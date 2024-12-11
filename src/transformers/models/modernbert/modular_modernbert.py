@@ -104,7 +104,8 @@ class ModernBertConfig(PretrainedConfig):
         bos_token_id (`int`, *optional*, defaults to 2):
             Beginning of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to tie weight embeddings
+            Whether the model's input and output word embeddings should be tied. Note that this is only relevant if the
+            model has a output word embedding layer.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
