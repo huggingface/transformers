@@ -267,7 +267,7 @@ class LlamaAttention(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        input_shape, _ = hidden_states.shape[:-1]
+        input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
         query_states = self.q_proj(hidden_states).view(hidden_shape)
@@ -382,6 +382,7 @@ class LlamaPreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
     _supports_quantized_cache = True
     _supports_static_cache = True
+    gradient_checkpointing = False
 
     def _init_weights(self, module):
         std = self.config.initializer_range
