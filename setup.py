@@ -100,7 +100,7 @@ _deps = [
     "av==9.2.0",  # Latest version of PyAV (10.0.0) has issues with audio stream.
     "beautifulsoup4",
     "blobfile",
-    "codecarbon==1.2.0",
+    "codecarbon>=2.8.1",
     "cookiecutter==1.7.3",
     "dataclasses",
     "datasets!=2.5.0",
@@ -162,7 +162,7 @@ _deps = [
     "sacremoses",
     "safetensors>=0.4.1",
     "sagemaker>=2.31.0",
-    "schedulefree>=1.2.6",
+    "schedulefree>=1.4",
     "scikit-learn",
     "scipy<1.13.0",  # SciPy >= 1.13.0 is not supported with the current jax pin (`jax>=0.4.1,<=0.4.13`)
     "sentencepiece>=0.1.91,!=0.1.92",
