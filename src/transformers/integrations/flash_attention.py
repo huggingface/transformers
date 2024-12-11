@@ -4,10 +4,10 @@ from ..modeling_flash_attention_utils import _flash_attention_forward
 
 
 def flash_attention_forward(
-    config, query, key, value, mask, target_dtype=torch.float16, training=False, layer_idx=0, **kwargs
+    config, query, key, value, attentions_mask, target_dtype=torch.float16, training=False, layer_idx=0, **kwargs
 ):
-    if mask is not None:
-        seq_len = mask.shape[1]
+    if attentions_mask is not None:
+        seq_len = attentions_mask.shape[1]
         query = query[:, :, :seq_len]
         value = value[:, :, :seq_len]
     else:
@@ -25,7 +25,7 @@ def flash_attention_forward(
         query,
         key,
         value,
-        mask,
+        attentions_mask,
         seq_len,
         config=config,
         dropout=dropout_rate,

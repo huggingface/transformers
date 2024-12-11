@@ -12,12 +12,12 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
-def sdpa_attention_forward(config, query, key, value, mask, **_kwargs):
-    key = repeat_kv(key, config.num_key_value_groups)
-    value = repeat_kv(value, config.num_key_value_groups)
+def sdpa_attention_forward(module, query, key, value, attentions_mask=None, **_kwargs):
+    key = repeat_kv(key, module.num_key_value_groups)
+    value = repeat_kv(value, module.num_key_value_groups)
 
-    causal_mask = mask
-    if mask is not None:
+    causal_mask = attentions_mask
+    if attentions_mask is not None:
         causal_mask = causal_mask[:, :, :, : key.shape[-2]]
 
     # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
@@ -36,8 +36,8 @@ def sdpa_attention_forward(config, query, key, value, mask, **_kwargs):
         key,
         value,
         attn_mask=causal_mask,
-        dropout_p=config.attention_dropout if config.training else 0.0,
+        dropout_p=module.config.attention_dropout if module.training else 0.0,
         is_causal=is_causal,
-        scale=config.scaling,
+        scale=module.scaling,
     )
     return attn_output, None

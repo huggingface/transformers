@@ -1,6 +1,6 @@
 import torch
 
-from ...utils import is_torch_greater_or_equal
+from ..utils import is_torch_greater_or_equal
 
 
 if is_torch_greater_or_equal("2.5"):
