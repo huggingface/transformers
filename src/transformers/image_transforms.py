@@ -416,6 +416,67 @@ def normalize(
     return image
 
 
+def unnormalize(
+    image: np.ndarray,
+    mean: Union[float, Iterable[float]],
+    std: Union[float, Iterable[float]],
+    data_format: Optional[ChannelDimension] = None,
+    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+) -> np.ndarray:
+    """
+    Unnormalizes `image` using the mean and standard deviation specified by `mean` and `std`.
+
+    image = (image * std) + mean
+
+    Args:
+        images (`np.ndarray`):
+             The image to unnormalize.
+        mean (`float` or `Iterable[float]`):
+            The mean to use for unnormalization.
+        std (`float` or `Iterable[float]`):
+            The standard deviation to use for unnormalization.
+        data_format (`ChannelDimension`, *optional*):
+            The channel dimension format of the output image. If unset, will use the inferred format from the input.
+        input_data_format (`ChannelDimension` or `str`, *optional*):
+            The channel dimension format for the input image. If unset, the channel dimension format is inferred
+            from the input image. Can be one of:
+            - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+            - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+            - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+    """
+    if not isinstance(image, np.ndarray):
+        raise ValueError("image must be a numpy array")
+
+    if input_data_format is None:
+        input_data_format = infer_channel_dimension_format(image)
+
+    channel_axis = get_channel_dimension_axis(image, input_data_format=input_data_format)
+    num_channels = image.shape[channel_axis]
+
+    if isinstance(mean, Iterable):
+        if len(mean) != num_channels:
+            raise ValueError(f"mean must have {num_channels} elements if it is an iterable, got {len(mean)}")
+    else:
+        mean = [mean] * num_channels
+
+    if isinstance(std, Iterable):
+        if len(std) != num_channels:
+            raise ValueError(f"std must have {num_channels} elements if it is an iterable, got {len(std)}")
+    else:
+        std = [std] * num_channels
+
+    rev_image_mean = tuple(-mu / stdev for mu, stdev in zip(mean, std))
+    rev_image_std = tuple(1 / stdev for stdev in std)
+    image = normalize(
+        image=image,
+        mean=rev_image_mean,
+        std=rev_image_std,
+        data_format=data_format,
+        input_data_format=input_data_format,
+    )
+    return image
+
+
 def center_crop(
     image: np.ndarray,
     size: Tuple[int, int],
