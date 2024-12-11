@@ -302,7 +302,7 @@ logger = logging.get_logger(__name__)
 
 # Name of the files used for checkpointing
 TRAINING_ARGS_NAME = "training_args.json"
-DEPRECATED_ARGS_NAME = "trainer_state.json"
+DEPRECATED_ARGS_NAME = "trainer_state.bin"
 TRAINER_STATE_NAME = "trainer_state.json"
 OPTIMIZER_NAME = "optimizer.pt"
 OPTIMIZER_NAME_BIN = "optimizer.bin"
