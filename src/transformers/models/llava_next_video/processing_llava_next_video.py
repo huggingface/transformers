@@ -76,7 +76,7 @@ class LlavaNextVideoProcessor(ProcessorMixin):
     ]
     image_processor_class = "LlavaNextImageProcessor"
     video_processor_class = "LlavaNextVideoImageProcessor"
-    tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
+    tokenizer_class = "AutoTokenizer"
 
     def __init__(
         self,
@@ -208,8 +208,10 @@ class LlavaNextVideoProcessor(ProcessorMixin):
                 num_frames = one_video.shape[0]  # frame dim is always after batch dim
 
                 # no `self.num_additional_image_tokens` added because video always has a default feature selection strategy
-                num_image_tokens = (height // self.patch_size) * (width // self.patch_size)
-                num_video_tokens = num_image_tokens // 4 * num_frames  # divide by 4 needed for avg pooling layer
+                num_video_tokens = ((height // self.patch_size) // 2) * (
+                    (width // self.patch_size) // 2
+                )  # divide by 2 for pooling
+                num_video_tokens *= num_frames
                 prompt_strings = []
                 for sample in text:
                     sample = sample.replace(self.video_token, self.video_token * num_video_tokens)

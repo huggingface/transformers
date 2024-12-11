@@ -137,6 +137,7 @@ from . import (
     llava,
     llava_next,
     llava_next_video,
+    llava_next_video2,
     llava_onevision,
     longformer,
     longt5,
