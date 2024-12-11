@@ -611,13 +611,9 @@ def flex_attention_forward(
     mask: Optional[torch.Tensor],
     **_kwargs,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    causal_mask = mask
-    if causal_mask is not None:
-        causal_mask = causal_mask[:, :, :, : key.shape[-2]]
-
     def causal_mod(score, b, h, q_idx, kv_idx):
-        if causal_mask is not None:
-            score += causal_mask[b][0][q_idx][kv_idx]
+        if mask is not None:
+            score += mask[b][0][q_idx][kv_idx]
         return score
 
     attn_output, attn_weights = flex_attention(
@@ -736,9 +732,9 @@ class Qwen2VLAttention(nn.Module):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        if output_attentions and self.config._attn_implementation in ["sdpa", "flash_attention_2"]:
-            logger.warning_once("Setting `attention_type` to `flex_attention` because `output_attentions=True`")
-            attention_type = "flex_attention"
+        if output_attentions and self.config._attn_implementation in ["sdpa", "flash_attention_2", "flex_attention"]:
+            logger.warning_once("Setting `attention_type` to `eager` because `output_attentions=True`")
+            attention_type = "eager"
         else:
             attention_type = self.config._attn_implementation
 
@@ -752,7 +748,7 @@ class Qwen2VLAttention(nn.Module):
             position_ids=position_ids,
         )
 
-        attention_output = attention_output.reshape(bsz, q_len, -1)
+        attention_output = attention_output.reshape(bsz, q_len, self.hidden_size)
         attention_output = self.o_proj(attention_output)
 
         if not output_attentions:
