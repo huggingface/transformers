@@ -1,6 +1,7 @@
 import torch
+from transformers import PreTrainedModel
 
-class AutoForCausalLM(LlamaPreTrainedModel, GenerationMixin):
+class AutoForCausalLM(PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
     _embeding_layer = "model.embed_tokens"

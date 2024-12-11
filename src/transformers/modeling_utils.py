@@ -1830,7 +1830,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if base_model is not self:
             return base_model.get_input_embeddings()
         else:
-            raise NotImplementedError
+            return getattr(self, self._embeding_layer)
 
     def set_input_embeddings(self, value: nn.Module):
         """
@@ -1843,7 +1843,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if base_model is not self:
             base_model.set_input_embeddings(value)
         else:
-            raise NotImplementedError
+            raise setattr(self, self._embeding_layer, value)
 
     def get_output_embeddings(self) -> nn.Module:
         """
@@ -1852,7 +1852,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         Returns:
             `nn.Module`: A torch module mapping hidden states to vocabulary.
         """
-        return None  # Overwrite for models with output embeddings
+        return getattr(self, self._output_embedding, None)
 
     def _init_weights(self, module):
         """
