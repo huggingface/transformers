@@ -61,13 +61,6 @@ class TimmWrapperModelOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
-def _load_timm_model(config: TimmWrapperConfig, add_classification_head: bool = False):
-    # timm model will not add classification head if num_classes = 0
-    num_classes = config.num_labels if add_classification_head else 0
-    model = timm.create_model(model_name=config.architecture, pretrained=False, num_classes=num_classes)
-    return model
-
-
 TIMM_WRAPPER_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
@@ -138,7 +131,8 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
 
     def __init__(self, config: TimmWrapperConfig):
         super().__init__(config)
-        self.timm_model = _load_timm_model(config, add_classification_head=False)
+        # using num_classes=0 to avoid creating classification head
+        self.timm_model = timm.create_model(config.architecture, pretrained=False, num_classes=0)
         self.post_init()
 
     @add_start_docstrings_to_model_forward(TIMM_WRAPPER_INPUTS_DOCSTRING)
@@ -252,7 +246,7 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
                 "or use `TimmWrapperModel` for feature extraction."
             )
 
-        self.timm_model = _load_timm_model(config, add_classification_head=True)
+        self.timm_model = timm.create_model(config.architecture, pretrained=False, num_classes=config.num_labels)
         self.num_labels = config.num_labels
         self.post_init()
 
