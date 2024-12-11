@@ -169,6 +169,7 @@ pip install transformers datasets evaluate
 
 <frameworkcontent>
 <pt>
+ 
 ```py
 >>> from transformers import DefaultDataCollator
 
@@ -176,6 +177,7 @@ pip install transformers datasets evaluate
 ```
 </pt>
 <tf>
+ 
 ```py
 >>> from transformers import DefaultDataCollator
 
@@ -203,7 +205,6 @@ pip install transformers datasets evaluate
 >>> model = AutoModelForQuestionAnswering.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
-```
 في هذه المرحلة، تبقى ثلاث خطوات فقط:
 
 1. حدد المعاملات الفائقة للتدريب في [`TrainingArguments`]. المعامل الوحيد المطلوب هو `output_dir` الذي يحدد مكان حفظ نموذجك. ستدفع هذا النموذج إلى Hub عن طريق تعيين `push_to_hub=True` (يجب عليك تسجيل الدخول إلى Hugging Face لتحميل نموذجك).
@@ -241,6 +242,7 @@ pip install transformers datasets evaluate
 ```
 </pt>
 <tf>
+ 
 <Tip>
 
 إذا لم تكن معتادًا على ضبط نموذج باستخدام Keras، فألق نظرة على البرنامج التعليمي الأساسي [هنا](../training#train-a-tensorflow-model-with-keras)!
@@ -357,7 +359,8 @@ pip install transformers datasets evaluate
 
 <frameworkcontent>
 <pt>
-قسّم النص وأرجع تنسورات PyTorch:
+ 
+ قسّم النص وأرجع تنسورات PyTorch:
 
 ```py
 >>> from transformers import AutoTokenizer
@@ -420,7 +423,7 @@ pip install transformers datasets evaluate
 
 فك تشفير الرموز المتوقعة للحصول على الإجابة:
 
-``py
+```py
 >>> predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
 >>> tokenizer.decode(predict_answer_tokens)
 '176 billion parameters and can generate text in 46 languages natural languages and 13'
