@@ -12,12 +12,12 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
-def sdpa_attention_forward(module, query, key, value, attentions_mask=None, **_kwargs):
+def sdpa_attention_forward(module, query, key, value, attention_mask=None, **_kwargs):
     key = repeat_kv(key, module.num_key_value_groups)
     value = repeat_kv(value, module.num_key_value_groups)
 
-    causal_mask = attentions_mask
-    if attentions_mask is not None:
+    causal_mask = attention_mask
+    if attention_mask is not None:
         causal_mask = causal_mask[:, :, :, : key.shape[-2]]
 
     query = query.contiguous()
