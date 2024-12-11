@@ -133,9 +133,12 @@ def _pad_to_max_length(
     padding="longest",
     bos_token_tensor=None,
     cut_off_length=None,
+    return_token_timestamps=False,
+    num_calls_generate_with_fallback=None,
 ):
     max_total_length = 0
     sequences = []
+    token_timestamps_list = []
 
     if padding_side not in ["right", "left"]:
         raise ValueError(f"`padding_side` must be either 'right' or 'left', not {padding_side}")
@@ -145,31 +148,72 @@ def _pad_to_max_length(
     elif padding == "max_length" and cut_off_length is None:
         raise ValueError("`cut_off_length` must be specified when `padding='max_length'`")
 
+    if num_calls_generate_with_fallback == 1:
+        sequences = torch.stack(
+            [
+                segments[0]["result"]
+                if isinstance(segments[0]["result"], torch.Tensor)
+                else segments[0]["result"]["sequences"]
+                for segments in current_segments
+            ],
+            dim=0,
+        )
+        if return_token_timestamps:
+            token_timestamps = torch.stack(
+                [segments[0]["result"]["token_timestamps"] for segments in current_segments], dim=0
+            )
+            return sequences, token_timestamps
+        return sequences
+
     for current_segment_list in current_segments:
         if current_segment_list is not None and len([d["tokens"] for d in current_segment_list]) > 0:
             sequence = torch.cat([d["tokens"] for d in current_segment_list], dim=-1)
+            if return_token_timestamps:
+                token_timestamps = torch.cat(
+                    [d["result"]["token_timestamps"][d["idxs"][0] : d["idxs"][1]] for d in current_segment_list],
+                    dim=-1,
+                )
 
             if cut_off_length is not None:
                 sequence = sequence[-cut_off_length:]
+                if return_token_timestamps:
+                    token_timestamps = token_timestamps[-cut_off_length:]
 
             if bos_token_tensor is not None:
                 sequence = torch.cat([bos_token_tensor, sequence])
-
+                if return_token_timestamps:
+                    token_timestamps = torch.cat(
+                        [torch.ones_like(bos_token_tensor, device=device) * 0.0, token_timestamps]
+                    )
             sequences.append(sequence)
+            if return_token_timestamps:
+                token_timestamps_list.append(token_timestamps)
             max_total_length = max(max_total_length, len(sequences[-1]))
         elif bos_token_tensor is not None:
             sequences.append(bos_token_tensor)
+            if return_token_timestamps:
+                token_timestamps_list.append(torch.ones_like(bos_token_tensor, device=device) * 0.0)
         else:
             sequences.append(torch.tensor([], device=device))
+            if return_token_timestamps:
+                token_timestamps_list.append(torch.tensor([], device=device))
 
     max_total_length = cut_off_length + 1 if padding == "max_length" else max_total_length
     for i in range(len(current_segments)):
         pad_length = max_total_length - len(sequences[i])
         pad = (0, pad_length) if padding_side == "right" else (pad_length, 0)
+
         sequences[i] = F.pad(sequences[i], pad=pad, value=pad_token_id)
+        if return_token_timestamps:
+            token_timestamps_list[i] = F.pad(token_timestamps_list[i], pad=pad, value=token_timestamps_list[i][-1])
 
     sequences = torch.stack(sequences, dim=0)
-    return sequences
+
+    if return_token_timestamps:
+        token_timestamps = torch.stack(token_timestamps_list, dim=0)
+        return sequences, token_timestamps
+    else:
+        return sequences
 
 
 class WhisperGenerationMixin(GenerationMixin):
@@ -438,21 +482,33 @@ class WhisperGenerationMixin(GenerationMixin):
                 specific kwargs should not be prefixed and decoder specific kwargs should be prefixed with *decoder_*.
 
         Return:
-            [`~utils.ModelOutput`] or `torch.LongTensor` or `Dict[str, Any]`: A [`~utils.ModelOutput`] (if `return_dict_in_generate=True`
-            or when `config.return_dict_in_generate=True`) or a `torch.FloatTensor` or a dict of segments when `return_segments=True`.
+            [`~utils.ModelOutput`] or `Dict[str, Any]` or `torch.LongTensor`:
 
-                If the passed input is > 30 seconds / > 3000 mel input features and `return_segments=True` then a dictionary of generated sequence ids, called `sequences` and a list of each generated segment is returned.
+                A [`~utils.ModelOutput`] (when `return_dict_in_generate=True` and the passed input requires only one call to the underlying `generate` method) or a `Dict[str, Any]` (when `return_segments=True` or `return_token_timestamps=True`, with keys `sequences`, `segments` if `return_segments=True`, `token_timestamps` if `return_token_timestamps=True`;
+                `sequences` and `token_timestamps` includes the decoder input ids and end of sequence id if the passed input requires only one call to the underlying `generate` method) or a torch.LongTensor` (including the decoder input ids and end of sequence id if the passed input requires only one call to the underlying `generate` method).
 
-                else if the passed input is <= 30 seconds / >= 3000 mel input features, the possible [`~utils.ModelOutput`] types are:
+                The possible [`~utils.ModelOutput`] types are:
+                - [`~utils.GenerateEncoderDecoderOutput`]
+                - [`~utils.GenerateBeamEncoderDecoderOutput`]
 
-                    - [`~generation.GenerateEncoderDecoderOutput`],
-                    - [`~generation.GenerateBeamEncoderDecoderOutput`]
+                A passed input requires only one call to the underlying `generate` method:
+                    - necessarily if `return_timestamps=False` (and necessarily the passed input is <= 30 seconds / <= 3000 mel input features since otherwise `return_timestamps` needs to be set to `True`).
+                    - eventualy if `return_timestamps=True` and the passed input is <= 30 seconds / <= 3000 mel input features, if the last predicted timestam is not < 30 seconds which will trigger a second call to generate starting to this timestamp.
 
-                else only the generated output sequence ids are returned.
+                `segments` is a list of lists (one per batch element) of `segment`.
+                A `segment` is a dictionary with keys `start`, `end`, `tokens`, `idxs`, and `result`.
+                - `start`: the start timestamp of the segment.
+                - `end`: the end timestamp of the segment.
+                - `tokens`: the tokens of the segment.
+                - `idxs`: the start(included) and end indices (excluded) of the `tokens` of the segment in the generated sequence ids (present in `result`).
+                - `result`: the result of underlying call to `generate`.
+
+                When `return_segments=True`, `return_dict_in_generate=True` applies to each `result` of each `segment`.
 
         Example:
 
-        - *Longform transcription*: To transcribe or translate audios longer than 30 seconds, process the audio files without truncation and pass all mel features at once to generate.
+        - *Longform transcription*: To transcribe or translate audios longer than 30 seconds, process the audio files without truncation and pass all mel features at once to generate. It is necessary to set `return_timestamps=True`.
+        Indeed, long-form transcription uses a sequential algorithm based on timestamps predictions, with heuristics like compression ratio threshold, log probability threshold and temperature fallback. This algorithm is described in the [the Whisper original paper](https://cdn.openai.com/papers/whisper.pdf), section *3.8. Long-form Transcription*.
 
         ```python
         >>> import torch
@@ -483,7 +539,9 @@ class WhisperGenerationMixin(GenerationMixin):
         " Folks, if you watch the show, you know, I spent a lot of time right over there. Patiently and astutely scrutinizing the boxwood and mahogany chest set of the day's biggest stories developing the central headline pawns, definitely maneuvering an oso topical night to F6, fainting a classic Sicilian, nade door variation on the news, all the while seeing eight moves deep and patiently marshalling the latest press releases into a fisher's shows in Lip Nitsky attack that culminates in the elegant lethal slow-played, all-passant checkmate that is my nightly monologue. But sometimes, sometimes, folks, I. CHEERING AND APPLAUSE Sometimes I startle away, cubside down in the monkey bars of a condemned playground on a super fun site. Get all hept up on goofballs. Rummage that were discarded tag bag of defective toys. Yank out a fist bowl of disembodied doll limbs, toss them on a stained kid's place mat from a defunct dennies. set up a table inside a rusty cargo container down by the Wharf and challenged toothless drifters to the godless bughouse blitz of tournament that is my segment. Meanwhile."
         ```
 
-        - *Shortform transcription*: If passed mel input features are < 30 seconds, the whole audio will be transcribed with a single call to generate.
+        - *Shortform transcription*: If passed mel input features are <= 30 seconds, there are two possibilities:
+            - `return_timestamps=False`: the whole audio will be transcribed with a single call to GenerationMixin's generate.
+            - `return_timestamps=True`: the audio will be transcribed using the same logic as long-form transcription.
 
         ```python
         >>> import torch
@@ -570,11 +628,21 @@ class WhisperGenerationMixin(GenerationMixin):
         # 3. Retrieve logits processors
         device = kwargs["encoder_outputs"][0].device if "encoder_outputs" in kwargs else input_features.device
         begin_index = init_tokens.shape[1]
+        num_beams = kwargs.get(
+            "num_beams",
+            generation_config.num_beams
+            if hasattr(generation_config, "num_beams") and generation_config.num_beams is not None
+            else 1,
+        )
+        if "assistant_model" in kwargs:
+            # speculative decoding: the model should be able to return
+            generation_config.begin_suppress_tokens = None
+
         logits_processor = self._retrieve_logit_processors(
             generation_config=generation_config,
             logits_processor=logits_processor,
             begin_index=begin_index,  # begin index is index of first generated decoder token
-            num_beams=kwargs.get("num_beams", 1),
+            num_beams=num_beams,
             device=device,
         )
 
@@ -620,11 +688,13 @@ class WhisperGenerationMixin(GenerationMixin):
         )
 
         # 6 Transcribe audio until we reach the end of all input audios
+        num_calls_generate_with_fallback = 0
         while (seek < max_frames).any():
             # 6.1 NOTE: When in longform transcription mode and batch size > 1 we need to dynamically reduce the batch size during the loop
             # in case one audio finished earlier than another one. Thus, we need to keep a table of "previous-index-2-current-index" in order
             # to know which original audio is being decoded
             # Set updated index map, duration of previously decoded chunks and number of max frames of current decoding chunk
+            num_calls_generate_with_fallback += 1
             input_features, cur_bsz, batch_idx_map = self._maybe_reduce_batch(
                 input_features=input_features,
                 seek=seek,
@@ -727,14 +797,12 @@ class WhisperGenerationMixin(GenerationMixin):
                     prev_idx=prev_i,
                     idx=i,
                     return_token_timestamps=return_token_timestamps,
+                    decoder_input_ids=decoder_input_ids,
                 )
 
-                current_segments[prev_i] += segments
+                seek[prev_i] += segment_offset
 
-                if is_shortform:
-                    seek[prev_i] += max_frames[i]
-                else:
-                    seek[prev_i] += segment_offset
+                current_segments[prev_i] += segments
 
         # 7. Once all segments are added to the list of all segments, called `current_segments`, we extract the predicted
         # output tokens from the list of dicts. If we use batch size > 1, we make sure to pad the output
@@ -744,51 +812,61 @@ class WhisperGenerationMixin(GenerationMixin):
             else current_segments
         )
 
-        sequences = _pad_to_max_length(
-            final_segments, generation_config.pad_token_id, device=self.device, padding_side="right"
-        )
-
-        # 8. If we return all segments, the predicted output sequences are put under `"sequences"`.
-        if return_segments:
-            return {"sequences": sequences, "segments": final_segments}
-
-        if is_shortform:
-            # add eos token:
-            if generation_config.max_new_tokens is None and generation_config.max_length is None:
-                eos_tokens = torch.full((sequences.shape[0], 1), generation_config.eos_token_id)
-                sequences = torch.cat([sequences, eos_tokens], dim=-1)
-
-            if return_token_timestamps:
-                outputs = {}
-                outputs["sequences"] = sequences
-                outputs["token_timestamps"] = torch.stack([d["token_timestamps"] for d in seek_outputs], dim=0)
-            else:
-                outputs = sequences
-
-            if return_dict_in_generate and generation_config.return_dict_in_generate:
-                dict_outputs = self._stack_split_outputs(seek_outputs, model_output_type, sequences.device, kwargs)
-
-                if num_return_sequences > 1:
-                    if hasattr(dict_outputs, "encoder_attentions") and dict_outputs.encoder_attentions is not None:
-                        dict_outputs.encoder_attentions = tuple(
-                            dict_outputs.encoder_attentions[i][::num_return_sequences]
-                            for i in range(len(dict_outputs.encoder_attentions))
-                        )
-                    if (
-                        hasattr(dict_outputs, "encoder_hidden_states")
-                        and dict_outputs.encoder_hidden_states is not None
-                    ):
-                        dict_outputs.encoder_hidden_states = tuple(
-                            dict_outputs.encoder_hidden_states[i][::num_return_sequences]
-                            for i in range(len(dict_outputs.encoder_hidden_states))
-                        )
-                if return_token_timestamps:
-                    dict_outputs["token_timestamps"] = outputs["token_timestamps"]
-                return dict_outputs
-
+        # if return_dict_in_generate is True, we return a ModelOutput if we have only one call to generate_with_fallback
+        # otherwise, return_dict_in_generate is applied in the 'result' of each segment in final_segments
+        if (
+            return_dict_in_generate
+            and generation_config.return_dict_in_generate
+            and num_calls_generate_with_fallback == 1
+            and not return_segments
+            and not return_token_timestamps
+        ):
+            # only one call to generate_with_fallback, we can return a ModelOutput
+            outputs = self._stack_split_outputs(seek_outputs, model_output_type, self.device, kwargs)
+            if num_return_sequences > 1:
+                if hasattr(outputs, "encoder_attentions") and outputs.encoder_attentions is not None:
+                    outputs.encoder_attentions = tuple(
+                        outputs.encoder_attentions[i][::num_return_sequences]
+                        for i in range(len(outputs.encoder_attentions))
+                    )
+                if hasattr(outputs, "encoder_hidden_states") and outputs.encoder_hidden_states is not None:
+                    outputs.encoder_hidden_states = tuple(
+                        outputs.encoder_hidden_states[i][::num_return_sequences]
+                        for i in range(len(outputs.encoder_hidden_states))
+                    )
             return outputs
 
-        return sequences
+        if return_token_timestamps:
+            sequences, token_timestamps = _pad_to_max_length(
+                final_segments,
+                generation_config.pad_token_id,
+                device=self.device,
+                padding_side="right",
+                return_token_timestamps=return_token_timestamps,
+                num_calls_generate_with_fallback=num_calls_generate_with_fallback,
+            )
+            outputs = {
+                "sequences": sequences,
+                "token_timestamps": token_timestamps,
+            }
+            if return_segments:
+                outputs["segments"] = final_segments
+        else:
+            sequences = _pad_to_max_length(
+                final_segments,
+                generation_config.pad_token_id,
+                device=self.device,
+                padding_side="right",
+                num_calls_generate_with_fallback=num_calls_generate_with_fallback,
+            )
+            if return_segments:
+                outputs = {
+                    "sequences": sequences,
+                    "segments": final_segments,
+                }
+            else:
+                outputs = sequences
+        return outputs
 
     def generate_with_fallback(
         self,
@@ -884,22 +962,14 @@ class WhisperGenerationMixin(GenerationMixin):
             new_decoder_attention_mask = []
 
             for i, seek_sequence in enumerate(seek_sequences):
-                # make sure we cut a predicted EOS token if we are not finished with the generation yet
-                prev_i = batch_idx_map[fallback_index_map[i]]
-                is_not_final = (seek[prev_i] + num_segment_frames) < max_frames[prev_i]
-
-                # remove eos token id
-                if is_not_final and seek_sequence[-1] == generation_config.eos_token_id:
-                    seek_sequence = seek_sequence[:-1]
-                    if return_token_timestamps and not is_shortform:
-                        seek_outputs[i]["token_timestamps"] = seek_outputs[i]["token_timestamps"][:-1]
-
-                # remove all padding tokens
+                # remove all padding tokens, except for the eos token
                 if seek_sequence[-1] == generation_config.pad_token_id:
                     num_paddings = (seek_sequence == generation_config.pad_token_id).sum()
-                    seek_sequence = seek_sequence[:-num_paddings]
-                    if return_token_timestamps and not is_shortform:
-                        seek_outputs[i]["token_timestamps"] = seek_outputs[i]["token_timestamps"][:-num_paddings]
+                    if generation_config.pad_token_id == generation_config.eos_token_id:
+                        # we do not remove the eos token id since it is needed for avg logprob calculation in _need_fallback
+                        num_paddings -= 1
+                    if num_paddings != 0:
+                        seek_sequence = seek_sequence[:-num_paddings]
 
                 # check which sequences in batch need fallback & which should be skipped
                 needs_fallback[i], should_skip[i] = self._need_fallback(
@@ -911,6 +981,10 @@ class WhisperGenerationMixin(GenerationMixin):
                     self.config.vocab_size,
                     temperature,
                 )
+
+                # remove eos token
+                if seek_sequence[-1] == generation_config.eos_token_id:
+                    seek_sequence = seek_sequence[:-1]
 
                 seek_sequence_list[fallback_index_map[i]] = seek_sequence
                 seek_outputs_list[fallback_index_map[i]] = seek_outputs[i]
@@ -954,14 +1028,19 @@ class WhisperGenerationMixin(GenerationMixin):
         return current_segments
 
     def _postprocess_outputs(
-        self, seek_outputs, decoder_input_ids, return_token_timestamps, generation_config, is_shortform
+        self,
+        seek_outputs,
+        decoder_input_ids,
+        return_token_timestamps,
+        generation_config,
+        is_shortform,
     ):
         # remove all previously passed decoder input ids
-        start_idx = decoder_input_ids.shape[-1] if not is_shortform else torch.tensor(0)
+        # should happen only if it is the first generated segment
+        start_idx = decoder_input_ids.shape[-1]
 
         if isinstance(seek_outputs, torch.Tensor):
-            seek_outputs = seek_outputs[:, start_idx:]
-            return seek_outputs, seek_outputs
+            return seek_outputs[:, start_idx:], seek_outputs
 
         if return_token_timestamps and hasattr(generation_config, "alignment_heads"):
             num_frames = getattr(generation_config, "num_frames", None)
@@ -971,9 +1050,6 @@ class WhisperGenerationMixin(GenerationMixin):
                 num_frames=num_frames,
                 num_input_ids=decoder_input_ids.shape[-1],
             )
-            seek_outputs["token_timestamps"] = seek_outputs["token_timestamps"][:, start_idx:]
-
-        seek_outputs["sequences"] = seek_outputs["sequences"][:, start_idx:]
 
         def split_by_batch_index(values, key, batch_idx, is_shortform, beam_indices=None):
             if beam_indices is not None and key == "scores":
@@ -1009,7 +1085,7 @@ class WhisperGenerationMixin(GenerationMixin):
 
             return values[batch_idx].cpu()
 
-        sequence_tokens = seek_outputs["sequences"]
+        sequence_tokens = seek_outputs["sequences"][:, start_idx:]
         seek_outputs = [
             {
                 k: split_by_batch_index(v, k, i, is_shortform, beam_indices=seek_outputs.get("beam_indices"))
@@ -1024,7 +1100,7 @@ class WhisperGenerationMixin(GenerationMixin):
         # Stack back seek_outputs tensors after splitting them with the split_by_batch_index method
         outputs = {}
         for key in seek_outputs[0].keys():
-            if key in ["sequences", "beam_indices"]:
+            if key in ["sequences", "beam_indices", "token_timestamps"]:
                 outputs[key] = torch.stack([v[key] for v in seek_outputs], dim=0).to(device)
             elif key in ["scores", "encoder_attentions", "encoder_hidden_states", "logits"]:
                 outputs[key] = tuple(
@@ -1055,6 +1131,10 @@ class WhisperGenerationMixin(GenerationMixin):
                 else:
                     outputs[key] = None
 
+        token_timestamps = outputs.get("token_timestamps", None)
+        if token_timestamps is not None:
+            model_output_type = dict
+
         return model_output_type(**outputs)
 
     def _need_fallback(
@@ -1081,7 +1161,9 @@ class WhisperGenerationMixin(GenerationMixin):
             else:
                 scores = seek_outputs[index]["scores"]
                 logprobs = self._retrieve_avg_logprobs(
-                    scores, seek_sequence, generation_config.eos_token_id, temperature
+                    scores,
+                    seek_sequence,
+                    temperature,
                 )
 
             if logprobs < generation_config.logprob_threshold:
@@ -1176,13 +1258,6 @@ class WhisperGenerationMixin(GenerationMixin):
 
         if no_speech_threshold is not None:
             logger.warning(warning_prefix.format(f"no_speech_threshold is set to {no_speech_threshold}"))
-
-        # when passing temperature as a list it cannot just be ignored => throw error in this case
-        if isinstance(temperature, (list, tuple)):
-            raise ValueError(
-                f"Audio input consists of only {total_input_frames}. Short-form transcription is activated."
-                f"temperature cannot be set to {temperature} which can only be used for temperature fallback for long-form generation. Make sure to set `temperature` to a float value or `None` for short-form generation."
-            )
 
     @staticmethod
     def _set_return_outputs(return_dict_in_generate, return_token_timestamps, logprob_threshold, generation_config):
@@ -1766,7 +1841,7 @@ class WhisperGenerationMixin(GenerationMixin):
         return compression_ratio
 
     @staticmethod
-    def _retrieve_avg_logprobs(scores, tokens, eos_token_id, temperature):
+    def _retrieve_avg_logprobs(scores, tokens, temperature):
         rescale_temperature = temperature if temperature > 0.0 else 1
         scores = torch.stack(scores).to(tokens.device)
 
@@ -1778,10 +1853,10 @@ class WhisperGenerationMixin(GenerationMixin):
         logprobs = F.log_softmax((scores * rescale_temperature).float(), dim=-1).to(scores.dtype)
 
         # retrieve logprob of selected tokens and sum
-        sum_logprobs = sum((logprobs[i][tokens[i]] * (tokens[i] != eos_token_id)) for i in range(logprobs.shape[0]))
-        length = (tokens != eos_token_id).sum(-1) if eos_token_id is not None else tokens.shape[0]
+        # don't remove the eos token logprob! it counts in avg_logprob calculation in the original implementation
+        sum_logprobs = sum(logprobs[i][tokens[i]] for i in range(logprobs.shape[0]))
 
-        avg_logprobs = sum_logprobs / (length + 1)
+        avg_logprobs = sum_logprobs / len(tokens)
         return avg_logprobs
 
     @staticmethod
@@ -1797,6 +1872,7 @@ class WhisperGenerationMixin(GenerationMixin):
         prev_idx,
         idx,
         return_token_timestamps,
+        decoder_input_ids,
     ):
         # find the predicted "end of segment" predictions of Whisper
         # "end of segment" predictions occur whenever Whisper predicts a timestamp token
@@ -1805,6 +1881,7 @@ class WhisperGenerationMixin(GenerationMixin):
         timestamp_segment_indices = torch.where(timestamp_tokens[:-1] & timestamp_tokens[1:])[0]
         timestamp_segment_indices.add_(1)
         token_timestamps = seek_outputs[idx]["token_timestamps"] if return_token_timestamps else []
+        idx_offset = decoder_input_ids.shape[-1]
 
         # If whisper predicted a "end of segment" via a timestep token, let's go ever each
         # "end of segment" prediction and slice the decoding into segments accordingly
@@ -1831,12 +1908,13 @@ class WhisperGenerationMixin(GenerationMixin):
                         "start": time_offset[prev_idx] + start_timestamp_pos.to(torch.float64) * time_precision,
                         "end": time_offset[prev_idx] + end_timestamp_pos.to(torch.float64) * time_precision,
                         "tokens": sliced_tokens,
+                        "idxs": (idx_offset + last_slice, idx_offset + current_slice),
                         "result": seek_outputs[idx],
                     }
                 )
                 if return_token_timestamps:
                     segments[-1]["token_timestamps"] = (
-                        token_timestamps[last_slice:current_slice] + time_offset[prev_idx]
+                        token_timestamps[idx_offset + last_slice : idx_offset + current_slice] + time_offset[prev_idx]
                     )
                 last_slice = current_slice
 
@@ -1862,11 +1940,14 @@ class WhisperGenerationMixin(GenerationMixin):
                     "start": time_offset[prev_idx],
                     "end": time_offset[prev_idx] + last_timestamp_pos * time_precision,
                     "tokens": seek_sequence,
+                    "idxs": (idx_offset, idx_offset + len(seek_sequence)),
                     "result": seek_outputs[idx],
                 }
             ]
             if return_token_timestamps:
-                segments[-1]["token_timestamps"] = token_timestamps + time_offset[prev_idx]
+                segments[-1]["token_timestamps"] = (
+                    token_timestamps[idx_offset : idx_offset + len(seek_sequence)] + time_offset[prev_idx]
+                )
             segment_offset = seek_num_frames[prev_idx]
 
         return segments, segment_offset
