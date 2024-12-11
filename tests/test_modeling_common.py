@@ -204,7 +204,6 @@ def sdpa_kernel(enable_flash, enable_math, enable_mem_efficient):
     return torch.nn.attention.sdpa_kernel(backends)
 
 
-@hub_retry
 @require_torch
 class ModelTesterMixin:
     model_tester = None
@@ -223,6 +222,16 @@ class ModelTesterMixin:
     has_attentions = True
     _is_composite = False
     model_split_percents = [0.5, 0.7, 0.9]
+
+    # Note: for all mixins that utilize the Hub in some way, we should ensure that
+    # they contain the `hub_retry` decorator in case of failures.
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        for attr_name in dir(cls):
+            if attr_name.startswith("test_"):
+                attr = getattr(cls, attr_name)
+                if callable(attr):
+                    setattr(cls, attr_name, hub_retry(attr))
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = copy.deepcopy(inputs_dict)
