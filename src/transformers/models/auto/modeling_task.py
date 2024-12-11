@@ -22,6 +22,8 @@ class AutoForCausalLM(PreTrainedModel, GenerationMixin):
     _embeding_layer = "model.embed_tokens"
     _output_embedding = "lm_head"
     _no_split_modules = []
+    _supports_cache_class = True
+
     def __init__(self, config):
         super().__init__(config)
         self.model = AutoModel.from_config(config)
@@ -30,7 +32,6 @@ class AutoForCausalLM(PreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
-
 
     def forward(
         self,

@@ -336,11 +336,3 @@ class FlashAttentionKwargs(TypedDict, total=False):
     cu_seq_lens_k: Optional[torch.LongTensor]
     max_length_q: Optional[int]
     max_length_k: Optional[int]
-
-
-class TransformersKwargs(TypedDict, total=False):
-    output_attentions: Optional[bool]
-    output_hidden_states: Optional[bool]
-    use_cache: Optional[bool]
-    return_dict: Optional[bool]
-
