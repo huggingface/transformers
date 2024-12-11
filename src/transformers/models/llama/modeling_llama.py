@@ -17,7 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union, Callable
 
 import torch
 import torch.utils.checkpoint
@@ -283,7 +283,7 @@ class LlamaAttention(nn.Module):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attention_interface: function = eager_attention_forward
+        attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
@@ -482,7 +482,7 @@ class LlamaModel(LlamaPreTrainedModel):
     Args:
         config: LlamaConfig
     """
-    _input_embedding = "embed_tokens" # no need for set and get, take then from PreTrainedModel
+    _input_embedding = "embed_tokens"
 
     def __init__(self, config: LlamaConfig):
         super().__init__(config)
@@ -517,11 +517,7 @@ class LlamaModel(LlamaPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if self.gradient_checkpointing and self.training and use_cache:
-            logger.warning_once(
-                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
-            )
-            use_cache = False
+
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
