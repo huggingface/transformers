@@ -45,6 +45,9 @@ from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import GenerationConfig, GenerationMixin
 from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
+from .integrations.flash_attention import * 
+from .integrations.flex_attention import * 
+from .integrations.sdpa_attention import *
 from .loss.loss_utils import LOSS_MAPPING
 from .pytorch_utils import (  # noqa: F401
     Conv1D,
@@ -5484,6 +5487,19 @@ def get_disk_only_shard_files(device_map, sharded_metadata, start_prefix):
     return [fname for fname, devices in files_content.items() if set(devices) == {"disk"}]
 
 
+
+
+ALL_ATTENTION_FUNCTIONS: Dict[str, Dict[str, function]] = {}
+
+ALL_ATTENTION_FUNCTIONS.update(
+    {
+        "flash_attention_2": flash_attention_forward,
+        "flex_attention": flex_attention_forward,
+        "sdpa": sdpa_attention_forward,
+    }
+)
+
+
 class GradientCheckpointLayer(torch.nn.Module):
     def __call__(self, *args, **kwargs):
         """
@@ -5599,6 +5615,3 @@ class GradientCheckpointLayer(torch.nn.Module):
 
         if getattr(self, "_hf_peft_config_loaded", False):
             self.disable_input_require_grads()
-
-
-ALL_ATTENTION_FUNCTIONS: Dict[str, Dict[str, function]] = {}
