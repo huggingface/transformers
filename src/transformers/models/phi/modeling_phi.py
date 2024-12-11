@@ -46,16 +46,11 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     get_torch_version,
-    is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
 )
 from .configuration_phi import PhiConfig
-
-
-if is_flash_attn_2_available():
-    from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
 logger = logging.get_logger(__name__)
@@ -148,31 +143,6 @@ class PhiRotaryEmbedding(nn.Module):
         sin = sin * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-
-class PhiLinearScalingRotaryEmbedding(PhiRotaryEmbedding):
-    """PhiRotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
-
-    def __init__(self, *args, **kwargs):
-        logger.warning_once(
-            "`PhiLinearScalingRotaryEmbedding` is deprecated an will be removed in v4.46. Please use "
-            "`PhiRotaryEmbedding`, which now also does linear scaling (simply pass the model config to __init__)."
-        )
-        kwargs["rope_type"] = "linear"
-        super().__init__(*args, **kwargs)
-
-
-class PhiDynamicNTKScalingRotaryEmbedding(PhiRotaryEmbedding):
-    """PhiRotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
-
-    def __init__(self, *args, **kwargs):
-        logger.warning_once(
-            "`PhiDynamicNTKScalingRotaryEmbedding` is deprecated an will be removed in v4.46. Please use "
-            "`PhiRotaryEmbedding`, which now also does dynamic ntk scaling (simply pass the model config to "
-            "__init__)."
-        )
-        kwargs["rope_type"] = "dynamic"
-        super().__init__(*args, **kwargs)
 
 
 class PhiMLP(nn.Module):
