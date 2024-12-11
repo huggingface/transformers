@@ -69,3 +69,6 @@ class BlipImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
+
+
+__all__ = ["BlipImageProcessorFast"]

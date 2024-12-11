@@ -443,7 +443,8 @@ def write_default_fast_image_processor_file(
         "    do_center_crop = None\n"
         "    do_rescale = None\n"
         "    do_normalize = None\n"
-        "    do_convert_rgb = None\n"
+        "    do_convert_rgb = None\n\n\n"
+        f'__all__ = ["{fast_image_processor_name}"]\n'
     )
 
     content = content_header + imports + content_base_file
@@ -536,7 +537,8 @@ def add_fast_image_processor_file(
         f'    do_center_crop = {default_args_dict.get("do_center_crop")}\n'
         f'    do_rescale = {default_args_dict.get("do_rescale")}\n'
         f'    do_normalize = {default_args_dict.get("do_normalize")}\n'
-        f'    do_convert_rgb = {default_args_dict.get("do_convert_rgb")}\n'
+        f'    do_convert_rgb = {default_args_dict.get("do_convert_rgb")}\n\n\n'
+        f'__all__ = ["{fast_image_processor_name}"]\n'
     )
 
     imports = "\n\nfrom ...image_processing_utils_fast import BaseImageProcessorFast\n"
