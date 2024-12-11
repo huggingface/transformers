@@ -135,7 +135,7 @@ class ModernBertConfig(PretrainedConfig):
         classifier_dropout=0.0,
         classifier_pooling="mean",
         classifier_norm=True,
-        classifier_bias=True,
+        classifier_bias=False,
         classifier_activation=None,
         deterministic_flash_attn=False,
         **kwargs,
