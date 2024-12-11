@@ -231,7 +231,7 @@ def _flash_attention_forward(
     if not use_top_left_mask:
         causal = is_causal
     else:
-        # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__.
+        # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in transformers.models.mistral.modeling_mistral.MistralFlashAttention2.__init__.
         causal = is_causal and query_length != 1
 
     # Assuming 4D tensors, key_states.shape[1] is the key/value sequence length (source length).
@@ -336,3 +336,47 @@ class FlashAttentionKwargs(TypedDict, total=False):
     cu_seq_lens_k: Optional[torch.LongTensor]
     max_length_q: Optional[int]
     max_length_k: Optional[int]
+
+
+class TransformersKwargs(TypedDict, total=False):
+    output_attentions: Optional[bool]
+    output_hidden_states: Optional[bool]
+    use_cache: Optional[bool]
+    return_dict: Optional[bool]
+
+
+
+from functools import wraps
+from typing import Callable, TypedDict, Optional
+
+
+
+def validate_config_kwargs(config):
+    """
+    A decorator to validate and initialize kwargs based on a config object.
+    """
+    def decorator(func: Callable):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            # Default values from the config
+            default_kwargs = {
+                "output_attentions": config.output_attentions,
+                "output_hidden_states": config.output_hidden_states,
+                "use_cache": config.use_cache,
+                "return_dict": config.use_return_dict,
+            }
+
+            # Merge provided kwargs with defaults
+            validated_kwargs = {**default_kwargs, **kwargs}
+
+            # Validate kwargs against TypedDict
+            for key in validated_kwargs:
+                if key not in TransformersKwargs.__annotations__:
+                    raise ValueError(f"Invalid keyword argument: {key}")
+
+            # Pass the validated kwargs to the function
+            return func(*args, **validated_kwargs)
+
+        return wrapper
+
+    return decorator
