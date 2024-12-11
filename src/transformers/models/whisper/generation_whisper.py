@@ -494,7 +494,7 @@ class WhisperGenerationMixin(GenerationMixin):
                 A:
                 - [`~utils.ModelOutput`] when `return_dict_in_generate=True` and (`return_timestamps=False` or `force_unique_generate_call=True`), including the decoder input ids and end of sequence id.
                 - `Dict[str, Any]` when (`return_dict_in_generate=True` and `return_timestamps=True`) or `return_segments=True` or `return_token_timestamps=True`.
-                - `torch.LongTensor`, excluding the decoder input ids and end of sequence id.
+                - `torch.LongTensor` in all other cases, excluding the decoder input ids and end of sequence id.
 
                 The possible [`~utils.ModelOutput`] types are:
                 - [`~utils.GenerateEncoderDecoderOutput`]
