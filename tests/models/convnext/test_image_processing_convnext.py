@@ -116,3 +116,9 @@ class ConvNextImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
             image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42)
             self.assertEqual(image_processor.size, {"shortest_edge": 42})
+
+    @unittest.skip(
+        "Skipping as ConvNextImageProcessor uses center_crop and center_crop functions are not equivalent for fast and slow processors"
+    )
+    def test_slow_fast_equivalence_batched(self):
+        pass

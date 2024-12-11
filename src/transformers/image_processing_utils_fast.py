@@ -814,7 +814,7 @@ class LlavaPatchingMixin:
         """
         max_patch = max(len(x) for x in pixel_values)
         pixel_values = [
-            torch.nn.functional.pad(image, pad=[0, max_patch - image.shape[0], 0, 0, 0, 0, 0, 0])
+            torch.nn.functional.pad(image, pad=[0, 0, 0, 0, 0, 0, 0, max_patch - image.shape[0]])
             for image in pixel_values
         ]
 
