@@ -1636,7 +1636,7 @@ class Trainer:
                 )
             if not is_accelerate_available("0.30.0"):
                 raise ImportError("You need to have `accelerate>=0.30.0` to be able to use schedulefree optimizers")
-            from schedulefree import RAdamScheduleFree, AdamWScheduleFree, SGDScheduleFree
+            from schedulefree import AdamWScheduleFree, RAdamScheduleFree, SGDScheduleFree
 
             additional_optim_kwargs = {}
             require_warmup = True
@@ -1652,7 +1652,7 @@ class Trainer:
                 optimizer_cls = SGDScheduleFree
             else:
                 raise ValueError("Invalid schedulefree optimizer")
-            
+
             additional_optim_kwargs["weight_decay"] = args.weight_decay
             if require_warmup:
                 additional_optim_kwargs["warmup_steps"] = args.warmup_steps
