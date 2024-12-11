@@ -74,6 +74,7 @@ from transformers.models.auto.modeling_auto import (
 )
 from transformers.testing_utils import (
     CaptureLogger,
+    hub_retry,
     is_flaky,
     is_pt_flax_cross_test,
     is_pt_tf_cross_test,
@@ -203,6 +204,7 @@ def sdpa_kernel(enable_flash, enable_math, enable_mem_efficient):
     return torch.nn.attention.sdpa_kernel(backends)
 
 
+@hub_retry
 @require_torch
 class ModelTesterMixin:
     model_tester = None
