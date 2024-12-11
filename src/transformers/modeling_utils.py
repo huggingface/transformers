@@ -2537,6 +2537,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         self.base_model._prune_heads(heads_to_prune)
 
+    def gradient_checkpointing_enable(self, gradient_checkpointing_kwargs=None):
+        for layer in list(self.modules()):
+            if isinstance(layer, GradientCheckpointLayer):
+                layer.gradient_checkpointing_enable(gradient_checkpointing_kwargs)
 
     @property
     def is_gradient_checkpointing(self) -> bool:
@@ -5501,6 +5505,7 @@ ALL_ATTENTION_FUNCTIONS.update(
 
 
 class GradientCheckpointLayer(torch.nn.Module):
+
     def __call__(self, *args, **kwargs):
         """
         Adjust the behavior of the inherited class by overriding `__call__`.
@@ -5508,7 +5513,7 @@ class GradientCheckpointLayer(torch.nn.Module):
         Automatically handles gradient checkpointing based on flags in the provided arguments.
         """
         # Extract necessary flags and arguments
-        gradient_checkpointing = kwargs.pop("gradient_checkpointing", False)
+        gradient_checkpointing = kwargs.pop("gradient_checkpointing", False) | getattr(self, "gradient_checkpointing", False)
         training = self.training
 
         if gradient_checkpointing and training:
@@ -5525,8 +5530,7 @@ class GradientCheckpointLayer(torch.nn.Module):
         By default, uses `torch.utils.checkpoint.checkpoint`.
         """
         # Assume `self.forward` is compatible with checkpointing
-        return checkpoint(self.__call__, *args, **kwargs)
-    
+        return  checkpoint(self.__call__, *args, **kwargs)
 
 
     def gradient_checkpointing_enable(self, gradient_checkpointing_kwargs=None):
@@ -5543,8 +5547,7 @@ class GradientCheckpointLayer(torch.nn.Module):
             gradient_checkpointing_kwargs (dict, *optional*):
                 Additional keyword arguments passed along to the `torch.utils.checkpoint.checkpoint` function.
         """
-        if not self.supports_gradient_checkpointing:
-            raise ValueError(f"{self.__class__.__name__} does not support gradient checkpointing.")
+        self.gradient_checkpointing = True
 
         if gradient_checkpointing_kwargs is None:
             gradient_checkpointing_kwargs = {"use_reentrant": True}
