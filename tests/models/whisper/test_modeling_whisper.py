@@ -193,34 +193,6 @@ def prepare_whisper_inputs_dict(
     }
 
 
-# Whisper's generate method does not return the decoder input token ids by default.
-# To keep compatibility with generic GenerationTesterMixin, we'll need to patch generate with this decorator that ensures only one call to generate is made and therefore decoder input token ids are returned.
-def with_decoder_input_ids(func):
-    def wrapper(self, *args, **kwargs):
-        if func is None:
-            return
-        all_generative_model_classes = self.all_generative_model_classes
-
-        class PatchedWhisperForConditionalGeneration(WhisperForConditionalGeneration):
-            def __init__(self, *args, **kwargs):
-                super().__init__(*args, **kwargs)
-                self.generation_config.force_unique_generate_call = True
-
-            @classmethod
-            def from_pretrained(cls, *args, **kwargs):
-                model = super(PatchedWhisperForConditionalGeneration, cls).from_pretrained(*args, **kwargs)
-                model.generation_config.force_unique_generate_call = True
-                return model
-
-        self.all_generative_model_classes = (PatchedWhisperForConditionalGeneration,)
-        result = func(self, *args, **kwargs)
-        # Restore original model classes
-        self.all_generative_model_classes = all_generative_model_classes
-        return result
-
-    return wrapper
-
-
 @require_torch
 class WhisperModelTester:
     def __init__(
@@ -472,6 +444,11 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.model_tester = WhisperModelTester(self)
         self.config_tester = ConfigTester(self, config_class=WhisperConfig)
         self.maxDiff = 3000
+
+    def prepare_config_and_inputs_for_generate(self, batch_size=2):
+        config, inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
+        inputs_dict["force_unique_generate_call"] = True
+        return config, inputs_dict
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -1624,96 +1601,6 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
             with self.assertRaises(ValueError):
                 model(input_features=input_features, labels=labels)
-
-    @with_decoder_input_ids
-    def test_greedy_generate(self):
-        super().test_greedy_generate()
-
-    @with_decoder_input_ids
-    def test_greedy_generate_dict_outputs(self):
-        super().test_greedy_generate_dict_outputs()
-
-    @with_decoder_input_ids
-    def test_greedy_generate_dict_outputs_use_cache(self):
-        super().test_greedy_generate_dict_outputs_use_cache()
-
-    @with_decoder_input_ids
-    def test_sample_generate(self):
-        super().test_sample_generate()
-
-    @with_decoder_input_ids
-    def test_sample_generate_dict_output(self):
-        super().test_sample_generate_dict_output()
-
-    @with_decoder_input_ids
-    def test_beam_search_generate(self):
-        super().test_beam_search_generate()
-
-    @with_decoder_input_ids
-    def test_beam_search_generate_dict_output(self):
-        super().test_beam_search_generate_dict_output()
-
-    @with_decoder_input_ids
-    def test_beam_search_generate_dict_outputs_use_cache(self):
-        super().test_beam_search_generate_dict_outputs_use_cache()
-
-    @with_decoder_input_ids
-    def test_beam_sample_generate(self):
-        super().test_beam_sample_generate()
-
-    @with_decoder_input_ids
-    def test_beam_sample_generate_dict_output(self):
-        super().test_beam_sample_generate_dict_output()
-
-    @with_decoder_input_ids
-    def test_group_beam_search_generate(self):
-        super().test_group_beam_search_generate()
-
-    @with_decoder_input_ids
-    def test_group_beam_search_generate_dict_output(self):
-        super().test_group_beam_search_generate_dict_output()
-
-    @with_decoder_input_ids
-    def test_constrained_beam_search_generate(self):
-        super().test_constrained_beam_search_generate()
-
-    @with_decoder_input_ids
-    def test_constrained_beam_search_generate_dict_output(self):
-        super().test_constrained_beam_search_generate_dict_output()
-
-    @with_decoder_input_ids
-    def test_contrastive_generate(self):
-        super().test_contrastive_generate()
-
-    @with_decoder_input_ids
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        super().test_contrastive_generate_dict_outputs_use_cache()
-
-    @with_decoder_input_ids
-    def test_generate_continue_from_past_key_values(self):
-        super().test_generate_continue_from_past_key_values()
-
-    @with_decoder_input_ids
-    def test_prompt_lookup_decoding_matches_greedy_search(self):
-        super().test_prompt_lookup_decoding_matches_greedy_search()
-
-    @with_decoder_input_ids
-    @parameterized.expand([("random",), ("same",)])
-    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
-        super().test_assisted_decoding_matches_greedy_search(assistant_type)
-
-    @with_decoder_input_ids
-    def test_assisted_decoding_sample(self):
-        super().test_assisted_decoding_sample()
-
-    @with_decoder_input_ids
-    @parameterized.expand([(1, False), (1, True), (4, False)])
-    def test_new_cache_format(self, num_beams, do_sample):
-        super().test_assisted_decoding_matches_greedy_search(num_beams, do_sample)
-
-    @with_decoder_input_ids
-    def test_eager_matches_sdpa_generate(self):
-        super().test_eager_matches_sdpa_generate()
 
 
 @require_torch
