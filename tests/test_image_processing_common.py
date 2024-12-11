@@ -165,16 +165,15 @@ class ImageProcessingTestMixin:
     @require_vision
     @require_torch
     def test_slow_fast_equivalence(self):
-        dummy_image = Image.open(
-            requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
-        )
-
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
             self.skipTest(reason="Skipping slow/fast equivalence test")
 
         if self.image_processing_class is None or self.fast_image_processing_class is None:
             self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
 
+        dummy_image = Image.open(
+            requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
+        )
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
         image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
 
@@ -189,8 +188,6 @@ class ImageProcessingTestMixin:
     @require_vision
     @require_torch
     def test_slow_fast_equivalence_batched(self):
-        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
-
         if not self.test_slow_image_processor or not self.test_fast_image_processor:
             self.skipTest(reason="Skipping slow/fast equivalence test")
 
@@ -202,6 +199,7 @@ class ImageProcessingTestMixin:
                 reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
             )
 
+        dummy_images = self.image_processor_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
         image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
 

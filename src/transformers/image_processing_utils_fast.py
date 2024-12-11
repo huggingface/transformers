@@ -166,7 +166,7 @@ def group_images_by_shape(
     return grouped_images, grouped_images_index
 
 
-def reconstruct_images(
+def reorder_images(
     processed_images: Dict[Tuple[int, int], "torch.Tensor"], grouped_images_index: Dict[int, Tuple[int, int]]
 ) -> List["torch.Tensor"]:
     """
@@ -307,7 +307,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
     def resize(
         self,
         image: "torch.Tensor",
-        size: Dict[str, int],
+        size: SizeDict,
         interpolation: "F.InterpolationMode" = None,
         **kwargs,
     ) -> "torch.Tensor":
@@ -317,7 +317,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         Args:
             image (`np.ndarray`):
                 Image to resize.
-            size (`Dict[str, int]`):
+            size (`SizeDict`):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
             resample (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
                 `InterpolationMode` filter to use when resizing the image e.g. `InterpolationMode.BICUBIC`.
@@ -348,7 +348,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         else:
             raise ValueError(
                 "Size must contain 'height' and 'width' keys, or 'max_height' and 'max_width', or 'shortest_edge' key. Got"
-                f" {size.keys()}."
+                f" {size}."
             )
         return F.resize(image, new_size, interpolation=interpolation)
 
@@ -625,7 +625,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
             if do_resize:
                 stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation)
             resized_images_grouped[shape] = stacked_images
-        resized_images = reconstruct_images(resized_images_grouped, grouped_images_index)
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
         # Group images by size for further processing
         # Needed in case do_resize is False, or resize returns images with different sizes
@@ -644,7 +644,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
                 stacked_images = self.normalize(stacked_images, image_mean, image_std)
             processed_images_grouped[shape] = stacked_images
 
-        processed_images = reconstruct_images(processed_images_grouped, grouped_images_index)
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
@@ -907,7 +907,6 @@ class LlavaPatchingMixin:
         image_std = image_std if image_std is not None else self.image_std
         do_pad = do_pad if do_pad is not None else self.do_pad
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
-        return_tensors = "pt" if return_tensors is None else return_tensors
         device = kwargs.pop("device", None)
 
         images, image_mean, image_std, size, crop_size, interpolation = self.prepare_process_arguments(
@@ -974,7 +973,7 @@ class LlavaPatchingMixin:
                 elif do_normalize:
                     stacked_image_patches = self.normalize(stacked_image_patches, image_mean, image_std)
                 processed_image_patches_grouped[shape] = stacked_image_patches
-            processed_image_patches = reconstruct_images(processed_image_patches_grouped, grouped_image_patches_index)
+            processed_image_patches = reorder_images(processed_image_patches_grouped, grouped_image_patches_index)
             processed_image_patches = (
                 torch.stack(processed_image_patches, dim=0) if return_tensors else processed_image_patches
             )
