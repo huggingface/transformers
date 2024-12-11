@@ -57,7 +57,7 @@ class BambaModelTester:
         num_hidden_layers=4,
         num_attention_heads=4,
         num_key_value_heads=2,
-        intermediate_size=37,
+        intermediate_size=64,
         hidden_act="silu",
         attention_dropout=0.0,
         attn_layer_indices=None,
@@ -131,6 +131,9 @@ class BambaModelTester:
         return config, inputs_dict
 
     def get_config(self):
+        # Fix for SDPA tests, force at least 4 layers
+        if self.num_hidden_layers < 4:
+            self.num_hidden_layers = 4
         if self.attn_layer_indices is None:
             d = [x for x in range(2, self.num_hidden_layers) if self.num_hidden_layers % x == 0]
             if len(d) == 0:
@@ -279,7 +282,7 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     def setUp(self):
         self.model_tester = BambaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=BambaConfig, hidden_size=37)
+        self.config_tester = ConfigTester(self, config_class=BambaConfig, hidden_size=64)
 
     def test_config(self):
         self.config_tester.run_common_tests()
