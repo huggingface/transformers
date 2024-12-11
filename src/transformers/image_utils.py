@@ -727,7 +727,7 @@ def validate_fast_preprocess_arguments(
         resample=resample,
     )
     # Extra checks for ImageProcessorFast
-    if return_tensors != "pt":
+    if return_tensors is not None and return_tensors != "pt":
         raise ValueError("Only returning PyTorch tensors is currently supported.")
 
     if data_format != ChannelDimension.FIRST:
