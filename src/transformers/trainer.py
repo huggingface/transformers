@@ -3698,9 +3698,6 @@ class Trainer:
                 scaled_loss.backward()
         else:
             self.accelerator.backward(loss, **kwargs)
-            # Finally we need to normalize the loss for reporting
-            if num_items_in_batch is None:
-                return loss.detach() / self.args.gradient_accumulation_steps
             return loss.detach()
 
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
@@ -5147,11 +5144,11 @@ class Trainer:
         if len(batch_samples) > 0 and "labels" in batch_samples[0]:
             # For now we don't support object detection
             try:
-                num_items_in_batch = sum([(batch["labels"].ne(-100)).sum() for batch in batch_samples])
+                num_items_in_batch = sum([(batch["labels"][..., 1:].ne(-100)).sum() for batch in batch_samples]) / self.args.gradient_accumulation_steps
             except (TypeError, AttributeError):
                 pass
 
-        if self.args.average_tokens_across_devices:
+        if num_items_in_batch is not None and self.args.average_tokens_across_devices:
             num_items_in_batch = self.accelerator.gather(num_items_in_batch).sum().item()
 
         if torch.is_tensor(num_items_in_batch):
