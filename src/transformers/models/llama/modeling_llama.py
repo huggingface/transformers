@@ -297,7 +297,7 @@ class LlamaAttention(nn.Module):
             **kwargs,
         )
 
-        attn_output = attn_output.reshape(*hidden_shape, -1)
+        attn_output = attn_output.reshape(*input_shape, -1)
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
