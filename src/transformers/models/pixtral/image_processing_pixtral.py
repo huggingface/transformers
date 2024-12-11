@@ -15,7 +15,7 @@
 """Image processor class for Pixtral."""
 
 import math
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -32,7 +32,7 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
-    is_valid_image,
+    make_list_of_images,
     to_numpy_array,
     valid_images,
     validate_kwargs,
@@ -47,40 +47,6 @@ logger = logging.get_logger(__name__)
 
 if is_vision_available():
     import PIL
-
-
-# Copied from transformers.models.idefics2.image_processing_idefics2.make_list_of_images
-def make_list_of_images(images: ImageInput) -> List[List[np.ndarray]]:
-    """
-    Convert a single image or a list of images to a list of numpy arrays.
-
-    Args:
-        images (`ImageInput`):
-            A single image or a list of images.
-
-    Returns:
-        A list of numpy arrays.
-    """
-    # If it's a single image, convert it to a list of lists
-    if is_valid_image(images):
-        images = [[images]]
-    # If it's a list of images, it's a single batch, so convert it to a list of lists
-    elif isinstance(images, (list, tuple)) and len(images) > 0 and is_valid_image(images[0]):
-        images = [images]
-    # If it's a list of batches, it's already in the right format
-    elif (
-        isinstance(images, (list, tuple))
-        and len(images) > 0
-        and isinstance(images[0], (list, tuple))
-        and len(images[0]) > 0
-        and is_valid_image(images[0][0])
-    ):
-        pass
-    else:
-        raise ValueError(
-            "Invalid input type. Must be a single image, a list of images, or a list of batches of images."
-        )
-    return images
 
 
 # Adapted from function in image_transforms.py to ensure any transparent pixels are converted to white.
@@ -167,18 +133,6 @@ def get_resize_output_image_size(
 
     num_height_tokens, num_width_tokens = _num_image_tokens((height, width), (patch_height, patch_width))
     return num_height_tokens * patch_height, num_width_tokens * patch_width
-
-
-# Hack to get tensor conversion used in BatchFeature without batching the images
-def _get_is_as_tensor_fns(tensor_type: Union[str, TensorType]) -> Tuple[Callable, Callable]:
-    return BatchFeature()._get_is_as_tensor_fns(tensor_type)
-
-
-def convert_to_tensor(array, tensor_type: Union[str, TensorType]) -> Any:
-    is_tensor, as_tensor = _get_is_as_tensor_fns(tensor_type)
-    if is_tensor(array):
-        return array
-    return as_tensor(array)
 
 
 class PixtralImageProcessor(BaseImageProcessor):
@@ -329,7 +283,7 @@ class PixtralImageProcessor(BaseImageProcessor):
         Pads images on the `num_of_patches` dimension with zeros to form a batch of same number of patches.
         Args:
             pixel_values (`List[np.ndarray]`):
-                An array of pixel values of each images of shape (`batch_size`, `num_patches`, `image_in_3D`)
+                An array of pixel values of each images of shape (`batch_size`, `height`, `width`, `channels`)
             image_sizes (`List[List[int]]`):
                 A list of sizes for each image in `pixel_values` in (height, width) format.
             data_format (`str` or `ChannelDimension`, *optional*):
@@ -442,9 +396,9 @@ class PixtralImageProcessor(BaseImageProcessor):
 
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
-        images_list = make_list_of_images(images)
+        images = make_list_of_images(images)
 
-        if not valid_images(images_list[0]):
+        if not valid_images(images[0]):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
                 "torch.Tensor, tf.Tensor or jax.ndarray."
@@ -462,12 +416,12 @@ class PixtralImageProcessor(BaseImageProcessor):
         )
 
         if do_convert_rgb:
-            images_list = [[convert_to_rgb(image) for image in images] for images in images_list]
+            images = [convert_to_rgb(image) for image in images]
 
         # All transformations expect numpy arrays.
-        images_list = [[to_numpy_array(image) for image in images] for images in images_list]
+        images = [to_numpy_array(image) for image in images]
 
-        if is_scaled_image(images_list[0][0]) and do_rescale:
+        if is_scaled_image(images[0]) and do_rescale:
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -475,52 +429,43 @@ class PixtralImageProcessor(BaseImageProcessor):
 
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images_list[0][0])
+            input_data_format = infer_channel_dimension_format(images[0])
 
         batch_images = []
         batch_image_sizes = []
-        for sample_images in images_list:
-            images = []
-            image_sizes = []
-            for image in sample_images:
-                if do_resize:
-                    image = self.resize(
-                        image=image,
-                        size=size,
-                        patch_size=patch_size,
-                        resample=resample,
-                        input_data_format=input_data_format,
-                    )
+        for image in images:
+            if do_resize:
+                image = self.resize(
+                    image=image,
+                    size=size,
+                    patch_size=patch_size,
+                    resample=resample,
+                    input_data_format=input_data_format,
+                )
 
-                if do_rescale:
-                    image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+            if do_rescale:
+                image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
 
-                if do_normalize:
-                    image = self.normalize(
-                        image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
-                    )
+            if do_normalize:
+                image = self.normalize(
+                    image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
+                )
 
-                images.append(image)
-                image_sizes.append(get_image_size(image, input_data_format))
-            batch_images.append(images)
-            batch_image_sizes.append(image_sizes)
+            batch_images.append(image)
+            batch_image_sizes.append(get_image_size(image, input_data_format))
 
-        images_list = [
-            [to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images]
-            for images in batch_images
+        batch_images = [
+            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+            for image in batch_images
         ]
 
-        images_list = [size for l in images_list for size in l]
-        image_sizes_list = [im for l in batch_image_sizes for im in l]
         pixel_values = self._pad_for_batching(
-            pixel_values=images_list,
-            image_sizes=image_sizes_list,
+            pixel_values=batch_images,
+            image_sizes=batch_image_sizes,
             input_data_format=data_format,
             data_format=data_format,
         )
 
-        # Convert to tensor type outside of BatchFeature to avoid batching the images of different sizes
-        # images_list = [[convert_to_tensor(image, return_tensors) for image in images] for images in images_list]
         return BatchFeature(
-            data={"pixel_values": pixel_values, "image_sizes": image_sizes_list}, tensor_type=return_tensors
+            data={"pixel_values": pixel_values, "image_sizes": batch_image_sizes}, tensor_type=return_tensors
         )
