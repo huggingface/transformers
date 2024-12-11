@@ -215,7 +215,7 @@ class LlamaMLP(nn.Module):
         return down_proj
 
 
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int, dim=2) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
     num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
@@ -223,16 +223,17 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     batch, num_key_value_heads, slen, head_dim = hidden_states.shape
     if n_rep == 1:
         return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    hidden_states = hidden_states.unsqueeze(dim).expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
 def eager_attention_forward(attention_class:nn.Module, query, key, value, mask, **_kwargs):
     config = attention_class.config
-    key_states = repeat_kv(key, config.num_key_value_groups)
-    value_states = repeat_kv(value, config.num_key_value_groups)
+    query, key, value = [x.transpose(1,2) for x in (query, key, value)]
+    key_states = repeat_kv(key, attention_class.num_key_value_groups)
+    value_states = repeat_kv(value, attention_class.num_key_value_groups)
 
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * config.scaling
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * attention_class.scaling
     if mask is not None:
         causal_mask = mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
@@ -252,6 +253,7 @@ class LlamaAttention(nn.Module):
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.scaling = self.head_dim ** -0.5
 
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias)
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias)
