@@ -25,11 +25,8 @@ def flash_attention_forward(
         value,
         mask,
         seq_len,
+        config=config,
         dropout=dropout_rate,
-        softmax_scale=getattr(config, "scaling", 1.0),
-        is_causal=getattr(config, "is_causal", False),
-        sliding_window=getattr(config, "sliding_window", None),
-        use_top_left_mask=getattr(config, "_flash_attn_uses_top_left_mask", False),
         layer_idx=layer_idx,
         **kwargs,
     )
