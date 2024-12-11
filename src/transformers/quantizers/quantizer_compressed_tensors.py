@@ -70,7 +70,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
         if self.run_compressed and self.is_quantization_compressed:
             apply_quantization_config(model, ct_quantization_config, run_compressed=True)
-        elif not self.is_quantization_compressed: 
+        elif not self.is_quantization_compressed:
             apply_quantization_config(model, ct_quantization_config)
 
     def _process_model_after_weight_loading(self, model, **kwargs):
