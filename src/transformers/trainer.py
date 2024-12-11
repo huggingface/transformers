@@ -140,7 +140,6 @@ from .trainer_utils import (
     has_length,
     neftune_post_forward_hook,
     number_of_arguments,
-    prepare_inputs_for_sequence_parallel,
     seed_worker,
     set_seed,
     speed_metrics,
@@ -2324,7 +2323,7 @@ class Trainer:
 
         if delay_optimizer_creation:
             if use_accelerator_prepare:
-                self.model = self.accelerator.prepare(self.model)
+                self.model, train_dataloader = self.accelerator.prepare(self.model, train_dataloader)
             self.create_optimizer_and_scheduler(num_training_steps=max_steps)
 
         # prepare using `accelerator` prepare
@@ -2332,13 +2331,15 @@ class Trainer:
             self.model.train()
             if hasattr(self.lr_scheduler, "step"):
                 if self.use_apex:
-                    model = self.accelerator.prepare(self.model)
+                    model, train_dataloader = self.accelerator.prepare(self.model, train_dataloader)
                 else:
-                    model, self.optimizer = self.accelerator.prepare(self.model, self.optimizer)
+                    model, self.optimizer, train_dataloader = self.accelerator.prepare(
+                        self.model, self.optimizer, train_dataloader
+                    )
             else:
                 # to handle cases wherein we pass "DummyScheduler" such as when it is specified in DeepSpeed config.
-                model, self.optimizer, self.lr_scheduler = self.accelerator.prepare(
-                    self.model, self.optimizer, self.lr_scheduler
+                model, self.optimizer, self.lr_scheduler, train_dataloader = self.accelerator.prepare(
+                    self.model, self.optimizer, self.lr_scheduler, train_dataloader
                 )
         elif self.args.optim in [OptimizerNames.LOMO, OptimizerNames.ADALOMO]:
             # In this case we are in DDP + LOMO, which should be supported
@@ -3616,12 +3617,6 @@ class Trainer:
 
         return inputs
 
-    def _prepare_inputs_for_sequence_parallel(self, inputs):
-        hf_ds_config = self.accelerator.state.deepspeed_plugin.hf_ds_config
-        sequence_parallel_size = hf_ds_config.sequence_parallel_size()
-        sequence_parallel_rank = hf_ds_config.sequence_parallel_rank()
-        return prepare_inputs_for_sequence_parallel(inputs, sequence_parallel_size, sequence_parallel_rank)
-
     def compute_loss_context_manager(self):
         """
         A helper wrapper to group together context managers.
@@ -3725,9 +3720,6 @@ class Trainer:
             if num_items_in_batch is not None:
                 loss_kwargs["num_items_in_batch"] = num_items_in_batch
             inputs = {**inputs, **loss_kwargs}
-
-        if is_deepspeed_sp_enabled():
-            inputs = self._prepare_inputs_for_sequence_parallel(inputs)
 
         outputs = model(**inputs)
         # Save past state if it exists
