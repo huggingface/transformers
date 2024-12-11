@@ -72,6 +72,7 @@ from . import (
     depth_anything,
     detr,
     dialogpt,
+    diffllama,
     dinat,
     dinov2,
     distilbert,
