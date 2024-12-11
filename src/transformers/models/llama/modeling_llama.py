@@ -301,9 +301,6 @@ class LlamaAttention(nn.Module):
         return attn_output, attn_weights
 
 
-
-
-
 class LlamaDecoderLayer(GradientCheckpointLayer):
     def __init__(self, config: LlamaConfig, layer_idx: int):
         super().__init__()

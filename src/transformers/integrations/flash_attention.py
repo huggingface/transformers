@@ -1,5 +1,5 @@
 import torch
-
+from ..modeling_flash_attention_utils import FlashAttentionKwargs, _flash_attention_forward
 
 def flash_attention_forward(
     config, query, key, value, mask, target_dtype=torch.float16, training=False, layer_idx=0, **kwargs
