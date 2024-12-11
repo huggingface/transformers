@@ -1,5 +1,10 @@
 import torch
 
+from ...utils import is_torch_greater_or_equal
+
+
+if is_torch_greater_or_equal("2.5"):
+    from torch.nn.attention.flex_attention import flex_attention
 
 def flex_attention_forward(config, query, key, value, mask, output_attentions=False, **_kwargs):
     def tanh_softcap(score, b, h, q_idx, kv_idx):
