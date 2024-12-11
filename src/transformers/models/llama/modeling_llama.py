@@ -201,7 +201,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-def eager_attention_forward(attention_class:nn.Module, query, key, value, attention_mask=None, **_kwargs):
+def eager_attention_forward(attention_class: nn.Module, query, key, value, attention_mask=None, **_kwargs):
     config = attention_class.config
     key_states = repeat_kv(key, attention_class.num_key_value_groups)
     value_states = repeat_kv(value, attention_class.num_key_value_groups)
@@ -217,6 +217,7 @@ def eager_attention_forward(attention_class:nn.Module, query, key, value, attent
     attn_output = attn_output.transpose(1, 2).contiguous()
     return attn_output, attn_weights
 
+
 class LlamaAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -226,12 +227,20 @@ class LlamaAttention(nn.Module):
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
 
-        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias)
-        self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias)
+        self.q_proj = nn.Linear(
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.k_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.v_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.o_proj = nn.Linear(
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+        )
 
     def forward(
         self,
@@ -244,9 +253,9 @@ class LlamaAttention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1,2)
-        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1,2)
-        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1,2)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -261,7 +270,11 @@ class LlamaAttention(nn.Module):
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
-            self, query_states, key_states, value_states, **kwargs,
+            self,
+            query_states,
+            key_states,
+            value_states,
+            **kwargs,
         )
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
@@ -331,6 +344,7 @@ class LlamaPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+
 
 class LlamaModel(LlamaPreTrainedModel):
     _embedding_layer = "embed_tokens"
@@ -548,4 +562,3 @@ class LlamaModel(LlamaPreTrainedModel):
                 )
 
         return causal_mask
-

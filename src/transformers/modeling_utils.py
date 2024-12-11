@@ -5493,8 +5493,6 @@ def get_disk_only_shard_files(device_map, sharded_metadata, start_prefix):
     return [fname for fname, devices in files_content.items() if set(devices) == {"disk"}]
 
 
-
-
 ALL_ATTENTION_FUNCTIONS: Dict[str, Dict[str, Callable]] = {}
 
 ALL_ATTENTION_FUNCTIONS.update(
@@ -5507,7 +5505,6 @@ ALL_ATTENTION_FUNCTIONS.update(
 
 
 class GradientCheckpointLayer(torch.nn.Module):
-
     def __call__(self, *args, **kwargs):
         """
         Adjust the behavior of the inherited class by overriding `__call__`.
@@ -5515,7 +5512,9 @@ class GradientCheckpointLayer(torch.nn.Module):
         Automatically handles gradient checkpointing based on flags in the provided arguments.
         """
         # Extract necessary flags and arguments
-        gradient_checkpointing = kwargs.pop("gradient_checkpointing", False) | getattr(self, "gradient_checkpointing", False)
+        gradient_checkpointing = kwargs.pop("gradient_checkpointing", False) | getattr(
+            self, "gradient_checkpointing", False
+        )
         training = self.training
 
         if gradient_checkpointing and training:
@@ -5531,11 +5530,12 @@ class GradientCheckpointLayer(torch.nn.Module):
 
         By default, uses `torch.utils.checkpoint.checkpoint`.
         """
+
         # Assume `self.forward` is compatible with checkpointing
         def wrapped_forward():
-           return self.forward(*args, **kwargs)
-        return  self._gradient_checkpointing_func(wrapped_forward)
+            return self.forward(*args, **kwargs)
 
+        return self._gradient_checkpointing_func(wrapped_forward)
 
     def gradient_checkpointing_enable(self, gradient_checkpointing_kwargs=None):
         """

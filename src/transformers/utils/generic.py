@@ -886,8 +886,6 @@ class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs):
     num_logits_to_keep: int = 0
 
 
-
-
 def validate_config_kwargs(func):
     """
     A decorator to validate and initialize kwargs based on a config object.
@@ -919,4 +917,3 @@ def validate_config_kwargs(func):
         return func(*args, **validated_kwargs)
 
     return wrapper
-

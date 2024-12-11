@@ -2572,10 +2572,6 @@ else:
     )
     _import_structure["models.llama"].extend(
         [
-            "LlamaForCausalLM",
-            "LlamaForQuestionAnswering",
-            "LlamaForSequenceClassification",
-            "LlamaForTokenClassification",
             "LlamaModel",
             "LlamaPreTrainedModel",
         ]
@@ -7265,10 +7261,6 @@ if TYPE_CHECKING:
             LiltPreTrainedModel,
         )
         from .models.llama import (
-            LlamaForCausalLM,
-            LlamaForQuestionAnswering,
-            LlamaForSequenceClassification,
-            LlamaForTokenClassification,
             LlamaModel,
             LlamaPreTrainedModel,
         )

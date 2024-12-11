@@ -44,7 +44,6 @@ class AutoForCausalLM(PreTrainedModel, GenerationMixin):
         num_logits_to_keep: int = 1,
         **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, CausalLMOutputWithPast]:
-
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -156,7 +155,6 @@ class AutoForSequenceClassification(PreTrainedModel):
         )
 
 
-
 class AutoForQuestionAnswering(PreTrainedModel):
     base_model_prefix = "transformer"
 
@@ -258,7 +256,7 @@ class AutoForTokenClassification(PreTrainedModel):
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        return_dict = False,
+        return_dict=False,
         **kwargs,
     ) -> Union[Tuple, TokenClassifierOutput]:
         r"""
@@ -273,7 +271,7 @@ class AutoForTokenClassification(PreTrainedModel):
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            **kwargs
+            **kwargs,
         )
         sequence_output = outputs[0]
         sequence_output = self.dropout(sequence_output)

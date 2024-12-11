@@ -4,8 +4,8 @@ from ..utils import is_torch_greater_or_equal
 if is_torch_greater_or_equal("2.5"):
     from torch.nn.attention.flex_attention import flex_attention
 
-def flex_attention_forward(module, query, key, value, attention_mask, output_attentions=False, **_kwargs):
 
+def flex_attention_forward(module, query, key, value, attention_mask, output_attentions=False, **_kwargs):
     causal_mask = attention_mask
     if causal_mask is not None:
         causal_mask = causal_mask[:, :, :, : key.shape[-2]]
