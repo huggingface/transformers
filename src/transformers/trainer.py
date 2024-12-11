@@ -313,7 +313,7 @@ FSDP_MODEL_NAME = "pytorch_model_fsdp"
 # Safe serialization check
 safe_serialize = os.environ.get("TRAINER_SAFE_SERIALIZE")
 
-if safe_serialize or __version__.split(".")[0] >= 5:
+if safe_serialize or int(__version__.split(".")[0]) >= 5:
     safe_serialize = True
 
 
