@@ -438,7 +438,9 @@ class _BaseAutoModelClass:
         elif type(config) in cls._model_mapping.keys():
             model_class = _get_model_class(config, cls._model_mapping)
             return model_class._from_config(config, **kwargs)
-
+        else:
+            model_class = cls._model_mapping["auto"]
+            return model_class._from_config(config, **kwargs)
         raise ValueError(
             f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
             f"Model type should be one of {', '.join(c.__name__ for c in cls._model_mapping.keys())}."

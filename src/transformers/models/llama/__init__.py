@@ -50,12 +50,8 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_llama"] = [
-        "LlamaForCausalLM",
         "LlamaModel",
         "LlamaPreTrainedModel",
-        "LlamaForSequenceClassification",
-        "LlamaForQuestionAnswering",
-        "LlamaForTokenClassification",
     ]
 
 try:
@@ -93,10 +89,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_llama import (
-            LlamaForCausalLM,
-            LlamaForQuestionAnswering,
-            LlamaForSequenceClassification,
-            LlamaForTokenClassification,
             LlamaModel,
             LlamaPreTrainedModel,
         )
