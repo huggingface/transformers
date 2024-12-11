@@ -51,7 +51,7 @@ class AutoForCausalLM(PreTrainedModel, GenerationMixin):
             return_dict=return_dict,
             **kwargs,
         )
-
+        self.lm_head.weight.data = self.model.embed_tokens.weight.data
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :])
 
