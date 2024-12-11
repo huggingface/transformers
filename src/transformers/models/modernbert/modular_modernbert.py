@@ -94,9 +94,6 @@ class ModernBertConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
         pad_token_id (`int`, *optional*, defaults to 0):
             Padding token id.
         eos_token_id (`int`, *optional*, defaults to 1):
@@ -113,8 +110,6 @@ class ModernBertConfig(PretrainedConfig):
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         query_pre_attn_scalar (`float`, *optional*, defaults to 256): scaling factor used on the attention scores
-        sliding_window (`int`, *optional*, defaults to 4096): in ModernBert, every other layer uses sliding window attention. This is the
-            size of the sliding window.
         final_logit_softcapping (`float`, *optional*, defaults to 30.0): scaling factor when applying tanh softcapping on the logits.
         attn_logit_softcapping (`float`, *optional*, defaults to 50.0): scaling factor when applying tanh softcapping on the attention scores.
         cache_implementation (`str`, *optional*, defaults to `"hybrid"`): the cache type to be used with `generate`.
