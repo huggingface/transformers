@@ -992,9 +992,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
 
             # Output weights.
             if not self.config.tie_word_embeddings:
-                _init_modernbert_weights(
-                    self.config, self.decoder, self.config.hidden_size, module_type=ModernBertModuleType.out_module
-                )
+                _init_modernbert_weights(self.config, self.decoder, module_type=ModernBertModuleType.out_module)
 
     def get_output_embeddings(self):
         return self.decoder
