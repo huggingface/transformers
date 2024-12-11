@@ -90,7 +90,6 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
                 from compressed_tensors.quantization import QuantizationStatus
 
                 self.compressor.quantization_config.quantization_status = QuantizationStatus.FROZEN
-
             self.compressor.decompress(model_path=cache_path, model=model)
 
     @property
@@ -108,7 +107,7 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
 
         return (
             self.quantization_config.sparsity_config is not None
-            and self.quantization_config.sparsity_config.format is not CompressionFormat.dense.value
+            and self.quantization_config.sparsity_config.format != CompressionFormat.dense.value
         )
 
     @property
