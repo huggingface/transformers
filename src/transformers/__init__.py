@@ -455,6 +455,7 @@ _import_structure = {
     "models.fuyu": ["FuyuConfig"],
     "models.gemma": ["GemmaConfig"],
     "models.gemma2": ["Gemma2Config"],
+    "models.modernbert": ["ModernBertConfig"],
     "models.git": [
         "GitConfig",
         "GitProcessor",
@@ -2313,6 +2314,15 @@ else:
             "Gemma2ForTokenClassification",
             "Gemma2Model",
             "Gemma2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.modernbert"].extend(
+        [
+            "ModernBertForCausalLM",
+            "ModernBertForSequenceClassification",
+            "ModernBertForTokenClassification",
+            "ModernBertModel",
+            "ModernBertPreTrainedModel",
         ]
     )
     _import_structure["models.git"].extend(
@@ -5358,6 +5368,7 @@ if TYPE_CHECKING:
     from .models.fuyu import FuyuConfig
     from .models.gemma import GemmaConfig
     from .models.gemma2 import Gemma2Config
+    from .models.modernbert import ModernBertConfig
     from .models.git import (
         GitConfig,
         GitProcessor,
@@ -7094,6 +7105,13 @@ if TYPE_CHECKING:
             Gemma2ForTokenClassification,
             Gemma2Model,
             Gemma2PreTrainedModel,
+        )
+        from .models.modernbert import (
+            ModernBertForCausalLM,
+            ModernBertForSequenceClassification,
+            ModernBertForTokenClassification,
+            ModernBertModel,
+            ModernBertPreTrainedModel,
         )
         from .models.git import (
             GitForCausalLM,

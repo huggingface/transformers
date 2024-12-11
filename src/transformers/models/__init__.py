@@ -97,6 +97,7 @@ from . import (
     fuyu,
     gemma,
     gemma2,
+    modernbert,
     git,
     glm,
     glpn,
