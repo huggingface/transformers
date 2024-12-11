@@ -121,7 +121,7 @@ def parse_message(message: str) -> str:
     # run-slow: model_1, model_2
     if not message.startswith(("run-slow", "run_slow", "run slow")):
         return ""
-    message = message[len("run slow"):]
+    message = message[len("run slow") :]
     # remove leading `:`
     while message.strip().startswith(":"):
         message = message.strip()[1:]
@@ -135,7 +135,7 @@ def get_models(message: str):
 
 
 def check_model_names(model_name: str):
-    allowed = string.ascii_letters + string.digits + '_'
+    allowed = string.ascii_letters + string.digits + "_"
     return not (model_name.startswith("_") or model_name.endswith("_")) and all(c in allowed for c in model_name)
 
 
