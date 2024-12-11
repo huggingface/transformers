@@ -234,6 +234,7 @@ class PhiConfig(PretrainedConfig):
 class PhiRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
+
 class PhiMLP(CLIPMLP):
     pass
 
