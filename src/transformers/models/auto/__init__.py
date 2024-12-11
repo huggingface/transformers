@@ -28,9 +28,9 @@ _import_structure = {
     "configuration_auto": ["CONFIG_MAPPING", "MODEL_NAMES_MAPPING", "AutoConfig"],
     "feature_extraction_auto": ["FEATURE_EXTRACTOR_MAPPING", "AutoFeatureExtractor"],
     "image_processing_auto": ["IMAGE_PROCESSOR_MAPPING", "AutoImageProcessor"],
-    "video_processing_auto": ["Video_PROCESSOR_MAPPING", "AutoVideoProcessor"],
     "processing_auto": ["PROCESSOR_MAPPING", "AutoProcessor"],
     "tokenization_auto": ["TOKENIZER_MAPPING", "AutoTokenizer"],
+    "video_processing_auto": ["AutoVideoProcessor", "Video_PROCESSOR_MAPPING"],
 }
 
 try:

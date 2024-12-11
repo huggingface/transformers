@@ -183,9 +183,9 @@ _import_structure = {
         "AutoConfig",
         "AutoFeatureExtractor",
         "AutoImageProcessor",
-        "AutoVideoProcessor",
         "AutoProcessor",
         "AutoTokenizer",
+        "AutoVideoProcessor",
     ],
     "models.autoformer": ["AutoformerConfig"],
     "models.bark": [
@@ -1172,7 +1172,6 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["image_processing_base"] = ["ImageProcessingMixin"]
     _import_structure["image_processing_utils"] = ["BaseImageProcessor"]
-    _import_structure["video_processing_utils"] = ["BaseVideoProcessor"]
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
     _import_structure["models.beit"].extend(["BeitFeatureExtractor", "BeitImageProcessor"])
     _import_structure["models.bit"].extend(["BitImageProcessor"])
@@ -1250,6 +1249,7 @@ else:
     _import_structure["models.vivit"].append("VivitImageProcessor")
     _import_structure["models.yolos"].extend(["YolosFeatureExtractor", "YolosImageProcessor"])
     _import_structure["models.zoedepth"].append("ZoeDepthImageProcessor")
+    _import_structure["video_processing_utils"] = ["BaseVideoProcessor"]
 
 try:
     if not is_torchvision_available():
