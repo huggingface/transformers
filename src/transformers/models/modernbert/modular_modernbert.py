@@ -142,7 +142,7 @@ class ModernBertConfig(PretrainedConfig):
         hidden_activation="gelu",
         max_position_embeddings=8192,
         initializer_range=0.02,
-        initalizer_cutoff_factor=2.0,
+        initializer_cutoff_factor=2.0,
         norm_eps=1e-5,
         norm_bias=False,
         pad_token_id=50283,
@@ -189,7 +189,7 @@ class ModernBertConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.initializer_range = initializer_range
-        self.initalizer_cutoff_factor = initalizer_cutoff_factor
+        self.initializer_cutoff_factor = initializer_cutoff_factor
         self.norm_eps = norm_eps
         self.norm_bias = norm_bias
         self.global_rope_theta = global_rope_theta
@@ -246,7 +246,7 @@ def _init_modernbert_weights(
     if module_type is None:
         raise RuntimeError("When using the full megatron init, every module must have a type.")
 
-    cutoff_factor = config.initalizer_cutoff_factor
+    cutoff_factor = config.initializer_cutoff_factor
     if cutoff_factor is None:
         cutoff_factor = 3
 

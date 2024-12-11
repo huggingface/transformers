@@ -253,7 +253,7 @@ def _init_modernbert_weights(
     if module_type is None:
         raise RuntimeError("When using the full megatron init, every module must have a type.")
 
-    cutoff_factor = config.initalizer_cutoff_factor
+    cutoff_factor = config.initializer_cutoff_factor
     if cutoff_factor is None:
         cutoff_factor = 3
 
