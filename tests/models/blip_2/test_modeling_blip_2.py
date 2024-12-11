@@ -1004,7 +1004,14 @@ class Blip2TextModelTester:
 # this model tester uses an encoder-decoder language model (T5)
 class Blip2ModelTester:
     def __init__(
-        self, parent, vision_kwargs=None, qformer_kwargs=None, text_kwargs=None, is_training=True, num_query_tokens=10
+        self,
+        parent,
+        vision_kwargs=None,
+        qformer_kwargs=None,
+        text_kwargs=None,
+        is_training=True,
+        num_query_tokens=10,
+        image_token_index=4,
     ):
         if vision_kwargs is None:
             vision_kwargs = {}
@@ -1021,6 +1028,7 @@ class Blip2ModelTester:
         self.seq_length = self.text_model_tester.seq_length  # need seq_length for common tests
         self.is_training = is_training
         self.num_query_tokens = num_query_tokens
+        self.image_token_index = image_token_index
 
     def prepare_config_and_inputs(self):
         _, pixel_values = self.vision_model_tester.prepare_config_and_inputs()
@@ -1043,6 +1051,7 @@ class Blip2ModelTester:
             qformer_config=self.qformer_model_tester.get_config(),
             text_config=self.text_model_tester.get_config(),
             num_query_tokens=self.num_query_tokens,
+            image_token_index=self.image_token_index,
         )
 
     def create_and_check_for_conditional_generation(
