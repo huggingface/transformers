@@ -24,10 +24,19 @@ Try GPTQ quantization with PEFT in this [notebook](https://colab.research.google
 
 The [AutoGPTQ](https://github.com/PanQiWei/AutoGPTQ) library implements the GPTQ algorithm, a post-training quantization technique where each row of the weight matrix is quantized independently to find a version of the weights that minimizes the error. These weights are quantized to int4, but they're restored to fp16 on the fly during inference. This can save your memory-usage by 4x because the int4 weights are dequantized in a fused kernel rather than a GPU's global memory, and you can also expect a speedup in inference because using a lower bitwidth takes less time to communicate.
 
+Now, we are going to replace [AutoGPTQ](https://github.com/PanQiWei/AutoGPTQ) with [GPTQModel](https://github.com/ModelCloud/GPTQModel), the auto_gptq will be deprecated in the future.
+
 Before you begin, make sure the following libraries are installed:
 
 ```bash
 pip install auto-gptq
+```
+or
+```bash
+pip install gptqmodel
+```
+
+```bash
 pip install --upgrade accelerate optimum transformers
 ```
 
@@ -110,7 +119,7 @@ Only 4-bit models are supported, and we recommend deactivating the ExLlama kerne
 
 </Tip>
 
-The ExLlama kernels are only supported when the entire model is on the GPU. If you're doing inference on a CPU with AutoGPTQ (version > 0.4.2), then you'll need to disable the ExLlama kernel. This overwrites the attributes related to the ExLlama kernels in the quantization config of the config.json file.
+The ExLlama kernels are only supported when the entire model is on the GPU. If you're doing inference on a CPU with AutoGPTQ (version > 0.4.2) or GPTQModel, then you'll need to disable the ExLlama kernel. This overwrites the attributes related to the ExLlama kernels in the quantization config of the config.json file.
 
 ```py
 import torch
