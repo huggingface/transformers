@@ -159,6 +159,7 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 ```
 </pt>
 <tf>
+ 
 ```py
 >>> from dataclasses import dataclass
 >>> from transformers.tokenization_utils_base import PreTrainedTokenizerBase, PaddingStrategy
