@@ -5489,7 +5489,7 @@ def get_disk_only_shard_files(device_map, sharded_metadata, start_prefix):
 
 
 
-ALL_ATTENTION_FUNCTIONS: Dict[str, Dict[str, function]] = {}
+ALL_ATTENTION_FUNCTIONS: Dict[str, Dict[str, Callable]] = {}
 
 ALL_ATTENTION_FUNCTIONS.update(
     {

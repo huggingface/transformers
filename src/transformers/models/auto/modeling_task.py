@@ -1,12 +1,26 @@
 import torch
-from transformers import PreTrainedModel
+import torch.nn as nn
+from typing import Optional, List, Union, Unpack, Tuple, Dict
+
+from ...modeling_utils import PreTrainedModel
+from ...generation import GenerationMixin
+from ..auto import AutoModel
+from ...cache_utils import Cache, DynamicCache, StaticCache
+
+from ...utils.generic import KwargsForCausalLM, validate_config_kwargs
+from ...modeling_outputs import (
+    QuestionAnsweringModelOutput,
+    SequenceClassifierOutputWithPast,
+    CausalLMOutputWithPast,
+    TokenClassifierOutput
+)
 
 class AutoForCausalLM(PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
     _embeding_layer = "model.embed_tokens"
     _output_embedding = "lm_head"
-
+    _no_split_modules = []
     def __init__(self, config):
         super().__init__(config)
         self.model = AutoModel.from_config(config)
@@ -75,11 +89,11 @@ class AutoForCausalLM(PreTrainedModel, GenerationMixin):
         )
 
 
-class AutoForSequenceClassification(LlamaPreTrainedModel):
+class AutoForSequenceClassification(PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.model = LlamaModel(config)
+        self.model = AutoModel.from_config(config)
         self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
@@ -158,13 +172,13 @@ class AutoForSequenceClassification(LlamaPreTrainedModel):
 
 
 
-class AutoForQuestionAnswering(LlamaPreTrainedModel):
+class AutoForQuestionAnswering(PreTrainedModel):
     base_model_prefix = "transformer"
 
     # Copied from transformers.models.bloom.modeling_bloom.BloomForQuestionAnswering.__init__ with Bloom->Llama
     def __init__(self, config):
         super().__init__(config)
-        self.transformer = LlamaModel(config)
+        self.transformer = AutoModel.from_config(config)
         self.qa_outputs = nn.Linear(config.hidden_size, 2)
 
         # Initialize weights and apply final processing
@@ -227,11 +241,11 @@ class AutoForQuestionAnswering(LlamaPreTrainedModel):
         )
 
 
-class AutoForTokenClassification(LlamaPreTrainedModel):
+class AutoForTokenClassification(PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
-        self.model = LlamaModel(config)
+        self.model = AutoModel.from_config(config)
         if getattr(config, "classifier_dropout", None) is not None:
             classifier_dropout = config.classifier_dropout
         elif getattr(config, "hidden_dropout", None) is not None:
@@ -259,6 +273,7 @@ class AutoForTokenClassification(LlamaPreTrainedModel):
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
+        return_dict = False,
         **kwargs,
     ) -> Union[Tuple, TokenClassifierOutput]:
         r"""
@@ -267,8 +282,6 @@ class AutoForTokenClassification(LlamaPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         outputs = self.model(
             input_ids,
             attention_mask=attention_mask,

@@ -185,6 +185,7 @@ _import_structure = {
         "AutoImageProcessor",
         "AutoProcessor",
         "AutoTokenizer",
+        "AutoForCausalLM",
     ],
     "models.autoformer": ["AutoformerConfig"],
     "models.bark": [
@@ -5039,6 +5040,7 @@ if TYPE_CHECKING:
         AutoImageProcessor,
         AutoProcessor,
         AutoTokenizer,
+        AutoForCausalLM,
     )
     from .models.autoformer import (
         AutoformerConfig,
@@ -6200,6 +6202,7 @@ if TYPE_CHECKING:
         from .utils.dummy_pt_objects import *
     else:
         # Benchmarks
+        from .models.auto.modeling_task import AutoForCausalLM
         from .benchmark.benchmark import PyTorchBenchmark
         from .benchmark.benchmark_args import PyTorchBenchmarkArguments
         from .cache_utils import (

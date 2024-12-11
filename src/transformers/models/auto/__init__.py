@@ -122,6 +122,9 @@ else:
         "AutoModelForZeroShotObjectDetection",
         "AutoModelForImageTextToText",
     ]
+    _import_structure["modeling_task"] = [
+        "AutoForCausalLM",
+    ]
 
 try:
     if not is_tf_available():
@@ -311,6 +314,7 @@ if TYPE_CHECKING:
             AutoModelForZeroShotObjectDetection,
             AutoModelWithLMHead,
         )
+        from .modeling_task import AutoForCausalLM
 
     try:
         if not is_tf_available():

@@ -20,7 +20,11 @@ from typing import Optional, Tuple, TypedDict
 import torch
 import torch.nn.functional as F
 
-from .utils import is_flash_attn_2_available, is_flash_attn_greater_or_equal
+from functools import wraps
+from typing import Callable, TypedDict, Optional
+import logging 
+
+from .utils.import_utils import is_flash_attn_2_available, is_flash_attn_greater_or_equal
 
 
 if is_flash_attn_2_available():
@@ -344,46 +348,3 @@ class TransformersKwargs(TypedDict, total=False):
     use_cache: Optional[bool]
     return_dict: Optional[bool]
 
-
-
-from functools import wraps
-from typing import Callable, TypedDict, Optional
-from logging import logger
-
-
-def validate_config_kwargs(config):
-    """
-    A decorator to validate and initialize kwargs based on a config object.
-    """
-    def decorator(func: Callable):
-        @wraps(func)
-        def wrapper(*args, **kwargs):
-            self = args[0]
-            # Default values from the config
-            default_kwargs = {
-                "output_attentions": self.config.output_attentions,
-                "output_hidden_states": self.config.output_hidden_states,
-                "use_cache": self.config.use_cache,
-                "return_dict": self.config.use_return_dict,
-            }
-
-            # Merge provided kwargs with defaults
-            validated_kwargs = {**default_kwargs, **kwargs}
-
-            # Validate kwargs against TypedDict
-            for key in validated_kwargs:
-                if key not in TransformersKwargs.__annotations__:
-                    raise ValueError(f"Invalid keyword argument: {key}")
-
-            if self.gradient_checkpointing and self.training and default_kwargs["use_cache"]:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
-                )
-                validated_kwargs["use_cache"] = False
-
-            # Pass the validated kwargs to the function
-            return func(*args, **validated_kwargs)
-
-        return wrapper
-
-    return decorator
