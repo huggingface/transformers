@@ -360,6 +360,7 @@ class WhisperGenerationMixin(GenerationMixin):
         return_token_timestamps: Optional[bool] = None,
         return_segments: bool = False,
         return_dict_in_generate: Optional[bool] = None,
+        force_unique_generate_call: Optional[bool] = None,
         **kwargs,
     ):
         """
@@ -480,6 +481,9 @@ class WhisperGenerationMixin(GenerationMixin):
                 Note that when doing long-form transcription, `return_dict_in_generate` can only be enabled when
                 `return_segments` is set True. In this case the generation outputs of each segment is added to each
                 segment.
+            force_unique_generate_call (`bool`, *optional*):
+                Whether to force a unique call to generate. This is useful for assisted decoding and testing purposes to ensure
+                that only one call to generate is made and therefore decoder input token ids are returned.
             kwargs (`Dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -693,12 +697,13 @@ class WhisperGenerationMixin(GenerationMixin):
             assistant_model = kwargs["assistant_model"]
             assistant_model.generation_config.force_unique_generate_call = True
 
-        if hasattr(generation_config, "force_unique_generate_call"):
-            force_unique_generate_call = generation_config.force_unique_generate_call
-        elif hasattr(self.generation_config, "force_unique_generate_call"):
-            force_unique_generate_call = self.generation_config.force_unique_generate_call
-        else:
-            force_unique_generate_call = False
+        if force_unique_generate_call is None:
+            if hasattr(generation_config, "force_unique_generate_call"):
+                force_unique_generate_call = generation_config.force_unique_generate_call
+            elif hasattr(self.generation_config, "force_unique_generate_call"):
+                force_unique_generate_call = self.generation_config.force_unique_generate_call
+            else:
+                force_unique_generate_call = False
 
         # 6 Transcribe audio until we reach the end of all input audios
         while (seek < max_frames).any():
