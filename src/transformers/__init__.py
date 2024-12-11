@@ -600,6 +600,14 @@ _import_structure = {
     "models.mobilenet_v2": ["MobileNetV2Config"],
     "models.mobilevit": ["MobileViTConfig"],
     "models.mobilevitv2": ["MobileViTV2Config"],
+    "models.molmo": [
+        "MolmoConfig",
+        "MolmoImageProcessor",
+        "MolmoPoolingConfig",
+        "MolmoProcessor",
+        "MolmoTextConfig",
+        "MolmoVisionConfig",
+    ],
     "models.moshi": [
         "MoshiConfig",
         "MoshiDepthConfig",
@@ -1228,6 +1236,7 @@ else:
     _import_structure["models.mobilenet_v1"].extend(["MobileNetV1FeatureExtractor", "MobileNetV1ImageProcessor"])
     _import_structure["models.mobilenet_v2"].extend(["MobileNetV2FeatureExtractor", "MobileNetV2ImageProcessor"])
     _import_structure["models.mobilevit"].extend(["MobileViTFeatureExtractor", "MobileViTImageProcessor"])
+    _import_structure["models.molmo"].append("MolmoImageProcessor")
     _import_structure["models.nougat"].append("NougatImageProcessor")
     _import_structure["models.oneformer"].extend(["OneFormerImageProcessor"])
     _import_structure["models.owlv2"].append("Owlv2ImageProcessor")
@@ -2835,6 +2844,15 @@ else:
             "MobileViTV2PreTrainedModel",
         ]
     )
+    _import_structure["models.molmo"].extend(
+        [
+            "MolmoForCausalLM",
+            "MolmoForConditionalGeneration",
+            "MolmoPreTrainedModel",
+            "MolmoTextModel",
+        ]
+    )
+
     _import_structure["models.moshi"].extend(
         [
             "MoshiForCausalLM",
@@ -5522,6 +5540,14 @@ if TYPE_CHECKING:
     from .models.mobilevitv2 import (
         MobileViTV2Config,
     )
+    from .models.molmo import (
+        MolmoConfig,
+        MolmoImageProcessor,
+        MolmoPoolingConfig,
+        MolmoProcessor,
+        MolmoTextConfig,
+        MolmoVisionConfig,
+    )
     from .models.moshi import (
         MoshiConfig,
         MoshiDepthConfig,
@@ -6184,6 +6210,7 @@ if TYPE_CHECKING:
             MobileNetV2ImageProcessor,
         )
         from .models.mobilevit import MobileViTFeatureExtractor, MobileViTImageProcessor
+        from .models.molmo import MolmoImageProcessor
         from .models.nougat import NougatImageProcessor
         from .models.oneformer import OneFormerImageProcessor
         from .models.owlv2 import Owlv2ImageProcessor
@@ -7492,6 +7519,12 @@ if TYPE_CHECKING:
             MobileViTV2ForSemanticSegmentation,
             MobileViTV2Model,
             MobileViTV2PreTrainedModel,
+        )
+        from .models.molmo import (
+            MolmoForCausalLM,
+            MolmoForConditionalGeneration,
+            MolmoPreTrainedModel,
+            MolmoTextModel,
         )
         from .models.moshi import (
             MoshiForCausalLM,
