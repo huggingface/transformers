@@ -193,6 +193,34 @@ def prepare_whisper_inputs_dict(
     }
 
 
+# Whisper's generate method does not return the decoder input token ids by default.
+# To keep compatibility with generic GenerationTesterMixin, we'll need to patch generate with this decorator that ensures only one call to generate is made and therefore decoder input token ids are returned.
+def with_decoder_input_ids(func):
+    def wrapper(self, *args, **kwargs):
+        if func is None:
+            return
+        all_generative_model_classes = self.all_generative_model_classes
+
+        class PatchedWhisperForConditionalGeneration(WhisperForConditionalGeneration):
+            def __init__(self, *args, **kwargs):
+                super().__init__(*args, **kwargs)
+                self.generation_config.force_unique_generate_call = True
+
+            @classmethod
+            def from_pretrained(cls, *args, **kwargs):
+                model = super(PatchedWhisperForConditionalGeneration, cls).from_pretrained(*args, **kwargs)
+                model.generation_config.force_unique_generate_call = True
+                return model
+
+        self.all_generative_model_classes = (PatchedWhisperForConditionalGeneration,)
+        result = func(self, *args, **kwargs)
+        # Restore original model classes
+        self.all_generative_model_classes = all_generative_model_classes
+        return result
+
+    return wrapper
+
+
 @require_torch
 class WhisperModelTester:
     def __init__(
@@ -1597,6 +1625,96 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             with self.assertRaises(ValueError):
                 model(input_features=input_features, labels=labels)
 
+    @with_decoder_input_ids
+    def test_greedy_generate(self):
+        super().test_greedy_generate()
+
+    @with_decoder_input_ids
+    def test_greedy_generate_dict_outputs(self):
+        super().test_greedy_generate_dict_outputs()
+
+    @with_decoder_input_ids
+    def test_greedy_generate_dict_outputs_use_cache(self):
+        super().test_greedy_generate_dict_outputs_use_cache()
+
+    @with_decoder_input_ids
+    def test_sample_generate(self):
+        super().test_sample_generate()
+
+    @with_decoder_input_ids
+    def test_sample_generate_dict_output(self):
+        super().test_sample_generate_dict_output()
+
+    @with_decoder_input_ids
+    def test_beam_search_generate(self):
+        super().test_beam_search_generate()
+
+    @with_decoder_input_ids
+    def test_beam_search_generate_dict_output(self):
+        super().test_beam_search_generate_dict_output()
+
+    @with_decoder_input_ids
+    def test_beam_search_generate_dict_outputs_use_cache(self):
+        super().test_beam_search_generate_dict_outputs_use_cache()
+
+    @with_decoder_input_ids
+    def test_beam_sample_generate(self):
+        super().test_beam_sample_generate()
+
+    @with_decoder_input_ids
+    def test_beam_sample_generate_dict_output(self):
+        super().test_beam_sample_generate_dict_output()
+
+    @with_decoder_input_ids
+    def test_group_beam_search_generate(self):
+        super().test_group_beam_search_generate()
+
+    @with_decoder_input_ids
+    def test_group_beam_search_generate_dict_output(self):
+        super().test_group_beam_search_generate_dict_output()
+
+    @with_decoder_input_ids
+    def test_constrained_beam_search_generate(self):
+        super().test_constrained_beam_search_generate()
+
+    @with_decoder_input_ids
+    def test_constrained_beam_search_generate_dict_output(self):
+        super().test_constrained_beam_search_generate_dict_output()
+
+    @with_decoder_input_ids
+    def test_contrastive_generate(self):
+        super().test_contrastive_generate()
+
+    @with_decoder_input_ids
+    def test_contrastive_generate_dict_outputs_use_cache(self):
+        super().test_contrastive_generate_dict_outputs_use_cache()
+
+    @with_decoder_input_ids
+    def test_generate_continue_from_past_key_values(self):
+        super().test_generate_continue_from_past_key_values()
+
+    @with_decoder_input_ids
+    def test_prompt_lookup_decoding_matches_greedy_search(self):
+        super().test_prompt_lookup_decoding_matches_greedy_search()
+
+    @with_decoder_input_ids
+    @parameterized.expand([("random",), ("same",)])
+    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
+        super().test_assisted_decoding_matches_greedy_search(assistant_type)
+
+    @with_decoder_input_ids
+    def test_assisted_decoding_sample(self):
+        super().test_assisted_decoding_sample()
+
+    @with_decoder_input_ids
+    @parameterized.expand([(1, False), (1, True), (4, False)])
+    def test_new_cache_format(self, num_beams, do_sample):
+        super().test_assisted_decoding_matches_greedy_search(num_beams, do_sample)
+
+    @with_decoder_input_ids
+    def test_eager_matches_sdpa_generate(self):
+        super().test_eager_matches_sdpa_generate()
+
 
 @require_torch
 @require_torchaudio
@@ -1769,7 +1887,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         generated_ids = model.generate(input_features, num_beams=5, max_length=20)
         transcript = processor.tokenizer.batch_decode(generated_ids)[0]
 
-        EXPECTED_TRANSCRIPT = "<|startoftranscript|><|notimestamps|> Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his"
+        EXPECTED_TRANSCRIPT = " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
     @slow
@@ -1787,7 +1905,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         generated_ids = model.generate(input_features, num_beams=5, max_length=20)
         transcript = processor.tokenizer.decode(generated_ids[0])
 
-        EXPECTED_TRANSCRIPT = "<|startoftranscript|><|en|><|transcribe|><|notimestamps|> Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel"
+        EXPECTED_TRANSCRIPT = " Mr. Quilter is the apostle of the middle classes and we are glad to welcome his gospel"
         self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
 
     @slow
@@ -1855,10 +1973,10 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         # fmt: off
         EXPECTED_LOGITS = torch.tensor(
             [
-                [50258, 50259, 50359, 50364, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 293, 321, 366, 5404, 281, 2928, 702, 14943],
-                [50258, 50259, 50359, 50364, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13, 50257, 50257, 50257, 50257, 50257],
-                [50258, 50259, 50359, 50364, 415, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264, 1064, 365, 26586, 3799, 293, 12904, 9256, 450, 10539, 949],
-                [50258, 50259, 50359, 50364, 634, 575, 12525, 22618, 1968, 6144, 35617, 1456, 397, 266, 311, 589, 307, 534, 10281, 934, 439, 11, 293, 393]
+                [2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 293, 321, 366, 5404, 281, 2928, 702, 14943],
+                [6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13, 50257, 50257, 50257, 50257, 50257],
+                [415, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264, 1064, 365, 26586, 3799, 293, 12904, 9256, 450, 10539, 949],
+                [634, 575, 12525, 22618, 1968, 6144, 35617, 1456, 397, 266, 311, 589, 307, 534, 10281, 934, 439, 11, 293, 393]
             ]
         )
         # fmt: on
@@ -1928,10 +2046,10 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         # fmt: off
         EXPECTED_LOGITS = torch.tensor(
             [
-                [50257, 50362, 1770, 13, 2264, 346, 353, 318, 262, 46329, 286, 262, 3504, 6097, 11, 290, 356, 389, 9675, 284, 7062, 465],
-                [50257, 50362, 5414, 318, 1770, 13, 2264, 346, 353, 338, 5642, 1342, 3499, 621, 465, 2300, 13, 50256, 50256, 50256, 50256, 50256],
-                [50257, 50362, 679, 4952, 514, 326, 379, 428, 43856, 1622, 286, 262, 614, 11, 351, 6786, 290, 32595, 12023, 28236, 878, 514],
-                [50257, 50362, 679, 468, 12296, 17188, 1771, 7361, 26113, 18881, 1122, 338, 670, 318, 1107, 8312, 706, 477, 290, 460, 7073, 287]
+                [1770, 13, 2264, 346, 353, 318, 262, 46329, 286, 262, 3504, 6097, 11, 290, 356, 389, 9675, 284, 7062, 465],
+                [5414, 318, 1770, 13, 2264, 346, 353, 338, 5642, 1342, 3499, 621, 465, 2300, 13, 50256, 50256, 50256, 50256, 50256],
+                [679, 4952, 514, 326, 379, 428, 43856, 1622, 286, 262, 614, 11, 351, 6786, 290, 32595, 12023, 28236, 878, 514],
+                [679, 468, 12296, 17188, 1771, 7361, 26113, 18881, 1122, 338, 670, 318, 1107, 8312, 706, 477, 290, 460, 7073, 287]
             ]
 
         )
@@ -2280,10 +2398,10 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         # fmt: off
         EXPECTED_OUTPUT = torch.tensor([
-            [0.0000, 0.0000, 0.0000, 0.0000, 0.4800, 0.8200, 0.9600, 1.1200, 1.1200, 1.2200, 1.5000, 1.7200, 2.0000, 2.3400, 2.5000, 2.6600, 3.1800, 3.5600, 3.6800, 3.8000, 4.1000, 4.3000, 4.5800, 4.9400, 5.3800, 12.4200, 12.8400, 26.9200, 26.9200, 26.9200, 26.9200, 26.9200, 26.9200, 26.9200, 26.9200, 26.9200, 26.9200, 26.9200, 26.9400, 26.9400, 26.9400, 26.9400, 29.8400],
-            [0.0000, 0.0000, 0.0000, 0.0000, 0.5200, 0.9000, 1.1400, 1.4200, 1.5200, 1.6800, 1.6800, 1.8800, 2.1000, 2.2200, 2.6200, 3.1400, 3.5800, 3.9600, 4.4000, 17.3000, 17.3000, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7400, 26.7400, 26.7400, 26.7400, 26.7400, 26.7400, 28.0000],
-            [0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.7600, 1.0000, 1.4200, 1.8000, 1.9400, 2.1800, 2.5200, 3.0200, 3.3200, 3.5400, 3.9400, 4.5600, 4.9200, 5.2800, 5.5600, 5.9000, 6.1600, 6.3000, 6.4800, 6.4800, 6.6400, 7.8200, 7.9600, 8.2200, 8.6000, 8.9200, 9.2200, 9.5200, 9.7200, 10.0600, 10.5400, 10.8800, 11.2600, 11.5400, 11.7400, 12.0800, 15.6800, 15.6800],
-            [0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.7400, 1.0400, 1.3200, 1.6800, 2.1400, 2.4800, 2.7800, 3.0800, 3.1600, 3.4000, 3.6000, 4.0200, 4.2200, 4.8600, 5.2400, 5.7400, 6.3400, 6.6200, 6.7600, 6.7600, 6.8600, 7.2400, 7.4200, 7.6800, 7.9200, 8.4800, 8.7600, 9.2000, 9.2000, 9.4200, 15.8200, 15.8200, 29.6400, 29.6600, 29.6600, 29.6600, 29.6600, 29.76]
+            [0.0000, 0.4800, 0.8200, 0.9600, 1.1200, 1.1200, 1.2200, 1.5000, 1.7200, 2.0000, 2.3400, 2.5000, 2.6600, 3.1800, 3.5600, 3.6800, 3.8000, 4.1000, 4.3000, 4.5800, 4.9400, 5.3800, 12.4200, 12.8400, 26.9200, 26.9200, 26.9200, 26.9200, 26.9200, 26.9200, 26.9200, 26.9200, 26.9200, 26.9200, 26.9200, 26.9400, 26.9400, 26.9400, 26.9400],
+            [0.0000, 0.5200, 0.9000, 1.1400, 1.4200, 1.5200, 1.6800, 1.6800, 1.8800, 2.1000, 2.2200, 2.6200, 3.1400, 3.5800, 3.9600, 4.4000, 17.3000, 17.3000, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7400, 26.7400, 26.7400, 26.7400, 26.7400, 26.7400],
+            [0.0000, 0.0000, 0.7600, 1.0000, 1.4200, 1.8000, 1.9400, 2.1800, 2.5200, 3.0200, 3.3200, 3.5400, 3.9400, 4.5600, 4.9200, 5.2800, 5.5600, 5.9000, 6.1600, 6.3000, 6.4800, 6.4800, 6.6400, 7.8200, 7.9600, 8.2200, 8.6000, 8.9200, 9.2200, 9.5200, 9.7200, 10.0600, 10.5400, 10.8800, 11.2600, 11.5400, 11.7400, 12.0800, 15.6800],
+            [0.0000, 0.0000, 0.7400, 1.0400, 1.3200, 1.6800, 2.1400, 2.4800, 2.7800, 3.0800, 3.1600, 3.4000, 3.6000, 4.0200, 4.2200, 4.8600, 5.2400, 5.7400, 6.3400, 6.6200, 6.7600, 6.7600, 6.8600, 7.2400, 7.4200, 7.6800, 7.9200, 8.4800, 8.7600, 9.2000, 9.2000, 9.4200, 15.8200, 15.8200, 29.6400, 29.6600, 29.6600, 29.6600, 29.6600]
         ])
         # fmt: on
 
@@ -2310,10 +2428,10 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         # fmt: off
         EXPECTED_OUTPUT = torch.tensor([
-            [0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.7400, 0.8000, 0.9800, 1.0200, 1.1400, 1.4000, 1.5200, 1.9200, 2.2600, 2.3800, 2.5400, 2.8600, 3.2600, 3.3400, 3.4400, 3.6000, 3.6800, 3.9200, 4.2000, 4.4800, 4.7800, 5.2600, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200],
-            [0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.7600, 1.0000, 1.3000, 1.3800, 1.5200, 1.5800, 1.7000, 1.8400, 2.1000, 2.5000, 3.1400, 3.4400, 3.7400, 4.1800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800],
-            [0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.6600, 0.9000, 1.2200, 1.5200, 1.7600, 2.0200, 2.4000, 2.9200, 3.1800, 3.3200, 3.6200, 4.1000, 4.3600, 4.7800, 5.1200, 5.3400, 5.7200, 6.0600, 6.2000, 6.2000, 6.2000, 6.5000, 6.9000, 7.6400, 8.0000, 8.2400, 8.5200, 8.7400, 9.0800, 9.4000, 9.5400, 9.9400, 10.4200, 10.7600, 11.1200, 11.4400, 11.5800, 11.8600, 12.4600, 12.4600],
-            [0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.6600, 0.8600, 1.1400, 1.5000, 1.9600, 2.3600, 2.6400, 2.9800, 3.1200, 3.2400, 3.4800, 3.7800, 4.1400, 4.6400, 5.0800, 5.4400, 6.2200, 6.2200, 6.2200, 6.4000, 6.8400, 7.1200, 7.2600, 7.4800, 7.8200, 8.1400, 8.7000, 9.0200, 9.0200, 9.2000, 9.8800, 9.8800, 9.8800, 9.8800, 9.8800, 9.8800, 9.8800, 9.8800, 9.8800, 9.8800]
+            [0.0000, 0.0000, 0.7400, 0.8000, 0.9800, 1.0200, 1.1400, 1.4000, 1.5200, 1.9200, 2.2600, 2.3800, 2.5400, 2.8600, 3.2600, 3.3400, 3.4400, 3.6000, 3.6800, 3.9200, 4.2000, 4.4800, 4.7800, 5.2600, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200],
+            [0.0000, 0.0000, 0.7600, 1.0000, 1.3000, 1.3800, 1.5200, 1.5800, 1.7000, 1.8400, 2.1000, 2.5000, 3.1400, 3.4400, 3.7400, 4.1800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800],
+            [0.0000, 0.0000, 0.6600, 0.9000, 1.2200, 1.5200, 1.7600, 2.0200, 2.4000, 2.9200, 3.1800, 3.3200, 3.6200, 4.1000, 4.3600, 4.7800, 5.1200, 5.3400, 5.7200, 6.0600, 6.2000, 6.2000, 6.2000, 6.5000, 6.9000, 7.6400, 8.0000, 8.2400, 8.5200, 8.7400, 9.0800, 9.4000, 9.5400, 9.9400, 10.4200, 10.7600, 11.1200, 11.4400, 11.5800, 11.8600, 12.4600],
+            [0.0000, 0.0000, 0.6600, 0.8600, 1.1400, 1.5000, 1.9600, 2.3600, 2.6400, 2.9800, 3.1200, 3.2400, 3.4800, 3.7800, 4.1400, 4.6400, 5.0800, 5.4400, 6.2200, 6.2200, 6.2200, 6.4000, 6.8400, 7.1200, 7.2600, 7.4800, 7.8200, 8.1400, 8.7000, 9.0200, 9.0200, 9.2000, 9.8800, 9.8800, 9.8800, 9.8800, 9.8800, 9.8800, 9.8800, 9.8800, 9.8800]
         ])
         # fmt: on
 
@@ -2448,8 +2566,8 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         prompt_ids = processor.get_prompt_ids("Leighton", return_tensors="pt").to(torch_device)
         output_with_prompt = model.generate(input_features, prompt_ids=prompt_ids)
 
-        expected_without_prompt = "<|startoftranscript|><|en|><|transcribe|><|notimestamps|> He has grave doubts whether Sir Frederick Layton's work is really Greek after all and can discover in it but little of Rocky Ithaca.<|endoftext|>"
-        expected_with_prompt = "<|startofprev|> Leighton<|startoftranscript|><|en|><|transcribe|><|notimestamps|> He has grave doubts whether Sir Frederick Leighton's work is really Greek after all and can discover in it but little of Rocky Ithaca.<|endoftext|>"
+        expected_without_prompt = " He has grave doubts whether Sir Frederick Layton's work is really Greek after all and can discover in it but little of Rocky Ithaca."
+        expected_with_prompt = " He has grave doubts whether Sir Frederick Leighton's work is really Greek after all and can discover in it but little of Rocky Ithaca."
 
         output_without_prompt = processor.decode(output_without_prompt[0])
         output_with_prompt = processor.decode(output_with_prompt[0])
@@ -2482,7 +2600,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_generate_with_prompt_ids_task_language(self):
-        EXPECTED_TEXT = "<|startofprev|> Mr. Kilter, Brionno.<|startoftranscript|><|en|><|transcribe|> Mr. Kilter is the apostle of the middle classes and we are glad to welcome his gospel.<|endoftext|>"
+        EXPECTED_TEXT = " Mr. Kilter is the apostle of the middle classes and we are glad to welcome his gospel."
 
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
@@ -2559,19 +2677,13 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         transcription = processor.batch_decode(sequences, skip_special_tokens=False)[0]
 
-        self.assertEqual(
-            transcription,
-            "<|startoftranscript|><|hi|><|transcribe|><|notimestamps|> Mirchi mein ki tene vibinda prajatiya hai<|endoftext|>",
-        )
+        self.assertEqual(transcription, " Mirchi mein ki tene vibinda prajatiya hai")
 
         # set task to translate
         sequences = model.generate(input_features, task="translate")
         transcription = processor.batch_decode(sequences, skip_special_tokens=False)[0]
 
-        self.assertEqual(
-            transcription,
-            "<|startoftranscript|><|hi|><|translate|><|notimestamps|> How much is the difference between the girls?<|endoftext|>",
-        )
+        self.assertEqual(transcription, " How much is the difference between the girls?")
 
     @slow
     def test_default_multilingual_transcription_long_form(self):
