@@ -2302,6 +2302,7 @@ else:
     )
     _import_structure["models.modernbert"].extend(
         [
+            "ModernBertForMaskedLM",
             "ModernBertForCausalLM",
             "ModernBertForSequenceClassification",
             "ModernBertForTokenClassification",

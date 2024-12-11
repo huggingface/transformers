@@ -31,11 +31,9 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_modernbert"] = [
-        "ModernBertForCausalLM",
+        "ModernBertForMaskedLM",
         "ModernBertModel",
         "ModernBertPreTrainedModel",
-        "ModernBertForSequenceClassification",
-        "ModernBertForTokenClassification",
     ]
 
 if TYPE_CHECKING:
@@ -48,9 +46,7 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_modernbert import (
-            ModernBertForCausalLM,
-            ModernBertForSequenceClassification,
-            ModernBertForTokenClassification,
+            ModernBertForMaskedLM,
             ModernBertModel,
             ModernBertPreTrainedModel,
         )
