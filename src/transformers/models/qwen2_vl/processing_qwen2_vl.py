@@ -49,10 +49,10 @@ class Qwen2VLProcessor(ProcessorMixin):
     Args:
         image_processor ([`Qwen2VLImageProcessor`], *optional*):
             The image processor is a required input.
-        video_processor ([`Qwen2VLVideoProcessor`], *optional*):
-            The video processor is a required input.
         tokenizer ([`Qwen2TokenizerFast`], *optional*):
             The tokenizer is a required input.
+        video_processor ([`Qwen2VLVideoProcessor`], *optional*):
+            The video processor is a required input.
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
     """

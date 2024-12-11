@@ -91,10 +91,9 @@ class LlavaOnevisionVideoProcessingTester(unittest.TestCase):
 class LlavaOnevisionVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
     video_processing_class = LlavaOnevisionVideoProcessor if is_vision_available() else None
 
-    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.setUp with CLIP->LlavaOnevision
     def setUp(self):
         super().setUp()
-        self.video_processor_tester = LlavaOnevisionVideoProcessingTester(self)
+        self.image_processor_tester = LlavaOnevisionVideoProcessingTester(self)
 
     @property
     def video_processor_dict(self):
