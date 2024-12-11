@@ -1151,6 +1151,10 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
     def set_output_embeddings(self, new_embeddings: nn.Linear):
         self.decoder = new_embeddings
 
+    @torch.compile(dynamic=True)
+    def compiled_head(self, output: torch.Tensor) -> torch.Tensor:
+        return self.decoder(self.head(output))
+
     def forward(
         self,
         input_ids: Optional[torch.Tensor],
@@ -1188,7 +1192,9 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
             max_seqlen=max_seqlen,
             batch_size=batch_size,
             seq_len=seq_len,
+            return_dict=return_dict,
         )
+        output = output[0]
 
         if self.sparse_prediction and labels is not None:
             # flatten labels and output first
@@ -1200,7 +1206,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
             output = output[mask_tokens]
             labels = labels[mask_tokens]
 
-        logits = self.decoder(self.head(output))
+        logits = self.compiled_head(output)
 
         loss = None
         if labels is not None:
