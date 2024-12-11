@@ -482,8 +482,8 @@ class WhisperGenerationMixin(GenerationMixin):
                 `return_segments` is set True. In this case the generation outputs of each segment is added to each
                 segment.
             force_unique_generate_call (`bool`, *optional*):
-                Whether to force a unique call to generate. This is useful for assisted decoding and testing purposes to ensure
-                that only one call to generate is made and therefore decoder input token ids are returned.
+                Whether to force a unique call to the underlying GenerationMixin's generate method. This is useful for assisted decoding and testing purposes to ensure
+                that only one call to generate is made and therefore decoder input token ids and eos token ids are returned.
             kwargs (`Dict[str, Any]`, *optional*):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
@@ -492,7 +492,7 @@ class WhisperGenerationMixin(GenerationMixin):
             [`~utils.ModelOutput`] or `Dict[str, Any]` or `torch.LongTensor`:
 
                 A:
-                - [`~utils.ModelOutput`] when `return_dict_in_generate=True` and `return_timestamps=False`, including the decoder input ids and end of sequence id.
+                - [`~utils.ModelOutput`] when (`return_dict_in_generate=True` and `return_timestamps=False`) or `force_unique_generate_call=True`, including the decoder input ids and end of sequence id.
                 - `Dict[str, Any]` when (`return_dict_in_generate=True` and `return_timestamps=True`) or `return_segments=True` or `return_token_timestamps=True`.
                 - `torch.LongTensor`, excluding the decoder input ids and end of sequence id.
 
