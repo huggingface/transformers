@@ -669,6 +669,17 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix, assign_
             # We add only the first key as an example
             new_key = key.replace("beta", "bias")
             renamed_beta[key] = new_key if not renamed_beta else renamed_beta
+
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            if "weight_g" in key:
+                new_key = key.replace("weight_g", "parametrizations.weight.original0")
+            if "weight_v" in key:
+                new_key = key.replace("weight_v", "parametrizations.weight.original1")
+        else:
+            if "parametrizations.weight.original0" in key:
+                new_key = key.replace("parametrizations.weight.original0", "weight_g")
+            if "parametrizations.weight.original1" in key:
+                new_key = key.replace("parametrizations.weight.original1", "weight_v")
         if new_key:
             old_keys.append(key)
             new_keys.append(new_key)
@@ -829,7 +840,6 @@ def _load_state_dict_into_meta_model(
             new_key = key.replace("beta", "bias")
             renamed_beta[key] = new_key if not renamed_beta else renamed_beta
 
-        # To reproduce `_load_state_dict_into_model` behaviour, we need to manually rename parametrized weigth norm, if necessary.
         if hasattr(nn.utils.parametrizations, "weight_norm"):
             if "weight_g" in key:
                 new_key = key.replace("weight_g", "parametrizations.weight.original0")
