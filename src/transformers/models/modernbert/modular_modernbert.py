@@ -1115,11 +1115,11 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
     ):
         super().__init__(config)
         self.config = config
-        self.bert = ModernBertModel(config)
+        self.model = ModernBertModel(config)
         self.head = ModernBertPredictionHead(config)
 
         if config.tie_word_embeddings:
-            decoder_weights = self.bert.embeddings.tok_embeddings.weight
+            decoder_weights = self.model.embeddings.tok_embeddings.weight
         else:
             decoder_weights = nn.Linear(config.hidden_size, config.vocab_size, bias=False).weight
         self.decoder = nn.Linear(decoder_weights.size(1), decoder_weights.size(0), bias=config.decoder_bias)
@@ -1138,7 +1138,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
             super()._init_weights(module)
         else:
             assert isinstance(reset_params, bool)
-            self.bert._init_weights(reset_params=reset_params)
+            self.model._init_weights(reset_params=reset_params)
             self.head._init_weights(reset_params=reset_params)
 
             # Output weights.
@@ -1179,7 +1179,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
                         input_ids=input_ids, attention_mask=attention_mask, position_ids=position_ids, labels=labels
                     )
 
-        output = self.bert(
+        output = self.model(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
