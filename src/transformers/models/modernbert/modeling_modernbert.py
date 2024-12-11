@@ -25,7 +25,7 @@ from enum import Enum
 from typing import Optional, Tuple, Union
 
 import torch
-import torch.nn as nn
+from torch import nn
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutput, MaskedLMOutput
@@ -610,6 +610,10 @@ class ModernBertEncoderLayer(nn.Module):
             self.attn_norm.reset_parameters()
             self.mlp_norm.reset_parameters()
 
+    @torch.compile(dynamic=True)
+    def compiled_mlp(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.mlp(self.mlp_norm(hidden_states))
+
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -634,7 +638,7 @@ class ModernBertEncoderLayer(nn.Module):
             max_seqlen=max_seqlen,
             attention_mask=attention_mask,
         )
-        return attn_out + self.mlp(self.mlp_norm(attn_out))
+        return attn_out + self.compiled_mlp(attn_out)
 
 
 class ModernBertPredictionHead(nn.Module):
