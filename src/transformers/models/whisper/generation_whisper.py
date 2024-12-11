@@ -134,7 +134,7 @@ def _pad_to_max_length(
     bos_token_tensor=None,
     cut_off_length=None,
     return_token_timestamps=False,
-    num_calls_generate_with_fallback=None,
+    force_unique_generate_call=False,
 ):
     max_total_length = 0
     sequences = []
@@ -148,7 +148,7 @@ def _pad_to_max_length(
     elif padding == "max_length" and cut_off_length is None:
         raise ValueError("`cut_off_length` must be specified when `padding='max_length'`")
 
-    if num_calls_generate_with_fallback == 1:
+    if force_unique_generate_call:
         sequences = torch.stack(
             [
                 segments[0]["result"]
@@ -205,7 +205,11 @@ def _pad_to_max_length(
 
         sequences[i] = F.pad(sequences[i], pad=pad, value=pad_token_id)
         if return_token_timestamps:
-            token_timestamps_list[i] = F.pad(token_timestamps_list[i], pad=pad, value=token_timestamps_list[i][-1])
+            token_timestamps_list[i] = F.pad(
+                token_timestamps_list[i],
+                pad=pad,
+                value=token_timestamps_list[i][-1] if len(token_timestamps_list[i]) > 0 else 0.0,
+            )
 
     sequences = torch.stack(sequences, dim=0)
 
@@ -480,30 +484,27 @@ class WhisperGenerationMixin(GenerationMixin):
                 Ad hoc parametrization of `generate_config` and/or additional model-specific kwargs that will be
                 forwarded to the `forward` function of the model. If the model is an encoder-decoder model, encoder
                 specific kwargs should not be prefixed and decoder specific kwargs should be prefixed with *decoder_*.
-
         Return:
             [`~utils.ModelOutput`] or `Dict[str, Any]` or `torch.LongTensor`:
 
-                A [`~utils.ModelOutput`] (when `return_dict_in_generate=True` and the passed input requires only one call to the underlying `generate` method) or a `Dict[str, Any]` (when `return_segments=True` or `return_token_timestamps=True`, with keys `sequences`, `segments` if `return_segments=True`, `token_timestamps` if `return_token_timestamps=True`;
-                `sequences` and `token_timestamps` includes the decoder input ids and end of sequence id if the passed input requires only one call to the underlying `generate` method) or a torch.LongTensor` (including the decoder input ids and end of sequence id if the passed input requires only one call to the underlying `generate` method).
+                A:
+                - [`~utils.ModelOutput`] when `return_dict_in_generate=True` and `return_timestamps=False`, including the decoder input ids and end of sequence id.
+                - `Dict[str, Any]` when (`return_dict_in_generate=True` and `return_timestamps=True`) or `return_segments=True` or `return_token_timestamps=True`.
+                - `torch.LongTensor`, excluding the decoder input ids and end of sequence id.
 
                 The possible [`~utils.ModelOutput`] types are:
                 - [`~utils.GenerateEncoderDecoderOutput`]
                 - [`~utils.GenerateBeamEncoderDecoderOutput`]
 
-                A passed input requires only one call to the underlying `generate` method:
-                    - necessarily if `return_timestamps=False` (and necessarily the passed input is <= 30 seconds / <= 3000 mel input features since otherwise `return_timestamps` needs to be set to `True`).
-                    - eventualy if `return_timestamps=True` and the passed input is <= 30 seconds / <= 3000 mel input features, if the last predicted timestam is not < 30 seconds which will trigger a second call to generate starting to this timestamp.
-
-                `segments` is a list of lists (one per batch element) of `segment`.
+                `segments` is a list of lists (one list per batch element) of `segment`.
                 A `segment` is a dictionary with keys `start`, `end`, `tokens`, `idxs`, and `result`.
                 - `start`: the start timestamp of the segment.
                 - `end`: the end timestamp of the segment.
-                - `tokens`: the tokens of the segment.
-                - `idxs`: the start(included) and end indices (excluded) of the `tokens` of the segment in the generated sequence ids (present in `result`).
-                - `result`: the result of underlying call to `generate`.
+                - `tokens`: the tokens of the segment, excluding the decoder input ids and end of sequence id.
+                - `idxs`: the start (included) and end (excluded) indices of the `tokens` of the segment in the underlying call to GenerationMixin's `generate` (present in `result`).
+                - `result`: the result of the underlying call to GenerationMixin's `generate`.
 
-                When `return_segments=True`, `return_dict_in_generate=True` applies to each `result` of each `segment`.
+                When `return_timestamps=True`, `return_dict_in_generate=True` applies to each call of the underlying GenerationMixin's `generate`, with outputs stored in `result` of each `segment`.
 
         Example:
 
@@ -635,7 +636,7 @@ class WhisperGenerationMixin(GenerationMixin):
             else 1,
         )
         if "assistant_model" in kwargs:
-            # speculative decoding: the model should be able to return
+            # speculative decoding: the model should be able to return eos token
             generation_config.begin_suppress_tokens = None
 
         logits_processor = self._retrieve_logit_processors(
@@ -686,15 +687,25 @@ class WhisperGenerationMixin(GenerationMixin):
             batch_size=cur_bsz,
             generation_config=generation_config,
         )
+        # 5bis speculative decoding: ensure the assistant model does only one call to generate and therefore returns decoder input token ids and eos token id
+        # we set a flag in the generation config to force the model to make only one call to generate and return the decoder input token ids and eos token id
+        if "assistant_model" in kwargs:
+            assistant_model = kwargs["assistant_model"]
+            assistant_model.generation_config.force_unique_generate_call = True
+
+        if hasattr(generation_config, "force_unique_generate_call"):
+            force_unique_generate_call = generation_config.force_unique_generate_call
+        elif hasattr(self.generation_config, "force_unique_generate_call"):
+            force_unique_generate_call = self.generation_config.force_unique_generate_call
+        else:
+            force_unique_generate_call = False
 
         # 6 Transcribe audio until we reach the end of all input audios
-        num_calls_generate_with_fallback = 0
         while (seek < max_frames).any():
             # 6.1 NOTE: When in longform transcription mode and batch size > 1 we need to dynamically reduce the batch size during the loop
             # in case one audio finished earlier than another one. Thus, we need to keep a table of "previous-index-2-current-index" in order
             # to know which original audio is being decoded
             # Set updated index map, duration of previously decoded chunks and number of max frames of current decoding chunk
-            num_calls_generate_with_fallback += 1
             input_features, cur_bsz, batch_idx_map = self._maybe_reduce_batch(
                 input_features=input_features,
                 seek=seek,
@@ -804,6 +815,9 @@ class WhisperGenerationMixin(GenerationMixin):
 
                 current_segments[prev_i] += segments
 
+            if force_unique_generate_call:
+                break
+
         # 7. Once all segments are added to the list of all segments, called `current_segments`, we extract the predicted
         # output tokens from the list of dicts. If we use batch size > 1, we make sure to pad the output
         final_segments = (
@@ -812,14 +826,13 @@ class WhisperGenerationMixin(GenerationMixin):
             else current_segments
         )
 
-        # if return_dict_in_generate is True, we return a ModelOutput if we have only one call to generate_with_fallback
+        # if return_dict_in_generate=True and we forced a unique call to generate or return_timestamps=False, meaning we are sure only one call to generate has been made,
+        # -> we can return a ModelOutput
         # otherwise, return_dict_in_generate is applied in the 'result' of each segment in final_segments
         if (
             return_dict_in_generate
             and generation_config.return_dict_in_generate
-            and num_calls_generate_with_fallback == 1
-            and not return_segments
-            and not return_token_timestamps
+            and (force_unique_generate_call or not return_timestamps)
         ):
             # only one call to generate_with_fallback, we can return a ModelOutput
             outputs = self._stack_split_outputs(seek_outputs, model_output_type, self.device, kwargs)
@@ -836,36 +849,38 @@ class WhisperGenerationMixin(GenerationMixin):
                     )
             return outputs
 
-        if return_token_timestamps:
-            sequences, token_timestamps = _pad_to_max_length(
-                final_segments,
-                generation_config.pad_token_id,
-                device=self.device,
-                padding_side="right",
-                return_token_timestamps=return_token_timestamps,
-                num_calls_generate_with_fallback=num_calls_generate_with_fallback,
+        padded_outputs = _pad_to_max_length(
+            current_segments=final_segments,
+            pad_token_id=generation_config.pad_token_id,
+            device=self.device,
+            padding_side="right",
+            return_token_timestamps=return_token_timestamps,
+            force_unique_generate_call=force_unique_generate_call,
+        )
+
+        if return_dict_in_generate and generation_config.return_dict_in_generate:
+            logger.warning_once(
+                "You have passed `return_dict_in_generate=True` and `return_timestamps=True`, this automatically sets `return_segments=True` to access the resuls of the underlying calls to GenerationMixin's generate in the returned `segments`."
             )
+            return_segments = True
+        elif not return_segments and not return_token_timestamps:
+            return padded_outputs
+
+        if return_token_timestamps:
+            sequences, token_timestamps = padded_outputs
             outputs = {
                 "sequences": sequences,
                 "token_timestamps": token_timestamps,
             }
-            if return_segments:
-                outputs["segments"] = final_segments
         else:
-            sequences = _pad_to_max_length(
-                final_segments,
-                generation_config.pad_token_id,
-                device=self.device,
-                padding_side="right",
-                num_calls_generate_with_fallback=num_calls_generate_with_fallback,
-            )
-            if return_segments:
-                outputs = {
-                    "sequences": sequences,
-                    "segments": final_segments,
-                }
-            else:
-                outputs = sequences
+            sequences = padded_outputs
+            outputs = {
+                "sequences": sequences,
+            }
+
+        if return_segments:
+            outputs["segments"] = final_segments
+
         return outputs
 
     def generate_with_fallback(
