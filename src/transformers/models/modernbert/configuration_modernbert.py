@@ -106,7 +106,7 @@ class ModernBertConfig(PretrainedConfig):
         intermediate_size=1152,
         num_hidden_layers=22,
         num_attention_heads=12,
-        hidden_activation="gelu_python",
+        hidden_activation="gelu",
         max_position_embeddings=8192,
         initializer_range=0.02,
         initalizer_cutoff_factor=2.0,

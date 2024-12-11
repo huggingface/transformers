@@ -138,7 +138,7 @@ class ModernBertConfig(PretrainedConfig):
         intermediate_size=1152,
         num_hidden_layers=22,
         num_attention_heads=12,
-        hidden_activation="gelu_python",
+        hidden_activation="gelu",
         max_position_embeddings=8192,
         initializer_range=0.02,
         initalizer_cutoff_factor=2.0,
@@ -623,7 +623,7 @@ class ModernBertRotaryEmbedding(GemmaRotaryEmbedding):
 
 
 def flash_attention_forward(
-    config: "ModernBertAttention",
+    self: "ModernBertAttention",
     qkv: torch.Tensor,
     rotary_emb: ModernBertUnpaddedRotaryEmbedding,
     cu_seqlens: torch.Tensor,
@@ -648,8 +648,8 @@ def flash_attention_forward(
             qkv,
             cu_seqlens=cu_seqlens,
             max_seqlen=max_seqlen,
-            dropout_p=config.attention_dropout if config.training else 0.0,
-            deterministic=config.deterministic_flash_attn,
+            dropout_p=self.attention_dropout if self.training else 0.0,
+            deterministic=self.deterministic_flash_attn,
             window_size=local_attention,
         )
         attn = attn.to(orig_dtype)  # type: ignore
@@ -658,8 +658,8 @@ def flash_attention_forward(
             qkv,
             cu_seqlens=cu_seqlens,
             max_seqlen=max_seqlen,
-            dropout_p=config.attention_dropout if config.training else 0.0,
-            deterministic=config.deterministic_flash_attn,
+            dropout_p=self.attention_dropout if self.training else 0.0,
+            deterministic=self.deterministic_flash_attn,
             window_size=local_attention,
         )
     return attn.view(bs, dim)
@@ -833,26 +833,6 @@ class ModernBertAttention(nn.Module):
         )
 
         return self.out_drop(self.Wo(attn))
-
-
-class ModernBertFlashAttention2(ModernBertAttention):
-    def __init__(self, config: ModernBertConfig, layer_id: Optional[int] = None):
-        super().__init__(config, layer_id)
-        self.config._attn_implementation = "flash_attention_2"
-        logger.warning_once(
-            "The `ModernBertFlashAttention2` class is deprecated in favor of simply modifying the `config._attn_implementation`"
-            "attribute of the `GemmaAttention` class! It will be removed in v4.48"
-        )
-
-
-class ModernBertSdpaAttention(ModernBertAttention):
-    def __init__(self, config: ModernBertConfig, layer_id: Optional[int] = None):
-        super().__init__(config, layer_id)
-        self.config._attn_implementation = "sdpa"
-        logger.warning_once(
-            "The `ModernBertFlashAttention2` class is deprecated in favor of simply modifying the `config._attn_implementation`"
-            "attribute of the `GemmaAttention` class! It will be removed in v4.48"
-        )
 
 
 class ModernBertEncoderLayer(nn.Module):
@@ -1114,7 +1094,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
         hidden_states = self.final_norm(hidden_states)
 
         if repad:
-            hidden_states = self._pad_outputs(hidden_states, indices, batch_size, seq_len)
+            hidden_states, _ = self._pad_outputs(hidden_states, indices, batch_size, seq_len)
 
         if not return_dict:
             return hidden_states
