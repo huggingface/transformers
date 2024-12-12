@@ -795,12 +795,12 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
 
         if self.mask_replace_prob == 1 or self.random_replace_prob == 0:
             return inputs, labels
-        
+
         remaining_prob = 1 - self.mask_replace_prob
-        # scaling the random_replace_prob to the remaining probability for example if 
-        # mask_replace_prob = 0.8 and random_replace_prob = 0.1, 
+        # scaling the random_replace_prob to the remaining probability for example if
+        # mask_replace_prob = 0.8 and random_replace_prob = 0.1,
         # then random_replace_prob_scaled = 0.1 / 0.2 = 0.5
-        random_replace_prob_scaled = self.random_replace_prob / remaining_prob 
+        random_replace_prob_scaled = self.random_replace_prob / remaining_prob
         # random_replace_prob% of the time, we replace masked input tokens with random word
         indices_random = self.tf_bernoulli(input_shape, random_replace_prob_scaled) & masked_indices & ~indices_replaced
         random_words = tf.random.uniform(input_shape, maxval=vocab_size, dtype=inputs.dtype)
@@ -902,7 +902,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
 
         if self.mask_replace_prob == 1 or self.random_replace_prob == 0:
             return inputs, labels
-        
+
         remaining_prob = 1 - self.mask_replace_prob
         # scaling the random_replace_prob to the remaining probability for example if
         # mask_replace_prob = 0.8 and random_replace_prob = 0.1,
@@ -967,7 +967,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
 
         if self.mask_replace_prob == 1 or self.random_replace_prob == 0:
             return inputs, labels
-        
+
         remaining_prob = 1 - self.mask_replace_prob
         # scaling the random_replace_prob to the remaining probability for example if
         # mask_replace_prob = 0.8 and random_replace_prob = 0.1,
