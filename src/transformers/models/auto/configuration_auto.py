@@ -459,6 +459,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("graphormer", "Graphormer"),
         ("grounding-dino", "Grounding DINO"),
         ("groupvit", "GroupViT"),
+        ("helium", "Helium"),
         ("herbert", "HerBERT"),
         ("hiera", "Hiera"),
         ("hubert", "Hubert"),
