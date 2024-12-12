@@ -69,7 +69,7 @@ logger = logging.get_logger(__name__)
 
 ACT2FN = {
     "gelu": partial(nn.gelu, approximate=False),
-    "gelu_10": lambda x: jnp.clip(nn.gelu(x, approximate=False), min=-10.0, max=10.0),
+    "gelu_10": lambda x: jnp.clip(nn.gelu(x, approximate=False), a_min=-10.0, a_max=10.0),
     "gelu_fast": lambda x: 0.5 * x * (1.0 + nn.tanh(x * 0.7978845608 * (1.0 + 0.044715 * x * x))),
     "gelu_new": lambda x: 0.5 * x * (1.0 + nn.tanh((2.0 / jnp.pi) ** 0.5 * (x + 0.044715 * jnp.power(x, 3.0)))),
     "gelu_python": lambda x: x * 0.5 * (1.0 + jax.scipy.special.erf(x / 2.0**0.5)),
