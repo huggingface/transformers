@@ -566,6 +566,11 @@ class _BaseAutoModelClass:
             return model_class.from_pretrained(
                 pretrained_model_name_or_path, *model_args, config=config, **hub_kwargs, **kwargs
             )
+        else:
+            model_class = cls._model_mapping[PretrainedConfig]
+            return model_class.from_pretrained(
+                pretrained_model_name_or_path, *model_args, config=config, **hub_kwargs, **kwargs
+            )
         raise ValueError(
             f"Unrecognized configuration class {config.__class__} for this kind of AutoModel: {cls.__name__}.\n"
             f"Model type should be one of {', '.join(c.__name__ for c in cls._model_mapping.keys())}."
