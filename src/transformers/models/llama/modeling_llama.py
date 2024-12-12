@@ -332,7 +332,6 @@ class LlamaPreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
     _supports_quantized_cache = True
     _supports_static_cache = True
-    gradient_checkpointing = False
 
 
 class LlamaModel(LlamaPreTrainedModel):
