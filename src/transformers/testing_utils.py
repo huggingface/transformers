@@ -2322,7 +2322,9 @@ class RequestCounter:
 
             return wrap
 
-        self.patcher = patch.object(urllib3.connectionpool.log, "debug", side_effect=patched_with_thread_info(urllib3.connectionpool.log.debug))
+        self.patcher = patch.object(
+            urllib3.connectionpool.log, "debug", side_effect=patched_with_thread_info(urllib3.connectionpool.log.debug)
+        )
         self.mock = self.patcher.start()
         return self
 
