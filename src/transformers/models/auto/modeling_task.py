@@ -39,7 +39,7 @@ class AutoForCausalLM(PreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value: nn.Module):
         self.model.set_input_embeddings(value)
 
-    @validate_config_kwargs
+
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -51,6 +51,8 @@ class AutoForCausalLM(PreTrainedModel, GenerationMixin):
         num_logits_to_keep: int = 1,
         **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, CausalLMOutputWithPast]:
+        return_dict = return_dict if return_dict else self.config.return_dict
+
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -106,10 +108,8 @@ class AutoForSequenceClassification(PreTrainedModel):
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs
     ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
@@ -119,10 +119,8 @@ class AutoForSequenceClassification(PreTrainedModel):
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs
         )
         hidden_states = transformer_outputs[0]
         logits = self.score(hidden_states)
@@ -183,6 +181,7 @@ class AutoForQuestionAnswering(PreTrainedModel):
     def set_input_embeddings(self, value):
         self.transformer.embed_tokens = value
 
+    @validate_config_kwargs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -192,8 +191,6 @@ class AutoForQuestionAnswering(PreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         start_positions: Optional[torch.LongTensor] = None,
         end_positions: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[Tuple, QuestionAnsweringModelOutput]:
@@ -205,9 +202,8 @@ class AutoForQuestionAnswering(PreTrainedModel):
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs
         )
 
         sequence_output = outputs[0]
@@ -259,7 +255,6 @@ class AutoForTokenClassification(PreTrainedModel):
     def set_input_embeddings(self, value):
         self.model.embed_tokens = value
 
-    @validate_config_kwargs
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -271,18 +266,14 @@ class AutoForTokenClassification(PreTrainedModel):
         return_dict=False,
         **kwargs,
     ) -> Union[Tuple, TokenClassifierOutput]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
+        return_dict = return_dict if return_dict else self.config.return_dict
         outputs = self.model(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
+            return_dict=return_dict,
             **kwargs,
         )
         sequence_output = outputs[0]
