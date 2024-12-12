@@ -1547,19 +1547,6 @@ class TrainingArguments:
         },
     )
 
-    def __new__(self, *args, **kwargs):
-        # catch and save only the parameters that the user passed
-        self.__training_args_params__ = {}
-        param_names = list(self.__dataclass_fields__.keys())
-
-        for i in range(len(args)):
-            self.__training_args_params__[param_names[i]] = serialize_parameter(param_names[i], args[i])
-
-        for k, v in kwargs.items():
-            self.__training_args_params__[k] = serialize_parameter(k, v)
-
-        return super().__new__(self)
-
     def __post_init__(self):
         # Parse in args that could be `dict` sent in from the CLI as a string
         for field in _VALID_DICT_FIELDS:
@@ -1581,8 +1568,6 @@ class TrainingArguments:
             self.logging_dir = os.path.join(self.output_dir, default_logdir())
         if self.logging_dir is not None:
             self.logging_dir = os.path.expanduser(self.logging_dir)
-        # set logging_dir in __training_args_params__
-        self.__training_args_params__["logging_dir"] = self.logging_dir
 
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
@@ -2552,9 +2537,9 @@ class TrainingArguments:
 
     def to_json_string(self):
         """
-        Serializes this instance to a JSON string.
+        Serializes the TrainingArguments into a JSON string.
         """
-        return json.dumps(self.__training_args_params__, indent=2)
+        return json.dumps(self.to_dict(), indent=2)
 
     def to_json_file(self, json_file_path: str):
         """
@@ -2566,7 +2551,7 @@ class TrainingArguments:
     @classmethod
     def from_json_file(cls: Type[T], json_file_path: str) -> T:
         """
-        Constructs an instance from a json file
+        Loads and initializes the TrainingArguments from a json file.
         """
         with open(json_file_path, "r", encoding="utf-8") as reader:
             params = json.load(reader)
