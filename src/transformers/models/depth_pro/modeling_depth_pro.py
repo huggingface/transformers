@@ -1206,14 +1206,8 @@ class DepthProModel(DepthProPreTrainedModel):
         >>> with torch.no_grad():
         ...     output = model(**inputs)
         ...
-        >>> for state in output.last_hidden_state:
-        ...     print(state.shape)
-        ...
-        torch.Size([1, 1024, 48, 48])
-        torch.Size([1, 1024, 96, 96])
-        torch.Size([1, 512, 192, 192])
-        torch.Size([1, 256, 384, 384])
-        torch.Size([1, 256, 768, 768])
+        >>> output.last_hidden_state.shape
+        torch.Size([1, 35, 577, 1024])
         ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
