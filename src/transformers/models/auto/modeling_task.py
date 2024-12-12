@@ -19,7 +19,7 @@ from ..auto import AutoModel
 class AutoForCausalLM(PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
-    _embeding_layer = "model.embed_tokens"
+    _input_embedding = "model.embed_tokens"
     _output_embedding = "lm_head"
     _no_split_modules = []
     _supports_cache_class = True

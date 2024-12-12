@@ -347,7 +347,7 @@ class LlamaPreTrainedModel(PreTrainedModel):
 
 
 class LlamaModel(LlamaPreTrainedModel):
-    _embedding_layer = "embed_tokens"
+    _input_embedding = "embed_tokens"
 
     def __init__(self, config: LlamaConfig):
         super().__init__(config)
