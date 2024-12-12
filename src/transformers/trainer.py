@@ -3840,7 +3840,7 @@ class Trainer:
             if safe_serialize:
                 self.args.to_json_file(os.path.join(output_dir, TRAINING_ARGS_NAME))
             else:
-                logger.warning(
+                logger.info(
                     f"trainer API will deprecate the {DEPRECATED_ARGS_NAME} in 5.0.0, to switch to a safe serialization method, "
                     "you can set os.environ['TRAINER_SAFE_SERIALIZE']= 'true' "
                 )
@@ -3944,7 +3944,7 @@ class Trainer:
         if safe_serialize:
             self.args.to_json_file(os.path.join(output_dir, TRAINING_ARGS_NAME))
         else:
-            logger.warning(
+            logger.info(
                 f"trainer API will deprecate the {DEPRECATED_ARGS_NAME} in 5.0.0, to switch to a safe serialization method, "
                 "you can set os.environ['TRAINER_SAFE_SERIALIZE']= 'true'"
             )
@@ -4661,7 +4661,7 @@ class Trainer:
         if safe_serialize:
             self.args.to_json_file(os.path.join(output_dir, TRAINING_ARGS_NAME))
         else:
-            logger.warning(
+            logger.info(
                 f"trainer API will deprecate the {DEPRECATED_ARGS_NAME} in 5.0.0, to switch to a safe serialization method, "
                 "you can set os.environ['TRAINER_SAFE_SERIALIZE']= 'true'"
             )
