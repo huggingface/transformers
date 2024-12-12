@@ -3343,6 +3343,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         # only permit 4 compilations: 2 prefill steps and 2 decoding steps (1 for each of conditioned/not conditioned)
         torch._dynamo.config.cache_size_limit = 4
+        torch._dynamo.reset()
 
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
