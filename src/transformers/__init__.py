@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.47.0.dev0"
+__version__ = "4.48.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -122,6 +122,7 @@ _import_structure = {
     "feature_extraction_utils": ["BatchFeature", "FeatureExtractionMixin"],
     "file_utils": [],
     "generation": [
+        "CompileConfig",
         "GenerationConfig",
         "TextIteratorStreamer",
         "TextStreamer",
@@ -168,6 +169,11 @@ _import_structure = {
         "AltCLIPProcessor",
         "AltCLIPTextConfig",
         "AltCLIPVisionConfig",
+    ],
+    "models.aria": [
+        "AriaConfig",
+        "AriaProcessor",
+        "AriaTextConfig",
     ],
     "models.audio_spectrogram_transformer": [
         "ASTConfig",
@@ -484,6 +490,7 @@ _import_structure = {
     "models.idefics": ["IdeficsConfig"],
     "models.idefics2": ["Idefics2Config"],
     "models.idefics3": ["Idefics3Config"],
+    "models.ijepa": ["IJepaConfig"],
     "models.imagegpt": ["ImageGPTConfig"],
     "models.informer": ["InformerConfig"],
     "models.instructblip": [
@@ -620,7 +627,7 @@ _import_structure = {
     "models.nougat": ["NougatProcessor"],
     "models.nystromformer": ["NystromformerConfig"],
     "models.olmo": ["OlmoConfig"],
-    "models.olmo_1124": ["Olmo1124Config"],
+    "models.olmo2": ["Olmo2Config"],
     "models.olmoe": ["OlmoeConfig"],
     "models.omdet_turbo": [
         "OmDetTurboConfig",
@@ -775,6 +782,7 @@ _import_structure = {
     "models.time_series_transformer": ["TimeSeriesTransformerConfig"],
     "models.timesformer": ["TimesformerConfig"],
     "models.timm_backbone": ["TimmBackboneConfig"],
+    "models.timm_wrapper": ["TimmWrapperConfig"],
     "models.trocr": [
         "TrOCRConfig",
         "TrOCRProcessor",
@@ -1174,6 +1182,7 @@ else:
     _import_structure["image_processing_base"] = ["ImageProcessingMixin"]
     _import_structure["image_processing_utils"] = ["BaseImageProcessor"]
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
+    _import_structure["models.aria"].extend(["AriaImageProcessor"])
     _import_structure["models.beit"].extend(["BeitFeatureExtractor", "BeitImageProcessor"])
     _import_structure["models.bit"].extend(["BitImageProcessor"])
     _import_structure["models.blip"].extend(["BlipImageProcessor"])
@@ -1193,7 +1202,7 @@ else:
     _import_structure["models.deprecated.efficientformer"].append("EfficientFormerImageProcessor")
     _import_structure["models.deprecated.tvlt"].append("TvltImageProcessor")
     _import_structure["models.deprecated.vit_hybrid"].extend(["ViTHybridImageProcessor"])
-    _import_structure["models.detr"].extend(["DetrFeatureExtractor", "DetrImageProcessor", "DetrImageProcessorFast"])
+    _import_structure["models.detr"].extend(["DetrFeatureExtractor", "DetrImageProcessor"])
     _import_structure["models.donut"].extend(["DonutFeatureExtractor", "DonutImageProcessor"])
     _import_structure["models.dpt"].extend(["DPTFeatureExtractor", "DPTImageProcessor"])
     _import_structure["models.efficientnet"].append("EfficientNetImageProcessor")
@@ -1230,7 +1239,7 @@ else:
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
     _import_structure["models.qwen2_vl"].extend(["Qwen2VLImageProcessor"])
-    _import_structure["models.rt_detr"].extend(["RTDetrImageProcessor", "RTDetrImageProcessorFast"])
+    _import_structure["models.rt_detr"].extend(["RTDetrImageProcessor"])
     _import_structure["models.sam"].extend(["SamImageProcessor"])
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
     _import_structure["models.seggpt"].extend(["SegGptImageProcessor"])
@@ -1258,7 +1267,23 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["image_processing_utils_fast"] = ["BaseImageProcessorFast"]
+    _import_structure["models.deformable_detr"].append("DeformableDetrImageProcessorFast")
+    _import_structure["models.detr"].append("DetrImageProcessorFast")
+    _import_structure["models.pixtral"].append("PixtralImageProcessorFast")
+    _import_structure["models.rt_detr"].append("RTDetrImageProcessorFast")
     _import_structure["models.vit"].append("ViTImageProcessorFast")
+
+try:
+    if not is_torchvision_available() and not is_timm_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    from .utils import dummy_timm_and_torchvision_objects
+
+    _import_structure["utils.dummy_timm_and_torchvision_objects"] = [
+        name for name in dir(dummy_timm_and_torchvision_objects) if not name.startswith("_")
+    ]
+else:
+    _import_structure["models.timm_wrapper"].extend(["TimmWrapperImageProcessor"])
 
 # PyTorch-backed objects
 try:
@@ -1398,6 +1423,15 @@ else:
             "AltCLIPPreTrainedModel",
             "AltCLIPTextModel",
             "AltCLIPVisionModel",
+        ]
+    )
+    _import_structure["models.aria"].extend(
+        [
+            "AriaForConditionalGeneration",
+            "AriaPreTrainedModel",
+            "AriaTextForCausalLM",
+            "AriaTextModel",
+            "AriaTextPreTrainedModel",
         ]
     )
     _import_structure["models.audio_spectrogram_transformer"].extend(
@@ -2455,6 +2489,15 @@ else:
             "Idefics3Model",
             "Idefics3PreTrainedModel",
             "Idefics3Processor",
+            "Idefics3VisionConfig",
+            "Idefics3VisionTransformer",
+        ]
+    )
+    _import_structure["models.ijepa"].extend(
+        [
+            "IJepaForImageClassification",
+            "IJepaModel",
+            "IJepaPreTrainedModel",
         ]
     )
     _import_structure["models.imagegpt"].extend(
@@ -2920,11 +2963,11 @@ else:
             "OlmoPreTrainedModel",
         ]
     )
-    _import_structure["models.olmo_1124"].extend(
+    _import_structure["models.olmo2"].extend(
         [
-            "Olmo1124ForCausalLM",
-            "Olmo1124Model",
-            "Olmo1124PreTrainedModel",
+            "Olmo2ForCausalLM",
+            "Olmo2Model",
+            "Olmo2PreTrainedModel",
         ]
     )
     _import_structure["models.olmoe"].extend(
@@ -3502,6 +3545,9 @@ else:
         ]
     )
     _import_structure["models.timm_backbone"].extend(["TimmBackbone"])
+    _import_structure["models.timm_wrapper"].extend(
+        ["TimmWrapperForImageClassification", "TimmWrapperModel", "TimmWrapperPreTrainedModel"]
+    )
     _import_structure["models.trocr"].extend(
         [
             "TrOCRForCausalLM",
@@ -4977,7 +5023,7 @@ if TYPE_CHECKING:
     from .feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 
     # Generation
-    from .generation import GenerationConfig, TextIteratorStreamer, TextStreamer, WatermarkingConfig
+    from .generation import CompileConfig, GenerationConfig, TextIteratorStreamer, TextStreamer, WatermarkingConfig
     from .hf_argparser import HfArgumentParser
 
     # Integrations
@@ -5019,6 +5065,11 @@ if TYPE_CHECKING:
         AltCLIPProcessor,
         AltCLIPTextConfig,
         AltCLIPVisionConfig,
+    )
+    from .models.aria import (
+        AriaConfig,
+        AriaProcessor,
+        AriaTextConfig,
     )
     from .models.audio_spectrogram_transformer import (
         ASTConfig,
@@ -5363,6 +5414,7 @@ if TYPE_CHECKING:
     )
     from .models.idefics2 import Idefics2Config
     from .models.idefics3 import Idefics3Config
+    from .models.ijepa import IJepaConfig
     from .models.imagegpt import ImageGPTConfig
     from .models.informer import InformerConfig
     from .models.instructblip import (
@@ -5514,7 +5566,7 @@ if TYPE_CHECKING:
         NystromformerConfig,
     )
     from .models.olmo import OlmoConfig
-    from .models.olmo_1124 import Olmo1124Config
+    from .models.olmo2 import Olmo2Config
     from .models.olmoe import OlmoeConfig
     from .models.omdet_turbo import (
         OmDetTurboConfig,
@@ -5698,6 +5750,7 @@ if TYPE_CHECKING:
         TimesformerConfig,
     )
     from .models.timm_backbone import TimmBackboneConfig
+    from .models.timm_wrapper import TimmWrapperConfig
     from .models.trocr import (
         TrOCRConfig,
         TrOCRProcessor,
@@ -6082,6 +6135,7 @@ if TYPE_CHECKING:
         from .image_processing_base import ImageProcessingMixin
         from .image_processing_utils import BaseImageProcessor
         from .image_utils import ImageFeatureExtractionMixin
+        from .models.aria import AriaImageProcessor
         from .models.beit import BeitFeatureExtractor, BeitImageProcessor
         from .models.bit import BitImageProcessor
         from .models.blip import BlipImageProcessor
@@ -6097,16 +6151,13 @@ if TYPE_CHECKING:
             ConditionalDetrImageProcessor,
         )
         from .models.convnext import ConvNextFeatureExtractor, ConvNextImageProcessor
-        from .models.deformable_detr import (
-            DeformableDetrFeatureExtractor,
-            DeformableDetrImageProcessor,
-        )
+        from .models.deformable_detr import DeformableDetrFeatureExtractor, DeformableDetrImageProcessor
         from .models.deit import DeiTFeatureExtractor, DeiTImageProcessor
         from .models.deprecated.deta import DetaImageProcessor
         from .models.deprecated.efficientformer import EfficientFormerImageProcessor
         from .models.deprecated.tvlt import TvltImageProcessor
         from .models.deprecated.vit_hybrid import ViTHybridImageProcessor
-        from .models.detr import DetrFeatureExtractor, DetrImageProcessor, DetrImageProcessorFast
+        from .models.detr import DetrFeatureExtractor, DetrImageProcessor
         from .models.donut import DonutFeatureExtractor, DonutImageProcessor
         from .models.dpt import DPTFeatureExtractor, DPTImageProcessor
         from .models.efficientnet import EfficientNetImageProcessor
@@ -6163,7 +6214,7 @@ if TYPE_CHECKING:
         )
         from .models.pvt import PvtImageProcessor
         from .models.qwen2_vl import Qwen2VLImageProcessor
-        from .models.rt_detr import RTDetrImageProcessor, RTDetrImageProcessorFast
+        from .models.rt_detr import RTDetrImageProcessor
         from .models.sam import SamImageProcessor
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.seggpt import SegGptImageProcessor
@@ -6187,7 +6238,19 @@ if TYPE_CHECKING:
         from .utils.dummy_torchvision_objects import *
     else:
         from .image_processing_utils_fast import BaseImageProcessorFast
+        from .models.deformable_detr import DeformableDetrImageProcessorFast
+        from .models.detr import DetrImageProcessorFast
+        from .models.pixtral import PixtralImageProcessorFast
+        from .models.rt_detr import RTDetrImageProcessorFast
         from .models.vit import ViTImageProcessorFast
+
+    try:
+        if not is_torchvision_available() and not is_timm_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        from .utils.dummy_timm_and_torchvision_objects import *
+    else:
+        from .models.timm_wrapper import TimmWrapperImageProcessor
 
     # Modeling
     try:
@@ -6309,6 +6372,13 @@ if TYPE_CHECKING:
             AltCLIPPreTrainedModel,
             AltCLIPTextModel,
             AltCLIPVisionModel,
+        )
+        from .models.aria import (
+            AriaForConditionalGeneration,
+            AriaPreTrainedModel,
+            AriaTextForCausalLM,
+            AriaTextModel,
+            AriaTextPreTrainedModel,
         )
         from .models.audio_spectrogram_transformer import (
             ASTForAudioClassification,
@@ -7174,6 +7244,13 @@ if TYPE_CHECKING:
             Idefics3Model,
             Idefics3PreTrainedModel,
             Idefics3Processor,
+            Idefics3VisionConfig,
+            Idefics3VisionTransformer,
+        )
+        from .models.ijepa import (
+            IJepaForImageClassification,
+            IJepaModel,
+            IJepaPreTrainedModel,
         )
         from .models.imagegpt import (
             ImageGPTForCausalImageModeling,
@@ -7532,10 +7609,10 @@ if TYPE_CHECKING:
             OlmoModel,
             OlmoPreTrainedModel,
         )
-        from .models.olmo_1124 import (
-            Olmo1124ForCausalLM,
-            Olmo1124Model,
-            Olmo1124PreTrainedModel,
+        from .models.olmo2 import (
+            Olmo2ForCausalLM,
+            Olmo2Model,
+            Olmo2PreTrainedModel,
         )
         from .models.olmoe import (
             OlmoeForCausalLM,
@@ -7985,6 +8062,11 @@ if TYPE_CHECKING:
             TimesformerPreTrainedModel,
         )
         from .models.timm_backbone import TimmBackbone
+        from .models.timm_wrapper import (
+            TimmWrapperForImageClassification,
+            TimmWrapperModel,
+            TimmWrapperPreTrainedModel,
+        )
         from .models.trocr import (
             TrOCRForCausalLM,
             TrOCRPreTrainedModel,

@@ -1,4 +1,4 @@
-# Copyright 2024 EleutherAI and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,8 +18,9 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_olmo_1124 import *
-    from .modeling_olmo_1124 import *
+    from .configuration_timm_wrapper import *
+    from .modeling_timm_wrapper import *
+    from .processing_timm_wrapper import *
 else:
     import sys
 
