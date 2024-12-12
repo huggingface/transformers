@@ -17,7 +17,8 @@
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils import BaseImageProcessor, get_size_dict
+from ...image_processing_utils import get_size_dict
+from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_transforms import convert_to_rgb
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
@@ -89,7 +90,7 @@ def pad_to_bounding_box(
     return padded_image
 
 
-class MolmoImageProcessorFast(BaseImageProcessor):
+class MolmoImageProcessorFast(BaseImageProcessorFast):
     """
     Image processor for the Molmo model.
 
@@ -184,6 +185,11 @@ class MolmoImageProcessorFast(BaseImageProcessor):
         )  # usable patches
         self.crop_window_size = self.crop_window_patches * self.image_patch_size
         self.crop_size = size["width"]
+
+        if ((self.patches_per_image_height + 1) // 2 != self.tokens_per_image_height) or (
+            (self.patches_per_image_width + 1) // 2 != self.tokens_per_image_width
+        ):
+            raise ValueError("Number of patches per crop does not fit number of tokens per image dimension.")
 
     def resize(
         self,
@@ -294,12 +300,6 @@ class MolmoImageProcessorFast(BaseImageProcessor):
         crops = []
         cropped_masks = []
         patch_orderings = []
-
-        if ((self.patches_per_image_height + 1) // 2 != self.tokens_per_image_height) or (
-            (self.patches_per_image_width + 1) // 2 != self.tokens_per_image_width
-        ):
-            raise ValueError("Number of patches per crop does not fit number of tokens per image dimension.")
-
         patch_index = 0
         for row in range(crop_grid[0]):
             crop_y_start = row * self.crop_window_size
@@ -324,7 +324,6 @@ class MolmoImageProcessorFast(BaseImageProcessor):
 
                 # Correct padding based on margins and offsets
                 crop_x_offset = self.overlap_margins[0] // 2 if column > 0 else 0
-
                 # Track patch ordering: generate an array representing the order of patches (overlaps (on crops))
                 reshaped_image = torch.arange(
                     patch_index,
@@ -356,7 +355,6 @@ class MolmoImageProcessorFast(BaseImageProcessor):
                 cropped_masks.append(cropped_mask)
 
                 patch_index += pooled_height * pooled_width
-
         crops = torch.stack(crops)
         patch_orderings = torch.stack(patch_orderings)
         cropped_masks = torch.stack(cropped_masks)
@@ -492,10 +490,8 @@ class MolmoImageProcessorFast(BaseImageProcessor):
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
         device = kwargs.pop("device", None)
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
-
         images = make_batched_images(images)
         image_type = get_image_type(images[0])
-
         if do_convert_rgb:
             images = [convert_to_rgb(image) for image in images]
 
@@ -503,7 +499,6 @@ class MolmoImageProcessorFast(BaseImageProcessor):
             images = [F.pil_to_tensor(image) for image in images]
         elif image_type == ImageType.NUMPY:
             images = [torch.from_numpy(image).contiguous() for image in images]
-
         all_images = []
         all_crop_grids = []
         all_cropped_masks = []
@@ -512,12 +507,15 @@ class MolmoImageProcessorFast(BaseImageProcessor):
         for image in images:
             if input_data_format is None:
                 input_data_format = infer_channel_dimension_format(image)
+
             if do_resize:
                 global_image_size = get_resize_output_image_size(image, size)
                 global_image = self.resize(
                     image=image, size=global_image_size, resample=resample, input_data_format=input_data_format
                 )
+
                 crop_grid = self.find_best_crop_grid_for_image_size(image)
+
                 new_crop_size = {}
                 new_crop_size["height"] = crop_grid[0] * self.crop_window_size + self.total_margin_pixels
                 new_crop_size["width"] = crop_grid[1] * self.crop_window_size + self.total_margin_pixels
@@ -528,6 +526,7 @@ class MolmoImageProcessorFast(BaseImageProcessor):
                 image = self.resize(
                     image=image, size=crop_output_size, resample=resample, input_data_format=input_data_format
                 )
+
             if do_pad:
                 image, image_mask = self.pad(
                     image=image, size=new_crop_size, input_data_format=input_data_format, constant_values=0
@@ -546,9 +545,10 @@ class MolmoImageProcessorFast(BaseImageProcessor):
                 global_image = (global_image - image_mean_tensor) / image_std_tensor
 
             if do_split_into_crops:
-                crops, patch_orderings, cropped_masks = self.split_image_into_crops(
+                crops, patch_orderings, cropped_masks = self.fully_batched_split_image_into_crops(
                     image=image, image_mask=image_mask, crop_grid=crop_grid, input_data_format=input_data_format
                 )
+
                 patch_orderings = self.transpose_patch_orderings(crop_grid, patch_orderings)
             global_image = self.reshape_into_patches(global_image, input_data_format=input_data_format)
             crops = torch.cat([global_image.unsqueeze(0), crops], dim=0)
@@ -560,6 +560,7 @@ class MolmoImageProcessorFast(BaseImageProcessor):
             all_crop_grids.append(crop_grid)
             all_cropped_masks.append(cropped_masks)
             all_patch_orderings.append(patch_orderings)
+
         data = {
             "pixel_values": all_images,
             "crop_grids": all_crop_grids,

@@ -20,6 +20,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_molmo import *
     from .image_processing_molmo import *
+    from .image_processing_molmo_fast import *
     from .modeling_molmo import *
     from .processing_molmo import *
 else:

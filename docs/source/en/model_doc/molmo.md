@@ -98,6 +98,10 @@ print(processor.decode(output[0], skip_special_tokens=True))
 
 [[autodoc]] MolmoImageProcessor
 
+## MolmoImageProcessorFast
+
+[[autodoc]] MolmoImageProcessorFast
+
 ## MolmoProcessor
 
 [[autodoc]] MolmoProcessor

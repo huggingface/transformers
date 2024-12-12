@@ -23,7 +23,13 @@ import regex as re
 import torch
 from safetensors.torch import load_file
 
-from transformers import GPT2TokenizerFast, Qwen2TokenizerFast
+from transformers import (
+    GPT2TokenizerFast,
+    MolmoImageProcessor,
+    MolmoImageProcessorFast,
+    MolmoProcessor,
+    Qwen2TokenizerFast,
+)
 from transformers.models.molmo import MolmoForConditionalGeneration
 from transformers.models.molmo.configuration_molmo import (
     MolmoConfig,
@@ -31,8 +37,6 @@ from transformers.models.molmo.configuration_molmo import (
     MolmoTextConfig,
     MolmoVisionConfig,
 )
-from transformers.models.molmo.image_processing_molmo import MolmoImageProcessor
-from transformers.models.molmo.processing_molmo import MolmoProcessor
 
 
 CHAT_TEMPLATE = (
@@ -291,7 +295,8 @@ def write_model(
     elif variant == "7B-O":
         tokenizer = GPT2TokenizerFast.from_pretrained(input_base_path, extra_special_tokens=extra_special_tokens)
         tokenizer.save_pretrained(model_path)
-    image_processor = MolmoImageProcessor.from_pretrained(input_base_path)
+    image_processor_class = MolmoImageProcessor if MolmoImageProcessorFast is None else MolmoImageProcessorFast
+    image_processor = image_processor_class.from_pretrained(input_base_path)
     processor = MolmoProcessor(image_processor=image_processor, tokenizer=tokenizer, chat_template=CHAT_TEMPLATE)
     processor.save_pretrained(model_path)
     print("Processor saved successfully.")
