@@ -326,7 +326,7 @@ class MoonshineMLP:
 
 
 class MoonshineAttention(PhiAttention):
-    def __init__(self, config: MoonshineConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: MoonshineConfig, layer_idx: Optional[int] = None, is_causal: bool = False):
         super().__init__(config, layer_idx)
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
@@ -338,6 +338,8 @@ class MoonshineAttention(PhiAttention):
             dim=self.rotary_ndims, 
             max_position_embeddings=config.max_position_embeddings,
         )
+
+        self.is_causal = is_causal
     
     def forward(
         self,
@@ -715,7 +717,7 @@ class MoonshineSdpaAttention(PhiSdpaAttention):
 
         # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
         # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
-        is_causal = True if causal_mask is None and q_len > 1 else False
+        is_causal = True if self.is_causal and causal_mask is None and q_len > 1 else False
 
         attn_output = torch.nn.functional.scaled_dot_product_attention(
             query_states,
@@ -755,8 +757,8 @@ class MoonshineDecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = MOONSHINE_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
-        self.encoder_attn = MOONSHINE_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
+        self.self_attn = MOONSHINE_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx, is_causal=True)
+        self.encoder_attn = MOONSHINE_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx, is_causal=True)
 
         self.mlp = MoonshineMLP(config, config.decoder_hidden_act) 
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps, bias=False)
