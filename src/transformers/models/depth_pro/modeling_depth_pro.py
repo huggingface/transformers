@@ -1043,9 +1043,7 @@ class DepthProEncoder(nn.Module):
         # STEP 6: get image features - (6) in diagram
 
         # a. extract hidden_state
-        hidden_state = (
-            image_encodings.last_hidden_state
-        )  # (B, self.seq_len+1, config.hidden_size)
+        hidden_state = image_encodings.last_hidden_state  # (B, self.seq_len+1, config.hidden_size)
 
         # b. reshape back to image like
         image_features = reshape_feature(
@@ -1434,9 +1432,7 @@ class DepthProFOVModel(nn.Module):
         )
 
         # a. extract hidden_state
-        hidden_state = (
-            encodings.last_hidden_state
-        )  # (B, self.seq_len+1, config.hidden_size)
+        hidden_state = encodings.last_hidden_state  # (B, self.seq_len+1, config.hidden_size)
         # extra step
         hidden_state = self.encoder_neck(hidden_state)
         # (B, self.fusion_hidden_size//2, self.out_size, self.out_size)
