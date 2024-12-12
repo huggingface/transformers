@@ -33,6 +33,7 @@ from ...utils import (
     logging,
 )
 from ..gemma.modeling_gemma import (
+    GemmaAttention,
     GemmaForCausalLM,
     GemmaForSequenceClassification,
     GemmaForTokenClassification,
@@ -40,7 +41,6 @@ from ..gemma.modeling_gemma import (
     GemmaPreTrainedModel,
     GemmaRMSNorm,
     GemmaRotaryEmbedding,
-    GemmaAttention,
     repeat_kv,
 )
 

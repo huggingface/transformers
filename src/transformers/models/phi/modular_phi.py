@@ -1,4 +1,3 @@
-import math
 from typing import Callable, Optional, Tuple
 
 import torch
@@ -15,11 +14,9 @@ from ..llama.modeling_llama import (
     LlamaForTokenClassification,
     LlamaMLP,
     apply_rotary_pos_emb,
-    eager_attention_forward # copied from Llama
+    eager_attention_forward,  # copied from Llama
 )
 from .configuration_phi import PhiConfig
-
-
 
 
 class PhiAttention(LlamaAttention):
