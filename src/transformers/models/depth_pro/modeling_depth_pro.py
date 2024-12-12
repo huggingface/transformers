@@ -959,7 +959,8 @@ class DepthProEncoder(nn.Module):
             patches,
             head_mask=head_mask,
             output_attentions=output_attentions,
-            output_hidden_states=True,  # required for intermediate features
+            # required for intermediate features
+            output_hidden_states=self.n_intermediate_hooks or output_hidden_states,
             return_dict=True,
             batch_size=B,
         )
@@ -969,12 +970,16 @@ class DepthProEncoder(nn.Module):
         scaled_images_last_hidden_state = scaled_images_last_hidden_state[::-1]
         # -1 as patch encoder expects high res patches first
 
+        # scale the image to patch size for image_encoder
+        image_scaled_to_patch_size = nn.functional.interpolate(
+            pixel_values,
+            size=(self.config.patch_size, self.config.patch_size),
+            mode="bilinear",
+            align_corners=False,
+        )
         image_encodings = self.image_encoder(
-            pixel_values=scaled_images[0],  # provide least resolution image
+            pixel_values=image_scaled_to_patch_size,
             head_mask=head_mask,
-            output_attentions=False,
-            output_hidden_states=False,
-            return_dict=True,
         )
 
         # STEP 4: get patch features (high_res, med_res, low_res) - (3-5) in diagram
@@ -1041,19 +1046,15 @@ class DepthProEncoder(nn.Module):
         # a. extract hidden_state
         hidden_state = (
             image_encodings.last_hidden_state
-        )  # (scaled_images_num_patches[0], self.seq_len+1, config.hidden_size)
+        )  # (B, self.seq_len+1, config.hidden_size)
 
         # b. reshape back to image like
         image_features = reshape_feature(
             hidden_state, self.out_size, self.out_size
-        )  # (scaled_images_num_patches[0], config.hidden_size, self.out_size, self.out_size)
+        )  # (B, config.hidden_size, self.out_size, self.out_size)
 
         # c. merge patches back together
-        image_features = merge(
-            image_features,
-            batch_size=B,
-            merge_out_size=self.out_size * 2 ** (0),
-        )  # (B, config.hidden_size, self.out_size*2**(self.n_scaled_images-1), self.out_size*2**(self.n_scaled_images-1))
+        # no merge required for image_features as they are already in batches instead of patches
 
         # d. upsample
         image_features = self.upsample_image(
@@ -1072,8 +1073,6 @@ class DepthProEncoder(nn.Module):
             # (B, config.intermediate_feature_dims[i], self.out_size*2**(self.n_scaled_images+i+1), self.out_size*2**(self.n_scaled_images+i+1))
             *intermediate_features,
         ]
-
-        # prepare last_hidden_state, hidden_states, attentions from patches to batches
 
         last_hidden_state = patch_encodings.last_hidden_state
         hidden_states = patch_encodings.hidden_states if output_hidden_states else None
@@ -1420,35 +1419,42 @@ class DepthProFOVModel(nn.Module):
         B, C, W, H = pixel_values.shape
 
         # follow the steps same as with image features in DepthProEncoder
-        pixel_values = interpolate(
+        # except for the extra encoder_neck layer applied
+
+        image_scaled_to_patch_size = nn.functional.interpolate(
             pixel_values,
-            scale_factor=self.config.scaled_images_ratios[0],  # same ratio as lowest ratioed image
+            size=(self.config.patch_size, self.config.patch_size),
+            mode="bilinear",
+            align_corners=False,
         )
-        patches = patch(
-            pixel_values,
-            patch_size=self.config.patch_size,
-            overlap_ratio=self.config.scaled_images_overlap_ratios[0],
-        )
-        encoder_outputs = self.encoder(
-            patches,
+        encodings = self.encoder(
+            image_scaled_to_patch_size,
             head_mask=head_mask,
-            output_attentions=False,
-            output_hidden_states=False,
-            return_dict=True,
         )
-        last_hidden_state = encoder_outputs.last_hidden_state
-        last_hidden_state = self.encoder_neck(last_hidden_state)
-        last_hidden_state = reshape_feature(last_hidden_state, width=self.out_size, height=self.out_size)
-        last_hidden_state = merge(
-            last_hidden_state,
-            batch_size=B,
-            merge_out_size=self.out_size,
-        )
+
+        # a. extract hidden_state
+        hidden_state = (
+            encodings.last_hidden_state
+        )  # (B, self.seq_len+1, config.hidden_size)
+        # extra step
+        hidden_state = self.encoder_neck(hidden_state)
+        # (B, self.fusion_hidden_size//2, self.out_size, self.out_size)
+
+        # b. reshape back to image like
+        fov_features = reshape_feature(
+            hidden_state, self.out_size, self.out_size
+        )  # (B, config.hidden_size, self.out_size, self.out_size)
+
+        # c. merge patches back together
+        # no merge required for fov_features as they are already in batches instead of patches
+
+        # d. upsample
+        # no upsampling required for fov_features, the head later downsamples to create scalars
 
         global_features = self.global_neck(global_features)
 
-        last_hidden_state = last_hidden_state + global_features
-        fov_output = self.head(last_hidden_state)
+        fov_features = fov_features + global_features
+        fov_output = self.head(fov_features)
         fov_output = fov_output.reshape(B)
 
         return fov_output
@@ -1652,7 +1658,7 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
         fov = (
             self.fov_model(
                 pixel_values=pixel_values,
-                # use lowest scaled image features for fov model
+                # frozon features from encoder are used
                 global_features=features[0].detach(),
                 head_mask=head_mask,
             )
