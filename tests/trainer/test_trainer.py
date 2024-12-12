@@ -573,7 +573,7 @@ class TrainerIntegrationCommon:
     def check_saved_checkpoints(self, output_dir, freq, total, is_pretrained=True, safe_weights=True):
         weights_file = WEIGHTS_NAME if not safe_weights else SAFE_WEIGHTS_NAME
         file_list = [weights_file, "optimizer.pt", "scheduler.pt", "trainer_state.json"]
-        safe_serialized = ["training_args.bin", "training_args.json"] # default to json in version 5.x.x
+        safe_serialized = ["training_args.bin", "training_args.json"]  # default to json in version 5.x.x
         if is_pretrained:
             file_list.append("config.json")
         for step in range(freq, total, freq):
