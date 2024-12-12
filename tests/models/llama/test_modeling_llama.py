@@ -54,6 +54,7 @@ if is_torch_available():
         LlamaTokenizer,
     )
 
+
 class LlamaModelTester:
     def __init__(
         self,
@@ -423,7 +424,6 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
         # The output should be different for long inputs
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
-
 
     def test_model_loading_old_rope_configs(self):
         def _reinitialize_config(base_config, new_kwargs):

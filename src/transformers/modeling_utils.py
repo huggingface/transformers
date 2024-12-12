@@ -1356,6 +1356,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     _output_embedding = None
     _input_embedding = None
+    gradient_checkpointing = False
 
     @property
     def dummy_inputs(self) -> Dict[str, torch.Tensor]:
@@ -1847,8 +1848,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         base_model = getattr(self, self.base_model_prefix, self)
         if base_model is not self:
             base_model.set_input_embeddings(value)
+        elif self._input_embedding is not None:
+            setattr(self, self._input_embedding, value)
         else:
-            raise setattr(self, self._input_embedding, value)
+            raise ValueError("No input embedding")
 
     def get_output_embeddings(self) -> nn.Module:
         """
@@ -1857,7 +1860,25 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         Returns:
             `nn.Module`: A torch module mapping hidden states to vocabulary.
         """
-        return getattr(self, self._output_embedding, None)
+        if self._output_embedding is not None:
+            return getattr(self, self._output_embedding, None)
+        else:
+            return None
+
+    def set_output_embeddings(self, value: nn.Module):
+        """
+        Set model's input embeddings.
+
+        Args:
+            value (`nn.Module`): A module mapping vocabulary to hidden states.
+        """
+        base_model = getattr(self, self.base_model_prefix, self)
+        if base_model is not self:
+            base_model.set_output_embeddings(value)
+        elif self._output_embedding is not None:
+            setattr(self, self._output_embedding, value)
+        else:
+            raise ValueError()
 
     def _init_weights(self, module):
         """

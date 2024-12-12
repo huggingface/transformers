@@ -13,16 +13,16 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils.generic import KwargsForCausalLM, validate_config_kwargs
-from ..auto import AutoModel
+from ..auto import AutoConfig, AutoModel
 
 
 class AutoForCausalLM(PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
-    _input_embedding = "model.embed_tokens"
     _output_embedding = "lm_head"
     _no_split_modules = []
     _supports_cache_class = True
+    config_class = AutoConfig
 
     def __init__(self, config):
         super().__init__(config)
@@ -33,6 +33,13 @@ class AutoForCausalLM(PreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_input_embeddings(self):
+        return self.model.get_input_embeddings()
+
+    def set_input_embeddings(self, value: nn.Module):
+        self.model.set_input_embeddings(value)
+
+    @validate_config_kwargs
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -74,6 +81,8 @@ class AutoForCausalLM(PreTrainedModel, GenerationMixin):
 
 
 class AutoForSequenceClassification(PreTrainedModel):
+    config_class = AutoConfig
+
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
@@ -157,6 +166,7 @@ class AutoForSequenceClassification(PreTrainedModel):
 
 class AutoForQuestionAnswering(PreTrainedModel):
     base_model_prefix = "transformer"
+    config_class = AutoConfig
 
     # Copied from transformers.models.bloom.modeling_bloom.BloomForQuestionAnswering.__init__ with Bloom->Llama
     def __init__(self, config):
@@ -225,6 +235,8 @@ class AutoForQuestionAnswering(PreTrainedModel):
 
 
 class AutoForTokenClassification(PreTrainedModel):
+    config_class = AutoConfig
+
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels

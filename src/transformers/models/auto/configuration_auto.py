@@ -900,6 +900,8 @@ class AutoConfig:
     This class cannot be instantiated directly using `__init__()` (throws an error).
     """
 
+    model_type = "auto"
+
     def __init__(self):
         raise EnvironmentError(
             "AutoConfig is designed to be instantiated "
