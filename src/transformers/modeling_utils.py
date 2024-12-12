@@ -174,10 +174,6 @@ else:
 if is_peft_available():
     from .utils import find_adapter_config_file
 
-
-SpecificPreTrainedModelType = TypeVar("SpecificPreTrainedModelType", bound="PreTrainedModel")
-
-
 TORCH_INIT_FUNCTIONS = {
     "uniform_": nn.init.uniform_,
     "normal_": nn.init.normal_,

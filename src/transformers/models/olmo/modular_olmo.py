@@ -1,23 +1,27 @@
+from typing import Callable, Optional, Tuple
+
 import torch
+import torch.nn as nn
+import torch.nn.functional as F
 import torch.utils.checkpoint
 
-from ...cache_utils import Cache, SlidingWindowCache, StaticCache
-from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...cache_utils import Cache
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ..llama.modeling_llama import (
+    LlamaAttention,
+    LlamaDecoderLayer,
     LlamaForMultipleChoice,
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
-    LlamaDecoderLayer,
-    LlamaRMSNorm,
     LlamaMLP,
-    LlamaAttention,apply_rotary_pos_emb, eager_attention_forward
+    LlamaRMSNorm,
+    apply_rotary_pos_emb,
+    eager_attention_forward,
 )
 from .configuration_olmo import OlmoConfig
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-import torch.nn as nn
-import torch.nn.functional as F
-from typing import Optional, Tuple, Callable
+
+
 class OlmoLayerNorm(nn.Module):
     """LayerNorm but with no learnable weight or bias."""
 
@@ -39,8 +43,8 @@ class OlmoRMSNorm(LlamaRMSNorm):
 class OlmoMLP(LlamaMLP):
     pass
 
+
 class OlmoAttention(LlamaAttention):
-       
     def forward(
         self,
         hidden_states: torch.Tensor,

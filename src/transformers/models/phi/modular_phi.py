@@ -1,37 +1,28 @@
-from .configuration_phi import PhiConfig
-from ..llama.modeling_llama import LlamaAttention, repeat_kv, apply_rotary_pos_emb, LlamaMLP, LlamaForCausalLM, LlamaForSequenceClassification, LlamaForTokenClassification, LlamaForQuestionAnswering
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+import math
+from typing import Callable, Optional, Tuple
+
+import torch
 import torch.nn as nn
 
-import math
-import torch
-from typing import Optional, Tuple, Callable
 from transformers.cache_utils import Cache
 
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ..llama.modeling_llama import (
+    LlamaAttention,
+    LlamaForCausalLM,
+    LlamaForQuestionAnswering,
+    LlamaForSequenceClassification,
+    LlamaForTokenClassification,
+    LlamaMLP,
+    apply_rotary_pos_emb,
+    eager_attention_forward # copied from Llama
+)
+from .configuration_phi import PhiConfig
 
-def eager_attention_forward(attention_class: nn.Module, query, key, value, attention_mask=None, layer_head_mask=None, **_kwargs):
-    key_states = repeat_kv(key_states, attention_class.num_key_value_groups)
-    value_states = repeat_kv(value_states, attention_class.num_key_value_groups)
 
-    # Queries and keys upcast to fp32 is required by Phi-2 to avoid overflow
-    attn_weights = torch.matmul(
-            query.to(torch.float32), key_states.to(torch.float32).transpose(2, 3)
-    ) / math.sqrt(attention_class.head_dim)
-
-    if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights += causal_mask
-
-    # upcast attention to fp32
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(value_states.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=attention_class.attention_dropout, training=attention_class.training)
-
-    attn_output = torch.matmul(attn_weights, value_states)
-    return attn_output, attn_weights
 
 
 class PhiAttention(LlamaAttention):
-
     def __init__(self, config: PhiConfig, layer_idx: int):
         super().__init__(config, layer_idx)
         self.rotary_ndims = int(self.head_dim * config.partial_rotary_factor)
@@ -44,8 +35,9 @@ class PhiAttention(LlamaAttention):
             self.k_layernorm = nn.LayerNorm(
                 config.hidden_size // self.num_heads, eps=config.layer_norm_eps, elementwise_affine=True
             )
-    
-    def forward(self, 
+
+    def forward(
+        self,
         hidden_states: torch.Tensor,
         position_embeddings: Tuple[torch.Tensor, torch.Tensor],
         past_key_value: Optional[Cache] = None,
@@ -58,7 +50,6 @@ class PhiAttention(LlamaAttention):
         query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
         value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
-
 
         if self.qk_layernorm:
             query_states = self.q_layernorm(query_states)
@@ -102,8 +93,11 @@ class PhiAttention(LlamaAttention):
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
+
 class PhiMLP(LlamaMLP):
     pass
+
+
 class PhiDecoderLayer(nn.Module):
     def __init__(self, config: PhiConfig, layer_idx: int):
         super().__init__()
@@ -152,17 +146,19 @@ class PhiDecoderLayer(nn.Module):
             outputs += (present_key_value,)
 
         return outputs
-    
+
+
 class PhiForCausalLM(LlamaForCausalLM):
     pass
+
 
 class PhiForSequenceClassification(LlamaForSequenceClassification):
     pass
 
+
 class PhiForTokenClassification(LlamaForTokenClassification):
     pass
 
+
 class PhiForQuestionAnswering(LlamaForQuestionAnswering):
     pass
-
-
