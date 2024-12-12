@@ -40,7 +40,7 @@ from ..gemma.modeling_gemma import (
     GemmaPreTrainedModel,
     GemmaRMSNorm,
     GemmaRotaryEmbedding,
-    apply_rotary_pos_emb,
+    GemmaAttention,
     repeat_kv,
 )
 
@@ -213,14 +213,7 @@ class Gemma2RotaryEmbedding(GemmaRotaryEmbedding):
     pass
 
 
-def eager_attention_forward(
-    config: Gemma2Config,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    mask: Optional[torch.Tensor],
-    **_kwargs,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+def gemma_eager_attention_forward(config, query, key, value, mask, **_kwargs):
     key_states = repeat_kv(key, config.num_key_value_groups)
     value_states = repeat_kv(value, config.num_key_value_groups)
 
@@ -242,15 +235,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-def flash_attention_forward(
-    config: Gemma2Config,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    mask: Optional[torch.Tensor],
-    target_dtype: torch.dtype = torch.float16,
-    **_kwargs,
-) -> Tuple[torch.Tensor, None]:
+def gemma_flash_attention_forward(config, query, key, value, mask, target_dtype=torch.float16, **_kwargs):
     if mask is not None:
         seq_len = mask.shape[1]
         query = query[:, :, :seq_len]
@@ -287,15 +272,7 @@ def flash_attention_forward(
     return attn_output, None
 
 
-def flex_attention_forward(
-    config: Gemma2Config,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    mask: Optional[torch.Tensor],
-    output_attentions: bool = False,
-    **_kwargs,
-) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+def gemma_flex_attention_forward(config, query, key, value, mask, output_attentions=False, **_kwargs):
     def tanh_softcap(score, b, h, q_idx, kv_idx):
         soft_cap = config.attn_logit_softcapping
         score = soft_cap * torch.tanh(score / soft_cap)
@@ -321,14 +298,7 @@ def flex_attention_forward(
     return attn_output, attn_weights
 
 
-def sdpa_attention_forward(
-    config: Gemma2Config,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    mask: Optional[torch.Tensor],
-    **_kwargs,
-) -> Tuple[torch.Tensor, None]:
+def gemma_sdpa_attention_forward(config, query, key, value, mask, **_kwargs):
     key = repeat_kv(key, config.num_key_value_groups)
     value = repeat_kv(value, config.num_key_value_groups)
 
@@ -360,132 +330,20 @@ def sdpa_attention_forward(
     return attn_output, None
 
 
-GEMMA2_ATTENTION_FUNCTION = {
-    "flash_attention_2": flash_attention_forward,
-    "flex_attention": flex_attention_forward,
-    "eager": eager_attention_forward,
-    "sdpa": sdpa_attention_forward,
+ALL_ATTENTION_FUNCTION = {
+    "gemma_flash_attention_2": gemma_flash_attention_forward,
+    "gemma_flex_attention": gemma_flex_attention_forward,
+    "gemma_eager": gemma_eager_attention_forward,
+    "gemma_sdpa": gemma_sdpa_attention_forward,
 }
 
+class Gemma2Attention(GemmaAttention):
+    pass
 
-class Gemma2Attention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-
-    def __init__(self, config: Gemma2Config, layer_idx: Optional[int] = None):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-
-        self.attention_dropout = config.attention_dropout
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = config.head_dim
-        self.num_key_value_heads = config.num_key_value_heads
-        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.max_position_embeddings = config.max_position_embeddings
-        self.rope_theta = config.rope_theta
-        self.is_causal = True
-        self.scaling = config.query_pre_attn_scalar**-0.5
-        self.sliding_window = config.sliding_window if not bool(layer_idx % 2) else None
-        self.attn_logit_softcapping = config.attn_logit_softcapping
-        if self.hidden_size % self.num_heads != 0:
-            raise ValueError(
-                f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.hidden_size}"
-                f" and `num_heads`: {self.num_heads})."
-            )
-
-        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
-        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
-        self.rotary_emb = Gemma2RotaryEmbedding(
-            self.head_dim,
-            max_position_embeddings=self.max_position_embeddings,
-            base=self.rope_theta,
-        )
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
-        output_attentions: bool = False,
-        use_cache: bool = False,
-        cache_position: Optional[torch.LongTensor] = None,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        bsz, q_len, _ = hidden_states.size()
-
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
-
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-
-        cos, sin = self.rotary_emb(value_states, position_ids)
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
-        if past_key_value is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {
-                "sin": sin,
-                "cos": cos,
-                "sliding_window": self.sliding_window,
-                "cache_position": cache_position,
-            }
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
-
-        if output_attentions and self.config._attn_implementation in ["sdpa", "flash_attention_2"]:
-            logger.warning_once("Setting `attention_type` to `flex_attention` because `output_attentions=True`")
-            attention_type = "flex_attention"
-        else:
-            attention_type = self.config._attn_implementation
-
-        attn_output, attn_weights = GEMMA2_ATTENTION_FUNCTION[attention_type](
-            self, query_states, key_states, value_states, attention_mask, output_attentions=output_attentions
-        )
-
-        attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-
-        if not output_attentions:
-            attn_weights = None
-
-        return attn_output, attn_weights, past_key_value
-
-
-class Gemma2FlashAttention2(Gemma2Attention):
-    def __init__(self, config: Gemma2Config, layer_idx: Optional[int] = None):
-        super().__init__(config, layer_idx)
-        self.config._attn_implementation = "flash_attention_2"
-        logger.warning_once(
-            "The `Gemma2FlashAttention2` class is deprecated in favor of simply modifying the `config._attn_implementation`"
-            "attribute of the `GemmaAttention` class! It will be removed in v4.48"
-        )
-
-
-class Gemma2SdpaAttention(Gemma2Attention):
-    def __init__(self, config: Gemma2Config, layer_idx: Optional[int] = None):
-        super().__init__(config, layer_idx)
-        self.config._attn_implementation = "sdpa"
-        logger.warning_once(
-            "The `Gemma2FlashAttention2` class is deprecated in favor of simply modifying the `config._attn_implementation`"
-            "attribute of the `GemmaAttention` class! It will be removed in v4.48"
-        )
-
-
-class Gemma2DecoderLayer(nn.Module):
+class Gemma2DecoderLayer(GemmaDecoderLayer):
     def __init__(self, config: Gemma2Config, layer_idx: int):
         super().__init__()
-        self.hidden_size = config.hidden_size
-        self.config = config
         self.is_sliding = not bool(layer_idx % 2)
-        self.self_attn = Gemma2Attention(config=config, layer_idx=layer_idx)
-        self.mlp = Gemma2MLP(config)
-        self.input_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.pre_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -550,22 +408,7 @@ class Gemma2DecoderLayer(nn.Module):
 
 
 class Gemma2PreTrainedModel(GemmaPreTrainedModel):
-    _supports_quantized_cache = False
-
-    @classmethod
-    def _check_and_enable_sdpa(cls, config, hard_check_only: bool = False):
-        """
-        Overloads `PreTrainedModel._check_and_enable_sdpa` so as to DISABLE torch SDPA by default on Gemma2 models.
-        SDPA reduces the model performance on Gemma2 because of the logits softcapping.
-        """
-        config = super()._check_and_enable_sdpa(config, hard_check_only=hard_check_only)
-
-        # if using the default path -> swap sdpa by eager
-        if not hard_check_only and config._attn_implementation == "sdpa":
-            config._attn_implementation = "eager"
-
-        return config
-
+    pass
 
 class Gemma2Model(GemmaModel, Gemma2PreTrainedModel):
     def __init__(self, config: Gemma2Config):
