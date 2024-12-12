@@ -34,6 +34,8 @@ else:
         "ModernBertForMaskedLM",
         "ModernBertModel",
         "ModernBertPreTrainedModel",
+        "ModernBertForSequenceClassification",
+        "ModernBertForTokenClassification",
     ]
 
 if TYPE_CHECKING:
@@ -47,6 +49,8 @@ if TYPE_CHECKING:
     else:
         from .modeling_modernbert import (
             ModernBertForMaskedLM,
+            ModernBertForSequenceClassification,
+            ModernBertForTokenClassification,
             ModernBertModel,
             ModernBertPreTrainedModel,
         )

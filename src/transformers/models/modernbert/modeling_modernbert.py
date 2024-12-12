@@ -26,9 +26,10 @@ from typing import Optional, Tuple, Union
 
 import torch
 from torch import nn
+from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutput, MaskedLMOutput
+from ...modeling_outputs import BaseModelOutput, MaskedLMOutput, SequenceClassifierOutput, TokenClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import is_flash_attn_2_available
 from .configuration_modernbert import ModernBertConfig
@@ -825,7 +826,7 @@ class ModernBertPreTrainedModel(PreTrainedModel):
         attention_mask: torch.Tensor,
         position_ids: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-    ):
+    ) -> Tuple[torch.Tensor | int | None]:
         return _unpad_modernbert_input(
             inputs=input_ids, attention_mask=attention_mask, position_ids=position_ids, labels=labels
         )
@@ -883,7 +884,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
 
     def _init_weights(self, module: Optional[nn.Module] = None, reset_params: Optional[bool] = None):
         if module and hasattr(module, "_init_weights"):
-            super()._init_weights(module, reset_params)
+            super()._init_weights(module, reset_params=reset_params)
         elif isinstance(reset_params, bool):
             self.embeddings._init_weights(reset_params=reset_params)
 
@@ -985,7 +986,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
     def _init_weights(self, module: Optional[nn.Module] = None, reset_params: Optional[bool] = None):
         assert (module is None) != (reset_params is None), "arg module xor reset_params must be specified"
         if module:
-            super()._init_weights(module)
+            super()._init_weights(module, reset_params=reset_params)
         else:
             assert isinstance(reset_params, bool)
             self.model._init_weights(reset_params=reset_params)
@@ -1086,3 +1087,172 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
                 seq_len=seq_len,
                 labels=labels,
             )
+
+
+class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
+    def __init__(self, config: ModernBertConfig):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+        self.config = config
+
+        self.model = ModernBertModel(config)
+        self.head = ModernBertPoolingHead(config)
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+
+        # Initialize weights and apply final processing
+        self._init_weights(reset_params=False)
+
+    def _init_weights(self, module: Optional[nn.Module] = None, reset_params: Optional[bool] = None):
+        assert (module is None) != (reset_params is None), "arg module xor reset_params must be specified"
+        if module:
+            super()._init_weights(module, reset_params=reset_params)
+        else:
+            assert isinstance(reset_params, bool)
+            self.model._init_weights(reset_params=reset_params)
+            self.head._init_weights(reset_params=reset_params)
+            _init_modernbert_weights(self.config, self.classifier, type_of_module=ModernBertModuleType.final_out)
+
+    def forward(
+        self,
+        input_ids: Optional[torch.Tensor],
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        return_dict: Optional[bool] = None,
+        indices: Optional[torch.Tensor] = None,
+        cu_seqlens: Optional[torch.Tensor] = None,
+        max_seqlen: Optional[int] = None,
+        batch_size: Optional[int] = None,
+        seq_len: Optional[int] = None,
+        **kwargs,
+    ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.model(
+            input_ids,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            indices=indices,
+            cu_seqlens=cu_seqlens,
+            max_seqlen=max_seqlen,
+            batch_size=batch_size,
+            seq_len=seq_len,
+            return_dict=return_dict,
+        )
+        last_hidden_state = outputs[0]
+
+        pooled_output = self.head(last_hidden_state)
+        logits = self.classifier(pooled_output)
+
+        loss = None
+        if labels is not None:
+            if self.config.problem_type is None:
+                if self.num_labels == 1:
+                    self.config.problem_type = "regression"
+                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
+                    self.config.problem_type = "single_label_classification"
+                else:
+                    self.config.problem_type = "multi_label_classification"
+
+            if self.config.problem_type == "regression":
+                loss_fct = MSELoss()
+                if self.num_labels == 1:
+                    loss = loss_fct(logits.squeeze(), labels.squeeze())
+                else:
+                    loss = loss_fct(logits, labels)
+            elif self.config.problem_type == "single_label_classification":
+                loss_fct = CrossEntropyLoss()
+                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            elif self.config.problem_type == "multi_label_classification":
+                loss_fct = BCEWithLogitsLoss()
+                loss = loss_fct(logits, labels)
+
+        if not return_dict:
+            output = (logits,)
+            return ((loss,) + output) if loss is not None else output
+
+        return SequenceClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=None,
+            attentions=None,
+        )
+
+
+class ModernBertForTokenClassification(ModernBertPreTrainedModel):
+    def __init__(self, config: ModernBertConfig):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+
+        self.model = ModernBertModel(config)
+        self.drop = nn.Dropout(config.classifier_dropout) if config.classifier_dropout > 0 else nn.Identity()
+        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
+
+        # Initialize weights and apply final processing
+        self._init_weights(reset_params=False)
+
+    def _init_weights(self, module: Optional[nn.Module] = None, reset_params: Optional[bool] = None):
+        assert (module is None) != (reset_params is None), "arg module xor reset_params must be specified"
+        if module:
+            super()._init_weights(module, reset_params=reset_params)
+        else:
+            assert isinstance(reset_params, bool)
+            self.model._init_weights(reset_params=reset_params)
+            _init_modernbert_weights(self.config, self.classifier, type_of_module=ModernBertModuleType.final_out)
+
+    def forward(
+        self,
+        input_ids: Optional[torch.Tensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        token_type_ids: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[Tuple[torch.Tensor], TokenClassifierOutput]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.model(
+            input_ids,
+            attention_mask=attention_mask,
+            token_type_ids=token_type_ids,
+            position_ids=position_ids,
+            head_mask=head_mask,
+            inputs_embeds=inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        last_hidden_state = outputs[0]
+
+        last_hidden_state = self.drop(last_hidden_state)
+        logits = self.classifier(last_hidden_state)
+
+        loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+
+        if not return_dict:
+            output = (logits,) + outputs[2:]
+            return ((loss,) + output) if loss is not None else output
+
+        return TokenClassifierOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=None,
+            attentions=None,
+        )

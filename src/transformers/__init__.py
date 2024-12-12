@@ -5339,7 +5339,6 @@ if TYPE_CHECKING:
     from .models.fuyu import FuyuConfig
     from .models.gemma import GemmaConfig
     from .models.gemma2 import Gemma2Config
-    from .models.modernbert import ModernBertConfig
     from .models.git import (
         GitConfig,
         GitProcessor,
@@ -5503,6 +5502,7 @@ if TYPE_CHECKING:
     from .models.mobilevitv2 import (
         MobileViTV2Config,
     )
+    from .models.modernbert import ModernBertConfig
     from .models.moshi import (
         MoshiConfig,
         MoshiDepthConfig,
@@ -7068,13 +7068,6 @@ if TYPE_CHECKING:
             Gemma2Model,
             Gemma2PreTrainedModel,
         )
-        from .models.modernbert import (
-            ModernBertForCausalLM,
-            ModernBertForSequenceClassification,
-            ModernBertForTokenClassification,
-            ModernBertModel,
-            ModernBertPreTrainedModel,
-        )
         from .models.git import (
             GitForCausalLM,
             GitModel,
@@ -7465,6 +7458,12 @@ if TYPE_CHECKING:
             MobileViTV2ForSemanticSegmentation,
             MobileViTV2Model,
             MobileViTV2PreTrainedModel,
+        )
+        from .models.modernbert import (
+            ModernBertForSequenceClassification,
+            ModernBertForTokenClassification,
+            ModernBertModel,
+            ModernBertPreTrainedModel,
         )
         from .models.moshi import (
             MoshiForCausalLM,
