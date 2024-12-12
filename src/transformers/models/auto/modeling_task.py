@@ -48,20 +48,20 @@ class AutoForCausalLM(PreTrainedModel, GenerationMixin):
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         labels: Optional[torch.LongTensor] = None,
         return_dict: Optional[bool] = None,
-        num_logits_to_keep: int = 1,
+        num_logits_to_keep: int = 0,
         **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, CausalLMOutputWithPast]:
-        return_dict = return_dict if return_dict else self.config.return_dict
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
-            return_dict=return_dict,
+            return_dict=True,
             **kwargs,
         )
-        # self.lm_head.weight.data = self.model.embed_tokens.weight.data # TODO fix me!
+
         hidden_states = outputs[0]
         logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :])
 
@@ -69,17 +69,15 @@ class AutoForCausalLM(PreTrainedModel, GenerationMixin):
         if labels is not None:
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
-
-        return CausalLMOutputWithPast(
+        output = CausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+        return output if return_dict else output.to_tuple()
 
 
 class AutoForSequenceClassification(PreTrainedModel):
@@ -119,7 +117,7 @@ class AutoForSequenceClassification(PreTrainedModel):
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            return_dict=return_dict,
+            return_dict=True,
             **kwargs
         )
         hidden_states = transformer_outputs[0]
@@ -202,7 +200,7 @@ class AutoForQuestionAnswering(PreTrainedModel):
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            return_dict=return_dict,
+            return_dict=True,
             **kwargs
         )
 
@@ -263,17 +261,17 @@ class AutoForTokenClassification(PreTrainedModel):
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        return_dict=False,
+        return_dict=None,
         **kwargs,
     ) -> Union[Tuple, TokenClassifierOutput]:
-        return_dict = return_dict if return_dict else self.config.return_dict
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         outputs = self.model(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            return_dict=return_dict,
+            return_dict=True,
             **kwargs,
         )
         sequence_output = outputs[0]

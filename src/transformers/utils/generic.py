@@ -905,10 +905,10 @@ def validate_config_kwargs(func):
         # Merge provided kwargs with defaults
         validated_kwargs = {**default_kwargs, **kwargs}
 
-        # Validate kwargs against TypedDict
-        for key in validated_kwargs:
-            if key not in KwargsForCausalLM.__annotations__:
-                raise ValueError(f"Invalid keyword argument: {key}")
+        # # Validate kwargs against TypedDict
+        # for key in validated_kwargs:
+        #     if key not in KwargsForCausalLM.__annotations__:
+        #         raise ValueError(f"Invalid keyword argument: {key}")
 
         if self.gradient_checkpointing and self.training and default_kwargs["use_cache"]:
             validated_kwargs["use_cache"] = False
