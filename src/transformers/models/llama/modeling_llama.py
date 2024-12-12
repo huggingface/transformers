@@ -17,8 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import math
-from typing import List, Optional, Tuple, Union
+from typing import Callable, List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -28,7 +27,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
-from ...modeling_flash_attention_utils import FlashAttentionKwargs, _flash_attention_forward
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -37,7 +36,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, GradientCheckpointLayer, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
@@ -45,11 +44,9 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
 )
-from ...utils.generic import validate_config_kwargs
 from .configuration_llama import LlamaConfig
 
 
@@ -85,12 +82,7 @@ ALL_LAYERNORM_LAYERS.append(LlamaRMSNorm)
 class LlamaRotaryEmbedding(nn.Module):
     def __init__(
         self,
-        dim=None,
-        max_position_embeddings=2048,
-        base=10000,
         device=None,
-        scaling_factor=1.0,
-        rope_type="default",
         config: Optional[LlamaConfig] = None,
     ):
         super().__init__()
