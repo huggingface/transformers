@@ -558,6 +558,7 @@ class ModernBertEmbeddings(nn.Module):
         if reset_params:
             self.norm.reset_parameters()
 
+    @torch.compile(dynamic=True)
     def forward(self, input_ids: torch.LongTensor, position_ids: Optional[torch.LongTensor] = None) -> torch.Tensor:
         return self.drop(self.norm(self.tok_embeddings(input_ids)))
 
