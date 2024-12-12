@@ -1148,9 +1148,6 @@ class FlaxModelTesterMixin:
             for output, remat_output in zip(outputs, remat_outputs):
                 self.assertTrue((output == remat_output).all())
 
-    @require_torch
-    @require_flax
-    @is_pt_flax_cross_test
     def test_activation_fns(self):
         # Assuming Torch activation functions of `activations.ACT2FN` as a base, compares Flax implementations
         # to produce equal/close results.
