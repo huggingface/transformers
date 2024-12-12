@@ -752,7 +752,7 @@ def sdpa_attention_forward(
         query,
         key,
         value,
-        dropout_p=self.attention_dropout,
+        dropout_p=self.attention_dropout if self.training else 0.0,
         attn_mask=attention_mask,
     ).transpose(1, 2)
     attn_output = attn_output.view(bs, seqlen, dim)
