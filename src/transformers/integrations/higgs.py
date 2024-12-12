@@ -535,15 +535,10 @@ class HiggsLinear(torch.nn.Module):
     def forward(self, x):
         x = pad_to_block(x, [-1], self.hadamard_size)
 
-        orig_shape = x.shape
-        x = x.reshape(-1, self.hadamard_size)
-        x = hadamard_transform(x, scale=1 / sqrt(self.hadamard_size))
-        x = x.reshape(orig_shape)
-
         if self.workspace is None:
             raise Exception("Workspace must be set before calling forward")
 
-        return flute.qgemm_simple(
+        return flute.qgemm_hadamard(
             x,
             self.weight,
             self.scales,
@@ -552,6 +547,7 @@ class HiggsLinear(torch.nn.Module):
             self.workspace,
             self.num_bits,
             self.group_size,
+            self.hadamard_size,
         )
 
 
