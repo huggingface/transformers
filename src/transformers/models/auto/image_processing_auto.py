@@ -30,6 +30,8 @@ from ...utils import (
     CONFIG_NAME,
     IMAGE_PROCESSOR_NAME,
     get_file_from_repo,
+    is_timm_config_dict,
+    is_timm_local_checkpoint,
     is_torchvision_available,
     is_vision_available,
     logging,
@@ -54,6 +56,7 @@ else:
     IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
             ("align", ("EfficientNetImageProcessor",)),
+            ("aria", ("AriaImageProcessor")),
             ("beit", ("BeitImageProcessor",)),
             ("bit", ("BitImageProcessor",)),
             ("blip", ("BlipImageProcessor",)),
@@ -90,6 +93,7 @@ else:
             ("idefics", ("IdeficsImageProcessor",)),
             ("idefics2", ("Idefics2ImageProcessor",)),
             ("idefics3", ("Idefics3ImageProcessor",)),
+            ("ijepa", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("imagegpt", ("ImageGPTImageProcessor",)),
             ("instructblip", ("BlipImageProcessor",)),
             ("instructblipvideo", ("InstructBlipVideoImageProcessor",)),
@@ -117,7 +121,7 @@ else:
             ("paligemma", ("SiglipImageProcessor",)),
             ("perceiver", ("PerceiverImageProcessor",)),
             ("pix2struct", ("Pix2StructImageProcessor",)),
-            ("pixtral", ("PixtralImageProcessor",)),
+            ("pixtral", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
             ("poolformer", ("PoolFormerImageProcessor",)),
             ("pvt", ("PvtImageProcessor",)),
             ("pvt_v2", ("PvtImageProcessor",)),
@@ -135,6 +139,7 @@ else:
             ("swinv2", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("table-transformer", ("DetrImageProcessor",)),
             ("timesformer", ("VideoMAEImageProcessor",)),
+            ("timm_wrapper", ("TimmWrapperImageProcessor",)),
             ("tvlt", ("TvltImageProcessor",)),
             ("tvp", ("TvpImageProcessor",)),
             ("udop", ("LayoutLMv3ImageProcessor",)),
@@ -374,6 +379,8 @@ class AutoImageProcessor:
                 Whether or not to allow for custom models defined on the Hub in their own modeling files. This option
                 should only be set to `True` for repositories you trust and in which you have read the code, as it will
                 execute code present on the Hub on your local machine.
+            image_processor_filename (`str`, *optional*, defaults to `"config.json"`):
+                The name of the file in the model directory to use for the image processor config.
             kwargs (`Dict[str, Any]`, *optional*):
                 The values in kwargs of any keys which are image processor attributes will be used to override the
                 loaded values. Behavior concerning key/value pairs whose keys are *not* image processor attributes is
@@ -413,7 +420,37 @@ class AutoImageProcessor:
         trust_remote_code = kwargs.pop("trust_remote_code", None)
         kwargs["_from_auto"] = True
 
-        config_dict, _ = ImageProcessingMixin.get_image_processor_dict(pretrained_model_name_or_path, **kwargs)
+        # Resolve the image processor config filename
+        if "image_processor_filename" in kwargs:
+            image_processor_filename = kwargs.pop("image_processor_filename")
+        elif is_timm_local_checkpoint(pretrained_model_name_or_path):
+            image_processor_filename = CONFIG_NAME
+        else:
+            image_processor_filename = IMAGE_PROCESSOR_NAME
+
+        # Load the image processor config
+        try:
+            # Main path for all transformers models and local TimmWrapper checkpoints
+            config_dict, _ = ImageProcessingMixin.get_image_processor_dict(
+                pretrained_model_name_or_path, image_processor_filename=image_processor_filename, **kwargs
+            )
+        except Exception as initial_exception:
+            # Fallback path for Hub TimmWrapper checkpoints. Timm models' image processing is saved in `config.json`
+            # instead of `preprocessor_config.json`. Because this is an Auto class and we don't have any information
+            # except the model name, the only way to check if a remote checkpoint is a timm model is to try to
+            # load `config.json` and if it fails with some error, we raise the initial exception.
+            try:
+                config_dict, _ = ImageProcessingMixin.get_image_processor_dict(
+                    pretrained_model_name_or_path, image_processor_filename=CONFIG_NAME, **kwargs
+                )
+            except Exception:
+                raise initial_exception
+
+            # In case we have a config_dict, but it's not a timm config dict, we raise the initial exception,
+            # because only timm models have image processing in `config.json`.
+            if not is_timm_config_dict(config_dict):
+                raise initial_exception
+
         image_processor_class = config_dict.get("image_processor_type", None)
         image_processor_auto_map = None
         if "AutoImageProcessor" in config_dict.get("auto_map", {}):
@@ -433,7 +470,9 @@ class AutoImageProcessor:
         if image_processor_class is None and image_processor_auto_map is None:
             if not isinstance(config, PretrainedConfig):
                 config = AutoConfig.from_pretrained(
-                    pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                    pretrained_model_name_or_path,
+                    trust_remote_code=trust_remote_code,
+                    **kwargs,
                 )
             # It could be in `config.image_processor_type``
             image_processor_class = getattr(config, "image_processor_type", None)
