@@ -125,7 +125,7 @@ class ModernBertConfig(PretrainedConfig):
         embedding_dropout=0.0,
         mlp_bias=False,
         mlp_dropout=0.0,
-        unpad_inputs=True,
+        unpad_inputs=None,
         unpad_no_grad=True,
         decoder_bias=True,
         classifier_dropout=0.0,
@@ -176,3 +176,6 @@ class ModernBertConfig(PretrainedConfig):
         self.classifier_norm = classifier_norm
         self.classifier_activation = classifier_activation
         self.deterministic_flash_attn = deterministic_flash_attn
+
+        if unpad_inputs is None:
+            self.unpad_inputs = self._attn_implementation == "flash_attention_2"

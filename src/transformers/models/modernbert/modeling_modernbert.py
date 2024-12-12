@@ -25,10 +25,12 @@ from enum import Enum
 from typing import Optional, Tuple, Union
 
 import torch
+import torch.nn.functional as F
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, MaskedLMOutput, SequenceClassifierOutput, TokenClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import is_flash_attn_2_available
@@ -39,6 +41,8 @@ if is_flash_attn_2_available():
     from flash_attn.flash_attn_interface import flash_attn_varlen_qkvpacked_func
     from flash_attn.layers.rotary import RotaryEmbedding
     from flash_attn.ops.triton.rotary import apply_rotary
+else:
+    RotaryEmbedding = None
 
 
 class ModernBertModuleType(str, Enum):
@@ -356,6 +360,40 @@ class ModernBertRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        position_ids (`torch.Tensor`, *optional*):
+            Deprecated and unused.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
+
+
 # def eager_attention_forward(
 #     config: ModernBertConfig,
 #     query: torch.Tensor,
@@ -452,44 +490,41 @@ def flash_attention_forward(
 #     return attn_output, attn_weights
 
 
-# def sdpa_attention_forward(
-#     config: ModernBertConfig,
-#     query: torch.Tensor,
-#     key: torch.Tensor,
-#     value: torch.Tensor,
-#     mask: Optional[torch.Tensor],
-#     **_kwargs,
-# ) -> Tuple[torch.Tensor, None]:
+def sdpa_attention_forward(
+    self: "ModernBertAttention",
+    qkv: torch.Tensor,
+    position_ids: Optional[torch.LongTensor],
+    attention_mask: torch.Tensor,
+    bs: int,
+    seqlen: int,
+    dim: int,
+    **_kwargs,
+) -> Tuple[torch.Tensor, None]:
+    # qkv: [batch_size, seqlen, 3, nheads, headdim]
+    cos, sin = self.rotary_emb(qkv, position_ids=position_ids)
+    query, key, value = qkv.transpose(3, 1).unbind(dim=2)
+    # query, key, value: [batch_size, heads, seq_len, head_dim]
+    query, key = apply_rotary_pos_emb(query, key, cos, sin)
 
-#     causal_mask = mask
-#     if mask is not None:
-#         causal_mask = causal_mask[:, :, :, : key.shape[-2]]
+    if attention_mask is not None:
+        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
 
-#     # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
-#     # Reference: https://github.com/pytorch/pytorch/issues/112577.
-#     if query.device.type == "cuda" and causal_mask is not None:
-#         query = query.contiguous()
-#         key = key.contiguous()
-#         value = value.contiguous()
-
-#     attn_output = torch.nn.functional.scaled_dot_product_attention(
-#         query,
-#         key,
-#         value,
-#         attn_mask=causal_mask,
-#         dropout_p=config.attention_dropout if config.training else 0.0,
-#         is_causal=False,
-#         scale=config.scaling,
-#     )
-#     attn_output = attn_output.transpose(1, 2).contiguous()
-#     return attn_output, None
+    attn_output = F.scaled_dot_product_attention(
+        query,
+        key,
+        value,
+        dropout_p=self.attention_dropout,
+        attn_mask=attention_mask,
+    ).transpose(1, 2)
+    attn_output = attn_output.view(bs, seqlen, dim)
+    return attn_output
 
 
 MODERNBERT_ATTENTION_FUNCTION = {
     "flash_attention_2": flash_attention_forward,
     # "flex_attention": flex_attention_forward,
     # "eager": eager_attention_forward,
-    # "sdpa": sdpa_attention_forward,
+    "sdpa": sdpa_attention_forward,
 }
 
 
@@ -575,21 +610,41 @@ class ModernBertAttention(nn.Module):
         Returns:
             attention: (total_nnz, dim)
         """
-        bs, dim = hidden_states.shape[:2]
         qkv = self.Wqkv(hidden_states)
-        qkv = qkv.view(-1, 3, self.num_heads, self.head_dim)
+
+        attn_kwargs = {}
+        if self.config._attn_implementation == "flash_attention_2":
+            bs, dim = hidden_states.shape[:2]
+            qkv = qkv.view(-1, 3, self.num_heads, self.head_dim)
+
+            attn_kwargs.update(
+                {
+                    "local_attention": self.local_attention,
+                    "cu_seqlens": cu_seqlens,
+                    "max_seqlen": max_seqlen,
+                    "bs": bs,
+                    "dim": dim,
+                }
+            )
+        else:
+            bs, seqlen, dim = hidden_states.shape
+            qkv = qkv.view(bs, seqlen, 3, self.num_heads, self.head_dim)
+
+            attn_kwargs.update(
+                {
+                    "position_ids": position_ids,
+                    "attention_mask": attention_mask,
+                    "bs": bs,
+                    "seqlen": seqlen,
+                    "dim": dim,
+                }
+            )
 
         attn = MODERNBERT_ATTENTION_FUNCTION[self.config._attn_implementation](
             self,
             qkv=qkv,
             rotary_emb=self.rotary_emb,
-            position_ids=position_ids,
-            attention_mask=attention_mask,
-            local_attention=self.local_attention,
-            cu_seqlens=cu_seqlens,
-            max_seqlen=max_seqlen,
-            bs=bs,
-            dim=dim,
+            **attn_kwargs,
         )
 
         return self.out_drop(self.Wo(attn))
@@ -799,7 +854,7 @@ class ModernBertPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["ModernBertEmbeddings", "ModernBertEncoderLayer"]
     _supports_flash_attn_2 = True
-    _supports_sdpa = False  # TODO: Enable SDPA
+    _supports_sdpa = True
 
     def _init_weights(
         self,
@@ -922,9 +977,14 @@ class ModernBertModel(ModernBertPreTrainedModel):
                 else:
                     input_ids, indices, cu_seqlens, max_seqlen, *_ = self._unpad_inputs(input_ids, attention_mask)
         elif position_ids is None:
-            position_ids = torch.arange(seq_len, device=input_ids.device)
+            position_ids = torch.arange(seq_len, device=input_ids.device).unsqueeze(0)
 
         hidden_states = self.embeddings(input_ids)
+
+        # expand attention_mask
+        if self.config._attn_implementation != "flash_attention_2" and attention_mask is not None:
+            # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
+            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
 
         for encoder_layer in self.layers:
             if self.gradient_checkpointing and self.training:
@@ -1063,30 +1123,17 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         if labels is not None:
             loss = self.loss_function(logits, labels, vocab_size=self.config.vocab_size)
 
-        if self.pad_logits:
+        if self.config.unpad_inputs:
             if self.pad_logits_no_grad:
                 logits, _ = self._pad_outputs_no_grad(logits, indices, batch_size, seq_len)
             else:
                 logits, _ = self._pad_outputs(logits, indices, batch_size, seq_len)
-            return MaskedLMOutput(
-                loss=loss,
-                logits=logits,
-                hidden_states=None,
-                attentions=None,
-            )
-        else:
-            return MaskedLMOutput(
-                loss=loss,
-                logits=logits,
-                hidden_states=None,
-                attentions=None,
-                indices=indices,
-                cu_seqlens=cu_seqlens,
-                max_seqlen=max_seqlen,
-                batch_size=batch_size,
-                seq_len=seq_len,
-                labels=labels,
-            )
+        return MaskedLMOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=None,
+            attentions=None,
+        )
 
 
 class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
