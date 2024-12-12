@@ -1,4 +1,6 @@
-from typing import List, Optional, Tuple, Union, Unpack
+from typing import List, Optional, Tuple, Union
+
+from ...processing_utils import Unpack
 
 import torch
 import torch.nn as nn
