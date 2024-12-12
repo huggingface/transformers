@@ -23,11 +23,18 @@ from ...cache_utils import Cache
 from ...utils import (
     logging,
 )
-from ..llama.modeling_llama import LlamaAttention, LlamaForCausalLM
+from ..llama.modeling_llama import LlamaAttention, LlamaForCausalLM, LlamaMLP, LlamaRMSNorm
 from .configuration_granite import GraniteConfig
 
 
 logger = logging.get_logger(__name__)
+
+class GraniteRMSNorm(LlamaRMSNorm):
+    pass
+
+class GraniteMLP(LlamaMLP):
+    pass
+
 
 class GraniteAttention(LlamaAttention):
     """Multi-headed attention from 'Attention Is All You Need' paper"""

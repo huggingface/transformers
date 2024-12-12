@@ -34,6 +34,7 @@ from ...utils import (
 )
 from ..gemma.modeling_gemma import (
     GemmaAttention,
+    GemmaDecoderLayer,
     GemmaForCausalLM,
     GemmaForSequenceClassification,
     GemmaForTokenClassification,
@@ -41,7 +42,6 @@ from ..gemma.modeling_gemma import (
     GemmaPreTrainedModel,
     GemmaRMSNorm,
     GemmaRotaryEmbedding,
-    GemmaDecoderLayer,
     repeat_kv,
 )
 

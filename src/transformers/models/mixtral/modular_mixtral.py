@@ -33,13 +33,10 @@ from ...modeling_outputs import (
     MoeModelOutputWithPast,
 )
 from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
     logging,
-    replace_return_docstrings,
 )
-from ..mistral.modeling_mistral import MistralAttention, MistralPreTrainedModel
-from ..llama.modeling_llama import LlamaAttention, LlamaRMSNorm, LlamaForCausalLM
+from ..llama.modeling_llama import LlamaForCausalLM, LlamaRMSNorm
+from ..mistral.modeling_mistral import MistralAttention, MistralPreTrainedModel, MistralForCausalLM
 from .configuration_mixtral import MixtralConfig
 
 
