@@ -1884,7 +1884,6 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         self.assertListEqual(transcript, EXPECTED_TRANSCRIPT)
 
     @slow
-    @require_read_token
     def test_large_batched_generation_multilingual(self):
         torch_device = "cpu"
         set_seed(0)
