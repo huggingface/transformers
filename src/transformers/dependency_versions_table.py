@@ -7,7 +7,7 @@ deps = {
     "av": "av==9.2.0",
     "beautifulsoup4": "beautifulsoup4",
     "blobfile": "blobfile",
-    "codecarbon": "codecarbon==1.2.0",
+    "codecarbon": "codecarbon>=2.8.1",
     "cookiecutter": "cookiecutter==1.7.3",
     "dataclasses": "dataclasses",
     "datasets": "datasets!=2.5.0",

@@ -167,3 +167,9 @@ tags
 
 # ruff
 .ruff_cache
+
+# folders generated in test_trainer.py
+/test
+/regression
+/None
+/examples/checkpoint-*
