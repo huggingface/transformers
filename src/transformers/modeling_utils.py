@@ -4017,7 +4017,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 loaded_state_dict_keys = sharded_metadata["all_checkpoint_keys"]
             else:
                 loaded_state_dict_keys = list(state_dict.keys())
-            # TODO: find better condition
             if (
                 gguf_path is None
                 and (low_cpu_mem_usage or (use_keep_in_fp32_modules and is_accelerate_available()))
