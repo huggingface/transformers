@@ -37,7 +37,9 @@ from .import_utils import (
     is_mlx_available,
     is_tf_available,
     is_torch_available,
+    is_torch_cuda_available,
     is_torch_fx_proxy,
+    is_torch_xpu_available,
 )
 
 
@@ -195,6 +197,32 @@ def is_torch_dtype(x):
     Tests if `x` is a torch dtype or not. Safe to call even if torch is not installed.
     """
     return False if not is_torch_available() else _is_torch_dtype(x)
+
+
+def get_torch_device_count():
+    num_devices = 0
+    if is_torch_available():
+        import torch
+
+        if is_torch_cuda_available():
+            num_devices = torch.cuda.device_count()
+        elif is_torch_xpu_available():
+            num_devices = torch.xpu.device_count()
+    return num_devices
+
+
+def clear_torch_device_cache():
+    """
+    Clears the device cache by calling `torch.{backend}.empty_cache`. Can also run `gc.collect()`, but do note that
+    this is a *considerable* slowdown and should be used sparingly.
+    """
+    if is_torch_available():
+        import torch
+
+        if is_torch_cuda_available():
+            torch.cuda.empty_cache()
+        elif is_torch_xpu_available():
+            torch.xpu.empty_cache()
 
 
 def _is_tensorflow(x):

@@ -50,6 +50,8 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.generic import clear_torch_device_cache, get_torch_device_count
+from ...utils.import_utils import is_torch_cuda_available, is_torch_xpu_available
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_gpt2 import GPT2Config
 
@@ -924,19 +926,28 @@ class GPT2Model(GPT2PreTrainedModel):
             FutureWarning,
         )
         self.device_map = (
-            get_device_map(len(self.h), range(torch.cuda.device_count())) if device_map is None else device_map
+            get_device_map(len(self.h), range(get_torch_device_count())) if device_map is None else device_map
         )
         assert_device_map(self.device_map, len(self.h))
         self.model_parallel = True
-        self.first_device = "cpu" if "cpu" in self.device_map.keys() else "cuda:" + str(min(self.device_map.keys()))
-        self.last_device = "cuda:" + str(max(self.device_map.keys()))
+        if "cpu" in self.device_map.keys():
+            self.first_device = "cpu"
+        else:
+            if torch.cuda.is_available():
+                device = "cuda"
+            elif is_torch_xpu_available():
+                device = "xpu"
+            else:
+                raise RuntimeError("Unknown device to dispatch to")
+            self.first_device = f"{device}:" + str(min(self.device_map.keys()))
+        self.last_device = f"{device}:" + str(max(self.device_map.keys()))
         self.wte = self.wte.to(self.first_device)
         self.wpe = self.wpe.to(self.first_device)
         # Load onto devices
         for k, v in self.device_map.items():
             for block in v:
-                cuda_device = "cuda:" + str(k)
-                self.h[block] = self.h[block].to(cuda_device)
+                backend_device = f"{device}:" + str(k)
+                self.h[block] = self.h[block].to(backend_device)
         # ln_f to last
         self.ln_f = self.ln_f.to(self.last_device)
 
@@ -955,7 +966,7 @@ class GPT2Model(GPT2PreTrainedModel):
         for index in range(len(self.h)):
             self.h[index] = self.h[index].to("cpu")
         self.ln_f = self.ln_f.to("cpu")
-        torch.cuda.empty_cache()
+        clear_torch_device_cache()
 
     def get_input_embeddings(self):
         return self.wte
@@ -1105,7 +1116,10 @@ class GPT2Model(GPT2PreTrainedModel):
             block, layer_past = self.h[i], past_key_values[i]
             # Model parallel
             if self.model_parallel:
-                torch.cuda.set_device(hidden_states.device)
+                if is_torch_cuda_available():
+                    torch.cuda.set_device(hidden_states.device)
+                elif is_torch_xpu_available():
+                    torch.xpu.set_device(hidden_states.device)
                 # Ensure layer_past is on same device as hidden_states (might not be correct)
                 if layer_past is not None:
                     layer_past = tuple(past_state.to(hidden_states.device) for past_state in layer_past)
@@ -1152,9 +1166,15 @@ class GPT2Model(GPT2PreTrainedModel):
 
             # Model Parallel: If it's the last layer for that device, put things on the next device
             if self.model_parallel:
+                if is_torch_cuda_available():
+                    backend = "cuda"
+                elif is_torch_xpu_available():
+                    backend = "xpu"
+                else:
+                    raise RuntimeError("Unknown device to dispatch to")
                 for k, v in self.device_map.items():
-                    if i == v[-1] and "cuda:" + str(k) != self.last_device:
-                        hidden_states = hidden_states.to("cuda:" + str(k + 1))
+                    if i == v[-1] and f"{backend}:" + str(k) != self.last_device:
+                        hidden_states = hidden_states.to(f"{backend}:" + str(k + 1))
 
         hidden_states = self.ln_f(hidden_states)
 
@@ -1211,7 +1231,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel, GenerationMixin):
             FutureWarning,
         )
         self.device_map = (
-            get_device_map(len(self.transformer.h), range(torch.cuda.device_count()))
+            get_device_map(len(self.transformer.h), range(get_torch_device_count()))
             if device_map is None
             else device_map
         )
@@ -1230,7 +1250,7 @@ class GPT2LMHeadModel(GPT2PreTrainedModel, GenerationMixin):
         self.transformer = self.transformer.to("cpu")
         self.lm_head = self.lm_head.to("cpu")
         self.model_parallel = False
-        torch.cuda.empty_cache()
+        clear_torch_device_cache()
 
     def get_output_embeddings(self):
         return self.lm_head
@@ -1288,7 +1308,10 @@ class GPT2LMHeadModel(GPT2PreTrainedModel, GenerationMixin):
 
         # Set device for model parallelism
         if self.model_parallel:
-            torch.cuda.set_device(self.transformer.first_device)
+            if is_torch_cuda_available():
+                torch.cuda.set_device(self.transformer.first_device)
+            elif is_torch_xpu_available():
+                torch.xpu.set_device(self.transformer.first_device)
             hidden_states = hidden_states.to(self.lm_head.weight.device)
 
         lm_logits = self.lm_head(hidden_states)
@@ -1368,7 +1391,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel, GenerationMixin):
             FutureWarning,
         )
         self.device_map = (
-            get_device_map(len(self.transformer.h), range(torch.cuda.device_count()))
+            get_device_map(len(self.transformer.h), range(get_torch_device_count()))
             if device_map is None
             else device_map
         )
@@ -1389,7 +1412,7 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel, GenerationMixin):
         self.lm_head = self.lm_head.to("cpu")
         self.multiple_choice_head = self.multiple_choice_head.to("cpu")
         self.model_parallel = False
-        torch.cuda.empty_cache()
+        clear_torch_device_cache()
 
     def get_output_embeddings(self):
         return self.lm_head
@@ -1476,7 +1499,10 @@ class GPT2DoubleHeadsModel(GPT2PreTrainedModel, GenerationMixin):
 
         # Set device for model parallelism
         if self.model_parallel:
-            torch.cuda.set_device(self.transformer.first_device)
+            if is_torch_cuda_available():
+                torch.cuda.set_device(self.transformer.first_device)
+            elif is_torch_xpu_available():
+                torch.xpu.set_device(self.transformer.first_device)
             hidden_states = hidden_states.to(self.lm_head.weight.device)
 
         lm_logits = self.lm_head(hidden_states)

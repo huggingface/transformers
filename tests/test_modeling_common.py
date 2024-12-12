@@ -104,7 +104,7 @@ from transformers.utils import (
     is_torch_fx_available,
     is_torch_sdpa_available,
 )
-from transformers.utils.generic import ContextManagers, ModelOutput
+from transformers.utils.generic import ContextManagers, ModelOutput, clear_torch_device_cache
 
 
 if is_accelerate_available():
@@ -3053,12 +3053,17 @@ class ModelTesterMixin:
 
         # a candidate for testing_utils
         def get_current_gpu_memory_use():
-            """returns a list of cuda memory allocations per GPU in MBs"""
+            """returns a list of device memory allocations per GPU in MBs"""
 
             per_device_memory = []
-            for id in range(torch.cuda.device_count()):
-                with torch.cuda.device(id):
-                    per_device_memory.append(torch.cuda.memory_allocated() >> 20)
+            if torch_device == "cuda":
+                for id in range(torch.cuda.device_count()):
+                    with torch.cuda.device(id):
+                        per_device_memory.append(torch.cuda.memory_allocated() >> 20)
+            elif torch_device == "xpu":
+                for id in range(torch.xpu.device_count()):
+                    with torch.xpu.device(id):
+                        per_device_memory.append(torch.xpu.memory_allocated() >> 20)
 
             return per_device_memory
 
@@ -3066,7 +3071,7 @@ class ModelTesterMixin:
         config = self.model_tester.get_large_model_config()
 
         for model_class in self.all_parallelizable_model_classes:
-            torch.cuda.empty_cache()
+            clear_torch_device_cache()
 
             # 1. single gpu memory load + unload + memory measurements
             # Retrieve initial memory usage (can easily be ~0.6-1.5GB if cuda-kernels have been preloaded by previous tests)
@@ -3074,7 +3079,7 @@ class ModelTesterMixin:
 
             # Put model on device 0 and take a memory snapshot
             model = model_class(config)
-            model.to("cuda:0")
+            model.to(torch_device)
             memory_after_model_load = get_current_gpu_memory_use()
 
             # The memory use on device 0 should be higher than it was initially.
@@ -3082,7 +3087,7 @@ class ModelTesterMixin:
 
             del model
             gc.collect()
-            torch.cuda.empty_cache()
+            clear_torch_device_cache()
 
             # 2. MP test
             # it's essential to re-calibrate the usage before the next stage
@@ -3106,7 +3111,7 @@ class ModelTesterMixin:
 
             del model
             gc.collect()
-            torch.cuda.empty_cache()
+            clear_torch_device_cache()
 
     @require_torch_multi_gpu
     def test_model_parallel_equal_results(self):
@@ -3133,7 +3138,7 @@ class ModelTesterMixin:
 
             model.parallelize()
 
-            parallel_output = model(**cast_to_device(inputs_dict, "cuda:0"))
+            parallel_output = model(**cast_to_device(inputs_dict, f"{torch_device}:0"))
 
             for value, parallel_value in zip(output, parallel_output):
                 if isinstance(value, torch.Tensor):
