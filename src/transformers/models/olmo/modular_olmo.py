@@ -10,7 +10,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaDecoderLayer,
-    LlamaForMultipleChoice,
+    LlamaForCausalLM,
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
@@ -103,6 +103,9 @@ class OlmoDecoderLayer(LlamaDecoderLayer):
         self.mlp = OlmoMLP(config)
         self.input_layernorm = OlmoLayerNorm(config.hidden_size)
         self.post_attention_layernorm = OlmoLayerNorm(config.hidden_size)
+
+class OlmoForCausalLM(LlamaForCausalLM):
+    pass
 
 
 class OlmoForTokenClassification(LlamaForTokenClassification):
