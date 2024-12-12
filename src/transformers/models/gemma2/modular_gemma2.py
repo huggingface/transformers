@@ -41,6 +41,7 @@ from ..gemma.modeling_gemma import (
     GemmaPreTrainedModel,
     GemmaRMSNorm,
     GemmaRotaryEmbedding,
+    GemmaDecoderLayer,
     repeat_kv,
 )
 
