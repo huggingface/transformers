@@ -42,6 +42,7 @@ from .utils import (
 )
 from .utils.generic import is_timm_config_dict
 
+
 logger = logging.get_logger(__name__)
 
 _re_configuration_file = re.compile(r"config\.(.*)\.json")

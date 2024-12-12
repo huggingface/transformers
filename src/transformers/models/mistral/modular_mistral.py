@@ -4,7 +4,6 @@ import torch.utils.checkpoint
 from ...cache_utils import Cache, SlidingWindowCache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ..llama.modeling_llama import (
-    LlamaForMultipleChoice,
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,

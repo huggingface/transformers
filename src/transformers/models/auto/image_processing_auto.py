@@ -35,7 +35,6 @@ from ...utils import (
     is_vision_available,
     logging,
 )
-from .utils.generic import is_timm_config_dict
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
@@ -43,6 +42,7 @@ from .configuration_auto import (
     model_type_to_module_name,
     replace_list_option_in_docstrings,
 )
+from .utils.generic import is_timm_config_dict
 
 
 logger = logging.get_logger(__name__)

@@ -23,7 +23,6 @@ from typing import Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
-from packaging import version
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
@@ -44,9 +43,7 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    get_torch_version,
     is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
 )
@@ -55,7 +52,7 @@ from .configuration_gpt2 import GPT2Config
 
 
 if is_flash_attn_2_available():
-    from ...modeling_flash_attention_utils import _flash_attention_forward
+    pass
 
 
 logger = logging.get_logger(__name__)
@@ -335,7 +332,7 @@ class GPT2Attention(nn.Module):
         attn_output = self.c_proj(attn_output)
         attn_output = self.resid_dropout(attn_output)
         return attn_output, attn_weights
-    
+
 
 class GPT2MLP(nn.Module):
     def __init__(self, intermediate_size, config):
