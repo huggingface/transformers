@@ -177,6 +177,3 @@ class MistralForSequenceClassification(LlamaForSequenceClassification):
 class MistralForQuestionAnswering(LlamaForQuestionAnswering):
     pass
 
-
-class MistralForMultipleChoice(LlamaForMultipleChoice):
-    pass

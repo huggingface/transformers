@@ -30,12 +30,12 @@ from ...utils import (
     CONFIG_NAME,
     IMAGE_PROCESSOR_NAME,
     get_file_from_repo,
-    is_timm_config_dict,
     is_timm_local_checkpoint,
     is_torchvision_available,
     is_vision_available,
     logging,
 )
+from .utils.generic import is_timm_config_dict
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
