@@ -25,6 +25,8 @@ class AutoForCausalLM(PreTrainedModel, GenerationMixin):
     _no_split_modules = []
     _supports_cache_class = True
     config_class = AutoConfig
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
 
     def __init__(self, config):
         super().__init__(config)
