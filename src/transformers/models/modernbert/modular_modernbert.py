@@ -633,30 +633,37 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-# def eager_attention_forward(
-#     config: ModernBertConfig,
-#     query: torch.Tensor,
-#     key: torch.Tensor,
-#     value: torch.Tensor,
-#     mask: Optional[torch.Tensor],
-#     **_kwargs,
-# ) -> Tuple[torch.Tensor, torch.Tensor]:
-#     attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * config.scaling
+def eager_attention_forward(
+    self: "ModernBertAttention",
+    qkv: torch.Tensor,
+    position_ids: Optional[torch.LongTensor],
+    attention_mask: torch.Tensor,
+    bs: int,
+    seqlen: int,
+    dim: int,
+    **_kwargs,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    # qkv: [batch_size, seqlen, 3, nheads, headdim]
+    cos, sin = self.rotary_emb(qkv, position_ids=position_ids)
+    query, key, value = qkv.transpose(3, 1).unbind(dim=2)
+    # query, key, value: [batch_size, heads, seq_len, head_dim]
+    query, key = apply_rotary_pos_emb(query, key, cos, sin)
 
-#     if config.attn_logit_softcapping is not None:
-#         attn_weights = attn_weights / config.attn_logit_softcapping
-#         attn_weights = torch.tanh(attn_weights)
-#         attn_weights = attn_weights * config.attn_logit_softcapping
-#     if mask is not None:  # no matter the length, we just slice it
-#         causal_mask = mask[:, :, :, : key_states.shape[-2]]
-#         attn_weights = attn_weights + causal_mask
+    scale = self.head_dim**-0.5
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scale
 
-#     # upcast attention to fp32
-#     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-#     attn_weights = nn.functional.dropout(attn_weights, p=config.attention_dropout, training=config.training)
-#     attn_output = torch.matmul(attn_weights, value_states)
-#     attn_output = attn_output.transpose(1, 2).contiguous()
-#     return attn_output, attn_weights
+    if attention_mask is not None:  # no matter the length, we just slice it
+        causal_mask = attention_mask[:, :, :, : key.shape[-2]]
+        attn_weights = attn_weights + causal_mask
+
+    # upcast attention to fp32
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    if self.training:
+        attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout)
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+    attn_output = attn_output.view(bs, seqlen, dim)
+    return attn_output
 
 
 def flash_attention_forward(
@@ -762,7 +769,7 @@ def sdpa_attention_forward(
 MODERNBERT_ATTENTION_FUNCTION = {
     "flash_attention_2": flash_attention_forward,
     # "flex_attention": flex_attention_forward,
-    # "eager": eager_attention_forward,
+    "eager": eager_attention_forward,
     "sdpa": sdpa_attention_forward,
 }
 
