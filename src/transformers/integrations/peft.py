@@ -454,9 +454,9 @@ class PeftAdapterMixin:
         If no adapter_name is passed, the active adapter is used.
 
         Args:
-            state_dict (nested dictionary of `torch.Tensor`, *optional*)L
-                The state dictionary of the model. Will default to `self.state_dict()`, but can be used if special 
-                precautions need to be taken when recovering the state dictionary of a model (like when using model 
+            state_dict (nested dictionary of `torch.Tensor`, *optional*)
+                The state dictionary of the model. Will default to `self.state_dict()`, but can be used if special
+                precautions need to be taken when recovering the state dictionary of a model (like when using model
                 parallelism).
             adapter_name (`str`, *optional*):
                 The name of the adapter to get the state dict from. If no name is passed, the active adapter is used.
