@@ -117,5 +117,3 @@ class OlmoForQuestionAnswering(LlamaForQuestionAnswering):
     pass
 
 
-class OlmoForMultipleChoice(LlamaForMultipleChoice):
-    pass
