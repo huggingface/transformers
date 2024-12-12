@@ -765,7 +765,6 @@ def merge(patches, batch_size, merge_out_size):
         boxes.append(boxes_in_row)
 
     boxes = torch.cat(boxes, dim=-2)
-    boxes = boxes[..., :merge_out_size, :merge_out_size]
     return boxes
 
 
@@ -1303,7 +1302,7 @@ class DepthProPreActResidualLayer(nn.Module):
 
 
 # Taken from transformers.models.dpt.modeling_dpt.DPTFeatureFusionLayer
-# except it uses deconv, skip_add and avoids interpolation (it always receives consitent inputs)
+# except it uses deconv annd skip_add
 class DepthProFeatureFusionLayer(nn.Module):
     def __init__(self, config: DepthProConfig, use_deconv: bool = True) -> None:
         super().__init__()
@@ -1328,6 +1327,10 @@ class DepthProFeatureFusionLayer(nn.Module):
 
     def forward(self, hidden_state, residual=None):
         if residual is not None:
+            if hidden_state.shape != residual.shape:
+                residual = nn.functional.interpolate(
+                    residual, size=(hidden_state.shape[2], hidden_state.shape[3]), mode="bilinear", align_corners=False
+                )
             hidden_state = self.skip_add.add(hidden_state, self.residual_layer1(residual))
 
         hidden_state = self.residual_layer2(hidden_state)
@@ -1357,13 +1360,17 @@ class DepthProFeatureFusionStage(nn.Module):
                 f"doesnot match len(hidden_states)={len(hidden_states)}"
             )
 
-        # first layer only uses the last hidden_state
-        fused_hidden_state = self.layers[0](hidden_states[0])
-        # looping from the second layer to last layer
-        for hidden_state, layer in zip(hidden_states[1:], self.layers[1:]):
-            fused_hidden_state = layer(fused_hidden_state, hidden_state)
+        fused_hidden_states = []
+        fused_hidden_state = None
+        for hidden_state, layer in zip(hidden_states, self.layers):
+            if fused_hidden_state is None:
+                # first layer only uses the last hidden_state
+                fused_hidden_state = layer(hidden_state)
+            else:
+                fused_hidden_state = layer(fused_hidden_state, hidden_state)
+            fused_hidden_states.append(fused_hidden_state)
 
-        return fused_hidden_state
+        return fused_hidden_states
 
 
 class DepthProFOVModel(nn.Module):
@@ -1652,8 +1659,8 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
         )
         features = depth_pro_outputs.features
         features = [proj(feature) for proj, feature in zip(self.projections, features)]
-        fused_features = self.fusion_stage(features)
-        predicted_depth = self.head(fused_features)
+        fused_hidden_states = self.fusion_stage(features)
+        predicted_depth = self.head(fused_hidden_states[-1])
 
         fov = (
             self.fov_model(
