@@ -20,15 +20,14 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from transformers import PretrainedConfig
-from transformers.models.dinov2.modeling_dinov2 import (
+from ....transformers.models.dinov2.modeling_dinov2 import (
     Dinov2Backbone,
     Dinov2Encoder,
     Dinov2ForImageClassification,
     Dinov2Model,
     Dinov2PatchEmbeddings,
 )
-
+from ...configuration_utils import PretrainedConfig
 from ...modeling_outputs import BackboneOutput
 from ...utils import logging
 from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
