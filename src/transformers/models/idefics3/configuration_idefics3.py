@@ -55,7 +55,7 @@ class Idefics3VisionConfig(PretrainedConfig):
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation for initializing all weight matrices in the model.
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
     Example:
 
