@@ -499,9 +499,28 @@ def load_state_dict(
     is_quantized: bool = False,
     map_location: Optional[Union[str, torch.device]] = None,
     weights_only: bool = True,
-):
+) -> Union[Dict[str, "torch.Tensor"], Any]:
     """
     Reads a PyTorch checkpoint file, returning properly formatted errors if they arise.
+
+    Args:
+        checkpoint_file (`str` or `os.PathLike`):
+            Path to the checkpoint file to load. Can be either a safetensors or pickle (`.bin`) checkpoint.
+        is_quantized (`bool`, *optional*, defaults to `False`):
+            Whether the checkpoint is quantized.
+        map_location (`str` or `torch.device`, *optional*):
+            A `torch.device` object, string or a dict specifying how to remap storage locations. It
+            indicates the location where all tensors should be loaded.
+        weights_only (`bool`, *optional*, defaults to `False`):
+            If True, only loads the model weights without optimizer states and other metadata.
+            Only supported for pickle (`.bin`) checkpoints with PyTorch >= 1.13. Has no effect when
+            loading safetensors files.
+
+    Returns:
+        `Union[Dict[str, "torch.Tensor"], Any]`: The loaded checkpoint.
+            - For safetensors files: always returns a dictionary mapping parameter names to tensors.
+            - For pickle files: returns any Python object that was pickled (commonly a state dict, but could be
+              an entire model, optimizer state, or any other Python object).
     """
     if map_location is None:
         if (
