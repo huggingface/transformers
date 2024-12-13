@@ -1,4 +1,4 @@
-FROM rocm/dev-ubuntu-22.04:6.0.2
+FROM rocm/dev-ubuntu-22.04:6.3
 # rocm/pytorch has no version with 2.1.0
 LABEL maintainer="Hugging Face"
 
@@ -30,5 +30,5 @@ RUN python3 -m pip uninstall -y tensorflow flax
 # this line must be added in order for python to be aware of transformers.
 RUN cd transformers && python3 setup.py develop
 
-# Remove nvml as it is not compatible with ROCm. apex is not tested on NVIDIA either.
-RUN python3 -m pip uninstall py3nvml pynvml apex -y
+# Remove nvml and nvidia-ml-py as it is not compatible with ROCm. apex is not tested on NVIDIA either.
+RUN python3 -m pip uninstall py3nvml pynvml nvidia-ml-py apex -y
