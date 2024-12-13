@@ -1526,8 +1526,9 @@ class SpQRConfig(QuantizationConfigMixin):
         shapes (`Optional`, *optional*):
             A dictionary holding the shape of each object. We need this because it's impossible
             to deduce the exact size of the parameters just from bits, beta1, beta2.
-        modules_to_not_convert (`Optional`, *optional*):
-            List of full paths of `nn.Linear` weight parameters that shall not be quantized.
+        modules_to_not_convert (`Optional[List[str]]`, *optional*):
+            Optionally, provides a list of full paths of `nn.Linear` weight parameters that shall not be quantized.
+            Defaults to None.
         kwargs (`Dict[str, Any]`, *optional*):
             Additional parameters from which to initialize the configuration object.
     """
