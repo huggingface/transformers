@@ -36,6 +36,7 @@ from ...utils import (
 )
 from .configuration_encodec import EncodecConfig, EncodecDiscriminatorConfig
 
+
 if is_torchaudio_available():
     import torchaudio
 
