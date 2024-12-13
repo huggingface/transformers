@@ -769,7 +769,7 @@ class SwitchTransformersPreTrainedModel(PreTrainedModel):
 
     config_class = SwitchTransformersConfig
     base_model_prefix = "switch_transformers"
-    supports_gradient_checkpointing = True
+    supports_gradient_checkpointing = False
     _supports_cache_class = True
     _supports_static_cache = False
     _no_split_modules = ["SwitchTransformersBlock"]
