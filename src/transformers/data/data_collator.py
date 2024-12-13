@@ -694,10 +694,12 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         mask_replace_prob (`float`, *optional*, defaults to 0.8):
             The probability with which masked tokens are replaced by the tokenizer's mask token (e.g., `[MASK]`).
             Defaults to 0.8, meaning 80% of the masked tokens will be replaced with `[MASK]`.
+            Only works when `mlm` is set to `True`.
         random_replace_prob (`float`, *optional*, defaults to 0.1):
             The probability with which masked tokens are replaced by random tokens from the tokenizer's vocabulary.
             Defaults to 0.1, meaning 10% of the masked tokens will be replaced with random tokens. The remaining
             masked tokens (1 - mask_replace_prob - random_replace_prob) are left unchanged.
+            Only works when `mlm` is set to `True`.
         pad_to_multiple_of (`int`, *optional*):
             If set, will pad the sequence to a multiple of the provided value.
         return_tensors (`str`):
@@ -732,8 +734,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         remaining proportion will consist of masked tokens left unchanged.
 
     </Tip>
-"""
-
+    """
 
     tokenizer: PreTrainedTokenizerBase
     mlm: bool = True
@@ -802,7 +803,9 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         # then random_replace_prob_scaled = 0.1 / 0.2 = 0.5
         random_replace_prob_scaled = self.random_replace_prob / remaining_prob
         # random_replace_prob% of the time, we replace masked input tokens with random word
-        indices_random = self.tf_bernoulli(input_shape, random_replace_prob_scaled) & masked_indices & ~indices_replaced
+        indices_random = (
+            self.tf_bernoulli(input_shape, random_replace_prob_scaled) & masked_indices & ~indices_replaced
+        )
         random_words = tf.random.uniform(input_shape, maxval=vocab_size, dtype=inputs.dtype)
 
         inputs = tf.where(indices_random, random_words, inputs)
@@ -910,7 +913,11 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         random_replace_prob_scaled = self.random_replace_prob / remaining_prob
 
         # random_replace_prob% of the time, we replace masked input tokens with random word
-        indices_random = torch.bernoulli(torch.full(labels.shape, random_replace_prob_scaled)).bool() & masked_indices & ~indices_replaced
+        indices_random = (
+            torch.bernoulli(torch.full(labels.shape, random_replace_prob_scaled)).bool()
+            & masked_indices
+            & ~indices_replaced
+        )
         random_words = torch.randint(len(self.tokenizer), labels.shape, dtype=torch.long)
         inputs[indices_random] = random_words[indices_random]
 
@@ -962,7 +969,9 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         labels[~masked_indices] = -100  # We only compute loss on masked tokens
 
         # mask_replace_prob% of the time, we replace masked input tokens with tokenizer.mask_token ([MASK])
-        indices_replaced = np.random.binomial(1, self.mask_replace_prob, size=labels.shape).astype(bool) & masked_indices
+        indices_replaced = (
+            np.random.binomial(1, self.mask_replace_prob, size=labels.shape).astype(bool) & masked_indices
+        )
         inputs[indices_replaced] = self.tokenizer.mask_token_id
 
         if self.mask_replace_prob == 1 or self.random_replace_prob == 0:
@@ -974,7 +983,9 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         # then random_replace_prob_scaled = 0.1 / 0.2 = 0.5
         random_replace_prob_scaled = self.random_replace_prob / remaining_prob
         indices_random = (
-            np.random.binomial(1, random_replace_prob_scaled, size=labels.shape).astype(bool) & masked_indices & ~indices_replaced
+            np.random.binomial(1, random_replace_prob_scaled, size=labels.shape).astype(bool)
+            & masked_indices
+            & ~indices_replaced
         )
         random_words = np.random.randint(
             low=0, high=len(self.tokenizer), size=np.count_nonzero(indices_random), dtype=np.int64
