@@ -88,7 +88,8 @@ class EncodecConfig(PretrainedConfig):
         use_conv_shortcut (`bool`, *optional*, defaults to `True`):
             Whether to use a convolutional layer as the 'skip' connection in the `EncodecResnetBlock` block. If False,
             an identity function will be used, giving a generic residual connection.
-        commitment_weight (`<fill_type>`, *optional*, defaults to 1.0): <fill_docstring>
+        commitment_weight (`float`, *optional*, defaults to 1.0):
+            The weight of the VQ commitment loss term. Controls how strongly the encoder's output is pulled towards the codebook vectors.
 
     Example:
 
