@@ -45,12 +45,12 @@ class Kosmos2_5ProcessorKwargs(ProcessingKwargs, total=False):
             "stride": 0,
             "pad_to_multiple_of": None,
             "return_attention_mask": None,
-            "return_tensors": "pt",
         },
         "images_kwargs": {
             "max_patches": 4096,
             "num_image_tokens": 2048,
         },
+        "common_kwargs": {"return_tensors": "pt"},
     }
 
 
@@ -109,24 +109,12 @@ class Kosmos2_5Processor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
-
-        max_patches = output_kwargs["images_kwargs"].setdefault("max_patches", None)
         num_image_tokens = output_kwargs["images_kwargs"].setdefault("num_image_tokens", None)
-
-        padding = output_kwargs["text_kwargs"].setdefault("padding", None)
-        truncation = output_kwargs["text_kwargs"].setdefault("truncation", None)
-        max_length = output_kwargs["text_kwargs"].setdefault("max_length", None)
-        stride = output_kwargs["text_kwargs"].setdefault("stride", None)
-        pad_to_multiple_of = output_kwargs["text_kwargs"].setdefault("pad_to_multiple_of", None)
-        return_attention_mask = output_kwargs["text_kwargs"].setdefault("return_attention_mask", None)
-        return_tensors = output_kwargs["text_kwargs"].setdefault("return_tensors", None)
 
         encoding = BatchFeature()
 
         if images is not None:
-            image_encoding = self.image_processor(
-                images, return_tensors=return_tensors, max_patches=max_patches, **kwargs
-            )
+            image_encoding = self.image_processor(images, **output_kwargs["images_kwargs"], **output_kwargs["common_kwargs"])
             image_encoding.pop("rows")
             image_encoding.pop("cols")
             encoding.update(image_encoding)
@@ -138,16 +126,7 @@ class Kosmos2_5Processor(ProcessorMixin):
                 text = [prompt + text]
             else:
                 text = [prompt + t for t in text]
-            input = self.tokenizer(
-                text,
-                padding=padding,
-                truncation=truncation,
-                max_length=max_length,
-                stride=stride,
-                pad_to_multiple_of=pad_to_multiple_of,
-                return_attention_mask=return_attention_mask,
-                return_tensors="pt",
-            )
+            input = self.tokenizer(text, **output_kwargs["text_kwargs"], **output_kwargs["common_kwargs"])
 
             batch_size, seq_len = input.input_ids.shape
             image_embeds_position_mask = [0, -1] + [1] * num_image_tokens + [-1]
