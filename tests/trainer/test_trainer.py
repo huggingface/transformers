@@ -552,10 +552,10 @@ if is_torch_available():
         compute_metrics = kwargs.pop("compute_metrics", None)
         data_collator = kwargs.pop("data_collator", None)
         optimizers = kwargs.pop("optimizers", (None, None))
+        output_dir = kwargs.pop("output_dir", "./regression")
         preprocess_logits_for_metrics = kwargs.pop("preprocess_logits_for_metrics", None)
-        kwargs.pop("output_dir")  # remove output_dir from kwargs
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = RegressionTrainingArguments(tmp_dir, a=a, b=b, keep_report_to=keep_report_to, **kwargs)
+
+        args = RegressionTrainingArguments(output_dir, a=a, b=b, keep_report_to=keep_report_to, **kwargs)
         return Trainer(
             model,
             args,
@@ -713,8 +713,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
 
         # Base training. Should have the same results as test_reproducible_training
         model = RegressionModel()
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(tmp_dir, learning_rate=0.1, report_to="none")
+        args = TrainingArguments("./regression", learning_rate=0.1, report_to="none")
         trainer = Trainer(model, args, train_dataset=train_dataset)
         trainer.train()
         self.check_trained_model(trainer.model)
@@ -736,8 +735,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
 
     def test_model_init(self):
         train_dataset = RegressionDataset()
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(tmp_dir, learning_rate=0.1, report_to="none")
+        args = TrainingArguments("./regression", learning_rate=0.1, report_to="none")
         trainer = Trainer(args=args, train_dataset=train_dataset, model_init=lambda: RegressionModel())
         trainer.train()
         self.check_trained_model(trainer.model)
@@ -784,11 +782,10 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             "disable_tqdm": True,
         }
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(
-                tmp_dir,
-                **args_kwargs,
-            )
+        args = TrainingArguments(
+            "./generation",
+            **args_kwargs,
+        )
         trainer = Trainer(
             model,
             args,
@@ -800,13 +797,12 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         trainer.train()
 
         grad_accum_loss_callback = StoreLossCallback()
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(
-                tmp_dir,
-                **args_kwargs,
-                gradient_accumulation_steps=2,
-                per_device_train_batch_size=4,
-            )
+        args = TrainingArguments(
+            "./generation",
+            **args_kwargs,
+            gradient_accumulation_steps=2,
+            per_device_train_batch_size=4,
+        )
         set_seed(42)
         model = AutoModelForCausalLM.from_pretrained(model_name)
         trainer = Trainer(
@@ -883,11 +879,10 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             "disable_tqdm": True,
         }
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(
-                tmp_dir,
-                **args_kwargs,
-            )
+        args = TrainingArguments(
+            "./generation",
+            **args_kwargs,
+        )
         trainer = Trainer(
             model,
             args,
@@ -899,13 +894,12 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         trainer.train()
 
         grad_accum_loss_callback = StoreLossCallback()
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(
-                tmp_dir,
-                **args_kwargs,
-                gradient_accumulation_steps=2,
-                per_device_train_batch_size=4,
-            )
+        args = TrainingArguments(
+            "./generation",
+            **args_kwargs,
+            gradient_accumulation_steps=2,
+            per_device_train_batch_size=4,
+        )
         set_seed(42)
         model = AutoModelForCausalLM.from_pretrained(model_name)
         trainer = Trainer(
@@ -993,8 +987,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
 
     def test_custom_optimizer(self):
         train_dataset = RegressionDataset()
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(tmp_dir, report_to="none")
+        args = TrainingArguments("./regression", report_to="none")
         model = RegressionModel()
         optimizer = torch.optim.SGD(model.parameters(), lr=1.0)
         lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda x: 1.0)
@@ -1012,15 +1005,14 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         model = RegressionModel()
         num_steps, num_warmup_steps = 10, 2
         extra_kwargs = {"power": 5.0, "lr_end": 1e-5}  # Non-default arguments
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(
-                tmp_dir,
-                lr_scheduler_type="polynomial",
-                lr_scheduler_kwargs=extra_kwargs,
-                learning_rate=0.2,
-                warmup_steps=num_warmup_steps,
-                report_to="none",
-            )
+        args = TrainingArguments(
+            "./regression",
+            lr_scheduler_type="polynomial",
+            lr_scheduler_kwargs=extra_kwargs,
+            learning_rate=0.2,
+            warmup_steps=num_warmup_steps,
+            report_to="none",
+        )
         trainer = Trainer(model, args, train_dataset=train_dataset)
         trainer.create_optimizer_and_scheduler(num_training_steps=num_steps)
 
@@ -1040,15 +1032,14 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         model = RegressionModel()
         num_steps, num_warmup_steps = 10, 2
         extra_kwargs = {"min_lr": 1e-5}  # Non-default arguments
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(
-                tmp_dir,
-                lr_scheduler_type="cosine_with_min_lr",
-                lr_scheduler_kwargs=extra_kwargs,
-                learning_rate=0.2,
-                warmup_steps=num_warmup_steps,
-                report_to="none",
-            )
+        args = TrainingArguments(
+            "./regression",
+            lr_scheduler_type="cosine_with_min_lr",
+            lr_scheduler_kwargs=extra_kwargs,
+            learning_rate=0.2,
+            warmup_steps=num_warmup_steps,
+            report_to="none",
+        )
         trainer = Trainer(model, args, train_dataset=train_dataset)
         trainer.create_optimizer_and_scheduler(num_training_steps=num_steps)
 
@@ -1064,13 +1055,12 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         # test passed arguments for a custom ReduceLROnPlateau scheduler
         train_dataset = RegressionDataset(length=64)
         eval_dataset = RegressionDataset(length=64)
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(
-                tmp_dir,
-                eval_strategy="epoch",
-                metric_for_best_model="eval_loss",
-                report_to="none",
-            )
+        args = TrainingArguments(
+            "./regression",
+            eval_strategy="epoch",
+            metric_for_best_model="eval_loss",
+            report_to="none",
+        )
         model = RegressionModel()
         optimizer = torch.optim.SGD(model.parameters(), lr=1.0)
         lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.2, patience=5, cooldown=2)
@@ -1097,16 +1087,15 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         train_dataset = RegressionDataset(length=64)
         eval_dataset = RegressionDataset(length=64)
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(
-                tmp_dir,
-                lr_scheduler_type="reduce_lr_on_plateau",
-                eval_strategy="epoch",
-                metric_for_best_model="eval_loss",
-                num_train_epochs=10,
-                learning_rate=0.2,
-                report_to="none",
-            )
+        args = TrainingArguments(
+            "./regression",
+            lr_scheduler_type="reduce_lr_on_plateau",
+            eval_strategy="epoch",
+            metric_for_best_model="eval_loss",
+            num_train_epochs=10,
+            learning_rate=0.2,
+            report_to="none",
+        )
         model = RegressionModel()
         trainer = TrainerWithLRLogs(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
         trainer.train()
@@ -1138,8 +1127,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         from transformers.optimization import Adafactor, AdafactorSchedule
 
         train_dataset = RegressionDataset()
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(tmp_dir, report_to="none")
+        args = TrainingArguments("./regression", report_to="none")
         model = RegressionModel()
         optimizer = Adafactor(model.parameters(), scale_parameter=True, relative_step=True, warmup_init=True, lr=None)
         lr_scheduler = AdafactorSchedule(optimizer)
@@ -1191,8 +1179,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         train_dataset = RegressionDataset()
         eval_dataset = RegressionDataset()
         model = RegressionDictModel()
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(tmp_dir, report_to="none")
+        args = TrainingArguments("./regression", report_to="none")
         trainer = Trainer(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
         trainer.train()
         _ = trainer.evaluate()
@@ -1203,8 +1190,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         tiny_gpt2 = GPT2LMHeadModel(config)
         x = torch.randint(0, 100, (128,))
         eval_dataset = RepeatDataset(x)
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(tmp_dir, report_to="none")
+        args = TrainingArguments("./test", report_to="none")
         trainer = Trainer(tiny_gpt2, args, eval_dataset=eval_dataset)
         # By default the past_key_values are removed
         result = trainer.predict(eval_dataset)
@@ -1217,8 +1203,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     def test_training_arguments_are_left_untouched(self):
         trainer = get_regression_trainer()
         trainer.train()
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(tmp_dir, report_to=[])
+        args = TrainingArguments("./regression", report_to=[])
         dict1, dict2 = args.to_dict(), trainer.args.to_dict()
         for key in dict1.keys():
             # Logging dir can be slightly different as they default to something with the time.
@@ -1465,15 +1450,14 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         train_dataset = RepeatDataset(x)
 
         # Trainer without inf/nan filter
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(
-                tmp_dir,
-                learning_rate=1e-9,
-                logging_steps=5,
-                logging_nan_inf_filter=False,
-                neftune_noise_alpha=0.4,
-                report_to="none",
-            )
+        args = TrainingArguments(
+            "./test",
+            learning_rate=1e-9,
+            logging_steps=5,
+            logging_nan_inf_filter=False,
+            neftune_noise_alpha=0.4,
+            report_to="none",
+        )
         trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
 
         trainer.model = trainer._activate_neftune(trainer.model)
@@ -1488,15 +1472,14 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # redefine the model
         tiny_gpt2 = GPT2LMHeadModel(config)
         # Trainer without inf/nan filter
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(
-                tmp_dir,
-                learning_rate=1e-9,
-                logging_steps=5,
-                logging_nan_inf_filter=False,
-                neftune_noise_alpha=0.4,
-                report_to="none",
-            )
+        args = TrainingArguments(
+            "./test",
+            learning_rate=1e-9,
+            logging_steps=5,
+            logging_nan_inf_filter=False,
+            neftune_noise_alpha=0.4,
+            report_to="none",
+        )
         trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
 
         # Check that it trains without errors
@@ -1521,19 +1504,17 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         train_dataset = RepeatDataset(x)
 
         # Trainer without inf/nan filter
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(
-                tmp_dir, learning_rate=1e9, logging_steps=5, logging_nan_inf_filter=False, report_to="none"
-            )
+        args = TrainingArguments(
+            "./test", learning_rate=1e9, logging_steps=5, logging_nan_inf_filter=False, report_to="none"
+        )
         trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
         trainer.train()
         log_history_no_filter = trainer.state.log_history
 
         # Trainer with inf/nan filter
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(
-                tmp_dir, learning_rate=1e9, logging_steps=5, logging_nan_inf_filter=True, report_to="none"
-            )
+        args = TrainingArguments(
+            "./test", learning_rate=1e9, logging_steps=5, logging_nan_inf_filter=True, report_to="none"
+        )
         trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
         trainer.train()
         log_history_filter = trainer.state.log_history
@@ -1595,8 +1576,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         train_dataset = RegressionDataset()
         config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
         tiny_gpt2 = GPT2LMHeadModel(config)
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(tmp_dir, report_to="none", dataloader_persistent_workers=False)
+        args = TrainingArguments("./test", report_to="none", dataloader_persistent_workers=False)
 
         # Single evaluation dataset
         eval_dataset = RegressionDataset()
@@ -1639,13 +1619,12 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         train_dataset = RegressionDataset()
         config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
         tiny_gpt2 = GPT2LMHeadModel(config)
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(
-                tmp_dir,
-                report_to="none",
-                dataloader_persistent_workers=True,
-                dataloader_num_workers=2,
-            )
+        args = TrainingArguments(
+            "./test",
+            report_to="none",
+            dataloader_persistent_workers=True,
+            dataloader_num_workers=2,
+        )
 
         # Single evaluation dataset
         eval_dataset = RegressionDataset()
@@ -1699,11 +1678,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertNotEqual(modeling_llama.apply_rotary_pos_emb, liger_rotary_pos_emb)
             self.assertFalse(isinstance(tiny_llama.model.norm, LigerRMSNorm))
 
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                args = TrainingArguments(
-                    tmp_dir,
-                    use_liger_kernel=True,
-                )
+            args = TrainingArguments(
+                "./test",
+                use_liger_kernel=True,
+            )
             Trainer(tiny_llama, args)
 
             # Spot check that modeling code and model instance variables are patched
@@ -2184,10 +2162,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # Make the Trainer believe it's a parallelized model
         model.is_parallelizable = True
         model.model_parallel = True
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(
-                tmp_dir, per_device_train_batch_size=16, per_device_eval_batch_size=16, report_to="none"
-            )
+        args = TrainingArguments(
+            "./regression", per_device_train_batch_size=16, per_device_eval_batch_size=16, report_to="none"
+        )
         trainer = Trainer(model, args, train_dataset=RegressionDataset(), eval_dataset=RegressionDataset())
         # Check the Trainer was fooled
         self.assertTrue(trainer.is_model_parallel)
@@ -2541,8 +2518,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     def test_dynamic_shapes(self):
         eval_dataset = DynamicShapesDataset(batch_size=self.batch_size)
         model = RegressionModel(a=2, b=1)
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(tmp_dir, report_to="none")
+        args = TrainingArguments("./regression", report_to="none")
         trainer = Trainer(model, args, eval_dataset=eval_dataset)
 
         # Check evaluation can run to completion
@@ -2559,8 +2535,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertTrue(np.all(seen[expected.shape[0] :] == -100))
 
         # Same tests with eval accumulation
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(tmp_dir, eval_accumulation_steps=2, report_to="none")
+        args = TrainingArguments("./regression", eval_accumulation_steps=2, report_to="none")
         trainer = Trainer(model, args, eval_dataset=eval_dataset)
 
         # Check evaluation can run to completion
@@ -3210,8 +3185,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         )
         eval_dataset = GlueDataset(data_args, tokenizer=tokenizer, mode="dev")
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            training_args = TrainingArguments(output_dir=tmp_dir, use_cpu=True, report_to="none")
+        training_args = TrainingArguments(output_dir="./examples", use_cpu=True, report_to="none")
         trainer = Trainer(model=model, args=training_args, eval_dataset=eval_dataset)
         result = trainer.evaluate()
         self.assertLess(result["eval_loss"], 0.2)
@@ -3228,13 +3202,12 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         )
         for example in dataset.examples:
             example["labels"] = example["input_ids"]
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            training_args = TrainingArguments(
-                output_dir=tmp_dir,
-                use_cpu=True,
-                per_device_eval_batch_size=1,
-                report_to="none",
-            )
+        training_args = TrainingArguments(
+            output_dir="./examples",
+            use_cpu=True,
+            per_device_eval_batch_size=1,
+            report_to="none",
+        )
         trainer = Trainer(
             model=model,
             args=training_args,
@@ -3264,8 +3237,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # Adding one column not used by the model should have no impact
         train_dataset = SampleIterableDataset(label_names=["labels", "extra"])
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = RegressionTrainingArguments(output_dir=tmp_dir, max_steps=4)
+        args = RegressionTrainingArguments(output_dir="./examples", max_steps=4)
         trainer = Trainer(model=model, args=args, train_dataset=train_dataset)
         trainer.train()
         self.assertEqual(trainer.state.global_step, 4)
@@ -3280,8 +3252,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # Adding one column not used by the model should have no impact
         eval_dataset = SampleIterableDataset(label_names=["labels", "extra"])
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = RegressionTrainingArguments(output_dir=tmp_dir)
+        args = RegressionTrainingArguments(output_dir="./examples")
         trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset, compute_metrics=AlmostAccuracy())
         results = trainer.evaluate()
 
@@ -3308,8 +3279,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         model = RegressionPreTrainedModel(config)
         eval_dataset = SampleIterableDataset()
 
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = RegressionTrainingArguments(output_dir=tmp_dir)
+        args = RegressionTrainingArguments(output_dir="./examples")
         trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset, compute_metrics=AlmostAccuracy())
 
         preds = trainer.predict(trainer.eval_dataset).predictions
@@ -4082,8 +4052,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         train_dataset = RegressionDataset()
         eval_dataset = RegressionDataset()
         model = RegressionDictModel()
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(tmp_dir, report_to="none", eval_use_gather_object=True)
+        args = TrainingArguments("./regression", report_to="none", eval_use_gather_object=True)
         trainer = Trainer(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
         trainer.train()
         _ = trainer.evaluate()
