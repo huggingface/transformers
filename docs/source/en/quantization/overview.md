@@ -60,6 +60,7 @@ Use the table below to help you decide which quantization method to use.
 | [FBGEMM_FP8](./fbgemm_fp8.md)                              | 🟢                       | 🔴    | 🟢        | 🔴              | 🔴                      | 🔴         | 🔴                        | 8      | 🔴                                   | 🟢            | 🟢                      | https://github.com/pytorch/FBGEMM       |
 | [torchao](./torchao.md)                              | 🟢                       |     | 🟢        | 🔴              | partial support (int4 weight only)       | 🔴         |                       | 4 / 8      |                                   | 🟢🔴           | 🟢                      | https://github.com/pytorch/ao       |
 | [VPTQ](./vptq)                      | 🔴                       |  🔴   |     🟢     | 🟡              | 🔴      | 🔴                | 🟢                      | 1 - 8          | 🔴                                   | 🟢            | 🟢                      | https://github.com/microsoft/VPTQ            |
+| [SpQR](./spqr.md)                          | 🔴                       |  🔴   | 🟢        | 🔴              |    🔴    | 🔴         |         🟢              | 3              |              🔴                     | 🟢           | 🟢                      | https://github.com/Vahe1994/SpQR/       |
 
 <Tip>
 
