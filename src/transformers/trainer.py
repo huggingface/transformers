@@ -50,7 +50,7 @@ import huggingface_hub.utils as hf_hub_utils
 import numpy as np
 import torch
 import torch.distributed as dist
-from huggingface_hub import ModelCard, create_repo, upload_folder
+from huggingface_hub import ModelCard, create_repo, load_torch_model, upload_folder
 from packaging import version
 from torch import nn
 from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler, SequentialSampler
@@ -66,7 +66,7 @@ from .image_processing_utils import BaseImageProcessor
 from .integrations.deepspeed import deepspeed_init, deepspeed_load_checkpoint, is_deepspeed_available
 from .integrations.tpu import tpu_spmd_dataloader
 from .modelcard import TrainingSummary
-from .modeling_utils import PreTrainedModel, load_sharded_checkpoint, unwrap_model
+from .modeling_utils import PreTrainedModel, unwrap_model
 from .models.auto.modeling_auto import (
     MODEL_FOR_CAUSAL_LM_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
@@ -2862,8 +2862,8 @@ class Trainer:
                 logger.warning("Could not load adapter model, make sure to have `peft>=0.3.0` installed")
         else:
             # We load the sharded checkpoint
-            load_result = load_sharded_checkpoint(
-                model, resume_from_checkpoint, strict=is_sagemaker_mp_enabled(), prefer_safe=self.args.save_safetensors
+            load_result = load_torch_model(
+                model, resume_from_checkpoint, strict=is_sagemaker_mp_enabled(), safe=self.args.save_safetensors
             )
             if not is_sagemaker_mp_enabled():
                 self._issue_warnings_after_load(load_result)
@@ -2988,8 +2988,11 @@ class Trainer:
         elif os.path.exists(os.path.join(self.state.best_model_checkpoint, SAFE_WEIGHTS_INDEX_NAME)) or os.path.exists(
             os.path.join(self.state.best_model_checkpoint, WEIGHTS_INDEX_NAME)
         ):
-            load_result = load_sharded_checkpoint(
-                model, self.state.best_model_checkpoint, strict=is_sagemaker_mp_enabled()
+            load_result = load_torch_model(
+                model,
+                self.state.best_model_checkpoint,
+                strict=is_sagemaker_mp_enabled(),
+                safe=self.args.save_safetensors,
             )
             if not is_sagemaker_mp_enabled():
                 self._issue_warnings_after_load(load_result)
