@@ -47,6 +47,7 @@ if is_vision_available():
 @require_vision
 class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Kosmos2_5Processor
+    images_input_name = "flattened_patches"
 
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
