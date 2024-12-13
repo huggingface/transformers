@@ -12,25 +12,20 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import os
-import tempfile
 import unittest
 
-from packaging import version
-
-from transformers import AutoTokenizer, ModernBertConfig, is_torch_available
+from transformers import ModernBertConfig, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
     CaptureLogger,
     require_torch,
-    require_torch_accelerator,
     slow,
     torch_device,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -141,9 +136,7 @@ class ModernBertModelTester:
             initializer_range=self.initializer_range,
         )
 
-    def create_and_check_model(
-        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
-    ):
+    def create_and_check_model(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
         model = ModernBertModel(config=config)
         model.to(torch_device)
         model.eval()

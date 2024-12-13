@@ -107,11 +107,13 @@ def prune_qkv_linear_layer(layer: nn.Linear, index: torch.LongTensor, dim: int =
         `torch.nn.Linear`: The pruned QKV layer as a new layer with `requires_grad=True`.
     """
     assert layer.out_features % 3 == 0, "The output features of the linear layer should be divisible by 3"
-    index = torch.cat([
-        index,
-        index + layer.out_features // 3,
-        index + 2 * layer.out_features // 3,
-    ])
+    index = torch.cat(
+        [
+            index,
+            index + layer.out_features // 3,
+            index + 2 * layer.out_features // 3,
+        ]
+    )
     index = index.to(layer.weight.device)
     W = layer.weight.index_select(dim, index).clone().detach()
     if layer.bias is not None:
