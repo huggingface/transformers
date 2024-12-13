@@ -544,3 +544,12 @@ class Starcoder2ForSequenceClassification(LlamaForSequenceClassification):
 
 class Starcoder2ForTokenClassification(LlamaForTokenClassification):
     pass
+
+
+__all__ = [
+    "Starcoder2ForCausalLM",
+    "Starcoder2Model",
+    "Starcoder2PreTrainedModel",
+    "Starcoder2ForSequenceClassification",
+    "Starcoder2ForTokenClassification",
+]
