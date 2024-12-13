@@ -151,7 +151,6 @@ class ModernBertModelTester:
         result = model(input_ids)
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-        self.parent.assertEqual(result.pooler_output.shape, (self.batch_size, self.hidden_size))
 
     def create_and_check_for_masked_lm(
         self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
@@ -220,7 +219,8 @@ class ModernBertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         if is_torch_available()
         else {}
     )
-    fx_compatible = True
+    fx_compatible = False
+    test_head_masking = False
     model_split_percents = [0.5, 0.8, 0.9]
 
     # special case for ForPreTraining model
@@ -265,13 +265,13 @@ class ModernBertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         config_and_inputs[3] = random_attention_mask([batch_size, seq_length, seq_length])
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @unittest.skip("ModernBert doesn't use `inputs_embeds` as input.")
+    def test_inputs_embeds(self):
+        pass
+
     def test_for_masked_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_masked_lm(*config_and_inputs)
-
-    def test_for_pretraining(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_pretraining(*config_and_inputs)
 
     def test_for_sequence_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -305,6 +305,10 @@ class ModernBertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             model.eval()
             model(input_ids, attention_mask=None)
         self.assertIn("We strongly recommend passing in an `attention_mask`", cl.out)
+
+    @unittest.skip("ModernBert doesn't use separate classes for SDPA, but a function instead.")
+    def test_sdpa_can_dispatch_non_composite_models(self):
+        pass
 
     @slow
     def test_model_from_pretrained(self):

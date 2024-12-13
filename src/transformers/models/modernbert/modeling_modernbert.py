@@ -1029,6 +1029,8 @@ class ModernBertModel(ModernBertPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
+        self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
+
         if batch_size is None and seq_len is None:
             batch_size, seq_len = input_ids.shape[:2]
 
