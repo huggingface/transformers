@@ -15,6 +15,7 @@
 """EnCodec model configuration"""
 
 import math
+from dataclasses import dataclass, field
 from typing import Optional
 
 import numpy as np
@@ -191,3 +192,73 @@ class EncodecConfig(PretrainedConfig):
     @property
     def num_quantizers(self) -> int:
         return int(1000 * self.target_bandwidths[-1] // (self.frame_rate * 10))
+
+
+@dataclass
+class EncodecDiscriminatorConfig(PretrainedConfig):
+    """
+    Configuration class for EncodecDiscriminator.
+
+    Args:
+        model_type (`str`, *optional*, defaults to `"encodec_discriminator"`):
+            The model type.
+        filters (`int`, *optional*, defaults to 32):
+            The number of filters in the initial convolutional layer.
+        in_channels (`int`, *optional*, defaults to 1):
+            Number of input channels.
+        out_channels (`int`, *optional*, defaults to 1):
+            Number of output channels.
+        n_ffts (`List[int]`, *optional*, defaults to `<factory>`):
+            List of FFT sizes for the STFT discriminators.
+        hop_lengths (`List[int]`, *optional*, defaults to `<factory>`):
+            List of hop lengths for the STFT discriminators.
+        win_lengths (`List[int]`, *optional*, defaults to `<factory>`):
+            List of window lengths for the STFT discriminators.
+        kernel_size (`Tuple[int, int]`, *optional*, defaults to `(3, 9)`):
+            Kernel size for the convolutional layers.
+        stride (`Tuple[int, int]`, *optional*, defaults to `(1, 2)`):
+            Stride for the convolutional layers.
+        dilations (`List[int]`, *optional*, defaults to `<factory>`):
+            List of dilations for the convolutional layers.
+        max_filters (`int`, *optional*, defaults to 1024):
+            Maximum number of filters in the convolutional layers.
+        filters_scale (`int`, *optional*, defaults to 2):
+            Scaling factor for the number of filters in each convolutional layer.
+        normalized (`bool`, *optional*, defaults to `True`):
+            Whether to normalize the STFT.
+        norm (`str`, *optional*, defaults to `"weight_norm"`):
+            Normalization method to use.
+        activation (`str`, *optional*, defaults to `"LeakyReLU"`):
+            Activation function to use.
+        activation_params (`Dict`, *optional*, defaults to `<factory>`):
+            Parameters for the activation function.
+        output_hidden_states (`bool`, *optional*, defaults to `False`):
+            Whether to return the hidden states of each discriminator layer.
+        output_attentions (`bool`, *optional*, defaults to `False`):
+            Whether to return the attentions tensors of all attention layers.
+        return_dict (`bool`, *optional*, defaults to `False`):
+            Whether to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        torchscript (`bool`, *optional*, defaults to `False`):
+            Whether the model is used with torchscript.
+    """
+
+    model_type: str = "encodec_discriminator"
+    filters: int = 32
+    in_channels: int = 1
+    out_channels: int = 1
+    n_ffts: list = field(default_factory=lambda: [1024, 2048, 512])
+    hop_lengths: list = field(default_factory=lambda: [256, 512, 128])
+    win_lengths: list = field(default_factory=lambda: [1024, 2048, 512])
+    kernel_size: tuple = (3, 9)
+    stride: tuple = (1, 2)
+    dilations: list = field(default_factory=lambda: [1, 2, 4])
+    max_filters: int = 1024
+    filters_scale: int = 2
+    normalized: bool = True
+    norm: str = "weight_norm"
+    activation: str = "LeakyReLU"
+    activation_params: dict = field(default_factory=lambda: {"negative_slope": 0.2})
+    output_hidden_states: bool = False
+    output_attentions: bool = False
+    return_dict: bool = False
+    torchscript: bool = False

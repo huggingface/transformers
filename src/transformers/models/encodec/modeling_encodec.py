@@ -16,18 +16,16 @@
 
 import math
 import typing as tp
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
-import torchaudio
 from torch import nn
 from torch.nn.utils import spectral_norm, weight_norm
 
-from transformers.configuration_utils import PretrainedConfig
-
+from ... import is_torchaudio_available
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
@@ -36,8 +34,10 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_encodec import EncodecConfig
+from .configuration_encodec import EncodecConfig, EncodecDiscriminatorConfig
 
+if is_torchaudio_available():
+    import torchaudio
 
 logger = logging.get_logger(__name__)
 
@@ -879,76 +879,6 @@ class EncodecModel(EncodecPreTrainedModel):
         return EncodecOutput(**outputs)
 
 
-@dataclass
-class EncodecDiscriminatorConfig(PretrainedConfig):
-    """
-    Configuration class for EncodecDiscriminator.
-
-    Args:
-        model_type (`str`, *optional*, defaults to `"encodec_discriminator"`):
-            The model type.
-        filters (`int`, *optional*, defaults to 32):
-            The number of filters in the initial convolutional layer.
-        in_channels (`int`, *optional*, defaults to 1):
-            Number of input channels.
-        out_channels (`int`, *optional*, defaults to 1):
-            Number of output channels.
-        n_ffts (`List[int]`, *optional*, defaults to `<factory>`):
-            List of FFT sizes for the STFT discriminators.
-        hop_lengths (`List[int]`, *optional*, defaults to `<factory>`):
-            List of hop lengths for the STFT discriminators.
-        win_lengths (`List[int]`, *optional*, defaults to `<factory>`):
-            List of window lengths for the STFT discriminators.
-        kernel_size (`Tuple[int, int]`, *optional*, defaults to `(3, 9)`):
-            Kernel size for the convolutional layers.
-        stride (`Tuple[int, int]`, *optional*, defaults to `(1, 2)`):
-            Stride for the convolutional layers.
-        dilations (`List[int]`, *optional*, defaults to `<factory>`):
-            List of dilations for the convolutional layers.
-        max_filters (`int`, *optional*, defaults to 1024):
-            Maximum number of filters in the convolutional layers.
-        filters_scale (`int`, *optional*, defaults to 2):
-            Scaling factor for the number of filters in each convolutional layer.
-        normalized (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the STFT.
-        norm (`str`, *optional*, defaults to `"weight_norm"`):
-            Normalization method to use.
-        activation (`str`, *optional*, defaults to `"LeakyReLU"`):
-            Activation function to use.
-        activation_params (`Dict`, *optional*, defaults to `<factory>`):
-            Parameters for the activation function.
-        output_hidden_states (`bool`, *optional*, defaults to `False`):
-            Whether to return the hidden states of each discriminator layer.
-        output_attentions (`bool`, *optional*, defaults to `False`):
-            Whether to return the attentions tensors of all attention layers.
-        return_dict (`bool`, *optional*, defaults to `False`):
-            Whether to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        torchscript (`bool`, *optional*, defaults to `False`):
-            Whether the model is used with torchscript.
-    """
-
-    model_type: str = "encodec_discriminator"
-    filters: int = 32
-    in_channels: int = 1
-    out_channels: int = 1
-    n_ffts: list = field(default_factory=lambda: [1024, 2048, 512])
-    hop_lengths: list = field(default_factory=lambda: [256, 512, 128])
-    win_lengths: list = field(default_factory=lambda: [1024, 2048, 512])
-    kernel_size: tuple = (3, 9)
-    stride: tuple = (1, 2)
-    dilations: list = field(default_factory=lambda: [1, 2, 4])
-    max_filters: int = 1024
-    filters_scale: int = 2
-    normalized: bool = True
-    norm: str = "weight_norm"
-    activation: str = "LeakyReLU"
-    activation_params: dict = field(default_factory=lambda: {"negative_slope": 0.2})
-    output_hidden_states: bool = False
-    output_attentions: bool = False
-    return_dict: bool = False
-    torchscript: bool = False
-
-
 def conv_layer_norm(x: torch.Tensor, normalized_shape: int) -> torch.Tensor:
     x = x.permute(0, 2, 3, 1)
     x = F.layer_norm(x, (normalized_shape,))
@@ -990,7 +920,7 @@ def get_norm_module(module: nn.Module, causal: bool = False, norm: str = "none",
         return nn.Identity()
 
 
-class NormConv2d(nn.Module):
+class EncodecNormConv2d(nn.Module):
     """Wrapper around Conv2d and normalization applied to this conv
     to provide a uniform interface across normalization approaches.
     """
@@ -1007,30 +937,19 @@ class NormConv2d(nn.Module):
         return x
 
 
-class STFTDiscriminator(nn.Module):
+class EncodecSTFTDiscriminator(nn.Module):
     def __init__(
         self,
-        filters,
-        in_channels,
-        out_channels,
-        n_fft,
-        hop_length,
-        win_length,
-        kernel_size,
-        stride,
-        dilations,
-        max_filters,
-        filters_scale,
-        normalized,
-        norm,
-        activation,
-        activation_params,
+        config: EncodecDiscriminatorConfig,
+        n_fft: int,
+        hop_length: int,
+        win_length: int,
     ):
         super().__init__()
         self.n_fft = n_fft
         self.hop_length = hop_length
         self.win_length = win_length
-        self.normalized = normalized
+        self.normalized = config.normalized
 
         # STFT transformation
         self.spec_transform = torchaudio.transforms.Spectrogram(
@@ -1042,19 +961,29 @@ class STFTDiscriminator(nn.Module):
             power=None,  # For complex STFT
         )
 
-        self.activation = getattr(nn, activation)(**activation_params)
+        self.activation = getattr(nn, config.activation)(**config.activation_params)
 
         self.convs = nn.ModuleList()
-        in_ch = 2 * in_channels
-        out_ch = filters
-        self.convs.append(NormConv2d(in_ch, out_ch, kernel_size, stride=(1, 1), norm=norm))
+        in_ch = 2 * config.in_channels
+        out_ch = config.filters
+        self.convs.append(EncodecNormConv2d(in_ch, out_ch, config.kernel_size, stride=(1, 1), norm=config.norm))
         in_ch = out_ch
-        for dilation in dilations:
-            out_ch = min(in_ch * filters_scale, max_filters)
-            self.convs.append(NormConv2d(in_ch, out_ch, kernel_size, stride=stride, dilation=(dilation, 1), norm=norm))
+        for dilation in config.dilations:
+            out_ch = min(in_ch * config.filters_scale, config.max_filters)
+            self.convs.append(
+                EncodecNormConv2d(
+                    in_ch, out_ch, config.kernel_size, stride=config.stride, dilation=(dilation, 1), norm=config.norm
+                )
+            )
             in_ch = out_ch
-        self.convs.append(NormConv2d(in_ch, out_ch, kernel_size=(kernel_size[0], kernel_size[0]), norm=norm))
-        self.conv_post = NormConv2d(out_ch, out_channels, kernel_size=(kernel_size[0], kernel_size[0]), norm=norm)
+        self.convs.append(
+            EncodecNormConv2d(
+                in_ch, out_ch, kernel_size=(config.kernel_size[0], config.kernel_size[0]), norm=config.norm
+            )
+        )
+        self.conv_post = EncodecNormConv2d(
+            out_ch, config.out_channels, kernel_size=(config.kernel_size[0], config.kernel_size[0]), norm=config.norm
+        )
 
     def forward(self, x: torch.Tensor):
         # Compute STFT
@@ -1072,7 +1001,7 @@ class STFTDiscriminator(nn.Module):
 
 
 @dataclass
-class DiscriminatorOutput(ModelOutput):
+class EncodecDiscriminatorOutput(ModelOutput):
     """
     Args:
         logits (`List[torch.Tensor]`):
@@ -1122,22 +1051,11 @@ class EncodecDiscriminator(PreTrainedModel):
         super().__init__(config)
         self.discriminators = nn.ModuleList(
             [
-                STFTDiscriminator(
-                    filters=config.filters,
-                    in_channels=config.in_channels,
-                    out_channels=config.out_channels,
+                EncodecSTFTDiscriminator(
+                    config=config,
                     n_fft=n_fft,
                     hop_length=hop_length,
                     win_length=win_length,
-                    kernel_size=config.kernel_size,
-                    stride=config.stride,
-                    dilations=config.dilations,
-                    max_filters=config.max_filters,
-                    filters_scale=config.filters_scale,
-                    normalized=config.normalized,
-                    norm=config.norm,
-                    activation=config.activation,
-                    activation_params=config.activation_params,
                 )
                 for n_fft, hop_length, win_length in zip(config.n_ffts, config.hop_lengths, config.win_lengths)
             ]
@@ -1173,7 +1091,7 @@ class EncodecDiscriminator(PreTrainedModel):
         if not return_dict:
             return (logits, fmaps)
 
-        return DiscriminatorOutput(
+        return EncodecDiscriminatorOutput(
             logits=logits,
             feature_maps=fmaps,
         )

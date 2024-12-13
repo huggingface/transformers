@@ -21,7 +21,7 @@ from ...utils import (
 
 
 _import_structure = {
-    "configuration_encodec": ["EncodecConfig"],
+    "configuration_encodec": ["EncodecConfig", "EncodecDiscriminatorConfig"],
     "feature_extraction_encodec": ["EncodecFeatureExtractor"],
     "loss_encodec": [
         "Balancer",
@@ -41,7 +41,6 @@ else:
         "EncodecModel",
         "EncodecPreTrainedModel",
         "EncodecDiscriminator",
-        "EncodecDiscriminatorConfig",
     ]
 
 if TYPE_CHECKING:
