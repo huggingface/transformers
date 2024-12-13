@@ -51,7 +51,7 @@ class Seq2SeqTrainingArguments(TrainingArguments):
             - a path to a *directory* containing a configuration file saved using the
               [`~GenerationConfig.save_pretrained`] method, e.g., `./my_model_directory/`.
             - a [`~generation.GenerationConfig`] object.
-    """
+    """  # fmt: skip  # Prevent Ruff from altering the indentation
 
     sortish_sampler: bool = field(default=False, metadata={"help": "Whether to use SortishSampler or not."})
     predict_with_generate: bool = field(
