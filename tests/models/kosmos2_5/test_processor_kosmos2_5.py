@@ -46,6 +46,8 @@ if is_vision_available():
 
 @require_vision
 class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = Kosmos2_5Processor
+
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
         image_processor = Kosmos2_5ImageProcessor()
