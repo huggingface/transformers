@@ -31,6 +31,7 @@ from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
+
 if is_vision_available():
     from PIL import Image
 
