@@ -28,8 +28,6 @@ from ..gemma.modeling_gemma import (
 )
 from ..granite.modeling_granite import (
     GraniteAttention,
-    GraniteFlashAttention2,
-    GraniteSdpaAttention,
 )
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
@@ -117,19 +115,6 @@ class GlmAttention(GraniteAttention):
         self.scaling = 1 / math.sqrt(self.head_dim)
 
 
-class GlmFlashAttention2(GlmAttention, GraniteFlashAttention2):
-    pass
-
-
-class GlmSdpaAttention(GraniteSdpaAttention):
-    pass
-
-
-GLM_ATTENTION_CLASSES = {
-    "eager": GlmAttention,
-    "flash_attention_2": GlmFlashAttention2,
-    "sdpa": GlmSdpaAttention,
-}
 
 
 class GlmDecoderLayer(LlamaDecoderLayer):

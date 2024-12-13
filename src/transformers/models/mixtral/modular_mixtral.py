@@ -36,7 +36,7 @@ from ...utils import (
     logging,
 )
 from ..llama.modeling_llama import LlamaForCausalLM, LlamaRMSNorm
-from ..mistral.modeling_mistral import MistralAttention, MistralPreTrainedModel, MistralForCausalLM
+from ..mistral.modeling_mistral import MistralAttention, MistralModel, MistralPreTrainedModel
 from .configuration_mixtral import MixtralConfig
 
 
@@ -304,7 +304,7 @@ class MixtralDecoderLayer(nn.Module):
 
 
 
-class MixtralModel(MistralPreTrainedModel, MistralForCausalLM):
+class MixtralModel(MistralModel):
 
     def forward(
         self,

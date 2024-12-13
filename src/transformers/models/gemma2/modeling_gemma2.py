@@ -35,7 +35,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, GradientCheckpointLayer, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     add_code_sample_docstrings,
@@ -279,9 +279,16 @@ class Gemma2Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class Gemma2DecoderLayer(GemmaDecoderLayer):
+class Gemma2DecoderLayer(GradientCheckpointLayer):
     def __init__(self, config: Gemma2Config, layer_idx: int):
         super().__init__()
+        self.hidden_size = config.hidden_size
+
+        self.self_attn = Gemma2Attention(config=config, layer_idx=layer_idx)
+
+        self.mlp = Gemma2MLP(config)
+        self.input_layernorm = Gemma2RMSNorm(config.hidden_size)
+        self.post_attention_layernorm = Gemma2RMSNorm(config.hidden_size)
         self.is_sliding = not bool(layer_idx % 2)
 
         self.pre_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
