@@ -214,7 +214,14 @@ class Gemma2RotaryEmbedding(GemmaRotaryEmbedding):
     pass
 
 
-def gemma_eager_attention_forward(config, query, key, value, mask, **_kwargs):
+def gemma_eager_attention_forward(
+    config: Gemma2Config,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    mask: Optional[torch.Tensor],
+    **_kwargs,
+) -> Tuple[torch.Tensor, torch.Tensor]:
     key_states = repeat_kv(key, config.num_key_value_groups)
     value_states = repeat_kv(value, config.num_key_value_groups)
 
@@ -338,8 +345,10 @@ ALL_ATTENTION_FUNCTION = {
     "gemma_sdpa": gemma_sdpa_attention_forward,
 }
 
+
 class Gemma2Attention(GemmaAttention):
     pass
+
 
 class Gemma2DecoderLayer(GemmaDecoderLayer):
     def __init__(self, config: Gemma2Config, layer_idx: int):
@@ -410,6 +419,7 @@ class Gemma2DecoderLayer(GemmaDecoderLayer):
 
 class Gemma2PreTrainedModel(GemmaPreTrainedModel):
     pass
+
 
 class Gemma2Model(GemmaModel, Gemma2PreTrainedModel):
     def __init__(self, config: Gemma2Config):

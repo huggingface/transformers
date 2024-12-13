@@ -104,6 +104,7 @@ class OlmoDecoderLayer(LlamaDecoderLayer):
         self.input_layernorm = OlmoLayerNorm(config.hidden_size)
         self.post_attention_layernorm = OlmoLayerNorm(config.hidden_size)
 
+
 class OlmoForCausalLM(LlamaForCausalLM):
     pass
 
@@ -118,5 +119,3 @@ class OlmoForSequenceClassification(LlamaForSequenceClassification):
 
 class OlmoForQuestionAnswering(LlamaForQuestionAnswering):
     pass
-
-

@@ -115,8 +115,6 @@ class GlmAttention(GraniteAttention):
         self.scaling = 1 / math.sqrt(self.head_dim)
 
 
-
-
 class GlmDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: GlmConfig, layer_idx: Optional[int] = None):
         super().__init__()

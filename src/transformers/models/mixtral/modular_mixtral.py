@@ -36,7 +36,7 @@ from ...utils import (
     logging,
 )
 from ..llama.modeling_llama import LlamaForCausalLM, LlamaRMSNorm
-from ..mistral.modeling_mistral import MistralAttention, MistralModel, MistralPreTrainedModel
+from ..mistral.modeling_mistral import MistralAttention, MistralModel
 from .configuration_mixtral import MixtralConfig
 
 
@@ -217,6 +217,7 @@ class MixtralSparseMoeBlock(nn.Module):
 class MixtralRMSNorm(LlamaRMSNorm):
     pass
 
+
 class MixtralAttention(MistralAttention):
     pass
 
@@ -302,10 +303,7 @@ class MixtralDecoderLayer(nn.Module):
         return outputs
 
 
-
-
 class MixtralModel(MistralModel):
-
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -442,7 +440,6 @@ class MixtralModel(MistralModel):
         )
 
 
-
 class MixtralForCausalLM(LlamaForCausalLM):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -456,7 +453,6 @@ class MixtralForCausalLM(LlamaForCausalLM):
         self.num_experts_per_tok = config.num_experts_per_tok
         # Initialize weights and apply final processing
         self.post_init()
-
 
     def forward(
         self,

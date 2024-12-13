@@ -1,5 +1,6 @@
 import torch
 import torch.utils.checkpoint
+from torch import nn
 
 from ...cache_utils import Cache, SlidingWindowCache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
@@ -7,9 +8,21 @@ from ..llama.modeling_llama import (
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
+    LlamaMLP,
     LlamaModel,
 )
 from .configuration_mistral import MistralConfig
+
+
+_CHECKPOINT_FOR_DOC = "mistralai/Mistral-7B-v0.1"
+
+
+class MistralMLP(LlamaMLP):
+    def __init__(self, config):
+        super().__init__(config)
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
 
 
 class MistralModel(LlamaModel):
@@ -175,4 +188,3 @@ class MistralForSequenceClassification(LlamaForSequenceClassification):
 
 class MistralForQuestionAnswering(LlamaForQuestionAnswering):
     pass
-

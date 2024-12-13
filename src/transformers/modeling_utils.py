@@ -1486,8 +1486,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     message += (
                         ', `"attn_implementation=flex_attention"` (implementation using torch\'s flex_attention)'
                     )
-                if cls.model_type + "_"+ config._attn_implementation in ALL_ATTENTION_FUNCTIONS:
-                    config._attn_implementation_internal = cls.model_type+ "_" + config._attn_implementation
+                if cls.model_type + "_" + config._attn_implementation in ALL_ATTENTION_FUNCTIONS:
+                    config._attn_implementation_internal = cls.model_type + "_" + config._attn_implementation
                 if config._attn_implementation in ALL_ATTENTION_FUNCTIONS:
                     pass
                 else:

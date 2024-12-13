@@ -13,6 +13,11 @@ def flash_attention_forward(
     else:
         seq_len = query.shape[1]
 
+    # FA2 uses non-transposed inputs
+    query = query.transpose(1, 2)
+    key = key.transpose(1, 2)
+    value = value.transpose(1, 2)
+
     dropout_rate = config.attention_dropout if training else 0.0
 
     input_dtype = query.dtype

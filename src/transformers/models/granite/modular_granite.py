@@ -29,8 +29,10 @@ from .configuration_granite import GraniteConfig
 
 logger = logging.get_logger(__name__)
 
+
 class GraniteRMSNorm(LlamaRMSNorm):
     pass
+
 
 class GraniteMLP(LlamaMLP):
     pass
