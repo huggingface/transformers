@@ -561,8 +561,8 @@ if is_torch_available():
         data_collator = kwargs.pop("data_collator", None)
         optimizers = kwargs.pop("optimizers", (None, None))
         preprocess_logits_for_metrics = kwargs.pop("preprocess_logits_for_metrics", None)
-        args = RegressionTrainingArguments(output_dir, a=a, b=b, keep_report_to=keep_report_to, **kwargs)
         assert output_dir is not None, "output_dir should be specified for testing"
+        args = RegressionTrainingArguments(output_dir, a=a, b=b, keep_report_to=keep_report_to, **kwargs)
         return Trainer(
             model,
             args,
@@ -1214,10 +1214,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         model = RegressionDictModel()
         with tempfile.TemporaryDirectory() as tmp_dir:
             args = TrainingArguments(tmp_dir, report_to="none")
-        trainer = Trainer(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
-        trainer.train()
-        _ = trainer.evaluate()
-        _ = trainer.predict(eval_dataset)
+            trainer = Trainer(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
+            trainer.train()
+            _ = trainer.evaluate()
+            _ = trainer.predict(eval_dataset)
 
     def test_evaluation_with_keys_to_drop(self):
         config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
@@ -1226,21 +1226,20 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         eval_dataset = RepeatDataset(x)
         with tempfile.TemporaryDirectory() as tmp_dir:
             args = TrainingArguments(tmp_dir, report_to="none")
-        trainer = Trainer(tiny_gpt2, args, eval_dataset=eval_dataset)
-        # By default the past_key_values are removed
-        result = trainer.predict(eval_dataset)
-        self.assertTrue(isinstance(result.predictions, np.ndarray))
-        # We can still get them by setting ignore_keys to []
-        result = trainer.predict(eval_dataset, ignore_keys=[])
-        self.assertTrue(isinstance(result.predictions, tuple))
-        self.assertEqual(len(result.predictions), 2)
+            trainer = Trainer(tiny_gpt2, args, eval_dataset=eval_dataset)
+            # By default the past_key_values are removed
+            result = trainer.predict(eval_dataset)
+            self.assertTrue(isinstance(result.predictions, np.ndarray))
+            # We can still get them by setting ignore_keys to []
+            result = trainer.predict(eval_dataset, ignore_keys=[])
+            self.assertTrue(isinstance(result.predictions, tuple))
+            self.assertEqual(len(result.predictions), 2)
 
     def test_training_arguments_are_left_untouched(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(output_dir=tmp_dir)
             trainer.train()
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                args = TrainingArguments(tmp_dir, report_to=[])
+            args = TrainingArguments(tmp_dir, report_to=[])
             dict1, dict2 = args.to_dict(), trainer.args.to_dict()
             for key in dict1.keys():
                 # Logging dir can be slightly different as they default to something with the time.
@@ -1505,16 +1504,16 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 neftune_noise_alpha=0.4,
                 report_to="none",
             )
-        trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
+            trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
 
-        trainer.model = trainer._activate_neftune(trainer.model)
+            trainer.model = trainer._activate_neftune(trainer.model)
 
-        dummy_input = torch.LongTensor([[1, 0, 1]]).to(torch_device)
+            dummy_input = torch.LongTensor([[1, 0, 1]]).to(torch_device)
 
-        emb1 = trainer.model.get_input_embeddings()(dummy_input)
-        emb2 = trainer.model.get_input_embeddings()(dummy_input)
+            emb1 = trainer.model.get_input_embeddings()(dummy_input)
+            emb2 = trainer.model.get_input_embeddings()(dummy_input)
 
-        self.assertFalse(torch.allclose(emb1, emb2), "Neftune noise is not applied!")
+            self.assertFalse(torch.allclose(emb1, emb2), "Neftune noise is not applied!")
 
         # redefine the model
         tiny_gpt2 = GPT2LMHeadModel(config)
@@ -1528,22 +1527,22 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 neftune_noise_alpha=0.4,
                 report_to="none",
             )
-        trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
+            trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
 
-        # Check that it trains without errors
-        trainer.train()
+            # Check that it trains without errors
+            trainer.train()
 
-        # Make sure forward pass works fine
-        _ = trainer.model(dummy_input)
-        self.assertTrue(len(trainer.model.get_input_embeddings()._forward_hooks) == 0)
+            # Make sure forward pass works fine
+            _ = trainer.model(dummy_input)
+            self.assertTrue(len(trainer.model.get_input_embeddings()._forward_hooks) == 0)
 
-        trainer.model.eval()
+            trainer.model.eval()
 
-        # Check that we get identical embeddings just in case
-        emb1 = trainer.model.get_input_embeddings()(dummy_input)
-        emb2 = trainer.model.get_input_embeddings()(dummy_input)
+            # Check that we get identical embeddings just in case
+            emb1 = trainer.model.get_input_embeddings()(dummy_input)
+            emb2 = trainer.model.get_input_embeddings()(dummy_input)
 
-        self.assertTrue(torch.allclose(emb1, emb2), "Neftune noise is still applied!")
+            self.assertTrue(torch.allclose(emb1, emb2), "Neftune noise is still applied!")
 
     def test_logging_inf_nan_filter(self):
         config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
@@ -1556,25 +1555,25 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             args = TrainingArguments(
                 tmp_dir, learning_rate=1e9, logging_steps=5, logging_nan_inf_filter=False, report_to="none"
             )
-        trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
-        trainer.train()
-        log_history_no_filter = trainer.state.log_history
+            trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
+            trainer.train()
+            log_history_no_filter = trainer.state.log_history
 
         # Trainer with inf/nan filter
         with tempfile.TemporaryDirectory() as tmp_dir:
             args = TrainingArguments(
                 tmp_dir, learning_rate=1e9, logging_steps=5, logging_nan_inf_filter=True, report_to="none"
             )
-        trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
-        trainer.train()
-        log_history_filter = trainer.state.log_history
+            trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
+            trainer.train()
+            log_history_filter = trainer.state.log_history
 
-        def is_any_loss_nan_or_inf(log_history):
-            losses = [l["loss"] for l in log_history[:-1]]
-            return any(math.isnan(x) for x in losses) or any(math.isinf(x) for x in losses)
+            def is_any_loss_nan_or_inf(log_history):
+                losses = [l["loss"] for l in log_history[:-1]]
+                return any(math.isnan(x) for x in losses) or any(math.isinf(x) for x in losses)
 
-        self.assertTrue(is_any_loss_nan_or_inf(log_history_no_filter))
-        self.assertFalse(is_any_loss_nan_or_inf(log_history_filter))
+            self.assertTrue(is_any_loss_nan_or_inf(log_history_no_filter))
+            self.assertFalse(is_any_loss_nan_or_inf(log_history_filter))
 
     def test_train_and_eval_dataloaders(self):
         if torch_device == "cuda":
@@ -1637,42 +1636,42 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         with tempfile.TemporaryDirectory() as tmp_dir:
             args = TrainingArguments(tmp_dir, report_to="none", dataloader_persistent_workers=False)
 
-        # Single evaluation dataset
-        eval_dataset = RegressionDataset()
-        trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
-        # Mocking the prepare method to avoid the dataloader changing with each call to get_eval_dataloader
-        trainer.accelerator.prepare = lambda x: x
+            # Single evaluation dataset
+            eval_dataset = RegressionDataset()
+            trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
+            # Mocking the prepare method to avoid the dataloader changing with each call to get_eval_dataloader
+            trainer.accelerator.prepare = lambda x: x
 
-        default_dataloader = trainer.get_eval_dataloader()
-        dataloader_with_dataset = trainer.get_eval_dataloader(eval_dataset)
+            default_dataloader = trainer.get_eval_dataloader()
+            dataloader_with_dataset = trainer.get_eval_dataloader(eval_dataset)
 
-        self.assertEqual(default_dataloader.dataset, eval_dataset)
-        self.assertEqual(dataloader_with_dataset.dataset, eval_dataset)
-        self.assertNotEqual(default_dataloader, dataloader_with_dataset)
+            self.assertEqual(default_dataloader.dataset, eval_dataset)
+            self.assertEqual(dataloader_with_dataset.dataset, eval_dataset)
+            self.assertNotEqual(default_dataloader, dataloader_with_dataset)
 
-        # Multiple evaluation datasets
-        first_dataset = RegressionDataset()
-        second_dataset = RegressionDataset()
-        trainer = Trainer(
-            tiny_gpt2,
-            args,
-            train_dataset=train_dataset,
-            eval_dataset={"first": first_dataset, "second": second_dataset},
-        )
-        # Mocking the prepare method to avoid the dataloader changing with each call to get_eval_dataloader
-        trainer.accelerator.prepare = lambda x: x
+            # Multiple evaluation datasets
+            first_dataset = RegressionDataset()
+            second_dataset = RegressionDataset()
+            trainer = Trainer(
+                tiny_gpt2,
+                args,
+                train_dataset=train_dataset,
+                eval_dataset={"first": first_dataset, "second": second_dataset},
+            )
+            # Mocking the prepare method to avoid the dataloader changing with each call to get_eval_dataloader
+            trainer.accelerator.prepare = lambda x: x
 
-        first_dataloader = trainer.get_eval_dataloader("first")
-        first_dataloader_repeated = trainer.get_eval_dataloader("first")
-        second_dataloader = trainer.get_eval_dataloader("second")
-        second_dataloader_repeated = trainer.get_eval_dataloader("second")
+            first_dataloader = trainer.get_eval_dataloader("first")
+            first_dataloader_repeated = trainer.get_eval_dataloader("first")
+            second_dataloader = trainer.get_eval_dataloader("second")
+            second_dataloader_repeated = trainer.get_eval_dataloader("second")
 
-        self.assertEqual(first_dataset, first_dataloader.dataset)
-        self.assertEqual(first_dataloader.dataset, first_dataloader_repeated.dataset)
-        self.assertEqual(second_dataset, second_dataloader.dataset)
-        self.assertEqual(second_dataloader.dataset, second_dataloader_repeated.dataset)
-        self.assertNotEqual(first_dataloader, first_dataloader_repeated)
-        self.assertNotEqual(second_dataloader, second_dataloader_repeated)
+            self.assertEqual(first_dataset, first_dataloader.dataset)
+            self.assertEqual(first_dataloader.dataset, first_dataloader_repeated.dataset)
+            self.assertEqual(second_dataset, second_dataloader.dataset)
+            self.assertEqual(second_dataloader.dataset, second_dataloader_repeated.dataset)
+            self.assertNotEqual(first_dataloader, first_dataloader_repeated)
+            self.assertNotEqual(second_dataloader, second_dataloader_repeated)
 
     def test_get_eval_dataloader_with_persistent_workers(self):
         train_dataset = RegressionDataset()
@@ -1686,42 +1685,42 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 dataloader_num_workers=2,
             )
 
-        # Single evaluation dataset
-        eval_dataset = RegressionDataset()
-        trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
-        # Mocking the prepare method to avoid the dataloader changing with each call to get_eval_dataloader
-        trainer.accelerator.prepare = lambda x: x
+            # Single evaluation dataset
+            eval_dataset = RegressionDataset()
+            trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
+            # Mocking the prepare method to avoid the dataloader changing with each call to get_eval_dataloader
+            trainer.accelerator.prepare = lambda x: x
 
-        default_dataloader = trainer.get_eval_dataloader()
-        dataloader_with_dataset = trainer.get_eval_dataloader(eval_dataset)
+            default_dataloader = trainer.get_eval_dataloader()
+            dataloader_with_dataset = trainer.get_eval_dataloader(eval_dataset)
 
-        self.assertEqual(default_dataloader.dataset, eval_dataset)
-        self.assertEqual(dataloader_with_dataset.dataset, eval_dataset)
-        self.assertEqual(default_dataloader, dataloader_with_dataset)
+            self.assertEqual(default_dataloader.dataset, eval_dataset)
+            self.assertEqual(dataloader_with_dataset.dataset, eval_dataset)
+            self.assertEqual(default_dataloader, dataloader_with_dataset)
 
-        # Multiple evaluation datasets
-        first_dataset = RegressionDataset()
-        second_dataset = RegressionDataset()
-        trainer = Trainer(
-            tiny_gpt2,
-            args,
-            train_dataset=train_dataset,
-            eval_dataset={"first": first_dataset, "second": second_dataset},
-        )
-        # Mocking the prepare method to avoid the dataloader changing with each call to get_eval_dataloader
-        trainer.accelerator.prepare = lambda x: x
+            # Multiple evaluation datasets
+            first_dataset = RegressionDataset()
+            second_dataset = RegressionDataset()
+            trainer = Trainer(
+                tiny_gpt2,
+                args,
+                train_dataset=train_dataset,
+                eval_dataset={"first": first_dataset, "second": second_dataset},
+            )
+            # Mocking the prepare method to avoid the dataloader changing with each call to get_eval_dataloader
+            trainer.accelerator.prepare = lambda x: x
 
-        first_dataloader = trainer.get_eval_dataloader("first")
-        first_dataloader_repeated = trainer.get_eval_dataloader("first")
-        second_dataloader = trainer.get_eval_dataloader("second")
-        second_dataloader_repeated = trainer.get_eval_dataloader("second")
+            first_dataloader = trainer.get_eval_dataloader("first")
+            first_dataloader_repeated = trainer.get_eval_dataloader("first")
+            second_dataloader = trainer.get_eval_dataloader("second")
+            second_dataloader_repeated = trainer.get_eval_dataloader("second")
 
-        self.assertEqual(first_dataset, first_dataloader.dataset)
-        self.assertEqual(first_dataloader.dataset, first_dataloader_repeated.dataset)
-        self.assertEqual(second_dataset, second_dataloader.dataset)
-        self.assertEqual(second_dataloader.dataset, second_dataloader_repeated.dataset)
-        self.assertEqual(first_dataloader, first_dataloader_repeated)
-        self.assertEqual(second_dataloader, second_dataloader_repeated)
+            self.assertEqual(first_dataset, first_dataloader.dataset)
+            self.assertEqual(first_dataloader.dataset, first_dataloader_repeated.dataset)
+            self.assertEqual(second_dataset, second_dataloader.dataset)
+            self.assertEqual(second_dataloader.dataset, second_dataloader_repeated.dataset)
+            self.assertEqual(first_dataloader, first_dataloader_repeated)
+            self.assertEqual(second_dataloader, second_dataloader_repeated)
 
     @require_liger_kernel
     def test_use_liger_kernel_patching(self):
@@ -1743,11 +1742,11 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                     tmp_dir,
                     use_liger_kernel=True,
                 )
-            Trainer(tiny_llama, args)
+                Trainer(tiny_llama, args)
 
-            # Spot check that modeling code and model instance variables are patched
-            self.assertEqual(modeling_llama.apply_rotary_pos_emb, liger_rotary_pos_emb)
-            self.assertTrue(isinstance(tiny_llama.model.norm, LigerRMSNorm))
+                # Spot check that modeling code and model instance variables are patched
+                self.assertEqual(modeling_llama.apply_rotary_pos_emb, liger_rotary_pos_emb)
+                self.assertTrue(isinstance(tiny_llama.model.norm, LigerRMSNorm))
 
     @require_liger_kernel
     @require_torch_gpu
@@ -2227,16 +2226,16 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             args = TrainingArguments(
                 tmp_dir, per_device_train_batch_size=16, per_device_eval_batch_size=16, report_to="none"
             )
-        trainer = Trainer(model, args, train_dataset=RegressionDataset(), eval_dataset=RegressionDataset())
-        # Check the Trainer was fooled
-        self.assertTrue(trainer.is_model_parallel)
-        self.assertEqual(trainer.args.n_gpu, 1)
+            trainer = Trainer(model, args, train_dataset=RegressionDataset(), eval_dataset=RegressionDataset())
+            # Check the Trainer was fooled
+            self.assertTrue(trainer.is_model_parallel)
+            self.assertEqual(trainer.args.n_gpu, 1)
 
-        # The batch size of the training and evaluation dataloaders should be 16, not 16 * n_gpu
-        self.assertEqual(trainer.get_train_dataloader().total_batch_size, 16)
-        self.assertEqual(len(trainer.get_train_dataloader()), 64 // 16)
-        self.assertEqual(trainer.get_eval_dataloader().total_batch_size, 16)
-        self.assertEqual(len(trainer.get_eval_dataloader()), 64 // 16)
+            # The batch size of the training and evaluation dataloaders should be 16, not 16 * n_gpu
+            self.assertEqual(trainer.get_train_dataloader().total_batch_size, 16)
+            self.assertEqual(len(trainer.get_train_dataloader()), 64 // 16)
+            self.assertEqual(trainer.get_eval_dataloader().total_batch_size, 16)
+            self.assertEqual(len(trainer.get_eval_dataloader()), 64 // 16)
 
     def test_evaluate(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -2633,38 +2632,38 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         model = RegressionModel(a=2, b=1)
         with tempfile.TemporaryDirectory() as tmp_dir:
             args = TrainingArguments(tmp_dir, report_to="none")
-        trainer = Trainer(model, args, eval_dataset=eval_dataset)
+            trainer = Trainer(model, args, eval_dataset=eval_dataset)
 
-        # Check evaluation can run to completion
-        _ = trainer.evaluate()
+            # Check evaluation can run to completion
+            _ = trainer.evaluate()
 
-        # Check predictions
-        preds = trainer.predict(eval_dataset)
-        for expected, seen in zip(eval_dataset.ys, preds.label_ids):
-            self.assertTrue(np.array_equal(expected, seen[: expected.shape[0]]))
-            self.assertTrue(np.all(seen[expected.shape[0] :] == -100))
+            # Check predictions
+            preds = trainer.predict(eval_dataset)
+            for expected, seen in zip(eval_dataset.ys, preds.label_ids):
+                self.assertTrue(np.array_equal(expected, seen[: expected.shape[0]]))
+                self.assertTrue(np.all(seen[expected.shape[0] :] == -100))
 
-        for expected, seen in zip(eval_dataset.xs, preds.predictions):
-            self.assertTrue(np.array_equal(2 * expected + 1, seen[: expected.shape[0]]))
-            self.assertTrue(np.all(seen[expected.shape[0] :] == -100))
+            for expected, seen in zip(eval_dataset.xs, preds.predictions):
+                self.assertTrue(np.array_equal(2 * expected + 1, seen[: expected.shape[0]]))
+                self.assertTrue(np.all(seen[expected.shape[0] :] == -100))
 
         # Same tests with eval accumulation
         with tempfile.TemporaryDirectory() as tmp_dir:
             args = TrainingArguments(tmp_dir, eval_accumulation_steps=2, report_to="none")
-        trainer = Trainer(model, args, eval_dataset=eval_dataset)
+            trainer = Trainer(model, args, eval_dataset=eval_dataset)
 
-        # Check evaluation can run to completion
-        _ = trainer.evaluate()
+            # Check evaluation can run to completion
+            _ = trainer.evaluate()
 
-        # Check predictions
-        preds = trainer.predict(eval_dataset)
-        for expected, seen in zip(eval_dataset.ys, preds.label_ids):
-            self.assertTrue(np.array_equal(expected, seen[: expected.shape[0]]))
-            self.assertTrue(np.all(seen[expected.shape[0] :] == -100))
+            # Check predictions
+            preds = trainer.predict(eval_dataset)
+            for expected, seen in zip(eval_dataset.ys, preds.label_ids):
+                self.assertTrue(np.array_equal(expected, seen[: expected.shape[0]]))
+                self.assertTrue(np.all(seen[expected.shape[0] :] == -100))
 
-        for expected, seen in zip(eval_dataset.xs, preds.predictions):
-            self.assertTrue(np.array_equal(2 * expected + 1, seen[: expected.shape[0]]))
-            self.assertTrue(np.all(seen[expected.shape[0] :] == -100))
+            for expected, seen in zip(eval_dataset.xs, preds.predictions):
+                self.assertTrue(np.array_equal(2 * expected + 1, seen[: expected.shape[0]]))
+                self.assertTrue(np.all(seen[expected.shape[0] :] == -100))
 
     def test_log_level(self):
         # testing only --log_level (--log_level_replica requires multiple gpus and DDP and is tested elsewhere)
@@ -2880,17 +2879,18 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # Now check failures
 
         # 1. fail to find a bogus checkpoint
-        trainer = get_regression_trainer()
-        with self.assertRaises(Exception) as context:
-            trainer.train(resume_from_checkpoint=f"{checkpoint}-bogus")
-        self.assertTrue("Can't find a valid checkpoint at" in str(context.exception))
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trainer = get_regression_trainer(output_dir=tmpdir)
+            with self.assertRaises(Exception) as context:
+                trainer.train(resume_from_checkpoint=f"{checkpoint}-bogus")
+            self.assertTrue("Can't find a valid checkpoint at" in str(context.exception))
 
         # 2. fail to find any checkpoint - due a fresh output_dir
-        output_dir2 = self.get_auto_remove_tmp_dir()
-        trainer = get_regression_trainer(output_dir=output_dir2)
-        with self.assertRaises(Exception) as context:
-            trainer.train(resume_from_checkpoint=True)
-        self.assertTrue("No valid checkpoint found in output directory" in str(context.exception))
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trainer = get_regression_trainer(output_dir=tmpdir)
+            with self.assertRaises(Exception) as context:
+                trainer.train(resume_from_checkpoint=True)
+            self.assertTrue("No valid checkpoint found in output directory" in str(context.exception))
 
     @unittest.skip(
         reason="@muellerzr: Fix once Trainer can take an accelerate configuration. Need to set `seedable_sampler=True`."
@@ -3305,9 +3305,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             training_args = TrainingArguments(output_dir=tmp_dir, use_cpu=True, report_to="none")
-        trainer = Trainer(model=model, args=training_args, eval_dataset=eval_dataset)
-        result = trainer.evaluate()
-        self.assertLess(result["eval_loss"], 0.2)
+            trainer = Trainer(model=model, args=training_args, eval_dataset=eval_dataset)
+            result = trainer.evaluate()
+            self.assertLess(result["eval_loss"], 0.2)
 
     @slow
     def test_trainer_eval_multiple(self):
@@ -3328,17 +3328,17 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 per_device_eval_batch_size=1,
                 report_to="none",
             )
-        trainer = Trainer(
-            model=model,
-            args=training_args,
-            eval_dataset={
-                "data1": dataset,
-                "data2": dataset,
-            },
-        )
-        result = trainer.evaluate()
-        self.assertIn("eval_data1_loss", result)
-        self.assertIn("eval_data2_loss", result)
+            trainer = Trainer(
+                model=model,
+                args=training_args,
+                eval_dataset={
+                    "data1": dataset,
+                    "data2": dataset,
+                },
+            )
+            result = trainer.evaluate()
+            self.assertIn("eval_data1_loss", result)
+            self.assertIn("eval_data2_loss", result)
 
     @slow
     def test_trainer_eval_lm(self):
@@ -3359,13 +3359,13 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             args = RegressionTrainingArguments(output_dir=tmp_dir, max_steps=4)
-        trainer = Trainer(model=model, args=args, train_dataset=train_dataset)
-        trainer.train()
-        self.assertEqual(trainer.state.global_step, 4)
+            trainer = Trainer(model=model, args=args, train_dataset=train_dataset)
+            trainer.train()
+            self.assertEqual(trainer.state.global_step, 4)
 
-        loader = trainer.get_train_dataloader()
-        self.assertIsInstance(loader, torch.utils.data.DataLoader)
-        self.assertIsInstance(loader.sampler, torch.utils.data.dataloader._InfiniteConstantSampler)
+            loader = trainer.get_train_dataloader()
+            self.assertIsInstance(loader, torch.utils.data.DataLoader)
+            self.assertIsInstance(loader.sampler, torch.utils.data.dataloader._InfiniteConstantSampler)
 
     def test_evaluation_iterable_dataset(self):
         config = RegressionModelConfig(a=1.5, b=2.5)
@@ -3375,26 +3375,26 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             args = RegressionTrainingArguments(output_dir=tmp_dir)
-        trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset, compute_metrics=AlmostAccuracy())
-        results = trainer.evaluate()
+            trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset, compute_metrics=AlmostAccuracy())
+            results = trainer.evaluate()
 
-        x, y = trainer.eval_dataset.dataset.x, trainer.eval_dataset.dataset.ys[0]
-        pred = 1.5 * x + 2.5
-        expected_loss = ((pred - y) ** 2).mean()
-        self.assertAlmostEqual(results["eval_loss"], expected_loss)
-        expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
-        self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
+            x, y = trainer.eval_dataset.dataset.x, trainer.eval_dataset.dataset.ys[0]
+            pred = 1.5 * x + 2.5
+            expected_loss = ((pred - y) ** 2).mean()
+            self.assertAlmostEqual(results["eval_loss"], expected_loss)
+            expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
+            self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
-        # With a number of elements not a round multiple of the batch size
-        eval_dataset = SampleIterableDataset(length=66)
-        results = trainer.evaluate(eval_dataset)
+            # With a number of elements not a round multiple of the batch size
+            eval_dataset = SampleIterableDataset(length=66)
+            results = trainer.evaluate(eval_dataset)
 
-        x, y = eval_dataset.dataset.x, eval_dataset.dataset.ys[0]
-        pred = 1.5 * x + 2.5
-        expected_loss = ((pred - y) ** 2).mean()
-        self.assertAlmostEqual(results["eval_loss"], expected_loss)
-        expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
-        self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
+            x, y = eval_dataset.dataset.x, eval_dataset.dataset.ys[0]
+            pred = 1.5 * x + 2.5
+            expected_loss = ((pred - y) ** 2).mean()
+            self.assertAlmostEqual(results["eval_loss"], expected_loss)
+            expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
+            self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
     def test_predict_iterable_dataset(self):
         config = RegressionModelConfig(a=1.5, b=2.5)
@@ -3403,18 +3403,18 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             args = RegressionTrainingArguments(output_dir=tmp_dir)
-        trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset, compute_metrics=AlmostAccuracy())
+            trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset, compute_metrics=AlmostAccuracy())
 
-        preds = trainer.predict(trainer.eval_dataset).predictions
-        x = eval_dataset.dataset.x
-        self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
+            preds = trainer.predict(trainer.eval_dataset).predictions
+            x = eval_dataset.dataset.x
+            self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
 
-        # With a number of elements not a round multiple of the batch size
-        # Adding one column not used by the model should have no impact
-        test_dataset = SampleIterableDataset(length=66, label_names=["labels", "extra"])
-        preds = trainer.predict(test_dataset).predictions
-        x = test_dataset.dataset.x
-        self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
+            # With a number of elements not a round multiple of the batch size
+            # Adding one column not used by the model should have no impact
+            test_dataset = SampleIterableDataset(length=66, label_names=["labels", "extra"])
+            preds = trainer.predict(test_dataset).predictions
+            x = test_dataset.dataset.x
+            self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
 
     def test_num_train_epochs_in_training(self):
         # len(train_dl) < gradient_accumulation_steps shouldn't give ``ZeroDivisionError`` when ``max_steps`` is given.
@@ -3744,30 +3744,31 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         del trainer
 
         # 2. TorchDynamo nvfuser
-        a = torch.ones(1024, 1024, device="cuda", requires_grad=True)
-        a.grad = None
-        args = TrainingArguments(output_dir="None", torchdynamo="nvfuser")
-        trainer = CustomTrainer(model=mod, args=args)
-        # warmup
-        for _ in range(10):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            a = torch.ones(1024, 1024, device="cuda", requires_grad=True)
+            a.grad = None
+            args = TrainingArguments(output_dir=tmp_dir, torchdynamo="nvfuser")
+            trainer = CustomTrainer(model=mod, args=args)
+            # warmup
+            for _ in range(10):
+                loss = trainer.training_step(mod, {"x": a})
+
+            # resets
+            gc.collect()
+            torch.cuda.empty_cache()
+            torch.cuda.reset_peak_memory_stats()
+
             loss = trainer.training_step(mod, {"x": a})
+            peak_mem = torch.cuda.max_memory_allocated()
+            torchdynamo.reset()
+            del trainer
 
-        # resets
-        gc.collect()
-        torch.cuda.empty_cache()
-        torch.cuda.reset_peak_memory_stats()
+            # Functional check
+            self.assertAlmostEqual(loss, orig_loss)
 
-        loss = trainer.training_step(mod, {"x": a})
-        peak_mem = torch.cuda.max_memory_allocated()
-        torchdynamo.reset()
-        del trainer
-
-        # Functional check
-        self.assertAlmostEqual(loss, orig_loss)
-
-        # AOT Autograd recomputaion and nvfuser recomputation optimization
-        # aggressively fuses the operations and reduce the memory footprint.
-        self.assertGreater(orig_peak_mem, peak_mem * 2)
+            # AOT Autograd recomputaion and nvfuser recomputation optimization
+            # aggressively fuses the operations and reduce the memory footprint.
+            self.assertGreater(orig_peak_mem, peak_mem * 2)
 
     @require_torch_accelerator
     @require_torch_bf16
@@ -3900,9 +3901,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             eval_dataset = SampleIterableDataset()
 
             # Leaves one option as something *not* basic
-            args = RegressionTrainingArguments(
-                output_dir=tmp_dir,
-            )
+            args = RegressionTrainingArguments(output_dir=tmp_dir)
             trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
             self.assertEqual(trainer.accelerator.split_batches, False)
             self.assertEqual(trainer.accelerator.dispatch_batches, None)
@@ -3931,10 +3930,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 accelerator_config["gradient_accumulation_kwargs"] = {"sync_each_batch": True}
 
             # Leaves all options as something *not* basic
-            args = RegressionTrainingArguments(
-                output_dir=tmp_dir,
-                accelerator_config=accelerator_config,
-            )
+            args = RegressionTrainingArguments(output_dir=tmp_dir, accelerator_config=accelerator_config)
             trainer = Trainer(model=model, args=args, eval_dataset=eval_dataset)
             self.assertEqual(trainer.accelerator.split_batches, True)
             self.assertEqual(trainer.accelerator.dispatch_batches, True)
@@ -4197,10 +4193,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         model = RegressionDictModel()
         with tempfile.TemporaryDirectory() as tmp_dir:
             args = TrainingArguments(tmp_dir, report_to="none", eval_use_gather_object=True)
-        trainer = Trainer(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
-        trainer.train()
-        _ = trainer.evaluate()
-        _ = trainer.predict(eval_dataset)
+            trainer = Trainer(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
+            trainer.train()
+            _ = trainer.evaluate()
+            _ = trainer.predict(eval_dataset)
 
     def test_trainer_saves_tokenizer(self):
         MODEL_ID = "google-bert/bert-base-uncased"
@@ -4827,22 +4823,22 @@ if is_torch_available():
 
     optim_test_params = [
         (
-            TrainingArguments(optim=OptimizerNames.ADAMW_HF, output_dir="None"),
+            OptimizerNames.ADAMW_HF,
             transformers.optimization.AdamW,
             default_adam_kwargs,
         ),
         (
-            TrainingArguments(optim=OptimizerNames.ADAMW_HF.value, output_dir="None"),
+            OptimizerNames.ADAMW_HF.value,
             transformers.optimization.AdamW,
             default_adam_kwargs,
         ),
         (
-            TrainingArguments(optim=OptimizerNames.ADAMW_TORCH, output_dir="None"),
+            OptimizerNames.ADAMW_TORCH,
             torch.optim.AdamW,
             default_adam_kwargs,
         ),
         (
-            TrainingArguments(optim=OptimizerNames.ADAFACTOR, output_dir="None"),
+            OptimizerNames.ADAFACTOR,
             transformers.optimization.Adafactor,
             {
                 "scale_parameter": False,
@@ -4857,7 +4853,7 @@ if is_torch_available():
 
         optim_test_params.append(
             (
-                TrainingArguments(optim=OptimizerNames.ADAMW_APEX_FUSED, output_dir="None"),
+                OptimizerNames.ADAMW_APEX_FUSED,
                 apex.optimizers.FusedAdam,
                 default_adam_kwargs,
             )
@@ -4868,7 +4864,7 @@ if is_torch_available():
 
         optim_test_params.append(
             (
-                TrainingArguments(optim=OptimizerNames.ADAMW_BNB, output_dir="None"),
+                OptimizerNames.ADAMW_BNB,
                 bnb.optim.AdamW,
                 default_adam_kwargs,
             )
@@ -4876,7 +4872,7 @@ if is_torch_available():
 
         optim_test_params.append(
             (
-                TrainingArguments(optim=OptimizerNames.ADAMW_8BIT, output_dir="None"),
+                OptimizerNames.ADAMW_8BIT,
                 bnb.optim.AdamW,
                 default_adam_kwargs,
             )
@@ -4884,7 +4880,7 @@ if is_torch_available():
 
         optim_test_params.append(
             (
-                TrainingArguments(optim=OptimizerNames.PAGED_ADAMW, output_dir="None"),
+                OptimizerNames.PAGED_ADAMW,
                 bnb.optim.AdamW,
                 default_adam_kwargs,
             )
@@ -4892,7 +4888,7 @@ if is_torch_available():
 
         optim_test_params.append(
             (
-                TrainingArguments(optim=OptimizerNames.PAGED_ADAMW_8BIT, output_dir="None"),
+                OptimizerNames.PAGED_ADAMW_8BIT,
                 bnb.optim.AdamW,
                 default_adam_kwargs,
             )
@@ -4900,7 +4896,7 @@ if is_torch_available():
 
         optim_test_params.append(
             (
-                TrainingArguments(optim=OptimizerNames.LION, output_dir="None"),
+                OptimizerNames.LION,
                 bnb.optim.Lion,
                 default_lion_kwargs,
             )
@@ -4908,7 +4904,7 @@ if is_torch_available():
 
         optim_test_params.append(
             (
-                TrainingArguments(optim=OptimizerNames.LION_8BIT, output_dir="None"),
+                OptimizerNames.LION_8BIT,
                 bnb.optim.Lion,
                 default_lion_kwargs,
             )
@@ -4916,7 +4912,7 @@ if is_torch_available():
 
         optim_test_params.append(
             (
-                TrainingArguments(optim=OptimizerNames.PAGED_LION_8BIT, output_dir="None"),
+                OptimizerNames.PAGED_LION_8BIT,
                 bnb.optim.Lion,
                 default_lion_kwargs,
             )
@@ -4925,28 +4921,28 @@ if is_torch_available():
         if version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse("0.44.0"):
             optim_test_params.append(
                 (
-                    TrainingArguments(optim=OptimizerNames.ADEMAMIX, output_dir="None"),
+                    OptimizerNames.ADEMAMIX,
                     bnb.optim.AdEMAMix,
                     default_ademamix_kwargs,
                 )
             )
             optim_test_params.append(
                 (
-                    TrainingArguments(optim=OptimizerNames.ADEMAMIX_8BIT, output_dir="None"),
+                    OptimizerNames.ADEMAMIX_8BIT,
                     bnb.optim.AdEMAMix,
                     default_ademamix_kwargs,
                 )
             )
             optim_test_params.append(
                 (
-                    TrainingArguments(optim=OptimizerNames.PAGED_ADEMAMIX_8BIT, output_dir="None"),
+                    OptimizerNames.PAGED_ADEMAMIX_8BIT,
                     bnb.optim.AdEMAMix,
                     default_ademamix_kwargs,
                 )
             )
             optim_test_params.append(
                 (
-                    TrainingArguments(optim=OptimizerNames.PAGED_ADEMAMIX, output_dir="None"),
+                    OptimizerNames.PAGED_ADEMAMIX,
                     bnb.optim.AdEMAMix,
                     default_ademamix_kwargs,
                 )
@@ -4957,7 +4953,7 @@ if is_torch_available():
 
         optim_test_params.append(
             (
-                TrainingArguments(optim=OptimizerNames.ADAMW_ANYPRECISION, output_dir="None"),
+                OptimizerNames.ADAMW_ANYPRECISION,
                 torchdistx.optimizers.AnyPrecisionAdamW,
                 dict(default_adam_kwargs, **default_anyprecision_kwargs),
             )
@@ -4967,7 +4963,7 @@ if is_torch_available():
 
         optim_test_params.append(
             (
-                TrainingArguments(optim=OptimizerNames.ADAMW_TORCH_4BIT, output_dir="None"),
+                OptimizerNames.ADAMW_TORCH_4BIT,
                 torchao.prototype.low_bit_optim.AdamW4bit,
                 default_adam_kwargs,
             )
@@ -4987,12 +4983,12 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             self.assertTrue(actual_v == v, f"Failed check for {p}. Expected {v}, but got {actual_v}.")
 
     @parameterized.expand(optim_test_params, skip_on_empty=True)
-    def test_optim_supported(self, training_args: TrainingArguments, expected_cls, expected_kwargs):
+    def test_optim_supported(self, optim: str, expected_cls, expected_kwargs):
         with tempfile.TemporaryDirectory() as tmp_dir:
-            # exercises all the valid --optim options
-            self.check_optim_and_kwargs(training_args, expected_cls, expected_kwargs)
+            trainer = get_regression_trainer(output_dir=tmp_dir, optim=optim)
 
-            trainer = get_regression_trainer(output_dir=tmp_dir, **training_args.to_dict())
+            # exercises all the valid --optim options
+            self.check_optim_and_kwargs(trainer.args, expected_cls, expected_kwargs)
             trainer.train()
 
     def test_fused_adam(self):
@@ -5006,21 +5002,23 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             "apex.optimizers": mock.optimizers,
             "apex.optimizers.FusedAdam": mock.optimizers.FusedAdam,
         }
-        with patch.dict("sys.modules", modules):
-            self.check_optim_and_kwargs(
-                TrainingArguments(optim=OptimizerNames.ADAMW_APEX_FUSED, output_dir="None"),
-                mock.optimizers.FusedAdam,
-                default_adam_kwargs,
-            )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.dict("sys.modules", modules):
+                self.check_optim_and_kwargs(
+                    TrainingArguments(optim=OptimizerNames.ADAMW_APEX_FUSED, output_dir=tmp_dir),
+                    mock.optimizers.FusedAdam,
+                    default_adam_kwargs,
+                )
 
     def test_fused_adam_no_apex(self):
-        args = TrainingArguments(optim=OptimizerNames.ADAMW_APEX_FUSED, output_dir="None")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(optim=OptimizerNames.ADAMW_APEX_FUSED, output_dir=tmp_dir)
 
-        # Pretend that apex does not exist, even if installed. By setting apex to None, importing
-        # apex will fail even if apex is installed.
-        with patch.dict("sys.modules", {"apex.optimizers": None}):
-            with self.assertRaises(ValueError):
-                Trainer.get_optimizer_cls_and_kwargs(args)
+            # Pretend that apex does not exist, even if installed. By setting apex to None, importing
+            # apex will fail even if apex is installed.
+            with patch.dict("sys.modules", {"apex.optimizers": None}):
+                with self.assertRaises(ValueError):
+                    Trainer.get_optimizer_cls_and_kwargs(args)
 
     def test_bnb_adam8bit(self):
         # Pretend that Bits and Bytes is installed and mock bnb.optim.Adam8bit exists.
@@ -5033,12 +5031,13 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             "bitsandbytes.optim": mock.optim,
             "bitsandbytes.optim.AdamW": mock.optim.AdamW,
         }
-        with patch.dict("sys.modules", modules):
-            self.check_optim_and_kwargs(
-                TrainingArguments(optim=OptimizerNames.ADAMW_BNB, output_dir="None"),
-                mock.optim.AdamW,
-                default_adam_kwargs,
-            )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.dict("sys.modules", modules):
+                self.check_optim_and_kwargs(
+                    TrainingArguments(optim=OptimizerNames.ADAMW_BNB, output_dir=tmp_dir),
+                    mock.optim.AdamW,
+                    default_adam_kwargs,
+                )
 
     def test_bnb_paged_adam8bit_alias(self):
         mock = Mock()
@@ -5047,12 +5046,13 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             "bitsandbytes.optim": mock.optim,
             "bitsandbytes.optim.AdamW": mock.optim.AdamW,
         }
-        with patch.dict("sys.modules", modules):
-            self.check_optim_and_kwargs(
-                TrainingArguments(optim=OptimizerNames.ADAMW_8BIT, output_dir="None"),
-                mock.optim.AdamW,
-                default_adam_kwargs,
-            )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.dict("sys.modules", modules):
+                self.check_optim_and_kwargs(
+                    TrainingArguments(optim=OptimizerNames.ADAMW_8BIT, output_dir=tmp_dir),
+                    mock.optim.AdamW,
+                    default_adam_kwargs,
+                )
 
     def test_bnb_paged_adam(self):
         mock = Mock()
@@ -5061,12 +5061,13 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             "bitsandbytes.optim": mock.optim,
             "bitsandbytes.optim.AdamW": mock.optim.AdamW,
         }
-        with patch.dict("sys.modules", modules):
-            self.check_optim_and_kwargs(
-                TrainingArguments(optim=OptimizerNames.PAGED_ADAMW, output_dir="None"),
-                mock.optim.AdamW,
-                default_adam_kwargs,
-            )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.dict("sys.modules", modules):
+                self.check_optim_and_kwargs(
+                    TrainingArguments(optim=OptimizerNames.PAGED_ADAMW, output_dir=tmp_dir),
+                    mock.optim.AdamW,
+                    default_adam_kwargs,
+                )
 
     def test_bnb_paged_adam8bit(self):
         mock = Mock()
@@ -5075,12 +5076,13 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             "bitsandbytes.optim": mock.optim,
             "bitsandbytes.optim.AdamW": mock.optim.AdamW,
         }
-        with patch.dict("sys.modules", modules):
-            self.check_optim_and_kwargs(
-                TrainingArguments(optim=OptimizerNames.PAGED_ADAMW_8BIT, output_dir="None"),
-                mock.optim.AdamW,
-                default_adam_kwargs,
-            )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.dict("sys.modules", modules):
+                self.check_optim_and_kwargs(
+                    TrainingArguments(optim=OptimizerNames.PAGED_ADAMW_8BIT, output_dir=tmp_dir),
+                    mock.optim.AdamW,
+                    default_adam_kwargs,
+                )
 
     def test_bnb_ademamix(self):
         mock = Mock()
@@ -5089,12 +5091,13 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             "bitsandbytes.optim": mock.optim,
             "bitsandbytes.optim.AdEMAMix": mock.optim.AdEMAMix,
         }
-        with patch.dict("sys.modules", modules):
-            self.check_optim_and_kwargs(
-                TrainingArguments(optim=OptimizerNames.ADEMAMIX, output_dir="None"),
-                mock.optim.AdEMAMix,
-                default_ademamix_kwargs,
-            )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.dict("sys.modules", modules):
+                self.check_optim_and_kwargs(
+                    TrainingArguments(optim=OptimizerNames.ADEMAMIX, output_dir=tmp_dir),
+                    mock.optim.AdEMAMix,
+                    default_ademamix_kwargs,
+                )
 
     def test_bnb_ademamix8bit(self):
         mock = Mock()
@@ -5103,12 +5106,13 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             "bitsandbytes.optim": mock.optim,
             "bitsandbytes.optim.AdEMAMix": mock.optim.AdEMAMix,
         }
-        with patch.dict("sys.modules", modules):
-            self.check_optim_and_kwargs(
-                TrainingArguments(optim=OptimizerNames.ADEMAMIX_8BIT, output_dir="None"),
-                mock.optim.AdEMAMix,
-                default_ademamix_kwargs,
-            )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.dict("sys.modules", modules):
+                self.check_optim_and_kwargs(
+                    TrainingArguments(optim=OptimizerNames.ADEMAMIX_8BIT, output_dir=tmp_dir),
+                    mock.optim.AdEMAMix,
+                    default_ademamix_kwargs,
+                )
 
     def test_bnb_paged_ademamix(self):
         mock = Mock()
@@ -5117,12 +5121,13 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             "bitsandbytes.optim": mock.optim,
             "bitsandbytes.optim.AdEMAMix": mock.optim.AdEMAMix,
         }
-        with patch.dict("sys.modules", modules):
-            self.check_optim_and_kwargs(
-                TrainingArguments(optim=OptimizerNames.PAGED_ADEMAMIX, output_dir="None"),
-                mock.optim.AdEMAMix,
-                default_ademamix_kwargs,
-            )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.dict("sys.modules", modules):
+                self.check_optim_and_kwargs(
+                    TrainingArguments(optim=OptimizerNames.PAGED_ADEMAMIX, output_dir=tmp_dir),
+                    mock.optim.AdEMAMix,
+                    default_ademamix_kwargs,
+                )
 
     def test_bnb_paged_ademamix8bit(self):
         mock = Mock()
@@ -5131,12 +5136,13 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             "bitsandbytes.optim": mock.optim,
             "bitsandbytes.optim.AdEMAMix": mock.optim.AdEMAMix,
         }
-        with patch.dict("sys.modules", modules):
-            self.check_optim_and_kwargs(
-                TrainingArguments(optim=OptimizerNames.PAGED_ADEMAMIX_8BIT, output_dir="None"),
-                mock.optim.AdEMAMix,
-                default_ademamix_kwargs,
-            )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.dict("sys.modules", modules):
+                self.check_optim_and_kwargs(
+                    TrainingArguments(optim=OptimizerNames.PAGED_ADEMAMIX_8BIT, output_dir=tmp_dir),
+                    mock.optim.AdEMAMix,
+                    default_ademamix_kwargs,
+                )
 
     def test_bnb_lion(self):
         mock = Mock()
@@ -5145,12 +5151,13 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             "bitsandbytes.optim": mock.optim,
             "bitsandbytes.optim.Lion": mock.optim.Lion,
         }
-        with patch.dict("sys.modules", modules):
-            self.check_optim_and_kwargs(
-                TrainingArguments(optim=OptimizerNames.LION, output_dir="None"),
-                mock.optim.Lion,
-                default_lion_kwargs,
-            )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.dict("sys.modules", modules):
+                self.check_optim_and_kwargs(
+                    TrainingArguments(optim=OptimizerNames.LION, output_dir=tmp_dir),
+                    mock.optim.Lion,
+                    default_lion_kwargs,
+                )
 
     def test_bnb_lion8bit(self):
         mock = Mock()
@@ -5159,12 +5166,13 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             "bitsandbytes.optim": mock.optim,
             "bitsandbytes.optim.Lion": mock.optim.Lion,
         }
-        with patch.dict("sys.modules", modules):
-            self.check_optim_and_kwargs(
-                TrainingArguments(optim=OptimizerNames.LION_8BIT, output_dir="None"),
-                mock.optim.Lion,
-                default_lion_kwargs,
-            )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.dict("sys.modules", modules):
+                self.check_optim_and_kwargs(
+                    TrainingArguments(optim=OptimizerNames.LION_8BIT, output_dir=tmp_dir),
+                    mock.optim.Lion,
+                    default_lion_kwargs,
+                )
 
     def test_bnb_paged_lion8bit(self):
         mock = Mock()
@@ -5173,12 +5181,13 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             "bitsandbytes.optim": mock.optim,
             "bitsandbytes.optim.Lion": mock.optim.Lion,
         }
-        with patch.dict("sys.modules", modules):
-            self.check_optim_and_kwargs(
-                TrainingArguments(optim=OptimizerNames.PAGED_LION_8BIT, output_dir="None"),
-                mock.optim.Lion,
-                default_lion_kwargs,
-            )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.dict("sys.modules", modules):
+                self.check_optim_and_kwargs(
+                    TrainingArguments(optim=OptimizerNames.PAGED_LION_8BIT, output_dir=tmp_dir),
+                    mock.optim.Lion,
+                    default_lion_kwargs,
+                )
 
     def test_bnb_paged_lion(self):
         mock = Mock()
@@ -5187,93 +5196,103 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             "bitsandbytes.optim": mock.optim,
             "bitsandbytes.optim.Lion": mock.optim.Lion,
         }
-        with patch.dict("sys.modules", modules):
-            self.check_optim_and_kwargs(
-                TrainingArguments(optim=OptimizerNames.PAGED_LION, output_dir="None"),
-                mock.optim.Lion,
-                default_lion_kwargs,
-            )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.dict("sys.modules", modules):
+                self.check_optim_and_kwargs(
+                    TrainingArguments(optim=OptimizerNames.PAGED_LION, output_dir=tmp_dir),
+                    mock.optim.Lion,
+                    default_lion_kwargs,
+                )
 
     def test_bnb_adam8bit_no_bnb(self):
-        args = TrainingArguments(optim=OptimizerNames.ADAMW_BNB, output_dir="None")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(optim=OptimizerNames.ADAMW_BNB, output_dir=tmp_dir)
 
-        # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
-        # bnb will fail even if `bitsandbytes` is installed.
-        with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-            with self.assertRaises(ValueError):
-                Trainer.get_optimizer_cls_and_kwargs(args)
+            # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
+            # bnb will fail even if `bitsandbytes` is installed.
+            with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
+                with self.assertRaises(ValueError):
+                    Trainer.get_optimizer_cls_and_kwargs(args)
 
     def test_bnb_paged_adam_no_bnb(self):
-        args = TrainingArguments(optim=OptimizerNames.PAGED_ADAMW, output_dir="None")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(optim=OptimizerNames.PAGED_ADAMW, output_dir=tmp_dir)
 
-        # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
-        # bnb will fail even if `bitsandbytes` is installed.
-        with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-            with self.assertRaises(ValueError):
-                Trainer.get_optimizer_cls_and_kwargs(args)
+            # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
+            # bnb will fail even if `bitsandbytes` is installed.
+            with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
+                with self.assertRaises(ValueError):
+                    Trainer.get_optimizer_cls_and_kwargs(args)
 
     def test_bnb_paged_adam8bit_no_bnb(self):
-        args = TrainingArguments(optim=OptimizerNames.PAGED_ADAMW_8BIT, output_dir="None")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(optim=OptimizerNames.PAGED_ADAMW_8BIT, output_dir=tmp_dir)
 
-        # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
-        # bnb will fail even if `bitsandbytes` is installed.
-        with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-            with self.assertRaises(ValueError):
-                Trainer.get_optimizer_cls_and_kwargs(args)
+            # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
+            # bnb will fail even if `bitsandbytes` is installed.
+            with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
+                with self.assertRaises(ValueError):
+                    Trainer.get_optimizer_cls_and_kwargs(args)
 
     def test_bnb_ademamix_no_bnb(self):
-        args = TrainingArguments(optim=OptimizerNames.ADEMAMIX, output_dir="None")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(optim=OptimizerNames.ADEMAMIX, output_dir=tmp_dir)
 
-        # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
-        # bnb will fail even if `bitsandbytes` is installed.
-        with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-            with self.assertRaises(ValueError):
-                Trainer.get_optimizer_cls_and_kwargs(args)
+            # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
+            # bnb will fail even if `bitsandbytes` is installed.
+            with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
+                with self.assertRaises(ValueError):
+                    Trainer.get_optimizer_cls_and_kwargs(args)
 
     def test_bnb_ademamix8bit_no_bnb(self):
-        args = TrainingArguments(optim=OptimizerNames.ADEMAMIX_8BIT, output_dir="None")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(optim=OptimizerNames.ADEMAMIX_8BIT, output_dir=tmp_dir)
 
-        # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
-        # bnb will fail even if `bitsandbytes` is installed.
-        with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-            with self.assertRaises(ValueError):
-                Trainer.get_optimizer_cls_and_kwargs(args)
+            # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
+            # bnb will fail even if `bitsandbytes` is installed.
+            with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
+                with self.assertRaises(ValueError):
+                    Trainer.get_optimizer_cls_and_kwargs(args)
 
     def test_bnb_paged_ademamix_no_bnb(self):
-        args = TrainingArguments(optim=OptimizerNames.PAGED_ADEMAMIX, output_dir="None")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(optim=OptimizerNames.PAGED_ADEMAMIX, output_dir=tmp_dir)
 
-        # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
-        # bnb will fail even if `bitsandbytes` is installed.
-        with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-            with self.assertRaises(ValueError):
-                Trainer.get_optimizer_cls_and_kwargs(args)
+            # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
+            # bnb will fail even if `bitsandbytes` is installed.
+            with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
+                with self.assertRaises(ValueError):
+                    Trainer.get_optimizer_cls_and_kwargs(args)
 
     def test_bnb_paged_ademamix8bit_no_bnb(self):
-        args = TrainingArguments(optim=OptimizerNames.PAGED_ADEMAMIX_8BIT, output_dir="None")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(optim=OptimizerNames.PAGED_ADEMAMIX_8BIT, output_dir=tmp_dir)
 
-        # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
-        # bnb will fail even if `bitsandbytes` is installed.
-        with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-            with self.assertRaises(ValueError):
-                Trainer.get_optimizer_cls_and_kwargs(args)
+            # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
+            # bnb will fail even if `bitsandbytes` is installed.
+            with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
+                with self.assertRaises(ValueError):
+                    Trainer.get_optimizer_cls_and_kwargs(args)
 
     def test_bnb_paged_lion_no_bnb(self):
-        args = TrainingArguments(optim=OptimizerNames.PAGED_LION, output_dir="None")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(optim=OptimizerNames.PAGED_LION, output_dir=tmp_dir)
 
-        # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
-        # bnb will fail even if `bitsandbytes` is installed.
-        with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-            with self.assertRaises(ValueError):
-                Trainer.get_optimizer_cls_and_kwargs(args)
+            # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
+            # bnb will fail even if `bitsandbytes` is installed.
+            with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
+                with self.assertRaises(ValueError):
+                    Trainer.get_optimizer_cls_and_kwargs(args)
 
     def test_bnb_paged_lion8bit_no_bnb(self):
-        args = TrainingArguments(optim=OptimizerNames.PAGED_LION_8BIT, output_dir="None")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(optim=OptimizerNames.PAGED_LION_8BIT, output_dir=tmp_dir)
 
-        # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
-        # bnb will fail even if `bitsandbytes` is installed.
-        with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
-            with self.assertRaises(ValueError):
-                Trainer.get_optimizer_cls_and_kwargs(args)
+            # Pretend that bnb does not exist, even if installed. By setting bnb to None, importing
+            # bnb will fail even if `bitsandbytes` is installed.
+            with patch.dict("sys.modules", {"bitsandbytes.optim": None}):
+                with self.assertRaises(ValueError):
+                    Trainer.get_optimizer_cls_and_kwargs(args)
 
     def test_anyprecision_adamw(self):
         # Pretend that torchdistx is installed and mock torchdistx.optimizers.AnyPrecisionAdamW exists.
@@ -5286,21 +5305,23 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
             "torchdistx.optimizers": mock.optimizers,
             "torchdistx.optimizers.AnyPrecisionAdamW.": mock.optimizers.AnyPrecisionAdamW,
         }
-        with patch.dict("sys.modules", modules):
-            self.check_optim_and_kwargs(
-                TrainingArguments(optim=OptimizerNames.ADAMW_ANYPRECISION, output_dir="None"),
-                mock.optimizers.AnyPrecisionAdamW,
-                dict(default_adam_kwargs, **default_anyprecision_kwargs),
-            )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with patch.dict("sys.modules", modules):
+                self.check_optim_and_kwargs(
+                    TrainingArguments(optim=OptimizerNames.ADAMW_ANYPRECISION, output_dir=tmp_dir),
+                    mock.optimizers.AnyPrecisionAdamW,
+                    dict(default_adam_kwargs, **default_anyprecision_kwargs),
+                )
 
     def test_no_torchdistx_anyprecision_adamw(self):
-        args = TrainingArguments(optim=OptimizerNames.ADAMW_ANYPRECISION, output_dir="None")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            args = TrainingArguments(optim=OptimizerNames.ADAMW_ANYPRECISION, output_dir=tmp_dir)
 
-        # Pretend that torchdistx does not exist, even if installed. By setting torchdistx to None, importing
-        # torchdistx.optimizers will fail even if torchdistx is installed.
-        with patch.dict("sys.modules", {"torchdistx.optimizers": None}):
-            with self.assertRaises(ValueError):
-                Trainer.get_optimizer_cls_and_kwargs(args)
+            # Pretend that torchdistx does not exist, even if installed. By setting torchdistx to None, importing
+            # torchdistx.optimizers will fail even if torchdistx is installed.
+            with patch.dict("sys.modules", {"torchdistx.optimizers": None}):
+                with self.assertRaises(ValueError):
+                    Trainer.get_optimizer_cls_and_kwargs(args)
 
 
 @require_torch
