@@ -7460,6 +7460,7 @@ if TYPE_CHECKING:
             MobileViTV2PreTrainedModel,
         )
         from .models.modernbert import (
+            ModernBertForMaskedLM,
             ModernBertForSequenceClassification,
             ModernBertForTokenClassification,
             ModernBertModel,

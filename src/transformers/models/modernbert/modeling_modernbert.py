@@ -33,7 +33,8 @@ from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, MaskedLMOutput, SequenceClassifierOutput, TokenClassifierOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import is_flash_attn_2_available
+from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer, prune_qkv_linear_layer
+from ...utils import is_flash_attn_2_available, logging
 from .configuration_modernbert import ModernBertConfig
 
 
@@ -43,6 +44,8 @@ if is_flash_attn_2_available():
     from flash_attn.ops.triton.rotary import apply_rotary
 else:
     RotaryEmbedding = None
+
+logger = logging.get_logger(__name__)
 
 
 class ModernBertModuleType(str, Enum):
@@ -402,8 +405,9 @@ def eager_attention_forward(
     bs: int,
     seqlen: int,
     dim: int,
+    output_attentions: Optional[bool] = False,
     **_kwargs,
-) -> Tuple[torch.Tensor, torch.Tensor]:
+) -> Tuple[torch.Tensor, torch.Tensor] | Tuple[torch.Tensor]:
     # qkv: [batch_size, seqlen, 3, nheads, headdim]
     cos, sin = self.rotary_emb(qkv, position_ids=position_ids)
     query, key, value = qkv.transpose(3, 1).unbind(dim=2)
@@ -424,7 +428,9 @@ def eager_attention_forward(
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
     attn_output = attn_output.view(bs, seqlen, dim)
-    return attn_output
+    if output_attentions:
+        return (attn_output, attn_weights)
+    return (attn_output,)
 
 
 def flash_attention_forward(
@@ -438,7 +444,7 @@ def flash_attention_forward(
     dim: int,
     target_dtype: torch.dtype = torch.bfloat16,
     **_kwargs,
-) -> torch.Tensor:
+) -> Tuple[torch.Tensor]:
     # (total_seqlen, 3, nheads, headdim)
     qkv = rotary_emb(qkv, cu_seqlens=cu_seqlens, max_seqlen=max_seqlen)
 
@@ -467,7 +473,7 @@ def flash_attention_forward(
             deterministic=self.deterministic_flash_attn,
             window_size=local_attention,
         )
-    return attn.view(bs, dim)
+    return (attn.view(bs, dim),)
 
 
 # def flex_attention_forward(
@@ -506,7 +512,7 @@ def sdpa_attention_forward(
     seqlen: int,
     dim: int,
     **_kwargs,
-) -> Tuple[torch.Tensor, None]:
+) -> Tuple[torch.Tensor]:
     # qkv: [batch_size, seqlen, 3, nheads, headdim]
     cos, sin = self.rotary_emb(qkv, position_ids=position_ids)
     query, key, value = qkv.transpose(3, 1).unbind(dim=2)
@@ -524,7 +530,7 @@ def sdpa_attention_forward(
         attn_mask=attention_mask,
     ).transpose(1, 2)
     attn_output = attn_output.view(bs, seqlen, dim)
-    return attn_output
+    return (attn_output,)
 
 
 MODERNBERT_ATTENTION_FUNCTION = {
@@ -559,7 +565,8 @@ class ModernBertAttention(nn.Module):
         self.deterministic_flash_attn = config.deterministic_flash_attn
         self.num_heads = config.num_attention_heads
         self.head_dim = config.hidden_size // config.num_attention_heads
-        self.Wqkv = nn.Linear(config.hidden_size, 3 * self.head_dim * self.num_heads, bias=config.attention_bias)
+        self.all_head_size = self.head_dim * self.num_heads
+        self.Wqkv = nn.Linear(config.hidden_size, 3 * self.all_head_size, bias=config.attention_bias)
 
         if layer_id % config.global_attn_every_n_layers != 0:
             self.local_attention = (config.local_attention // 2, config.local_attention // 2)
@@ -584,6 +591,21 @@ class ModernBertAttention(nn.Module):
 
         self.Wo = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
         self.out_drop = nn.Dropout(config.attention_dropout) if config.attention_dropout > 0.0 else nn.Identity()
+        self.pruned_heads = set()
+
+    def prune_heads(self, heads):
+        if len(heads) == 0:
+            return
+        heads, index = find_pruneable_heads_and_indices(heads, self.num_heads, self.head_dim, self.pruned_heads)
+
+        # Prune linear layers
+        self.Wqkv = prune_qkv_linear_layer(self.Wqkv, index)
+        self.Wo = prune_linear_layer(self.Wo, index, dim=1)
+
+        # Update hyper params and store pruned heads
+        self.num_heads = self.num_heads - len(heads)
+        self.all_head_size = self.head_dim * self.num_heads
+        self.pruned_heads = self.pruned_heads.union(heads)
 
     def _init_weights(self, reset_params: bool = False):
         _init_modernbert_weights(self.config, self.Wqkv, module_type=ModernBertModuleType.in_module)
@@ -596,6 +618,7 @@ class ModernBertAttention(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         cu_seqlens: Optional[torch.Tensor] = None,
         max_seqlen: Optional[int] = None,
+        output_attentions: Optional[bool] = False,
         **kwargs,
     ) -> torch.Tensor:
         """Perform self-attention.
@@ -619,9 +642,12 @@ class ModernBertAttention(nn.Module):
         """
         qkv = self.Wqkv(hidden_states)
 
-        attn_kwargs = {}
+        attn_kwargs = {
+            "output_attentions": output_attentions,
+            "dim": self.all_head_size,
+        }
         if self.config._attn_implementation == "flash_attention_2":
-            bs, dim = hidden_states.shape[:2]
+            bs = hidden_states.shape[0]
             qkv = qkv.view(-1, 3, self.num_heads, self.head_dim)
 
             attn_kwargs.update(
@@ -630,11 +656,10 @@ class ModernBertAttention(nn.Module):
                     "cu_seqlens": cu_seqlens,
                     "max_seqlen": max_seqlen,
                     "bs": bs,
-                    "dim": dim,
                 }
             )
         else:
-            bs, seqlen, dim = hidden_states.shape
+            bs, seqlen = hidden_states.shape[:2]
             qkv = qkv.view(bs, seqlen, 3, self.num_heads, self.head_dim)
 
             attn_kwargs.update(
@@ -643,18 +668,32 @@ class ModernBertAttention(nn.Module):
                     "attention_mask": attention_mask,
                     "bs": bs,
                     "seqlen": seqlen,
-                    "dim": dim,
                 }
             )
 
-        attn = MODERNBERT_ATTENTION_FUNCTION[self.config._attn_implementation](
+        if output_attentions:
+            if self.config._attn_implementation == "sdpa":
+                logger.warning_once(
+                    "Outputting attentions is only supported with the 'eager' attention implementation, "
+                    'not with "sdpa". Falling back to `attn_implementation="eager"`.'
+                )
+                self.config._attn_implementation = "eager"
+            elif self.config._attn_implementation != "eager":
+                logger.warning_once(
+                    "Outputting attentions is only supported with the eager attention implementation, "
+                    f'not with {self.config._attn_implementation}. Consider setting `attn_implementation="eager"`.'
+                    " Setting `output_attentions=False`."
+                )
+
+        attn_outputs = MODERNBERT_ATTENTION_FUNCTION[self.config._attn_implementation](
             self,
             qkv=qkv,
             rotary_emb=self.rotary_emb,
             **attn_kwargs,
         )
+        hidden_states = attn_outputs[0]
 
-        return self.out_drop(self.Wo(attn))
+        return (self.out_drop(self.Wo(hidden_states)),) + attn_outputs[1:]  # add attentions if outputted
 
 
 class ModernBertEncoderLayer(nn.Module):
@@ -685,6 +724,7 @@ class ModernBertEncoderLayer(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         cu_seqlens: Optional[torch.Tensor] = None,
         max_seqlen: Optional[int] = None,
+        output_attentions: Optional[bool] = False,
     ) -> torch.Tensor:
         """Forward pass for a ModernBert layer, including both attention and MLP.
 
@@ -695,14 +735,18 @@ class ModernBertEncoderLayer(nn.Module):
             cu_seqlens: (batch + 1,)
             max_seqlen: int
         """
-        attn_out = hidden_states + self.attn(
+        attn_outputs = self.attn(
             self.attn_norm(hidden_states),
             position_ids=position_ids,
             cu_seqlens=cu_seqlens,
             max_seqlen=max_seqlen,
             attention_mask=attention_mask,
+            output_attentions=output_attentions,
         )
-        return attn_out + self.compiled_mlp(attn_out)
+        hidden_states = hidden_states + attn_outputs[0]
+        hidden_states = hidden_states + self.compiled_mlp(hidden_states)
+
+        return (hidden_states,) + attn_outputs[1:]  # add attentions if outputted
 
 
 class ModernBertPredictionHead(nn.Module):
@@ -868,7 +912,8 @@ class ModernBertPreTrainedModel(PreTrainedModel):
         module: Union[ModernBertEncoderLayer, ModernBertAttention, ModernBertMLP, ModernBertEmbeddings],
         reset_params: bool = False,
     ):
-        module._init_weights(reset_params)
+        if isinstance(module, (ModernBertEncoderLayer, ModernBertAttention, ModernBertMLP, ModernBertEmbeddings)):
+            module._init_weights(reset_params=reset_params)
 
     @torch.no_grad()
     def _unpad_inputs_no_grad(
@@ -944,6 +989,14 @@ class ModernBertModel(ModernBertPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.tok_embeddings = value
 
+    def _prune_heads(self, heads_to_prune):
+        """
+        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
+        class PreTrainedModel
+        """
+        for layer, heads in heads_to_prune.items():
+            self.layers[layer].attn.prune_heads(heads)
+
     def _init_weights(self, module: Optional[nn.Module] = None, reset_params: Optional[bool] = None):
         if module and hasattr(module, "_init_weights"):
             super()._init_weights(module, reset_params=reset_params)
@@ -958,14 +1011,23 @@ class ModernBertModel(ModernBertPreTrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        return_dict: Optional[bool] = None,
         indices: Optional[torch.Tensor] = None,
         cu_seqlens: Optional[torch.Tensor] = None,
         max_seqlen: Optional[int] = None,
         batch_size: Optional[int] = None,
         seq_len: Optional[int] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor, ...], BaseModelOutput]:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attentions = () if output_attentions else None
 
         if batch_size is None and seq_len is None:
             batch_size, seq_len = input_ids.shape[:2]
@@ -994,23 +1056,34 @@ class ModernBertModel(ModernBertPreTrainedModel):
             attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
 
         for encoder_layer in self.layers:
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+
             if self.gradient_checkpointing and self.training:
-                hidden_states = self._gradient_checkpointing_func(
+                layer_outputs = self._gradient_checkpointing_func(
                     encoder_layer.__call__,
                     hidden_states,
                     attention_mask,
                     position_ids,
                     cu_seqlens,
                     max_seqlen,
+                    output_attentions,
                 )
             else:
-                hidden_states = encoder_layer(
+                layer_outputs = encoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,
                     position_ids=position_ids,
                     cu_seqlens=cu_seqlens,
                     max_seqlen=max_seqlen,
+                    output_attentions=output_attentions,
                 )
+            hidden_states = layer_outputs[0]
+            if output_attentions and len(layer_outputs) > 1:
+                all_self_attentions = all_self_attentions + (layer_outputs[1],)
+
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
 
         hidden_states = self.final_norm(hidden_states)
 
@@ -1018,11 +1091,17 @@ class ModernBertModel(ModernBertPreTrainedModel):
             hidden_states, _ = self._pad_outputs(hidden_states, indices, batch_size, seq_len)
 
         if not return_dict:
-            return hidden_states
-        return BaseModelOutput(last_hidden_state=hidden_states)
+            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+        return BaseModelOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
+        )
 
 
 class ModernBertForMaskedLM(ModernBertPreTrainedModel):
+    _tied_weights_keys = ["decoder.weight"]
+
     def __init__(
         self,
         config: ModernBertConfig,
@@ -1079,12 +1158,14 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        return_dict: Optional[bool] = None,
         indices: Optional[torch.Tensor] = None,
         cu_seqlens: Optional[torch.Tensor] = None,
         max_seqlen: Optional[int] = None,
         batch_size: Optional[int] = None,
         seq_len: Optional[int] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[Tuple[torch.Tensor], MaskedLMOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1101,7 +1182,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
                         input_ids=input_ids, attention_mask=attention_mask, position_ids=position_ids, labels=labels
                     )
 
-        output = self.model(
+        outputs = self.model(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -1110,21 +1191,23 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
             max_seqlen=max_seqlen,
             batch_size=batch_size,
             seq_len=seq_len,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-        output = output[0]
+        last_hidden_state = outputs[0]
 
         if self.sparse_prediction and labels is not None:
             # flatten labels and output first
             labels = labels.view(-1)
-            output = output.view(labels.shape[0], -1)
+            last_hidden_state = last_hidden_state.view(labels.shape[0], -1)
 
             # then filter out the non-masked tokens
             mask_tokens = labels != self.sparse_pred_ignore_index
-            output = output[mask_tokens]
+            last_hidden_state = last_hidden_state[mask_tokens]
             labels = labels[mask_tokens]
 
-        logits = self.compiled_head(output)
+        logits = self.compiled_head(last_hidden_state)
 
         loss = None
         if labels is not None:
@@ -1135,11 +1218,15 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
                 logits, _ = self._pad_outputs_no_grad(logits, indices, batch_size, seq_len)
             else:
                 logits, _ = self._pad_outputs(logits, indices, batch_size, seq_len)
+        if not return_dict:
+            output = (logits,)
+            return ((loss,) + output) if loss is not None else output
+
         return MaskedLMOutput(
             loss=loss,
             logits=logits,
-            hidden_states=None,
-            attentions=None,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1164,7 +1251,7 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
             assert isinstance(reset_params, bool)
             self.model._init_weights(reset_params=reset_params)
             self.head._init_weights(reset_params=reset_params)
-            _init_modernbert_weights(self.config, self.classifier, type_of_module=ModernBertModuleType.final_out)
+            _init_modernbert_weights(self.config, self.classifier, module_type=ModernBertModuleType.final_out)
 
     def forward(
         self,
@@ -1172,12 +1259,14 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        return_dict: Optional[bool] = None,
         indices: Optional[torch.Tensor] = None,
         cu_seqlens: Optional[torch.Tensor] = None,
         max_seqlen: Optional[int] = None,
         batch_size: Optional[int] = None,
         seq_len: Optional[int] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[Tuple[torch.Tensor], SequenceClassifierOutput]:
         r"""
@@ -1197,6 +1286,8 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
             max_seqlen=max_seqlen,
             batch_size=batch_size,
             seq_len=seq_len,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
         last_hidden_state = outputs[0]
@@ -1234,8 +1325,8 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
         return SequenceClassifierOutput(
             loss=loss,
             logits=logits,
-            hidden_states=None,
-            attentions=None,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
 
@@ -1258,17 +1349,19 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
         else:
             assert isinstance(reset_params, bool)
             self.model._init_weights(reset_params=reset_params)
-            _init_modernbert_weights(self.config, self.classifier, type_of_module=ModernBertModuleType.final_out)
+            _init_modernbert_weights(self.config, self.classifier, module_type=ModernBertModuleType.final_out)
 
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
+        input_ids: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
+        indices: Optional[torch.Tensor] = None,
+        cu_seqlens: Optional[torch.Tensor] = None,
+        max_seqlen: Optional[int] = None,
+        batch_size: Optional[int] = None,
+        seq_len: Optional[int] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1282,10 +1375,12 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
         outputs = self.model(
             input_ids,
             attention_mask=attention_mask,
-            token_type_ids=token_type_ids,
             position_ids=position_ids,
-            head_mask=head_mask,
-            inputs_embeds=inputs_embeds,
+            indices=indices,
+            cu_seqlens=cu_seqlens,
+            max_seqlen=max_seqlen,
+            batch_size=batch_size,
+            seq_len=seq_len,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1307,6 +1402,6 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
         return TokenClassifierOutput(
             loss=loss,
             logits=logits,
-            hidden_states=None,
-            attentions=None,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
