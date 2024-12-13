@@ -80,8 +80,10 @@ TIMM_WRAPPER_INPUTS_DOCSTRING = r"""
 class TimmWrapperPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     config_class = TimmWrapperConfig
-    accepts_loss_kwargs = False
     _no_split_modules = []
+
+    # used in Trainer to avoid passing `loss_kwargs` to model forward
+    accepts_loss_kwargs = False
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["vision", "timm"])
