@@ -4,10 +4,13 @@ from ..llama.modeling_llama import LlamaDecoderLayer, LlamaModel
 from ..mistral.modeling_mistral import MistralMLP
 from ..whisper.modeling_whisper import WhisperModel
 
+from torch.nn import CrossEntropyLoss
+
 from typing import List, Optional, Tuple, Union
 from ...processing_utils import Unpack
 
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
+from ...generation import GenerationMixin
 
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -42,6 +45,8 @@ import copy
 import math
 
 logger = logging.get_logger(__name__)
+
+_CONFIG_FOR_DOC = "MoonshineConfig"
 
 
 class MoonshineConfig(PretrainedConfig):
@@ -84,8 +89,14 @@ class MoonshineConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-5):
             The epsilon used by the layer normalization layers.
+        decoder_start_token_id (`int`, *optional*, defaults to 1):
+            Corresponds to the "<|startoftranscript|>" token, which is automatically used when no `decoder_input_ids`
+            are provided to the `generate` function. It is used to guide the model`s generation process depending on
+            the task.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
+        is_encoder_decoder (`bool`, *optional*, defaults to `True`):
+            Whether the model is used as an encoder/decoder or not.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings. TODO: check this
         partial_rotary_factor (`float`, *optional*, defaults to 0.5):
@@ -139,6 +150,35 @@ class MoonshineConfig(PretrainedConfig):
             Denotes beginning of sequences token id.
         eos_token_id (`int`, *optional*, defaults to 2):
             Denotes end of sequences token id.
+        apply_spec_augment (`bool`, *optional*, defaults to `False`):
+            Whether to apply *SpecAugment* data augmentation to the outputs of the feature encoder. For reference see
+            [SpecAugment: A Simple Data Augmentation Method for Automatic Speech
+            Recognition](https://arxiv.org/abs/1904.08779).
+        mask_time_prob (`float`, *optional*, defaults to 0.05):
+            Percentage (between 0 and 1) of all feature vectors along the time axis which will be masked. The masking
+            procecure generates `mask_time_prob*len(time_axis)/mask_time_length` independent masks over the axis. If
+            reasoning from the propability of each feature vector to be chosen as the start of the vector span to be
+            masked, *mask_time_prob* should be `prob_vector_start*mask_time_length`. Note that overlap may decrease the
+            actual percentage of masked vectors. This is only relevant if `apply_spec_augment == True`.
+        mask_time_length (`int`, *optional*, defaults to 10):
+            Length of vector span along the time axis.
+        mask_time_min_masks (`int`, *optional*, defaults to 2),:
+            The minimum number of masks of length `mask_feature_length` generated along the time axis, each time step,
+            irrespectively of `mask_feature_prob`. Only relevant if ''mask_time_prob*len(time_axis)/mask_time_length <
+            mask_time_min_masks''
+        mask_feature_prob (`float`, *optional*, defaults to 0.0):
+            Percentage (between 0 and 1) of all feature vectors along the feature axis which will be masked. The
+            masking procecure generates `mask_feature_prob*len(feature_axis)/mask_time_length` independent masks over
+            the axis. If reasoning from the propability of each feature vector to be chosen as the start of the vector
+            span to be masked, *mask_feature_prob* should be `prob_vector_start*mask_feature_length`. Note that overlap
+            may decrease the actual percentage of masked vectors. This is only relevant if `apply_spec_augment is
+            True`.
+        mask_feature_length (`int`, *optional*, defaults to 10):
+            Length of vector span along the feature axis.
+        mask_feature_min_masks (`int`, *optional*, defaults to 0),:
+            The minimum number of masks of length `mask_feature_length` generated along the feature axis, each time
+            step, irrespectively of `mask_feature_prob`. Only relevant if
+            `mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks`.
 
     Example:
 
@@ -171,7 +211,9 @@ class MoonshineConfig(PretrainedConfig):
         max_position_embeddings=2048,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
+        decoder_start_token_id=1,
         use_cache=True,
+        is_encoder_decoder=True,
         rope_theta=10000.0,
         partial_rotary_factor=0.5,
         attention_bias=False,
@@ -181,6 +223,13 @@ class MoonshineConfig(PretrainedConfig):
         ff_mult=4,
         bos_token_id=1,
         eos_token_id=2,
+        apply_spec_augment=False,
+        mask_time_prob=0.05,
+        mask_time_length=10,
+        mask_time_min_masks=2,
+        mask_feature_prob=0.0,
+        mask_feature_length=10,
+        mask_feature_min_masks=0,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -198,7 +247,9 @@ class MoonshineConfig(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
+        self.decoder_start_token_id = decoder_start_token_id
         self.use_cache = use_cache
+        self.is_encoder_decoder = is_encoder_decoder
         self.rope_theta = rope_theta
         self.partial_rotary_factor = partial_rotary_factor
 
@@ -208,11 +259,40 @@ class MoonshineConfig(PretrainedConfig):
         self.rope_scaling = rope_scaling
         self.ff_mult = ff_mult
 
+        # fine-tuning config parameters for SpecAugment: https://arxiv.org/abs/1904.08779
+        self.apply_spec_augment = apply_spec_augment
+        self.mask_time_prob = mask_time_prob
+        self.mask_time_length = mask_time_length
+        self.mask_time_min_masks = mask_time_min_masks
+        self.mask_feature_prob = mask_feature_prob
+        self.mask_feature_length = mask_feature_length
+        self.mask_feature_min_masks = mask_feature_min_masks
+
         super().__init__(
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
+            is_encoder_decoder=is_encoder_decoder,
+            decoder_start_token_id=decoder_start_token_id,
             **kwargs,
         )
+
+
+# Copied from transformers.models.bart.modeling_bart.shift_tokens_right
+def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
+    """
+    Shift input ids one token to the right.
+    """
+    shifted_input_ids = input_ids.new_zeros(input_ids.shape)
+    shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
+    shifted_input_ids[:, 0] = decoder_start_token_id
+
+    if pad_token_id is None:
+        raise ValueError("self.model.config.pad_token_id has to be defined.")
+    # replace possible -100 values in labels by `pad_token_id`
+    shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
+
+    return shifted_input_ids
+
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
@@ -224,6 +304,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
         return hidden_states
     hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
 
 def rotate_every_two(x: torch.Tensor) -> torch.Tensor:
     x1 = x[:, :, :, ::2]
@@ -958,6 +1039,7 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -1003,14 +1085,14 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
                 layer_outputs = self._gradient_checkpointing_func(
                     encoder_layer.__call__,
                     hidden_states,
-                    None,
+                    attention_mask,
                     output_attentions,
                     position_embeddings=embed_pos,
                 )
             else:
                 layer_outputs = encoder_layer(
                     hidden_states,
-                    None,
+                    attention_mask,
                     output_attentions=output_attentions,
                     position_embeddings=embed_pos,
                 )
@@ -1029,7 +1111,82 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
         return BaseModelOutput(
             last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
         )
-    
+
+
+MOONSHINE_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            If `past_key_values` is used, optionally only the last `input_ids` have to be input (see
+            `past_key_values`).
+
+            If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
+            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
+            information on the default strategy.
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.n_positions - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
+        past_key_values (`Cache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
+            Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
+            returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
+
+            Two formats are allowed:
+            - a [`~cache_utils.Cache`] instance, see our
+            [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache);
+            - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
+            shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
+            cache format.
+
+            The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
+            legacy cache format will be returned.
+
+            If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
+            have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
+            of shape `(batch_size, sequence_length)`.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
+        use_cache (`bool`, *optional*):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
+            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
+            the complete sequence length.
+"""
+
 
 class MoonshineDecoder(LlamaModel):
     def __init__(self, config: MoonshineConfig):
@@ -1188,5 +1345,223 @@ class MoonshineModel(WhisperModel):
         super().__init__(config)
         self.encoder = MoonshineEncoder(config)
         self.decoder = MoonshineDecoder(config)
+
+    def forward(
+        self,
+        input_features: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
+        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Union[EncoderDecoderCache, Tuple[torch.FloatTensor]]] = None,
+        decoder_inputs_embeds: Optional[Tuple[torch.FloatTensor]] = None,
+        decoder_position_ids: Optional[Tuple[torch.LongTensor]] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+    ) -> Union[Tuple[torch.Tensor], Seq2SeqModelOutput]:
+        r"""
+        Returns:
+
+        Example:
+         ```python
+         >>> import torch
+         >>> from transformers import AutoFeatureExtractor, WhisperModel
+         >>> from datasets import load_dataset
+
+         >>> model = WhisperModel.from_pretrained("openai/whisper-base")
+         >>> feature_extractor = AutoFeatureExtractor.from_pretrained("openai/whisper-base")
+         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+         >>> inputs = feature_extractor(ds[0]["audio"]["array"], return_tensors="pt")
+         >>> input_features = inputs.input_features
+         >>> decoder_input_ids = torch.tensor([[1, 1]]) * model.config.decoder_start_token_id
+         >>> last_hidden_state = model(input_features, decoder_input_ids=decoder_input_ids).last_hidden_state
+         >>> list(last_hidden_state.shape)
+         [1, 2, 512]
+         ```"""
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if encoder_outputs is None:
+            input_features = self._mask_input_features(input_features, attention_mask=attention_mask)
+
+            encoder_outputs = self.encoder(
+                input_features,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+                return_dict=return_dict,
+            )
+        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
+        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
+            encoder_outputs = BaseModelOutput(
+                last_hidden_state=encoder_outputs[0],
+                hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
+                attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
+            )
+
+        # decoder outputs consists of (dec_features, past_key_value, dec_hidden, dec_attn)
+        decoder_outputs = self.decoder(
+            input_ids=decoder_input_ids,
+            attention_mask=decoder_attention_mask,
+            encoder_hidden_states=encoder_outputs[0],
+            past_key_values=past_key_values,
+            inputs_embeds=decoder_inputs_embeds,
+            position_ids=decoder_position_ids,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            cache_position=cache_position,
+        )
+
+        if not return_dict:
+            return decoder_outputs + encoder_outputs
+
+        return Seq2SeqModelOutput(
+            last_hidden_state=decoder_outputs.last_hidden_state,
+            past_key_values=decoder_outputs.past_key_values,
+            decoder_hidden_states=decoder_outputs.hidden_states,
+            decoder_attentions=decoder_outputs.attentions,
+            cross_attentions=decoder_outputs.cross_attentions,
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,
+            encoder_attentions=encoder_outputs.attentions,
+        )
+
+
+class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixin):
+    _tied_weights_keys = ["proj_out.weight"]
+
+    def __init__(self, config: MoonshineConfig):
+        super().__init__(config)
+        self.model = MoonshineModel(config)
+        self.proj_out = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_encoder(self):
+        return self.model.get_encoder()
+
+    def get_decoder(self):
+        return self.model.get_decoder()
+
+    def get_output_embeddings(self):
+        return self.proj_out
+
+    def set_output_embeddings(self, new_embeddings):
+        self.proj_out = new_embeddings
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.model.get_input_embeddings()
+    
+    @add_start_docstrings_to_model_forward(MOONSHINE_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        input_features: Optional[torch.FloatTensor] = None,
+        attention_mask: Optional[torch.LongTensor] = None,
+        decoder_input_ids: Optional[torch.LongTensor] = None,
+        decoder_attention_mask: Optional[torch.LongTensor] = None,
+        encoder_outputs: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Union[EncoderDecoderCache, Tuple[torch.FloatTensor]]] = None,
+        decoder_inputs_embeds: Optional[Tuple[torch.FloatTensor]] = None,
+        decoder_position_ids: Optional[Tuple[torch.LongTensor]] = None,
+        labels: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+    ) -> Union[Tuple[torch.Tensor], Seq2SeqLMOutput]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Labels for computing the language modeling loss. Indices should either be in `[0, ..., config.vocab_size]`
+            or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored (masked), the loss is
+            only computed for the tokens with labels in `[0, ..., config.vocab_size]`. `sequence_length` should be smaller than or equal to `config.max_target_positions`.
+
+        Returns:
+
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from transformers import AutoProcessor, WhisperForConditionalGeneration
+        >>> from datasets import load_dataset
+
+        >>> processor = AutoProcessor.from_pretrained("openai/whisper-tiny.en")
+        >>> model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
+
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+
+        >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="pt")
+        >>> input_features = inputs.input_features
+
+        >>> generated_ids = model.generate(inputs=input_features)
+
+        >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        >>> transcription
+        ' Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.'
+        ```"""
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if labels is not None:
+            if labels.shape[1] > self.max_target_positions:
+                raise ValueError(
+                    f"Labels' sequence length {labels.shape[1]} cannot exceed the maximum allowed length of {self.max_target_positions} tokens."
+                )
+            if decoder_input_ids is None and decoder_inputs_embeds is None:
+                decoder_input_ids = shift_tokens_right(
+                    labels, self.config.pad_token_id, self.config.decoder_start_token_id
+                )
+
+        outputs = self.model(
+            input_features,
+            attention_mask=attention_mask,
+            decoder_input_ids=decoder_input_ids,
+            encoder_outputs=encoder_outputs,
+            decoder_attention_mask=decoder_attention_mask,
+            past_key_values=past_key_values,
+            decoder_inputs_embeds=decoder_inputs_embeds,
+            decoder_position_ids=decoder_position_ids,
+            use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+            cache_position=cache_position,
+        )
+        lm_logits = self.proj_out(outputs[0])
+
+        loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            # move labels to correct device to enable PP
+            labels = labels.to(lm_logits.device)
+            loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.reshape(-1))
+
+        if not return_dict:
+            output = (lm_logits,) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return Seq2SeqLMOutput(
+            loss=loss,
+            logits=lm_logits,
+            past_key_values=outputs.past_key_values,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
+            cross_attentions=outputs.cross_attentions,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            encoder_hidden_states=outputs.encoder_hidden_states,
+            encoder_attentions=outputs.encoder_attentions,
+        )
+    
+
+
 
 
