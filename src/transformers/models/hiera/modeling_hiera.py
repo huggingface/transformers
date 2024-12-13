@@ -1518,7 +1518,7 @@ class HieraBackbone(HieraPreTrainedModel, BackboneMixin):
 
         >>> processor = AutoImageProcessor.from_pretrained("facebook/hiera-tiny-224-hf")
         >>> model = AutoBackbone.from_pretrained(
-        ...     "facebook/hiera-tiny-224-hf", out_features=["stage1", "stage2", "stage3", "stage4"]
+        ...     "facebook/hiera-tiny-224-hf", out_indices=[1, 2, 3, 4]
         ... )
 
         >>> inputs = processor(image, return_tensors="pt")

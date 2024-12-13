@@ -142,8 +142,8 @@ class PvtV2ModelTester(ModelTesterMixin):
         self.parent.assertEqual(len(model.channels), len(config.out_features))
         self.parent.assertListEqual(model.channels, config.hidden_sizes[1:])
 
-        # verify backbone works with out_features=None
-        config.out_features = None
+        # verify backbone works with out_indices=None
+        config.out_indices = None
         model = PvtV2Backbone(config=config)
         model.to(torch_device)
         model.eval()
@@ -397,32 +397,11 @@ class PvtV2BackboneTest(BackboneTesterMixin, unittest.TestCase):
         num_stages = len(config.depths) if hasattr(config, "depths") else config.num_hidden_layers
         expected_stage_names = [f"stage{idx}" for idx in range(1, num_stages + 1)]
         self.assertEqual(config.stage_names, expected_stage_names)
-        self.assertTrue(set(config.out_features).issubset(set(config.stage_names)))
 
-        # Test out_features and out_indices are correctly set
-        # out_features and out_indices both None
-        config = config_class(out_features=None, out_indices=None)
-        self.assertEqual(config.out_features, [config.stage_names[-1]])
+        # Test out_indices are correctly set
+        # out_indices set to None
+        config = config_class(out_indices=None)
         self.assertEqual(config.out_indices, [len(config.stage_names) - 1])
-
-        # out_features and out_indices both set
-        config = config_class(out_features=["stage1", "stage2"], out_indices=[0, 1])
-        self.assertEqual(config.out_features, ["stage1", "stage2"])
-        self.assertEqual(config.out_indices, [0, 1])
-
-        # Only out_features set
-        config = config_class(out_features=["stage2", "stage4"])
-        self.assertEqual(config.out_features, ["stage2", "stage4"])
-        self.assertEqual(config.out_indices, [1, 3])
-
-        # Only out_indices set
-        config = config_class(out_indices=[0, 2])
-        self.assertEqual(config.out_features, [config.stage_names[0], config.stage_names[2]])
-        self.assertEqual(config.out_indices, [0, 2])
-
-        # Error raised when out_indices do not correspond to out_features
-        with self.assertRaises(ValueError):
-            config = config_class(out_features=["stage1", "stage2"], out_indices=[0, 2])
 
     def test_config_save_pretrained(self):
         config_class = self.config_class

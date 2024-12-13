@@ -62,7 +62,7 @@ class UperNetModelTester:
         hidden_act="gelu",
         type_sequence_label_size=10,
         initializer_range=0.02,
-        out_features=["stage2", "stage3", "stage4"],
+        out_indices=[2, 3, 4],
         num_labels=3,
         scope=None,
     ):
@@ -79,7 +79,7 @@ class UperNetModelTester:
         self.hidden_act = hidden_act
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
-        self.out_features = out_features
+        self.out_indices = out_indices
         self.num_labels = num_labels
         self.scope = scope
         self.num_hidden_layers = num_stages
@@ -104,7 +104,7 @@ class UperNetModelTester:
             is_training=self.is_training,
             intermediate_size=self.intermediate_size,
             hidden_act=self.hidden_act,
-            out_features=self.out_features,
+            out_indices=self.out_indices,
         )
 
     def get_config(self):

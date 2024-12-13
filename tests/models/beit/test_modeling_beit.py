@@ -73,7 +73,6 @@ class BeitModelTester:
         num_labels=3,
         scope=None,
         out_indices=[1, 2, 3, 4],
-        out_features=["stage1", "stage2", "stage3", "stage4"],
     ):
         self.parent = parent
         self.vocab_size = vocab_size
@@ -94,7 +93,6 @@ class BeitModelTester:
         self.initializer_range = initializer_range
         self.scope = scope
         self.out_indices = out_indices
-        self.out_features = out_features
         self.num_labels = num_labels
 
         # in BeiT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
@@ -130,7 +128,6 @@ class BeitModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
             out_indices=self.out_indices,
-            out_features=self.out_features,
         )
 
     def create_and_check_model(self, config, pixel_values, labels, pixel_labels):
@@ -147,17 +144,17 @@ class BeitModelTester:
         result = model(pixel_values)
 
         # verify hidden states
-        self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
+        self.parent.assertEqual(len(result.feature_maps), len(config.out_indices))
         expected_height = expected_width = self.image_size // config.patch_size
         self.parent.assertListEqual(
             list(result.feature_maps[0].shape), [self.batch_size, self.hidden_size, expected_height, expected_width]
         )
 
         # verify channels
-        self.parent.assertEqual(len(model.channels), len(config.out_features))
+        self.parent.assertEqual(len(model.channels), len(config.out_indices))
 
-        # verify backbone works with out_features=None
-        config.out_features = None
+        # verify backbone works with out_indices=None
+        config.out_indices = None
         model = BeitBackbone(config=config)
         model.to(torch_device)
         model.eval()

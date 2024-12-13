@@ -658,7 +658,7 @@ class PvtV2Backbone(PvtV2Model, BackboneMixin):
 
         >>> processor = AutoImageProcessor.from_pretrained("OpenGVLab/pvt_v2_b0")
         >>> model = AutoBackbone.from_pretrained(
-        ...     "OpenGVLab/pvt_v2_b0", out_features=["stage1", "stage2", "stage3", "stage4"]
+        ...     "OpenGVLab/pvt_v2_b0", out_indices=[1, 2, 3, 4]
         ... )
 
         >>> inputs = processor(image, return_tensors="pt")

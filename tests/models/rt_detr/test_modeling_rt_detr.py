@@ -170,7 +170,6 @@ class RTDetrModelTester:
             embeddings_size=10,
             hidden_sizes=hidden_sizes,
             depths=[1, 1, 2, 1],
-            out_features=["stage2", "stage3", "stage4"],
             out_indices=[2, 3, 4],
         )
         return RTDetrConfig.from_backbone_configs(

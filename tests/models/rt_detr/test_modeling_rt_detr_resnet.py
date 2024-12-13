@@ -42,7 +42,6 @@ class RTDetrResNetModelTester:
         hidden_act="relu",
         num_labels=3,
         scope=None,
-        out_features=["stage2", "stage3", "stage4"],
         out_indices=[2, 3, 4],
     ):
         self.parent = parent
@@ -58,7 +57,6 @@ class RTDetrResNetModelTester:
         self.num_labels = num_labels
         self.scope = scope
         self.num_stages = len(hidden_sizes)
-        self.out_features = out_features
         self.out_indices = out_indices
 
     def prepare_config_and_inputs(self):
@@ -80,7 +78,6 @@ class RTDetrResNetModelTester:
             depths=self.depths,
             hidden_act=self.hidden_act,
             num_labels=self.num_labels,
-            out_features=self.out_features,
             out_indices=self.out_indices,
         )
 
@@ -91,15 +88,15 @@ class RTDetrResNetModelTester:
         result = model(pixel_values)
 
         # verify feature maps
-        self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
+        self.parent.assertEqual(len(result.feature_maps), len(config.out_indices))
         self.parent.assertListEqual(list(result.feature_maps[0].shape), [self.batch_size, self.hidden_sizes[1], 4, 4])
 
         # verify channels
-        self.parent.assertEqual(len(model.channels), len(config.out_features))
+        self.parent.assertEqual(len(model.channels), len(config.out_indices))
         self.parent.assertListEqual(model.channels, config.hidden_sizes[1:])
 
-        # verify backbone works with out_features=None
-        config.out_features = None
+        # verify backbone works with out_indices=None
+        config.out_indices = None
         model = RTDetrResNetBackbone(config=config)
         model.to(torch_device)
         model.eval()

@@ -120,18 +120,18 @@ class VitDetModelTester:
         result = model(pixel_values)
 
         # verify hidden states
-        self.parent.assertEqual(len(result.feature_maps), len(config.out_features))
+        self.parent.assertEqual(len(result.feature_maps), len(config.out_indices))
         self.parent.assertListEqual(
             list(result.feature_maps[0].shape),
             [self.batch_size, self.hidden_size, self.num_patches_one_direction, self.num_patches_one_direction],
         )
 
         # verify channels
-        self.parent.assertEqual(len(model.channels), len(config.out_features))
+        self.parent.assertEqual(len(model.channels), len(config.out_indices))
         self.parent.assertListEqual(model.channels, [config.hidden_size])
 
-        # verify backbone works with out_features=None
-        config.out_features = None
+        # verify backbone works with out_indices=None
+        config.out_indices = None
         model = VitDetBackbone(config=config)
         model.to(torch_device)
         model.eval()
