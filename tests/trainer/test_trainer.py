@@ -726,41 +726,41 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         model = RegressionModel()
         with tempfile.TemporaryDirectory() as tmp_dir:
             args = TrainingArguments(tmp_dir, learning_rate=0.1, report_to="none")
-        trainer = Trainer(model, args, train_dataset=train_dataset)
-        trainer.train()
-        self.check_trained_model(trainer.model)
+            trainer = Trainer(model, args, train_dataset=train_dataset)
+            trainer.train()
+            self.check_trained_model(trainer.model)
 
-        # Can return tensors.
-        train_dataset.set_format(type="torch", dtype=torch.float32)
-        model = RegressionModel()
-        trainer = Trainer(model, args, train_dataset=train_dataset)
-        trainer.train()
-        self.check_trained_model(trainer.model)
+            # Can return tensors.
+            train_dataset.set_format(type="torch", dtype=torch.float32)
+            model = RegressionModel()
+            trainer = Trainer(model, args, train_dataset=train_dataset)
+            trainer.train()
+            self.check_trained_model(trainer.model)
 
-        # Adding one column not used by the model should have no impact
-        z = np.random.normal(size=(64,)).astype(np.float32)
-        train_dataset = datasets.Dataset.from_dict({"input_x": x, "label": y, "extra": z})
-        model = RegressionModel()
-        trainer = Trainer(model, args, train_dataset=train_dataset)
-        trainer.train()
-        self.check_trained_model(trainer.model)
+            # Adding one column not used by the model should have no impact
+            z = np.random.normal(size=(64,)).astype(np.float32)
+            train_dataset = datasets.Dataset.from_dict({"input_x": x, "label": y, "extra": z})
+            model = RegressionModel()
+            trainer = Trainer(model, args, train_dataset=train_dataset)
+            trainer.train()
+            self.check_trained_model(trainer.model)
 
     def test_model_init(self):
         train_dataset = RegressionDataset()
         with tempfile.TemporaryDirectory() as tmp_dir:
             args = TrainingArguments(tmp_dir, learning_rate=0.1, report_to="none")
-        trainer = Trainer(args=args, train_dataset=train_dataset, model_init=lambda: RegressionModel())
-        trainer.train()
-        self.check_trained_model(trainer.model)
+            trainer = Trainer(args=args, train_dataset=train_dataset, model_init=lambda: RegressionModel())
+            trainer.train()
+            self.check_trained_model(trainer.model)
 
-        # Re-training should restart from scratch, thus lead the same results.
-        trainer.train()
-        self.check_trained_model(trainer.model)
+            # Re-training should restart from scratch, thus lead the same results.
+            trainer.train()
+            self.check_trained_model(trainer.model)
 
-        # Re-training should restart from scratch, thus lead the same results and new seed should be used.
-        trainer.args.seed = 314
-        trainer.train()
-        self.check_trained_model(trainer.model, alternate_seed=True)
+            # Re-training should restart from scratch, thus lead the same results and new seed should be used.
+            trainer.args.seed = 314
+            trainer.train()
+            self.check_trained_model(trainer.model, alternate_seed=True)
 
     @slow
     def test_gradient_accumulation_loss_alignment_with_model_loss(self):
@@ -800,15 +800,15 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
                 tmp_dir,
                 **args_kwargs,
             )
-        trainer = Trainer(
-            model,
-            args,
-            train_dataset=tokenized_dataset["train"],
-            callbacks=[base_loss_callback],
-            data_collator=data_collator,
-        )
-        assert trainer.model_accepts_loss_kwargs
-        trainer.train()
+            trainer = Trainer(
+                model,
+                args,
+                train_dataset=tokenized_dataset["train"],
+                callbacks=[base_loss_callback],
+                data_collator=data_collator,
+            )
+            assert trainer.model_accepts_loss_kwargs
+            trainer.train()
 
         grad_accum_loss_callback = StoreLossCallback()
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -818,42 +818,44 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
                 gradient_accumulation_steps=2,
                 per_device_train_batch_size=4,
             )
-        set_seed(42)
-        model = AutoModelForCausalLM.from_pretrained(model_name)
-        trainer = Trainer(
-            model,
-            args,
-            train_dataset=tokenized_dataset["train"],
-            callbacks=[grad_accum_loss_callback],
-            data_collator=data_collator,
-        )
-        trainer.train()
+            set_seed(42)
+            model = AutoModelForCausalLM.from_pretrained(model_name)
+            trainer = Trainer(
+                model,
+                args,
+                train_dataset=tokenized_dataset["train"],
+                callbacks=[grad_accum_loss_callback],
+                data_collator=data_collator,
+            )
+            trainer.train()
 
-        set_seed(42)
-        model = AutoModelForCausalLM.from_pretrained(model_name)
-        broken_loss_callback = StoreLossCallback()
-        trainer = Trainer(
-            model,
-            args,
-            train_dataset=tokenized_dataset["train"],
-            callbacks=[broken_loss_callback],
-            data_collator=data_collator,
-        )
-        # disable model_accepts_loss_kwargs
-        trainer.model_accepts_loss_kwargs = False
-        trainer.train()
+            set_seed(42)
+            model = AutoModelForCausalLM.from_pretrained(model_name)
+            broken_loss_callback = StoreLossCallback()
+            trainer = Trainer(
+                model,
+                args,
+                train_dataset=tokenized_dataset["train"],
+                callbacks=[broken_loss_callback],
+                data_collator=data_collator,
+            )
+            # disable model_accepts_loss_kwargs
+            trainer.model_accepts_loss_kwargs = False
+            trainer.train()
 
-        # Calculate the difference between the base loss and the grad_accum loss
-        diff_truth = [
-            abs(base - grad) for base, grad in zip(base_loss_callback.losses, grad_accum_loss_callback.losses)
-        ]
-        diff_broken = [abs(base - grad) for base, grad in zip(base_loss_callback.losses, broken_loss_callback.losses)]
+            # Calculate the difference between the base loss and the grad_accum loss
+            diff_truth = [
+                abs(base - grad) for base, grad in zip(base_loss_callback.losses, grad_accum_loss_callback.losses)
+            ]
+            diff_broken = [
+                abs(base - grad) for base, grad in zip(base_loss_callback.losses, broken_loss_callback.losses)
+            ]
 
-        # all diff truth should be quite close
-        self.assertLess(max(diff_truth), 0.01, f"Difference {max(diff_truth)} is not within 0.01")
+            # all diff truth should be quite close
+            self.assertLess(max(diff_truth), 0.01, f"Difference {max(diff_truth)} is not within 0.01")
 
-        # max diff broken should be very off
-        self.assertGreater(max(diff_broken), 3, f"Difference {max(diff_broken)} is not greater than 3")
+            # max diff broken should be very off
+            self.assertGreater(max(diff_broken), 3, f"Difference {max(diff_broken)} is not greater than 3")
 
     @slow
     def test_gradient_accumulation_loss_alignment_with_loss_func(self):
@@ -899,15 +901,15 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
                 tmp_dir,
                 **args_kwargs,
             )
-        trainer = Trainer(
-            model,
-            args,
-            train_dataset=tokenized_dataset["train"],
-            callbacks=[base_loss_callback],
-            compute_loss_func=loss_fn,
-            data_collator=data_collator,
-        )
-        trainer.train()
+            trainer = Trainer(
+                model,
+                args,
+                train_dataset=tokenized_dataset["train"],
+                callbacks=[base_loss_callback],
+                compute_loss_func=loss_fn,
+                data_collator=data_collator,
+            )
+            trainer.train()
 
         grad_accum_loss_callback = StoreLossCallback()
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -917,43 +919,45 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
                 gradient_accumulation_steps=2,
                 per_device_train_batch_size=4,
             )
-        set_seed(42)
-        model = AutoModelForCausalLM.from_pretrained(model_name)
-        trainer = Trainer(
-            model,
-            args,
-            train_dataset=tokenized_dataset["train"],
-            callbacks=[grad_accum_loss_callback],
-            compute_loss_func=loss_fn,
-            data_collator=data_collator,
-        )
-        trainer.train()
+            set_seed(42)
+            model = AutoModelForCausalLM.from_pretrained(model_name)
+            trainer = Trainer(
+                model,
+                args,
+                train_dataset=tokenized_dataset["train"],
+                callbacks=[grad_accum_loss_callback],
+                compute_loss_func=loss_fn,
+                data_collator=data_collator,
+            )
+            trainer.train()
 
-        set_seed(42)
-        model = AutoModelForCausalLM.from_pretrained(model_name)
-        broken_loss_callback = StoreLossCallback()
-        loss_fn = partial(compute_loss, vocab_size=model.config.vocab_size, disable_num_items_in_batch=True)
-        trainer = Trainer(
-            model,
-            args,
-            train_dataset=tokenized_dataset["train"],
-            callbacks=[broken_loss_callback],
-            compute_loss_func=loss_fn,
-            data_collator=data_collator,
-        )
-        trainer.train()
+            set_seed(42)
+            model = AutoModelForCausalLM.from_pretrained(model_name)
+            broken_loss_callback = StoreLossCallback()
+            loss_fn = partial(compute_loss, vocab_size=model.config.vocab_size, disable_num_items_in_batch=True)
+            trainer = Trainer(
+                model,
+                args,
+                train_dataset=tokenized_dataset["train"],
+                callbacks=[broken_loss_callback],
+                compute_loss_func=loss_fn,
+                data_collator=data_collator,
+            )
+            trainer.train()
 
-        # Calculate the difference between the base loss and the grad_accum loss
-        diff_truth = [
-            abs(base - grad) for base, grad in zip(base_loss_callback.losses, grad_accum_loss_callback.losses)
-        ]
-        diff_broken = [abs(base - grad) for base, grad in zip(base_loss_callback.losses, broken_loss_callback.losses)]
+            # Calculate the difference between the base loss and the grad_accum loss
+            diff_truth = [
+                abs(base - grad) for base, grad in zip(base_loss_callback.losses, grad_accum_loss_callback.losses)
+            ]
+            diff_broken = [
+                abs(base - grad) for base, grad in zip(base_loss_callback.losses, broken_loss_callback.losses)
+            ]
 
-        # all diff truth should be quite close
-        self.assertLess(max(diff_truth), 0.01, f"Difference {max(diff_truth)} is not within 0.01")
+            # all diff truth should be quite close
+            self.assertLess(max(diff_truth), 0.01, f"Difference {max(diff_truth)} is not within 0.01")
 
-        # max diff broken should be very off
-        self.assertGreater(max(diff_broken), 3, f"Difference {max(diff_broken)} is not greater than 3")
+            # max diff broken should be very off
+            self.assertGreater(max(diff_broken), 3, f"Difference {max(diff_broken)} is not greater than 3")
 
     def test_gradient_accumulation(self):
         # Training with half the batch size but accumulation steps as 2 should give the same training losses.
@@ -1011,16 +1015,16 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         train_dataset = RegressionDataset()
         with tempfile.TemporaryDirectory() as tmp_dir:
             args = TrainingArguments(tmp_dir, report_to="none")
-        model = RegressionModel()
-        optimizer = torch.optim.SGD(model.parameters(), lr=1.0)
-        lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda x: 1.0)
-        trainer = Trainer(model, args, train_dataset=train_dataset, optimizers=(optimizer, lr_scheduler))
-        trainer.train()
+            model = RegressionModel()
+            optimizer = torch.optim.SGD(model.parameters(), lr=1.0)
+            lr_scheduler = torch.optim.lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda x: 1.0)
+            trainer = Trainer(model, args, train_dataset=train_dataset, optimizers=(optimizer, lr_scheduler))
+            trainer.train()
 
-        (a, b) = self.default_trained_model
-        self.assertFalse(torch.allclose(trainer.model.a, a))
-        self.assertFalse(torch.allclose(trainer.model.b, b))
-        self.assertEqual(trainer.optimizer.state_dict()["param_groups"][0]["lr"], 1.0)
+            (a, b) = self.default_trained_model
+            self.assertFalse(torch.allclose(trainer.model.a, a))
+            self.assertFalse(torch.allclose(trainer.model.b, b))
+            self.assertEqual(trainer.optimizer.state_dict()["param_groups"][0]["lr"], 1.0)
 
     def test_lr_scheduler_kwargs(self):
         # test scheduler kwargs passed via TrainingArguments
@@ -1037,19 +1041,19 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
                 warmup_steps=num_warmup_steps,
                 report_to="none",
             )
-        trainer = Trainer(model, args, train_dataset=train_dataset)
-        trainer.create_optimizer_and_scheduler(num_training_steps=num_steps)
+            trainer = Trainer(model, args, train_dataset=train_dataset)
+            trainer.create_optimizer_and_scheduler(num_training_steps=num_steps)
 
-        # Checking that the scheduler was created
-        self.assertIsNotNone(trainer.lr_scheduler)
+            # Checking that the scheduler was created
+            self.assertIsNotNone(trainer.lr_scheduler)
 
-        # Checking that the correct args were passed
-        sched1 = trainer.lr_scheduler
-        sched2 = get_polynomial_decay_schedule_with_warmup(
-            trainer.optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_steps, **extra_kwargs
-        )
-        self.assertEqual(sched1.lr_lambdas[0].args, sched2.lr_lambdas[0].args)
-        self.assertEqual(sched1.lr_lambdas[0].keywords, sched2.lr_lambdas[0].keywords)
+            # Checking that the correct args were passed
+            sched1 = trainer.lr_scheduler
+            sched2 = get_polynomial_decay_schedule_with_warmup(
+                trainer.optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_steps, **extra_kwargs
+            )
+            self.assertEqual(sched1.lr_lambdas[0].args, sched2.lr_lambdas[0].args)
+            self.assertEqual(sched1.lr_lambdas[0].keywords, sched2.lr_lambdas[0].keywords)
 
     def test_cosine_with_min_lr_scheduler(self):
         train_dataset = RegressionDataset()
@@ -1065,16 +1069,16 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
                 warmup_steps=num_warmup_steps,
                 report_to="none",
             )
-        trainer = Trainer(model, args, train_dataset=train_dataset)
-        trainer.create_optimizer_and_scheduler(num_training_steps=num_steps)
+            trainer = Trainer(model, args, train_dataset=train_dataset)
+            trainer.create_optimizer_and_scheduler(num_training_steps=num_steps)
 
-        # Checking that the scheduler was created
-        self.assertIsNotNone(trainer.lr_scheduler)
+            # Checking that the scheduler was created
+            self.assertIsNotNone(trainer.lr_scheduler)
 
-        # Check the last learning rate
-        for _ in range(num_steps):
-            trainer.lr_scheduler.step()
-        self.assertEqual(trainer.lr_scheduler.get_last_lr()[0], 1e-5)
+            # Check the last learning rate
+            for _ in range(num_steps):
+                trainer.lr_scheduler.step()
+            self.assertEqual(trainer.lr_scheduler.get_last_lr()[0], 1e-5)
 
     def test_reduce_lr_on_plateau_args(self):
         # test passed arguments for a custom ReduceLROnPlateau scheduler
@@ -1087,18 +1091,22 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
                 metric_for_best_model="eval_loss",
                 report_to="none",
             )
-        model = RegressionModel()
-        optimizer = torch.optim.SGD(model.parameters(), lr=1.0)
-        lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.2, patience=5, cooldown=2)
-        trainer = Trainer(
-            model, args, train_dataset=train_dataset, eval_dataset=eval_dataset, optimizers=(optimizer, lr_scheduler)
-        )
-        trainer.train()
+            model = RegressionModel()
+            optimizer = torch.optim.SGD(model.parameters(), lr=1.0)
+            lr_scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.2, patience=5, cooldown=2)
+            trainer = Trainer(
+                model,
+                args,
+                train_dataset=train_dataset,
+                eval_dataset=eval_dataset,
+                optimizers=(optimizer, lr_scheduler),
+            )
+            trainer.train()
 
-        self.assertIsInstance(trainer.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau)
-        self.assertEqual(trainer.lr_scheduler.factor, 0.2)
-        self.assertEqual(trainer.lr_scheduler.patience, 5)
-        self.assertEqual(trainer.lr_scheduler.cooldown, 2)
+            self.assertIsInstance(trainer.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau)
+            self.assertEqual(trainer.lr_scheduler.factor, 0.2)
+            self.assertEqual(trainer.lr_scheduler.patience, 5)
+            self.assertEqual(trainer.lr_scheduler.cooldown, 2)
 
     def test_reduce_lr_on_plateau(self):
         # test the ReduceLROnPlateau scheduler
@@ -1123,30 +1131,30 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
                 learning_rate=0.2,
                 report_to="none",
             )
-        model = RegressionModel()
-        trainer = TrainerWithLRLogs(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
-        trainer.train()
+            model = RegressionModel()
+            trainer = TrainerWithLRLogs(model, args, train_dataset=train_dataset, eval_dataset=eval_dataset)
+            trainer.train()
 
-        self.assertIsInstance(trainer.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau)
-        patience = trainer.lr_scheduler.patience
+            self.assertIsInstance(trainer.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau)
+            patience = trainer.lr_scheduler.patience
 
-        logs = trainer.state.log_history[1:]
-        best_loss = logs[0]["eval_loss"]
-        bad_epochs = 0
-        for i, log in enumerate(logs[:-1]):  # Compare learning rate to next epoch's
-            loss = log["eval_loss"]
-            just_decreased = False
-            if loss > best_loss:
-                bad_epochs += 1
-                if bad_epochs > patience:
-                    self.assertLess(logs[i + 1]["learning_rate"], log["learning_rate"])
-                    just_decreased = True
+            logs = trainer.state.log_history[1:]
+            best_loss = logs[0]["eval_loss"]
+            bad_epochs = 0
+            for i, log in enumerate(logs[:-1]):  # Compare learning rate to next epoch's
+                loss = log["eval_loss"]
+                just_decreased = False
+                if loss > best_loss:
+                    bad_epochs += 1
+                    if bad_epochs > patience:
+                        self.assertLess(logs[i + 1]["learning_rate"], log["learning_rate"])
+                        just_decreased = True
+                        bad_epochs = 0
+                else:
+                    best_loss = loss
                     bad_epochs = 0
-            else:
-                best_loss = loss
-                bad_epochs = 0
-            if not just_decreased:
-                self.assertEqual(logs[i + 1]["learning_rate"], log["learning_rate"])
+                if not just_decreased:
+                    self.assertEqual(logs[i + 1]["learning_rate"], log["learning_rate"])
 
     def test_adafactor_lr_none(self):
         # test the special case where lr=None, since Trainer can't not have lr_scheduler
@@ -1156,16 +1164,18 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         train_dataset = RegressionDataset()
         with tempfile.TemporaryDirectory() as tmp_dir:
             args = TrainingArguments(tmp_dir, report_to="none")
-        model = RegressionModel()
-        optimizer = Adafactor(model.parameters(), scale_parameter=True, relative_step=True, warmup_init=True, lr=None)
-        lr_scheduler = AdafactorSchedule(optimizer)
-        trainer = Trainer(model, args, train_dataset=train_dataset, optimizers=(optimizer, lr_scheduler))
-        trainer.train()
+            model = RegressionModel()
+            optimizer = Adafactor(
+                model.parameters(), scale_parameter=True, relative_step=True, warmup_init=True, lr=None
+            )
+            lr_scheduler = AdafactorSchedule(optimizer)
+            trainer = Trainer(model, args, train_dataset=train_dataset, optimizers=(optimizer, lr_scheduler))
+            trainer.train()
 
-        (a, b) = self.default_trained_model
-        self.assertFalse(torch.allclose(trainer.model.a, a))
-        self.assertFalse(torch.allclose(trainer.model.b, b))
-        self.assertGreater(trainer.optimizer.state_dict()["param_groups"][0]["lr"], 0)
+            (a, b) = self.default_trained_model
+            self.assertFalse(torch.allclose(trainer.model.a, a))
+            self.assertFalse(torch.allclose(trainer.model.b, b))
+            self.assertGreater(trainer.optimizer.state_dict()["param_groups"][0]["lr"], 0)
 
     @require_torch_accelerator
     @require_torch_bf16
@@ -1784,8 +1794,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             # Check this works
             _ = trainer.train()
 
-        for name, param in tiny_llama.named_parameters():
-            self.assertFalse(torch.allclose(param, previous_params[name].to(param.device), rtol=1e-12, atol=1e-12))
+            for name, param in tiny_llama.named_parameters():
+                self.assertFalse(torch.allclose(param, previous_params[name].to(param.device), rtol=1e-12, atol=1e-12))
 
     @require_lomo
     @require_torch_gpu
