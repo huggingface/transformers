@@ -134,6 +134,8 @@ class ModernBertConfig(PretrainedConfig):
         classifier_bias=False,
         classifier_activation="gelu",
         deterministic_flash_attn=False,
+        sparse_prediction=False,
+        sparse_pred_ignore_index=-100,
         **kwargs,
     ):
         super().__init__(
@@ -176,6 +178,8 @@ class ModernBertConfig(PretrainedConfig):
         self.classifier_norm = classifier_norm
         self.classifier_activation = classifier_activation
         self.deterministic_flash_attn = deterministic_flash_attn
+        self.sparse_prediction = sparse_prediction
+        self.sparse_pred_ignore_index = sparse_pred_ignore_index
 
         if unpad_inputs is None:
             self.unpad_inputs = self._attn_implementation == "flash_attention_2"

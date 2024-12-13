@@ -1102,14 +1102,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
 class ModernBertForMaskedLM(ModernBertPreTrainedModel):
     _tied_weights_keys = ["decoder.weight"]
 
-    def __init__(
-        self,
-        config: ModernBertConfig,
-        pad_logits: bool = True,
-        pad_logits_no_grad: Optional[bool] = None,
-        sparse_prediction: bool = True,
-        sparse_pred_ignore_index: int = -100,
-    ):
+    def __init__(self, config: ModernBertConfig):
         super().__init__(config)
         self.config = config
         self.model = ModernBertModel(config)
@@ -1122,10 +1115,8 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         self.decoder = nn.Linear(decoder_weights.size(1), decoder_weights.size(0), bias=config.decoder_bias)
         self.decoder.weight = decoder_weights
 
-        self.pad_logits = pad_logits
-        self.pad_logits_no_grad = pad_logits_no_grad if pad_logits_no_grad is not None else self.config.unpad_no_grad
-        self.sparse_prediction = sparse_prediction
-        self.sparse_pred_ignore_index = sparse_pred_ignore_index
+        self.sparse_prediction = self.config.sparse_prediction
+        self.sparse_pred_ignore_index = self.config.sparse_pred_ignore_index
         # Initialize weights and apply final processing
         self._init_weights(reset_params=False)
 
@@ -1214,7 +1205,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
             loss = self.loss_function(logits, labels, vocab_size=self.config.vocab_size)
 
         if self.config.unpad_inputs:
-            if self.pad_logits_no_grad:
+            if self.config.unpad_no_grad:
                 logits, _ = self._pad_outputs_no_grad(logits, indices, batch_size, seq_len)
             else:
                 logits, _ = self._pad_outputs(logits, indices, batch_size, seq_len)
