@@ -126,7 +126,7 @@ class Kosmos2_5Processor(ProcessorMixin):
                 text = [prompt + text]
             else:
                 text = [prompt + t for t in text]
-            input = self.tokenizer(text, **output_kwargs["text_kwargs"], **output_kwargs["common_kwargs"])
+            input = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
             batch_size, seq_len = input.input_ids.shape
             image_embeds_position_mask = [0, -1] + [1] * num_image_tokens + [-1]
