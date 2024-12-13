@@ -19,13 +19,39 @@ Processor class for Kosmos2_5.
 from typing import List, Optional, Union
 
 from ...image_processing_utils import BatchFeature
-from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import PaddingStrategy, TextInput, TruncationStrategy
-from ...utils import TensorType, is_torch_available
+from ...image_utils import ImageInput
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
+from ...tokenization_utils_base import TextInput
+from ...utils import is_torch_available
 
 
 if is_torch_available():
     import torch
+
+
+class Kosmos2_5ImagesKwargs(ImagesKwargs, total=False):
+    max_patches: Optional[int]
+    num_image_tokens: Optional[int]
+
+
+class Kosmos2_5ProcessorKwargs(ProcessingKwargs, total=False):
+    text_kwargs: TextKwargs
+    images_kwargs: Kosmos2_5ImagesKwargs
+    _defaults = {
+        "text_kwargs": {
+            "padding": True,
+            "truncation": True,
+            "max_length": None,
+            "stride": 0,
+            "pad_to_multiple_of": None,
+            "return_attention_mask": None,
+            "return_tensors": "pt",
+        },
+        "images_kwargs": {
+            "max_patches": 4096,
+            "num_image_tokens": 2048,
+        },
+    }
 
 
 class Kosmos2_5Processor(ProcessorMixin):
@@ -58,18 +84,11 @@ class Kosmos2_5Processor(ProcessorMixin):
 
     def __call__(
         self,
-        images=None,
+        images: ImageInput = None,
         text: Union[TextInput, List[TextInput]] = None,
-        padding: Union[bool, str, PaddingStrategy] = True,
-        truncation: Union[bool, str, TruncationStrategy] = True,
-        max_length: Optional[int] = None,
-        max_patches: Optional[int] = 4096,
-        num_image_tokens: Optional[int] = 2048,
-        stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        return_attention_mask: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = "pt",
-        **kwargs,
+        audio=None,
+        videos=None,
+        **kwargs: Unpack[Kosmos2_5ProcessorKwargs],
     ) -> BatchFeature:
         """
         This method uses [`Kosmos2_5ImageProcessor.preprocess`] method to prepare image(s) for the model, and
@@ -84,6 +103,23 @@ class Kosmos2_5Processor(ProcessorMixin):
 
         if images is None:
             raise ValueError("Kosmos2_5Processor requires images to be passed.")
+
+        output_kwargs = self._merge_kwargs(
+            Kosmos2_5ProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+
+        max_patches = output_kwargs["images_kwargs"].setdefault("max_patches", None)
+        num_image_tokens = output_kwargs["images_kwargs"].setdefault("num_image_tokens", None)
+
+        padding = output_kwargs["text_kwargs"].setdefault("padding", None)
+        truncation = output_kwargs["text_kwargs"].setdefault("truncation", None)
+        max_length = output_kwargs["text_kwargs"].setdefault("max_length", None)
+        stride = output_kwargs["text_kwargs"].setdefault("stride", None)
+        pad_to_multiple_of = output_kwargs["text_kwargs"].setdefault("pad_to_multiple_of", None)
+        return_attention_mask = output_kwargs["text_kwargs"].setdefault("return_attention_mask", None)
+        return_tensors = output_kwargs["text_kwargs"].setdefault("return_tensors", None)
 
         encoding = BatchFeature()
 
