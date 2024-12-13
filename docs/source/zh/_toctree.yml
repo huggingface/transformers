@@ -25,6 +25,8 @@
     title: 分享您的模型
   - local: agents
     title: 智能体和工具
+  - local: agents_advanced
+    title: 智能体，超强版 - 多智能体、外部工具等
   - local: llm_tutorial
     title: 使用LLMs进行生成
   title: 教程
