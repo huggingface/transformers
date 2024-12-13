@@ -29,7 +29,6 @@ logger = logging.getLogger(__name__)
 @add_start_docstrings(TrainingArguments.__doc__)
 class Seq2SeqTrainingArguments(TrainingArguments):
     """
-    Args:
         sortish_sampler (`bool`, *optional*, defaults to `False`):
             Whether to use a *sortish sampler* or not. Only possible if the underlying datasets are *Seq2SeqDataset*
             for now but will become generally available in the near future.
