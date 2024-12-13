@@ -114,7 +114,7 @@ class Kosmos2_5Processor(ProcessorMixin):
         encoding = BatchFeature()
 
         if images is not None:
-            image_encoding = self.image_processor(images, **output_kwargs["images_kwargs"], **output_kwargs["common_kwargs"])
+            image_encoding = self.image_processor(images, **output_kwargs["images_kwargs"])
             image_encoding.pop("rows")
             image_encoding.pop("cols")
             encoding.update(image_encoding)
