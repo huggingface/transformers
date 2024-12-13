@@ -2,7 +2,7 @@ from ...configuration_utils import PretrainedConfig
 from ..phi.modeling_phi import PhiAttention, PhiFlashAttention2, PhiSdpaAttention, PhiMLP, PhiRotaryEmbedding
 from ..llama.modeling_llama import LlamaDecoderLayer, LlamaModel
 from ..mistral.modeling_mistral import MistralMLP
-from ..whisper.modeling_whisper import WhisperEncoder
+from ..whisper.modeling_whisper import WhisperModel
 
 from typing import List, Optional, Tuple, Union
 from ...processing_utils import Unpack
@@ -1181,3 +1181,12 @@ class MoonshineDecoder(LlamaModel):
             attentions=all_self_attns,
             cross_attentions=all_cross_attentions,
         )
+    
+
+class MoonshineModel(WhisperModel):
+    def __init__(self, config: MoonshineConfig):
+        super().__init__(config)
+        self.encoder = MoonshineEncoder(config)
+        self.decoder = MoonshineDecoder(config)
+
+
