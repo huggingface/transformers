@@ -65,17 +65,6 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
-    def prepare_image_inputs(self):
-        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
-        or a list of PyTorch tensors if one specifies torchify=True.
-        """
-
-        image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
-
-        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
-
-        return image_inputs
-
     def test_image_procesor_load_save_reload(self):
         # make sure load from Hub repo. -> save -> reload locally work
         image_processor = Kosmos2_5ImageProcessor.from_pretrained("microsoft/kosmos-2.5")
