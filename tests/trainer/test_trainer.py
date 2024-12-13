@@ -526,7 +526,15 @@ if is_torch_available():
             return self.ln2(x + h + self.bias)
 
     def get_regression_trainer(
-        a=0, b=0, double_output=False, train_len=64, eval_len=64, pretrained=True, keep_report_to=False, **kwargs
+        a=0,
+        b=0,
+        double_output=False,
+        train_len=64,
+        eval_len=64,
+        pretrained=True,
+        keep_report_to=False,
+        output_dir=None,
+        **kwargs,
     ):
         label_names = kwargs.get("label_names", None)
         gradient_checkpointing = kwargs.get("gradient_checkpointing", False)
@@ -553,9 +561,8 @@ if is_torch_available():
         data_collator = kwargs.pop("data_collator", None)
         optimizers = kwargs.pop("optimizers", (None, None))
         preprocess_logits_for_metrics = kwargs.pop("preprocess_logits_for_metrics", None)
-        kwargs.pop("output_dir")  # remove output_dir from kwargs
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            args = RegressionTrainingArguments(tmp_dir, a=a, b=b, keep_report_to=keep_report_to, **kwargs)
+        args = RegressionTrainingArguments(output_dir, a=a, b=b, keep_report_to=keep_report_to, **kwargs)
+        assert output_dir is not None, "output_dir should be specified for testing"
         return Trainer(
             model,
             args,
@@ -678,13 +685,15 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         args = TrainingArguments("..")
         self.n_epochs = args.num_train_epochs
         self.batch_size = args.train_batch_size
-        trainer = get_regression_trainer(learning_rate=0.1)
-        trainer.train()
-        self.default_trained_model = (trainer.model.a, trainer.model.b)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(learning_rate=0.1, output_dir=tmp_dir)
+            trainer.train()
+            self.default_trained_model = (trainer.model.a, trainer.model.b)
 
-        trainer = get_regression_trainer(learning_rate=0.1, seed=314)
-        trainer.train()
-        self.alternate_trained_model = (trainer.model.a, trainer.model.b)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(learning_rate=0.1, seed=314, output_dir=tmp_dir)
+            trainer.train()
+            self.alternate_trained_model = (trainer.model.a, trainer.model.b)
 
     def check_trained_model(self, model, alternate_seed=False):
         # Checks a training seeded with learning_rate = 0.1
@@ -694,14 +703,16 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
 
     def test_reproducible_training(self):
         # Checks that training worked, model trained and seed made a reproducible training.
-        trainer = get_regression_trainer(learning_rate=0.1)
-        trainer.train()
-        self.check_trained_model(trainer.model)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(learning_rate=0.1, output_dir=tmp_dir)
+            trainer.train()
+            self.check_trained_model(trainer.model)
 
         # Checks that a different seed gets different (reproducible) results.
-        trainer = get_regression_trainer(learning_rate=0.1, seed=314)
-        trainer.train()
-        self.check_trained_model(trainer.model, alternate_seed=True)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(learning_rate=0.1, seed=314, output_dir=tmp_dir)
+            trainer.train()
+            self.check_trained_model(trainer.model, alternate_seed=True)
 
     def test_trainer_with_datasets(self):
         import datasets
@@ -946,50 +957,55 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
 
     def test_gradient_accumulation(self):
         # Training with half the batch size but accumulation steps as 2 should give the same training losses.
-        trainer = get_regression_trainer(
-            gradient_accumulation_steps=2, per_device_train_batch_size=4, learning_rate=0.1
-        )
-        trainer.train()
-        self.check_trained_model(trainer.model)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(
+                gradient_accumulation_steps=2, per_device_train_batch_size=4, learning_rate=0.1, output_dir=tmp_dir
+            )
+            trainer.train()
+            self.check_trained_model(trainer.model)
 
     def test_gradient_checkpointing(self):
-        trainer = get_regression_trainer(
-            per_device_train_batch_size=1,
-            learning_rate=0.1,
-            gradient_checkpointing=True,
-            gradient_checkpointing_kwargs={"use_reentrant": False},
-        )
-        previous_params = {k: v.detach().clone() for k, v in trainer.model.named_parameters()}
-
-        trainer.train()
-
-        # Check if model weights have been updated
-        for k, v in trainer.model.named_parameters():
-            self.assertFalse(
-                torch.allclose(previous_params[k], v, rtol=1e-4, atol=1e-4),
-                f"Model weights for {k} have not been updated",
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(
+                per_device_train_batch_size=1,
+                learning_rate=0.1,
+                gradient_checkpointing=True,
+                gradient_checkpointing_kwargs={"use_reentrant": False},
+                output_dir=tmp_dir,
             )
+            previous_params = {k: v.detach().clone() for k, v in trainer.model.named_parameters()}
+
+            trainer.train()
+
+            # Check if model weights have been updated
+            for k, v in trainer.model.named_parameters():
+                self.assertFalse(
+                    torch.allclose(previous_params[k], v, rtol=1e-4, atol=1e-4),
+                    f"Model weights for {k} have not been updated",
+                )
 
     def test_training_loss(self):
         n_gpus = max(1, backend_device_count(torch_device))
 
         # With even logs
-        trainer = get_regression_trainer(logging_steps=64 / (8 * n_gpus))
-        trainer.train()
-        log_history = trainer.state.log_history
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(logging_steps=64 / (8 * n_gpus), output_dir=tmp_dir)
+            trainer.train()
+            log_history = trainer.state.log_history
 
-        losses = [log["loss"] for log in log_history if "loss" in log]
-        train_loss = log_history[-1]["train_loss"]
-        self.assertAlmostEqual(sum(losses) / len(losses), train_loss, places=4)
+            losses = [log["loss"] for log in log_history if "loss" in log]
+            train_loss = log_history[-1]["train_loss"]
+            self.assertAlmostEqual(sum(losses) / len(losses), train_loss, places=4)
 
         # With uneven logs
-        trainer = get_regression_trainer(logging_steps=5)
-        trainer.train()
-        log_history = trainer.state.log_history
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(logging_steps=5, output_dir=tmp_dir)
+            trainer.train()
+            log_history = trainer.state.log_history
 
-        # Training loss should be the same as before
-        new_train_loss = log_history[-1]["train_loss"]
-        self.assertAlmostEqual(train_loss, new_train_loss, places=4)
+            # Training loss should be the same as before
+            new_train_loss = log_history[-1]["train_loss"]
+            self.assertAlmostEqual(train_loss, new_train_loss, places=4)
 
     def test_custom_optimizer(self):
         train_dataset = RegressionDataset()
@@ -1155,13 +1171,17 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
     @require_torch_bf16
     def test_mixed_bf16(self):
         # very basic test
-        trainer = get_regression_trainer(learning_rate=0.1, bf16=True)
-        trainer.train()
-        self.check_trained_model(trainer.model)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(learning_rate=0.1, bf16=True, output_dir=tmp_dir)
+            trainer.train()
+            self.check_trained_model(trainer.model)
 
         # --bf16 --half_precision_backend apex can't be used together
-        with self.assertRaises(ValueError):
-            trainer = get_regression_trainer(learning_rate=0.1, bf16=True, half_precision_backend="apex")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with self.assertRaises(ValueError):
+                trainer = get_regression_trainer(
+                    learning_rate=0.1, bf16=True, half_precision_backend="apex", output_dir=tmp_dir
+                )
 
         # will add more specific tests once there are some bugs to fix
 
@@ -1170,9 +1190,10 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
     @require_torch_tf32
     def test_tf32(self):
         # very basic test
-        trainer = get_regression_trainer(learning_rate=0.1, tf32=True)
-        trainer.train()
-        self.check_trained_model(trainer.model)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(learning_rate=0.1, tf32=True, output_dir=tmp_dir)
+            trainer.train()
+            self.check_trained_model(trainer.model)
 
 
 @require_torch
@@ -1215,54 +1236,64 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertEqual(len(result.predictions), 2)
 
     def test_training_arguments_are_left_untouched(self):
-        trainer = get_regression_trainer()
-        trainer.train()
         with tempfile.TemporaryDirectory() as tmp_dir:
-            args = TrainingArguments(tmp_dir, report_to=[])
-        dict1, dict2 = args.to_dict(), trainer.args.to_dict()
-        for key in dict1.keys():
-            # Logging dir can be slightly different as they default to something with the time.
-            if key != "logging_dir":
-                self.assertEqual(dict1[key], dict2[key])
+            trainer = get_regression_trainer(output_dir=tmp_dir)
+            trainer.train()
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                args = TrainingArguments(tmp_dir, report_to=[])
+            dict1, dict2 = args.to_dict(), trainer.args.to_dict()
+            for key in dict1.keys():
+                # Logging dir can be slightly different as they default to something with the time.
+                if key != "logging_dir":
+                    self.assertEqual(dict1[key], dict2[key])
 
     def test_number_of_steps_in_training(self):
         # Regular training has n_epochs * len(train_dl) steps
-        trainer = get_regression_trainer(learning_rate=0.1)
-        train_output = trainer.train()
-        self.assertEqual(train_output.global_step, self.n_epochs * 64 / self.batch_size)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(learning_rate=0.1, output_dir=tmp_dir)
+            train_output = trainer.train()
+            self.assertEqual(train_output.global_step, self.n_epochs * 64 / self.batch_size)
 
-        # Check passing num_train_epochs works (and a float version too):
-        trainer = get_regression_trainer(learning_rate=0.1, num_train_epochs=1.5)
-        train_output = trainer.train()
-        self.assertEqual(train_output.global_step, int(1.5 * 64 / self.batch_size))
+            # Check passing num_train_epochs works (and a float version too):
+            trainer = get_regression_trainer(learning_rate=0.1, num_train_epochs=1.5, output_dir=tmp_dir)
+            train_output = trainer.train()
+            self.assertEqual(train_output.global_step, int(1.5 * 64 / self.batch_size))
 
-        # If we pass a max_steps, num_train_epochs is ignored
-        trainer = get_regression_trainer(learning_rate=0.1, max_steps=10)
-        train_output = trainer.train()
-        self.assertEqual(train_output.global_step, 10)
+            # If we pass a max_steps, num_train_epochs is ignored
+            trainer = get_regression_trainer(learning_rate=0.1, max_steps=10, output_dir=tmp_dir)
+            train_output = trainer.train()
+            self.assertEqual(train_output.global_step, 10)
 
     @require_torch_bf16
     @require_intel_extension_for_pytorch
     def test_number_of_steps_in_training_with_ipex(self):
-        for mix_bf16 in [True, False]:
-            # Regular training has n_epochs * len(train_dl) steps
-            trainer = get_regression_trainer(learning_rate=0.1, use_ipex=True, bf16=mix_bf16, use_cpu=True)
-            train_output = trainer.train()
-            self.assertEqual(train_output.global_step, self.n_epochs * 64 / trainer.args.train_batch_size)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            for mix_bf16 in [True, False]:
+                # Regular training has n_epochs * len(train_dl) steps
+                trainer = get_regression_trainer(
+                    learning_rate=0.1, use_ipex=True, bf16=mix_bf16, use_cpu=True, output_dir=tmp_dir
+                )
+                train_output = trainer.train()
+                self.assertEqual(train_output.global_step, self.n_epochs * 64 / trainer.args.train_batch_size)
 
-            # Check passing num_train_epochs works (and a float version too):
-            trainer = get_regression_trainer(
-                learning_rate=0.1, num_train_epochs=1.5, use_ipex=True, bf16=mix_bf16, use_cpu=True
-            )
-            train_output = trainer.train()
-            self.assertEqual(train_output.global_step, int(1.5 * 64 / trainer.args.train_batch_size))
+                # Check passing num_train_epochs works (and a float version too):
+                trainer = get_regression_trainer(
+                    learning_rate=0.1,
+                    num_train_epochs=1.5,
+                    use_ipex=True,
+                    bf16=mix_bf16,
+                    use_cpu=True,
+                    output_dir=tmp_dir,
+                )
+                train_output = trainer.train()
+                self.assertEqual(train_output.global_step, int(1.5 * 64 / trainer.args.train_batch_size))
 
-            # If we pass a max_steps, num_train_epochs is ignored
-            trainer = get_regression_trainer(
-                learning_rate=0.1, max_steps=10, use_ipex=True, bf16=mix_bf16, use_cpu=True
-            )
-            train_output = trainer.train()
-            self.assertEqual(train_output.global_step, 10)
+                # If we pass a max_steps, num_train_epochs is ignored
+                trainer = get_regression_trainer(
+                    learning_rate=0.1, max_steps=10, use_ipex=True, bf16=mix_bf16, use_cpu=True, output_dir=tmp_dir
+                )
+                train_output = trainer.train()
+                self.assertEqual(train_output.global_step, 10)
 
     def test_torch_compile_loss_func_compatibility(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
@@ -1550,32 +1581,40 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             n_gpu = max(1, backend_device_count(torch_device))
         else:
             n_gpu = 1
-        trainer = get_regression_trainer(learning_rate=0.1, per_device_train_batch_size=16)
-        self.assertEqual(trainer.get_train_dataloader().total_batch_size, 16 * n_gpu)
-        trainer = get_regression_trainer(learning_rate=0.1, per_device_eval_batch_size=16)
-        self.assertEqual(trainer.get_eval_dataloader().total_batch_size, 16 * n_gpu)
 
-        # Check drop_last works
-        trainer = get_regression_trainer(
-            train_len=66, eval_len=74, learning_rate=0.1, per_device_train_batch_size=16, per_device_eval_batch_size=32
-        )
-        self.assertEqual(len(trainer.get_train_dataloader()), 66 // (16 * n_gpu) + 1)
-        self.assertEqual(len(trainer.get_eval_dataloader()), 74 // (32 * n_gpu) + 1)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(learning_rate=0.1, per_device_train_batch_size=16, output_dir=tmp_dir)
+            self.assertEqual(trainer.get_train_dataloader().total_batch_size, 16 * n_gpu)
+            trainer = get_regression_trainer(learning_rate=0.1, per_device_eval_batch_size=16, output_dir=tmp_dir)
+            self.assertEqual(trainer.get_eval_dataloader().total_batch_size, 16 * n_gpu)
 
-        trainer = get_regression_trainer(
-            train_len=66,
-            eval_len=74,
-            learning_rate=0.1,
-            per_device_train_batch_size=16,
-            per_device_eval_batch_size=32,
-            dataloader_drop_last=True,
-        )
-        self.assertEqual(len(trainer.get_train_dataloader()), 66 // (16 * n_gpu))
-        self.assertEqual(len(trainer.get_eval_dataloader()), 74 // (32 * n_gpu))
+            # Check drop_last works
+            trainer = get_regression_trainer(
+                train_len=66,
+                eval_len=74,
+                learning_rate=0.1,
+                per_device_train_batch_size=16,
+                per_device_eval_batch_size=32,
+                output_dir=tmp_dir,
+            )
+            self.assertEqual(len(trainer.get_train_dataloader()), 66 // (16 * n_gpu) + 1)
+            self.assertEqual(len(trainer.get_eval_dataloader()), 74 // (32 * n_gpu) + 1)
 
-        # Check passing a new dataset for evaluation works
-        new_eval_dataset = RegressionDataset(length=128)
-        self.assertEqual(len(trainer.get_eval_dataloader(new_eval_dataset)), 128 // (32 * n_gpu))
+            trainer = get_regression_trainer(
+                train_len=66,
+                eval_len=74,
+                learning_rate=0.1,
+                per_device_train_batch_size=16,
+                per_device_eval_batch_size=32,
+                dataloader_drop_last=True,
+                output_dir=tmp_dir,
+            )
+            self.assertEqual(len(trainer.get_train_dataloader()), 66 // (16 * n_gpu))
+            self.assertEqual(len(trainer.get_eval_dataloader()), 74 // (32 * n_gpu))
+
+            # Check passing a new dataset for evaluation works
+            new_eval_dataset = RegressionDataset(length=128)
+            self.assertEqual(len(trainer.get_eval_dataloader(new_eval_dataset)), 128 // (32 * n_gpu))
 
     # tests that we do not require dataloader to have a .dataset attribute
     def test_dataloader_without_dataset(self):
@@ -2200,134 +2239,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertEqual(len(trainer.get_eval_dataloader()), 64 // 16)
 
     def test_evaluate(self):
-        trainer = get_regression_trainer(a=1.5, b=2.5, compute_metrics=AlmostAccuracy())
-        results = trainer.evaluate()
-
-        x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
-        pred = 1.5 * x + 2.5
-        expected_loss = ((pred - y) ** 2).mean()
-        self.assertAlmostEqual(results["eval_loss"], expected_loss)
-        expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
-        self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
-
-        # With a number of elements not a round multiple of the batch size
-        trainer = get_regression_trainer(a=1.5, b=2.5, eval_len=66, compute_metrics=AlmostAccuracy())
-        results = trainer.evaluate()
-
-        x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
-        pred = 1.5 * x + 2.5
-        expected_loss = ((pred - y) ** 2).mean()
-        self.assertAlmostEqual(results["eval_loss"], expected_loss)
-        expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
-        self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
-
-        # With logits preprocess
-        trainer = get_regression_trainer(
-            a=1.5,
-            b=2.5,
-            compute_metrics=AlmostAccuracy(),
-            preprocess_logits_for_metrics=lambda logits, labels: logits + 1,
-        )
-        results = trainer.evaluate()
-
-        x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
-        pred = 1.5 * x + 2.5
-        expected_loss = ((pred - y) ** 2).mean()
-        self.assertAlmostEqual(results["eval_loss"], expected_loss)
-        expected_acc = AlmostAccuracy()((pred + 1, y))["accuracy"]
-        self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
-
-    def test_evaluate_with_batch_eval_metrics(self):
-        trainer = get_regression_trainer(
-            a=1.5, b=2.5, compute_metrics=AlmostAccuracyBatched(), batch_eval_metrics=True
-        )
-        results = trainer.evaluate()
-
-        x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
-        pred = 1.5 * x + 2.5
-        expected_loss = ((pred - y) ** 2).mean()
-        self.assertAlmostEqual(results["eval_loss"], expected_loss)
-        expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
-        self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
-
-        # With a number of elements not a round multiple of the batch size
-        trainer = get_regression_trainer(
-            a=1.5, b=2.5, eval_len=66, compute_metrics=AlmostAccuracyBatched(), batch_eval_metrics=True
-        )
-        results = trainer.evaluate()
-
-        x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
-        pred = 1.5 * x + 2.5
-        expected_loss = ((pred - y) ** 2).mean()
-        self.assertAlmostEqual(results["eval_loss"], expected_loss)
-        expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
-        self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
-
-        # With logits preprocess
-        trainer = get_regression_trainer(
-            a=1.5,
-            b=2.5,
-            compute_metrics=AlmostAccuracyBatched(),
-            batch_eval_metrics=True,
-            preprocess_logits_for_metrics=lambda logits, labels: logits + 1,
-        )
-        results = trainer.evaluate()
-
-        x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
-        pred = 1.5 * x + 2.5
-        expected_loss = ((pred - y) ** 2).mean()
-        self.assertAlmostEqual(results["eval_loss"], expected_loss)
-        expected_acc = AlmostAccuracy()((pred + 1, y))["accuracy"]
-        self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
-
-    def test_evaluate_with_jit(self):
-        trainer = get_regression_trainer(a=1.5, b=2.5, compute_metrics=AlmostAccuracy(), jit_mode_eval=True)
-        results = trainer.evaluate()
-
-        x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
-        pred = 1.5 * x + 2.5
-        expected_loss = ((pred - y) ** 2).mean()
-        self.assertAlmostEqual(results["eval_loss"], expected_loss)
-        expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
-        self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
-
-        # With a number of elements not a round multiple of the batch size
-        trainer = get_regression_trainer(
-            a=1.5, b=2.5, eval_len=66, compute_metrics=AlmostAccuracy(), jit_mode_eval=True
-        )
-        results = trainer.evaluate()
-
-        x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
-        pred = 1.5 * x + 2.5
-        expected_loss = ((pred - y) ** 2).mean()
-        self.assertAlmostEqual(results["eval_loss"], expected_loss)
-        expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
-        self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
-
-        # With logits preprocess
-        trainer = get_regression_trainer(
-            a=1.5,
-            b=2.5,
-            compute_metrics=AlmostAccuracy(),
-            preprocess_logits_for_metrics=lambda logits, labels: logits + 1,
-            jit_mode_eval=True,
-        )
-        results = trainer.evaluate()
-
-        x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
-        pred = 1.5 * x + 2.5
-        expected_loss = ((pred - y) ** 2).mean()
-        self.assertAlmostEqual(results["eval_loss"], expected_loss)
-        expected_acc = AlmostAccuracy()((pred + 1, y))["accuracy"]
-        self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
-
-    @require_torch_bf16
-    @require_intel_extension_for_pytorch
-    def test_evaluate_with_ipex(self):
-        for mix_bf16 in [True, False]:
-            trainer = get_regression_trainer(
-                a=1.5, b=2.5, use_ipex=True, compute_metrics=AlmostAccuracy(), bf16=mix_bf16, use_cpu=True
-            )
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(a=1.5, b=2.5, compute_metrics=AlmostAccuracy(), output_dir=tmp_dir)
             results = trainer.evaluate()
 
             x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
@@ -2339,13 +2252,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
             # With a number of elements not a round multiple of the batch size
             trainer = get_regression_trainer(
-                a=1.5,
-                b=2.5,
-                use_ipex=True,
-                eval_len=66,
-                compute_metrics=AlmostAccuracy(),
-                bf16=mix_bf16,
-                use_cpu=True,
+                a=1.5, b=2.5, eval_len=66, compute_metrics=AlmostAccuracy(), output_dir=tmp_dir
             )
             results = trainer.evaluate()
 
@@ -2360,11 +2267,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer = get_regression_trainer(
                 a=1.5,
                 b=2.5,
-                use_ipex=True,
                 compute_metrics=AlmostAccuracy(),
                 preprocess_logits_for_metrics=lambda logits, labels: logits + 1,
-                bf16=mix_bf16,
-                use_cpu=True,
+                output_dir=tmp_dir,
             )
             results = trainer.evaluate()
 
@@ -2375,142 +2280,236 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             expected_acc = AlmostAccuracy()((pred + 1, y))["accuracy"]
             self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
-    def test_predict(self):
-        trainer = get_regression_trainer(a=1.5, b=2.5)
-        preds = trainer.predict(trainer.eval_dataset).predictions
-        x = trainer.eval_dataset.x
-        self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
+    def test_evaluate_with_batch_eval_metrics(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(
+                a=1.5, b=2.5, compute_metrics=AlmostAccuracyBatched(), batch_eval_metrics=True, output_dir=tmp_dir
+            )
+            results = trainer.evaluate()
 
-        # With a number of elements not a round multiple of the batch size
-        trainer = get_regression_trainer(a=1.5, b=2.5, eval_len=66)
-        preds = trainer.predict(trainer.eval_dataset).predictions
-        x = trainer.eval_dataset.x
-        self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
+            x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
+            pred = 1.5 * x + 2.5
+            expected_loss = ((pred - y) ** 2).mean()
+            self.assertAlmostEqual(results["eval_loss"], expected_loss)
+            expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
+            self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
-        # With more than one output of the model
-        trainer = get_regression_trainer(a=1.5, b=2.5, double_output=True)
-        preds = trainer.predict(trainer.eval_dataset).predictions
-        x = trainer.eval_dataset.x
-        self.assertEqual(len(preds), 2)
-        self.assertTrue(np.allclose(preds[0], 1.5 * x + 2.5))
-        self.assertTrue(np.allclose(preds[1], 1.5 * x + 2.5))
+            # With a number of elements not a round multiple of the batch size
+            trainer = get_regression_trainer(
+                a=1.5,
+                b=2.5,
+                eval_len=66,
+                compute_metrics=AlmostAccuracyBatched(),
+                batch_eval_metrics=True,
+                output_dir=tmp_dir,
+            )
+            results = trainer.evaluate()
 
-        # With more than one output/label of the model
-        trainer = get_regression_trainer(a=1.5, b=2.5, double_output=True, label_names=["labels", "labels_2"])
-        outputs = trainer.predict(trainer.eval_dataset)
-        preds = outputs.predictions
-        labels = outputs.label_ids
-        x = trainer.eval_dataset.x
-        self.assertEqual(len(preds), 2)
-        self.assertTrue(np.allclose(preds[0], 1.5 * x + 2.5))
-        self.assertTrue(np.allclose(preds[1], 1.5 * x + 2.5))
-        self.assertTrue(np.array_equal(labels[0], trainer.eval_dataset.ys[0]))
-        self.assertTrue(np.array_equal(labels[1], trainer.eval_dataset.ys[1]))
+            x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
+            pred = 1.5 * x + 2.5
+            expected_loss = ((pred - y) ** 2).mean()
+            self.assertAlmostEqual(results["eval_loss"], expected_loss)
+            expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
+            self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
-    def test_predict_with_batch_eval_metrics(self):
-        trainer = get_regression_trainer(
-            a=1.5, b=2.5, compute_metrics=AlmostAccuracyBatched(), batch_eval_metrics=True
-        )
-        results = trainer.predict(trainer.eval_dataset)
-        preds = results.predictions
-        x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
-        gt = 1.5 * x + 2.5
-        self.assertTrue(np.allclose(preds, gt))
-        expected_acc = AlmostAccuracy()((preds, y))["accuracy"]
-        self.assertAlmostEqual(results.metrics["test_accuracy"], expected_acc)
+            # With logits preprocess
+            trainer = get_regression_trainer(
+                a=1.5,
+                b=2.5,
+                compute_metrics=AlmostAccuracyBatched(),
+                batch_eval_metrics=True,
+                preprocess_logits_for_metrics=lambda logits, labels: logits + 1,
+                output_dir=tmp_dir,
+            )
+            results = trainer.evaluate()
 
-        # With a number of elements not a round multiple of the batch size
-        trainer = get_regression_trainer(
-            a=1.5, b=2.5, eval_len=66, compute_metrics=AlmostAccuracyBatched(), batch_eval_metrics=True
-        )
-        results = trainer.predict(trainer.eval_dataset)
-        preds = results.predictions
-        x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
-        self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
-        expected_acc = AlmostAccuracy()((preds, y))["accuracy"]
-        self.assertAlmostEqual(results.metrics["test_accuracy"], expected_acc)
+            x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
+            pred = 1.5 * x + 2.5
+            expected_loss = ((pred - y) ** 2).mean()
+            self.assertAlmostEqual(results["eval_loss"], expected_loss)
+            expected_acc = AlmostAccuracy()((pred + 1, y))["accuracy"]
+            self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
-        # With more than one output of the model
-        trainer = get_regression_trainer(
-            a=1.5, b=2.5, double_output=True, compute_metrics=AlmostAccuracyBatched(), batch_eval_metrics=True
-        )
-        preds = trainer.predict(trainer.eval_dataset).predictions
-        x = trainer.eval_dataset.x
-        self.assertEqual(len(preds), 2)
-        self.assertTrue(np.allclose(preds[0], 1.5 * x + 2.5))
-        self.assertTrue(np.allclose(preds[1], 1.5 * x + 2.5))
+    def test_evaluate_with_jit(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(
+                a=1.5, b=2.5, compute_metrics=AlmostAccuracy(), jit_mode_eval=True, output_dir=tmp_dir
+            )
+            results = trainer.evaluate()
 
-        # With more than one output/label of the model
-        trainer = get_regression_trainer(
-            a=1.5,
-            b=2.5,
-            double_output=True,
-            label_names=["labels", "labels_2"],
-            compute_metrics=AlmostAccuracyBatched(),
-            batch_eval_metrics=True,
-        )
-        outputs = trainer.predict(trainer.eval_dataset)
-        preds = outputs.predictions
-        labels = outputs.label_ids
-        x = trainer.eval_dataset.x
-        self.assertEqual(len(preds), 2)
-        self.assertTrue(np.allclose(preds[0], 1.5 * x + 2.5))
-        self.assertTrue(np.allclose(preds[1], 1.5 * x + 2.5))
-        self.assertTrue(np.array_equal(labels[0], trainer.eval_dataset.ys[0]))
-        self.assertTrue(np.array_equal(labels[1], trainer.eval_dataset.ys[1]))
+            x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
+            pred = 1.5 * x + 2.5
+            expected_loss = ((pred - y) ** 2).mean()
+            self.assertAlmostEqual(results["eval_loss"], expected_loss)
+            expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
+            self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
-    def test_predict_with_jit(self):
-        trainer = get_regression_trainer(a=1.5, b=2.5, jit_mode_eval=True)
-        preds = trainer.predict(trainer.eval_dataset).predictions
-        x = trainer.eval_dataset.x
-        self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
+            # With a number of elements not a round multiple of the batch size
+            trainer = get_regression_trainer(
+                a=1.5, b=2.5, eval_len=66, compute_metrics=AlmostAccuracy(), jit_mode_eval=True, output_dir=tmp_dir
+            )
+            results = trainer.evaluate()
 
-        # With a number of elements not a round multiple of the batch size
-        trainer = get_regression_trainer(a=1.5, b=2.5, eval_len=66, jit_mode_eval=True)
-        preds = trainer.predict(trainer.eval_dataset).predictions
-        x = trainer.eval_dataset.x
-        self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
+            x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
+            pred = 1.5 * x + 2.5
+            expected_loss = ((pred - y) ** 2).mean()
+            self.assertAlmostEqual(results["eval_loss"], expected_loss)
+            expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
+            self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
-        # With more than one output of the model
-        trainer = get_regression_trainer(a=1.5, b=2.5, double_output=True, jit_mode_eval=True)
-        preds = trainer.predict(trainer.eval_dataset).predictions
-        x = trainer.eval_dataset.x
-        self.assertEqual(len(preds), 2)
-        self.assertTrue(np.allclose(preds[0], 1.5 * x + 2.5))
-        self.assertTrue(np.allclose(preds[1], 1.5 * x + 2.5))
+            # With logits preprocess
+            trainer = get_regression_trainer(
+                a=1.5,
+                b=2.5,
+                compute_metrics=AlmostAccuracy(),
+                preprocess_logits_for_metrics=lambda logits, labels: logits + 1,
+                jit_mode_eval=True,
+                output_dir=tmp_dir,
+            )
+            results = trainer.evaluate()
 
-        # With more than one output/label of the model
-        trainer = get_regression_trainer(
-            a=1.5, b=2.5, double_output=True, label_names=["labels", "labels_2"], jit_mode_eval=True
-        )
-        outputs = trainer.predict(trainer.eval_dataset)
-        preds = outputs.predictions
-        labels = outputs.label_ids
-        x = trainer.eval_dataset.x
-        self.assertEqual(len(preds), 2)
-        self.assertTrue(np.allclose(preds[0], 1.5 * x + 2.5))
-        self.assertTrue(np.allclose(preds[1], 1.5 * x + 2.5))
-        self.assertTrue(np.array_equal(labels[0], trainer.eval_dataset.ys[0]))
-        self.assertTrue(np.array_equal(labels[1], trainer.eval_dataset.ys[1]))
+            x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
+            pred = 1.5 * x + 2.5
+            expected_loss = ((pred - y) ** 2).mean()
+            self.assertAlmostEqual(results["eval_loss"], expected_loss)
+            expected_acc = AlmostAccuracy()((pred + 1, y))["accuracy"]
+            self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
     @require_torch_bf16
     @require_intel_extension_for_pytorch
-    def test_predict_with_ipex(self):
-        for mix_bf16 in [True, False]:
-            trainer = get_regression_trainer(a=1.5, b=2.5, use_ipex=True, bf16=mix_bf16, use_cpu=True)
+    def test_evaluate_with_ipex(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            for mix_bf16 in [True, False]:
+                trainer = get_regression_trainer(
+                    a=1.5,
+                    b=2.5,
+                    use_ipex=True,
+                    compute_metrics=AlmostAccuracy(),
+                    bf16=mix_bf16,
+                    use_cpu=True,
+                    output_dir=tmp_dir,
+                )
+                results = trainer.evaluate()
+
+                x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
+                pred = 1.5 * x + 2.5
+                expected_loss = ((pred - y) ** 2).mean()
+                self.assertAlmostEqual(results["eval_loss"], expected_loss)
+                expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
+                self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
+
+                # With a number of elements not a round multiple of the batch size
+                trainer = get_regression_trainer(
+                    a=1.5,
+                    b=2.5,
+                    use_ipex=True,
+                    eval_len=66,
+                    compute_metrics=AlmostAccuracy(),
+                    bf16=mix_bf16,
+                    use_cpu=True,
+                    output_dir=tmp_dir,
+                )
+                results = trainer.evaluate()
+
+                x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
+                pred = 1.5 * x + 2.5
+                expected_loss = ((pred - y) ** 2).mean()
+                self.assertAlmostEqual(results["eval_loss"], expected_loss)
+                expected_acc = AlmostAccuracy()((pred, y))["accuracy"]
+                self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
+
+                # With logits preprocess
+                trainer = get_regression_trainer(
+                    a=1.5,
+                    b=2.5,
+                    use_ipex=True,
+                    compute_metrics=AlmostAccuracy(),
+                    preprocess_logits_for_metrics=lambda logits, labels: logits + 1,
+                    bf16=mix_bf16,
+                    use_cpu=True,
+                    output_dir=tmp_dir,
+                )
+                results = trainer.evaluate()
+
+                x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
+                pred = 1.5 * x + 2.5
+                expected_loss = ((pred - y) ** 2).mean()
+                self.assertAlmostEqual(results["eval_loss"], expected_loss)
+                expected_acc = AlmostAccuracy()((pred + 1, y))["accuracy"]
+                self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
+
+    def test_predict(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(a=1.5, b=2.5, output_dir=tmp_dir)
             preds = trainer.predict(trainer.eval_dataset).predictions
             x = trainer.eval_dataset.x
             self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
 
             # With a number of elements not a round multiple of the batch size
-            trainer = get_regression_trainer(a=1.5, b=2.5, eval_len=66, use_ipex=True, bf16=mix_bf16, use_cpu=True)
+            trainer = get_regression_trainer(a=1.5, b=2.5, eval_len=66, output_dir=tmp_dir)
             preds = trainer.predict(trainer.eval_dataset).predictions
             x = trainer.eval_dataset.x
             self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
 
             # With more than one output of the model
+            trainer = get_regression_trainer(a=1.5, b=2.5, double_output=True, output_dir=tmp_dir)
+            preds = trainer.predict(trainer.eval_dataset).predictions
+            x = trainer.eval_dataset.x
+            self.assertEqual(len(preds), 2)
+            self.assertTrue(np.allclose(preds[0], 1.5 * x + 2.5))
+            self.assertTrue(np.allclose(preds[1], 1.5 * x + 2.5))
+
+            # With more than one output/label of the model
             trainer = get_regression_trainer(
-                a=1.5, b=2.5, double_output=True, use_ipex=True, bf16=mix_bf16, use_cpu=True
+                a=1.5, b=2.5, double_output=True, label_names=["labels", "labels_2"], output_dir=tmp_dir
+            )
+            outputs = trainer.predict(trainer.eval_dataset)
+            preds = outputs.predictions
+            labels = outputs.label_ids
+            x = trainer.eval_dataset.x
+            self.assertEqual(len(preds), 2)
+            self.assertTrue(np.allclose(preds[0], 1.5 * x + 2.5))
+            self.assertTrue(np.allclose(preds[1], 1.5 * x + 2.5))
+            self.assertTrue(np.array_equal(labels[0], trainer.eval_dataset.ys[0]))
+            self.assertTrue(np.array_equal(labels[1], trainer.eval_dataset.ys[1]))
+
+    def test_predict_with_batch_eval_metrics(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(
+                a=1.5, b=2.5, compute_metrics=AlmostAccuracyBatched(), batch_eval_metrics=True, output_dir=tmp_dir
+            )
+            results = trainer.predict(trainer.eval_dataset)
+            preds = results.predictions
+            x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
+            gt = 1.5 * x + 2.5
+            self.assertTrue(np.allclose(preds, gt))
+            expected_acc = AlmostAccuracy()((preds, y))["accuracy"]
+            self.assertAlmostEqual(results.metrics["test_accuracy"], expected_acc)
+
+            # With a number of elements not a round multiple of the batch size
+            trainer = get_regression_trainer(
+                a=1.5,
+                b=2.5,
+                eval_len=66,
+                compute_metrics=AlmostAccuracyBatched(),
+                batch_eval_metrics=True,
+                output_dir=tmp_dir,
+            )
+            results = trainer.predict(trainer.eval_dataset)
+            preds = results.predictions
+            x, y = trainer.eval_dataset.x, trainer.eval_dataset.ys[0]
+            self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
+            expected_acc = AlmostAccuracy()((preds, y))["accuracy"]
+            self.assertAlmostEqual(results.metrics["test_accuracy"], expected_acc)
+
+            # With more than one output of the model
+            trainer = get_regression_trainer(
+                a=1.5,
+                b=2.5,
+                double_output=True,
+                compute_metrics=AlmostAccuracyBatched(),
+                batch_eval_metrics=True,
+                output_dir=tmp_dir,
             )
             preds = trainer.predict(trainer.eval_dataset).predictions
             x = trainer.eval_dataset.x
@@ -2524,9 +2523,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 b=2.5,
                 double_output=True,
                 label_names=["labels", "labels_2"],
-                use_ipex=True,
-                bf16=mix_bf16,
-                use_cpu=True,
+                compute_metrics=AlmostAccuracyBatched(),
+                batch_eval_metrics=True,
+                output_dir=tmp_dir,
             )
             outputs = trainer.predict(trainer.eval_dataset)
             preds = outputs.predictions
@@ -2537,6 +2536,97 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertTrue(np.allclose(preds[1], 1.5 * x + 2.5))
             self.assertTrue(np.array_equal(labels[0], trainer.eval_dataset.ys[0]))
             self.assertTrue(np.array_equal(labels[1], trainer.eval_dataset.ys[1]))
+
+    def test_predict_with_jit(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(a=1.5, b=2.5, jit_mode_eval=True, output_dir=tmp_dir)
+            preds = trainer.predict(trainer.eval_dataset).predictions
+            x = trainer.eval_dataset.x
+            self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
+
+            # With a number of elements not a round multiple of the batch size
+            trainer = get_regression_trainer(a=1.5, b=2.5, eval_len=66, jit_mode_eval=True, output_dir=tmp_dir)
+            preds = trainer.predict(trainer.eval_dataset).predictions
+            x = trainer.eval_dataset.x
+            self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
+
+            # With more than one output of the model
+            trainer = get_regression_trainer(a=1.5, b=2.5, double_output=True, jit_mode_eval=True, output_dir=tmp_dir)
+            preds = trainer.predict(trainer.eval_dataset).predictions
+            x = trainer.eval_dataset.x
+            self.assertEqual(len(preds), 2)
+            self.assertTrue(np.allclose(preds[0], 1.5 * x + 2.5))
+            self.assertTrue(np.allclose(preds[1], 1.5 * x + 2.5))
+
+            # With more than one output/label of the model
+            trainer = get_regression_trainer(
+                a=1.5,
+                b=2.5,
+                double_output=True,
+                label_names=["labels", "labels_2"],
+                jit_mode_eval=True,
+                output_dir=tmp_dir,
+            )
+            outputs = trainer.predict(trainer.eval_dataset)
+            preds = outputs.predictions
+            labels = outputs.label_ids
+            x = trainer.eval_dataset.x
+            self.assertEqual(len(preds), 2)
+            self.assertTrue(np.allclose(preds[0], 1.5 * x + 2.5))
+            self.assertTrue(np.allclose(preds[1], 1.5 * x + 2.5))
+            self.assertTrue(np.array_equal(labels[0], trainer.eval_dataset.ys[0]))
+            self.assertTrue(np.array_equal(labels[1], trainer.eval_dataset.ys[1]))
+
+    @require_torch_bf16
+    @require_intel_extension_for_pytorch
+    def test_predict_with_ipex(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            for mix_bf16 in [True, False]:
+                trainer = get_regression_trainer(
+                    a=1.5, b=2.5, use_ipex=True, bf16=mix_bf16, use_cpu=True, output_dir=tmp_dir
+                )
+                preds = trainer.predict(trainer.eval_dataset).predictions
+                x = trainer.eval_dataset.x
+                self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
+
+                # With a number of elements not a round multiple of the batch size
+                trainer = get_regression_trainer(
+                    a=1.5, b=2.5, eval_len=66, use_ipex=True, bf16=mix_bf16, use_cpu=True, output_dir=tmp_dir
+                )
+                preds = trainer.predict(trainer.eval_dataset).predictions
+                x = trainer.eval_dataset.x
+                self.assertTrue(np.allclose(preds, 1.5 * x + 2.5))
+
+                # With more than one output of the model
+                trainer = get_regression_trainer(
+                    a=1.5, b=2.5, double_output=True, use_ipex=True, bf16=mix_bf16, use_cpu=True, output_dir=tmp_dir
+                )
+                preds = trainer.predict(trainer.eval_dataset).predictions
+                x = trainer.eval_dataset.x
+                self.assertEqual(len(preds), 2)
+                self.assertTrue(np.allclose(preds[0], 1.5 * x + 2.5))
+                self.assertTrue(np.allclose(preds[1], 1.5 * x + 2.5))
+
+                # With more than one output/label of the model
+                trainer = get_regression_trainer(
+                    a=1.5,
+                    b=2.5,
+                    double_output=True,
+                    label_names=["labels", "labels_2"],
+                    use_ipex=True,
+                    bf16=mix_bf16,
+                    use_cpu=True,
+                    output_dir=tmp_dir,
+                )
+                outputs = trainer.predict(trainer.eval_dataset)
+                preds = outputs.predictions
+                labels = outputs.label_ids
+                x = trainer.eval_dataset.x
+                self.assertEqual(len(preds), 2)
+                self.assertTrue(np.allclose(preds[0], 1.5 * x + 2.5))
+                self.assertTrue(np.allclose(preds[1], 1.5 * x + 2.5))
+                self.assertTrue(np.array_equal(labels[0], trainer.eval_dataset.ys[0]))
+                self.assertTrue(np.array_equal(labels[1], trainer.eval_dataset.ys[1]))
 
     def test_dynamic_shapes(self):
         eval_dataset = DynamicShapesDataset(batch_size=self.batch_size)
@@ -2583,27 +2673,29 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         # test with the default log_level - should be the same as before and thus we test depending on is_info
         is_info = logging.get_verbosity() <= 20
-        with CaptureLogger(logger) as cl:
-            trainer = get_regression_trainer()
-            trainer.train()
-        if is_info:
-            self.assertIn(log_info_string, cl.out)
-        else:
-            self.assertNotIn(log_info_string, cl.out)
 
-        with LoggingLevel(logging.INFO):
-            # test with low log_level - lower than info
+        with tempfile.TemporaryDirectory() as tmp_dir:
             with CaptureLogger(logger) as cl:
-                trainer = get_regression_trainer(log_level="debug")
+                trainer = get_regression_trainer(output_dir=tmp_dir)
                 trainer.train()
-            self.assertIn(log_info_string, cl.out)
+            if is_info:
+                self.assertIn(log_info_string, cl.out)
+            else:
+                self.assertNotIn(log_info_string, cl.out)
 
-        with LoggingLevel(logging.INFO):
-            # test with high log_level - should be quiet
-            with CaptureLogger(logger) as cl:
-                trainer = get_regression_trainer(log_level="error")
-                trainer.train()
-            self.assertNotIn(log_info_string, cl.out)
+            with LoggingLevel(logging.INFO):
+                # test with low log_level - lower than info
+                with CaptureLogger(logger) as cl:
+                    trainer = get_regression_trainer(log_level="debug", output_dir=tmp_dir)
+                    trainer.train()
+                self.assertIn(log_info_string, cl.out)
+
+            with LoggingLevel(logging.INFO):
+                # test with high log_level - should be quiet
+                with CaptureLogger(logger) as cl:
+                    trainer = get_regression_trainer(log_level="error", output_dir=tmp_dir)
+                    trainer.train()
+                self.assertNotIn(log_info_string, cl.out)
 
     def test_save_checkpoints(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -2693,12 +2785,13 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # since wrapping primarily happens on multi-gpu setup we want multiple gpus to test for
         # example DataParallel(DataParallel(model))
 
-        trainer = get_regression_trainer()
-        trainer.train()
-        model_wrapped_before = trainer.model_wrapped
-        trainer.train()
-        model_wrapped_after = trainer.model_wrapped
-        self.assertIs(model_wrapped_before, model_wrapped_after, "should be not wrapped twice")
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(output_dir=tmp_dir)
+            trainer.train()
+            model_wrapped_before = trainer.model_wrapped
+            trainer.train()
+            model_wrapped_after = trainer.model_wrapped
+            self.assertIs(model_wrapped_before, model_wrapped_after, "should be not wrapped twice")
 
     @require_torch_up_to_2_accelerators
     def test_can_resume_training(self):
@@ -3326,17 +3419,24 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     def test_num_train_epochs_in_training(self):
         # len(train_dl) < gradient_accumulation_steps shouldn't give ``ZeroDivisionError`` when ``max_steps`` is given.
         # It should give 1 update step for each epoch.
-        trainer = get_regression_trainer(
-            max_steps=3, train_len=64, per_device_train_batch_size=16, gradient_accumulation_steps=5
-        )
-        train_output = trainer.train()
-        self.assertEqual(train_output.global_step, 3)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(
+                max_steps=3,
+                train_len=64,
+                per_device_train_batch_size=16,
+                gradient_accumulation_steps=5,
+                output_dir=tmp_dir,
+            )
+            train_output = trainer.train()
+            self.assertEqual(train_output.global_step, 3)
 
-        # Even ``max_steps`` is not specified, we still expect 1 update step for each epoch if
-        # len(train_dl) < gradient_accumulation_steps.
-        trainer = get_regression_trainer(train_len=64, per_device_train_batch_size=16, gradient_accumulation_steps=5)
-        train_output = trainer.train()
-        self.assertEqual(train_output.global_step, int(self.n_epochs))
+            # Even ``max_steps`` is not specified, we still expect 1 update step for each epoch if
+            # len(train_dl) < gradient_accumulation_steps.
+            trainer = get_regression_trainer(
+                train_len=64, per_device_train_batch_size=16, gradient_accumulation_steps=5, output_dir=tmp_dir
+            )
+            train_output = trainer.train()
+            self.assertEqual(train_output.global_step, int(self.n_epochs))
 
     def test_early_stopping_callback(self):
         # early stopping stops training before num_training_epochs
@@ -3375,22 +3475,23 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 self.assertEqual(trainer.state.global_step, 0)
 
     def test_flos_extraction(self):
-        trainer = get_regression_trainer(learning_rate=0.1)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(learning_rate=0.1, output_dir=tmp_dir)
 
-        def assert_flos_extraction(trainer, wrapped_model_to_check):
-            self.assertEqual(trainer.model, trainer.accelerator.unwrap_model(wrapped_model_to_check))
-            self.assertGreaterEqual(
-                getattr(trainer.accelerator.unwrap_model(wrapped_model_to_check).config, "total_flos", 0), 0
-            )
+            def assert_flos_extraction(trainer, wrapped_model_to_check):
+                self.assertEqual(trainer.model, trainer.accelerator.unwrap_model(wrapped_model_to_check))
+                self.assertGreaterEqual(
+                    getattr(trainer.accelerator.unwrap_model(wrapped_model_to_check).config, "total_flos", 0), 0
+                )
 
-        # with plain model
-        assert_flos_extraction(trainer, trainer.model)
+            # with plain model
+            assert_flos_extraction(trainer, trainer.model)
 
-        # with enforced DataParallel
-        assert_flos_extraction(trainer, nn.DataParallel(trainer.model))
+            # with enforced DataParallel
+            assert_flos_extraction(trainer, nn.DataParallel(trainer.model))
 
-        trainer.train()
-        self.assertTrue(isinstance(trainer.state.total_flos, float))
+            trainer.train()
+            self.assertTrue(isinstance(trainer.state.total_flos, float))
 
     def check_checkpoint_deletion(self, trainer, output_dir, expected):
         # Make fake checkpoints
@@ -3482,13 +3583,14 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             check_func("test_mem_gpu_alloc_delta", metrics)
 
     def test_mem_metrics(self):
-        # with mem metrics enabled
-        trainer = get_regression_trainer(skip_memory_metrics=False)
-        self.check_mem_metrics(trainer, self.assertIn)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # with mem metrics enabled
+            trainer = get_regression_trainer(skip_memory_metrics=False, output_dir=tmp_dir)
+            self.check_mem_metrics(trainer, self.assertIn)
 
-        # with mem metrics disabled
-        trainer = get_regression_trainer(skip_memory_metrics=True)
-        self.check_mem_metrics(trainer, self.assertNotIn)
+            # with mem metrics disabled
+            trainer = get_regression_trainer(skip_memory_metrics=True, output_dir=tmp_dir)
+            self.check_mem_metrics(trainer, self.assertNotIn)
 
     @require_torch_accelerator
     def test_fp16_full_eval(self):
@@ -3497,55 +3599,60 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         debug = 0
         n_gpus = backend_device_count(torch_device)
 
-        bs = 8
-        eval_len = 16 * n_gpus
-        # make the params somewhat big so that there will be enough RAM consumed to be able to
-        # measure things. We should get about 64KB for a+b in fp32
-        a = torch.ones(1000, bs) + 0.001
-        b = torch.ones(1000, bs) - 0.001
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            bs = 8
+            eval_len = 16 * n_gpus
+            # make the params somewhat big so that there will be enough RAM consumed to be able to
+            # measure things. We should get about 64KB for a+b in fp32
+            a = torch.ones(1000, bs) + 0.001
+            b = torch.ones(1000, bs) - 0.001
 
-        # 1. with fp16_full_eval disabled
-        trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, skip_memory_metrics=False)
-        metrics = trainer.evaluate()
-        del trainer
-        gc.collect()
+            # 1. with fp16_full_eval disabled
+            trainer = get_regression_trainer(
+                a=a, b=b, eval_len=eval_len, skip_memory_metrics=False, output_dir=tmp_dir
+            )
+            metrics = trainer.evaluate()
+            del trainer
+            gc.collect()
 
-        fp32_init = metrics["init_mem_gpu_alloc_delta"]
-        fp32_eval = metrics["eval_mem_gpu_alloc_delta"]
+            fp32_init = metrics["init_mem_gpu_alloc_delta"]
+            fp32_eval = metrics["eval_mem_gpu_alloc_delta"]
 
-        if debug:
-            print(f"fp32_init {fp32_init}")
-            print(f"fp32_eval {fp32_eval}")
+            if debug:
+                print(f"fp32_init {fp32_init}")
+                print(f"fp32_eval {fp32_eval}")
 
-        # here we expect the model to be preloaded in trainer.__init__ and consume around 64K gpu ram.
-        # perfect world: fp32_init == 64<<10
-        self.assertGreater(fp32_init, 59_000)
-        # after eval should be no extra memory allocated - with a small margin (other than the peak
-        # memory consumption for the forward calculation that gets recovered)
-        # perfect world: fp32_eval == close to zero
-        self.assertLess(fp32_eval, 5_000)
+            # here we expect the model to be preloaded in trainer.__init__ and consume around 64K gpu ram.
+            # perfect world: fp32_init == 64<<10
+            self.assertGreater(fp32_init, 59_000)
+            # after eval should be no extra memory allocated - with a small margin (other than the peak
+            # memory consumption for the forward calculation that gets recovered)
+            # perfect world: fp32_eval == close to zero
+            self.assertLess(fp32_eval, 5_000)
 
-        # 2. with fp16_full_eval enabled
-        trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, fp16_full_eval=True, skip_memory_metrics=False)
-        metrics = trainer.evaluate()
-        fp16_init = metrics["init_mem_gpu_alloc_delta"]
-        fp16_eval = metrics["eval_mem_gpu_alloc_delta"]
+            # 2. with fp16_full_eval enabled
+            trainer = get_regression_trainer(
+                a=a, b=b, eval_len=eval_len, fp16_full_eval=True, skip_memory_metrics=False, output_dir=tmp_dir
+            )
+            metrics = trainer.evaluate()
+            fp16_init = metrics["init_mem_gpu_alloc_delta"]
+            fp16_eval = metrics["eval_mem_gpu_alloc_delta"]
 
-        if debug:
-            print(f"fp16_init {fp16_init}")
-            print(f"fp16_eval {fp16_eval}")
+            if debug:
+                print(f"fp16_init {fp16_init}")
+                print(f"fp16_eval {fp16_eval}")
 
-        # here we expect the model to not be preloaded in trainer.__init__, so with a small margin it should be close to 0
-        # perfect world: fp16_init == close to zero
-        self.assertLess(fp16_init, 5_000)
-        # here we put the model on device in eval and only `half()` of it, i.e. about 32K,(again we ignore the peak margin which gets returned back)
-        # perfect world: fp32_init == 32<<10
-        self.assertGreater(fp16_eval, 27_000)
+            # here we expect the model to not be preloaded in trainer.__init__, so with a small margin it should be close to 0
+            # perfect world: fp16_init == close to zero
+            self.assertLess(fp16_init, 5_000)
+            # here we put the model on device in eval and only `half()` of it, i.e. about 32K,(again we ignore the peak margin which gets returned back)
+            # perfect world: fp32_init == 32<<10
+            self.assertGreater(fp16_eval, 27_000)
 
-        # 3. relative comparison fp32 vs full fp16
-        # should be about half of fp16_init
-        # perfect world: fp32_init/2 == fp16_eval
-        self.assertAlmostEqual(fp16_eval, fp32_init / 2, delta=5_000)
+            # 3. relative comparison fp32 vs full fp16
+            # should be about half of fp16_init
+            # perfect world: fp32_init/2 == fp16_eval
+            self.assertAlmostEqual(fp16_eval, fp32_init / 2, delta=5_000)
 
     @require_non_xpu
     @require_torch_non_multi_gpu
@@ -3564,30 +3671,31 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         a = torch.ones(1000, bs) + 0.001
         b = torch.ones(1000, bs) - 0.001
 
-        # 1. Default - without TorchDynamo
-        trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len)
-        metrics = trainer.evaluate()
-        original_eval_loss = metrics["eval_loss"]
-        del trainer
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # 1. Default - without TorchDynamo
+            trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, output_dir=tmp_dir)
+            metrics = trainer.evaluate()
+            original_eval_loss = metrics["eval_loss"]
+            del trainer
 
-        # 2. TorchDynamo eager
-        trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, torchdynamo="eager")
-        metrics = trainer.evaluate()
-        self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss)
-        del trainer
-        torchdynamo.reset()
+            # 2. TorchDynamo eager
+            trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, torchdynamo="eager", output_dir=tmp_dir)
+            metrics = trainer.evaluate()
+            self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss)
+            del trainer
+            torchdynamo.reset()
 
-        # 3. TorchDynamo nvfuser
-        trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, torchdynamo="nvfuser")
-        metrics = trainer.evaluate()
-        self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss)
-        torchdynamo.reset()
+            # 3. TorchDynamo nvfuser
+            trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, torchdynamo="nvfuser", output_dir=tmp_dir)
+            metrics = trainer.evaluate()
+            self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss)
+            torchdynamo.reset()
 
-        # 4. TorchDynamo fx2trt
-        trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, torchdynamo="fx2trt")
-        metrics = trainer.evaluate()
-        self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss)
-        torchdynamo.reset()
+            # 4. TorchDynamo fx2trt
+            trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, torchdynamo="fx2trt", output_dir=tmp_dir)
+            metrics = trainer.evaluate()
+            self.assertAlmostEqual(metrics["eval_loss"], original_eval_loss)
+            torchdynamo.reset()
 
     @unittest.skip(reason="torch 2.0.0 gives `ModuleNotFoundError: No module named 'torchdynamo'`.")
     @require_torch_non_multi_gpu
@@ -3678,48 +3786,53 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         a = torch.ones(1000, bs) + 0.001
         b = torch.ones(1000, bs) - 0.001
 
-        # 1. with bf16_full_eval disabled
-        trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, skip_memory_metrics=False)
-        metrics = trainer.evaluate()
-        del trainer
-        gc.collect()
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # 1. with bf16_full_eval disabled
+            trainer = get_regression_trainer(
+                a=a, b=b, eval_len=eval_len, skip_memory_metrics=False, output_dir=tmp_dir
+            )
+            metrics = trainer.evaluate()
+            del trainer
+            gc.collect()
 
-        fp32_init = metrics["init_mem_gpu_alloc_delta"]
-        fp32_eval = metrics["eval_mem_gpu_alloc_delta"]
+            fp32_init = metrics["init_mem_gpu_alloc_delta"]
+            fp32_eval = metrics["eval_mem_gpu_alloc_delta"]
 
-        if debug:
-            print(f"fp32_init {fp32_init}")
-            print(f"fp32_eval {fp32_eval}")
+            if debug:
+                print(f"fp32_init {fp32_init}")
+                print(f"fp32_eval {fp32_eval}")
 
-        # here we expect the model to be preloaded in trainer.__init__ and consume around 64K gpu ram.
-        # perfect world: fp32_init == 64<<10
-        self.assertGreater(fp32_init, 59_000)
-        # after eval should be no extra memory allocated - with a small margin (other than the peak
-        # memory consumption for the forward calculation that gets recovered)
-        # perfect world: fp32_eval == close to zero
-        self.assertLess(fp32_eval, 5_000)
+            # here we expect the model to be preloaded in trainer.__init__ and consume around 64K gpu ram.
+            # perfect world: fp32_init == 64<<10
+            self.assertGreater(fp32_init, 59_000)
+            # after eval should be no extra memory allocated - with a small margin (other than the peak
+            # memory consumption for the forward calculation that gets recovered)
+            # perfect world: fp32_eval == close to zero
+            self.assertLess(fp32_eval, 5_000)
 
-        # 2. with bf16_full_eval enabled
-        trainer = get_regression_trainer(a=a, b=b, eval_len=eval_len, bf16_full_eval=True, skip_memory_metrics=False)
-        metrics = trainer.evaluate()
-        bf16_init = metrics["init_mem_gpu_alloc_delta"]
-        bf16_eval = metrics["eval_mem_gpu_alloc_delta"]
+            # 2. with bf16_full_eval enabled
+            trainer = get_regression_trainer(
+                a=a, b=b, eval_len=eval_len, bf16_full_eval=True, skip_memory_metrics=False, output_dir=tmp_dir
+            )
+            metrics = trainer.evaluate()
+            bf16_init = metrics["init_mem_gpu_alloc_delta"]
+            bf16_eval = metrics["eval_mem_gpu_alloc_delta"]
 
-        if debug:
-            print(f"bf16_init {bf16_init}")
-            print(f"bf16_eval {bf16_eval}")
+            if debug:
+                print(f"bf16_init {bf16_init}")
+                print(f"bf16_eval {bf16_eval}")
 
-        # here we expect the model to not be preloaded in trainer.__init__, so with a small margin it should be close to 0
-        # perfect world: bf16_init == close to zero
-        self.assertLess(bf16_init, 5_000)
-        # here we put the model on device in eval and only `half()` of it, i.e. about 32K,(again we ignore the peak margin which gets returned back)
-        # perfect world: fp32_init == 32<<10
-        self.assertGreater(bf16_eval, 27_000)
+            # here we expect the model to not be preloaded in trainer.__init__, so with a small margin it should be close to 0
+            # perfect world: bf16_init == close to zero
+            self.assertLess(bf16_init, 5_000)
+            # here we put the model on device in eval and only `half()` of it, i.e. about 32K,(again we ignore the peak margin which gets returned back)
+            # perfect world: fp32_init == 32<<10
+            self.assertGreater(bf16_eval, 27_000)
 
-        # 3. relative comparison fp32 vs full bf16
-        # should be about half of bf16_init
-        # perfect world: fp32_init/2 == bf16_eval
-        self.assertAlmostEqual(bf16_eval, fp32_init / 2, delta=5_000)
+            # 3. relative comparison fp32 vs full bf16
+            # should be about half of bf16_init
+            # perfect world: fp32_init/2 == bf16_eval
+            self.assertAlmostEqual(bf16_eval, fp32_init / 2, delta=5_000)
 
     def test_no_wd_param_group(self):
         model = nn.Sequential(TstLayer(128), nn.ModuleList([TstLayer(128), TstLayer(128)]))
@@ -4875,11 +4988,12 @@ class TrainerOptimizerChoiceTest(unittest.TestCase):
 
     @parameterized.expand(optim_test_params, skip_on_empty=True)
     def test_optim_supported(self, training_args: TrainingArguments, expected_cls, expected_kwargs):
-        # exercises all the valid --optim options
-        self.check_optim_and_kwargs(training_args, expected_cls, expected_kwargs)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            # exercises all the valid --optim options
+            self.check_optim_and_kwargs(training_args, expected_cls, expected_kwargs)
 
-        trainer = get_regression_trainer(**training_args.to_dict())
-        trainer.train()
+            trainer = get_regression_trainer(output_dir=tmp_dir, **training_args.to_dict())
+            trainer.train()
 
     def test_fused_adam(self):
         # Pretend that apex is installed and mock apex.optimizers.FusedAdam exists.
