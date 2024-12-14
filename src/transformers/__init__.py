@@ -450,7 +450,6 @@ _import_structure = {
     "models.fuyu": ["FuyuConfig"],
     "models.gemma": ["GemmaConfig"],
     "models.gemma2": ["Gemma2Config"],
-    "models.modernbert": ["ModernBertConfig"],
     "models.git": [
         "GitConfig",
         "GitProcessor",
@@ -595,6 +594,7 @@ _import_structure = {
     "models.mobilenet_v2": ["MobileNetV2Config"],
     "models.mobilevit": ["MobileViTConfig"],
     "models.mobilevitv2": ["MobileViTV2Config"],
+    "models.modernbert": ["ModernBertConfig"],
     "models.moshi": [
         "MoshiConfig",
         "MoshiDepthConfig",
@@ -2300,15 +2300,6 @@ else:
             "Gemma2PreTrainedModel",
         ]
     )
-    _import_structure["models.modernbert"].extend(
-        [
-            "ModernBertForMaskedLM",
-            "ModernBertForSequenceClassification",
-            "ModernBertForTokenClassification",
-            "ModernBertModel",
-            "ModernBertPreTrainedModel",
-        ]
-    )
     _import_structure["models.git"].extend(
         [
             "GitForCausalLM",
@@ -2818,6 +2809,15 @@ else:
             "MobileViTV2ForSemanticSegmentation",
             "MobileViTV2Model",
             "MobileViTV2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.modernbert"].extend(
+        [
+            "ModernBertForMaskedLM",
+            "ModernBertForSequenceClassification",
+            "ModernBertForTokenClassification",
+            "ModernBertModel",
+            "ModernBertPreTrainedModel",
         ]
     )
     _import_structure["models.moshi"].extend(
