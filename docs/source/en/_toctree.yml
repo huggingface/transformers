@@ -364,6 +364,8 @@
         title: CodeLlama
       - local: model_doc/cohere
         title: Cohere
+      - local: model_doc/cohere2
+        title: Cohere2
       - local: model_doc/convbert
         title: ConvBERT
       - local: model_doc/cpm
@@ -659,6 +661,8 @@
         title: GLPN
       - local: model_doc/hiera
         title: Hiera
+      - local: model_doc/ijepa
+        title: I-JEPA
       - local: model_doc/imagegpt
         title: ImageGPT
       - local: model_doc/levit
@@ -705,6 +709,8 @@
         title: Swin2SR
       - local: model_doc/table-transformer
         title: Table Transformer
+      - local: model_doc/timm_wrapper
+        title: Timm Wrapper
       - local: model_doc/upernet
         title: UperNet
       - local: model_doc/van
@@ -810,6 +816,8 @@
         title: ALIGN
       - local: model_doc/altclip
         title: AltCLIP
+      - local: model_doc/aria
+        title: Aria
       - local: model_doc/blip
         title: BLIP
       - local: model_doc/blip-2
