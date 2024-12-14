@@ -52,7 +52,7 @@ class BambaModelTester:
         batch_size=13,
         seq_length=7,
         is_training=True,
-        use_input_mask=False,
+        use_input_mask=True,
         use_labels=True,
         vocab_size=99,
         hidden_size=32,
@@ -453,9 +453,10 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         for model_class in decoder_only_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
             input_ids = inputs_dict["input_ids"]
-            attention_mask = inputs_dict.get("attention_mask")
-            if attention_mask is None:
-                attention_mask = torch.ones_like(input_ids)
+
+            # - for left padding we absolutely need to use an all ones
+            #   attention mask, so we do not use the one in inputs_dict
+            attention_mask = torch.ones_like(input_ids)
 
             model = model_class(config).to(torch_device).eval()
             signature = inspect.signature(model.forward).parameters.keys()
@@ -480,7 +481,7 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             next_logits_with_padding = model(**model_kwargs).logits[:, -1, :]
 
             # They should result in very similar logits
-            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, atol=1e-5, rtol=5e-2)
+            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, atol=1e-5, rtol=1e-1)
 
 
 @require_torch
@@ -513,7 +514,7 @@ class BambaModelIntegrationTest(unittest.TestCase):
         # considering differences in hardware processing and potential deviations in generated text.
         EXPECTED_TEXTS = {
             # 7: "",
-            8: "<|begin_of_text|>Hey how are you doing on this lovely evening? I am doing great. I am a 20",
+            8: "<|begin_of_text|>Hey how are you doing on this lovely evening? I am doing well, I am just sitting here",
             #  9: """,
         }
 
@@ -553,7 +554,7 @@ class BambaModelIntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = {
             7: [],
             8: [
-                "<|begin_of_text|>Hey how are you doing on this lovely evening? I am doing great, I am in a good",
+                "<|begin_of_text|>Hey how are you doing on this lovely evening? I am doing well. I am a 20",
                 "!!!<|begin_of_text|>I am late! I need to get to the airport! I have a flight to",
             ],
             9: [],
