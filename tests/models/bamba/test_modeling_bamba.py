@@ -401,7 +401,7 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         pass
 
     def test_batching_equivalence(self):
-        # need to disable the tril input mask 
+        # need to disable the tril input mask
         orig = self.model_tester.use_input_mask
         self.model_tester.use_input_mask = False
         super().test_batching_equivalence()
