@@ -400,6 +400,13 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_new_cache_format(self, num_beams, do_sample):
         pass
 
+    def test_batching_equivalence(self):
+        # need to disable the tril input mask 
+        orig = self.model_tester.use_input_mask
+        self.model_tester.use_input_mask = False
+        super().test_batching_equivalence()
+        self.model_tester.use_input_mask = orig
+
     # essentially the same test in test_utils, just adjustment for rtol for this model
     @pytest.mark.generate
     def test_left_padding_compatibility(self):
