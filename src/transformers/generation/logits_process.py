@@ -1383,8 +1383,6 @@ class PrefixConstrainedLogitsProcessor(LogitsProcessor):
         return scores_processed
 
 
-
-
 class HammingDiversityLogitsProcessor(LogitsProcessor):
     r"""
     [`LogitsProcessor`] that enforces diverse beam search.
