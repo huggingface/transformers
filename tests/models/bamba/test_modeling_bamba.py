@@ -14,10 +14,10 @@
 # limitations under the License.
 """Testing suite for the PyTorch Bamba model."""
 
-import unittest
-import pytest
 import inspect
+import unittest
 
+import pytest
 from parameterized import parameterized
 
 from transformers import AutoTokenizer, BambaConfig, is_torch_available
@@ -43,6 +43,7 @@ if is_torch_available():
     from transformers.models.bamba.modeling_bamba import (
         HybridMambaAttentionDynamicCache,
     )
+
 
 class BambaModelTester:
     def __init__(
@@ -456,7 +457,6 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             if attention_mask is None:
                 attention_mask = torch.ones_like(input_ids)
 
-    
             model = model_class(config).to(torch_device).eval()
             signature = inspect.signature(model.forward).parameters.keys()
 
