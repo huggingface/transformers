@@ -27,7 +27,7 @@ class ModernBertConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ModernBertModel`]. It is used to instantiate an ModernBert
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the ModernBert-7B.
+    defaults will yield a similar configuration to that of the ModernBert-base.
     e.g. [answerdotai/modernbert-base](https://huggingface.co/answerdotai/modernbert-base)
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -84,9 +84,9 @@ class ModernBertConfig(PretrainedConfig):
 
     ```python
     >>> from transformers import ModernBertModel, ModernBertConfig
-    >>> # Initializing a ModernBert modernbert-7b style configuration
+    >>> # Initializing a ModernBert modernbert-base style configuration
     >>> configuration = ModernBertConfig()
-    >>> # Initializing a model from the modernbert-7b style configuration
+    >>> # Initializing a model from the modernbert-base style configuration
     >>> model = ModernBertModel(configuration)
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -182,4 +182,4 @@ class ModernBertConfig(PretrainedConfig):
         self.sparse_pred_ignore_index = sparse_pred_ignore_index
 
         if unpad_inputs is None:
-            self.unpad_inputs = self._attn_implementation == "flash_attention_2"
+            self.unpad_inputs = self._attn_implementation in {"flash_attention_2", "flex_attention"}

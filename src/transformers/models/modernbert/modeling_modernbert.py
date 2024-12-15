@@ -34,7 +34,7 @@ from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, MaskedLMOutput, SequenceClassifierOutput, TokenClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer, prune_qkv_linear_layer
-from ...utils import is_flash_attn_2_available, logging
+from ...utils import is_flash_attn_2_available, is_torch_greater_or_equal, logging
 from .configuration_modernbert import ModernBertConfig
 
 
@@ -44,6 +44,9 @@ if is_flash_attn_2_available():
     from flash_attn.ops.triton.rotary import apply_rotary
 else:
     RotaryEmbedding = None
+
+if is_torch_greater_or_equal("2.5"):
+    from torch.nn.attention.flex_attention import BlockMask, create_block_mask, flex_attention
 
 logger = logging.get_logger(__name__)
 
@@ -476,31 +479,36 @@ def flash_attention_forward(
     return (attn.view(bs, dim),)
 
 
-# def flex_attention_forward(
-#     config: ModernBertConfig,
-#     query: torch.Tensor,
-#     key: torch.Tensor,
-#     value: torch.Tensor,
-#     mask: Optional[torch.Tensor],
-#     output_attentions: bool = False,
-#     **_kwargs,
-# ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+def flex_attention_forward(
+    self: "ModernBertAttention",
+    qkv: torch.Tensor,
+    rotary_emb: ModernBertUnpaddedRotaryEmbedding,
+    cu_seqlens: torch.Tensor,
+    block_mask: BlockMask,
+    max_seqlen: int,
+    bs: int,
+    dim: int,
+    **_kwargs,
+) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+    qkv = rotary_emb(qkv, cu_seqlens=cu_seqlens, max_seqlen=max_seqlen)
+    query, key, value = qkv.unbind(dim=1)
 
-#     attn_output = flex_attention(
-#         query,
-#         key,
-#         value,
-#         enable_gqa=True,
-#         scale=config.scaling,
-#         return_lse=output_attentions,
-#     )
-#     if not output_attentions:
-#         attn_weights = None
-#     else:
-#         attn_output, attn_weights = attn_output
+    query = query.transpose(0, 1).unsqueeze(0)
+    key = key.transpose(0, 1).unsqueeze(0)
+    value = value.transpose(0, 1).unsqueeze(0)
 
-#     attn_output = attn_output.transpose(1, 2).contiguous()
-#     return attn_output, attn_weights
+    attn_output = flex_attention(
+        query,
+        key,
+        value,
+        block_mask=block_mask,
+        enable_gqa=False,
+        scale=None,
+        return_lse=False,
+    )
+
+    attn_output = attn_output.squeeze(0).transpose(0, 1).contiguous()
+    return (attn_output.view(bs, dim),)
 
 
 def sdpa_attention_forward(
@@ -535,7 +543,7 @@ def sdpa_attention_forward(
 
 MODERNBERT_ATTENTION_FUNCTION = {
     "flash_attention_2": flash_attention_forward,
-    # "flex_attention": flex_attention_forward,
+    "flex_attention": flex_attention_forward,
     "eager": eager_attention_forward,
     "sdpa": sdpa_attention_forward,
 }
@@ -580,7 +588,7 @@ class ModernBertAttention(nn.Module):
                 rope_theta = config.local_rope_theta
             max_position_embeddings = config.local_attention
 
-        if config._attn_implementation == "flash_attention_2":
+        if config._attn_implementation in {"flash_attention_2", "flex_attention"}:
             self.rotary_emb = ModernBertUnpaddedRotaryEmbedding(
                 dim=self.head_dim, max_seqlen=max_position_embeddings, base=rope_theta
             )
@@ -617,6 +625,7 @@ class ModernBertAttention(nn.Module):
         position_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         cu_seqlens: Optional[torch.Tensor] = None,
+        block_mask: Optional[BlockMask] = None,
         max_seqlen: Optional[int] = None,
         output_attentions: Optional[bool] = False,
         **kwargs,
@@ -658,6 +667,20 @@ class ModernBertAttention(nn.Module):
                     "bs": bs,
                 }
             )
+        elif self.config._attn_implementation == "flex_attention":
+            bs, dim = hidden_states.shape[:2]
+            qkv = qkv.view(-1, 3, self.num_heads, self.head_dim)
+
+            attn_kwargs.update(
+                {
+                    "local_attention": self.local_attention,
+                    "block_mask": block_mask,
+                    "cu_seqlens": cu_seqlens,
+                    "max_seqlen": max_seqlen,
+                    "bs": bs,
+                }
+            )
+
         else:
             bs, seqlen = hidden_states.shape[:2]
             qkv = qkv.view(bs, seqlen, 3, self.num_heads, self.head_dim)
@@ -723,6 +746,7 @@ class ModernBertEncoderLayer(nn.Module):
         position_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         cu_seqlens: Optional[torch.Tensor] = None,
+        block_mask: Optional[BlockMask] = None,
         max_seqlen: Optional[int] = None,
         output_attentions: Optional[bool] = False,
     ) -> torch.Tensor:
@@ -739,6 +763,7 @@ class ModernBertEncoderLayer(nn.Module):
             self.attn_norm(hidden_states),
             position_ids=position_ids,
             cu_seqlens=cu_seqlens,
+            block_mask=block_mask,
             max_seqlen=max_seqlen,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
@@ -906,6 +931,7 @@ class ModernBertPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["ModernBertEmbeddings", "ModernBertEncoderLayer"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
+    _supports_flex_attn = True
 
     def _init_weights(
         self,
@@ -969,6 +995,40 @@ class ModernBertPreTrainedModel(PreTrainedModel):
         return _pad_modernbert_output(
             inputs=inputs, indices=indices, batch=batch_size, seqlen=seqlen, labels=labels, ignore_index=ignore_index
         )
+
+    @classmethod
+    def offsets_to_sequence_ids_tensor(cls, offsets):
+        device = offsets.device
+        counts = offsets[1:] - offsets[:-1]
+        return torch.repeat_interleave(torch.arange(len(counts), device=device, dtype=torch.int32), counts)
+
+    @torch.compile(dynamic=False)
+    def create_attention_mask(self, sequence_ids, cu_seqlens, window_size):
+        """
+        Creates a block mask combining sequence masking and local/or global attention masking.
+        """
+
+        def sliding_window_seq_mask_mod(b, h, q_idx, kv_idx):
+            # only allow attention within the same sequence
+            same_seq = sequence_ids[q_idx] == sequence_ids[kv_idx]
+
+            # get position within the sequence
+            q_pos = q_idx - cu_seqlens[sequence_ids[q_idx]]
+            kv_pos = kv_idx - cu_seqlens[sequence_ids[kv_idx]]
+
+            # sliding window within each sequence
+            in_window = (q_pos - kv_pos).abs() <= window_size
+
+            return same_seq & in_window
+
+        block_mask = create_block_mask(
+            sliding_window_seq_mask_mod,
+            B=None,
+            H=None,
+            Q_LEN=cu_seqlens[-1],
+            KV_LEN=cu_seqlens[-1],
+        )
+        return block_mask
 
 
 class ModernBertModel(ModernBertPreTrainedModel):
@@ -1057,6 +1117,19 @@ class ModernBertModel(ModernBertPreTrainedModel):
             # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
             attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
 
+        # create block mask
+        if self.config._attn_implementation == "flex_attention":
+            sequence_ids = self.offsets_to_sequence_ids_tensor(cu_seqlens)
+
+            if self.config.local_attention != (-1, -1):
+                window_size = self.config.local_attention // 2
+            else:
+                window_size = max_seqlen
+
+            block_mask = self.create_attention_mask(sequence_ids, cu_seqlens, window_size)
+        else:
+            block_mask = None
+
         for encoder_layer in self.layers:
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -1077,6 +1150,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
                     attention_mask=attention_mask,
                     position_ids=position_ids,
                     cu_seqlens=cu_seqlens,
+                    block_mask=block_mask,
                     max_seqlen=max_seqlen,
                     output_attentions=output_attentions,
                 )
