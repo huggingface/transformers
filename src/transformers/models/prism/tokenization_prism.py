@@ -95,7 +95,7 @@ class PrismTokenizer(PreTrainedTokenizer):
             A string representing the source language.
         tgt_lang (`str`, *mandatory*, *optional*):
             A string representing the target language.
-        bos_token (`str`, *optional*, defaults to `"<s>"`): 
+        bos_token (`str`, *optional*, defaults to `"<s>"`):
             The beginning of sequence token.
         eos_token (`str`, *optional*, defaults to `"</s>"`):
             The end of sequence token.
@@ -139,8 +139,8 @@ class PrismTokenizer(PreTrainedTokenizer):
     >>> model_inputs = tokenizer(src_text, text_target=tgt_text, return_tensors="pt")
     >>> outputs = model(**model_inputs)  # should work
     ```
-        """
-    
+    """
+
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
 
@@ -168,10 +168,10 @@ class PrismTokenizer(PreTrainedTokenizer):
         self.language_codes = language_codes
         fairseq_language_code = FAIRSEQ_LANGUAGE_CODES[language_codes]
         self.lang_code_to_token = {lang_code: f"<{lang_code}>" for lang_code in fairseq_language_code}
-        
+
         additional_special_tokens = kwargs.pop("additional_special_tokens", [])
         language_tokens = [self.get_lang_token(lang_code) for lang_code in fairseq_language_code]
-        
+
         additional_special_tokens = language_tokens + additional_special_tokens
 
         self.vocab_file = vocab_file
