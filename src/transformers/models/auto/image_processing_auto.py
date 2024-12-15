@@ -501,13 +501,17 @@ class AutoImageProcessor:
             if use_fast:
                 if not image_processor_type.endswith("Fast"):
                     image_processor_type += "Fast"
-                image_processor_class = get_image_processor_class_from_name(image_processor_type)
-                if image_processor_class is None:
+                for _, image_processors in IMAGE_PROCESSOR_MAPPING_NAMES.items():
+                    if image_processor_type in image_processors:
+                        break
+                else:
+                    image_processor_type = image_processor_type[:-4]
+                    use_fast = False
                     logger.warning_once(
                         "`use_fast` is set to `True` but the image processor class does not have a fast version. "
                         " Falling back to the slow version."
                     )
-                    image_processor_class = get_image_processor_class_from_name(image_processor_type[:-4])
+                image_processor_class = get_image_processor_class_from_name(image_processor_type)
             else:
                 image_processor_type = (
                     image_processor_type[:-4] if image_processor_type.endswith("Fast") else image_processor_type
