@@ -499,8 +499,7 @@ class MoonshineAttention(PhiAttention):
             query_states = torch.cat((query_rot, query_pass), dim=-1)
             key_states = torch.cat((key_rot, key_pass), dim=-1)
 
-        if past_key_value is not None:
-            if not is_cross_attention:
+            if past_key_value is not None:
                 cache_kwargs = {
                     "sin": sin,
                     "cos": cos,
@@ -622,8 +621,7 @@ class MoonshineFlashAttention2(PhiFlashAttention2):
             query_states = torch.cat((query_rot, query_pass), dim=-1)
             key_states = torch.cat((key_rot, key_pass), dim=-1)
 
-        if past_key_value is not None:
-            if not is_cross_attention:
+            if past_key_value is not None:
                 cache_kwargs = {
                     "sin": sin,
                     "cos": cos,
@@ -765,8 +763,7 @@ class MoonshineSdpaAttention(PhiSdpaAttention):
             query_states = torch.cat((query_rot, query_pass), dim=-1)
             key_states = torch.cat((key_rot, key_pass), dim=-1)
 
-        if past_key_value is not None:
-            if not is_cross_attention:
+            if past_key_value is not None:
                 cache_kwargs = {
                     "sin": sin,
                     "cos": cos,
