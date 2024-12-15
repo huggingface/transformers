@@ -673,11 +673,11 @@ _import_structure = {
     "models.plbart": ["PLBartConfig"],
     "models.poolformer": ["PoolFormerConfig"],
     "models.pop2piano": ["Pop2PianoConfig"],
+    "models.prism": ["PrismConfig"],
     "models.prophetnet": [
         "ProphetNetConfig",
         "ProphetNetTokenizer",
     ],
-    "models.prism": ["PrismConfig"],
     "models.pvt": ["PvtConfig"],
     "models.pvt_v2": ["PvtV2Config"],
     "models.qwen2": [
@@ -3093,6 +3093,13 @@ else:
             "Pop2PianoPreTrainedModel",
         ]
     )
+    _import_structure["models.prism"].extend(
+        [
+            "PrismForConditionalGeneration",
+            "PrismModel",
+            "PrismPreTrainedModel",
+        ]
+    )
     _import_structure["models.prophetnet"].extend(
         [
             "ProphetNetDecoder",
@@ -3116,13 +3123,6 @@ else:
             "PvtV2ForImageClassification",
             "PvtV2Model",
             "PvtV2PreTrainedModel",
-        ]
-    )
-    _import_structure["models.prism"].extend(
-        [
-            "PrismForConditionalGeneration",
-            "PrismModel",
-            "PrismPreTrainedModel",
         ]
     )
     _import_structure["models.qwen2"].extend(

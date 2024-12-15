@@ -45,11 +45,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_prism import (
-            PrismForConditionalGeneration,
-            PrismModel,
-            PrismPreTrainedModel,
-        )
+        from .modeling_prism import PrismForConditionalGeneration, PrismModel, PrismPreTrainedModel
 
 
 else:
