@@ -142,6 +142,7 @@ from .trainer_utils import (
     number_of_arguments,
     seed_worker,
     set_seed,
+    shard_inputs,
     speed_metrics,
 )
 from .training_args import OptimizerNames, ParallelMode, TrainingArguments
@@ -256,7 +257,7 @@ if is_accelerate_available():
 
     if is_deepspeed_available():
         from accelerate.utils import DeepSpeedSchedulerWrapper
-        from deepspeed.utils import groups as deepspeed_groups
+        from deepspeed.utils import groups as deepspeed_mpu
 
 if is_accelerate_available("0.28.0"):
     from accelerate.utils import DataLoaderConfiguration
@@ -2323,7 +2324,7 @@ class Trainer:
 
         if delay_optimizer_creation:
             if use_accelerator_prepare:
-                self.model, train_dataloader = self.accelerator.prepare(self.model, train_dataloader)
+                self.model = self.accelerator.prepare(self.model)
             self.create_optimizer_and_scheduler(num_training_steps=max_steps)
 
         # prepare using `accelerator` prepare
@@ -2331,15 +2332,13 @@ class Trainer:
             self.model.train()
             if hasattr(self.lr_scheduler, "step"):
                 if self.use_apex:
-                    model, train_dataloader = self.accelerator.prepare(self.model, train_dataloader)
+                    model = self.accelerator.prepare(self.model)
                 else:
-                    model, self.optimizer, train_dataloader = self.accelerator.prepare(
-                        self.model, self.optimizer, train_dataloader
-                    )
+                    model, self.optimizer = self.accelerator.prepare(self.model, self.optimizer)
             else:
                 # to handle cases wherein we pass "DummyScheduler" such as when it is specified in DeepSpeed config.
-                model, self.optimizer, self.lr_scheduler, train_dataloader = self.accelerator.prepare(
-                    self.model, self.optimizer, self.lr_scheduler, train_dataloader
+                model, self.optimizer, self.lr_scheduler = self.accelerator.prepare(
+                    self.model, self.optimizer, self.lr_scheduler
                 )
         elif self.args.optim in [OptimizerNames.LOMO, OptimizerNames.ADALOMO]:
             # In this case we are in DDP + LOMO, which should be supported
@@ -3617,6 +3616,33 @@ class Trainer:
 
         return inputs
 
+    def _finalize_inputs(
+        self,
+        input_ids: torch.LongTensor = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        loss_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        input_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[torch.LongTensor] = None,
+        **model_kwargs,
+    ):
+        if is_deepspeed_sp_enabled():
+            ds_plugin = self.accelerator.state.deepspeed_plugin
+            num_shards = ds_plugin.sequence_parallel_size
+            rank = ds_plugin.sequence_parallel_rank
+            inputs = shard_inputs(
+                num_shards,
+                rank,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                loss_mask=loss_mask,
+                position_ids=position_ids,
+                inputs_embeds=input_embeds,
+                labels=labels,
+                **model_kwargs,
+            )
+        return inputs
+
     def compute_loss_context_manager(self):
         """
         A helper wrapper to group together context managers.
@@ -3721,7 +3747,9 @@ class Trainer:
                 loss_kwargs["num_items_in_batch"] = num_items_in_batch
             inputs = {**inputs, **loss_kwargs}
 
+        inputs = self._finalize_inputs(**inputs)
         outputs = model(**inputs)
+
         # Save past state if it exists
         # TODO: this needs to be fixed and made cleaner later.
         if self.args.past_index >= 0:
