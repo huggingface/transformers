@@ -30,8 +30,12 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_gemma2"] = [
+    _import_structure["modeling_moonshine"] = [
+        "MoonshineForConditionalGeneration",
+        "MoonshineModel",
+        "MoonshinePreTrainedModel",
     ]
+
 
 if TYPE_CHECKING:
     from .configuration_moonshine import MoonshineConfig
@@ -42,7 +46,12 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        pass
+        from .modeling_moonshine import (
+            MoonshineForConditionalGeneration,
+            MoonshineModel,
+            MoonshinePreTrainedModel,
+        )
+
 
 else:
     import sys

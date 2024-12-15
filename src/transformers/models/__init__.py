@@ -103,6 +103,7 @@ from . import (
     gpt_bigcode,
     gpt_neo,
     gpt_neox,
+    moonshine,
     gpt_neox_japanese,
     gpt_sw3,
     gptj,

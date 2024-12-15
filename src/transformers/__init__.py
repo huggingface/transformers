@@ -463,6 +463,7 @@ _import_structure = {
     "models.gpt_bigcode": ["GPTBigCodeConfig"],
     "models.gpt_neo": ["GPTNeoConfig"],
     "models.gpt_neox": ["GPTNeoXConfig"],
+    "models.moonshine": ["MoonshineConfig"],
     "models.gpt_neox_japanese": ["GPTNeoXJapaneseConfig"],
     "models.gpt_sw3": [],
     "models.gptj": ["GPTJConfig"],
@@ -1081,6 +1082,7 @@ else:
     _import_structure["models.gemma"].append("GemmaTokenizerFast")
     _import_structure["models.gpt2"].append("GPT2TokenizerFast")
     _import_structure["models.gpt_neox"].append("GPTNeoXTokenizerFast")
+    _import_structure["models.moonshine"].append("MoonshineTokenizer")
     _import_structure["models.gpt_neox_japanese"].append("GPTNeoXJapaneseTokenizer")
     _import_structure["models.herbert"].append("HerbertTokenizerFast")
     _import_structure["models.layoutlm"].append("LayoutLMTokenizerFast")
@@ -2358,6 +2360,16 @@ else:
             "GPTNeoXForTokenClassification",
             "GPTNeoXModel",
             "GPTNeoXPreTrainedModel",
+        ]
+    )
+    _import_structure["models.moonshine"].extend(
+        [
+            "MoonshineForCausalLM",
+            "MoonshineForQuestionAnswering",
+            "MoonshineForSequenceClassification",
+            "MoonshineForTokenClassification",
+            "MoonshineModel",
+            "MoonshinePreTrainedModel",
         ]
     )
     _import_structure["models.gpt_neox_japanese"].extend(
@@ -5339,6 +5351,7 @@ if TYPE_CHECKING:
     )
     from .models.gpt_neo import GPTNeoConfig
     from .models.gpt_neox import GPTNeoXConfig
+    from .models.moonshine import MoonshineConfig
     from .models.gpt_neox_japanese import (
         GPTNeoXJapaneseConfig,
     )
@@ -6009,6 +6022,7 @@ if TYPE_CHECKING:
         from .models.gemma import GemmaTokenizerFast
         from .models.gpt2 import GPT2TokenizerFast
         from .models.gpt_neox import GPTNeoXTokenizerFast
+        from .models.moonshine import MoonshineTokenizer
         from .models.gpt_neox_japanese import GPTNeoXJapaneseTokenizer
         from .models.herbert import HerbertTokenizerFast
         from .models.layoutlm import LayoutLMTokenizerFast
@@ -7101,6 +7115,14 @@ if TYPE_CHECKING:
             GPTNeoXForTokenClassification,
             GPTNeoXModel,
             GPTNeoXPreTrainedModel,
+        )
+        from .models.moonshine import (
+            MoonshineForCausalLM,
+            MoonshineForQuestionAnswering,
+            MoonshineForSequenceClassification,
+            MoonshineForTokenClassification,
+            MoonshineModel,
+            MoonshinePreTrainedModel,
         )
         from .models.gpt_neox_japanese import (
             GPTNeoXJapaneseForCausalLM,
