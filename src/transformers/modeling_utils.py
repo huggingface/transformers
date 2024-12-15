@@ -29,7 +29,7 @@ import warnings
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial, wraps
-from multiprocessing import Process
+from threading import Thread
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, TypeVar, Union
 from zipfile import is_zipfile
 
@@ -3597,7 +3597,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
             else:
                 config.quantization_config = quantization_config
-            hf_quantizer = AutoHfQuantizer.from_config(config.quantization_config, pre_quantized=pre_quantized)
+
+            hf_quantizer = AutoHfQuantizer.from_config(
+                config.quantization_config,
+                pre_quantized=pre_quantized,
+            )
+
         else:
             hf_quantizer = None
 
@@ -3825,11 +3830,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                                     **has_file_kwargs,
                                 }
                                 if not has_file(pretrained_model_name_or_path, safe_weights_name, **has_file_kwargs):
-                                    Process(
+                                    Thread(
                                         target=auto_conversion,
                                         args=(pretrained_model_name_or_path,),
                                         kwargs={"ignore_errors_during_conversion": True, **cached_file_kwargs},
-                                        name="Process-auto_conversion",
+                                        name="Thread-auto_conversion",
                                     ).start()
                         else:
                             # Otherwise, no PyTorch file was found, maybe there is a TF or Flax model file.
@@ -4281,7 +4286,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 dispatch_model(model, **device_map_kwargs)
 
         if hf_quantizer is not None:
-            hf_quantizer.postprocess_model(model)
+            hf_quantizer.postprocess_model(model, config=config)
             model.hf_quantizer = hf_quantizer
 
         if _adapter_model_path is not None:

@@ -1324,3 +1324,12 @@ class Starcoder2ForTokenClassification(Starcoder2PreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "Starcoder2ForCausalLM",
+    "Starcoder2Model",
+    "Starcoder2PreTrainedModel",
+    "Starcoder2ForSequenceClassification",
+    "Starcoder2ForTokenClassification",
+]
