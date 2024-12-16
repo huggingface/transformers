@@ -490,6 +490,7 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             # They should result in very similar logits
             torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, atol=1e-5, rtol=1e-1)
 
+
 @slow
 @require_torch
 class BambaModelIntegrationTest(unittest.TestCase):
