@@ -36,7 +36,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, GradientCheckpointLayer, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, nn.ModuleLayer, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     add_code_sample_docstrings,
@@ -262,7 +262,7 @@ class GlmAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class GlmDecoderLayer(GradientCheckpointLayer):
+class GlmDecoderLayer(nn.ModuleLayer):
     def __init__(self, config: GlmConfig, layer_idx: Optional[int] = None):
         super().__init__()
         self.hidden_size = config.hidden_size
