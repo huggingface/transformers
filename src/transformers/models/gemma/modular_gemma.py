@@ -29,6 +29,7 @@ from ..llama.modeling_llama import (
     LlamaForCausalLM,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
+    LlamaMLP,
     LlamaModel,
 )
 from ..llama.tokenization_llama import LlamaTokenizer
@@ -341,6 +342,14 @@ class GemmaRMSNorm(nn.Module):
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
+
+
+class GemmaMLP(LlamaMLP):
+    def __init__(self, config):
+        super().__init__()
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
 
 
 class GemmaModel(LlamaModel):
