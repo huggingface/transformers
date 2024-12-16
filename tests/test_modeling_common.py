@@ -4739,6 +4739,9 @@ class ModelTesterMixin:
                 self.skipTest(f"{model_class.__name__} with sliding window attention is not supported by this test")
             model = model_class(config).to(device=torch_device, dtype=torch.float32)
 
+            if "position_ids" not in inspect.signature(model.forward).parameters:
+                continue  # doesn't accept position ids and probably has special way to model positions
+
             (
                 input_ids,
                 position_ids,
@@ -4747,7 +4750,7 @@ class ModelTesterMixin:
                 position_ids_shared_prefix,
             ) = self._get_custom_4d_mask_test_data()
 
-            logits = model.forward(input_ids, position_ids=position_ids).logits
+            logits = model.forward(input_ids).logits
             # logits.shape == torch.Size([3, 4, ...])
 
             logits_shared_prefix = model(
