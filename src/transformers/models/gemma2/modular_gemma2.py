@@ -29,11 +29,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import (
-    is_flash_attn_2_available,
-    is_torch_greater_or_equal,
-    logging,
-)
+from ...utils import logging
 from ..gemma.modeling_gemma import (
     GemmaAttention,
     GemmaDecoderLayer,
@@ -47,13 +43,6 @@ from ..gemma.modeling_gemma import (
     apply_rotary_pos_emb,
     repeat_kv,
 )
-
-
-if is_flash_attn_2_available():
-    pass
-
-if is_torch_greater_or_equal("2.5"):
-    pass
 
 
 _CHECKPOINT_FOR_DOC = "google/gemma2-7b"
@@ -299,10 +288,16 @@ class Gemma2Attention(GemmaAttention):
         return attn_output, attn_weights
 
 
-class Gemma2DecoderLayer(GemmaDecoderLayer):
+class Gemma2DecoderLayer(nn.Module):
     def __init__(self, config: Gemma2Config, layer_idx: int):
         super().__init__()
+        self.hidden_size = config.hidden_size
+        self.config = config
         self.is_sliding = not bool(layer_idx % 2)
+        self.self_attn = Gemma2Attention(config=config, layer_idx=layer_idx)
+        self.mlp = Gemma2MLP(config)
+        self.input_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.pre_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)

@@ -22,7 +22,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, GradientCheckpointLayer, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     LossKwargs,
@@ -270,7 +270,7 @@ class MistralAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class MistralDecoderLayer(GradientCheckpointLayer):
+class MistralDecoderLayer(nn.Module):
     def __init__(self, config: MistralConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
