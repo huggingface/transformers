@@ -160,8 +160,8 @@ ALL_LAYERNORM_LAYERS.append(GraniteMoeRMSNorm)
 class GraniteMoeRotaryEmbedding(nn.Module):
     def __init__(
         self,
+        config: GraniteMoeConfig,
         device=None,
-        config: Optional[GraniteMoeConfig] = None,
     ):
         super().__init__()
         self.rope_kwargs = {}

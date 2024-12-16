@@ -81,8 +81,8 @@ class MistralRMSNorm(nn.Module):
 class MistralRotaryEmbedding(nn.Module):
     def __init__(
         self,
+        config: MistralConfig,
         device=None,
-        config: Optional[MistralConfig] = None,
     ):
         super().__init__()
         self.rope_kwargs = {}

@@ -310,8 +310,8 @@ class MoshiLinear(nn.Module):
 class MoshiRotaryEmbedding(nn.Module):
     def __init__(
         self,
+        config: MoshiConfig,
         device=None,
-        config: Optional[MoshiConfig] = None,
     ):
         super().__init__()
         self.rope_kwargs = {}
@@ -493,11 +493,7 @@ class MoshiAttention(nn.Module):
         self.rotary_emb = None
         if use_rope:
             self.rope_theta = config.rope_theta
-            self.rotary_emb = MoshiRotaryEmbedding(
-                self.head_dim,
-                max_position_embeddings=self.max_position_embeddings,
-                base=self.rope_theta,
-            )
+            self.rotary_emb = MoshiRotaryEmbedding(config)
 
     # copied from transformers.models.gemma.modeling_gemma.GemmaAttention.forward
     # no longer copied after attention refactors

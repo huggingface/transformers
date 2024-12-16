@@ -47,8 +47,8 @@ class DummyRMSNorm(nn.Module):
 class DummyRotaryEmbedding(nn.Module):
     def __init__(
         self,
+        config: DummyConfig,
         device=None,
-        config: Optional[DummyConfig] = None,
     ):
         super().__init__()
         self.rope_kwargs = {}

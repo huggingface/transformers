@@ -303,8 +303,8 @@ class Olmo2PreTrainedModel(PreTrainedModel):
 class Olmo2RotaryEmbedding(nn.Module):
     def __init__(
         self,
+        config: Olmo2Config,
         device=None,
-        config: Optional[Olmo2Config] = None,
     ):
         super().__init__()
         self.rope_kwargs = {}

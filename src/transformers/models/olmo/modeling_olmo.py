@@ -279,8 +279,8 @@ class OlmoDecoderLayer(nn.Module):
 class OlmoRotaryEmbedding(nn.Module):
     def __init__(
         self,
+        config: OlmoConfig,
         device=None,
-        config: Optional[OlmoConfig] = None,
     ):
         super().__init__()
         self.rope_kwargs = {}

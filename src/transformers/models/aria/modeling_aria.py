@@ -708,8 +708,8 @@ class AriaPreTrainedModel(PreTrainedModel):
 class AriaTextRotaryEmbedding(nn.Module):
     def __init__(
         self,
+        config: AriaTextConfig,
         device=None,
-        config: Optional[AriaTextConfig] = None,
     ):
         super().__init__()
         self.rope_kwargs = {}

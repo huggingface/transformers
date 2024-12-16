@@ -79,8 +79,8 @@ class Phi3RMSNorm(nn.Module):
 class Phi3RotaryEmbedding(nn.Module):
     def __init__(
         self,
+        config: Phi3Config,
         device=None,
-        config: Optional[Phi3Config] = None,
     ):
         super().__init__()
         self.rope_kwargs = {}

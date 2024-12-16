@@ -59,8 +59,8 @@ _CONFIG_FOR_DOC = "PersimmonConfig"
 class PersimmonRotaryEmbedding(nn.Module):
     def __init__(
         self,
+        config: PersimmonConfig,
         device=None,
-        config: Optional[PersimmonConfig] = None,
     ):
         super().__init__()
         self.rope_kwargs = {}

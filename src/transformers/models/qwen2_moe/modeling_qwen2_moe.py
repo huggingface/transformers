@@ -169,8 +169,8 @@ class Qwen2MoeRMSNorm(nn.Module):
 class Qwen2MoeRotaryEmbedding(nn.Module):
     def __init__(
         self,
+        config: Qwen2MoeConfig,
         device=None,
-        config: Optional[Qwen2MoeConfig] = None,
     ):
         super().__init__()
         self.rope_kwargs = {}

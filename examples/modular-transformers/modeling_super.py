@@ -44,8 +44,8 @@ class SuperRMSNorm(nn.Module):
 class SuperRotaryEmbedding(nn.Module):
     def __init__(
         self,
+        config: SuperConfig,
         device=None,
-        config: Optional[SuperConfig] = None,
     ):
         super().__init__()
         self.rope_kwargs = {}

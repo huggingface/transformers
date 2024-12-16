@@ -51,8 +51,8 @@ _CONFIG_FOR_DOC = "DbrxConfig"
 class DbrxRotaryEmbedding(nn.Module):
     def __init__(
         self,
+        config: DbrxConfig,
         device=None,
-        config: Optional[DbrxConfig] = None,
     ):
         super().__init__()
         self.rope_kwargs = {}

@@ -47,8 +47,8 @@ class Multimodal1TextRMSNorm(nn.Module):
 class Multimodal1TextRotaryEmbedding(nn.Module):
     def __init__(
         self,
+        config: Multimodal1TextConfig,
         device=None,
-        config: Optional[Multimodal1TextConfig] = None,
     ):
         super().__init__()
         self.rope_kwargs = {}

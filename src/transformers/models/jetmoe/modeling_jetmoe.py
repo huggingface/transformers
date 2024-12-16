@@ -388,8 +388,8 @@ class JetMoeRMSNorm(nn.Module):
 class JetMoeRotaryEmbedding(nn.Module):
     def __init__(
         self,
+        config: JetMoeConfig,
         device=None,
-        config: Optional[JetMoeConfig] = None,
     ):
         super().__init__()
         self.rope_kwargs = {}

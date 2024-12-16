@@ -279,8 +279,8 @@ class Qwen2DecoderLayer(nn.Module):
 class Qwen2RotaryEmbedding(nn.Module):
     def __init__(
         self,
+        config: Qwen2Config,
         device=None,
-        config: Optional[Qwen2Config] = None,
     ):
         super().__init__()
         self.rope_kwargs = {}

@@ -160,8 +160,8 @@ ALL_LAYERNORM_LAYERS.append(OlmoeRMSNorm)
 class OlmoeRotaryEmbedding(nn.Module):
     def __init__(
         self,
+        config: OlmoeConfig,
         device=None,
-        config: Optional[OlmoeConfig] = None,
     ):
         super().__init__()
         self.rope_kwargs = {}

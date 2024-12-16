@@ -380,8 +380,8 @@ class MixtralDecoderLayer(nn.Module):
 class MixtralRotaryEmbedding(nn.Module):
     def __init__(
         self,
+        config: MixtralConfig,
         device=None,
-        config: Optional[MixtralConfig] = None,
     ):
         super().__init__()
         self.rope_kwargs = {}

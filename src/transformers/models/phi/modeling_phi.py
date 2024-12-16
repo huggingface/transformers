@@ -286,8 +286,8 @@ class PhiRMSNorm(nn.Module):
 class PhiRotaryEmbedding(nn.Module):
     def __init__(
         self,
+        config: PhiConfig,
         device=None,
-        config: Optional[PhiConfig] = None,
     ):
         super().__init__()
         self.rope_kwargs = {}

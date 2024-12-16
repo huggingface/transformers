@@ -227,8 +227,8 @@ class GPTNeoXJapaneseAttention(nn.Module):
 class GPTNeoXJapaneseRotaryEmbedding(nn.Module):
     def __init__(
         self,
+        config: GPTNeoXJapaneseConfig,
         device=None,
-        config: Optional[GPTNeoXJapaneseConfig] = None,
     ):
         super().__init__()
         self.rope_kwargs = {}

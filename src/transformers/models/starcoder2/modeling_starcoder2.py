@@ -62,8 +62,8 @@ _CONFIG_FOR_DOC = "Starcoder2Config"
 class Starcoder2RotaryEmbedding(nn.Module):
     def __init__(
         self,
+        config: Starcoder2Config,
         device=None,
-        config: Optional[Starcoder2Config] = None,
     ):
         super().__init__()
         self.rope_kwargs = {}

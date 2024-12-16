@@ -295,8 +295,8 @@ class GraniteDecoderLayer(nn.Module):
 class GraniteRotaryEmbedding(nn.Module):
     def __init__(
         self,
+        config: GraniteConfig,
         device=None,
-        config: Optional[GraniteConfig] = None,
     ):
         super().__init__()
         self.rope_kwargs = {}

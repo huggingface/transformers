@@ -65,8 +65,8 @@ _CONFIG_FOR_DOC = "StableLmConfig"
 class StableLmRotaryEmbedding(nn.Module):
     def __init__(
         self,
+        config: StableLmConfig,
         device=None,
-        config: Optional[StableLmConfig] = None,
     ):
         super().__init__()
         self.rope_kwargs = {}

@@ -113,8 +113,8 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 class FalconRotaryEmbedding(nn.Module):
     def __init__(
         self,
+        config: FalconConfig,
         device=None,
-        config: Optional[FalconConfig] = None,
     ):
         super().__init__()
         self.rope_kwargs = {}

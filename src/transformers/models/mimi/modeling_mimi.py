@@ -367,8 +367,8 @@ class MimiLayerScale(nn.Module):
 class MimiRotaryEmbedding(nn.Module):
     def __init__(
         self,
+        config: MimiConfig,
         device=None,
-        config: Optional[MimiConfig] = None,
     ):
         super().__init__()
         self.rope_kwargs = {}
@@ -531,11 +531,7 @@ class MimiAttention(nn.Module):
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
-        self.rotary_emb = MimiRotaryEmbedding(
-            self.head_dim,
-            max_position_embeddings=self.max_position_embeddings,
-            base=self.rope_theta,
-        )
+        self.rotary_emb = MimiRotaryEmbedding(config)
         self.sliding_window = config.sliding_window  # Ignore copy
 
     def forward(

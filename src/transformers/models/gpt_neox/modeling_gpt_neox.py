@@ -490,8 +490,8 @@ class GPTNeoXSdpaAttention(GPTNeoXAttention):
 class GPTNeoXRotaryEmbedding(nn.Module):
     def __init__(
         self,
+        config: GPTNeoXConfig,
         device=None,
-        config: Optional[GPTNeoXConfig] = None,
     ):
         super().__init__()
         self.rope_kwargs = {}
