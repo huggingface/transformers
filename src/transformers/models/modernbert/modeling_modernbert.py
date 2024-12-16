@@ -339,7 +339,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 
 
 def eager_attention_forward(
-    self: "ModernBertAttention",
+    module: "ModernBertAttention",
     qkv: torch.Tensor,
     position_ids: Optional[torch.LongTensor],
     attention_mask: torch.Tensor,
@@ -350,12 +350,12 @@ def eager_attention_forward(
     **_kwargs,
 ) -> Tuple[torch.Tensor, torch.Tensor] | Tuple[torch.Tensor]:
     # qkv: [batch_size, seqlen, 3, nheads, headdim]
-    cos, sin = self.rotary_emb(qkv, position_ids=position_ids)
+    cos, sin = module.rotary_emb(qkv, position_ids=position_ids)
     query, key, value = qkv.transpose(3, 1).unbind(dim=2)
     # query, key, value: [batch_size, heads, seq_len, head_dim]
     query, key = apply_rotary_pos_emb(query, key, cos, sin)
 
-    scale = self.head_dim**-0.5
+    scale = module.head_dim**-0.5
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scale
 
     if attention_mask is not None:  # no matter the length, we just slice it
@@ -364,8 +364,8 @@ def eager_attention_forward(
 
     # upcast attention to fp32
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    if self.training:
-        attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout)
+    if module.training:
+        attn_weights = nn.functional.dropout(attn_weights, p=module.attention_dropout)
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
     attn_output = attn_output.view(bs, seqlen, dim)
@@ -375,7 +375,7 @@ def eager_attention_forward(
 
 
 def flash_attention_forward(
-    self: "ModernBertAttention",
+    module: "ModernBertAttention",
     qkv: torch.Tensor,
     rotary_emb: ModernBertUnpaddedRotaryEmbedding,
     cu_seqlens: torch.Tensor,
@@ -400,8 +400,8 @@ def flash_attention_forward(
             qkv,
             cu_seqlens=cu_seqlens,
             max_seqlen=max_seqlen,
-            dropout_p=self.attention_dropout if self.training else 0.0,
-            deterministic=self.deterministic_flash_attn,
+            dropout_p=module.attention_dropout if module.training else 0.0,
+            deterministic=module.deterministic_flash_attn,
             window_size=local_attention,
         )
         attn = attn.to(orig_dtype)  # type: ignore
@@ -410,15 +410,15 @@ def flash_attention_forward(
             qkv,
             cu_seqlens=cu_seqlens,
             max_seqlen=max_seqlen,
-            dropout_p=self.attention_dropout if self.training else 0.0,
-            deterministic=self.deterministic_flash_attn,
+            dropout_p=module.attention_dropout if module.training else 0.0,
+            deterministic=module.deterministic_flash_attn,
             window_size=local_attention,
         )
     return (attn.view(bs, dim),)
 
 
 def flex_attention_forward(
-    self: "ModernBertAttention",
+    module: "ModernBertAttention",
     qkv: torch.Tensor,
     rotary_emb: ModernBertUnpaddedRotaryEmbedding,
     cu_seqlens: torch.Tensor,
@@ -450,7 +450,7 @@ def flex_attention_forward(
 
 
 def sdpa_attention_forward(
-    self: "ModernBertAttention",
+    module: "ModernBertAttention",
     qkv: torch.Tensor,
     position_ids: Optional[torch.LongTensor],
     attention_mask: torch.Tensor,
@@ -460,7 +460,7 @@ def sdpa_attention_forward(
     **_kwargs,
 ) -> Tuple[torch.Tensor]:
     # qkv: [batch_size, seqlen, 3, nheads, headdim]
-    cos, sin = self.rotary_emb(qkv, position_ids=position_ids)
+    cos, sin = module.rotary_emb(qkv, position_ids=position_ids)
     query, key, value = qkv.transpose(3, 1).unbind(dim=2)
     # query, key, value: [batch_size, heads, seq_len, head_dim]
     query, key = apply_rotary_pos_emb(query, key, cos, sin)
@@ -472,7 +472,7 @@ def sdpa_attention_forward(
         query,
         key,
         value,
-        dropout_p=self.attention_dropout if self.training else 0.0,
+        dropout_p=module.attention_dropout if module.training else 0.0,
         attn_mask=attention_mask,
     ).transpose(1, 2)
     attn_output = attn_output.view(bs, seqlen, dim)
