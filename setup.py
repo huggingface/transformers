@@ -422,7 +422,7 @@ extras["benchmark"] = deps_list("optimum-benchmark")
 # when modifying the following list, make sure to update src/transformers/dependency_versions_check.py
 install_requires = [
     deps["filelock"],  # filesystem locks, e.g., to prevent parallel downloads
-    "huggingface-hub @ git+https://github.com/huggingface/huggingface_hub.git@fix-loading-state-dict",
+    "huggingface-hub @ git+https://github.com/huggingface/huggingface_hub.git@deprecate-generate-kwargs",
     deps["numpy"],
     deps["packaging"],  # utilities from PyPA to e.g., compare versions
     deps["pyyaml"],  # used for the model cards metadata
