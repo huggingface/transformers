@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_moonshine.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-
 from ...configuration_utils import PretrainedConfig
 
 
@@ -42,8 +41,6 @@ class MoonshineConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder.
         decoder_hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 2048):
-            The maximum sequence length that this model might ever be used with. TODO: check this
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-5):
@@ -56,10 +53,8 @@ class MoonshineConfig(PretrainedConfig):
             Whether or not the model should return the last key/values attentions (not used by all models).
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Whether the model is used as an encoder/decoder or not.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings. TODO: check this
-        partial_rotary_factor (`float`, *optional*, defaults to 0.5):
-            Percentage of the query and keys which will have rotary embedding. TODO: check this
+        min_rotary_ndims (`int`, *optional*, defaults to 32):
+            The minimum number of dimensions of the RoPE.
         ff_mult (`int`, *optional*, defaults to 4):
             Factor by which to scale the intermediate size.
         attention_bias (`bool`, *optional*, defaults to `False`):
@@ -68,43 +63,6 @@ class MoonshineConfig(PretrainedConfig):
             The dropout ratio for the attention probabilities.
         qk_layernorm (`bool`, *optional*, defaults to `False`):
             Whether or not to normalize the Queries and Keys after projecting the hidden states.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
-            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
-            accordingly.
-            Expected contents:
-                `rope_type` (`str`):
-                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-                    'llama3'], with 'default' being the original RoPE implementation.
-                `factor` (`float`, *optional*):
-                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
-                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
-                    original maximum pre-trained length.
-                `original_max_position_embeddings` (`int`, *optional*):
-                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
-                    pretraining.
-                `attention_factor` (`float`, *optional*):
-                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
-                    computation. If unspecified, it defaults to value recommended by the implementation, using the
-                    `factor` field to infer the suggested value.
-                `beta_fast` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 32.
-                `beta_slow` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`List[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `long_factor` (`List[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `low_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
-                `high_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
         bos_token_id (`int`, *optional*, defaults to 1):
             Denotes beginning of sequences token id.
         eos_token_id (`int`, *optional*, defaults to 2):
@@ -167,18 +125,15 @@ class MoonshineConfig(PretrainedConfig):
         num_key_value_heads=None,
         encoder_hidden_act="gelu",
         decoder_hidden_act="silu",
-        max_position_embeddings=2048,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
         decoder_start_token_id=1,
         use_cache=True,
         is_encoder_decoder=True,
-        rope_theta=10000.0,
-        partial_rotary_factor=0.5,
+        min_rotary_ndims=32,
         attention_bias=False,
         attention_dropout=0.0,
         qk_layernorm=False,
-        rope_scaling=None,
         ff_mult=4,
         bos_token_id=1,
         eos_token_id=2,
@@ -203,19 +158,15 @@ class MoonshineConfig(PretrainedConfig):
         self.num_key_value_heads = num_key_value_heads
         self.encoder_hidden_act = encoder_hidden_act
         self.decoder_hidden_act = decoder_hidden_act
-        self.max_position_embeddings = max_position_embeddings
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.decoder_start_token_id = decoder_start_token_id
         self.use_cache = use_cache
         self.is_encoder_decoder = is_encoder_decoder
-        self.rope_theta = rope_theta
-        self.partial_rotary_factor = partial_rotary_factor
-
+        self.min_rotary_ndims = min_rotary_ndims
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.qk_layernorm = qk_layernorm
-        self.rope_scaling = rope_scaling
         self.ff_mult = ff_mult
 
         # fine-tuning config parameters for SpecAugment: https://arxiv.org/abs/1904.08779

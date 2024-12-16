@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_moonshine.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-
 import copy
 import math
 from typing import List, Optional, Tuple, Union
@@ -256,7 +255,8 @@ class MoonshineAttention(nn.Module):
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.rope_theta = config.rope_theta
-        self.rotary_ndims = max(config.hidden_size // config.num_attention_heads // 2, 32)
+
+        self.rotary_ndims = max(config.hidden_size // config.num_attention_heads // 2, config.min_rotary_ndims)
 
         self.is_causal = is_causal
 
@@ -278,11 +278,7 @@ class MoonshineAttention(nn.Module):
             self.k_layernorm = nn.LayerNorm(
                 config.hidden_size // self.num_heads, eps=config.layer_norm_eps, elementwise_affine=True
             )
-
-        self.rotary_emb = MoonshineRotaryEmbedding(
-            dim=self.rotary_ndims,
-            max_position_embeddings=config.max_position_embeddings,
-        )
+        self.rotary_emb = MoonshineRotaryEmbedding(dim=self.rotary_ndims)
 
     def forward(
         self,
@@ -356,15 +352,14 @@ class MoonshineAttention(nn.Module):
                 key_states[..., : self.rotary_ndims],
                 key_states[..., self.rotary_ndims :],
             )
-            # [batch_size, seq_length, num_heads, head_dim // config.partial_rotary_factor]
+            # [batch_size, seq_length, num_heads, self.rotary_ndims]
             query_rot, key_rot = apply_rotary_pos_emb(query_rot, key_rot, cos, sin)
 
             # [batch_size, seq_length, num_heads, head_dim]
             query_states = torch.cat((query_rot, query_pass), dim=-1)
             key_states = torch.cat((key_rot, key_pass), dim=-1)
 
-        if past_key_value is not None:
-            if not is_cross_attention:
+            if past_key_value is not None:
                 cache_kwargs = {
                     "sin": sin,
                     "cos": cos,
@@ -497,15 +492,14 @@ class MoonshineFlashAttention2(MoonshineAttention):
                 key_states[..., : self.rotary_ndims],
                 key_states[..., self.rotary_ndims :],
             )
-            # [batch_size, seq_length, num_heads, head_dim // config.partial_rotary_factor]
+            # [batch_size, seq_length, num_heads, self.rotary_ndims]
             query_rot, key_rot = apply_rotary_pos_emb(query_rot, key_rot, cos, sin)
 
             # [batch_size, seq_length, num_heads, head_dim]
             query_states = torch.cat((query_rot, query_pass), dim=-1)
             key_states = torch.cat((key_rot, key_pass), dim=-1)
 
-        if past_key_value is not None:
-            if not is_cross_attention:
+            if past_key_value is not None:
                 cache_kwargs = {
                     "sin": sin,
                     "cos": cos,
@@ -655,15 +649,14 @@ class MoonshineSdpaAttention(MoonshineAttention):
                 key_states[..., : self.rotary_ndims],
                 key_states[..., self.rotary_ndims :],
             )
-            # [batch_size, seq_length, num_heads, head_dim // config.partial_rotary_factor]
+            # [batch_size, seq_length, num_heads, self.rotary_ndims]
             query_rot, key_rot = apply_rotary_pos_emb(query_rot, key_rot, cos, sin)
 
             # [batch_size, seq_length, num_heads, head_dim]
             query_states = torch.cat((query_rot, query_pass), dim=-1)
             key_states = torch.cat((key_rot, key_pass), dim=-1)
 
-        if past_key_value is not None:
-            if not is_cross_attention:
+            if past_key_value is not None:
                 cache_kwargs = {
                     "sin": sin,
                     "cos": cos,
@@ -1046,7 +1039,7 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
         config: MoonshineConfig
     """
 
-    main_input_name = "input_features"
+    main_input_name = "input_values"
 
     def __init__(self, config: MoonshineConfig):
         super().__init__(config)
@@ -1059,8 +1052,7 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
         self.groupnorm = nn.GroupNorm(num_groups=1, num_channels=embed_dim, eps=1e-5)
 
         self.rotary_emb = MoonshineRotaryEmbedding(
-            dim=max(config.hidden_size // config.num_attention_heads // 2, 32),
-            max_position_embeddings=config.max_position_embeddings,
+            dim=max(config.hidden_size // config.num_attention_heads // 2, config.min_rotary_ndims)
         )
 
         self.layers = nn.ModuleList([MoonshineEncoderLayer(config, idx) for idx in range(config.num_hidden_layers)])
@@ -1078,8 +1070,7 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
     @add_start_docstrings_to_model_forward(MOONSHINE_INPUTS_DOCSTRING)
     def forward(
         self,
-        input_features: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        input_values: Optional[torch.FloatTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -1097,7 +1088,7 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if (input_features is None) ^ (inputs_embeds is not None):
+        if (input_values is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if self.gradient_checkpointing and self.training and use_cache:
@@ -1107,7 +1098,7 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
             use_cache = False
 
         if inputs_embeds is None:
-            inputs_embeds = self.preprocess(input_features)
+            inputs_embeds = self.preprocess(input_values)
 
         # kept for BC (non `Cache` `past_key_values` inputs)
         return_legacy_cache = False
@@ -1131,9 +1122,6 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = self._update_causal_mask(
-            attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
-        )
         hidden_states = inputs_embeds
 
         # create position embeddings to be shared across the decoder layers
@@ -1144,15 +1132,15 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
         all_self_attns = () if output_attentions else None
         next_decoder_cache = None
 
-        for decoder_layer in self.layers:
+        for encoder_layer in self.layers:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
+                    encoder_layer.__call__,
                     hidden_states,
-                    causal_mask,
+                    None,
                     position_ids,
                     past_key_values,
                     output_attentions,
@@ -1161,9 +1149,8 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
                     position_embeddings,
                 )
             else:
-                layer_outputs = decoder_layer(
+                layer_outputs = encoder_layer(
                     hidden_states,
-                    attention_mask=causal_mask,
                     position_ids=position_ids,
                     past_key_value=past_key_values,
                     output_attentions=output_attentions,
@@ -1326,9 +1313,9 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
             param.requires_grad = False
         self._requires_grad = False
 
-    def preprocess(self, input_features: torch.FloatTensor):
-        input_features = input_features.unsqueeze(1)
-        inputs_embeds = nn.functional.tanh(self.conv1(input_features))
+    def preprocess(self, input_values: torch.FloatTensor):
+        input_values = input_values.unsqueeze(1)
+        inputs_embeds = nn.functional.tanh(self.conv1(input_values))
         inputs_embeds = self.groupnorm(inputs_embeds)
         inputs_embeds = nn.functional.gelu(self.conv2(inputs_embeds))
         inputs_embeds = nn.functional.gelu(self.conv3(inputs_embeds))
@@ -1359,8 +1346,7 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
         )
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps, bias=False)
         self.rotary_emb = MoonshineRotaryEmbedding(
-            dim=max(config.hidden_size // config.num_attention_heads // 2, 32),
-            max_position_embeddings=config.max_position_embeddings,
+            dim=max(config.hidden_size // config.num_attention_heads // 2, config.min_rotary_ndims)
         )
         self.gradient_checkpointing = False
 
@@ -1839,7 +1825,7 @@ class MoonshineModel(MoonshinePreTrainedModel):
     @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_features: Optional[torch.FloatTensor] = None,
+        input_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
@@ -1863,18 +1849,18 @@ class MoonshineModel(MoonshinePreTrainedModel):
 
         ```python
          >>> import torch
-         >>> from transformers import AutoFeatureExtractor, WhisperModel
+         >>> from transformers import AutoFeatureExtractor, MoonshineModel
          >>> from datasets import load_dataset
 
-         >>> model = WhisperModel.from_pretrained("openai/whisper-base")
-         >>> feature_extractor = AutoFeatureExtractor.from_pretrained("openai/whisper-base")
+         >>> model = MoonshineModel.from_pretrained("UsefulSensors/moonshine-tiny")
+         >>> feature_extractor = AutoFeatureExtractor.from_pretrained("UsefulSensors/moonshine-tiny")
          >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
          >>> inputs = feature_extractor(ds[0]["audio"]["array"], return_tensors="pt")
-         >>> input_features = inputs.input_features
+         >>> input_values = inputs.input_values
          >>> decoder_input_ids = torch.tensor([[1, 1]]) * model.config.decoder_start_token_id
-         >>> last_hidden_state = model(input_features, decoder_input_ids=decoder_input_ids).last_hidden_state
+         >>> last_hidden_state = model(input_values, decoder_input_ids=decoder_input_ids).last_hidden_state
          >>> list(last_hidden_state.shape)
-         [1, 2, 512]
+         [1, 2, 288]
          ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1884,10 +1870,10 @@ class MoonshineModel(MoonshinePreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if encoder_outputs is None:
-            input_features = self._mask_input_features(input_features, attention_mask=attention_mask)
+            input_values = self._mask_input_values(input_values, attention_mask=attention_mask)
 
             encoder_outputs = self.encoder(
-                input_features,
+                input_values,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
@@ -1981,7 +1967,7 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
     @replace_return_docstrings(output_type=Seq2SeqLMOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_features: Optional[torch.FloatTensor] = None,
+        input_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
         decoder_input_ids: Optional[torch.LongTensor] = None,
         decoder_attention_mask: Optional[torch.LongTensor] = None,
@@ -2000,7 +1986,7 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the language modeling loss. Indices should either be in `[0, ..., config.vocab_size]`
             or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored (masked), the loss is
-            only computed for the tokens with labels in `[0, ..., config.vocab_size]`. `sequence_length` should be smaller than or equal to `config.max_target_positions`.
+            only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
         Returns:
 
@@ -2008,18 +1994,18 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
 
         ```python
         >>> import torch
-        >>> from transformers import AutoProcessor, WhisperForConditionalGeneration
+        >>> from transformers import AutoProcessor, MoonshineForConditionalGeneration
         >>> from datasets import load_dataset
 
-        >>> processor = AutoProcessor.from_pretrained("openai/whisper-tiny.en")
-        >>> model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
+        >>> processor = AutoProcessor.from_pretrained("UsefulSensors/moonshine")
+        >>> model = MoonshineForConditionalGeneration.from_pretrained("UsefulSensors/moonshine")
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
         >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="pt")
-        >>> input_features = inputs.input_features
+        >>> input_values = inputs.input_values
 
-        >>> generated_ids = model.generate(inputs=input_features)
+        >>> generated_ids = model.generate(input_values, max_new_tokens=100)
 
         >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         >>> transcription
@@ -2028,17 +2014,13 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
-            if labels.shape[1] > self.max_target_positions:
-                raise ValueError(
-                    f"Labels' sequence length {labels.shape[1]} cannot exceed the maximum allowed length of {self.max_target_positions} tokens."
-                )
             if decoder_input_ids is None and decoder_inputs_embeds is None:
                 decoder_input_ids = shift_tokens_right(
                     labels, self.config.pad_token_id, self.config.decoder_start_token_id
                 )
 
         outputs = self.model(
-            input_features,
+            input_values,
             attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             encoder_outputs=encoder_outputs,

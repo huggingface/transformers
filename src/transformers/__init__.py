@@ -5351,7 +5351,6 @@ if TYPE_CHECKING:
     )
     from .models.gpt_neo import GPTNeoConfig
     from .models.gpt_neox import GPTNeoXConfig
-    from .models.moonshine import MoonshineConfig
     from .models.gpt_neox_japanese import (
         GPTNeoXJapaneseConfig,
     )
@@ -5499,6 +5498,7 @@ if TYPE_CHECKING:
     from .models.mobilevitv2 import (
         MobileViTV2Config,
     )
+    from .models.moonshine import MoonshineConfig
     from .models.moshi import (
         MoshiConfig,
         MoshiDepthConfig,
@@ -6022,7 +6022,6 @@ if TYPE_CHECKING:
         from .models.gemma import GemmaTokenizerFast
         from .models.gpt2 import GPT2TokenizerFast
         from .models.gpt_neox import GPTNeoXTokenizerFast
-        from .models.moonshine import MoonshineTokenizer
         from .models.gpt_neox_japanese import GPTNeoXJapaneseTokenizer
         from .models.herbert import HerbertTokenizerFast
         from .models.layoutlm import LayoutLMTokenizerFast
@@ -6037,6 +6036,7 @@ if TYPE_CHECKING:
         from .models.mbart import MBartTokenizerFast
         from .models.mbart50 import MBart50TokenizerFast
         from .models.mobilebert import MobileBertTokenizerFast
+        from .models.moonshine import MoonshineTokenizer
         from .models.mpnet import MPNetTokenizerFast
         from .models.mt5 import MT5TokenizerFast
         from .models.mvp import MvpTokenizerFast
@@ -7116,14 +7116,6 @@ if TYPE_CHECKING:
             GPTNeoXModel,
             GPTNeoXPreTrainedModel,
         )
-        from .models.moonshine import (
-            MoonshineForCausalLM,
-            MoonshineForQuestionAnswering,
-            MoonshineForSequenceClassification,
-            MoonshineForTokenClassification,
-            MoonshineModel,
-            MoonshinePreTrainedModel,
-        )
         from .models.gpt_neox_japanese import (
             GPTNeoXJapaneseForCausalLM,
             GPTNeoXJapaneseModel,
@@ -7462,6 +7454,14 @@ if TYPE_CHECKING:
             MobileViTV2ForSemanticSegmentation,
             MobileViTV2Model,
             MobileViTV2PreTrainedModel,
+        )
+        from .models.moonshine import (
+            MoonshineForCausalLM,
+            MoonshineForQuestionAnswering,
+            MoonshineForSequenceClassification,
+            MoonshineForTokenClassification,
+            MoonshineModel,
+            MoonshinePreTrainedModel,
         )
         from .models.moshi import (
             MoshiForCausalLM,
