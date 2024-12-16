@@ -367,7 +367,6 @@ class GemmaModel(LlamaModel):
             [GemmaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        del self.rotary_emb  # Gemma does not implement rotary emb at the modeling level yet!
         self.post_init()
 
     def forward(
@@ -432,6 +431,9 @@ class GemmaModel(LlamaModel):
         # embed positions
         hidden_states = inputs_embeds
 
+        # create position embeddings to be shared across the decoder layers
+        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+
         # normalized
         # Gemma downcasts the below to float16, causing sqrt(3072)=55.4256 to become 55.5
         # See https://github.com/huggingface/transformers/pull/29402
@@ -457,6 +459,7 @@ class GemmaModel(LlamaModel):
                     output_attentions,
                     use_cache,
                     cache_position,
+                    position_embeddings
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -467,6 +470,7 @@ class GemmaModel(LlamaModel):
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                     cache_position=cache_position,
+                    position_embeddings=position_embeddings,
                 )
 
             hidden_states = layer_outputs[0]

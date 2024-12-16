@@ -202,10 +202,6 @@ class Gemma2MLP(nn.Module):
         return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
 
-class Gemma2RotaryEmbedding(GemmaRotaryEmbedding):
-    pass
-
-
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
