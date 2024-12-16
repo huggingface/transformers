@@ -1253,7 +1253,7 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
 
         if not return_dict:
-            output = (logits,) + outputs[2:]
+            output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
