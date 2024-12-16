@@ -318,7 +318,6 @@ class DbrxFlashAttention2(DbrxAttention):
     calls the public API of flash attention.
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 

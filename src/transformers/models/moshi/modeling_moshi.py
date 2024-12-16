@@ -527,7 +527,8 @@ class MoshiAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.gemma.modeling_gemma.GemmaFlashAttention2 with Gemma->Moshi
+# NO LONGER EXIST Copied from transformers.models.gemma.modeling_gemma.GemmaFlashAttention2 with Gemma->Moshi
+# TODO cyril: modular
 class MoshiFlashAttention2(MoshiAttention):
     """
     Moshi flash attention module. This module inherits from `MoshiAttention` as the weights of the module stays
@@ -643,7 +644,8 @@ class MoshiFlashAttention2(MoshiAttention):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.gemma.modeling_gemma.GemmaSdpaAttention with Gemma->Moshi
+# NO LONGER EXIST Copied from transformers.models.gemma.modeling_gemma.GemmaSdpaAttention with Gemma->Moshi
+# TODO cyril: modular
 class MoshiSdpaAttention(MoshiAttention):
     """
     Moshi attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from

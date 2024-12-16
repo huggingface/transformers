@@ -510,7 +510,8 @@ class GraniteMoeAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.granite.modeling_granite.GraniteFlashAttention2 with Granite->GraniteMoe
+# NO LONGER EXIST Copied from transformers.models.granite.modeling_granite.GraniteFlashAttention2 with Granite->GraniteMoe
+# TODO cyril: modular
 class GraniteMoeFlashAttention2(GraniteMoeAttention):
     """
     GraniteMoe flash attention module. This module inherits from `GraniteMoeAttention` as the weights of the module stays
@@ -617,7 +618,8 @@ class GraniteMoeFlashAttention2(GraniteMoeAttention):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.granite.modeling_granite.GraniteSdpaAttention with Granite->GraniteMoe
+# NO LONGER EXIST Copied from transformers.models.granite.modeling_granite.GraniteSdpaAttention with Granite->GraniteMoe
+# TODO cyril: modular
 class GraniteMoeSdpaAttention(GraniteMoeAttention):
     """
     GraniteMoe attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from

@@ -35,7 +35,13 @@ from ...modeling_outputs import (
 from ...utils import (
     logging,
 )
-from ..llama.modeling_llama import LlamaForCausalLM, LlamaRMSNorm
+from ..llama.modeling_llama import (
+    LlamaForCausalLM,
+    LlamaForQuestionAnswering,
+    LlamaForSequenceClassification,
+    LlamaForTokenClassification,
+    LlamaRMSNorm,
+)
 from ..mistral.modeling_mistral import MistralAttention, MistralModel
 from .configuration_mixtral import MixtralConfig
 
@@ -561,3 +567,15 @@ class MixtralForCausalLM(LlamaForCausalLM):
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
         )
+
+
+class MixtralForSequenceClassification(LlamaForSequenceClassification):
+    pass
+
+
+class MixtralForTokenClassification(LlamaForTokenClassification):
+    pass
+
+
+class MixtralForQuestionAnswering(LlamaForQuestionAnswering):
+    pass

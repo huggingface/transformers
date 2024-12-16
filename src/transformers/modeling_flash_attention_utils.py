@@ -276,7 +276,7 @@ def _flash_attention_forward(
     if not use_top_left_mask:
         causal = is_causal
     else:
-        # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1. For details, please see the comment in transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__.
+        # TODO: Remove the `query_length != 1` check once Flash Attention for RoCm is bumped to 2.1.
         causal = is_causal and query_length != 1
 
     # Assuming 4D tensors, key_states.shape[1] is the key/value sequence length (source length).

@@ -641,7 +641,6 @@ class JetMoeSdpaAttention(JetMoeAttention):
 
 
 class JetMoeFlashAttention2(JetMoeAttention):
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 

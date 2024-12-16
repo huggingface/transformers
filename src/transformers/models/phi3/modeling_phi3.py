@@ -431,7 +431,6 @@ class Phi3FlashAttention2(Phi3Attention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -550,8 +549,8 @@ class Phi3FlashAttention2(Phi3Attention):
         return attn_output, attn_weights, past_key_value
 
 
-# copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention with Llama->Phi3
-# TODO @Arthur no longer copied from LLama after static cache
+# NO LONGER EXIST copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention with Llama->Phi3
+# TODO cyril: modular
 class Phi3SdpaAttention(Phi3Attention):
     """
     Phi3 attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from

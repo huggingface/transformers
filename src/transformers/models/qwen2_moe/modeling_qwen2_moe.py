@@ -419,7 +419,8 @@ class Qwen2MoeAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.qwen2.modeling_qwen2.Qwen2FlashAttention2 with Qwen2->Qwen2Moe
+# NO LONGER EXIST Copied from transformers.models.qwen2.modeling_qwen2.Qwen2FlashAttention2 with Qwen2->Qwen2Moe
+# TODO cyril: modular
 class Qwen2MoeFlashAttention2(Qwen2MoeAttention):
     """
     Qwen2Moe flash attention module, following Qwen2Moe attention module. This module inherits from `Qwen2MoeAttention`
@@ -429,7 +430,6 @@ class Qwen2MoeFlashAttention2(Qwen2MoeAttention):
     config.max_window_layers layers.
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -530,7 +530,8 @@ class Qwen2MoeFlashAttention2(Qwen2MoeAttention):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.qwen2.modeling_qwen2.Qwen2SdpaAttention with Qwen2->Qwen2Moe
+# NO LONGER EXIST Copied from transformers.models.qwen2.modeling_qwen2.Qwen2SdpaAttention with Qwen2->Qwen2Moe
+# TODO cyril: modular
 class Qwen2MoeSdpaAttention(Qwen2MoeAttention):
     """
     Qwen2Moe attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
