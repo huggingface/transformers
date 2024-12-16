@@ -483,7 +483,7 @@ class MistralModel(MistralPreTrainedModel):
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
+        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -590,11 +590,10 @@ class MistralModel(MistralPreTrainedModel):
         input_tensor: torch.Tensor,
         cache_position: torch.Tensor,
         past_key_values: Cache,
-        use_cache: bool,
         output_attentions: bool,
     ):
         if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and use_cache:
+            if attention_mask is not None and past_key_values is not None:
                 is_padding_right = attention_mask[:, -1].sum().item() != input_tensor.size()[0]
                 if is_padding_right:
                     raise ValueError(
