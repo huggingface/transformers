@@ -1,7 +1,6 @@
 from typing import Callable, Optional, Tuple
 
 import torch
-from torch import nn
 
 from ...cache_utils import Cache
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -14,7 +13,6 @@ from ..olmo.modeling_olmo import (
     OlmoDecoderLayer,
     OlmoForCausalLM,
     OlmoModel,
-    OlmoPreTrainedModel,
     apply_rotary_pos_emb,
 )
 
@@ -293,5 +291,5 @@ __all__ = [
     "Olmo2Config",
     "Olmo2ForCausalLM",
     "Olmo2Model",
-    "Olmo2PreTrainedModel",
+    "Olmo2PreTrainedModel",  # noqa: F822
 ]

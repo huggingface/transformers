@@ -213,7 +213,7 @@ def eager_attention_forward(
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     if scaling is None:
         scaling = module.head_dim**-0.5
-    
+
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
 
