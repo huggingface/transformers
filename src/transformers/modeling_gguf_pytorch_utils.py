@@ -252,7 +252,14 @@ def get_gguf_hf_weights_map(
     See "Standardized tensor names" in
     https://github.com/ggerganov/ggml/blob/master/docs/gguf.md for details.
     """
-    from gguf import MODEL_ARCH_NAMES, get_tensor_name_map
+    if is_gguf_available() and is_torch_available():
+        from gguf import MODEL_ARCH_NAMES, get_tensor_name_map
+    else:
+        logger.error(
+            "Loading a GGUF checkpoint in PyTorch, requires both PyTorch and GGUF>=0.10.0 to be installed. Please see "
+            "https://pytorch.org/ and https://github.com/ggerganov/llama.cpp/tree/master/gguf-py for installation instructions."
+        )
+        raise ImportError("Please install torch and gguf>=0.10.0 to load a GGUF checkpoint in PyTorch.")
 
     model_type = hf_model.config.model_type if model_type is None else model_type
     num_layers = hf_model.config.num_hidden_layers if num_layers is None else num_layers
