@@ -301,17 +301,16 @@ class Gemma2Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class Gemma2DecoderLayer(nn.ModuleLayer):
+class Gemma2DecoderLayer(nn.Module):
     def __init__(self, config: Gemma2Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-
-        self.self_attn = Gemma2Attention(config=config, layer_idx=layer_idx)
-
-        self.mlp = Gemma2MLP(config)
-        self.input_layernorm = Gemma2RMSNorm(config.hidden_size)
-        self.post_attention_layernorm = Gemma2RMSNorm(config.hidden_size)
+        self.config = config
         self.is_sliding = not bool(layer_idx % 2)
+        self.self_attn = Gemma2Attention(config=config, layer_idx=layer_idx)
+        self.mlp = Gemma2MLP(config)
+        self.input_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
         self.pre_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = Gemma2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)

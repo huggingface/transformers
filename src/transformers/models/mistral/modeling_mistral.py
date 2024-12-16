@@ -261,7 +261,7 @@ class MistralAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class MistralDecoderLayer(nn.ModuleLayer):
+class MistralDecoderLayer(nn.Module):
     def __init__(self, config: MistralConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size

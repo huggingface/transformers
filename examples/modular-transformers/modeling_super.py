@@ -249,7 +249,7 @@ class SuperAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class SuperDecoderLayer(nn.ModuleLayer):
+class SuperDecoderLayer(nn.Module):
     def __init__(self, config: SuperConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size

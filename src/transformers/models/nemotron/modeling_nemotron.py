@@ -517,7 +517,7 @@ NEMOTRON_ATTENTION_CLASSES = {
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
-class NemotronDecoderLayer(nn.ModuleLayer):
+class NemotronDecoderLayer(nn.Module):
     # Ignore copy
     def __init__(self, config: NemotronConfig, layer_idx: int):
         super().__init__()

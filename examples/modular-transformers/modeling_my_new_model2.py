@@ -187,7 +187,7 @@ class MyNewModel2Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class MyNewModel2DecoderLayer(nn.ModuleLayer):
+class MyNewModel2DecoderLayer(nn.Module):
     def __init__(self, config: MyNewModel2Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size

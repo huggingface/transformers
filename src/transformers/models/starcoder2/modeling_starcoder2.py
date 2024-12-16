@@ -272,7 +272,7 @@ class Starcoder2Attention(nn.Module):
         return attn_output, attn_weights
 
 
-class Starcoder2DecoderLayer(nn.ModuleLayer):
+class Starcoder2DecoderLayer(nn.Module):
     def __init__(self, config: Starcoder2Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size

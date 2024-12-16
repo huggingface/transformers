@@ -287,7 +287,7 @@ class LlamaAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class LlamaDecoderLayer(nn.ModuleLayer):
+class LlamaDecoderLayer(nn.Module):
     def __init__(self, config: LlamaConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size

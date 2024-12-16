@@ -212,7 +212,7 @@ class Qwen2MLP(nn.Module):
         return down_proj
 
 
-class Qwen2DecoderLayer(nn.ModuleLayer):
+class Qwen2DecoderLayer(nn.Module):
     def __init__(self, config: Qwen2Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
