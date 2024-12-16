@@ -295,7 +295,6 @@ def eager_attention_forward(
     position_ids: Optional[torch.LongTensor],
     attention_mask: torch.Tensor,
     bs: int,
-    seqlen: int,
     dim: int,
     output_attentions: Optional[bool] = False,
     **_kwargs,
@@ -319,7 +318,7 @@ def eager_attention_forward(
         attn_weights = nn.functional.dropout(attn_weights, p=module.attention_dropout)
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
-    attn_output = attn_output.view(bs, seqlen, dim)
+    attn_output = attn_output.view(bs, -1, dim)
     if output_attentions:
         return (attn_output, attn_weights)
     return (attn_output,)
@@ -406,7 +405,6 @@ def sdpa_attention_forward(
     position_ids: Optional[torch.LongTensor],
     attention_mask: torch.Tensor,
     bs: int,
-    seqlen: int,
     dim: int,
     **_kwargs,
 ) -> Tuple[torch.Tensor]:
@@ -426,7 +424,7 @@ def sdpa_attention_forward(
         dropout_p=module.attention_dropout if module.training else 0.0,
         attn_mask=attention_mask,
     ).transpose(1, 2)
-    attn_output = attn_output.view(bs, seqlen, dim)
+    attn_output = attn_output.view(bs, -1, dim)
     return (attn_output,)
 
 
@@ -493,11 +491,6 @@ class ModernBertAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        cu_seqlens: Optional[torch.Tensor] = None,
-        block_mask: Optional[BlockMask] = None,
-        max_seqlen: Optional[int] = None,
         output_attentions: Optional[bool] = False,
         **kwargs,
     ) -> torch.Tensor:
@@ -522,48 +515,11 @@ class ModernBertAttention(nn.Module):
         """
         qkv = self.Wqkv(hidden_states)
 
-        attn_kwargs = {
-            "output_attentions": output_attentions,
-            "dim": self.all_head_size,
-        }
-        if self.config._attn_implementation == "flash_attention_2":
-            bs = hidden_states.shape[0]
+        bs = hidden_states.shape[0]
+        if self.config._attn_implementation in ("flash_attention_2", "flex_attention"):
             qkv = qkv.view(-1, 3, self.num_heads, self.head_dim)
-
-            attn_kwargs.update(
-                {
-                    "local_attention": self.local_attention,
-                    "cu_seqlens": cu_seqlens,
-                    "max_seqlen": max_seqlen,
-                    "bs": bs,
-                }
-            )
-        elif self.config._attn_implementation == "flex_attention":
-            bs, dim = hidden_states.shape[:2]
-            qkv = qkv.view(-1, 3, self.num_heads, self.head_dim)
-
-            attn_kwargs.update(
-                {
-                    "local_attention": self.local_attention,
-                    "block_mask": block_mask,
-                    "cu_seqlens": cu_seqlens,
-                    "max_seqlen": max_seqlen,
-                    "bs": bs,
-                }
-            )
-
         else:
-            bs, seqlen = hidden_states.shape[:2]
-            qkv = qkv.view(bs, seqlen, 3, self.num_heads, self.head_dim)
-
-            attn_kwargs.update(
-                {
-                    "position_ids": position_ids,
-                    "attention_mask": attention_mask,
-                    "bs": bs,
-                    "seqlen": seqlen,
-                }
-            )
+            qkv = qkv.view(bs, -1, 3, self.num_heads, self.head_dim)
 
         if output_attentions:
             if self.config._attn_implementation == "sdpa":
@@ -583,7 +539,11 @@ class ModernBertAttention(nn.Module):
             self,
             qkv=qkv,
             rotary_emb=self.rotary_emb,
-            **attn_kwargs,
+            local_attention=self.local_attention,
+            bs=bs,
+            dim=self.all_head_size,
+            output_attentions=output_attentions,
+            **kwargs,
         )
         hidden_states = attn_outputs[0]
         hidden_states = self.out_drop(self.Wo(hidden_states))
