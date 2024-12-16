@@ -502,7 +502,7 @@ class BambaModelIntegrationTest(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        model_id = "ibm-fms/Bamba-9.8b-1.8T-hf"
+        model_id = "ibm-fms/Bamba-9B"
         cls.model = BambaForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True)
         cls.tokenizer = AutoTokenizer.from_pretrained(model_id)
 
@@ -521,7 +521,7 @@ class BambaModelIntegrationTest(unittest.TestCase):
         # considering differences in hardware processing and potential deviations in generated text.
         EXPECTED_TEXTS = {
             # 7: "",
-            8: "<|begin_of_text|>Hey how are you doing on this lovely evening? I am doing well, I am just sitting here",
+            8: "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are all having a good time.",
             #  9: """,
         }
 
@@ -541,13 +541,12 @@ class BambaModelIntegrationTest(unittest.TestCase):
 
             EXPECTED_LOGITS_NO_GRAD = torch.tensor(
                 [
-                    192., 185., 185., 183., 183., 186., 184., 183.,
-                    183., 188., 184., 185., 185., 185., 188., 184.,
-                    186., 185., 185., 185., 185., 184., 184., 184.,
-                    184., 184., 187., 186., 185., 184., 185., 187.,
-                    188., 186., 186., 187., 186., 185., 186., 187.
-                ]
-                , dtype=torch.bfloat16)  # fmt: skip
+                    149., 142., 146., 142., 143., 144., 142., 145.,
+                    142., 146., 144., 146., 147., 147., 148., 145.,
+                    147., 145., 145., 145., 145., 144., 144., 144.,
+                    144., 145., 147., 146., 144., 144., 148., 147.,
+                    148., 147., 147., 147., 146., 146., 148., 148.
+                ], dtype=torch.bfloat16)  # fmt: skip
 
             torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD, rtol=1e-3, atol=1)
 
@@ -559,8 +558,8 @@ class BambaModelIntegrationTest(unittest.TestCase):
         EXPECTED_TEXTS = {
             7: [],
             8: [
-                "<|begin_of_text|>Hey how are you doing on this lovely evening? I am doing well. I am a 20",
-                "!!!<|begin_of_text|>I am late! I need to get to the airport! I have a flight to",
+                "<|begin_of_text|>Hey how are you doing on this lovely evening? I hope you are doing well. I am here",
+                "!!!<|begin_of_text|>I am late! I need to get to work! I have to get to the",
             ],
             9: [],
         }
@@ -584,23 +583,21 @@ class BambaModelIntegrationTest(unittest.TestCase):
 
             EXPECTED_LOGITS_NO_GRAD_0 = torch.tensor(
                 [
-                    193., 186., 185., 183., 183., 187., 184., 184.,
-                    183., 188., 184., 186., 186., 186., 188., 185.,
-                    187., 186., 185., 185., 185., 184., 184., 184.,
-                    184., 185., 187., 187., 185., 184., 185., 187.,
-                    188., 187., 187., 187., 186., 186., 187., 188.
-                ]
-                , dtype=torch.bfloat16)  # fmt: skip
+                    149., 142., 146., 142., 143., 144., 142., 145.,
+                    142., 146., 144., 146., 147., 147., 148., 145.,
+                    147., 145., 145., 145., 145., 144., 144., 144.,
+                    144., 145., 147., 146., 144., 144., 148., 147.,
+                    148., 147., 147., 147., 146., 146., 148., 148.
+                ], dtype=torch.bfloat16)  # fmt: skip
 
             EXPECTED_LOGITS_NO_GRAD_1 = torch.tensor(
                 [
-                    198., 196., 193., 191., 193., 193., 195., 194.,
-                    195., 194., 193., 199., 197., 198., 196., 192.,
-                    194., 193., 193., 193., 193., 192., 192., 192.,
-                    191., 197., 196., 192., 193., 194., 196., 192.,
-                    193., 193., 193., 192., 193., 193., 192., 193.
-                ]
-                , dtype=torch.bfloat16)  # fmt: skip
+                    182., 178., 177., 174., 176., 176., 178., 178.,
+                    177., 179., 176., 183., 180., 182., 179., 174.,
+                    178., 176., 176., 175., 175., 175., 174., 173.,
+                    174., 182., 180., 176., 177., 177., 180., 176.,
+                    178., 177., 177., 175., 176., 177., 175., 177.
+                ], dtype=torch.bfloat16)  # fmt: skip
 
             torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_0, rtol=1e-3, atol=1)
             torch.testing.assert_close(logits[1, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_1, rtol=1e-3, atol=1)
