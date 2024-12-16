@@ -117,22 +117,22 @@ def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
     return model
 
 
-def eager_attention_forward(self, query, key, value, attention_mask=None, head_mask=None):
+def eager_attention_forward(module, query, key, value, attention_mask, head_mask=None, **kwargs):
     attn_weights = torch.matmul(query, key.transpose(-1, -2))
 
-    if self.scale_attn_weights:
+    if module.scale_attn_weights:
         attn_weights = attn_weights / torch.full(
             [], value.size(-1) ** 0.5, dtype=attn_weights.dtype, device=attn_weights.device
         )
 
     # Layer-wise attention scaling
-    if self.scale_attn_by_inverse_layer_idx:
-        attn_weights = attn_weights / float(self.layer_idx + 1)
+    if module.scale_attn_by_inverse_layer_idx:
+        attn_weights = attn_weights / float(module.layer_idx + 1)
 
-    if not self.is_cross_attention:
+    if not module.is_cross_attention:
         # if only "normal" attention layer implements causal mask
         query_length, key_length = query.size(-2), key.size(-2)
-        causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
+        causal_mask = module.bias[:, :, key_length - query_length : key_length, :key_length]
         mask_value = torch.finfo(attn_weights.dtype).min
         # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
         # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
@@ -147,7 +147,7 @@ def eager_attention_forward(self, query, key, value, attention_mask=None, head_m
 
     # Downcast (if necessary) back to V's dtype (if in mixed-precision) -- No-Op otherwise
     attn_weights = attn_weights.type(value.dtype)
-    attn_weights = self.attn_dropout(attn_weights)
+    attn_weights = module.attn_dropout(attn_weights)
 
     # Mask heads if we want to
     if head_mask is not None:
@@ -273,13 +273,13 @@ class GPT2Attention(nn.Module):
     def forward(
         self,
         hidden_states: Optional[Tuple[torch.FloatTensor]],
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        layer_past: Optional[Tuple[torch.Tensor]] = None,
         attention_mask: Optional[torch.FloatTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
         encoder_hidden_states: Optional[torch.Tensor] = None,
         encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        use_cache: Optional[bool] = False,
+        output_attentions: Optional[bool] = False,
         **kwargs,
     ) -> Tuple[Union[torch.Tensor, Tuple[torch.Tensor]], ...]:
         if encoder_hidden_states is not None:
@@ -289,29 +289,34 @@ class GPT2Attention(nn.Module):
                     "Please make sure to instantiate class with `GPT2Attention(..., is_cross_attention=True)`."
                 )
 
-            query = self.q_attn(hidden_states)
-            key, value = self.c_attn(encoder_hidden_states).split(self.split_size, dim=2)
+            query_states = self.q_attn(hidden_states)
+            key_states, value_states = self.c_attn(encoder_hidden_states).split(self.split_size, dim=2)
             attention_mask = encoder_attention_mask
         else:
-            query, key, value = self.c_attn(hidden_states).split(self.split_size, dim=2)
+            query_states, key_states, value_states = self.c_attn(hidden_states).split(self.split_size, dim=2)
 
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = query.view(hidden_shape).transpose(1, 2)
-        key_states = key.view(hidden_shape).transpose(1, 2)
-        value_states = value.view(hidden_shape).transpose(1, 2)
+        query_states = query_states.view(hidden_shape).transpose(1, 2)
+        key_states = key_states.view(hidden_shape).transpose(1, 2)
+        value_states = value_states.view(hidden_shape).transpose(1, 2)
 
-        cos, sin = position_embeddings
+        if layer_past is not None:
+            past_key, past_value = layer_past
+            key_states = torch.cat((past_key, key_states), dim=-2)
+            value_states = torch.cat((past_value, value_states), dim=-2)
 
-        if past_key_value is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+        if use_cache is True:
+            present = (key_states, value_states)
+        else:
+            present = None
 
+        using_eager = self.config._attn_implementation == "eager"
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+            if self.config._attn_implementation == "sdpa" and (output_attentions or head_mask is not None):
+                using_eager = True
                 logger.warning_once(
                     "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
                     'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
@@ -319,21 +324,34 @@ class GPT2Attention(nn.Module):
             else:
                 attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        if self.reorder_and_upcast_attn:
-            attn_output, attn_weights = self._upcast_and_reordered_attn(query, key, value, attention_mask, head_mask)
+        if using_eager and self.reorder_and_upcast_attn:
+            attn_output, attn_weights = self._upcast_and_reordered_attn(
+                query_states, key_states, value_states, attention_mask, head_mask
+            )
         else:
             attn_output, attn_weights = attention_interface(
                 self,
                 query_states,
                 key_states,
                 value_states,
+                attention_mask,
+                head_mask=head_mask,
+                dropout=self.attn_dropout.p if self.training else 0.0,
                 **kwargs,
             )
 
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.c_proj(attn_output)
+        attn_output_reshaped = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.c_proj(attn_output_reshaped)
         attn_output = self.resid_dropout(attn_output)
-        return attn_output, attn_weights
+
+        outputs = (attn_output, present)
+        if output_attentions:
+            # weird but needed to satisfy BC and tests (would normally be None)
+            if self.config._attn_implementation == "flash_attention_2":
+                attn_weights = attn_output_reshaped
+            outputs += (attn_weights,)
+
+        return outputs  # a, present, (attentions)
 
 
 class GPT2MLP(nn.Module):
@@ -415,7 +433,7 @@ class GPT2Block(nn.Module):
             attn_output = cross_attn_outputs[0]
             # residual connection
             hidden_states = residual + attn_output
-            outputs = outputs + cross_attn_outputs[1:]  # add cross attentions if we output attention weights
+            outputs = outputs + cross_attn_outputs[2:]  # add cross attentions if we output attention weights
 
         residual = hidden_states
         hidden_states = self.ln_2(hidden_states)

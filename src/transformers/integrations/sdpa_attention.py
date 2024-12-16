@@ -25,8 +25,9 @@ def sdpa_attention_forward(
     scaling: Optional[float] = None,
     **kwargs,
 ) -> Tuple[torch.Tensor, None]:
-    key = repeat_kv(key, module.num_key_value_groups)
-    value = repeat_kv(value, module.num_key_value_groups)
+    if hasattr(module, "num_key_value_groups"):
+        key = repeat_kv(key, module.num_key_value_groups)
+        value = repeat_kv(value, module.num_key_value_groups)
 
     causal_mask = attention_mask
     if attention_mask is not None:

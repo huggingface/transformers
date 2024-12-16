@@ -22,12 +22,8 @@ def flash_attention_forward(
     target_dtype: torch.dtype = torch.float16,
     **kwargs,
 ) -> Tuple[torch.Tensor, None]:
-    if attention_mask is not None:
-        seq_len = attention_mask.shape[1]
-        query = query[:, :, :seq_len]
-        value = value[:, :, :seq_len]
-    else:
-        seq_len = query.shape[1]
+    # This is before the transpose
+    seq_len = query.shape[2]
 
     # FA2 uses non-transposed inputs
     query = query.transpose(1, 2)
