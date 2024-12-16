@@ -272,11 +272,7 @@ class DbrxAttention(nn.Module):
             self.hidden_size, self.hidden_size + 2 * self.num_key_value_heads * self.head_dim, bias=False
         )
         self.out_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
-        self.rotary_emb = DbrxRotaryEmbedding(
-            self.head_dim,
-            max_position_embeddings=self.max_position_embeddings,
-            base=self.rope_theta,
-        )
+        self.rotary_emb = DbrxRotaryEmbedding(config)
 
     def forward(
         self,
