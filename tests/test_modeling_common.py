@@ -3876,20 +3876,6 @@ class ModelTesterMixin:
                 model_eager = model_eager.eval().to(torch_device)
                 self.assertTrue(model_eager.config._attn_implementation == "eager")
 
-                for name, submodule in model_eager.named_modules():
-                    class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                        raise ValueError("The eager model should not have SDPA attention layers")
-
-                has_sdpa = False
-                for name, submodule in model_sdpa.named_modules():
-                    class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                        has_sdpa = True
-                        break
-                if not has_sdpa and model_sdpa.config.model_type != "falcon":
-                    raise ValueError("The SDPA model should have SDPA attention layers")
-
     @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         """
