@@ -92,8 +92,15 @@ if is_torch_available():
         WatermarkDetector,
         WatermarkingConfig,
     )
-    from transformers.generation.candidate_generator import AssistedCandidateGeneratorDifferentTokenizers
+    from transformers.generation.candidate_generator import (
+        AssistedCandidateGenerator,
+        AssistedCandidateGeneratorDifferentTokenizers,
+    )
     from transformers.generation.utils import _speculative_sampling
+
+from unittest.mock import patch
+
+from transformers.utils import is_sklearn_available
 
 
 class GenerationTesterMixin:
@@ -1195,6 +1202,7 @@ class GenerationTesterMixin:
                     "prophetnet",
                     "seamlessm4t",
                     "clvp",
+                    "fuyu",
                 ]
             ):
                 self.skipTest(reason="May fix in the future: need model-specific fixes")
@@ -1720,6 +1728,7 @@ class GenerationTesterMixin:
             num_hidden_layers = text_config.num_hidden_layers
 
             inputs_embeds = model.get_input_embeddings()(input_ids)
+            max_cache_len += inputs_embeds.shape[1]
             outputs = model.generate(inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict)
 
             # we should get `max_length` in shape, not `max_length - embeds_length`
@@ -1879,6 +1888,32 @@ class GenerationTesterMixin:
                                 legacy_cache_converted[layer_idx][kv_idx],
                             )
                         )
+
+    @parameterized.expand([("offloaded",)])  # ("offloaded_static",) TODO: @raushan fixme in some models (eg T5)
+    @require_torch_gpu
+    @pytest.mark.generate
+    def test_offloaded_cache_implementation(self, cache_implementation):
+        """Tests we can generate by indicating `cache_implementation` for each possible cache class"""
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_cache_class:
+                self.skipTest(reason="This model does not support the new cache format")
+
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+
+            model = model_class(config).to(torch_device).eval()
+            generation_kwargs = {
+                "max_new_tokens": 5,
+                "use_cache": True,
+                "cache_implementation": cache_implementation,
+            }
+
+            legacy_results = model.generate(**generation_kwargs, **inputs_dict)
+
+            # Most cache classes have their own tests except for some that are tested here
+            # The ones here do not need special treatment when passing `cache_implementation`
+            # and are not bound to specific models only
+            new_results = model.generate(**generation_kwargs, **inputs_dict)
+            self.assertListEqual(legacy_results.tolist(), new_results.tolist())
 
     @pytest.mark.generate
     def test_generate_with_static_cache(self):
@@ -3812,7 +3847,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             do_sample=False,
             max_new_tokens=max_new_tokens_item,
             assistant_model=draft_model,
-            target_tokenizer=target_tokenizer,
+            tokenizer=target_tokenizer,
             assistant_tokenizer=assistant_tokenizer,
         )
 
@@ -4286,3 +4321,110 @@ class TestAssistedCandidateGeneratorDifferentTokenizers(unittest.TestCase):
         self.assertEqual(discrep_length, 0)
         np.testing.assert_array_equal(new_tokens_only, np.array([[]]))
         np.testing.assert_array_equal(discrep_only, np.array([[]]))
+
+
+class TestAssistedCandidateGeneratorUpdateStrategy(unittest.TestCase):
+    def setUp(self):
+        checkpoint = "EleutherAI/pythia-160m-deduped"
+        self.assistant_model = AutoModelForCausalLM.from_pretrained(checkpoint)
+        self.assistant_model.generation_config.assistant_confidence_threshold = 0.4
+        self.model_kwargs = {}
+        self.input_ids = torch.randint(1, 10, (1, 9))
+        self.candidate_generator = AssistedCandidateGenerator(
+            input_ids=self.input_ids,
+            assistant_model=self.assistant_model,
+            generation_config=self.assistant_model.generation_config,
+            model_kwargs=self.model_kwargs,
+        )
+        self.candidate_generator.probs = [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1]
+        self.original_probs = self.candidate_generator.probs
+        self.original_threshold = self.assistant_model.generation_config.assistant_confidence_threshold
+
+    def assert_no_sklearn(self):
+        with patch("transformers.utils.import_utils._sklearn_available", False):
+            self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
+            self.assertEqual(self.candidate_generator.matches, self.original_matches)
+            self.assertEqual(self.candidate_generator.probs, self.original_probs)
+            self.assertEqual(
+                self.assistant_model.generation_config.assistant_confidence_threshold, self.original_threshold
+            )
+
+    @parameterized.expand([(is_sklearn_available(),), (False,)])
+    def test_update_candidate_strategy_no_matches_short(self, sklearn_available):
+        print("test_update_candidate_strategy_no_matches_short")
+        self.original_matches = []
+        self.candidate_generator.matches = self.original_matches
+        self.num_matches = 0
+
+        if sklearn_available:
+            self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
+            self.assertEqual(self.candidate_generator.matches, [0])
+            self.assertEqual(self.candidate_generator.probs, [0.9])
+            self.assertEqual(self.assistant_model.generation_config.assistant_confidence_threshold, 0.4)
+        else:
+            self.assert_no_sklearn()
+
+    @parameterized.expand([(is_sklearn_available(),), (False,)])
+    def test_update_candidate_strategy_with_mix_matches_3(self, sklearn_available):
+        self.original_matches = [1, 0, 1, 0, 1]
+        self.candidate_generator.matches = self.original_matches
+        self.num_matches = 3
+        if sklearn_available:
+            self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
+            self.assertEqual(self.candidate_generator.matches, [1, 0, 1, 0, 1, 1, 1, 1, 0])
+            self.assertEqual(self.candidate_generator.probs, [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1])
+            self.assertEqual(self.assistant_model.generation_config.assistant_confidence_threshold, 0.2)
+        else:
+            self.assert_no_sklearn()
+
+    @parameterized.expand([(is_sklearn_available(),), (False,)])
+    def test_update_candidate_strategy_with_matches_4(self, sklearn_available):
+        self.original_matches = [1, 1, 1, 1, 1]
+        self.candidate_generator.matches = self.original_matches
+        self.num_matches = 4
+        if sklearn_available:
+            self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
+            self.assertEqual(self.candidate_generator.matches, [1, 1, 1, 1, 1, 1, 1, 1, 1])
+            self.assertEqual(self.candidate_generator.probs, [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1])
+            self.assertEqual(self.assistant_model.generation_config.assistant_confidence_threshold, 0.4)
+        else:
+            self.assert_no_sklearn()
+
+    @parameterized.expand([(is_sklearn_available(),), (False,)])
+    def test_update_candidate_strategy_with_matches_3(self, sklearn_available):
+        self.original_matches = [1, 1, 1, 1, 1]
+        self.candidate_generator.matches = self.original_matches
+        self.num_matches = 3
+        if sklearn_available:
+            self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
+            self.assertEqual(self.candidate_generator.matches, [1, 1, 1, 1, 1, 1, 1, 1, 0])
+            self.assertEqual(self.candidate_generator.probs, [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2, 0.1])
+            self.assertEqual(self.assistant_model.generation_config.assistant_confidence_threshold, 0.2)
+        else:
+            self.assert_no_sklearn()
+
+    @parameterized.expand([(is_sklearn_available(),), (False,)])
+    def test_update_candidate_strategy_with_matches_2(self, sklearn_available):
+        self.original_matches = [1, 1, 1, 1, 1]
+        self.candidate_generator.matches = self.original_matches
+        self.num_matches = 2
+        if sklearn_available:
+            self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
+            self.assertEqual(self.candidate_generator.matches, [1, 1, 1, 1, 1, 1, 1, 0])
+            self.assertEqual(self.candidate_generator.probs, [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3, 0.2])
+            self.assertEqual(self.assistant_model.generation_config.assistant_confidence_threshold, 0.3)
+        else:
+            self.assert_no_sklearn()
+
+    @parameterized.expand([(is_sklearn_available(),), (False,)])
+    def test_update_candidate_strategy_with_matches_1(self, sklearn_available):
+        self.original_matches = [1, 1, 1, 1, 1]
+        self.candidate_generator.matches = self.original_matches
+        self.num_matches = 1
+        if sklearn_available:
+            self.candidate_generator.update_candidate_strategy(self.input_ids, None, self.num_matches)
+            self.assertEqual(self.candidate_generator.matches, [1, 1, 1, 1, 1, 1, 0])
+            self.assertEqual(self.candidate_generator.probs, [0.9, 0.8, 0.7, 0.6, 0.5, 0.4, 0.3])
+            self.assertEqual(self.assistant_model.generation_config.assistant_confidence_threshold, 0.4)
+        else:
+            self.assert_no_sklearn()

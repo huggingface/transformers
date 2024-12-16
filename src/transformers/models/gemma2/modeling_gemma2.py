@@ -27,7 +27,6 @@ import torch.nn as nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, HybridCache
 from ...generation import GenerationMixin
-from ...modeling_flash_attention_utils import _flash_attention_forward
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -170,7 +169,14 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-def eager_attention_forward(config, query, key, value, mask, **_kwargs):
+def eager_attention_forward(
+    config: Gemma2Config,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    mask: Optional[torch.Tensor],
+    **_kwargs,
+) -> Tuple[torch.Tensor, torch.Tensor]:
     key_states = repeat_kv(key, config.num_key_value_groups)
     value_states = repeat_kv(value, config.num_key_value_groups)
 
@@ -192,7 +198,15 @@ def eager_attention_forward(config, query, key, value, mask, **_kwargs):
     return attn_output, attn_weights
 
 
-def flash_attention_forward(config, query, key, value, mask, target_dtype=torch.float16, **_kwargs):
+def flash_attention_forward(
+    config: Gemma2Config,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    mask: Optional[torch.Tensor],
+    target_dtype: torch.dtype = torch.float16,
+    **_kwargs,
+) -> Tuple[torch.Tensor, None]:
     if mask is not None:
         seq_len = mask.shape[1]
         query = query[:, :, :seq_len]
@@ -229,7 +243,15 @@ def flash_attention_forward(config, query, key, value, mask, target_dtype=torch.
     return attn_output, None
 
 
-def flex_attention_forward(config, query, key, value, mask, output_attentions=False, **_kwargs):
+def flex_attention_forward(
+    config: Gemma2Config,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    mask: Optional[torch.Tensor],
+    output_attentions: bool = False,
+    **_kwargs,
+) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
     def tanh_softcap(score, b, h, q_idx, kv_idx):
         soft_cap = config.attn_logit_softcapping
         score = soft_cap * torch.tanh(score / soft_cap)
@@ -247,12 +269,22 @@ def flex_attention_forward(config, query, key, value, mask, output_attentions=Fa
         return_lse=output_attentions,
     )
     if not output_attentions:
-        return attn_output, None
+        attn_weights = None
     else:
-        return attn_output[0], attn_output[1]
+        attn_output, attn_weights = attn_output
+
+    attn_output = attn_output.transpose(1, 2).contiguous()
+    return attn_output, attn_weights
 
 
-def sdpa_attention_forward(config, query, key, value, mask, **_kwargs):
+def sdpa_attention_forward(
+    config: Gemma2Config,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    mask: Optional[torch.Tensor],
+    **_kwargs,
+) -> Tuple[torch.Tensor, None]:
     key = repeat_kv(key, config.num_key_value_groups)
     value = repeat_kv(value, config.num_key_value_groups)
 
@@ -280,6 +312,7 @@ def sdpa_attention_forward(config, query, key, value, mask, **_kwargs):
         is_causal=is_causal,
         scale=config.scaling,
     )
+    attn_output = attn_output.transpose(1, 2).contiguous()
     return attn_output, None
 
 
@@ -362,7 +395,7 @@ class Gemma2Attention(nn.Module):
 
         if output_attentions and self.config._attn_implementation in ["sdpa", "flash_attention_2"]:
             logger.warning_once("Setting `attention_type` to `flex_attention` because `output_attentions=True`")
-            attention_type = "eager"
+            attention_type = "flex_attention"
         else:
             attention_type = self.config._attn_implementation
 
@@ -1247,3 +1280,12 @@ class Gemma2ForTokenClassification(Gemma2PreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "Gemma2ForCausalLM",
+    "Gemma2Model",
+    "Gemma2PreTrainedModel",
+    "Gemma2ForSequenceClassification",
+    "Gemma2ForTokenClassification",
+]
