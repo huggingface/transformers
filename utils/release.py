@@ -118,6 +118,7 @@ def global_version_update(version: str, patch: bool = False):
         # We don't update the version in the examples for patch releases.
         update_version_in_examples(version)
 
+
 def remove_conversion_scripts():
     """
     Delete the scripts that convert models from older, unsupported formats. We don't want to include these
