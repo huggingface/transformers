@@ -517,7 +517,7 @@ def load_state_dict(
             loading safetensors files.
 
     Returns:
-        `Union[Dict[str, "torch.Tensor"], Any]`: The loaded checkpoint.
+        `Union[Dict[str, "torch.Tensor"], Any]`: The loaded checkpoint
             - For safetensors files: always returns a dictionary mapping parameter names to tensors.
             - For pickle files: returns any Python object that was pickled (commonly a state dict, but could be
               an entire model, optimizer state, or any other Python object).
