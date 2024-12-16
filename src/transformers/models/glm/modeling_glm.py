@@ -78,8 +78,8 @@ class GlmRMSNorm(nn.Module):
 class GlmRotaryEmbedding(nn.Module):
     def __init__(
         self,
+        config: GlmConfig,
         device=None,
-        config: Optional[GlmConfig] = None,
     ):
         super().__init__()
         self.rope_kwargs = {}

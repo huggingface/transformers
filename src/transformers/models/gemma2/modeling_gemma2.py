@@ -357,8 +357,8 @@ class Gemma2PreTrainedModel(PreTrainedModel):
 class Gemma2RotaryEmbedding(nn.Module):
     def __init__(
         self,
+        config: Gemma2Config,
         device=None,
-        config: Optional[Gemma2Config] = None,
     ):
         super().__init__()
         self.rope_kwargs = {}
