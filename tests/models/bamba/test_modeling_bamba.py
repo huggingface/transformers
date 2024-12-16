@@ -490,7 +490,7 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             # They should result in very similar logits
             torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, atol=1e-5, rtol=1e-1)
 
-
+@slow
 @require_torch
 class BambaModelIntegrationTest(unittest.TestCase):
     model = None
@@ -513,7 +513,6 @@ class BambaModelIntegrationTest(unittest.TestCase):
             # 8 is for A100 / A10 and 7 for T4
             cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
 
-    @slow
     def test_simple_generate(self):
         # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
         #
@@ -551,8 +550,6 @@ class BambaModelIntegrationTest(unittest.TestCase):
 
             torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD, rtol=1e-3, atol=1)
 
-    # implement this
-    @slow
     def test_simple_batched_generate_with_padding(self):
         # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
         #
