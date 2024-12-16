@@ -16,11 +16,33 @@ rendered properly in your Markdown viewer.
 
 # Bamba
 
+
 ## Overview
 
 Bamba-9B is a decoder-only language model based on the [Mamba-2](https://github.com/state-spaces/mamba) architecture and is designed to handle a wide range of text generation tasks. It is trained from scratch using a two-stage training approach. In the first stage, the model is trained on 2 trillion tokens from the Dolma v1.7 dataset. In the second stage, it undergoes additional training on 200 billion tokens, leveraging a carefully curated blend of high-quality data to further refine its performance and enhance output quality.
 
-## Model Use:
+Checkout all Bamba-9B model checkpoints [here](https://github.com/foundation-model-stack/bamba).
+
+## BambaConfig
+
+| Model            | Params       | # Layers | Hidden Dim. | Attention Heads | GQA | KV Heads | Context Length |  Tied Embeddings |
+|-------------------|--------------|----------|-------------|-----------------|-----|----------|----------------|------------------|
+| Bamba  | 9B (9.78B)   | 32       | 4096        | 32              | Yes | 8        | 4096           | True |
+
+<!---
+## Usage Tips
+
+Tips: 
+
+- The architecture is based on Mamba-2 models.
+
+## BambaModel
+
+[[autodoc]] BambaModel
+    - forward
+-->
+
+## BambaForCausalLM
 
 ```python
 from transformers import AutoModelForCausalLM, AutoTokenizer
@@ -35,19 +57,3 @@ print(tokenizer.batch_decode(response, skip_special_tokens=True)[0])
 ```
 
 This model was contributed by [ani300]https://github.com/ani300) and [fabianlim]https://github.com/fabianlim) . 
-
-## BambaConfig
-
-| Model            | Params       | # Layers | Hidden Dim. | Attention Heads | GQA | KV Heads | Context Length |  Tied Embeddings |
-|-------------------|--------------|----------|-------------|-----------------|-----|----------|----------------|------------------|
-| Bamba  | 9B (9.78B)   | 32       | 4096        | 32              | Yes | 8        | 4096           | True |
-
-## BambaModel
-
-[[autodoc]] BambaModel
-    - forward
-
-## BambaForCausalLM
-
-[[autodoc]] BambaForCausalLM
-    - forward
