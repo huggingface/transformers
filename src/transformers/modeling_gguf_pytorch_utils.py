@@ -416,6 +416,8 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False, model_to_lo
             )
 
     if return_tensors:
+        parsed_parameters["tensors"] = {}
+
         tensor_key_mapping = get_gguf_hf_weights_map(model_to_load)
         config = parsed_parameters.get("config", {})
 
