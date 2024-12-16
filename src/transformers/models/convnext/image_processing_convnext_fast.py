@@ -17,7 +17,7 @@
 from typing import Dict, List, Optional, Union
 
 from ...image_processing_utils import BatchFeature, get_size_dict
-from ...image_processing_utils_fast import BaseImageProcessorFast
+from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
 from ...image_transforms import get_resize_output_image_size
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
@@ -39,8 +39,6 @@ if is_torch_available():
     import torch
 
 if is_torchvision_available():
-    from ...image_utils import pil_torch_interpolation_mapping
-
     if is_torchvision_v2_available():
         from torchvision.transforms.v2 import functional as F
     else:
@@ -123,7 +121,7 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
         image: "torch.Tensor",
         size: Dict[str, int],
         crop_pct: float,
-        resample: PILImageResampling = PILImageResampling.BICUBIC,
+        interpolation: PILImageResampling = PILImageResampling.BICUBIC,
         **kwargs,
     ) -> "torch.Tensor":
         """
@@ -158,7 +156,7 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
             image = F.resize(
                 image,
                 resize_size,
-                interpolation=resample,
+                interpolation=interpolation,
                 **kwargs,
             )
             # then crop to (shortest_edge, shortest_edge)
@@ -169,10 +167,10 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
             )
         else:
             # warping (no cropping) when evaluated at 384 or larger
-            return self.resize(
+            return F.resize(
                 image,
                 (shortest_edge, shortest_edge),
-                interpolation=resample,
+                interpolation=interpolation,
                 **kwargs,
             )
 
@@ -265,8 +263,15 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
         return_tensors = "pt" if return_tensors is None else return_tensors
         device = kwargs.pop("device", None)
 
-        images, image_mean, image_std, size, crop_size, interpolation = self.prepare_process_arguments(
+        images = self._prepare_input_images(
             images=images,
+            do_convert_rgb=do_convert_rgb,
+            device=device,
+            input_data_format=input_data_format,
+        )
+
+        image_mean, image_std, size, crop_size, interpolation = self._prepare_process_arguments(
+            device=images[0].device,
             do_resize=do_resize,
             size=size,
             resample=resample,
@@ -280,40 +285,42 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
             do_convert_rgb=do_convert_rgb,
             return_tensors=return_tensors,
             data_format=data_format,
-            input_data_format=input_data_format,
-            device=device,
+            **kwargs,
         )
 
-        processed_images = []
-        for image in images:
+        # Group images by size for batched resizing
+        grouped_images, grouped_images_index = group_images_by_shape(images)
+        resized_images_grouped = {}
+        for shape, images in grouped_images.items():
+            stacked_images = torch.stack(images, dim=0)
             if do_resize:
-                interpolation = (
-                    pil_torch_interpolation_mapping[resample]
-                    if isinstance(resample, (PILImageResampling, int))
-                    else resample
+                stacked_images = self.resize(
+                    image=stacked_images, size=size, crop_pct=crop_pct, interpolation=interpolation
                 )
-                image = self.resize(
-                    image=image,
-                    size=size,
-                    crop_pct=crop_pct,
-                    resample=interpolation,
-                )
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
+        # Group images by size for further processing
+        # Needed in case do_resize is False, or resize returns images with different sizes
+        grouped_images, grouped_images_index = group_images_by_shape(resized_images)
+        processed_images_grouped = {}
+        for shape, images in grouped_images.items():
+            stacked_images = torch.stack(images, dim=0)
             if do_center_crop:
-                image = self.center_crop(image, crop_size)
-
+                stacked_images = self.center_crop(stacked_images, crop_size)
+            # Fused rescale and normalize
             if do_rescale and do_normalize:
-                # fused rescale and normalize
-                image = self.normalize(image.to(dtype=torch.float32), image_mean, image_std)
+                stacked_images = self.normalize(stacked_images.to(dtype=torch.float32), image_mean, image_std)
             elif do_rescale:
-                image = image * rescale_factor
+                stacked_images = stacked_images * rescale_factor
             elif do_normalize:
-                image = self.normalize(image, image_mean, image_std)
+                stacked_images = self.normalize(stacked_images, image_mean, image_std)
+            processed_images_grouped[shape] = stacked_images
 
-            processed_images.append(image)
-        images = processed_images
+        processed_images = reorder_images(processed_images_grouped, grouped_images_index)
+        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
-        return BatchFeature(data={"pixel_values": torch.stack(images, dim=0)}, tensor_type=return_tensors)
+        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
 
 __all__ = ["ConvNextImageProcessorFast"]
