@@ -11,9 +11,6 @@ from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaDecoderLayer,
     LlamaForCausalLM,
-    LlamaForQuestionAnswering,
-    LlamaForSequenceClassification,
-    LlamaForTokenClassification,
     LlamaMLP,
     LlamaRMSNorm,
     apply_rotary_pos_emb,
@@ -110,16 +107,4 @@ class OlmoDecoderLayer(LlamaDecoderLayer):
 
 
 class OlmoForCausalLM(LlamaForCausalLM):
-    pass
-
-
-class OlmoForTokenClassification(LlamaForTokenClassification):
-    pass
-
-
-class OlmoForSequenceClassification(LlamaForSequenceClassification):
-    pass
-
-
-class OlmoForQuestionAnswering(LlamaForQuestionAnswering):
     pass

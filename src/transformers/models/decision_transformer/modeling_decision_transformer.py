@@ -141,6 +141,7 @@ def eager_attention_forward(self, query, key, value, attention_mask=None, head_m
 
     return attn_output, attn_weights
 
+
 # Copied from transformers.models.gpt2.modeling_gpt2.GPT2Attention with GPT2->DecisionTransformerGPT2
 class DecisionTransformerGPT2Attention(nn.Module):
     def __init__(self, config, is_cross_attention=False, layer_idx=None):

@@ -36,6 +36,7 @@ from ...modeling_outputs import (
     ModelOutput,
     Seq2SeqLMOutput,
 )
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
