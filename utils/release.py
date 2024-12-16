@@ -123,7 +123,7 @@ def remove_conversion_scripts():
     """
     Delete the scripts that convert models from older, unsupported formats. We don't want to include these
     in release wheels because they often have to open insecure file types (pickle, Torch .bin models). This results in
-    vulnerability scanners flagging us, see an example issue here: https://github.com/huggingface/transformers/issues/34840#issuecomment-2544876106
+    vulnerability scanners flagging us and can cause compliance issues for users with strict security policies.
     """
     model_dir = Path(PATH_TO_MODELS)
     for conversion_script in list(model_dir.glob("**/convert*.py")):
