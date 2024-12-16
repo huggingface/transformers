@@ -199,7 +199,7 @@ def eager_attention_forward(
 
 
 def flash_attention_forward(
-    config: Gemma2Config,
+    self: 'Gemma2Attention',
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
@@ -218,13 +218,14 @@ def flash_attention_forward(
     key_states = key.transpose(1, 2)
     value_states = value.transpose(1, 2)
 
-    dropout_rate = config.attention_dropout if config.training else 0.0
+    dropout_rate = self.config.attention_dropout if self.training else 0.0
 
     input_dtype = query_states.dtype
     if input_dtype == torch.float32:
         query_states = query_states.to(target_dtype)
         key_states = key_states.to(target_dtype)
         value_states = value_states.to(target_dtype)
+
 
     attn_output = _flash_attention_forward(
         query_states,
@@ -233,11 +234,11 @@ def flash_attention_forward(
         mask,
         seq_len,
         dropout=dropout_rate,
-        softmax_scale=config.scaling,
-        is_causal=config.is_causal,
-        sliding_window=config.sliding_window,
-        use_top_left_mask=config._flash_attn_uses_top_left_mask,
-        softcap=config.attn_logit_softcapping if is_flash_attn_greater_or_equal("2.6.0") else None,
+        softmax_scale=self.scaling,
+        is_causal=self.is_causal,
+        sliding_window=self.config.sliding_window,
+        use_top_left_mask=self.config._flash_attn_uses_top_left_mask,
+        softcap=self.config.attn_logit_softcapping if is_flash_attn_greater_or_equal("2.6.0") else None,
     )
 
     return attn_output, None
