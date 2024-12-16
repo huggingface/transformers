@@ -99,6 +99,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                       [CodeGen](model_doc/codegen)                       |       ✅        |         ❌         |      ❌      |
 |                    [CodeLlama](model_doc/code_llama)                     |       ✅        |         ❌         |      ✅      |
 |                        [Cohere](model_doc/cohere)                        |       ✅        |         ❌         |      ❌      |
+|                       [Cohere2](model_doc/cohere2)                       |       ✅        |         ❌         |      ❌      |
 |              [Conditional DETR](model_doc/conditional_detr)              |       ✅        |         ❌         |      ❌      |
 |                      [ConvBERT](model_doc/convbert)                      |       ✅        |         ✅         |      ❌      |
 |                      [ConvNeXT](model_doc/convnext)                      |       ✅        |         ✅         |      ❌      |
@@ -321,6 +322,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                         [TAPEX](model_doc/tapex)                         |       ✅        |         ✅         |      ✅      |
 |       [Time Series Transformer](model_doc/time_series_transformer)       |       ✅        |         ❌         |      ❌      |
 |                   [TimeSformer](model_doc/timesformer)                   |       ✅        |         ❌         |      ❌      |
+|                [TimmWrapperModel](model_doc/timm_wrapper)                |       ✅        |         ❌         |      ❌      |
 |        [Trajectory Transformer](model_doc/trajectory_transformer)        |       ✅        |         ❌         |      ❌      |
 |                  [Transformer-XL](model_doc/transfo-xl)                  |       ✅        |         ✅         |      ❌      |
 |                         [TrOCR](model_doc/trocr)                         |       ✅        |         ❌         |      ❌      |
