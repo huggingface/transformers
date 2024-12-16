@@ -761,7 +761,8 @@ COHERE_INPUTS_DOCSTRING = r"""
     "The bare Cohere Model outputting raw hidden-states without any specific head on top.",
     COHERE_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaModel with Llama->Cohere, LLAMA->COHERE
+# copied from transformers.models.llama.modeling_llama.LlamaModel with Llama->Cohere, LLAMA->COHERE
+# TODO cyril: modular
 class CohereModel(CoherePreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`CohereDecoderLayer`]

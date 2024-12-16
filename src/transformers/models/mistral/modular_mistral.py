@@ -5,6 +5,7 @@ from torch import nn
 from ...cache_utils import Cache, SlidingWindowCache, StaticCache
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ..llama.modeling_llama import (
+    LlamaForCausalLM,
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
@@ -176,6 +177,10 @@ class MistralModel(LlamaModel):
                     padding_mask, min_dtype
                 )
         return causal_mask
+
+
+class MistralForCausalLM(LlamaForCausalLM):
+    pass
 
 
 class MistralForTokenClassification(LlamaForTokenClassification):

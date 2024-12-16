@@ -169,40 +169,18 @@ class Qwen2MoeRMSNorm(nn.Module):
 class Qwen2MoeRotaryEmbedding(nn.Module):
     def __init__(
         self,
-        dim=None,
-        max_position_embeddings=2048,
-        base=10000,
         device=None,
-        scaling_factor=1.0,
-        rope_type="default",
         config: Optional[Qwen2MoeConfig] = None,
     ):
         super().__init__()
-        # TODO (joao): remove the `if` below, only used for BC
         self.rope_kwargs = {}
-        if config is None:
-            logger.warning_once(
-                "`Qwen2MoeRotaryEmbedding` can now be fully parameterized by passing the model config through the "
-                "`config` argument. All other arguments will be removed in v4.46"
-            )
-            self.rope_kwargs = {
-                "rope_type": rope_type,
-                "factor": scaling_factor,
-                "dim": dim,
-                "base": base,
-                "max_position_embeddings": max_position_embeddings,
-            }
-            self.rope_type = rope_type
-            self.max_seq_len_cached = max_position_embeddings
-            self.original_max_seq_len = max_position_embeddings
+        # BC: "rope_type" was originally "type"
+        if config.rope_scaling is not None:
+            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
         else:
-            # BC: "rope_type" was originally "type"
-            if config.rope_scaling is not None:
-                self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-            else:
-                self.rope_type = "default"
-            self.max_seq_len_cached = config.max_position_embeddings
-            self.original_max_seq_len = config.max_position_embeddings
+            self.rope_type = "default"
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
@@ -318,7 +296,8 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-# Copied from transformers.models.qwen2.modeling_qwen2.Qwen2Attention with Qwen2->Qwen2Moe
+# copied from transformers.models.qwen2.modeling_qwen2.Qwen2Attention with Qwen2->Qwen2Moe
+# no longer copied after attention refactors
 class Qwen2MoeAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper. Modified to use sliding window attention: Longformer
@@ -1577,22 +1556,21 @@ SQuAD (a linear layer on top of the hidden-states output to compute `span start 
 )
 # Copied from transformers.models.mistral.modeling_mistral.MistralForQuestionAnswering with Mistral->Qwen2Moe, MISTRAL->QWEN2MOE
 class Qwen2MoeForQuestionAnswering(Qwen2MoePreTrainedModel):
-    base_model_prefix = "model"
+    base_model_prefix = "transformer"
 
-    # Copied from models.models.bloom.modeling_bloom.BloomForQuestionAnswering.__init__ with Bloom->Qwen2Moe
     def __init__(self, config):
         super().__init__(config)
-        self.model = Qwen2MoeModel(config)
+        self.transformer = Qwen2MoeModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, 2)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.model.embed_tokens
+        return self.transformer.embed_tokens
 
     def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
+        self.transformer.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(QWEN2MOE_INPUTS_DOCSTRING)
     def forward(
@@ -1621,7 +1599,7 @@ class Qwen2MoeForQuestionAnswering(Qwen2MoePreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.model(
+        outputs = self.transformer(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,

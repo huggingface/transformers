@@ -516,7 +516,8 @@ NEMOTRON_ATTENTION_CLASSES = {
 }
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
+# copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
+# no longer copied after attention refactors
 class NemotronDecoderLayer(nn.Module):
     # Ignore copy
     def __init__(self, config: NemotronConfig, layer_idx: int):

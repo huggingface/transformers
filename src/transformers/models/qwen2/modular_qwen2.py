@@ -2,6 +2,7 @@ from typing import Callable, Optional, Tuple, Unpack
 
 import torch
 import torch.utils.checkpoint
+from torch import nn
 
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -14,6 +15,7 @@ from ..llama.modeling_llama import (
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
+    LlamaMLP,
     LlamaModel,
     apply_rotary_pos_emb,
     eager_attention_forward,
@@ -22,6 +24,14 @@ from .configuration_qwen2 import Qwen2Config
 
 
 logger = logging.get_logger(__name__)
+
+
+class Qwen2MLP(LlamaMLP):
+    def __init__(self, config):
+        super().__init__(config)
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
 
 
 class Qwen2Attention(LlamaAttention):
