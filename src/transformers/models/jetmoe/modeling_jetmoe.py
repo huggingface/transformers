@@ -523,11 +523,7 @@ class JetMoeAttention(nn.Module):
 
         self.kv_proj = torch.nn.Linear(config.hidden_size, self.kv_projection_size * 2, bias=False)
 
-        self.rotary_emb = JetMoeRotaryEmbedding(
-            config.kv_channels,
-            max_position_embeddings=config.max_position_embeddings,
-            base=config.rope_theta,
-        )
+        self.rotary_emb = JetMoeRotaryEmbedding(config)
 
     def forward(
         self,

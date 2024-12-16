@@ -167,8 +167,8 @@ ALL_LAYERNORM_LAYERS.append(Olmo2RMSNorm)
 class Olmo2Attention(OlmoAttention):
     def __init__(self, config: Olmo2Config, layer_idx: Optional[int] = None):
         super().__init__(config, layer_idx=layer_idx)
-        self.q_norm = Olmo2RMSNorm(self.num_heads * self.head_dim, config.rms_norm_eps)
-        self.k_norm = Olmo2RMSNorm(self.num_key_value_heads * self.head_dim, config.rms_norm_eps)
+        self.q_norm = Olmo2RMSNorm(config.num_attention_heads * self.head_dim, config.rms_norm_eps)
+        self.k_norm = Olmo2RMSNorm(config.num_key_value_heads * self.head_dim, config.rms_norm_eps)
 
     def forward(
         self,

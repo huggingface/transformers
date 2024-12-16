@@ -375,11 +375,7 @@ class Phi3Attention(nn.Module):
 
     def _init_rope(self):
         if self.rope_scaling is None:
-            self.rotary_emb = Phi3RotaryEmbedding(
-                self.head_dim,
-                max_position_embeddings=self.max_position_embeddings,
-                base=self.rope_theta,
-            )
+            self.rotary_emb = Phi3RotaryEmbedding(self.config)
         else:
             scaling_type = self.config.rope_scaling["type"]
             if scaling_type == "longrope":
