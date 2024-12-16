@@ -120,8 +120,6 @@ class ModernBertConfig(PretrainedConfig):
         global_attn_every_n_layers=3,
         local_attention=128,
         local_rope_theta=10000.0,
-        skip_first_prenorm=True,
-        embedding_norm=True,
         embedding_dropout=0.0,
         mlp_bias=False,
         mlp_dropout=0.0,
@@ -130,7 +128,6 @@ class ModernBertConfig(PretrainedConfig):
         decoder_bias=True,
         classifier_dropout=0.0,
         classifier_pooling="mean",
-        classifier_norm=True,
         classifier_bias=False,
         classifier_activation="gelu",
         deterministic_flash_attn=False,
@@ -164,8 +161,6 @@ class ModernBertConfig(PretrainedConfig):
         self.global_attn_every_n_layers = global_attn_every_n_layers
         self.local_attention = local_attention
         self.local_rope_theta = local_rope_theta
-        self.skip_first_prenorm = skip_first_prenorm
-        self.embedding_norm = embedding_norm
         self.embedding_dropout = embedding_dropout
         self.mlp_bias = mlp_bias
         self.mlp_dropout = mlp_dropout
@@ -175,7 +170,6 @@ class ModernBertConfig(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
         self.classifier_pooling = classifier_pooling
         self.classifier_bias = classifier_bias
-        self.classifier_norm = classifier_norm
         self.classifier_activation = classifier_activation
         self.deterministic_flash_attn = deterministic_flash_attn
         self.sparse_prediction = sparse_prediction

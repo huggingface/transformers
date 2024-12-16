@@ -555,7 +555,7 @@ class ModernBertEncoderLayer(nn.Module):
     def __init__(self, config: ModernBertConfig, layer_id: Optional[int] = None):
         super().__init__()
         self.config = config
-        if config.skip_first_prenorm and config.embedding_norm and layer_id == 0:
+        if layer_id == 0:
             self.attn_norm = nn.Identity()
         else:
             self.attn_norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
@@ -606,12 +606,8 @@ class ModernBertPredictionHead(nn.Module):
         super().__init__()
         self.config = config
         self.dense = nn.Linear(config.hidden_size, config.hidden_size, config.classifier_bias)
-        self.act = ACT2FN[config.classifier_activation] if config.classifier_activation else nn.Identity()
-        self.norm = (
-            nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
-            if config.classifier_norm
-            else nn.Identity()
-        )
+        self.act = ACT2FN[config.classifier_activation]
+        self.norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         return self.norm(self.act(self.dense(hidden_states)))
@@ -622,12 +618,8 @@ class ModernBertPoolingHead(nn.Module):
         super().__init__()
         self.config = config
         self.dense = nn.Linear(config.hidden_size, config.hidden_size, config.classifier_bias)
-        self.act = ACT2FN[config.classifier_activation] if config.classifier_activation else nn.Identity()
-        self.norm = (
-            nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
-            if config.classifier_norm
-            else nn.Identity()
-        )
+        self.act = ACT2FN[config.classifier_activation]
+        self.norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
         self.drop = torch.nn.Dropout(config.classifier_dropout) if config.classifier_dropout > 0 else nn.Identity()
         self.pooling_type = ModernBertPoolingType(config.classifier_pooling)
 

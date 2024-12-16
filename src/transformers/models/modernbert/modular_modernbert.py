@@ -154,8 +154,6 @@ class ModernBertConfig(PretrainedConfig):
         global_attn_every_n_layers=3,
         local_attention=128,
         local_rope_theta=10000.0,
-        skip_first_prenorm=True,
-        embedding_norm=True,
         embedding_dropout=0.0,
         mlp_bias=False,
         mlp_dropout=0.0,
@@ -164,7 +162,6 @@ class ModernBertConfig(PretrainedConfig):
         decoder_bias=True,
         classifier_dropout=0.0,
         classifier_pooling="mean",
-        classifier_norm=True,
         classifier_bias=False,
         classifier_activation="gelu",
         deterministic_flash_attn=False,
@@ -198,8 +195,6 @@ class ModernBertConfig(PretrainedConfig):
         self.global_attn_every_n_layers = global_attn_every_n_layers
         self.local_attention = local_attention
         self.local_rope_theta = local_rope_theta
-        self.skip_first_prenorm = skip_first_prenorm
-        self.embedding_norm = embedding_norm
         self.embedding_dropout = embedding_dropout
         self.mlp_bias = mlp_bias
         self.mlp_dropout = mlp_dropout
@@ -209,7 +204,6 @@ class ModernBertConfig(PretrainedConfig):
         self.classifier_dropout = classifier_dropout
         self.classifier_pooling = classifier_pooling
         self.classifier_bias = classifier_bias
-        self.classifier_norm = classifier_norm
         self.classifier_activation = classifier_activation
         self.deterministic_flash_attn = deterministic_flash_attn
         self.sparse_prediction = sparse_prediction
@@ -760,7 +754,7 @@ class ModernBertEncoderLayer(nn.Module):
     def __init__(self, config: ModernBertConfig, layer_id: Optional[int] = None):
         super().__init__()
         self.config = config
-        if config.skip_first_prenorm and config.embedding_norm and layer_id == 0:
+        if layer_id == 0:
             self.attn_norm = nn.Identity()
         else:
             self.attn_norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
@@ -811,12 +805,8 @@ class ModernBertPredictionHead(nn.Module):
         super().__init__()
         self.config = config
         self.dense = nn.Linear(config.hidden_size, config.hidden_size, config.classifier_bias)
-        self.act = ACT2FN[config.classifier_activation] if config.classifier_activation else nn.Identity()
-        self.norm = (
-            nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
-            if config.classifier_norm
-            else nn.Identity()
-        )
+        self.act = ACT2FN[config.classifier_activation]
+        self.norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         return self.norm(self.act(self.dense(hidden_states)))
@@ -827,12 +817,8 @@ class ModernBertPoolingHead(nn.Module):
         super().__init__()
         self.config = config
         self.dense = nn.Linear(config.hidden_size, config.hidden_size, config.classifier_bias)
-        self.act = ACT2FN[config.classifier_activation] if config.classifier_activation else nn.Identity()
-        self.norm = (
-            nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
-            if config.classifier_norm
-            else nn.Identity()
-        )
+        self.act = ACT2FN[config.classifier_activation]
+        self.norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
         self.drop = torch.nn.Dropout(config.classifier_dropout) if config.classifier_dropout > 0 else nn.Identity()
         self.pooling_type = ModernBertPoolingType(config.classifier_pooling)
 
