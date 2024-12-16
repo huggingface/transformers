@@ -281,7 +281,7 @@ class Starcoder2ForTokenClassification(LlamaForTokenClassification):
 __all__ = [
     "Starcoder2ForCausalLM",
     "Starcoder2Model",
-    "Starcoder2PreTrainedModel", # noqa: F822
+    "Starcoder2PreTrainedModel",  # noqa: F822
     "Starcoder2ForSequenceClassification",
     "Starcoder2ForTokenClassification",
 ]

@@ -257,14 +257,12 @@ class Starcoder2Attention(nn.Module):
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        dropout_rate = 0.0 if not self.training else self.attention_dropout
-
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
             key_states,
             value_states,
-            dropout=dropout_rate,
+            dropout=0.0 if not self.training else self.attention_dropout,
             **kwargs,
         )
 
