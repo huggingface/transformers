@@ -1118,7 +1118,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
 
 
 class ModernBertForMaskedLM(ModernBertPreTrainedModel):
-    _tied_weights_keys = ["decoder.weight"]
+    _tied_weights_keys = ["model.embeddings.tok_embeddings.weight"]
 
     def __init__(self, config: ModernBertConfig):
         super().__init__(config)
@@ -1126,10 +1126,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         self.model = ModernBertModel(config)
         self.head = ModernBertPredictionHead(config)
 
-        if config.tie_word_embeddings:
-            decoder_weights = self.model.embeddings.tok_embeddings.weight
-        else:
-            decoder_weights = nn.Linear(config.hidden_size, config.vocab_size, bias=False).weight
+        decoder_weights = nn.Linear(config.hidden_size, config.vocab_size, bias=False).weight
         self.decoder = nn.Linear(decoder_weights.size(1), decoder_weights.size(0), bias=config.decoder_bias)
         self.decoder.weight = decoder_weights
 
