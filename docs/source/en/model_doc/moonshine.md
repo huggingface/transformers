@@ -20,64 +20,26 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The moonshine model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The moonshine model was proposed in [Moonshine: Speech Recognition for Live Transcription and Voice Commands
+](https://arxiv.org/abs/2410.15608) by Nat Jeffries, Evan King, Manjunath Kudlur, Guy Nicholson, James Wang, Pete Warden.
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+This paper introduces Moonshine, a family of speech recognition models optimized for live transcription and voice command processing. Moonshine is based on an encoder-decoder transformer architecture and employs Rotary Position Embedding (RoPE) instead of traditional absolute position embeddings. The model is trained on speech segments of various lengths, but without using zero-padding, leading to greater efficiency for the encoder during inference time. When benchmarked against OpenAI's Whisper tiny-en, Moonshine Tiny demonstrates a 5x reduction in compute requirements for transcribing a 10-second speech segment while incurring no increase in word error rates across standard evaluation datasets. These results highlight Moonshine's potential for real-time and resource-constrained applications.
 
 Tips:
 
-<INSERT TIPS ABOUT MODEL HERE>
+- Moonshine improves upon Whisper's architecture:
+  1. It uses SwiGLU activation instead of GELU in the decoder layers
+  2. Most importantly, it replaces absolute position embeddings with Rotary Position Embeddings (RoPE). This allows Moonshine to handle audio inputs of any length, unlike Whisper which is restricted to fixed 30-second windows.
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+This model was contributed by [Eustache Le Bihan (eustlb)](https://huggingface.co/eustlb).
+The original code can be found [here](https://github.com/usefulsensors/moonshine).
 
 
 ## MoonshineConfig
 
 [[autodoc]] MoonshineConfig
-
-## MoonshineTokenizer
-
-[[autodoc]] MoonshineTokenizer
-    - set_prefix_tokens
-    - build_inputs_with_special_tokens
-    - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
-    - save_vocabulary
-    - batch_decode
-    - decode
-    - basic_normalize
-    - normalize
-
-## MoonshineTokenizerFast
-
-[[autodoc]] MoonshineTokenizerFast
-    - set_prefix_tokens
-    - build_inputs_with_special_tokens
-    - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
-    - save_vocabulary
-    - batch_decode
-    - decode
-    - basic_normalize
-    - normalize
-
-## MoonshineFeatureExtractor
-
-[[autodoc]] MoonshineFeatureExtractor
-    - __call__
-
-## MoonshineProcessor
-
-[[autodoc]] MoonshineProcessor
-    - __call__
-    - from_pretrained
-    - save_pretrained
-    - batch_decode
-    - decode
 
 <frameworkcontent>
 <pt>
@@ -93,16 +55,6 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 [[autodoc]] MoonshineForConditionalGeneration
     - forward
     - generate
-
-## MoonshineForCausalLM
-
-[[autodoc]] MoonshineForCausalLM
-    - forward
-
-## MoonshineForAudioClassification
-
-[[autodoc]] MoonshineForAudioClassification
-    - forward
 
 </pt>
 <tf>
