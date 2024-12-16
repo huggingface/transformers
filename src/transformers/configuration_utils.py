@@ -36,6 +36,7 @@ from .utils import (
     copy_func,
     download_url,
     extract_commit_hash,
+    is_flash_attn_greater_or_equal_2_10,
     is_remote_url,
     is_timm_config_dict,
     is_torch_available,
@@ -303,6 +304,8 @@ class PretrainedConfig(PushToHubMixin):
         # Attention implementation to use, if relevant.
         self._attn_implementation_internal = kwargs.pop("attn_implementation", None)
         self._attn_implementation_autoset = False
+
+        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
         # Drop the transformers version info
         self.transformers_version = kwargs.pop("transformers_version", None)
