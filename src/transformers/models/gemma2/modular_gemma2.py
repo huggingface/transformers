@@ -287,7 +287,7 @@ class Gemma2Attention(GemmaAttention):
             query_states,
             key_states,
             value_states,
-            dropout = self.attention_dropout if self.training else 0.0,
+            dropout=self.attention_dropout if self.training else 0.0,
             scaling=self.scaling,
             sliding_window=self.sliding_window,
             softcap=self.attn_logit_softcapping,
