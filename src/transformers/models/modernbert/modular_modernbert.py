@@ -331,7 +331,6 @@ class ApplyRotaryEmbUnpad(torch.autograd.Function):
     ):
         # (total_nnz, 3, nheads, headdim)
         total_nnz, three, nheads, headdim = qkv.shape
-        assert three == 3
         if qkv.is_contiguous():
             # Call 1 kernel instead of 2 kernels
             # We need qkv to be contiguous so that when we reshape to combine (3, nheads)
