@@ -22,17 +22,14 @@ from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PretrainedConfig
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS
+from ...modeling_outputs import BaseModelOutputWithPast
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 from ..llama.modeling_llama import (
-    LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
     LlamaModel,
-    LlamaPreTrainedModel,
 )
 from ..llama.tokenization_llama import LlamaTokenizer
 
@@ -346,29 +343,7 @@ class GemmaRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.eps}"
 
 
-ALL_LAYERNORM_LAYERS.append(GemmaRMSNorm)
-
-
-class GemmaDecoderLayer(LlamaDecoderLayer):
-    def __init__(self, config: GemmaConfig, layer_idx: int):
-        super().__init__(config, layer_idx)
-        self.input_layernorm = GemmaRMSNorm(config.hidden_size)
-        self.post_attention_layernorm = GemmaRMSNorm(config.hidden_size)
-
-
-class GemmaPreTrainedModel(LlamaPreTrainedModel):
-    pass
-
-
 class GemmaModel(LlamaModel):
-    def __init__(self, config: GemmaConfig):
-        super().__init__(config)
-        self.layers = nn.ModuleList(
-            [GemmaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
-        self.norm = GemmaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_init()
-
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -481,97 +456,16 @@ class GemmaModel(LlamaModel):
         return output if return_dict else output.to_tuple()
 
 
-# Example where we ony modify the docstring and call super
 class GemmaForCausalLM(LlamaForCausalLM):
-    def __init__(self, config):
-        super().__init__(config)
-        self.model = GemmaModel(config)
-        self.post_init()
-
-    def forward(
-        self,
-        input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        num_logits_to_keep: int = 0,
-        **loss_kwargs,
-    ) -> Union[Tuple, CausalLMOutputWithPast]:
-        r"""
-        ```python
-        >>> from transformers import AutoTokenizer, GemmaForCausalLM
-
-        >>> model = GemmaForCausalLM.from_pretrained("google/gemma-7b")
-        >>> tokenizer = AutoTokenizer.from_pretrained("google/gemma-7b")
-
-        >>> prompt = "What is your favorite condiment?"
-        >>> inputs = tokenizer(prompt, return_tensors="pt")
-
-        >>> # Generate
-        >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "What is your favorite condiment?"
-        ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            cache_position=cache_position,
-        )
-
-        hidden_states = outputs[0]
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :])
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size, **loss_kwargs)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
-
-        return CausalLMOutputWithPast(
-            loss=loss,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
+    pass
 
 
 class GemmaForSequenceClassification(LlamaForSequenceClassification):
-    def __init__(self, config):
-        super().__init__(config)
-        self.model = GemmaModel(config)
-        self.post_init()
+    pass
 
 
 class GemmaForTokenClassification(LlamaForTokenClassification):
-    def __init__(self, config):
-        super().__init__(config)
-        self.model = GemmaModel(config)
-        self.post_init()
+    pass
 
 
 __all__ = [
@@ -581,5 +475,5 @@ __all__ = [
     "GemmaForCausalLM",
     "GemmaForSequenceClassification",
     "GemmaForTokenClassification",
-    "GemmaPreTrainedModel",
+    "GemmaPreTrainedModel",  # noqa: F822
 ]
