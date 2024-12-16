@@ -292,8 +292,8 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 def eager_attention_forward(
     module: "ModernBertAttention",
     qkv: torch.Tensor,
-    position_ids: Optional[torch.LongTensor],
     attention_mask: torch.Tensor,
+    position_ids: Optional[torch.LongTensor],
     bs: int,
     dim: int,
     output_attentions: Optional[bool] = False,
@@ -402,8 +402,8 @@ def flex_attention_forward(
 def sdpa_attention_forward(
     module: "ModernBertAttention",
     qkv: torch.Tensor,
-    position_ids: Optional[torch.LongTensor],
     attention_mask: torch.Tensor,
+    position_ids: Optional[torch.LongTensor],
     bs: int,
     dim: int,
     **_kwargs,
@@ -570,8 +570,8 @@ class ModernBertEncoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         cu_seqlens: Optional[torch.Tensor] = None,
         block_mask: Optional[BlockMask] = None,
         max_seqlen: Optional[int] = None,
@@ -581,8 +581,8 @@ class ModernBertEncoderLayer(nn.Module):
 
         Args:
             hidden_states: (total_nnz, dim)
-            position_ids: (total_nnz,)
             attention_mask: (batch, max_seqlen)
+            position_ids: (total_nnz,)
             cu_seqlens: (batch + 1,)
             max_seqlen: int
         """
