@@ -30,7 +30,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial, wraps
 from threading import Thread
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, TypeVar, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, Union
 from zipfile import is_zipfile
 
 import torch

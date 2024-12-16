@@ -1,3 +1,5 @@
+from typing import Optional
+
 import torch
 
 
@@ -13,7 +15,16 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-def sdpa_attention_forward(module, query, key, value, attention_mask=None, **_kwargs):
+def sdpa_attention_forward(
+    module: torch.nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor] = None,
+    dropout: float = 0.0,
+    scaling: Optional[float] = None,
+    **kwargs,
+):
     key = repeat_kv(key, module.num_key_value_groups)
     value = repeat_kv(value, module.num_key_value_groups)
 
@@ -31,9 +42,10 @@ def sdpa_attention_forward(module, query, key, value, attention_mask=None, **_kw
         key,
         value,
         attn_mask=causal_mask,
-        dropout_p=module.config.attention_dropout if module.training else 0.0,
+        dropout_p=dropout,
+        scale=scaling,
         is_causal=is_causal,
-        scale=module.scaling,
     )
     attn_output = attn_output.transpose(1, 2).contiguous()
+
     return attn_output, None

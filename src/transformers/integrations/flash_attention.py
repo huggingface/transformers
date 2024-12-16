@@ -1,13 +1,25 @@
+from typing import Optional
+
 import torch
 
 from ..modeling_flash_attention_utils import _flash_attention_forward
 
 
 def flash_attention_forward(
-    config, query, key, value, attentions_mask, target_dtype=torch.float16, training=False, layer_idx=0, **kwargs
+    module: torch.nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor] = None,
+    dropout: float = 0.0,
+    scaling: Optional[float] = None,
+    sliding_window: Optional[int] = None,
+    softcap: Optional[float] = None,
+    target_dtype: torch.dtype = torch.float16,
+    **kwargs,
 ):
-    if attentions_mask is not None:
-        seq_len = attentions_mask.shape[1]
+    if attention_mask is not None:
+        seq_len = attention_mask.shape[1]
         query = query[:, :, :seq_len]
         value = value[:, :, :seq_len]
     else:
@@ -17,8 +29,6 @@ def flash_attention_forward(
     query = query.transpose(1, 2)
     key = key.transpose(1, 2)
     value = value.transpose(1, 2)
-
-    dropout_rate = config.attention_dropout if training else 0.0
 
     input_dtype = query.dtype
     if input_dtype == torch.float32:
@@ -30,11 +40,14 @@ def flash_attention_forward(
         query,
         key,
         value,
-        attentions_mask,
+        attention_mask,
         seq_len,
-        config=config,
-        dropout=dropout_rate,
-        layer_idx=layer_idx,
+        module.is_causal,
+        dropout=dropout,
+        softmax_scale=scaling,
+        sliding_window=sliding_window,
+        softcap=softcap,
+        use_top_left_mask=module._flash_attn_uses_top_left_mask,
         **kwargs,
     )
 

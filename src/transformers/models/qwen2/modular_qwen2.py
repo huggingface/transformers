@@ -1,32 +1,30 @@
-from typing import Callable, List, Optional, Tuple, Union, Unpack
+from typing import Callable, Optional, Tuple, Unpack
 
 import torch
-from torch import nn
 import torch.utils.checkpoint
 
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...cache_utils import Cache, SlidingWindowCache, StaticCache
-from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...utils import logging
 from ..llama.modeling_llama import (
+    LlamaAttention,
+    LlamaDecoderLayer,
+    LlamaForCausalLM,
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
     LlamaModel,
-    LlamaForCausalLM,
-    LlamaAttention,
-    LlamaDecoderLayer,
-    eager_attention_forward,
     apply_rotary_pos_emb,
+    eager_attention_forward,
 )
 from .configuration_qwen2 import Qwen2Config
 
 
 logger = logging.get_logger(__name__)
 
-class Qwen2Attention(LlamaAttention):
 
+class Qwen2Attention(LlamaAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -75,7 +73,7 @@ class Qwen2Attention(LlamaAttention):
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
-    
+
 class Qwen2DecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: Qwen2Config, layer_idx: int):
         super().__init__()
@@ -85,17 +83,22 @@ class Qwen2DecoderLayer(LlamaDecoderLayer):
                 "unexpected results may be encountered."
             )
 
+
 class Qwen2Model(LlamaModel):
     pass
+
 
 class Qwen2ForCausalLM(LlamaForCausalLM):
     pass
 
+
 class Qwen2ForSequenceClassification(LlamaForSequenceClassification):
     pass
 
+
 class Qwen2ForTokenClassification(LlamaForTokenClassification):
     pass
+
 
 class Qwen2ForQuestionAnswering(LlamaForQuestionAnswering):
     pass

@@ -50,6 +50,8 @@ from .configuration_gemma2 import Gemma2Config
 logger = logging.get_logger(__name__)
 
 
+_CHECKPOINT_FOR_DOC = "google/gemma2-7b"
+_CONFIG_FOR_DOC = "Gemma2Config"
 
 
 class Gemma2RMSNorm(nn.Module):
@@ -198,18 +200,30 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-def eager_attention_forward(attention_class: nn.Module, query, key, value, attention_mask=None, **_kwargs):
-    config = attention_class.config
-    key_states = repeat_kv(key, attention_class.num_key_value_groups)
-    value_states = repeat_kv(value, attention_class.num_key_value_groups)
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    mask: Optional[torch.Tensor],
+    **kwargs,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
 
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * attention_class.scaling
-    if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * module.scaling
+
+    if module.attn_logit_softcapping is not None:
+        attn_weights = attn_weights / module.attn_logit_softcapping
+        attn_weights = torch.tanh(attn_weights)
+        attn_weights = attn_weights * module.attn_logit_softcapping
+    if mask is not None:  # no matter the length, we just slice it
+        causal_mask = mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
+    # upcast attention to fp32
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=config.attention_dropout, training=attention_class.training)
+    attn_weights = nn.functional.dropout(attn_weights, p=module.attention_dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
     return attn_output, attn_weights
@@ -224,7 +238,7 @@ class Gemma2Attention(nn.Module):
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        self.scaling = self.head_dim**-0.5
+        self.scaling = config.query_pre_attn_scalar**-0.5
 
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
@@ -238,6 +252,10 @@ class Gemma2Attention(nn.Module):
         self.o_proj = nn.Linear(
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
+        self.attn_logit_softcapping = self.config.attn_logit_softcapping
+        self.attention_dropout = self.config.attention_dropout
+        self.is_causal = True
+        self.sliding_window = config.sliding_window if not bool(layer_idx % 2) else None
 
     def forward(
         self,
@@ -271,6 +289,10 @@ class Gemma2Attention(nn.Module):
             query_states,
             key_states,
             value_states,
+            dropout=self.attention_dropout if self.training else 0.0,
+            scaling=self.scaling,
+            sliding_window=self.sliding_window,
+            softcap=self.attn_logit_softcapping,
             **kwargs,
         )
 

@@ -207,7 +207,7 @@ class MyNewModel2DecoderLayer(GradientCheckpointLayer):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.46
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
@@ -243,6 +243,51 @@ class MyNewModel2DecoderLayer(GradientCheckpointLayer):
             outputs += (present_key_value,)
 
         return outputs
+
+
+MY_NEW_MODEL2_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`MyNewModel2Config`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+
+@add_start_docstrings(
+    "The bare MyNewModel2 Model outputting raw hidden-states without any specific head on top.",
+    MY_NEW_MODEL2_START_DOCSTRING,
+)
+class MyNewModel2PreTrainedModel(PreTrainedModel):
+    config_class = MyNewModel2Config
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["MyNewModel2DecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_cache_class = True
+    _supports_quantized_cache = True
+    _supports_static_cache = True
+
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
 
 
 class MyNewModel2RotaryEmbedding(nn.Module):
@@ -308,51 +353,6 @@ class MyNewModel2RotaryEmbedding(nn.Module):
         sin = sin * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-
-MY_NEW_MODEL2_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`MyNewModel2Config`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The bare MyNewModel2 Model outputting raw hidden-states without any specific head on top.",
-    MY_NEW_MODEL2_START_DOCSTRING,
-)
-class MyNewModel2PreTrainedModel(PreTrainedModel):
-    config_class = MyNewModel2Config
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["MyNewModel2DecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
-
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
 
 
 MY_NEW_MODEL2_INPUTS_DOCSTRING = r"""

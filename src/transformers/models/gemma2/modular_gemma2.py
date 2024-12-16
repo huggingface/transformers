@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional, Tuple, Union
+from typing import Callable, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -22,13 +22,15 @@ import torch.utils.checkpoint
 from ...activations import ACT2FN
 from ...cache_utils import Cache, HybridCache
 from ...configuration_utils import PretrainedConfig
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
 )
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...processing_utils import Unpack
 from ...utils import (
     is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal,
     is_torch_greater_or_equal,
     logging,
 )
@@ -42,15 +44,16 @@ from ..gemma.modeling_gemma import (
     GemmaPreTrainedModel,
     GemmaRMSNorm,
     GemmaRotaryEmbedding,
+    apply_rotary_pos_emb,
     repeat_kv,
 )
 
 
 if is_flash_attn_2_available():
-    from ...modeling_flash_attention_utils import _flash_attention_forward
+    pass
 
 if is_torch_greater_or_equal("2.5"):
-    from torch.nn.attention.flex_attention import flex_attention
+    pass
 
 
 _CHECKPOINT_FOR_DOC = "google/gemma2-7b"
@@ -214,140 +217,86 @@ class Gemma2RotaryEmbedding(GemmaRotaryEmbedding):
     pass
 
 
-def gemma_eager_attention_forward(
-    config: Gemma2Config,
+def eager_attention_forward(
+    module: nn.Module,
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
     mask: Optional[torch.Tensor],
-    **_kwargs,
+    **kwargs,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    key_states = repeat_kv(key, config.num_key_value_groups)
-    value_states = repeat_kv(value, config.num_key_value_groups)
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
 
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * config.scaling
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * module.scaling
 
-    if config.attn_logit_softcapping is not None:
-        attn_weights = attn_weights / config.attn_logit_softcapping
+    if module.attn_logit_softcapping is not None:
+        attn_weights = attn_weights / module.attn_logit_softcapping
         attn_weights = torch.tanh(attn_weights)
-        attn_weights = attn_weights * config.attn_logit_softcapping
+        attn_weights = attn_weights * module.attn_logit_softcapping
     if mask is not None:  # no matter the length, we just slice it
         causal_mask = mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
     # upcast attention to fp32
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=config.attention_dropout, training=config.training)
+    attn_weights = nn.functional.dropout(attn_weights, p=module.attention_dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
     return attn_output, attn_weights
 
 
-def gemma_flash_attention_forward(config, query, key, value, mask, target_dtype=torch.float16, **_kwargs):
-    if mask is not None:
-        seq_len = mask.shape[1]
-        query = query[:, :, :seq_len]
-        value = value[:, :, :seq_len]
-
-    # TODO: These transpose are quite inefficient but Flash Attention requires the layout
-    # [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor rotary embedding
-    query_states = query.transpose(1, 2)
-    key_states = key.transpose(1, 2)
-    value_states = value.transpose(1, 2)
-
-    dropout_rate = config.attention_dropout if config.training else 0.0
-
-    input_dtype = query_states.dtype
-    if input_dtype == torch.float32:
-        query_states = query_states.to(target_dtype)
-        key_states = key_states.to(target_dtype)
-        value_states = value_states.to(target_dtype)
-
-    attn_output = _flash_attention_forward(
-        query_states,
-        key_states,
-        value_states,
-        mask,
-        seq_len,
-        dropout=dropout_rate,
-        softmax_scale=config.scaling,
-        is_causal=config.is_causal,
-        sliding_window=config.sliding_window,
-        use_top_left_mask=config._flash_attn_uses_top_left_mask,
-        softcap=config.attn_logit_softcapping if is_flash_attn_greater_or_equal("2.6.0") else None,
-    )
-
-    return attn_output, None
-
-
-def gemma_flex_attention_forward(config, query, key, value, mask, output_attentions=False, **_kwargs):
-    def tanh_softcap(score, b, h, q_idx, kv_idx):
-        soft_cap = config.attn_logit_softcapping
-        score = soft_cap * torch.tanh(score / soft_cap)
-        if mask is not None:
-            return score + mask[b][0][q_idx][kv_idx]
-        return score
-
-    attn_output = flex_attention(
-        query,
-        key,
-        value,
-        score_mod=tanh_softcap,
-        enable_gqa=True,
-        scale=config.scaling,
-        return_lse=output_attentions,
-    )
-    if not output_attentions:
-        attn_weights = None
-    else:
-        attn_output, attn_weights = attn_output
-
-    attn_output = attn_output.transpose(1, 2).contiguous()
-    return attn_output, attn_weights
-
-
-def gemma_sdpa_attention_forward(config, query, key, value, mask, **_kwargs):
-    key = repeat_kv(key, config.num_key_value_groups)
-    value = repeat_kv(value, config.num_key_value_groups)
-
-    causal_mask = mask
-    if mask is not None:
-        causal_mask = causal_mask[:, :, :, : key.shape[-2]]
-
-    # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
-    # Reference: https://github.com/pytorch/pytorch/issues/112577.
-    if query.device.type == "cuda" and causal_mask is not None:
-        query = query.contiguous()
-        key = key.contiguous()
-        value = value.contiguous()
-
-    # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
-    # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
-    is_causal = True if causal_mask is None and query.shape[1] > 1 else False
-
-    attn_output = torch.nn.functional.scaled_dot_product_attention(
-        query,
-        key,
-        value,
-        attn_mask=causal_mask,
-        dropout_p=config.attention_dropout if config.training else 0.0,
-        is_causal=is_causal,
-        scale=config.scaling,
-    )
-    attn_output = attn_output.transpose(1, 2).contiguous()
-    return attn_output, None
-
-
-ALL_ATTENTION_FUNCTION = {
-    "gemma_flash_attention_2": gemma_flash_attention_forward,
-    "gemma_flex_attention": gemma_flex_attention_forward,
-    "gemma_eager": gemma_eager_attention_forward,
-    "gemma_sdpa": gemma_sdpa_attention_forward,
-}
-
-
 class Gemma2Attention(GemmaAttention):
-    pass
+    def __init__(self, config: Gemma2Config, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.attn_logit_softcapping = self.config.attn_logit_softcapping
+        self.attention_dropout = self.config.attention_dropout
+        self.is_causal = True
+        self.scaling = config.query_pre_attn_scalar**-0.5
+        self.sliding_window = config.sliding_window if not bool(layer_idx % 2) else None
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        past_key_value: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
+
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        if past_key_value is not None:
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            dropout = self.attention_dropout if self.training else 0.0,
+            scaling=self.scaling,
+            sliding_window=self.sliding_window,
+            softcap=self.attn_logit_softcapping,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
 
 
 class Gemma2DecoderLayer(GemmaDecoderLayer):

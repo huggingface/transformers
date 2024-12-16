@@ -32,6 +32,7 @@ from ..llama.modeling_llama import (
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
     LlamaModel,
+    LlamaPreTrainedModel,
 )
 from ..llama.tokenization_llama import LlamaTokenizer
 
