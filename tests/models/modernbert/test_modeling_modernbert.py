@@ -25,7 +25,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -257,6 +257,25 @@ class ModernBertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         batch_size, seq_length = config_and_inputs[3].shape
         config_and_inputs[3] = random_attention_mask([batch_size, seq_length, seq_length])
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            for name, param in model.named_parameters():
+                # The classifier.weight from ModernBertForSequenceClassification and ModernBertForTokenClassification
+                # are initialized without `initializer_range`, so they're not set to ~0 via the _config_zero_init
+                if param.requires_grad and not (
+                    name == "classifier.weight"
+                    and model_class in [ModernBertForSequenceClassification, ModernBertForTokenClassification]
+                ):
+                    self.assertIn(
+                        ((param.data.mean() * 1e9).round() / 1e9).item(),
+                        [0.0, 1.0],
+                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                    )
 
     @unittest.skip("ModernBert doesn't use `inputs_embeds` as input.")
     def test_inputs_embeds(self):

@@ -51,13 +51,6 @@ if is_torch_greater_or_equal("2.5"):
 logger = logging.get_logger(__name__)
 
 
-class ModernBertModuleType(str, Enum):
-    in_module = "in"
-    out_module = "out"
-    embedding = "emb"
-    final_out = "final_out"
-
-
 class ModernBertPoolingType(str, Enum):
     cls = "cls"
     mean = "mean"
@@ -246,52 +239,6 @@ class ModernBertUnpaddedRotaryEmbedding(RotaryEmbedding):
         return f"dim={self.dim}, base={self.base}, scale_base={self.scale_base}"
 
 
-# Copyright 2023 OLMo Authors
-# License: Apache-2.0
-
-
-def _init_modernbert_weights(
-    config: ModernBertConfig,
-    module: Union[nn.Linear, nn.Embedding],
-    module_type: ModernBertModuleType,
-) -> None:
-    """
-    Initialize weights of a linear or embedding module.
-
-    :param config: The model config.
-    :param module: The linear or embedding submodule to initialize.
-    """
-    if module_type is None:
-        raise RuntimeError("When using the full megatron init, every module must have a type.")
-
-    cutoff_factor = config.initializer_cutoff_factor
-    if cutoff_factor is None:
-        cutoff_factor = 3
-
-    if module_type == ModernBertModuleType.in_module:
-        std = config.initializer_range  # for att_proj (same as QKV), ff_proj
-    elif module_type == ModernBertModuleType.out_module:
-        std = config.initializer_range / math.sqrt(2.0 * config.num_hidden_layers)  # for attn_out, ff_out
-    elif module_type == ModernBertModuleType.embedding:
-        std = config.initializer_range  # token embeddings (wte)
-    elif module_type == ModernBertModuleType.final_out:
-        std = config.hidden_size**-0.5  # final output (ff_out)
-    else:
-        raise RuntimeError(f"Unknown module type '{module_type}'")
-
-    nn.init.trunc_normal_(
-        module.weight,
-        mean=0.0,
-        std=std,
-        a=-cutoff_factor * std,
-        b=cutoff_factor * std,
-    )
-
-    if isinstance(module, nn.Linear):
-        if module.bias is not None:
-            nn.init.zeros_(module.bias)
-
-
 class ModernBertEmbeddings(nn.Module):
     """
     Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
@@ -303,11 +250,6 @@ class ModernBertEmbeddings(nn.Module):
         self.tok_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
         self.drop = nn.Dropout(config.embedding_dropout) if config.embedding_dropout > 0.0 else nn.Identity()
-
-    def _init_weights(self, reset_params: bool = False):
-        _init_modernbert_weights(self.config, self.tok_embeddings, module_type=ModernBertModuleType.embedding)
-        if reset_params:
-            self.norm.reset_parameters()
 
     @torch.compile(dynamic=True)
     def forward(self, input_ids: torch.LongTensor, position_ids: Optional[torch.LongTensor] = None) -> torch.Tensor:
@@ -328,10 +270,6 @@ class ModernBertMLP(nn.Module):
         self.act = ACT2FN[config.hidden_activation]
         self.drop = nn.Dropout(config.mlp_dropout) if config.mlp_dropout > 0.0 else nn.Identity()
         self.Wo = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.mlp_bias)
-
-    def _init_weights(self, reset_params: bool = False):
-        _init_modernbert_weights(self.config, self.Wi, module_type=ModernBertModuleType.in_module)
-        _init_modernbert_weights(self.config, self.Wo, module_type=ModernBertModuleType.out_module)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         input, gate = self.Wi(hidden_states).chunk(2, dim=-1)
@@ -615,10 +553,6 @@ class ModernBertAttention(nn.Module):
         self.all_head_size = self.head_dim * self.num_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    def _init_weights(self, reset_params: bool = False):
-        _init_modernbert_weights(self.config, self.Wqkv, module_type=ModernBertModuleType.in_module)
-        _init_modernbert_weights(self.config, self.Wo, module_type=ModernBertModuleType.out_module)
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -731,11 +665,6 @@ class ModernBertEncoderLayer(nn.Module):
         self.mlp_norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
         self.mlp = ModernBertMLP(config)
 
-    def _init_weights(self, reset_params: bool = False):
-        if reset_params:
-            self.attn_norm.reset_parameters()
-            self.mlp_norm.reset_parameters()
-
     @torch.compile(dynamic=True)
     def compiled_mlp(self, hidden_states: torch.Tensor) -> torch.Tensor:
         return self.mlp(self.mlp_norm(hidden_states))
@@ -786,14 +715,6 @@ class ModernBertPredictionHead(nn.Module):
             else nn.Identity()
         )
 
-    def _init_weights(self, reset_params: bool = False):
-        if reset_params:
-            self.norm.reset_parameters()
-        _init_modernbert_weights(self.config, self.dense, module_type=ModernBertModuleType.in_module)
-
-    def reset_parameters(self):
-        self._init_weights(reset_params=True)
-
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         return self.norm(self.act(self.dense(hidden_states)))
 
@@ -825,13 +746,9 @@ class ModernBertPoolingHead(nn.Module):
 
         return self.drop(self.norm(self.act(self.dense(output))))
 
-    def _init_weights(self, reset_params: bool = False):
-        _init_modernbert_weights(self.config, self.dense, module_type=ModernBertModuleType.out_module)
-        if reset_params and hasattr(self.norm, "reset_parameters"):
-            self.norm.reset_parameters()
 
-    def reset_parameters(self):
-        self._init_weights(reset_params=True)
+# Copyright 2023 OLMo Authors
+# License: Apache-2.0
 
 
 def _unpad_modernbert_input(
@@ -933,13 +850,47 @@ class ModernBertPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = True
 
-    def _init_weights(
-        self,
-        module: Union[ModernBertEncoderLayer, ModernBertAttention, ModernBertMLP, ModernBertEmbeddings],
-        reset_params: bool = False,
-    ):
-        if isinstance(module, (ModernBertEncoderLayer, ModernBertAttention, ModernBertMLP, ModernBertEmbeddings)):
-            module._init_weights(reset_params=reset_params)
+    def _init_weights(self, module: nn.Module):
+        cutoff_factor = self.config.initializer_cutoff_factor
+        if cutoff_factor is None:
+            cutoff_factor = 3
+
+        def init_weight(module: nn.Module, std: float):
+            nn.init.trunc_normal_(
+                module.weight,
+                mean=0.0,
+                std=std,
+                a=-cutoff_factor * std,
+                b=cutoff_factor * std,
+            )
+
+            if isinstance(module, nn.Linear):
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+
+        stds = {
+            "in": self.config.initializer_range,
+            "out": self.config.initializer_range / math.sqrt(2.0 * self.config.num_hidden_layers),
+            "embedding": self.config.initializer_range,
+            "final_out": self.config.hidden_size**-0.5,
+        }
+
+        if isinstance(module, ModernBertEmbeddings):
+            init_weight(module.tok_embeddings, stds["embedding"])
+        elif isinstance(module, ModernBertMLP):
+            init_weight(module.Wi, stds["in"])
+            init_weight(module.Wo, stds["out"])
+        elif isinstance(module, ModernBertAttention):
+            init_weight(module.Wqkv, stds["in"])
+            init_weight(module.Wo, stds["out"])
+        elif isinstance(module, ModernBertPredictionHead):
+            init_weight(module.dense, stds["in"])  # TODO: Should this be "out"/"final_out"?
+        elif isinstance(module, ModernBertPoolingHead):
+            init_weight(module.dense, stds["out"])
+        elif isinstance(module, ModernBertForMaskedLM):
+            init_weight(module.decoder, stds["out"])
+        elif isinstance(module, (ModernBertForSequenceClassification, ModernBertForTokenClassification)):
+            init_weight(module.classifier, stds["final_out"])
 
     @torch.no_grad()
     def _unpad_inputs_no_grad(
@@ -1056,15 +1007,6 @@ class ModernBertModel(ModernBertPreTrainedModel):
         """
         for layer, heads in heads_to_prune.items():
             self.layers[layer].attn.prune_heads(heads)
-
-    def _init_weights(self, module: Optional[nn.Module] = None, reset_params: Optional[bool] = None):
-        if module and hasattr(module, "_init_weights"):
-            super()._init_weights(module, reset_params=reset_params)
-        elif isinstance(reset_params, bool):
-            self.embeddings._init_weights(reset_params=reset_params)
-
-            if reset_params:
-                self.final_norm.reset_parameters()
 
     def forward(
         self,
@@ -1193,21 +1135,9 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
 
         self.sparse_prediction = self.config.sparse_prediction
         self.sparse_pred_ignore_index = self.config.sparse_pred_ignore_index
+
         # Initialize weights and apply final processing
-        self._init_weights(reset_params=False)
-
-    def _init_weights(self, module: Optional[nn.Module] = None, reset_params: Optional[bool] = None):
-        assert (module is None) != (reset_params is None), "arg module xor reset_params must be specified"
-        if module:
-            super()._init_weights(module, reset_params=reset_params)
-        else:
-            assert isinstance(reset_params, bool)
-            self.model._init_weights(reset_params=reset_params)
-            self.head._init_weights(reset_params=reset_params)
-
-            # Output weights.
-            if not self.config.tie_word_embeddings:
-                _init_modernbert_weights(self.config, self.decoder, module_type=ModernBertModuleType.out_module)
+        self.post_init()
 
     def get_output_embeddings(self):
         return self.decoder
@@ -1308,17 +1238,7 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
-        self._init_weights(reset_params=False)
-
-    def _init_weights(self, module: Optional[nn.Module] = None, reset_params: Optional[bool] = None):
-        assert (module is None) != (reset_params is None), "arg module xor reset_params must be specified"
-        if module:
-            super()._init_weights(module, reset_params=reset_params)
-        else:
-            assert isinstance(reset_params, bool)
-            self.model._init_weights(reset_params=reset_params)
-            self.head._init_weights(reset_params=reset_params)
-            _init_modernbert_weights(self.config, self.classifier, module_type=ModernBertModuleType.final_out)
+        self.post_init()
 
     def forward(
         self,
@@ -1407,16 +1327,7 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
-        self._init_weights(reset_params=False)
-
-    def _init_weights(self, module: Optional[nn.Module] = None, reset_params: Optional[bool] = None):
-        assert (module is None) != (reset_params is None), "arg module xor reset_params must be specified"
-        if module:
-            super()._init_weights(module, reset_params=reset_params)
-        else:
-            assert isinstance(reset_params, bool)
-            self.model._init_weights(reset_params=reset_params)
-            _init_modernbert_weights(self.config, self.classifier, module_type=ModernBertModuleType.final_out)
+        self.post_init()
 
     def forward(
         self,
