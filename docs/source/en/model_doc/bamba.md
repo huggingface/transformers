@@ -16,51 +16,44 @@ rendered properly in your Markdown viewer.
 
 # Bamba
 
+
 ## Overview
 
-TODO
+Bamba-9B is a decoder-only language model based on the [Mamba-2](https://github.com/state-spaces/mamba) architecture and is designed to handle a wide range of text generation tasks. It is trained from scratch using a two-stage training approach. In the first stage, the model is trained on 2 trillion tokens from the Dolma v1.7 dataset. In the second stage, it undergoes additional training on 200 billion tokens, leveraging a carefully curated blend of high-quality data to further refine its performance and enhance output quality.
 
-Tips:
-
-```python
-import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
-
-model_path = "..."
-tokenizer = AutoTokenizer.from_pretrained(model_path)
-
-# drop device_map if running on CPU
-model = AutoModelForCausalLM.from_pretrained(model_path, device_map="auto")
-model.eval()
-
-# change input text as desired
-prompt = "Write a code to find the maximum value in a list of numbers."
-
-# tokenize the text
-input_tokens = tokenizer(prompt, return_tensors="pt")
-# generate output tokens
-output = model.generate(**input_tokens, max_new_tokens=100)
-# decode output tokens into text
-output = tokenizer.batch_decode(output)
-# loop over the batch to print, in this example the batch size is 1
-for i in output:
-    print(i)
-```
-
-<!-- update this -->
-This model was contributed by [ani300]https://github.com/ani300) and [fabianlim]https://github.com/fabianlim) . 
-
+Checkout all Bamba-9B model checkpoints [here](https://github.com/foundation-model-stack/bamba).
 
 ## BambaConfig
 
-[[autodoc]] BambaConfig
+| Model            | Params       | # Layers | Hidden Dim. | Attention Heads | GQA | KV Heads | Context Length |  Tied Embeddings |
+|-------------------|--------------|----------|-------------|-----------------|-----|----------|----------------|------------------|
+| Bamba  | 9B (9.78B)   | 32       | 4096        | 32              | Yes | 8        | 4096           | True |
+
+<!---
+## Usage Tips
+
+Tips: 
+
+- The architecture is based on Mamba-2 models.
 
 ## BambaModel
 
 [[autodoc]] BambaModel
     - forward
+-->
 
 ## BambaForCausalLM
 
-[[autodoc]] BambaForCausalLM
-    - forward
+```python
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+model = AutoModelForCausalLM.from_pretrained("ibm-fms/Bamba-9B")
+tokenizer = AutoTokenizer.from_pretrained("ibm-fms/Bamba-9B")
+
+message = ["I am an LLM and my name is "]
+inputs = tokenizer(message, return_tensors='pt', return_token_type_ids=False)
+response = model.generate(**inputs, max_new_tokens=100, do_sample=True, top_k=50, top_p=0.95)
+print(tokenizer.batch_decode(response, skip_special_tokens=True)[0])
+```
+
+This HF implementation is contributed by [ani300](https://github.com/ani300) and [fabianlim](https://github.com/fabianlim). 
