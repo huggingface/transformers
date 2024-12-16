@@ -153,6 +153,35 @@ class Kosmos2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             processor()
 
     @require_torch
+    @require_vision
+    def test_structured_kwargs_nested(self):
+        # Rewrite as KOSMOS-2.5 processor doesn't use `rescale_factor`
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        image_processor = self.get_component("image_processor")
+        tokenizer = self.get_component("tokenizer")
+
+        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = self.prepare_text_inputs()
+        image_input = self.prepare_image_inputs()
+
+        # Define the kwargs for each modality
+        all_kwargs = {
+            "common_kwargs": {"return_tensors": "pt"},
+            "images_kwargs": {"max_patches": 1024},
+            "text_kwargs": {"padding": "max_length", "max_length": 76},
+        }
+
+        inputs = processor(text=input_str, images=image_input, **all_kwargs)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        self.assertEqual(inputs["flattened_patches"].shape[1], 1024)
+
+        self.assertEqual(len(inputs["input_ids"][0]), 76)
+
+    @require_torch
     def test_full_processor(self):
         url = "https://huggingface.co/kirp/kosmos2_5/resolve/main/receipt_00008.png"
         processor = AutoProcessor.from_pretrained("microsoft/kosmos-2.5")
