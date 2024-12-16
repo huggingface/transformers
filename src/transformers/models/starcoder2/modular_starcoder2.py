@@ -132,14 +132,12 @@ class Starcoder2Attention(LlamaAttention):
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        dropout_rate = 0.0 if not self.training else self.attention_dropout
-
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
             key_states,
             value_states,
-            dropout=dropout_rate,
+            dropout=0.0 if not self.training else self.attention_dropout,
             **kwargs,
         )
 
@@ -283,7 +281,7 @@ class Starcoder2ForTokenClassification(LlamaForTokenClassification):
 __all__ = [
     "Starcoder2ForCausalLM",
     "Starcoder2Model",
-    "Starcoder2PreTrainedModel",
+    "Starcoder2PreTrainedModel", # noqa: F822
     "Starcoder2ForSequenceClassification",
     "Starcoder2ForTokenClassification",
 ]
