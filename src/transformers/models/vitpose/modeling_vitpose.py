@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch ViTPose model."""
+"""PyTorch VitPose model."""
 
 from dataclasses import dataclass
 from typing import Optional, Tuple, Union
@@ -30,17 +30,17 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.backbone_utils import load_backbone
-from .configuration_vitpose import ViTPoseConfig
+from .configuration_vitpose import VitPoseConfig
 
 
 logger = logging.get_logger(__name__)
 
 # General docstring
-_CONFIG_FOR_DOC = "ViTPoseConfig"
+_CONFIG_FOR_DOC = "VitPoseConfig"
 
 
 @dataclass
-class PoseEstimatorOutput(ModelOutput):
+class VitPoseEstimatorOutput(ModelOutput):
     """
     Class for outputs of pose estimation models.
 
@@ -67,13 +67,13 @@ class PoseEstimatorOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
-class ViTPosePreTrainedModel(PreTrainedModel):
+class VitPosePreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = ViTPoseConfig
+    config_class = VitPoseConfig
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
@@ -99,7 +99,7 @@ VITPOSE_START_DOCSTRING = r"""
     behavior.
 
     Parameters:
-        config ([`ViTPoseConfig`]): Model configuration class with all the parameters of the model.
+        config ([`VitPoseConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -107,8 +107,8 @@ VITPOSE_START_DOCSTRING = r"""
 VITPOSE_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`ViTPoseImageProcessor`]. See
-            [`ViTPoseImageProcessor.__call__`] for details.
+            Pixel values. Pixel values can be obtained using [`VitPoseImageProcessor`]. See
+            [`VitPoseImageProcessor.__call__`] for details.
 
         dataset_index (`torch.Tensor` of shape `(batch_size,)`):
             Index to use in the Mixture-of-Experts (MoE) blocks of the backbone.
@@ -129,7 +129,7 @@ VITPOSE_INPUTS_DOCSTRING = r"""
 """
 
 
-def flip_back(output_flipped, flip_pairs, target_type="GaussianHeatmap"):
+def flip_back(output_flipped, flip_pairs, target_type="gaussian-heatmap"):
     """Flip the flipped heatmaps back to the original form.
 
     Args:
@@ -137,39 +137,39 @@ def flip_back(output_flipped, flip_pairs, target_type="GaussianHeatmap"):
             The output heatmaps obtained from the flipped images.
         flip_pairs (`torch.Tensor` of shape `(num_keypoints, 2)`):
             Pairs of keypoints which are mirrored (for example, left ear -- right ear).
-        target_type (`str`, *optional*, defaults to `"GaussianHeatmap"`):
-            Target type to use. Can be GaussianHeatmap or CombinedTarget.
-            GaussianHeatmap: Classification target with gaussian distribution.
-            CombinedTarget: The combination of classification target (response map) and regression target (offset map).
+        target_type (`str`, *optional*, defaults to `"gaussian-heatmap"`):
+            Target type to use. Can be gaussian-heatmap or combined-target.
+            gaussian-heatmap: Classification target with gaussian distribution.
+            combined-target: The combination of classification target (response map) and regression target (offset map).
             Paper ref: Huang et al. The Devil is in the Details: Delving into Unbiased Data Processing for Human Pose Estimation (CVPR 2020).
 
     Returns:
         torch.Tensor: heatmaps that flipped back to the original image
     """
-    if target_type not in ["GaussianHeatmap", "CombinedTarget"]:
-        raise ValueError("target_type should be GaussianHeatmap or CombinedTarget")
+    if target_type not in ["gaussian-heatmap", "combined-target"]:
+        raise ValueError("target_type should be gaussian-heatmap or combined-target")
 
     if output_flipped.ndim != 4:
         raise ValueError("output_flipped should be [batch_size, num_keypoints, height, width]")
-    original_shape = output_flipped.shape
+    batch_size, num_keypoints, height, width = output_flipped.shape
     channels = 1
-    if target_type.lower() == "CombinedTarget".lower():
+    if target_type == "combined-target":
         channels = 3
         output_flipped[:, 1::3, ...] = -output_flipped[:, 1::3, ...]
-    output_flipped = output_flipped.reshape(original_shape[0], -1, channels, original_shape[2], original_shape[3])
+    output_flipped = output_flipped.reshape(batch_size, -1, channels, height, width)
     output_flipped_back = output_flipped.clone()
 
     # Swap left-right parts
     for left, right in flip_pairs.tolist():
         output_flipped_back[:, left, ...] = output_flipped[:, right, ...]
         output_flipped_back[:, right, ...] = output_flipped[:, left, ...]
-    output_flipped_back = output_flipped_back.reshape(original_shape)
+    output_flipped_back = output_flipped_back.reshape((batch_size, num_keypoints, height, width))
     # Flip horizontally
     output_flipped_back = output_flipped_back.flip(-1)
     return output_flipped_back
 
 
-class ViTPoseSimpleDecoder(nn.Module):
+class VitPoseSimpleDecoder(nn.Module):
     """
     Simple decoding head consisting of a ReLU activation, 4x upsampling and a 3x3 convolution, turning the
     feature maps into heatmaps.
@@ -178,16 +178,16 @@ class ViTPoseSimpleDecoder(nn.Module):
     def __init__(self, config) -> None:
         super().__init__()
 
-        self.scale_factor = config.scale_factor
-        self.conv = nn.Conv2d(config.backbone_hidden_size, config.num_labels, kernel_size=3, stride=1, padding=1)
-
-    def forward(self, hidden_state, flip_pairs) -> torch.Tensor:
-        # Transform input: ReLu + upsample
-        hidden_state = nn.functional.relu(hidden_state)
-        hidden_state = nn.functional.interpolate(
-            hidden_state, scale_factor=self.scale_factor, mode="bilinear", align_corners=False
+        self.activation = nn.ReLU()
+        self.upsampling = nn.Upsample(scale_factor=config.scale_factor, mode="bilinear", align_corners=False)
+        self.conv = nn.Conv2d(
+            config.backbone_config.hidden_size, config.num_labels, kernel_size=3, stride=1, padding=1
         )
 
+    def forward(self, hidden_state: torch.Tensor, flip_pairs: Optional[torch.Tensor] = None) -> torch.Tensor:
+        # Transform input: ReLU + upsample
+        hidden_state = self.activation(hidden_state)
+        hidden_state = self.upsampling(hidden_state)
         heatmaps = self.conv(hidden_state)
 
         if flip_pairs is not None:
@@ -196,17 +196,17 @@ class ViTPoseSimpleDecoder(nn.Module):
         return heatmaps
 
 
-class ViTPoseClassicDecoder(nn.Module):
+class VitPoseClassicDecoder(nn.Module):
     """
     Classic decoding head consisting of a 2 deconvolutional blocks, followed by a 1x1 convolution layer,
     turning the feature maps into heatmaps.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: VitPoseConfig):
         super().__init__()
 
         self.deconv1 = nn.ConvTranspose2d(
-            config.backbone_hidden_size, 256, kernel_size=4, stride=2, padding=1, bias=False
+            config.backbone_config.hidden_size, 256, kernel_size=4, stride=2, padding=1, bias=False
         )
         self.batchnorm1 = nn.BatchNorm2d(256)
         self.relu1 = nn.ReLU()
@@ -217,7 +217,7 @@ class ViTPoseClassicDecoder(nn.Module):
 
         self.conv = nn.Conv2d(256, config.num_labels, kernel_size=1, stride=1, padding=0)
 
-    def forward(self, hidden_state, flip_pairs):
+    def forward(self, hidden_state: torch.Tensor, flip_pairs: Optional[torch.Tensor] = None):
         hidden_state = self.deconv1(hidden_state)
         hidden_state = self.batchnorm1(hidden_state)
         hidden_state = self.relu1(hidden_state)
@@ -235,11 +235,11 @@ class ViTPoseClassicDecoder(nn.Module):
 
 
 @add_start_docstrings(
-    "The ViTPose model with a pose estimation head on top.",
+    "The VitPose model with a pose estimation head on top.",
     VITPOSE_START_DOCSTRING,
 )
-class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
-    def __init__(self, config: ViTPoseConfig) -> None:
+class VitPoseForPoseEstimation(VitPosePreTrainedModel):
+    def __init__(self, config: VitPoseConfig) -> None:
         super().__init__(config)
 
         self.backbone = load_backbone(config)
@@ -252,16 +252,13 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
         if not hasattr(self.backbone.config, "patch_size"):
             raise ValueError("The backbone should have a patch_size attribute")
 
-        config.backbone_hidden_size = self.backbone.config.hidden_size
-        config.image_size = self.backbone.config.image_size
-        config.patch_size = self.backbone.config.patch_size
-        self.head = ViTPoseSimpleDecoder(config) if config.use_simple_decoder else ViTPoseClassicDecoder(config)
+        self.head = VitPoseSimpleDecoder(config) if config.use_simple_decoder else VitPoseClassicDecoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     @add_start_docstrings_to_model_forward(VITPOSE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=PoseEstimatorOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=VitPoseEstimatorOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         pixel_values: torch.Tensor,
@@ -271,20 +268,20 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[tuple, PoseEstimatorOutput]:
+    ) -> Union[tuple, VitPoseEstimatorOutput]:
         """
         Returns:
 
         Examples:
 
         ```python
-        >>> from transformers import AutoImageProcessor, ViTPoseForPoseEstimation
+        >>> from transformers import AutoImageProcessor, VitPoseForPoseEstimation
         >>> import torch
         >>> from PIL import Image
         >>> import requests
 
         >>> processor = AutoImageProcessor.from_pretrained("")
-        >>> model = ViTPoseForPoseEstimation.from_pretrained("")
+        >>> model = VitPoseForPoseEstimation.from_pretrained("")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -316,8 +313,8 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
         # Turn output hidden states in tensor of shape (batch_size, num_channels, height, width)
         sequence_output = outputs.feature_maps[-1] if return_dict else outputs[0][-1]
         batch_size = sequence_output.shape[0]
-        patch_height = self.config.image_size[0] // self.config.patch_size[0]
-        patch_width = self.config.image_size[1] // self.config.patch_size[1]
+        patch_height = self.config.backbone_config.image_size[0] // self.config.backbone_config.patch_size[0]
+        patch_width = self.config.backbone_config.image_size[1] // self.config.backbone_config.patch_size[1]
         sequence_output = (
             sequence_output.permute(0, 2, 1).reshape(batch_size, -1, patch_height, patch_width).contiguous()
         )
@@ -331,7 +328,7 @@ class ViTPoseForPoseEstimation(ViTPosePreTrainedModel):
                 output = (heatmaps,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
 
-        return PoseEstimatorOutput(
+        return VitPoseEstimatorOutput(
             loss=loss,
             heatmaps=heatmaps,
             hidden_states=outputs.hidden_states,

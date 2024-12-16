@@ -12,15 +12,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Image processor class for ViTPose."""
+"""Image processor class for VitPose."""
 
+import itertools
 import math
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_transforms import box_to_center_and_scale, to_channel_dimension_format
+from ...image_transforms import to_channel_dimension_format
 from ...image_utils import (
     IMAGENET_DEFAULT_MEAN,
     IMAGENET_DEFAULT_STD,
@@ -48,6 +49,51 @@ if is_scipy_available():
 logger = logging.get_logger(__name__)
 
 
+# inspired by https://github.com/ViTAE-Transformer/ViTPose/blob/d5216452796c90c6bc29f5c5ec0bdba94366768a/mmpose/datasets/datasets/base/kpt_2d_sview_rgb_img_top_down_dataset.py#L132
+def box_to_center_and_scale(
+    box: Union[Tuple, List, np.ndarray],
+    image_width: int,
+    image_height: int,
+    normalize_factor: float = 200.0,
+    padding_factor: float = 1.25,
+):
+    """
+    Encodes a bounding box in COCO format into (center, scale).
+
+    Args:
+        box (`Tuple`, `List`, or `np.ndarray`):
+            Bounding box in COCO format (top_left_x, top_left_y, width, height).
+        image_width (`int`):
+            Image width.
+        image_height (`int`):
+            Image height.
+        normalize_factor (`float`):
+            Width and height scale factor.
+        padding_factor (`float`):
+            Bounding box padding factor.
+
+    Returns:
+        tuple: A tuple containing center and scale.
+
+        - `np.ndarray` [float32](2,): Center of the bbox (x, y).
+        - `np.ndarray` [float32](2,): Scale of the bbox width & height.
+    """
+
+    top_left_x, top_left_y, width, height = box[:4]
+    aspect_ratio = image_width / image_height
+    center = np.array([top_left_x + width * 0.5, top_left_y + height * 0.5], dtype=np.float32)
+
+    if width > aspect_ratio * height:
+        height = width * 1.0 / aspect_ratio
+    elif width < aspect_ratio * height:
+        width = height * aspect_ratio
+
+    scale = np.array([width / normalize_factor, height / normalize_factor], dtype=np.float32)
+    scale = scale * padding_factor
+
+    return center, scale
+
+
 def coco_to_pascal_voc(bboxes: np.ndarray) -> np.ndarray:
     """
     Converts bounding boxes from the COCO format to the Pascal VOC format.
@@ -68,7 +114,7 @@ def coco_to_pascal_voc(bboxes: np.ndarray) -> np.ndarray:
     return bboxes
 
 
-def get_keypoint_predictions(heatmaps):
+def get_keypoint_predictions(heatmaps: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
     """Get keypoint predictions from score maps.
 
     Args:
@@ -78,9 +124,9 @@ def get_keypoint_predictions(heatmaps):
     Returns:
         tuple: A tuple containing aggregated results.
 
-        - coords (np.ndarray[N, K, 2]):
+        - coords (`np.ndarray` of shape `(batch_size, num_keypoints, 2)`):
             Predicted keypoint location.
-        - scores (np.ndarray[N, K, 1]):
+        - scores (`np.ndarray` of shape `(batch_size, num_keypoints, 1)`):
             Scores (confidence) of the keypoints.
     """
     if not isinstance(heatmaps, np.ndarray):
@@ -101,8 +147,8 @@ def get_keypoint_predictions(heatmaps):
     return preds, scores
 
 
-def post_dark_udp(coords, batch_heatmaps, kernel=3):
-    """DARK post-pocessing. Implemented by udp.
+def post_dark_unbiased_data_processing(coords: np.ndarray, batch_heatmaps: np.ndarray, kernel: int = 3) -> np.ndarray:
+    """DARK post-pocessing. Implemented by unbiased_data_processing.
 
     Paper references:
     - Huang et al. The Devil is in the Details: Delving into Unbiased Data Processing for Human Pose Estimation (CVPR 2020).
@@ -122,20 +168,19 @@ def post_dark_udp(coords, batch_heatmaps, kernel=3):
         `np.ndarray` of shape `(num_persons, num_keypoints, 2)` ):
             Refined coordinates.
     """
-    if not isinstance(coords, np.ndarray):
-        coords = coords.cpu().numpy()
-    if not isinstance(batch_heatmaps, np.ndarray):
-        batch_heatmaps = batch_heatmaps.cpu().numpy()
     batch_size, num_keypoints, height, width = batch_heatmaps.shape
     num_coords = coords.shape[0]
     if not (batch_size == 1 or batch_size == num_coords):
         raise ValueError("The batch size of heatmaps should be 1 or equal to the batch size of coordinates.")
     radius = int((kernel - 1) // 2)
-    for heatmaps in batch_heatmaps:
-        for heatmap in heatmaps:
-            gaussian_filter(heatmap, sigma=0.8, output=heatmap, radius=(radius, radius), axes=(0, 1))
-    np.clip(batch_heatmaps, 0.001, 50, batch_heatmaps)
-    np.log(batch_heatmaps, batch_heatmaps)
+    batch_heatmaps = np.array(
+        [
+            [gaussian_filter(heatmap, sigma=0.8, radius=(radius, radius), axes=(0, 1)) for heatmap in heatmaps]
+            for heatmaps in batch_heatmaps
+        ]
+    )
+    batch_heatmaps = np.clip(batch_heatmaps, 0.001, 50)
+    batch_heatmaps = np.log(batch_heatmaps)
 
     batch_heatmaps_pad = np.pad(batch_heatmaps, ((0, 0), (0, 0), (1, 1), (1, 1)), mode="edge").flatten()
 
@@ -166,7 +211,7 @@ def post_dark_udp(coords, batch_heatmaps, kernel=3):
     return coords
 
 
-def transform_preds(coords, center, scale, output_size):
+def transform_preds(coords: np.ndarray, center: np.ndarray, scale: np.ndarray, output_size: np.ndarray) -> np.ndarray:
     """Get final keypoint predictions from heatmaps and apply scaling and
     translation to map them back to the image.
 
@@ -174,18 +219,18 @@ def transform_preds(coords, center, scale, output_size):
         num_keypoints: K
 
     Args:
-        coords (`np.ndarray[K, ndims]`):
+        coords (`np.ndarray` of shape `(num_keypoints, ndims)`):
 
             * If ndims=2, corrds are predicted keypoint location.
             * If ndims=4, corrds are composed of (x, y, scores, tags)
             * If ndims=5, corrds are composed of (x, y, scores, tags,
               flipped_tags)
 
-        center (`np.ndarray[2,]`):
+        center (`np.ndarray` of shape `(2,)`):
             Center of the bounding box (x, y).
-        scale (`np.ndarray[2,]`):
-            Scale of the bounding box wrt [width, height].
-        output_size (`np.ndarray[2,]):
+        scale (`np.ndarray` of shape `(2,)`):
+            Scale of the bounding box wrt original image of width and height.
+        output_size (`np.ndarray` of shape `(2,)`):
             Size of the destination heatmaps in (height, width) format.
 
     Returns:
@@ -253,9 +298,9 @@ def get_warp_matrix(theta: float, size_input: np.ndarray, size_dst: np.ndarray, 
 
 def scipy_warp_affine(src, M, size):
     """
-    This function implements cv2.warpAffine used in the original implementation using scipy.
+    This function implements cv2.warpAffine function using affine_transform in scipy. See https://docs.scipy.org/doc/scipy/reference/generated/scipy.ndimage.affine_transform.html and https://docs.opencv.org/4.x/d4/d61/tutorial_warp_affine.html for more details.
 
-    Note: the original implementation uses cv2.INTER_LINEAR.
+    Note: the original implementation of cv2.warpAffine uses cv2.INTER_LINEAR.
     """
     channels = [src[..., i] for i in range(src.shape[-1])]
 
@@ -277,9 +322,9 @@ def scipy_warp_affine(src, M, size):
     return new_src
 
 
-class ViTPoseImageProcessor(BaseImageProcessor):
+class VitPoseImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a ViTPose image processor.
+    Constructs a VitPose image processor.
 
     Args:
         do_affine_transform (`bool`, *optional*, defaults to `True`):
@@ -321,6 +366,7 @@ class ViTPoseImageProcessor(BaseImageProcessor):
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
+        self.normalize_factor = 200.0
 
     def affine_transform(
         self,
@@ -359,7 +405,7 @@ class ViTPoseImageProcessor(BaseImageProcessor):
         # one uses a pixel standard deviation of 200 pixels
         transformation = get_warp_matrix(rotation, center * 2.0, np.array(size) - 1.0, scale * 200.0)
 
-        # cv2 requires channels last format
+        # input image requires channels last format
         image = (
             image
             if input_data_format == ChannelDimension.LAST
@@ -394,7 +440,7 @@ class ViTPoseImageProcessor(BaseImageProcessor):
                 Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
 
-            boxes (`List[List[float]]` or `np.ndarray`):
+            boxes (`List[List[List[float]]]` or `np.ndarray`):
                 List or array of bounding boxes for each image. Each box should be a list of 4 floats representing the bounding
                 box coordinates in COCO format (top_left_x, top_left_y, width, height).
 
@@ -443,6 +489,11 @@ class ViTPoseImageProcessor(BaseImageProcessor):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
+        if isinstance(boxes, list) and len(images) != len(boxes):
+            raise ValueError(f"Batch of images and boxes mismatch : {len(images)} != {len(boxes)}")
+        elif isinstance(boxes, np.ndarray) and len(images) != boxes.shape[0]:
+            raise ValueError(f"Batch of images and boxes mismatch : {len(images)} != {boxes.shape[0]}")
+
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
@@ -462,7 +513,10 @@ class ViTPoseImageProcessor(BaseImageProcessor):
             for image, image_boxes in zip(images, boxes):
                 for box in image_boxes:
                     center, scale = box_to_center_and_scale(
-                        box, image_width=size["width"], image_height=size["height"]
+                        box,
+                        image_width=size["width"],
+                        image_height=size["height"],
+                        normalize_factor=self.normalize_factor,
                     )
                     transformed_image = self.affine_transform(
                         image, center, scale, rotation=0, size=size, input_data_format=input_data_format
@@ -470,9 +524,9 @@ class ViTPoseImageProcessor(BaseImageProcessor):
                     new_images.append(transformed_image)
             images = new_images
 
-        # since the number of boxes can differ per image, the image processor takes a list
-        # rather than a numpy array of boxes
-        # it currently creates pixel_values of shape (batch_size*num_persons, num_channels, height, width)
+        # For batch processing, the number of boxes must be consistent across all images in the batch.
+        # When using a list input, the number of boxes can vary dynamically per image.
+        # The image processor creates pixel_values of shape (batch_size*num_persons, num_channels, height, width)
 
         if self.do_rescale:
             images = [
@@ -496,10 +550,10 @@ class ViTPoseImageProcessor(BaseImageProcessor):
 
     def keypoints_from_heatmaps(
         self,
-        heatmaps,
-        center,
-        scale,
-        kernel=11,
+        heatmaps: np.ndarray,
+        center: np.ndarray,
+        scale: np.ndarray,
+        kernel: int = 11,
     ):
         """
         Get final keypoint predictions from heatmaps and transform them back to
@@ -508,30 +562,27 @@ class ViTPoseImageProcessor(BaseImageProcessor):
         Args:
             heatmaps (`np.ndarray` of shape `(batch_size, num_keypoints, height, width])`):
                 Model predicted heatmaps.
-            center (np.ndarray[N, 2]):
+            center (`np.ndarray` of shape `(batch_size, 2)`):
                 Center of the bounding box (x, y).
-            scale (np.ndarray[N, 2]):
-                Scale of the bounding box wrt height/width.
-            kernel (int):
+            scale (`np.ndarray` of shape `(batch_size, 2)`):
+                Scale of the bounding box wrt original images of width and height.
+            kernel (int, *optional*, defaults to 11):
                 Gaussian kernel size (K) for modulation, which should match the heatmap gaussian sigma when training.
                 K=17 for sigma=3 and k=11 for sigma=2.
 
         Returns:
             tuple: A tuple containing keypoint predictions and scores.
 
-            - preds (np.ndarray[batch_size, num_keypoints, 2]):
+            - preds (`np.ndarray` of shape `(batch_size, num_keypoints, 2)`):
                 Predicted keypoint location in images.
-            - scores (np.ndarray[batch_size, num_keypoints, 1]):
+            - scores (`np.ndarray` of shape `(batch_size, num_keypoints, 1)`):
                 Scores (confidence) of the keypoints.
         """
-        # Avoid mutation
-        heatmaps = heatmaps.numpy().copy()
-
         batch_size, _, height, width = heatmaps.shape
 
         coords, scores = get_keypoint_predictions(heatmaps)
 
-        preds = post_dark_udp(coords, heatmaps, kernel=kernel)
+        preds = post_dark_unbiased_data_processing(coords, heatmaps, kernel=kernel)
 
         # Transform back to the image
         for i in range(batch_size):
@@ -539,51 +590,84 @@ class ViTPoseImageProcessor(BaseImageProcessor):
 
         return preds, scores
 
-    def post_process_pose_estimation(self, outputs, boxes, kernel_size=11):
+    def post_process_pose_estimation(
+        self,
+        outputs: torch.Tensor,
+        boxes: Union[List[List[List[float]]], np.ndarray],
+        kernel_size: int = 11,
+        threshold: float = None,
+        target_sizes: Union[TensorType, List[Tuple]] = None,
+    ):
         """
         Transform the heatmaps into keypoint predictions and transform them back to the image.
 
         Args:
             outputs (torch.Tensor):
                 Model outputs.
-            boxes (torch.Tensor of shape [batch_size, 4]):
-                Bounding boxes.
+            boxes (`List[List[List[float]]]` or `np.ndarray`):
+                List or array of bounding boxes for each image. Each box should be a list of 4 floats representing the bounding
+                box coordinates in COCO format (top_left_x, top_left_y, width, height).
             kernel_size (`int`, *optional*, defaults to 11):
                 Gaussian kernel size (K) for modulation.
+            threshold (`float`, *optional*, defaults to None):
+                Score threshold to keep object detection predictions.
+            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
+                `(height, width)` of each image in the batch. If unset, predictions will be resize with the default value.
         Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the keypoints and boxes for an image
+            `List[List[Dict]]`: A list of dictionaries, each dictionary containing the keypoints and boxes for an image
             in the batch as predicted by the model.
         """
 
         # First compute centers and scales for each bounding box
-        batch_size = len(outputs.heatmaps)
+        batch_size, num_keypoints, _, _ = outputs.heatmaps.shape
+
+        if target_sizes is not None:
+            if batch_size != len(target_sizes):
+                raise ValueError(
+                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
+                )
+
         centers = np.zeros((batch_size, 2), dtype=np.float32)
         scales = np.zeros((batch_size, 2), dtype=np.float32)
+        flattened_boxes = list(itertools.chain(*boxes))
         for i in range(batch_size):
+            if target_sizes is not None:
+                image_width, image_height = target_sizes[i][0], target_sizes[i][1]
+                scale_factor = np.array([image_width, image_height, image_width, image_height])
+                flattened_boxes[i] = flattened_boxes[i] * scale_factor
             width, height = self.size["width"], self.size["height"]
-            center, scale = box_to_center_and_scale(boxes[i], image_width=width, image_height=height)
+            center, scale = box_to_center_and_scale(flattened_boxes[i], image_width=width, image_height=height)
             centers[i, :] = center
             scales[i, :] = scale
 
-        preds, scores = self.keypoints_from_heatmaps(outputs.heatmaps, centers, scales, kernel=kernel_size)
+        preds, scores = self.keypoints_from_heatmaps(
+            outputs.heatmaps.cpu().numpy(), centers, scales, kernel=kernel_size
+        )
 
-        all_preds = np.zeros((batch_size, preds.shape[1], 3), dtype=np.float32)
-        all_boxes = np.zeros((batch_size, 6), dtype=np.float32)
-        all_preds[:, :, 0:2] = preds[:, :, 0:2]
-        all_preds[:, :, 2:3] = scores
+        all_boxes = np.zeros((batch_size, 4), dtype=np.float32)
         all_boxes[:, 0:2] = centers[:, 0:2]
         all_boxes[:, 2:4] = scales[:, 0:2]
-        all_boxes[:, 4] = np.prod(scales * 200.0, axis=1)
 
-        poses = torch.Tensor(all_preds)
-
+        poses = torch.Tensor(preds)
+        scores = torch.Tensor(scores)
+        labels = torch.range(0, num_keypoints - 1)
         bboxes_xyxy = torch.Tensor(coco_to_pascal_voc(all_boxes))
 
-        pose_results: List[Dict[str, torch.Tensor]] = []
-        for pose, bbox_xyxy in zip(poses, bboxes_xyxy):
-            pose_result = {}
-            pose_result["keypoints"] = pose
-            pose_result["bbox"] = bbox_xyxy
-            pose_results.append(pose_result)
+        results: List[List[Dict[str, torch.Tensor]]] = []
 
-        return pose_results
+        pose_bbox_pairs = zip(poses, scores, bboxes_xyxy)
+
+        for batch_bbox in boxes:
+            batch_results: List[Dict[str, torch.Tensor]] = []
+            for _ in batch_bbox:
+                # Unpack the next pose and bbox_xyxy from the iterator
+                pose, score, bbox_xyxy = next(pose_bbox_pairs)
+                if threshold is not None:
+                    score_condition = (score > threshold).squeeze(1)
+                    pose, score, labels = pose[score_condition], score[score_condition], labels[score_condition]
+                pose_result = {"keypoints": pose, "scores": score, "labels": labels, "bbox": bbox_xyxy}
+                batch_results.append(pose_result)
+            results.append(batch_results)
+
+        return results

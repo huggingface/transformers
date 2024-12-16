@@ -14,11 +14,13 @@
 
 import unittest
 
+from huggingface_hub import DepthEstimationOutput
 from huggingface_hub.utils import insecure_hashlib
 
 from transformers import MODEL_FOR_DEPTH_ESTIMATION_MAPPING, is_torch_available, is_vision_available
 from transformers.pipelines import DepthEstimationPipeline, pipeline
 from transformers.testing_utils import (
+    compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
     nested_simplify,
     require_tf,
@@ -56,8 +58,23 @@ def hashimage(image: Image) -> str:
 class DepthEstimationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_DEPTH_ESTIMATION_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
-        depth_estimator = DepthEstimationPipeline(model=model, image_processor=processor, torch_dtype=torch_dtype)
+    def get_test_pipeline(
+        self,
+        model,
+        tokenizer=None,
+        image_processor=None,
+        feature_extractor=None,
+        processor=None,
+        torch_dtype="float32",
+    ):
+        depth_estimator = DepthEstimationPipeline(
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            torch_dtype=torch_dtype,
+        )
         return depth_estimator, [
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
@@ -94,6 +111,9 @@ class DepthEstimationPipelineTests(unittest.TestCase):
             outputs,
         )
 
+        for single_output in outputs:
+            compare_pipeline_output_to_hub_spec(single_output, DepthEstimationOutput)
+
     @require_tf
     @unittest.skip(reason="Depth estimation is not implemented in TF")
     def test_small_model_tf(self):
@@ -109,10 +129,30 @@ class DepthEstimationPipelineTests(unittest.TestCase):
 
         # This seems flaky.
         # self.assertEqual(outputs["depth"], "1a39394e282e9f3b0741a90b9f108977")
-        self.assertEqual(nested_simplify(outputs["predicted_depth"].max().item()), 29.304)
+        self.assertEqual(nested_simplify(outputs["predicted_depth"].max().item()), 29.306)
         self.assertEqual(nested_simplify(outputs["predicted_depth"].min().item()), 2.662)
 
     @require_torch
     def test_small_model_pt(self):
         # This is highly irregular to have no small tests.
         self.skipTest(reason="There is not hf-internal-testing tiny model for either GLPN nor DPT")
+
+    @require_torch
+    def test_multiprocess(self):
+        depth_estimator = pipeline(
+            model="hf-internal-testing/tiny-random-DepthAnythingForDepthEstimation",
+            num_workers=2,
+        )
+        outputs = depth_estimator(
+            [
+                "./tests/fixtures/tests_samples/COCO/000000039769.png",
+                "./tests/fixtures/tests_samples/COCO/000000039769.png",
+            ]
+        )
+        self.assertEqual(
+            [
+                {"predicted_depth": ANY(torch.Tensor), "depth": ANY(Image.Image)},
+                {"predicted_depth": ANY(torch.Tensor), "depth": ANY(Image.Image)},
+            ],
+            outputs,
+        )

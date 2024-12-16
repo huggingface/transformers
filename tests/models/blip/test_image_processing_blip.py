@@ -43,6 +43,7 @@ class BlipImageProcessingTester(unittest.TestCase):
         image_std=[0.26862954, 0.26130258, 0.27577711],
         do_convert_rgb=True,
     ):
+        super().__init__()
         size = size if size is not None else {"height": 20, "width": 20}
         self.parent = parent
         self.batch_size = batch_size

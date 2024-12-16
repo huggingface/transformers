@@ -15,7 +15,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -48,6 +48,8 @@ class LlavaConfig(PretrainedConfig):
             Can be one of `"default"` or `"full"`.
         vision_feature_layer (`int`, *optional*, defaults to -2):
             The index of the layer to select the vision feature.
+        image_seq_length (`int`, *optional*, defaults to 576):
+            Sequence length of one image embedding.
 
     Example:
 
@@ -71,7 +73,7 @@ class LlavaConfig(PretrainedConfig):
     ```"""
 
     model_type = "llava"
-    is_composition = False
+    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
 
     def __init__(
         self,
@@ -82,11 +84,13 @@ class LlavaConfig(PretrainedConfig):
         projector_hidden_act="gelu",
         vision_feature_select_strategy="default",
         vision_feature_layer=-2,
+        image_seq_length=576,
         **kwargs,
     ):
         self.ignore_index = ignore_index
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
+        self.image_seq_length = image_seq_length
 
         if vision_feature_select_strategy not in ["default", "full"]:
             raise ValueError(

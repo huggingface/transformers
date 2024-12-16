@@ -12,66 +12,49 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert ViTPose checkpoints from the original repository.
+"""Convert VitPose checkpoints from the original repository.
 
 URL: https://github.com/vitae-transformer/vitpose
 """
 
 import argparse
-from pathlib import Path
+import os
+import re
 
-import numpy as np
 import requests
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import ViTPoseBackboneConfig, ViTPoseConfig, ViTPoseForPoseEstimation, ViTPoseImageProcessor
-from transformers.models.vitpose.image_processing_vitpose import coco_to_pascal_voc
+from transformers import VitPoseBackboneConfig, VitPoseConfig, VitPoseForPoseEstimation, VitPoseImageProcessor
 
 
-def get_original_pose_results(pixel_values, img_metas, output_heatmap, image_processor):
-    batch_size = pixel_values.shape[0]
+ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
+    r"patch_embed.proj": "embeddings.patch_embeddings.projection",
+    r"pos_embed": "embeddings.position_embeddings",
+    r"blocks": "encoder.layer",
+    r"attn.proj": "attention.output.dense",
+    r"attn": "attention.self",
+    r"norm1": "layernorm_before",
+    r"norm2": "layernorm_after",
+    r"last_norm": "layernorm",
+    r"keypoint_head": "head",
+    r"final_layer": "conv",
+}
 
-    centers = np.zeros((batch_size, 2), dtype=np.float32)
-    scales = np.zeros((batch_size, 2), dtype=np.float32)
-    for i in range(batch_size):
-        centers[i, :] = img_metas[i]["center"]
-        scales[i, :] = img_metas[i]["scale"]
-
-    preds, scores = image_processor.keypoints_from_heatmaps(output_heatmap, center=centers, scale=scales)
-
-    all_preds = np.zeros((batch_size, preds.shape[1], 3), dtype=np.float32)
-    all_boxes = np.zeros((batch_size, 6), dtype=np.float32)
-    all_preds[:, :, 0:2] = preds[:, :, 0:2]
-    all_preds[:, :, 2:3] = scores
-    all_boxes[:, 0:2] = centers[:, 0:2]
-    all_boxes[:, 2:4] = scales[:, 0:2]
-    all_boxes[:, 4] = np.prod(scales * 200.0, axis=1)
-
-    poses = all_preds
-
-    # create final results by adding person bbox information
-    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="vitpose_person_results.pt", repo_type="dataset")
-    person_results = torch.load(filepath, map_location="cpu")
-    bboxes = np.array([box["bbox"] for box in person_results])
-    bboxes_xyxy = coco_to_pascal_voc(bboxes)
-
-    pose_results = []
-    for pose, person_result, bbox_xyxy in zip(poses, person_results, bboxes_xyxy):
-        pose_result = person_result.copy()
-        pose_result["keypoints"] = pose
-        pose_result["bbox"] = bbox_xyxy
-        pose_results.append(pose_result)
-
-    return pose_results
+MODEL_TO_FILE_NAME_MAPPING = {
+    "vitpose-base-simple": "vitpose-b-simple.pth",
+    "vitpose-base": "vitpose-b.pth",
+    "vitpose-base-coco-aic-mpii": "vitpose_base_coco_aic_mpii.pth",
+    "vitpose-plus-base": "vitpose+_base.pth",
+}
 
 
 def get_config(model_name):
-    num_experts = 6 if "+" in model_name else 1
-    part_features = 192 if "+" in model_name else 0
+    num_experts = 6 if "plus" in model_name else 1
+    part_features = 192 if "plus" in model_name else 0
 
-    backbone_config = ViTPoseBackboneConfig(out_indices=[12], num_experts=num_experts, part_features=part_features)
+    backbone_config = VitPoseBackboneConfig(out_indices=[12], num_experts=num_experts, part_features=part_features)
     # size of the architecture
     if "small" in model_name:
         backbone_config.hidden_size = 768
@@ -91,81 +74,77 @@ def get_config(model_name):
 
     use_simple_decoder = "simple" in model_name
 
-    config = ViTPoseConfig(
+    edges = [
+        [15, 13],
+        [13, 11],
+        [16, 14],
+        [14, 12],
+        [11, 12],
+        [5, 11],
+        [6, 12],
+        [5, 6],
+        [5, 7],
+        [6, 8],
+        [7, 9],
+        [8, 10],
+        [1, 2],
+        [0, 1],
+        [0, 2],
+        [1, 3],
+        [2, 4],
+        [3, 5],
+        [4, 6],
+    ]
+    id2label = {
+        0: "Nose",
+        1: "L_Eye",
+        2: "R_Eye",
+        3: "L_Ear",
+        4: "R_Ear",
+        5: "L_Shoulder",
+        6: "R_Shoulder",
+        7: "L_Elbow",
+        8: "R_Elbow",
+        9: "L_Wrist",
+        10: "R_Wrist",
+        11: "L_Hip",
+        12: "R_Hip",
+        13: "L_Knee",
+        14: "R_Knee",
+        15: "L_Ankle",
+        16: "R_Ankle",
+    }
+
+    label2id = {v: k for k, v in id2label.items()}
+
+    config = VitPoseConfig(
         backbone_config=backbone_config,
         num_labels=17,
         use_simple_decoder=use_simple_decoder,
+        edges=edges,
+        id2label=id2label,
+        label2id=label2id,
     )
 
     return config
 
 
-def rename_key(name, config):
-    if "patch_embed.proj" in name:
-        name = name.replace("patch_embed.proj", "embeddings.patch_embeddings.projection")
-    if "pos_embed" in name:
-        name = name.replace("pos_embed", "embeddings.position_embeddings")
-    if "blocks" in name:
-        name = name.replace("blocks", "encoder.layer")
-    if "attn.proj" in name:
-        name = name.replace("attn.proj", "attention.output.dense")
-    if "attn" in name:
-        name = name.replace("attn", "attention.self")
-    if "norm1" in name:
-        name = name.replace("norm1", "layernorm_before")
-    if "norm2" in name:
-        name = name.replace("norm2", "layernorm_after")
-    if "last_norm" in name:
-        name = name.replace("last_norm", "layernorm")
-
-    # keypoint head
-    if "keypoint_head" in name and config.use_simple_decoder:
-        name = name.replace("final_layer.", "")
-        name = name.replace("keypoint_head", "head.conv")
-    elif "keypoint_head" in name and not config.use_simple_decoder:
-        name = name.replace("keypoint_head", "head")
-        name = name.replace("deconv_layers.0.weight", "deconv1.weight")
-        name = name.replace("deconv_layers.1.weight", "batchnorm1.weight")
-        name = name.replace("deconv_layers.1.bias", "batchnorm1.bias")
-        name = name.replace("deconv_layers.1.running_mean", "batchnorm1.running_mean")
-        name = name.replace("deconv_layers.1.running_var", "batchnorm1.running_var")
-        name = name.replace("deconv_layers.1.num_batches_tracked", "batchnorm1.num_batches_tracked")
-        name = name.replace("deconv_layers.3.weight", "deconv2.weight")
-        name = name.replace("deconv_layers.4.weight", "batchnorm2.weight")
-        name = name.replace("deconv_layers.4.bias", "batchnorm2.bias")
-        name = name.replace("deconv_layers.4.running_mean", "batchnorm2.running_mean")
-        name = name.replace("deconv_layers.4.running_var", "batchnorm2.running_var")
-        name = name.replace("deconv_layers.4.num_batches_tracked", "batchnorm2.num_batches_tracked")
-
-        name = name.replace("final_layer.weight", "conv.weight")
-        name = name.replace("final_layer.bias", "conv.bias")
-
-    return name
-
-
-def convert_state_dict(orig_state_dict, dim, config):
-    for key in orig_state_dict.copy().keys():
-        val = orig_state_dict.pop(key)
-
-        if "qkv" in key:
-            key_split = key.split(".")
-            layer_num = int(key_split[2])
-            if "weight" in key:
-                orig_state_dict[f"backbone.encoder.layer.{layer_num}.attention.attention.query.weight"] = val[:dim, :]
-                orig_state_dict[f"backbone.encoder.layer.{layer_num}.attention.attention.key.weight"] = val[
-                    dim : dim * 2, :
-                ]
-                orig_state_dict[f"backbone.encoder.layer.{layer_num}.attention.attention.value.weight"] = val[-dim:, :]
-            else:
-                orig_state_dict[f"backbone.encoder.layer.{layer_num}.attention.attention.query.bias"] = val[:dim]
-                orig_state_dict[f"backbone.encoder.layer.{layer_num}.attention.attention.key.bias"] = val[
-                    dim : dim * 2
-                ]
-                orig_state_dict[f"backbone.encoder.layer.{layer_num}.attention.attention.value.bias"] = val[-dim:]
-        else:
-            orig_state_dict[rename_key(key, config)] = val
-
-    return orig_state_dict
+def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
+    """
+    This function should be applied only once, on the concatenated keys to efficiently rename using
+    the key mappings.
+    """
+    output_dict = {}
+    if state_dict_keys is not None:
+        old_text = "\n".join(state_dict_keys)
+        new_text = old_text
+        for pattern, replacement in ORIGINAL_TO_CONVERTED_KEY_MAPPING.items():
+            if replacement is None:
+                new_text = re.sub(pattern, "", new_text)  # an empty line
+                continue
+            new_text = re.sub(pattern, replacement, new_text)
+        output_dict = dict(zip(old_text.split("\n"), new_text.split("\n")))
+    return output_dict
 
 
 # We will verify our results on a COCO image
@@ -175,49 +154,80 @@ def prepare_img():
     return image
 
 
-model_name_to_file_name = {
-    "vitpose-base-simple": "vitpose-b-simple.pth",
-    "vitpose-base": "vitpose-b.pth",
-    "vitpose-base-coco-aic-mpii": "vitpose_base_coco_aic_mpii.pth",
-    "vitpose+-base": "vitpose+_base.pth",
-}
-
-
 @torch.no_grad()
-def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
-    """
-    Copy/paste/tweak model's weights to our ViTPose structure.
-    """
+def write_model(model_path, model_name, push_to_hub):
+    os.makedirs(model_path, exist_ok=True)
 
-    # define default ViTPose configuration
+    # ------------------------------------------------------------
+    # Vision model params and config
+    # ------------------------------------------------------------
+
+    # params from config
     config = get_config(model_name)
 
-    # load HuggingFace model
-    model = ViTPoseForPoseEstimation(config)
-    model.eval()
+    # ------------------------------------------------------------
+    # Convert weights
+    # ------------------------------------------------------------
 
     # load original state_dict
-    filename = model_name_to_file_name[model_name]
+    filename = MODEL_TO_FILE_NAME_MAPPING[model_name]
+    print(f"Fetching all parameters from the checkpoint at {filename}...")
+
     checkpoint_path = hf_hub_download(
         repo_id="nielsr/vitpose-original-checkpoints", filename=filename, repo_type="model"
     )
-    state_dict = torch.load(checkpoint_path, map_location="cpu")["state_dict"]
 
-    # rename some keys
-    new_state_dict = convert_state_dict(state_dict, dim=config.backbone_config.hidden_size, config=config)
-    missing_keys, unexpected_keys = model.load_state_dict(new_state_dict, strict=False)
+    print("Converting model...")
+    original_state_dict = torch.load(checkpoint_path, map_location="cpu")["state_dict"]
+    all_keys = list(original_state_dict.keys())
+    new_keys = convert_old_keys_to_new_keys(all_keys)
 
-    # TODO add associate_heads to the MoE models
-    if model_name in ["vitpose-base", "vitpose-base-simple"]:
-        assert missing_keys == []
-        assert unexpected_keys == []
-    elif model_name == "vitpose-base-coco-aic-mpii":
-        for key in unexpected_keys:
-            if key != "backbone.cls_token":
-                assert "associate_heads" in key
+    dim = config.backbone_config.hidden_size
+
+    state_dict = {}
+    for key in all_keys:
+        new_key = new_keys[key]
+        value = original_state_dict[key]
+
+        if re.search("associate_heads", new_key) or re.search("backbone.cls_token", new_key):
+            # This associated_heads is concept of auxiliary head so does not require in inference stage.
+            # backbone.cls_token is optional forward function for dynamically change of size, see detail in https://github.com/ViTAE-Transformer/ViTPose/issues/34
+            pass
+        elif re.search("qkv", new_key):
+            state_dict[new_key.replace("self.qkv", "attention.query")] = value[:dim]
+            state_dict[new_key.replace("self.qkv", "attention.key")] = value[dim : dim * 2]
+            state_dict[new_key.replace("self.qkv", "attention.value")] = value[-dim:]
+        elif re.search("head", new_key) and not config.use_simple_decoder:
+            # Pattern for deconvolution layers
+            deconv_pattern = r"deconv_layers\.(0|3)\.weight"
+            new_key = re.sub(deconv_pattern, lambda m: f"deconv{int(m.group(1))//3 + 1}.weight", new_key)
+            # Pattern for batch normalization layers
+            bn_patterns = [
+                (r"deconv_layers\.(\d+)\.weight", r"batchnorm\1.weight"),
+                (r"deconv_layers\.(\d+)\.bias", r"batchnorm\1.bias"),
+                (r"deconv_layers\.(\d+)\.running_mean", r"batchnorm\1.running_mean"),
+                (r"deconv_layers\.(\d+)\.running_var", r"batchnorm\1.running_var"),
+                (r"deconv_layers\.(\d+)\.num_batches_tracked", r"batchnorm\1.num_batches_tracked"),
+            ]
+
+            for pattern, replacement in bn_patterns:
+                if re.search(pattern, new_key):
+                    # Convert the layer number to the correct batch norm index
+                    layer_num = int(re.search(pattern, key).group(1))
+                    bn_num = layer_num // 3 + 1
+                    new_key = re.sub(pattern, replacement.replace(r"\1", str(bn_num)), new_key)
+            state_dict[new_key] = value
+        else:
+            state_dict[new_key] = value
+
+    print("Loading the checkpoint in a Vitpose model.")
+    model = VitPoseForPoseEstimation(config)
+    model.eval()
+    model.load_state_dict(state_dict)
+    print("Checkpoint loaded successfully.")
 
     # create image processor
-    image_processor = ViTPoseImageProcessor()
+    image_processor = VitPoseImageProcessor()
 
     # verify image processor
     image = prepare_img()
@@ -228,10 +238,8 @@ def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     original_pixel_values = torch.load(filepath, map_location="cpu")["img"]
     assert torch.allclose(pixel_values, original_pixel_values, atol=1e-1)
 
-    img_metas = torch.load(filepath, map_location="cpu")["img_metas"]
     dataset_index = torch.tensor([0])
 
-    print("Shape of pixel values:", pixel_values.shape)
     with torch.no_grad():
         # first forward pass
         outputs = model(pixel_values, dataset_index=dataset_index)
@@ -247,79 +255,78 @@ def convert_vitpose_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
         )
         output_flipped_heatmap = outputs_flipped.heatmaps
 
-    output_heatmap = (output_heatmap + output_flipped_heatmap) * 0.5
+    outputs.heatmaps = (output_heatmap + output_flipped_heatmap) * 0.5
 
     # Verify pose_results
-    pose_results = get_original_pose_results(pixel_values, img_metas, output_heatmap, image_processor)
-    # This is a list of dictionaries, containing the bounding box and keypoints per detected person
-    assert torch.allclose(
-        torch.from_numpy(pose_results[0]["bbox"]).float(), torch.tensor([412.8, 157.61, 464.85, 294.62])
-    )
-    assert torch.allclose(
-        torch.from_numpy(pose_results[1]["bbox"]).float(), torch.tensor([384.43, 172.21, 398.55, 206.95])
-    )
+    pose_results = image_processor.post_process_pose_estimation(outputs, boxes=boxes)[0]
 
     if model_name == "vitpose-base-simple":
         assert torch.allclose(
-            torch.from_numpy(pose_results[1]["keypoints"][0, :3]),
-            torch.tensor([3.98180511e02, 1.81808380e02, 8.66642594e-01]),
+            pose_results[1]["keypoints"][0],
+            torch.tensor([3.98180511e02, 1.81808380e02]),
+            atol=5e-2,
+        )
+        assert torch.allclose(
+            pose_results[1]["scores"][0],
+            torch.tensor([8.66642594e-01]),
             atol=5e-2,
         )
     elif model_name == "vitpose-base":
         assert torch.allclose(
-            torch.from_numpy(pose_results[1]["keypoints"][0, :3]),
-            torch.tensor([3.9807913e02, 1.8182812e02, 8.8235235e-01]),
+            pose_results[1]["keypoints"][0],
+            torch.tensor([3.9807913e02, 1.8182812e02]),
+            atol=5e-2,
+        )
+        assert torch.allclose(
+            pose_results[1]["scores"][0],
+            torch.tensor([8.8235235e-01]),
             atol=5e-2,
         )
     elif model_name == "vitpose-base-coco-aic-mpii":
         assert torch.allclose(
-            torch.from_numpy(pose_results[1]["keypoints"][0, :3]),
-            torch.tensor([3.98305542e02, 1.81741592e02, 8.69966745e-01]),
+            pose_results[1]["keypoints"][0],
+            torch.tensor([3.98305542e02, 1.81741592e02]),
             atol=5e-2,
         )
-    elif model_name == "vitpose+-base":
         assert torch.allclose(
-            torch.from_numpy(pose_results[1]["keypoints"][0, :3]),
-            torch.tensor([3.98201294e02, 1.81728302e02, 8.75046968e-01]),
+            pose_results[1]["scores"][0],
+            torch.tensor([8.69966745e-01]),
+            atol=5e-2,
+        )
+    elif model_name == "vitpose-plus-base":
+        assert torch.allclose(
+            pose_results[1]["keypoints"][0],
+            torch.tensor([3.98201294e02, 1.81728302e02]),
+            atol=5e-2,
+        )
+        assert torch.allclose(
+            pose_results[1]["scores"][0],
+            torch.tensor([8.75046968e-01]),
             atol=5e-2,
         )
     else:
         raise ValueError("Model not supported")
-    print("Looks ok!")
+    print("Conversion successfully done.")
 
-    # test post_process_pose_estimation
-    # results are slightly different due to no flip augmentation
-    hf_pose_results = image_processor.post_process_pose_estimation(outputs, boxes=boxes[0])
-    if model_name == "vitpose-base-simple":
-        assert torch.allclose(
-            torch.tensor(hf_pose_results[1]["keypoints"][0, :3]),
-            torch.tensor([3.9813846e02, 1.8180725e02, 8.7446749e-01]),
-            atol=5e-2,
-        )
-        assert hf_pose_results[0]["keypoints"].shape == (17, 3)
-        assert hf_pose_results[1]["keypoints"].shape == (17, 3)
-
-    if pytorch_dump_folder_path is not None:
-        Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-        print(f"Saving model and image processor for {model_name} to {pytorch_dump_folder_path}")
-        model.save_pretrained(pytorch_dump_folder_path)
-        image_processor.save_pretrained(pytorch_dump_folder_path)
+    # save the model to a local directory
+    model.save_pretrained(model_path)
+    image_processor.save_pretrained(model_path)
 
     if push_to_hub:
         print(f"Pushing model and image processor for {model_name} to hub")
-        model.push_to_hub(f"nielsr/{model_name}")
-        image_processor.push_to_hub(f"nielsr/{model_name}")
+        model.push_to_hub(f"danelcsb/{model_name}")
+        image_processor.push_to_hub(f"danelcsb/{model_name}")
 
 
-if __name__ == "__main__":
+def main():
     parser = argparse.ArgumentParser()
     # Required parameters
     parser.add_argument(
         "--model_name",
         default="vitpose-base-simple",
-        choices=model_name_to_file_name.keys(),
+        choices=MODEL_TO_FILE_NAME_MAPPING.keys(),
         type=str,
-        help="Name of the ViTPose model you'd like to convert.",
+        help="Name of the VitPose model you'd like to convert.",
     )
     parser.add_argument(
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
@@ -329,4 +336,8 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_vitpose_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    write_model(model_path=args.pytorch_dump_folder_path, model_name=args.model_name, push_to_hub=args.push_to_hub)
+
+
+if __name__ == "__main__":
+    main()

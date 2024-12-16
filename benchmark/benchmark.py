@@ -101,7 +101,7 @@ def summarize(run_dir, metrics, expand_metrics=False):
         # post-processing of report: show a few selected/important metric
         for metric in metrics:
             keys = metric.split(".")
-            value = report
+            value = report.to_dict()
             current = metrics_values
             for key in keys:
                 # Avoid KeyError when a user's specified metric has typo.

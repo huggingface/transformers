@@ -101,7 +101,7 @@ for the list of all BCP-47 in the Flores 200 dataset.
 >>> inputs = tokenizer(article, return_tensors="pt")
 
 >>> translated_tokens = model.generate(
-...     **inputs, forced_bos_token_id=tokenizer.lang_code_to_id["fra_Latn"], max_length=30
+...     **inputs, forced_bos_token_id=tokenizer.convert_tokens_to_ids("fra_Latn"), max_length=30
 ... )
 >>> tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
 Le chef de l'ONU dit qu'il n'y a pas de solution militaire en Syrie
@@ -126,7 +126,7 @@ See example below for a translation from romanian to german:
 >>> inputs = tokenizer(article, return_tensors="pt")
 
 >>> translated_tokens = model.generate(
-...     **inputs, forced_bos_token_id=tokenizer.lang_code_to_id["deu_Latn"], max_length=30
+...     **inputs, forced_bos_token_id=tokenizer.convert_tokens_to_ids("deu_Latn"), max_length=30
 ... )
 >>> tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
 UN-Chef sagt, es gibt keine militärische Lösung in Syrien
@@ -175,7 +175,7 @@ To load a model using Flash Attention 2, we can pass the argument `attn_implemen
 >>> inputs = tokenizer(article, return_tensors="pt").to("cuda")
 
 >>> translated_tokens = model.generate(
-...     **inputs, forced_bos_token_id=tokenizer.lang_code_to_id["deu_Latn"], max_length=30
+...     **inputs, forced_bos_token_id=tokenizer.convert_tokens_to_ids("deu_Latn"), max_length=30
 ... )
 >>> tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0]
 "UN-Chef sagt, es gibt keine militärische Lösung in Syrien"
@@ -188,3 +188,21 @@ Below is an expected speedup diagram that compares pure inference time between t
 <div style="text-align: center">
 <img src="https://huggingface.co/datasets/visheratin/documentation-images/resolve/main/nllb-speedup.webp">
 </div>
+
+## Using Scaled Dot Product Attention (SDPA)
+PyTorch includes a native scaled dot-product attention (SDPA) operator as part of `torch.nn.functional`. This function
+encompasses several implementations that can be applied depending on the inputs and the hardware in use. See the
+[official documentation](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html)
+or the [GPU Inference](https://huggingface.co/docs/transformers/main/en/perf_infer_gpu_one#pytorch-scaled-dot-product-attention)
+page for more information.
+
+SDPA is used by default for `torch>=2.1.1` when an implementation is available, but you may also set
+`attn_implementation="sdpa"` in `from_pretrained()` to explicitly request SDPA to be used.
+
+```python
+from transformers import AutoModelForSeq2SeqLM
+model = AutoModelForSeq2SeqLM.from_pretrained("facebook/nllb-200-distilled-600M", torch_dtype=torch.float16, attn_implementation="sdpa")
+...
+```
+
+For the best speedups, we recommend loading the model in half-precision (e.g. `torch.float16` or `torch.bfloat16`).

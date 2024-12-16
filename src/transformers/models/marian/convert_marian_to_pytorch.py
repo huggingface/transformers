@@ -701,7 +701,12 @@ if __name__ == "__main__":
     """
     parser = argparse.ArgumentParser()
     # Required parameters
-    parser.add_argument("--src", type=str, help="path to marian model sub dir", default="en-de")
+    parser.add_argument(
+        "--src",
+        type=str,
+        help="path to marian model sub dir. yaml.load will be used to load the configuration file, please be wary of which file you're loading.",
+        default="en-de",
+    )
     parser.add_argument("--dest", type=str, default=None, help="Path to the output PyTorch model.")
     args = parser.parse_args()
 

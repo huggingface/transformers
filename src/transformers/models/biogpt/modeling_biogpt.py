@@ -23,7 +23,8 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
+from ...generation import GenerationMixin
+from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask, _prepare_4d_causal_attention_mask_for_sdpa
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     CausalLMOutputWithCrossAttentions,
@@ -46,7 +47,8 @@ _CHECKPOINT_FOR_DOC = "microsoft/biogpt"
 _CONFIG_FOR_DOC = "BioGptConfig"
 
 
-# Copied from transformers.models.opt.modeling_opt.OPTLearnedPositionalEmbedding with OPT->BioGpt
+# copied from transformers.models.opt.modeling_opt.OPTLearnedPositionalEmbedding with OPT->BioGpt
+# TODO @ArthurZucker bring copied from back
 class BioGptLearnedPositionalEmbedding(nn.Embedding):
     """
     This module learns positional embeddings up to a fixed maximum size.
@@ -244,16 +246,130 @@ class BioGptAttention(nn.Module):
         return attn_output, attn_weights_reshaped, past_key_value
 
 
+# Copied from transformers.models.bart.modeling_bart.BartSdpaAttention with Bart->BioGpt
+class BioGptSdpaAttention(BioGptAttention):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        key_value_states: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        layer_head_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        """Input shape: Batch x Time x Channel"""
+        if output_attentions or layer_head_mask is not None:
+            # TODO: Improve this warning with e.g. `model.config._attn_implementation = "manual"` once this is implemented.
+            logger.warning_once(
+                "BioGptModel is using BioGptSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True` or `layer_head_mask` not None. Falling back to the manual attention"
+                ' implementation, but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+            )
+            return super().forward(
+                hidden_states,
+                key_value_states=key_value_states,
+                past_key_value=past_key_value,
+                attention_mask=attention_mask,
+                layer_head_mask=layer_head_mask,
+                output_attentions=output_attentions,
+            )
+
+        # if key_value_states are provided this layer is used as a cross-attention layer
+        # for the decoder
+        is_cross_attention = key_value_states is not None
+
+        bsz, tgt_len, _ = hidden_states.size()
+
+        # get query proj
+        query_states = self.q_proj(hidden_states)
+        # get key, value proj
+        # `past_key_value[0].shape[2] == key_value_states.shape[1]`
+        # is checking that the `sequence_length` of the `past_key_value` is the same as
+        # the provided `key_value_states` to support prefix tuning
+        if (
+            is_cross_attention
+            and past_key_value is not None
+            and past_key_value[0].shape[2] == key_value_states.shape[1]
+        ):
+            # reuse k,v, cross_attentions
+            key_states = past_key_value[0]
+            value_states = past_key_value[1]
+        elif is_cross_attention:
+            # cross_attentions
+            key_states = self._shape(self.k_proj(key_value_states), -1, bsz)
+            value_states = self._shape(self.v_proj(key_value_states), -1, bsz)
+        elif past_key_value is not None:
+            # reuse k, v, self_attention
+            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+            key_states = torch.cat([past_key_value[0], key_states], dim=2)
+            value_states = torch.cat([past_key_value[1], value_states], dim=2)
+        else:
+            # self_attention
+            key_states = self._shape(self.k_proj(hidden_states), -1, bsz)
+            value_states = self._shape(self.v_proj(hidden_states), -1, bsz)
+
+        if self.is_decoder:
+            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
+            # Further calls to cross_attention layer can then reuse all cross-attention
+            # key/value_states (first "if" case)
+            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
+            # all previous decoder key/value_states. Further calls to uni-directional self-attention
+            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
+            # if encoder bi-directional self-attention `past_key_value` is always `None`
+            past_key_value = (key_states, value_states)
+
+        query_states = self._shape(query_states, tgt_len, bsz)
+
+        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
+        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
+        # The tgt_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create a causal mask in case tgt_len == 1.
+        is_causal = True if self.is_causal and attention_mask is None and tgt_len > 1 else False
+
+        # NOTE: SDPA with memory-efficient backend is currently (torch==2.1.2) bugged when using non-contiguous inputs and a custom attn_mask,
+        # but we are fine here as `_shape` do call `.contiguous()`. Reference: https://github.com/pytorch/pytorch/issues/112577
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+            query_states,
+            key_states,
+            value_states,
+            attn_mask=attention_mask,
+            dropout_p=self.dropout if self.training else 0.0,
+            is_causal=is_causal,
+        )
+
+        if attn_output.size() != (bsz, self.num_heads, tgt_len, self.head_dim):
+            raise ValueError(
+                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
+                f" {attn_output.size()}"
+            )
+
+        attn_output = attn_output.transpose(1, 2)
+
+        # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
+        # partitioned across GPUs when using tensor-parallelism.
+        attn_output = attn_output.reshape(bsz, tgt_len, self.embed_dim)
+
+        attn_output = self.out_proj(attn_output)
+
+        return attn_output, None, past_key_value
+
+
+BIOGPT_ATTENTION_CLASSES = {
+    "eager": BioGptAttention,
+    "sdpa": BioGptSdpaAttention,
+}
+
+
 class BioGptDecoderLayer(nn.Module):
     def __init__(self, config: BioGptConfig):
         super().__init__()
         self.embed_dim = config.hidden_size
 
-        self.self_attn = BioGptAttention(
+        self.self_attn = BIOGPT_ATTENTION_CLASSES[config._attn_implementation](
             embed_dim=self.embed_dim,
             num_heads=config.num_attention_heads,
             dropout=config.attention_probs_dropout_prob,
             is_decoder=True,
+            is_causal=True,
         )
         self.dropout = config.hidden_dropout_prob
         self.activation_fn = ACT2FN[config.hidden_act]
@@ -337,6 +453,7 @@ class BioGptPreTrainedModel(PreTrainedModel):
     config_class = BioGptConfig
     base_model_prefix = "biogpt"
     supports_gradient_checkpointing = True
+    _supports_sdpa = True
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -444,6 +561,7 @@ class BioGptModel(BioGptPreTrainedModel):
         self.layer_norm = nn.LayerNorm(self.embed_dim)
 
         self.gradient_checkpointing = False
+        self._use_sdpa = config._attn_implementation == "sdpa"
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -511,9 +629,16 @@ class BioGptModel(BioGptPreTrainedModel):
         # embed positions
         positions = self.embed_positions(attention_mask, past_key_values_length)
 
-        attention_mask = _prepare_4d_causal_attention_mask(
-            attention_mask, input_shape, inputs_embeds, past_key_values_length
-        )
+        if self._use_sdpa and not output_attentions and head_mask is None:
+            # output_attentions=True & head_mask can not be supported when using SDPA, fall back to
+            # the manual implementation that requires a 4D causal mask in all cases.
+            attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
+                attention_mask, input_shape, inputs_embeds, past_key_values_length
+            )
+        else:
+            attention_mask = _prepare_4d_causal_attention_mask(
+                attention_mask, input_shape, inputs_embeds, past_key_values_length
+            )
 
         hidden_states = inputs_embeds + positions
 
@@ -596,7 +721,7 @@ class BioGptModel(BioGptPreTrainedModel):
 @add_start_docstrings(
     """BioGPT Model with a `language modeling` head on top for CLM fine-tuning.""", BIOGPT_START_DOCSTRING
 )
-class BioGptForCausalLM(BioGptPreTrainedModel):
+class BioGptForCausalLM(BioGptPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["output_projection.weight"]
 
     def __init__(self, config):
@@ -676,37 +801,6 @@ class BioGptForCausalLM(BioGptPreTrainedModel):
             attentions=outputs.attentions,
             cross_attentions=outputs.cross_attentions,
         )
-
-    def prepare_inputs_for_generation(
-        self, input_ids, attention_mask, inputs_embeds=None, past_key_values=None, **kwargs
-    ):
-        # only last tokens for inputs_ids if past is defined in kwargs
-        if past_key_values is not None:
-            past_length = past_key_values[0][0].shape[2]
-
-            # Some generation methods already pass only the last input ID
-            if input_ids.shape[1] > past_length:
-                remove_prefix_length = past_length
-            else:
-                # Default to old behavior: keep only final ID
-                remove_prefix_length = input_ids.shape[1] - 1
-
-            input_ids = input_ids[:, remove_prefix_length:]
-
-        if inputs_embeds is not None and past_key_values is None:
-            model_inputs = {"inputs_embeds": inputs_embeds}
-        else:
-            model_inputs = {"input_ids": input_ids}
-
-        model_inputs.update(
-            {
-                "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
-                "use_cache": kwargs.get("use_cache"),
-            }
-        )
-
-        return model_inputs
 
     @staticmethod
     def _reorder_cache(past_key_values, beam_idx):

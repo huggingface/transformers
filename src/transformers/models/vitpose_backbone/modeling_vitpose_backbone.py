@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""PyTorch ViTPose backbone model.
+"""PyTorch VitPose backbone model.
 
 This code is the same as the original Vision Transformer (ViT) with 2 modifications:
 - use of padding=2 in the patch embedding layer
@@ -38,16 +38,16 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ...utils.backbone_utils import BackboneMixin
-from .configuration_vitpose_backbone import ViTPoseBackboneConfig
+from .configuration_vitpose_backbone import VitPoseBackboneConfig
 
 
 logger = logging.get_logger(__name__)
 
 # General docstring
-_CONFIG_FOR_DOC = "ViTPoseBackboneConfig"
+_CONFIG_FOR_DOC = "VitPoseBackboneConfig"
 
 
-class ViTPoseBackbonePatchEmbeddings(nn.Module):
+class VitPoseBackbonePatchEmbeddings(nn.Module):
     """Image to Patch Embedding."""
 
     def __init__(self, config):
@@ -79,15 +79,15 @@ class ViTPoseBackbonePatchEmbeddings(nn.Module):
         return embeddings
 
 
-class ViTPoseBackboneEmbeddings(nn.Module):
+class VitPoseBackboneEmbeddings(nn.Module):
     """
     Construct the position and patch embeddings.
     """
 
-    def __init__(self, config: ViTPoseBackboneConfig) -> None:
+    def __init__(self, config: VitPoseBackboneConfig) -> None:
         super().__init__()
 
-        self.patch_embeddings = ViTPoseBackbonePatchEmbeddings(config)
+        self.patch_embeddings = VitPoseBackbonePatchEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
         position_embeddings = torch.zeros(1, num_patches + 1, config.hidden_size)
         # Pre-compute the modified position embeddings
@@ -95,7 +95,6 @@ class ViTPoseBackboneEmbeddings(nn.Module):
             position_embeddings[:, 1:] + position_embeddings[:, :1]
         )
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.config = config
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         embeddings = self.patch_embeddings(pixel_values)
@@ -108,9 +107,9 @@ class ViTPoseBackboneEmbeddings(nn.Module):
         return embeddings
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->ViTPoseBackbone
-class ViTPoseBackboneSelfAttention(nn.Module):
-    def __init__(self, config: ViTPoseBackboneConfig) -> None:
+# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViT->VitPoseBackbone
+class VitPoseBackboneSelfAttention(nn.Module):
+    def __init__(self, config: VitPoseBackboneConfig) -> None:
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -169,14 +168,14 @@ class ViTPoseBackboneSelfAttention(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->ViTPoseBackbone
-class ViTPoseBackboneSelfOutput(nn.Module):
+# Copied from transformers.models.vit.modeling_vit.ViTSelfOutput with ViT->VitPoseBackbone
+class VitPoseBackboneSelfOutput(nn.Module):
     """
-    The residual connection is defined in ViTPoseBackboneLayer instead of here (as is the case with other models), due to the
+    The residual connection is defined in VitPoseBackboneLayer instead of here (as is the case with other models), due to the
     layernorm applied before each block.
     """
 
-    def __init__(self, config: ViTPoseBackboneConfig) -> None:
+    def __init__(self, config: VitPoseBackboneConfig) -> None:
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -188,12 +187,12 @@ class ViTPoseBackboneSelfOutput(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->ViTPoseBackbone
-class ViTPoseBackboneAttention(nn.Module):
-    def __init__(self, config: ViTPoseBackboneConfig) -> None:
+# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViT->VitPoseBackbone
+class VitPoseBackboneAttention(nn.Module):
+    def __init__(self, config: VitPoseBackboneConfig) -> None:
         super().__init__()
-        self.attention = ViTPoseBackboneSelfAttention(config)
-        self.output = ViTPoseBackboneSelfOutput(config)
+        self.attention = VitPoseBackboneSelfAttention(config)
+        self.output = VitPoseBackboneSelfOutput(config)
         self.pruned_heads = set()
 
     def prune_heads(self, heads: Set[int]) -> None:
@@ -228,8 +227,8 @@ class ViTPoseBackboneAttention(nn.Module):
         return outputs
 
 
-class ViTPoseBackboneMoEMLP(nn.Module):
-    def __init__(self, config: ViTPoseBackboneConfig) -> None:
+class VitPoseBackboneMoeMLP(nn.Module):
+    def __init__(self, config: VitPoseBackboneConfig):
         super().__init__()
 
         in_features = out_features = config.hidden_size
@@ -248,49 +247,47 @@ class ViTPoseBackboneMoEMLP(nn.Module):
         experts = [nn.Linear(hidden_features, part_features) for _ in range(num_experts)]
         self.experts = nn.ModuleList(experts)
 
-    def forward(self, x, indices):
-        expert_x = torch.zeros_like(x[:, :, -self.part_features :])
+    def forward(self, hidden_state: torch.Tensor, indices: torch.Tensor) -> torch.Tensor:
+        expert_hidden_state = torch.zeros_like(hidden_state[:, :, -self.part_features :])
 
-        x = self.fc1(x)
-        x = self.act(x)
-        shared_x = self.fc2(x)
+        hidden_state = self.fc1(hidden_state)
+        hidden_state = self.act(hidden_state)
+        shared_hidden_state = self.fc2(hidden_state)
         indices = indices.view(-1, 1, 1)
 
         # to support ddp training
         for i in range(self.num_experts):
-            selectedIndex = indices == i
-            current_x = self.experts[i](x) * selectedIndex
-            expert_x = expert_x + current_x
+            selected_index = indices == i
+            current_hidden_state = self.experts[i](hidden_state) * selected_index
+            expert_hidden_state = expert_hidden_state + current_hidden_state
 
-        x = torch.cat([shared_x, expert_x], dim=-1)
+        hidden_state = torch.cat([shared_hidden_state, expert_hidden_state], dim=-1)
 
-        return x
+        return hidden_state
 
 
-class ViTPoseBackboneMLP(nn.Module):
-    def __init__(self, config: ViTPoseBackboneConfig) -> None:
+class VitPoseBackboneMLP(nn.Module):
+    def __init__(self, config: VitPoseBackboneConfig) -> None:
         super().__init__()
         in_features = out_features = config.hidden_size
         hidden_features = int(config.hidden_size * config.mlp_ratio)
         self.fc1 = nn.Linear(in_features, hidden_features, bias=True)
-        if isinstance(config.hidden_act, str):
-            self.activation = ACT2FN[config.hidden_act]
-        else:
-            self.activation = config.hidden_act
+        self.activation = ACT2FN[config.hidden_act]
         self.fc2 = nn.Linear(hidden_features, out_features, bias=True)
 
-    def forward(self, hidden_state: torch.Tensor, indices=None) -> torch.Tensor:
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
         hidden_state = self.fc1(hidden_state)
         hidden_state = self.activation(hidden_state)
         hidden_state = self.fc2(hidden_state)
         return hidden_state
 
 
-class ViTPoseBackboneLayer(nn.Module):
-    def __init__(self, config: ViTPoseBackboneConfig) -> None:
+class VitPoseBackboneLayer(nn.Module):
+    def __init__(self, config: VitPoseBackboneConfig) -> None:
         super().__init__()
-        self.attention = ViTPoseBackboneAttention(config)
-        self.mlp = ViTPoseBackboneMLP(config) if config.num_experts == 1 else ViTPoseBackboneMoEMLP(config)
+        self.num_experts = config.num_experts
+        self.attention = VitPoseBackboneAttention(config)
+        self.mlp = VitPoseBackboneMLP(config) if self.num_experts == 1 else VitPoseBackboneMoeMLP(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -301,8 +298,15 @@ class ViTPoseBackboneLayer(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+        # Validate dataset_index when using multiple experts
+        if self.num_experts > 1 and dataset_index is None:
+            raise ValueError(
+                "dataset_index must be provided when using multiple experts "
+                f"(num_experts={self.num_experts}). Please provide dataset_index "
+                "to the forward pass."
+            )
         self_attention_outputs = self.attention(
-            self.layernorm_before(hidden_states),  # in ViTPoseBackbone, layernorm is applied before self-attention
+            self.layernorm_before(hidden_states),  # in VitPoseBackbone, layernorm is applied before self-attention
             head_mask,
             output_attentions=output_attentions,
         )
@@ -313,7 +317,10 @@ class ViTPoseBackboneLayer(nn.Module):
         hidden_states = attention_output + hidden_states
 
         layer_output = self.layernorm_after(hidden_states)
-        layer_output = self.mlp(layer_output, indices=dataset_index)
+        if self.num_experts == 1:
+            layer_output = self.mlp(layer_output)
+        else:
+            layer_output = self.mlp(layer_output, indices=dataset_index)
 
         # second residual connection
         layer_output = layer_output + hidden_states
@@ -323,12 +330,12 @@ class ViTPoseBackboneLayer(nn.Module):
         return outputs
 
 
-# Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->ViTPoseBackbone
-class ViTPoseBackboneEncoder(nn.Module):
-    def __init__(self, config: ViTPoseBackboneConfig) -> None:
+# Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViT->VitPoseBackbone
+class VitPoseBackboneEncoder(nn.Module):
+    def __init__(self, config: VitPoseBackboneConfig) -> None:
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([ViTPoseBackboneLayer(config) for _ in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([VitPoseBackboneLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
     # Ignore copy
@@ -354,6 +361,7 @@ class ViTPoseBackboneEncoder(nn.Module):
                 layer_outputs = self._gradient_checkpointing_func(
                     layer_module.__call__,
                     hidden_states,
+                    dataset_index,
                     layer_head_mask,
                     output_attentions,
                 )
@@ -377,17 +385,17 @@ class ViTPoseBackboneEncoder(nn.Module):
         )
 
 
-class ViTPoseBackbonePreTrainedModel(PreTrainedModel):
+class VitPoseBackbonePreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = ViTPoseBackboneConfig
+    config_class = VitPoseBackboneConfig
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["ViTPoseEmbeddings", "ViTPoseLayer"]
+    _no_split_modules = ["VitPoseBackboneEmbeddings", "VitPoseBackboneLayer"]
 
     def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
         """Initialize the weights"""
@@ -402,7 +410,7 @@ class ViTPoseBackbonePreTrainedModel(PreTrainedModel):
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
-        elif isinstance(module, ViTPoseBackboneEmbeddings):
+        elif isinstance(module, VitPoseBackboneEmbeddings):
             module.position_embeddings.data = nn.init.trunc_normal_(
                 module.position_embeddings.data.to(torch.float32),
                 mean=0.0,
@@ -416,7 +424,7 @@ VITPOSE_BACKBONE_START_DOCSTRING = r"""
     behavior.
 
     Parameters:
-        config ([`ViTPoseBackboneConfig`]): Model configuration class with all the parameters of the model.
+        config ([`VitPoseBackboneConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -449,17 +457,17 @@ VITPOSE_BACKBONE_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The ViTPose backbone useful for downstream tasks.",
+    "The VitPose backbone useful for downstream tasks.",
     VITPOSE_BACKBONE_START_DOCSTRING,
 )
-class ViTPoseBackbone(ViTPoseBackbonePreTrainedModel, BackboneMixin):
-    def __init__(self, config: ViTPoseBackboneConfig):
+class VitPoseBackbone(VitPoseBackbonePreTrainedModel, BackboneMixin):
+    def __init__(self, config: VitPoseBackboneConfig):
         super().__init__(config)
         super()._init_backbone(config)
 
         self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
-        self.embeddings = ViTPoseBackboneEmbeddings(config)
-        self.encoder = ViTPoseBackboneEncoder(config)
+        self.embeddings = VitPoseBackboneEmbeddings(config)
+        self.encoder = VitPoseBackboneEncoder(config)
 
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
@@ -483,11 +491,11 @@ class ViTPoseBackbone(ViTPoseBackbonePreTrainedModel, BackboneMixin):
         Examples:
 
         ```python
-        >>> from transformers import ViTPoseBackboneConfig, ViTPoseBackbone
+        >>> from transformers import VitPoseBackboneConfig, VitPoseBackbone
         >>> import torch
 
-        >>> config = ViTPoseBackboneConfig(out_indices=[-1])
-        >>> model = ViTPoseBackbone(config)
+        >>> config = VitPoseBackboneConfig(out_indices=[-1])
+        >>> model = VitPoseBackbone(config)
 
         >>> pixel_values = torch.randn(1, 3, 256, 192)
         >>> dataset_index = torch.tensor([1])

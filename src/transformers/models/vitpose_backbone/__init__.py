@@ -20,7 +20,7 @@ from typing import TYPE_CHECKING
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
 
-_import_structure = {"configuration_vitpose_backbone": ["ViTPoseBackboneConfig"]}
+_import_structure = {"configuration_vitpose_backbone": ["VitPoseBackboneConfig"]}
 
 
 try:
@@ -30,12 +30,12 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_vitpose_backbone"] = [
-        "ViTPoseBackbonePreTrainedModel",
-        "ViTPoseBackbone",
+        "VitPoseBackbonePreTrainedModel",
+        "VitPoseBackbone",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_vitpose_backbone import ViTPoseBackboneConfig
+    from .configuration_vitpose_backbone import VitPoseBackboneConfig
 
     try:
         if not is_torch_available():
@@ -44,8 +44,8 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_vitpose_backbone import (
-            ViTPoseBackbone,
-            ViTPoseBackbonePreTrainedModel,
+            VitPoseBackbone,
+            VitPoseBackbonePreTrainedModel,
         )
 
 else:

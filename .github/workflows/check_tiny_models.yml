@@ -23,7 +23,7 @@ jobs:
 
       - uses: actions/checkout@v4
       - name: Set up Python 3.8
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           # Semantic version range syntax or exact version of a Python version
           python-version: '3.8'

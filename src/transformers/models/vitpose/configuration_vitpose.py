@@ -12,21 +12,22 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""ViTPose model configuration"""
+"""VitPose model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto.configuration_auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
 
 
-class ViTPoseConfig(PretrainedConfig):
+class VitPoseConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ViTPoseForPoseEstimation`]. It is used to instantiate a
-    ViTPose model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the ViTPose
+    This is the configuration class to store the configuration of a [`VitPoseForPoseEstimation`]. It is used to instantiate a
+    VitPose model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the VitPose
     [google/vitpose-base-patch16-224](https://huggingface.co/google/vitpose-base-patch16-224) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
@@ -34,7 +35,7 @@ class ViTPoseConfig(PretrainedConfig):
 
     Args:
         backbone_config (`PretrainedConfig` or `dict`, *optional*, defaults to `VitPoseBackboneConfig()`):
-            The configuration of the backbone model. Currently backbone_config with `vitpose_backbone` model_type is only supported.
+            The configuration of the backbone model. Currently, only `backbone_config` with `vitpose_backbone` as `model_type` is supported.
         backbone (`str`, *optional*):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
             will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
@@ -52,18 +53,19 @@ class ViTPoseConfig(PretrainedConfig):
         scale_factor (`int`, *optional*, defaults to 4):
             Factor to upscale the feature maps coming from the ViT backbone.
         use_simple_decoder (`bool`, *optional*, defaults to `True`):
-            Whether to use a simple decoder to decode the feature maps from the backbone into heatmaps.
+            Whether to use a `VitPoseSimpleDecoder` to decode the feature maps from the backbone into heatmaps. Otherwise it uses `VitPoseClassicDecoder`.
+
 
     Example:
 
     ```python
-    >>> from transformers import ViTPoseConfig, ViTPoseForPoseEstimation
+    >>> from transformers import VitPoseConfig, VitPoseForPoseEstimation
 
-    >>> # Initializing a ViTPose configuration
-    >>> configuration = ViTPoseConfig()
+    >>> # Initializing a VitPose configuration
+    >>> configuration = VitPoseConfig()
 
     >>> # Initializing a model (with random weights) from the configuration
-    >>> model = ViTPoseForPoseEstimation(configuration)
+    >>> model = VitPoseForPoseEstimation(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -86,21 +88,27 @@ class ViTPoseConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
         if use_pretrained_backbone:
-            raise ValueError("Pretrained backbones are not supported yet.")
-
-        if backbone_config is not None and backbone is not None:
-            raise ValueError("You can't specify both `backbone` and `backbone_config`.")
+            logger.info(
+                "`use_pretrained_backbone` is `True`. For the pure inference purpose of VitPose weight do not set this value."
+            )
+        if use_timm_backbone:
+            raise ValueError("use_timm_backbone set `True` is not supported at the moment.")
 
         if backbone_config is None and backbone is None:
             logger.info("`backbone_config` is `None`. Initializing the config with the default `VitPose` backbone.")
-            backbone_config = CONFIG_MAPPING["vitpose_backbone"](out_features=["stage4"])
+            backbone_config = CONFIG_MAPPING["vitpose_backbone"](out_indices=[4])
         elif isinstance(backbone_config, dict):
             backbone_model_type = backbone_config.get("model_type")
             config_class = CONFIG_MAPPING[backbone_model_type]
             backbone_config = config_class.from_dict(backbone_config)
 
-        if backbone_kwargs is not None and backbone_kwargs and backbone_config is not None:
-            raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
+        verify_backbone_config_arguments(
+            use_timm_backbone=use_timm_backbone,
+            use_pretrained_backbone=use_pretrained_backbone,
+            backbone=backbone,
+            backbone_config=backbone_config,
+            backbone_kwargs=backbone_kwargs,
+        )
 
         self.backbone_config = backbone_config
         self.backbone = backbone

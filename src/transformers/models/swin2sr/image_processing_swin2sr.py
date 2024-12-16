@@ -28,10 +28,9 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
-    validate_kwargs,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, logging
+from ...utils import TensorType, filter_out_non_signature_kwargs, logging
 
 
 logger = logging.get_logger(__name__)
@@ -66,16 +65,6 @@ class Swin2SRImageProcessor(BaseImageProcessor):
         self.rescale_factor = rescale_factor
         self.do_pad = do_pad
         self.pad_size = pad_size
-        self._valid_processor_keys = [
-            "images",
-            "do_rescale",
-            "rescale_factor",
-            "do_pad",
-            "pad_size",
-            "return_tensors",
-            "data_format",
-            "input_data_format",
-        ]
 
     def pad(
         self,
@@ -118,6 +107,7 @@ class Swin2SRImageProcessor(BaseImageProcessor):
             input_data_format=input_data_format,
         )
 
+    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: ImageInput,
@@ -128,7 +118,6 @@ class Swin2SRImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
     ):
         """
         Preprocess an image or batch of images.
@@ -171,8 +160,6 @@ class Swin2SRImageProcessor(BaseImageProcessor):
         pad_size = pad_size if pad_size is not None else self.pad_size
 
         images = make_list_of_images(images)
-
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         if not valid_images(images):
             raise ValueError(

@@ -31,10 +31,10 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTPoseImageProcessor
+    from transformers import VitPoseImageProcessor
 
 
-class ViTPoseImageProcessingTester(unittest.TestCase):
+class VitPoseImageProcessingTester(unittest.TestCase):
     def __init__(
         self,
         parent,
@@ -94,12 +94,12 @@ class ViTPoseImageProcessingTester(unittest.TestCase):
 
 @require_torch
 @require_vision
-class ViTPoseImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = ViTPoseImageProcessor if is_vision_available() else None
+class VitPoseImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+    image_processing_class = VitPoseImageProcessor if is_vision_available() else None
 
     def setUp(self):
         super().setUp()
-        self.image_processor_tester = ViTPoseImageProcessingTester(self)
+        self.image_processor_tester = VitPoseImageProcessingTester(self)
 
     @property
     def image_processor_dict(self):

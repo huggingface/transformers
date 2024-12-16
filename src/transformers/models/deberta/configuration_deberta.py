@@ -40,7 +40,7 @@ class DebertaConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Arguments:
-        vocab_size (`int`, *optional*, defaults to 30522):
+        vocab_size (`int`, *optional*, defaults to 50265):
             Vocabulary size of the DeBERTa model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`DebertaModel`] or [`TFDebertaModel`].
         hidden_size (`int`, *optional*, defaults to 768):
@@ -62,7 +62,7 @@ class DebertaConfig(PretrainedConfig):
         max_position_embeddings (`int`, *optional*, defaults to 512):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        type_vocab_size (`int`, *optional*, defaults to 2):
+        type_vocab_size (`int`, *optional*, defaults to 0):
             The vocabulary size of the `token_type_ids` passed when calling [`DebertaModel`] or [`TFDebertaModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.

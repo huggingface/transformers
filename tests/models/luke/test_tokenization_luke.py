@@ -146,11 +146,9 @@ class LukeTokenizerTest(TokenizerTesterMixin, unittest.TestCase):
                 # token_type_ids should put 0 everywhere
                 self.assertEqual(sum(tokens_r["token_type_ids"]), sum(tokens_p["token_type_ids"]))
 
-                # token_type_ids should put 0 everywhere
-                self.assertEqual(sum(tokens_r["token_type_ids"]), sum(tokens_p["token_type_ids"]))
-
                 # attention_mask should put 1 everywhere, so sum over length should be 1
                 self.assertEqual(
+                    sum(tokens_r["attention_mask"]) / len(tokens_r["attention_mask"]),
                     sum(tokens_p["attention_mask"]) / len(tokens_p["attention_mask"]),
                 )
 

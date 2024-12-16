@@ -265,7 +265,9 @@ class FuyuModelTester:
 @require_torch
 class FuyuModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (FuyuForCausalLM,) if is_torch_available() else ()
-    pipeline_model_mapping = {"text-generation": FuyuForCausalLM} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"text-generation": FuyuForCausalLM, "image-text-to-text": FuyuForCausalLM} if is_torch_available() else {}
+    )
 
     test_head_masking = False
     test_pruning = False
@@ -330,7 +332,7 @@ class FuyuModelIntegrationTest(unittest.TestCase):
 
         text_prompt_coco_captioning = "Generate a coco-style caption.\n"
 
-        inputs = processor(text=text_prompt_coco_captioning, images=image, return_tensors="pt")
+        inputs = processor(images=image, text=text_prompt_coco_captioning, return_tensors="pt")
         generated_ids = model.generate(**inputs, max_new_tokens=10)
 
         # take the last 8 tokens (in order to skip special \n\x04 characters) and decode them

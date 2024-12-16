@@ -27,7 +27,7 @@ from transformers.image_processing_utils import get_size_dict
 from transformers.testing_utils import TOKEN, USER, get_tests_dir, is_staging_test
 
 
-sys.path.append(str(Path(__file__).parent.parent / "utils"))
+sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
 
 from test_module.custom_image_processing import CustomImageProcessor  # noqa E402
 

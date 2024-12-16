@@ -63,7 +63,7 @@ Examples:
 ---
 Task: "Answer the question in the variable `question` about the image stored in the variable `image`. The question is in French."
 
-I will use the following tools: `translator` to translate the question into English and then `image_qa` to answer the question on the input image.
+Thought: I will use the following tools: `translator` to translate the question into English and then `image_qa` to answer the question on the input image.
 Code:
 ```py
 translated_question = translator(question=question, src_lang="French", tgt_lang="English")
@@ -75,7 +75,7 @@ final_answer(f"The answer is {answer}")
 ---
 Task: "Identify the oldest person in the `document` and create an image showcasing the result."
 
-I will use the following tools: `document_qa` to find the oldest person in the document, then `image_generator` to generate an image according to the answer.
+Thought: I will use the following tools: `document_qa` to find the oldest person in the document, then `image_generator` to generate an image according to the answer.
 Code:
 ```py
 answer = document_qa(document, question="What is the oldest person?")
@@ -87,7 +87,7 @@ final_answer(image)
 ---
 Task: "Generate an image using the text given in the variable `caption`."
 
-I will use the following tool: `image_generator` to generate an image.
+Thought: I will use the following tool: `image_generator` to generate an image.
 Code:
 ```py
 image = image_generator(prompt=caption)
@@ -97,7 +97,7 @@ final_answer(image)
 ---
 Task: "Summarize the text given in the variable `text` and read it out loud."
 
-I will use the following tools: `summarizer` to create a summary of the input text, then `text_reader` to read it out loud.
+Thought: I will use the following tools: `summarizer` to create a summary of the input text, then `text_reader` to read it out loud.
 Code:
 ```py
 summarized_text = summarizer(text)
@@ -109,7 +109,7 @@ final_answer(audio_summary)
 ---
 Task: "Answer the question in the variable `question` about the text in the variable `text`. Use the answer to generate an image."
 
-I will use the following tools: `text_qa` to create the answer, then `image_generator` to generate an image according to the answer.
+Thought: I will use the following tools: `text_qa` to create the answer, then `image_generator` to generate an image according to the answer.
 Code:
 ```py
 answer = text_qa(text=text, question=question)
@@ -121,7 +121,7 @@ final_answer(image)
 ---
 Task: "Caption the following `image`."
 
-I will use the following tool: `image_captioner` to generate a caption for the image.
+Thought: I will use the following tool: `image_captioner` to generate a caption for the image.
 Code:
 ```py
 caption = image_captioner(image)
@@ -199,7 +199,7 @@ Thought: I will now generate an image showcasing the oldest person.
 Action:
 {
   "action": "image_generator",
-  "action_input": {"text": ""A portrait of John Doe, a 55-year-old man living in Canada.""}
+  "action_input": {"prompt": "A portrait of John Doe, a 55-year-old man living in Canada."}
 }<end_action>
 Observation: "image.png"
 
@@ -292,7 +292,6 @@ print(answer)
 Observation: "The oldest person in the document is John Doe, a 55 year old lumberjack living in Newfoundland."
 
 Thought: I will now generate an image showcasing the oldest person.
-
 Code:
 ```py
 image = image_generator("A portrait of John Doe, a 55-year-old man living in Canada.")
@@ -303,7 +302,6 @@ final_answer(image)
 Task: "What is the result of the following operation: 5 + 3 + 1294.678?"
 
 Thought: I will use python code to compute the result of the operation and then return the final answer using the `final_answer` tool
-
 Code:
 ```py
 result = 5 + 3 + 1294.678
@@ -334,10 +332,10 @@ final_answer("Shanghai")
 ---
 Task: "What is the current age of the pope, raised to the power 0.36?"
 
-Thought: I will use the tool `search` to get the age of the pope, then raise it to the power 0.36.
+Thought: I will use the tool `wiki` to get the age of the pope, then raise it to the power 0.36.
 Code:
 ```py
-pope_age = search(query="current pope age")
+pope_age = wiki(query="current pope age")
 print("Pope age:", pope_age)
 ```<end_action>
 Observation:
@@ -350,16 +348,16 @@ pope_current_age = 85 ** 0.36
 final_answer(pope_current_age)
 ```<end_action>
 
-Above example were using notional tools that might not exist for you. You only have acces to those tools:
+Above example were using notional tools that might not exist for you. On top of performing computations in the Python code snippets that you create, you have acces to those tools (and no other tool):
 
 <<tool_descriptions>>
 
-You also can perform computations in the Python code that you generate.
+<<managed_agents_descriptions>>
 
 Here are the rules you should always follow to solve your task:
 1. Always provide a 'Thought:' sequence, and a 'Code:\n```py' sequence ending with '```<end_action>' sequence, else you will fail.
 2. Use only variables that you have defined!
-3. Always use the right arguments for the tools. DO NOT pass the arguments as a dict as in 'answer = ask_search_agent({'query': "What is the place where James Bond lives?"})', but use the arguments directly as in 'answer = ask_search_agent(query="What is the place where James Bond lives?")'.
+3. Always use the right arguments for the tools. DO NOT pass the arguments as a dict as in 'answer = wiki({'query': "What is the place where James Bond lives?"})', but use the arguments directly as in 'answer = wiki(query="What is the place where James Bond lives?")'.
 4. Take care to not chain too many sequential tool calls in the same code block, especially when the output format is unpredictable. For instance, a call to search has an unpredictable return format, so do not have another tool call that depends on its output in the same block: rather output results with print() to use them in the next block.
 5. Call a tool only when needed, and never re-do a tool call that you previously did with the exact same parameters.
 6. Don't name any new variable with the same name as a tool: for instance don't name a variable 'final_answer'.
@@ -412,6 +410,8 @@ Task:
 Your plan can leverage any of these tools:
 {tool_descriptions}
 
+{managed_agents_descriptions}
+
 List of facts that you know:
 ```
 {answer_facts}
@@ -455,8 +455,10 @@ USER_PROMPT_PLAN_UPDATE = """You're still working towards solving this task:
 {task}
 ```
 
-You have access to these tools:
+You have access to these tools and only these:
 {tool_descriptions}
+
+{managed_agents_descriptions}
 
 Here is the up to date list of facts that you know:
 ```

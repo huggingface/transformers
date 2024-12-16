@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import argparse
+import importlib.util
 import json
 import os
 import re
@@ -20,9 +21,11 @@ import sys
 import types
 
 import torch
+from huggingface_hub import split_torch_state_dict_into_shards
+from packaging import version
 
 from transformers import AutoTokenizer, GPT2Config
-from transformers.modeling_utils import WEIGHTS_INDEX_NAME, WEIGHTS_NAME, shard_checkpoint
+from transformers.modeling_utils import WEIGHTS_INDEX_NAME, WEIGHTS_NAME
 
 
 def add_checkpointing_args(parser):
@@ -569,7 +572,15 @@ def convert_checkpoint_from_megatron_to_transformers(args):
 
     # Store the state_dict to file.
     max_shard_size = int(args.max_shard_size) if args.max_shard_size.isdigit() else args.max_shard_size
-    shards, index = shard_checkpoint(output_state_dict, max_shard_size=max_shard_size)
+    state_dict_split = split_torch_state_dict_into_shards(output_state_dict, max_shard_size=max_shard_size)
+    shards = index = None
+    for tensors in state_dict_split.filename_to_tensors.values():
+        shards = {tensor: state_dict[tensor] for tensor in tensors}
+    if state_dict_split.is_sharded:
+        index = {
+            "metadata": state_dict_split.metadata,
+            "weight_map": state_dict_split.tensor_to_filename,
+        }
 
     # Save the model
     for shard_file, shard in shards.items():
@@ -606,9 +617,16 @@ def convert_checkpoint_from_transformers_to_megatron(args):
     if args.megatron_path is not None:
         sys.path.insert(0, args.megatron_path)
 
-    try:
-        from megatron.tokenizer.tokenizer import _vocab_size_with_padding
-    except ModuleNotFoundError:
+    megatron_exists = importlib.util.find_spec("megatron") is not None
+    if megatron_exists:
+        from megatron.core import package_info
+
+        if version.parse(package_info.__version__) >= version.parse("0.6.0"):
+            from megatron.training.tokenizer.tokenizer import _vocab_size_with_padding
+        else:
+            from megatron.tokenizer.tokenizer import _vocab_size_with_padding
+
+    else:
         print("Unable to import Megatron, please specify the path to Megatron using --megatron-path. Exiting.")
         exit(1)
 

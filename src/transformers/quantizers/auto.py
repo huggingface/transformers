@@ -18,7 +18,9 @@ from ..models.auto.configuration_auto import AutoConfig
 from ..utils.quantization_config import (
     AqlmConfig,
     AwqConfig,
+    BitNetConfig,
     BitsAndBytesConfig,
+    CompressedTensorsConfig,
     EetqConfig,
     FbgemmFp8Config,
     GPTQConfig,
@@ -26,16 +28,20 @@ from ..utils.quantization_config import (
     QuantizationConfigMixin,
     QuantizationMethod,
     QuantoConfig,
+    TorchAoConfig,
 )
 from .quantizer_aqlm import AqlmHfQuantizer
 from .quantizer_awq import AwqQuantizer
+from .quantizer_bitnet import BitNetHfQuantizer
 from .quantizer_bnb_4bit import Bnb4BitHfQuantizer
 from .quantizer_bnb_8bit import Bnb8BitHfQuantizer
+from .quantizer_compressed_tensors import CompressedTensorsHfQuantizer
 from .quantizer_eetq import EetqHfQuantizer
 from .quantizer_fbgemm_fp8 import FbgemmFp8HfQuantizer
 from .quantizer_gptq import GptqHfQuantizer
 from .quantizer_hqq import HqqHfQuantizer
 from .quantizer_quanto import QuantoHfQuantizer
+from .quantizer_torchao import TorchAoHfQuantizer
 
 
 AUTO_QUANTIZER_MAPPING = {
@@ -47,7 +53,10 @@ AUTO_QUANTIZER_MAPPING = {
     "quanto": QuantoHfQuantizer,
     "eetq": EetqHfQuantizer,
     "hqq": HqqHfQuantizer,
+    "compressed-tensors": CompressedTensorsHfQuantizer,
     "fbgemm_fp8": FbgemmFp8HfQuantizer,
+    "torchao": TorchAoHfQuantizer,
+    "bitnet": BitNetHfQuantizer,
 }
 
 AUTO_QUANTIZATION_CONFIG_MAPPING = {
@@ -59,7 +68,10 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "aqlm": AqlmConfig,
     "quanto": QuantoConfig,
     "hqq": HqqConfig,
+    "compressed-tensors": CompressedTensorsConfig,
     "fbgemm_fp8": FbgemmFp8Config,
+    "torchao": TorchAoConfig,
+    "bitnet": BitNetConfig,
 }
 
 
@@ -100,7 +112,7 @@ class AutoQuantizationConfig:
         quantization_config_dict = model_config.quantization_config
         quantization_config = cls.from_dict(quantization_config_dict)
         # Update with potential kwargs that are passed through from_pretrained.
-        quantization_config.update(kwargs)
+        quantization_config.update(**kwargs)
         return quantization_config
 
 

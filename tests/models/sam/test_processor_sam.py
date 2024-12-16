@@ -26,6 +26,8 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_tf_available, is_torch_available, is_vision_available
 
+from ...test_processing_common import prepare_image_inputs
+
 
 if is_vision_available():
     from PIL import Image
@@ -54,13 +56,10 @@ class SamProcessorTest(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
+    # Processor tester class can't use ProcessorTesterMixin atm because the processor is atypical e.g. only contains an image processor
     def prepare_image_inputs(self):
-        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
-        or a list of PyTorch tensors if one specifies torchify=True.
-        """
-        image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
-        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
-        return image_inputs
+        """This function prepares a list of PIL images."""
+        return prepare_image_inputs()
 
     def prepare_mask_inputs(self):
         """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
@@ -166,16 +165,10 @@ class TFSamProcessorTest(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
+    # Processor tester class can't use ProcessorTesterMixin as processor is atypical e.g. only contains an image processor and it assumes torch
     def prepare_image_inputs(self):
-        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
-        or a list of PyTorch tensors if one specifies torchify=True.
-        """
-
-        image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
-
-        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
-
-        return image_inputs
+        """This function prepares a list of PIL images."""
+        return prepare_image_inputs()
 
     def test_save_load_pretrained_additional_features(self):
         processor = SamProcessor(image_processor=self.get_image_processor())
@@ -255,16 +248,10 @@ class SamProcessorEquivalenceTest(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
+    # Processor tester class can't use ProcessorTesterMixin atm because the processor is atypical e.g. only contains an image processor
     def prepare_image_inputs(self):
-        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
-        or a list of PyTorch tensors if one specifies torchify=True.
-        """
-
-        image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
-
-        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
-
-        return image_inputs
+        """This function prepares a list of PIL images."""
+        return prepare_image_inputs()
 
     @is_pt_tf_cross_test
     def test_post_process_masks_equivalence(self):
