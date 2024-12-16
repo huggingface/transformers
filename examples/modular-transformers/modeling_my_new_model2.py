@@ -53,7 +53,7 @@ class MyNewModel2RotaryEmbedding(nn.Module):
         super().__init__()
         self.rope_kwargs = {}
         # BC: "rope_type" was originally "type"
-        if config.get("rope_scaling", None) is not None:
+        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
             self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
         else:
             self.rope_type = "default"
