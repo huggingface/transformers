@@ -29,6 +29,8 @@ Checkout all Bamba-9B model checkpoints [here](https://github.com/foundation-mod
 |-------------------|--------------|----------|-------------|-----------------|-----|----------|----------------|------------------|
 | Bamba  | 9B (9.78B)   | 32       | 4096        | 32              | Yes | 8        | 4096           | True |
 
+[[autodoc]] BambaConfig
+
 <!---
 ## Usage Tips
 
@@ -55,5 +57,8 @@ inputs = tokenizer(message, return_tensors='pt', return_token_type_ids=False)
 response = model.generate(**inputs, max_new_tokens=100, do_sample=True, top_k=50, top_p=0.95)
 print(tokenizer.batch_decode(response, skip_special_tokens=True)[0])
 ```
+
+[[autodoc]] BambaForCausalLM
+    - forward
 
 This HF implementation is contributed by [ani300](https://github.com/ani300) and [fabianlim](https://github.com/fabianlim). 
