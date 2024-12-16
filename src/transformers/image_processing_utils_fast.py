@@ -616,7 +616,6 @@ class BaseImageProcessorFast(BaseImageProcessor):
             do_resize=do_resize,
             size=size,
             resample=resample,
-            do_center_crop=do_center_crop,
             crop_size=crop_size,
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
