@@ -134,7 +134,7 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor] = None,
+    attention_mask: Optional[torch.Tensor],
     dropout: float = 0.0,
     scaling: Optional[float] = None,
     **kwargs,
@@ -187,7 +187,8 @@ class OlmoAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_ids: Optional[torch.LongTensor] = None,
+        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        attention_mask: Optional[torch.Tensor],
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
@@ -208,7 +209,7 @@ class OlmoAttention(nn.Module):
         key_states = key_states.view(hidden_shape).transpose(1, 2)
         value_states = value_states.view(hidden_shape).transpose(1, 2)
 
-        cos, sin = self.rotary_emb(value_states, position_ids)
+        cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
@@ -231,6 +232,7 @@ class OlmoAttention(nn.Module):
             query_states,
             key_states,
             value_states,
+            attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             **kwargs,
@@ -247,6 +249,7 @@ class OlmoDecoderLayer(nn.Module):
         self.hidden_size = config.hidden_size
 
         self.self_attn = OlmoAttention(config=config, layer_idx=layer_idx)
+
         self.mlp = OlmoMLP(config)
         self.input_layernorm = OlmoLayerNorm(config.hidden_size)
         self.post_attention_layernorm = OlmoLayerNorm(config.hidden_size)

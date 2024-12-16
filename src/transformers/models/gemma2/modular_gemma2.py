@@ -205,25 +205,31 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    mask: Optional[torch.Tensor],
+    attention_mask: Optional[torch.Tensor],
+    dropout: float = 0.0,
+    scaling: Optional[float] = None,
+    softcap: Optional[float] = None,
     **kwargs,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
+    if scaling is None:
+        scaling = module.head_dim**-0.5
+    
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
 
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * module.scaling
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
 
-    if module.attn_logit_softcapping is not None:
-        attn_weights = attn_weights / module.attn_logit_softcapping
+    if softcap is not None:
+        attn_weights = attn_weights / softcap
         attn_weights = torch.tanh(attn_weights)
-        attn_weights = attn_weights * module.attn_logit_softcapping
-    if mask is not None:  # no matter the length, we just slice it
-        causal_mask = mask[:, :, :, : key_states.shape[-2]]
+        attn_weights = attn_weights * softcap
+    if attention_mask is not None:  # no matter the length, we just slice it
+        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
     # upcast attention to fp32
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=module.attention_dropout, training=module.training)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
     return attn_output, attn_weights
@@ -242,6 +248,7 @@ class Gemma2Attention(GemmaAttention):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        attention_mask: Optional[torch.Tensor],
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -276,6 +283,7 @@ class Gemma2Attention(GemmaAttention):
             query_states,
             key_states,
             value_states,
+            attention_mask,
             dropout=self.attention_dropout if self.training else 0.0,
             scaling=self.scaling,
             sliding_window=self.sliding_window,

@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Tuple
 
 import torch
 
@@ -14,14 +14,14 @@ def flash_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor] = None,
+    attention_mask: Optional[torch.Tensor],
     dropout: float = 0.0,
     scaling: Optional[float] = None,
     sliding_window: Optional[int] = None,
     softcap: Optional[float] = None,
     target_dtype: torch.dtype = torch.float16,
     **kwargs,
-):
+) -> Tuple[torch.Tensor, None]:
     if attention_mask is not None:
         seq_len = attention_mask.shape[1]
         query = query[:, :, :seq_len]

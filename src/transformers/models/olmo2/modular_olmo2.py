@@ -173,11 +173,9 @@ class Olmo2Attention(OlmoAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
+        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        attention_mask: Optional[torch.Tensor],
         past_key_value: Optional[Cache] = None,
-        output_attentions: bool = False,
-        use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
@@ -192,7 +190,7 @@ class Olmo2Attention(OlmoAttention):
         key_states = key_states.view(hidden_shape).transpose(1, 2)
         value_states = value_states.view(hidden_shape).transpose(1, 2)
 
-        cos, sin = self.rotary_emb(value_states, position_ids)
+        cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
@@ -215,6 +213,7 @@ class Olmo2Attention(OlmoAttention):
             query_states,
             key_states,
             value_states,
+            attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             **kwargs,
@@ -244,12 +243,13 @@ class Olmo2DecoderLayer(OlmoDecoderLayer):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
 
         # Self Attention
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+        hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -257,6 +257,7 @@ class Olmo2DecoderLayer(OlmoDecoderLayer):
             output_attentions=output_attentions,
             use_cache=use_cache,
             cache_position=cache_position,
+            position_embeddings=position_embeddings,
             **kwargs,
         )
         hidden_states = self.post_attention_layernorm(hidden_states)
@@ -271,13 +272,8 @@ class Olmo2DecoderLayer(OlmoDecoderLayer):
         outputs = (hidden_states,)
         if output_attentions:
             outputs += (self_attn_weights,)
-        if use_cache:
-            outputs += (present_key_value,)
+
         return outputs
-
-
-class Olmo2PreTrainedModel(OlmoPreTrainedModel):
-    pass
 
 
 # The OLMo2 model is identical to the OLMo model, except RMSNorm is used instead of
@@ -285,17 +281,12 @@ class Olmo2PreTrainedModel(OlmoPreTrainedModel):
 class Olmo2Model(OlmoModel):
     def __init__(self, config: Olmo2Config):
         super().__init__(config)
-        self.layers = nn.ModuleList(
-            [Olmo2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
         self.norm = Olmo2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
 # The heads now only need to redefine the model inside to the correct `RobertaModel`
 class Olmo2ForCausalLM(OlmoForCausalLM):
-    def __init__(self, config: Olmo2Config):
-        super().__init__(config)
-        self.model = Olmo2Model(config)
+    pass
 
 
 __all__ = [

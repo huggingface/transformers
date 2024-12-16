@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Tuple
 
 import torch
 
@@ -20,11 +20,11 @@ def sdpa_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor] = None,
+    attention_mask: Optional[torch.Tensor],
     dropout: float = 0.0,
     scaling: Optional[float] = None,
     **kwargs,
-):
+) -> Tuple[torch.Tensor, None]:
     key = repeat_kv(key, module.num_key_value_groups)
     value = repeat_kv(value, module.num_key_value_groups)
 

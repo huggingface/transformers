@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Tuple
 
 import torch
 
@@ -14,11 +14,11 @@ def flex_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor] = None,
+    attention_mask: Optional[torch.Tensor],
     scaling: Optional[float] = None,
     softcap: Optional[float] = None,
     **kwargs,
-):
+) -> Tuple[torch.Tensor, torch.Tensor]:
     causal_mask = attention_mask
     if causal_mask is not None:
         causal_mask = causal_mask[:, :, :, : key.shape[-2]]
