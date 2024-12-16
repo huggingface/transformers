@@ -473,6 +473,7 @@ class Starcoder2Model(Starcoder2PreTrainedModel):
         )
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
         self.rotary_emb = Starcoder2RotaryEmbedding(config=config)
+        self.gradient_checkpointing = False
         self.embedding_dropout = config.embedding_dropout
 
         # Initialize weights and apply final processing

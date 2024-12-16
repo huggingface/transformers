@@ -484,6 +484,7 @@ class Qwen2Model(Qwen2PreTrainedModel):
         )
         self.norm = Qwen2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Qwen2RotaryEmbedding(config=config)
+        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()

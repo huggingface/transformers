@@ -585,6 +585,7 @@ class MixtralModel(MixtralPreTrainedModel):
         )
         self.norm = MixtralRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = MixtralRotaryEmbedding(config=config)
+        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()
