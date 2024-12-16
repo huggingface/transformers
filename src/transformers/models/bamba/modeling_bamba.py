@@ -1831,15 +1831,3 @@ class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
             }
         )
         return model_inputs
-
-    # FIXME: override this for now, feel that this way of handling the
-    # the cache is very cumbersome
-    def _supports_default_dynamic_cache(self) -> bool:
-        """
-        Return `True` if current model can use a `DynamicCache` instance when initializing the `past_key_values`.
-        This is mostly the same as `_supports_cache_class` attribute, but add exception for `Bamba` model which
-        uses its own `HybridMambaAttentionDynamicCache` and do not need to initialize the Cache in advance in
-        order to save memory (because no back and forth `to_legacy_cache` and `from_legacy_cache` will be performed
-        for `HybridMambaAttentionDynamicCache`).
-        """
-        return False
