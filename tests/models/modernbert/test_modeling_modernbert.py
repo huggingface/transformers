@@ -214,6 +214,7 @@ class ModernBertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     )
     fx_compatible = False
     test_head_masking = False
+    test_pruning = False
     model_split_percents = [0.5, 0.8, 0.9]
 
     # special case for ForPreTraining model

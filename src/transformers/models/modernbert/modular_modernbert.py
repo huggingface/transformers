@@ -34,7 +34,6 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import find_pruneable_heads_and_indices, prune_linear_layer, prune_qkv_linear_layer
 from ...utils import (
     is_flash_attn_2_available,
     is_torch_greater_or_equal,
@@ -744,20 +743,6 @@ class ModernBertAttention(nn.Module):
         self.out_drop = nn.Dropout(config.attention_dropout) if config.attention_dropout > 0.0 else nn.Identity()
         self.pruned_heads = set()
 
-    def prune_heads(self, heads):
-        if len(heads) == 0:
-            return
-        heads, index = find_pruneable_heads_and_indices(heads, self.num_heads, self.head_dim, self.pruned_heads)
-
-        # Prune linear layers
-        self.Wqkv = prune_qkv_linear_layer(self.Wqkv, index)
-        self.Wo = prune_linear_layer(self.Wo, index, dim=1)
-
-        # Update hyper params and store pruned heads
-        self.num_heads = self.num_heads - len(heads)
-        self.all_head_size = self.head_dim * self.num_heads
-        self.pruned_heads = self.pruned_heads.union(heads)
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -1111,14 +1096,6 @@ class ModernBertModel(ModernBertPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.embeddings.tok_embeddings = value
-
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        for layer, heads in heads_to_prune.items():
-            self.layers[layer].attn.prune_heads(heads)
 
     def forward(
         self,
