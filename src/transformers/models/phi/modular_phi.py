@@ -9,7 +9,6 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaForCausalLM,
-    LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
     LlamaMLP,
@@ -154,8 +153,4 @@ class PhiForSequenceClassification(LlamaForSequenceClassification):
 
 
 class PhiForTokenClassification(LlamaForTokenClassification):
-    pass
-
-
-class PhiForQuestionAnswering(LlamaForQuestionAnswering):
     pass
