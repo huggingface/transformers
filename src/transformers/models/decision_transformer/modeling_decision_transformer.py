@@ -17,7 +17,7 @@
 import math
 import os
 from dataclasses import dataclass
-from typing import Optional, Tuple, Union
+from typing import Callable, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -25,7 +25,7 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import Conv1D, find_pruneable_heads_and_indices, prune_conv1d_layer
 from ...utils import (
     ModelOutput,
@@ -100,8 +100,48 @@ def load_tf_weights_in_gpt2(model, config, gpt2_checkpoint_path):
     return model
 
 
-# copied from transformers.models.gpt2.modeling_gpt2.GPT2Attention with GPT2->DecisionTransformerGPT2
-# no longer copied after attention refactors
+# Copied from transformers.models.gpt2.modeling_gpt2.eager_attention_forward
+def eager_attention_forward(self, query, key, value, attention_mask=None, head_mask=None):
+    attn_weights = torch.matmul(query, key.transpose(-1, -2))
+
+    if self.scale_attn_weights:
+        attn_weights = attn_weights / torch.full(
+            [], value.size(-1) ** 0.5, dtype=attn_weights.dtype, device=attn_weights.device
+        )
+
+    # Layer-wise attention scaling
+    if self.scale_attn_by_inverse_layer_idx:
+        attn_weights = attn_weights / float(self.layer_idx + 1)
+
+    if not self.is_cross_attention:
+        # if only "normal" attention layer implements causal mask
+        query_length, key_length = query.size(-2), key.size(-2)
+        causal_mask = self.bias[:, :, key_length - query_length : key_length, :key_length]
+        mask_value = torch.finfo(attn_weights.dtype).min
+        # Need to be a tensor, otherwise we get error: `RuntimeError: expected scalar type float but found double`.
+        # Need to be on the same device, otherwise `RuntimeError: ..., x and y to be on the same device`
+        mask_value = torch.full([], mask_value, dtype=attn_weights.dtype, device=attn_weights.device)
+        attn_weights = torch.where(causal_mask, attn_weights.to(attn_weights.dtype), mask_value)
+
+    if attention_mask is not None:
+        # Apply the attention mask
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+
+    # Downcast (if necessary) back to V's dtype (if in mixed-precision) -- No-Op otherwise
+    attn_weights = attn_weights.type(value.dtype)
+    attn_weights = self.attn_dropout(attn_weights)
+
+    # Mask heads if we want to
+    if head_mask is not None:
+        attn_weights = attn_weights * head_mask
+
+    attn_output = torch.matmul(attn_weights, value)
+
+    return attn_output, attn_weights
+
+# Copied from transformers.models.gpt2.modeling_gpt2.GPT2Attention with GPT2->DecisionTransformerGPT2
 class DecisionTransformerGPT2Attention(nn.Module):
     def __init__(self, config, is_cross_attention=False, layer_idx=None):
         super().__init__()
