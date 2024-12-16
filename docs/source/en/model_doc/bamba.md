@@ -56,4 +56,4 @@ response = model.generate(**inputs, max_new_tokens=100, do_sample=True, top_k=50
 print(tokenizer.batch_decode(response, skip_special_tokens=True)[0])
 ```
 
-This model was contributed by [ani300]https://github.com/ani300) and [fabianlim]https://github.com/fabianlim) . 
+This model was contributed by [ani300](https://github.com/ani300) and [fabianlim](https://github.com/fabianlim). 
