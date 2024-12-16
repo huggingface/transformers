@@ -528,7 +528,7 @@ class LongformerSelfAttention(nn.Module):
         layer_head_mask=None,
         is_index_masked=None,
         is_index_global_attn=None,
-        is_global_attn=None,
+        is_global_attn=False,
         output_attentions=False,
     ):
         """
@@ -589,7 +589,7 @@ class LongformerSelfAttention(nn.Module):
         )
 
         # compute local attention probs from global attention keys and contact over window dim
-        if is_global_attn:
+        if is_global_attn is not None and is_global_attn:
             # compute global attn indices required through out forward fn
             (
                 max_num_global_attn_indices,
@@ -637,7 +637,7 @@ class LongformerSelfAttention(nn.Module):
         value_vectors = value_vectors.view(seq_len, batch_size, self.num_heads, self.head_dim).transpose(0, 1)
 
         # compute local attention output with global attention value and add
-        if is_global_attn:
+        if is_global_attn == True:
             # compute sum of global and local attn
             attn_output = self._compute_attn_output_with_global_indices(
                 value_vectors=value_vectors,
@@ -657,7 +657,7 @@ class LongformerSelfAttention(nn.Module):
 
         # compute value for global attention and overwrite to attention output
         # TODO: remove the redundant computation
-        if is_global_attn:
+        if is_global_attn == True:
             global_attn_output, global_attn_probs = self._compute_global_attn_output_from_hidden(
                 hidden_states=hidden_states,
                 max_num_global_attn_indices=max_num_global_attn_indices,
@@ -687,7 +687,7 @@ class LongformerSelfAttention(nn.Module):
         if output_attentions:
             outputs += (attn_probs,)
 
-        return outputs + (global_attn_probs,) if (is_global_attn and output_attentions) else outputs
+        return outputs + (global_attn_probs,) if (is_global_attn == True and output_attentions) else outputs
 
     @staticmethod
     def _pad_and_transpose_last_two_dims(hidden_states_padded, padding):
