@@ -459,7 +459,7 @@ class GemmaModel(LlamaModel):
                     output_attentions,
                     use_cache,
                     cache_position,
-                    position_embeddings
+                    position_embeddings,
                 )
             else:
                 layer_outputs = decoder_layer(

@@ -32,14 +32,12 @@ from ...processing_utils import Unpack
 from ...utils import logging
 from ..gemma.modeling_gemma import (
     GemmaAttention,
-    GemmaDecoderLayer,
     GemmaForCausalLM,
     GemmaForSequenceClassification,
     GemmaForTokenClassification,
     GemmaModel,
     GemmaPreTrainedModel,
     GemmaRMSNorm,
-    GemmaRotaryEmbedding,
     apply_rotary_pos_emb,
     repeat_kv,
 )
