@@ -119,3 +119,6 @@ class VitPoseConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.scale_factor = scale_factor
         self.use_simple_decoder = use_simple_decoder
+
+
+__all__ = ["VitPoseConfig"]

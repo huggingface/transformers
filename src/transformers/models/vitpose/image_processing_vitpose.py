@@ -671,3 +671,6 @@ class VitPoseImageProcessor(BaseImageProcessor):
             results.append(batch_results)
 
         return results
+
+
+__all__ = ["VitPoseImageProcessor"]
