@@ -101,7 +101,8 @@ def convert_ssm_config_to_hf_config(
     hf_config.tie_word_embeddings = config_ssm["tie_embeddings"]
 
     # currently this script assumes config_ssm belongs to v2
-    assert config_ssm["ssm_cfg"].get("layer") == "Mamba2", "Conversion script only supports Mamba2"
+    if config_ssm["ssm_cfg"].get("layer") != "Mamba2":
+        raise ValueError("Conversion script only supports Mamba2")
 
     # Set attention values
     attn_cfg = config_ssm.get("attn_cfg")

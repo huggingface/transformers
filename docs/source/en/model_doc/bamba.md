@@ -48,7 +48,7 @@ for i in output:
 ```
 
 <!-- update this -->
-This model was contributed by [...](https://huggingface.co/...).
+This model was contributed by [ani300]https://github.com/ani300) and [fabianlim]https://github.com/fabianlim) . 
 
 
 ## BambaConfig
