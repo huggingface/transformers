@@ -3,7 +3,9 @@ from typing import Optional
 import torch
 
 from ..modeling_flash_attention_utils import _flash_attention_forward
+from ..utils import is_flash_attn_greater_or_equal_2_10
 
+_use_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
 
 def flash_attention_forward(
     module: torch.nn.Module,
@@ -47,7 +49,7 @@ def flash_attention_forward(
         softmax_scale=scaling,
         sliding_window=sliding_window,
         softcap=softcap,
-        use_top_left_mask=module._flash_attn_uses_top_left_mask,
+        use_top_left_mask=_use_top_left_mask,
         **kwargs,
     )
 

@@ -36,6 +36,14 @@ class Qwen2MLP(LlamaMLP):
 
 
 class Qwen2Attention(LlamaAttention):
+
+    def __init__(self, config: Qwen2Config, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=True)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
+
     def forward(
         self,
         hidden_states: torch.Tensor,
