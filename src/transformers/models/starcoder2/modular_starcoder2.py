@@ -38,16 +38,16 @@ from ...utils import (
     is_flash_attn_2_available,
     logging,
 )
-from ..llama.modeling_llama import (
-    LlamaAttention,
-    LlamaDecoderLayer,
-    LlamaForSequenceClassification,
-    LlamaForTokenClassification,
-    LlamaRotaryEmbedding,
+from ..mistral.modeling_mistral import (
+    MistralAttention,
+    MistralDecoderLayer,
+    MistralForCausalLM,
+    MistralForSequenceClassification,
+    MistralForTokenClassification,
+    MistralModel,
     apply_rotary_pos_emb,
-    repeat_kv,
+    eager_attention_forward,
 )
-from ..qwen2.modeling_qwen2 import Qwen2ForCausalLM, Qwen2Model
 from .configuration_starcoder2 import Starcoder2Config
 
 
@@ -59,10 +59,6 @@ logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "Starcoder2Config"
 _CHECKPOINT_FOR_DOC = "bigcode/starcoder2-7b"
-
-
-class Starcoder2RotaryEmbedding(LlamaRotaryEmbedding):
-    pass
 
 
 class Starcoder2MLP(nn.Module):
@@ -82,27 +78,9 @@ class Starcoder2MLP(nn.Module):
         return hidden_states
 
 
-def eager_attention_forward(attention_class: nn.Module, query, key, value, attention_mask=None, **_kwargs):
-    config = attention_class.config
-    key_states = repeat_kv(key, attention_class.num_key_value_groups)
-    value_states = repeat_kv(value, attention_class.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * attention_class.scaling
-    if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=config.attention_dropout, training=attention_class.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-    return attn_output, attn_weights
-
-
-class Starcoder2Attention(LlamaAttention):
+class Starcoder2Attention(MistralAttention):
     def __init__(self, config: Starcoder2Config, layer_idx: Optional[int] = None):
         super().__init__()
-        self.attention_dropout = config.attention_dropout
         self.residual_dropout = config.residual_dropout
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.use_bias)
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.use_bias)
@@ -148,6 +126,7 @@ class Starcoder2Attention(LlamaAttention):
             key_states,
             value_states,
             dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
             **kwargs,
         )
 
@@ -157,7 +136,7 @@ class Starcoder2Attention(LlamaAttention):
         return attn_output, attn_weights
 
 
-class Starcoder2DecoderLayer(LlamaDecoderLayer):
+class Starcoder2DecoderLayer(MistralDecoderLayer):
     def __init__(self, config: Starcoder2Config, layer_idx: int):
         super().__init__(self)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
@@ -167,14 +146,7 @@ class Starcoder2DecoderLayer(LlamaDecoderLayer):
 STARCODER2_INPUTS_DOCSTRING = None  # will be automatically redefined
 
 
-class Starcoder2Model(Qwen2Model):
-    """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Starcoder2DecoderLayer`]
-
-    Args:
-        config: Starcoder2Config
-    """
-
+class Starcoder2Model(MistralModel):
     def __init__(self, config: Starcoder2Config):
         super().__init__(config)
         self.embedding_dropout = config.embedding_dropout
@@ -276,15 +248,15 @@ class Starcoder2Model(Qwen2Model):
         return output if return_dict else output.to_tuple()
 
 
-class Starcoder2ForCausalLM(Qwen2ForCausalLM):
+class Starcoder2ForCausalLM(MistralForCausalLM):
     pass
 
 
-class Starcoder2ForSequenceClassification(LlamaForSequenceClassification):
+class Starcoder2ForSequenceClassification(MistralForSequenceClassification):
     pass
 
 
-class Starcoder2ForTokenClassification(LlamaForTokenClassification):
+class Starcoder2ForTokenClassification(MistralForTokenClassification):
     pass
 
 

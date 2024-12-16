@@ -89,6 +89,8 @@ class Qwen2Attention(LlamaAttention):
             query_states,
             key_states,
             value_states,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
             sliding_window=sliding_window,
             **kwargs,
         )

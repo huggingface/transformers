@@ -103,20 +103,32 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-def eager_attention_forward(attention_class: nn.Module, query, key, value, attention_mask=None, **_kwargs):
-    config = attention_class.config
-    key_states = repeat_kv(key, attention_class.num_key_value_groups)
-    value_states = repeat_kv(value, attention_class.num_key_value_groups)
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor] = None,
+    dropout: float = 0.0,
+    scaling: Optional[float] = None,
+    **kwargs,
+):
+    if scaling is None:
+        scaling = module.head_dim**-0.5
 
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * attention_class.scaling
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
     if attention_mask is not None:
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=config.attention_dropout, training=attention_class.training)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value_states)
     attn_output = attn_output.transpose(1, 2).contiguous()
+
     return attn_output, attn_weights
 
 
@@ -130,6 +142,7 @@ class Qwen2Attention(nn.Module):
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
+        self.attention_droupout = config.attention_dropout
         self.is_causal = True
         self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=True)
         self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=True)
@@ -182,6 +195,8 @@ class Qwen2Attention(nn.Module):
             query_states,
             key_states,
             value_states,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
             sliding_window=sliding_window,
             **kwargs,
         )

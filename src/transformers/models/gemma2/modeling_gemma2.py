@@ -174,6 +174,7 @@ class Gemma2Attention(nn.Module):
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = config.query_pre_attn_scalar**-0.5
+        self.attention_droupout = config.attention_dropout
         self.is_causal = True
 
         self.q_proj = nn.Linear(
