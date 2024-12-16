@@ -1,5 +1,5 @@
 import ast
-from collections import defaultdict, deque
+from collections import defaultdict
 
 
 # Function to perform topological sorting
@@ -29,14 +29,14 @@ def topological_sort(dependencies):
             return filtered_list + list(graph.keys())
         to_add = []
         for k in graph.keys():
-            if len(graph[k])==1 and graph[k][0] in base_modules:
+            if len(graph[k]) == 1 and graph[k][0] in base_modules:
                 if graph[k][0] in reverse:
                     del reverse[graph[k][0]]
                 if k not in filtered_list:
-                    to_add +=[k]
+                    to_add += [k]
         for k in base_modules:
             if k not in filtered_list:
-                to_add+=[k]
+                to_add += [k]
         filtered_list += list(to_add)
         return filter_one_by_one(filtered_list, reverse)
 
