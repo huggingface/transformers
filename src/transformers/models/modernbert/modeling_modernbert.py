@@ -649,8 +649,9 @@ class ModernBertAttention(nn.Module):
             **attn_kwargs,
         )
         hidden_states = attn_outputs[0]
+        hidden_states = self.out_drop(self.Wo(hidden_states))
 
-        return (self.out_drop(self.Wo(hidden_states)),) + attn_outputs[1:]  # add attentions if outputted
+        return (hidden_states,) + attn_outputs[1:]  # add attentions if outputted
 
 
 class ModernBertEncoderLayer(nn.Module):
