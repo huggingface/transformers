@@ -129,6 +129,29 @@ def convert_usefulsensors_moonshine_to_hf(model_name, pytorch_dump_folder_path):
     converted_decoder_weights = _convert_weights(loaded_decoder_weights, encoder=False)
     converted_decoder_weights['embed_tokens.weight'] = converted_decoder_weights['embed_tokens.weight'].T
 
+    final_weights = {}
+    for k, v in encoder_state_dict.items():
+        final_weights[f"model.encoder.{k}"] = v
+    
+    for k, v in converted_decoder_weights.items():
+        final_weights[f"model.decoder.{k}"] = v
+
+    if model_name == 'tiny':
+        config = MoonshineConfig()
+    elif model_name == 'base':
+        config = MoonshineConfig(
+            hidden_size=416,
+            num_hidden_layers=8,
+            num_attention_heads=8,
+        )
+    else:
+        raise ValueError(f"Unknown model name {model_name}")
+
+    final_weights['proj_out.weight'] = converted_decoder_weights['embed_tokens.weight']
+    
+    model = MoonshineForConditionalGeneration(config)
+    model.load_state_dict(final_weights)
+    model.save_pretrained(pytorch_dump_folder_path)
 
 
 
