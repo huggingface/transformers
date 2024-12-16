@@ -30,6 +30,7 @@ from ...utils import (
     CONFIG_NAME,
     IMAGE_PROCESSOR_NAME,
     get_file_from_repo,
+    is_timm_config_dict,
     is_timm_local_checkpoint,
     is_torchvision_available,
     is_vision_available,
@@ -42,7 +43,6 @@ from .configuration_auto import (
     model_type_to_module_name,
     replace_list_option_in_docstrings,
 )
-from .utils.generic import is_timm_config_dict
 
 
 logger = logging.get_logger(__name__)
