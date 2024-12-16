@@ -42,7 +42,7 @@ if is_flash_attn_2_available():
     from flash_attn.layers.rotary import RotaryEmbedding
     from flash_attn.ops.triton.rotary import apply_rotary
 else:
-    RotaryEmbedding = None
+    RotaryEmbedding = object
 
 if is_torch_greater_or_equal("2.5"):
     from torch.nn.attention.flex_attention import BlockMask, create_block_mask, flex_attention
@@ -372,7 +372,7 @@ def flex_attention_forward(
     qkv: torch.Tensor,
     rotary_emb: ModernBertUnpaddedRotaryEmbedding,
     cu_seqlens: torch.Tensor,
-    block_mask: BlockMask,
+    block_mask: "BlockMask",
     max_seqlen: int,
     bs: int,
     dim: int,
@@ -573,7 +573,7 @@ class ModernBertEncoderLayer(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         cu_seqlens: Optional[torch.Tensor] = None,
-        block_mask: Optional[BlockMask] = None,
+        block_mask: Optional["BlockMask"] = None,
         max_seqlen: Optional[int] = None,
         output_attentions: Optional[bool] = False,
     ) -> torch.Tensor:
