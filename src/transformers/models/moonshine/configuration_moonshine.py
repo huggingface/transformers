@@ -55,6 +55,8 @@ class MoonshineConfig(PretrainedConfig):
             Whether the model is used as an encoder/decoder or not.
         min_rotary_ndims (`int`, *optional*, defaults to 32):
             The minimum number of dimensions of the RoPE.
+        rope_theta (`float`, *optional*, defaults to 10000.0):
+            The base period of the RoPE embeddings.
         ff_mult (`int`, *optional*, defaults to 4):
             Factor by which to scale the intermediate size.
         attention_bias (`bool`, *optional*, defaults to `False`):
@@ -129,6 +131,7 @@ class MoonshineConfig(PretrainedConfig):
         layer_norm_eps=1e-5,
         decoder_start_token_id=1,
         use_cache=True,
+        rope_theta=10000.0,
         is_encoder_decoder=True,
         min_rotary_ndims=32,
         attention_bias=False,
@@ -162,6 +165,7 @@ class MoonshineConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.decoder_start_token_id = decoder_start_token_id
         self.use_cache = use_cache
+        self.rope_theta = rope_theta
         self.is_encoder_decoder = is_encoder_decoder
         self.min_rotary_ndims = min_rotary_ndims
         self.attention_bias = attention_bias

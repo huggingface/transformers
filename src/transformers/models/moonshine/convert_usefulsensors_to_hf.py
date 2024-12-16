@@ -15,15 +15,14 @@
 # limitations under the License.
 
 import argparse
-from huggingface_hub import hf_hub_download
-
-import h5py
-import torch
-import numpy as np
 import re
 
-from transformers.models.moonshine.modeling_moonshine import MoonshineConfig
-from transformers.models.moonshine.modeling_moonshine import MoonshineDecoder
+import h5py
+import numpy as np
+import torch
+from huggingface_hub import hf_hub_download
+
+from transformers.models.moonshine.modeling_moonshine import MoonshineConfig, MoonshineForConditionalGeneration
 
 
 # Copied from https://github.com/usefulsensors/moonshine/blob/a1d77cc573b0471ac4602b86f67b3f48d67df1a9/moonshine/model.py
@@ -31,8 +30,7 @@ def _get_weights(model_name):
     repo = "UsefulSensors/moonshine"
 
     return (
-        hf_hub_download(repo, f"{x}.weights.h5", subfolder=model_name)
-        for x in ("preprocessor", "encoder", "decoder")
+        hf_hub_download(repo, f"{x}.weights.h5", subfolder=model_name) for x in ("preprocessor", "encoder", "decoder")
     )
 
 
@@ -58,7 +56,12 @@ def _read_h5_weights(group, current_key="", weights={}):
 
 
 def _convert_layer_names(name, gated_mlp=False):
-    name = re.sub(r'layers\.functional(?:_(\d+))?\.layers', lambda m: f'layers.{m.group(1) if m.group(1) else "0"}', name, count=1)
+    name = re.sub(
+        r"layers\.functional(?:_(\d+))?\.layers",
+        lambda m: f'layers.{m.group(1) if m.group(1) else "0"}',
+        name,
+        count=1,
+    )
     if gated_mlp:
         name = re.sub(r"functional\.layers\.dense\.", "mlp.up_proj.", name)
         name = re.sub(r"functional\.layers\.dense_1\.", "mlp.down_proj.", name)
@@ -113,32 +116,32 @@ def _convert_weights(weights, encoder=True):
 
 def convert_usefulsensors_moonshine_to_hf(model_name, pytorch_dump_folder_path):
     preprocessor_weights_path, encoder_weights_path, decoder_weights_path = _get_weights(model_name)
-    
-    with h5py.File(preprocessor_weights_path, 'r') as f:
+
+    with h5py.File(preprocessor_weights_path, "r") as f:
         loaded_preprocessor_weights = _read_h5_weights(f, weights={})
 
-    with h5py.File(encoder_weights_path, 'r') as f:
+    with h5py.File(encoder_weights_path, "r") as f:
         loaded_encoder_weights = _read_h5_weights(f, weights={})
 
-    with h5py.File(decoder_weights_path, 'r') as f:
+    with h5py.File(decoder_weights_path, "r") as f:
         loaded_decoder_weights = _read_h5_weights(f, weights={})
 
     encoder_state_dict = {**loaded_encoder_weights, **loaded_preprocessor_weights}
     encoder_state_dict = _convert_weights(encoder_state_dict)
 
     converted_decoder_weights = _convert_weights(loaded_decoder_weights, encoder=False)
-    converted_decoder_weights['embed_tokens.weight'] = converted_decoder_weights['embed_tokens.weight'].T
+    converted_decoder_weights["embed_tokens.weight"] = converted_decoder_weights["embed_tokens.weight"].T
 
     final_weights = {}
     for k, v in encoder_state_dict.items():
         final_weights[f"model.encoder.{k}"] = v
-    
+
     for k, v in converted_decoder_weights.items():
         final_weights[f"model.decoder.{k}"] = v
 
-    if model_name == 'tiny':
+    if model_name == "tiny":
         config = MoonshineConfig()
-    elif model_name == 'base':
+    elif model_name == "base":
         config = MoonshineConfig(
             hidden_size=416,
             num_hidden_layers=8,
@@ -147,12 +150,11 @@ def convert_usefulsensors_moonshine_to_hf(model_name, pytorch_dump_folder_path):
     else:
         raise ValueError(f"Unknown model name {model_name}")
 
-    final_weights['proj_out.weight'] = converted_decoder_weights['embed_tokens.weight']
-    
+    final_weights["proj_out.weight"] = converted_decoder_weights["embed_tokens.weight"]
+
     model = MoonshineForConditionalGeneration(config)
     model.load_state_dict(final_weights)
     model.save_pretrained(pytorch_dump_folder_path)
-
 
 
 if __name__ == "__main__":
@@ -162,7 +164,4 @@ if __name__ == "__main__":
     parser.add_argument("--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
     args = parser.parse_args()
 
-    convert_usefulsensors_moonshine_to_hf(
-        args.model_name, args.pytorch_dump_folder_path
-    )
-
+    convert_usefulsensors_moonshine_to_hf(args.model_name, args.pytorch_dump_folder_path)
