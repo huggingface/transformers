@@ -23,7 +23,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, GradientCheckpointLayer, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, nn.ModuleLayer, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     LossKwargs,
@@ -228,7 +228,7 @@ class OlmoAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class OlmoDecoderLayer(GradientCheckpointLayer):
+class OlmoDecoderLayer(nn.ModuleLayer):
     def __init__(self, config: OlmoConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
