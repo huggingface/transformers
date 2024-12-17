@@ -1,6 +1,5 @@
 import unittest
 
-from zmq import device
 import torch
 import logging
 from transformers import AutoTokenizer, AutoModelForCausalLM, GenerationConfig
@@ -8,8 +7,7 @@ from transformers.generation.candidate_generator import UniversalSpeculativeDeco
 
 logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 
-if torch.cuda.is_available():
-    device = "cuda"
+device = "cuda" if torch.cuda.is_available() else "cpu"
 
 class TestUniversalSpeculativeDecoding(unittest.TestCase):
     @classmethod
@@ -99,7 +97,7 @@ class TestUniversalSpeculativeDecoding(unittest.TestCase):
         self.generator.input_ids = input_ids
 
         for depth in [1, 8, 17]:
-            self.generation_config.num_assistant_tokens = depth
+            self.generator.num_assistant_tokens = depth
             candidates, scores = self.generator.get_candidates(input_ids)
             self.assertLessEqual(
                 candidates.shape[1] - input_ids.shape[1], depth
