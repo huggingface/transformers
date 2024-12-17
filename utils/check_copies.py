@@ -187,7 +187,7 @@ def _should_continue(line: str, indent: str) -> bool:
 def _sanity_check_splits(splits_1, splits_2, is_class, filename):
     """Check the two (inner) block structures of the corresponding code block given by `split_code_into_blocks` match.
 
-    For the case of `class`, they must be of one of the following 3 cases:
+    For the case of `class`, they must be one of the following 3 cases:
 
         - a single block without name:
 
@@ -322,12 +322,12 @@ def split_code_into_blocks(
             + "```\n"
         )
 
-    # from now on, the `block` means inner blocks unless explicitly specified
+    # from now on,`block` means inner blocks unless explicitly specified
     indent_str = " " * indent
     block_without_name_idx = 0
     empty_block_idx = 0
 
-    # Find the lines for the definition header
+    # Find the lines for definition header
     index = start_index
     if "(" in lines[start_index] and "):" not in lines[start_index] in lines[start_index]:
         while index < end_index:
@@ -401,7 +401,7 @@ def find_code_in_transformers(
         base_path (`str`, *optional*):
             The path to the base folder where files are checked. If not set, it will be set to `TRANSFORMERS_PATH`.
         return_indices(`bool`, *optional*, defaults to `False`):
-            If `False`, will only return the code (as a string), otherwise it will also return the whole lines of the
+            If `False`, it will only return the code (as a string), otherwise it will return the whole lines of the
             file where the object specified by `object_name` is defined, together the start/end indices of the block in
             the file that defines the object.
 
