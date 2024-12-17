@@ -1302,7 +1302,7 @@ class ModelTesterMixin:
                             for i in range(model.config.num_hidden_layers)
                         )
                         non_empty_pkv = (
-                            DynamicCache.from_legacy_cache(empty_pkv)
+                            DynamicCache.from_legacy_cache(non_empty_pkv)
                             if model_class._supports_cache_class
                             else non_empty_pkv
                         )
