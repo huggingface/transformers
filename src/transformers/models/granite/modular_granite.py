@@ -23,20 +23,11 @@ from ...cache_utils import Cache
 from ...utils import (
     logging,
 )
-from ..llama.modeling_llama import LlamaAttention, LlamaForCausalLM, LlamaMLP, LlamaRMSNorm
+from ..llama.modeling_llama import LlamaAttention, LlamaForCausalLM, LlamaDecoderLayer
 from .configuration_granite import GraniteConfig
 
 
 logger = logging.get_logger(__name__)
-
-
-class GraniteRMSNorm(LlamaRMSNorm):
-    pass
-
-
-class GraniteMLP(LlamaMLP):
-    pass
-
 
 class GraniteAttention(LlamaAttention):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
@@ -46,17 +37,9 @@ class GraniteAttention(LlamaAttention):
         self.scaling = config.attention_multiplier
 
 
-class GraniteDecoderLayer(nn.Module):
+class GraniteDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: GraniteConfig, layer_idx: int):
         super().__init__()
-        self.hidden_size = config.hidden_size
-
-        self.self_attn = GraniteAttention(config=config, layer_idx=layer_idx)
-
-        self.mlp = GraniteMLP(config)
-        self.input_layernorm = GraniteRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = GraniteRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
         self.residual_multiplier = config.residual_multiplier
 
     def forward(
@@ -98,7 +81,7 @@ class GraniteDecoderLayer(nn.Module):
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+        hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -121,9 +104,6 @@ class GraniteDecoderLayer(nn.Module):
 
         if output_attentions:
             outputs += (self_attn_weights,)
-
-        if use_cache:
-            outputs += (present_key_value,)
 
         return outputs
 
