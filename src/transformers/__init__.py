@@ -1082,7 +1082,6 @@ else:
     _import_structure["models.gemma"].append("GemmaTokenizerFast")
     _import_structure["models.gpt2"].append("GPT2TokenizerFast")
     _import_structure["models.gpt_neox"].append("GPTNeoXTokenizerFast")
-    _import_structure["models.moonshine"].append("MoonshineTokenizer")
     _import_structure["models.gpt_neox_japanese"].append("GPTNeoXJapaneseTokenizer")
     _import_structure["models.herbert"].append("HerbertTokenizerFast")
     _import_structure["models.layoutlm"].append("LayoutLMTokenizerFast")
@@ -2364,10 +2363,7 @@ else:
     )
     _import_structure["models.moonshine"].extend(
         [
-            "MoonshineForCausalLM",
-            "MoonshineForQuestionAnswering",
-            "MoonshineForSequenceClassification",
-            "MoonshineForTokenClassification",
+            "MoonshineForConditionalGeneration",
             "MoonshineModel",
             "MoonshinePreTrainedModel",
         ]
@@ -3720,13 +3716,6 @@ else:
             "WhisperForConditionalGeneration",
             "WhisperModel",
             "WhisperPreTrainedModel",
-        ]
-    )
-    _import_structure["models.moonshine"].extend(
-        [
-            "MoonshineForConditionalGeneration",
-            "MoonshineModel",
-            "MoonshinePreTrainedModel",
         ]
     )
     _import_structure["models.x_clip"].extend(
@@ -6043,7 +6032,6 @@ if TYPE_CHECKING:
         from .models.mbart import MBartTokenizerFast
         from .models.mbart50 import MBart50TokenizerFast
         from .models.mobilebert import MobileBertTokenizerFast
-        from .models.moonshine import MoonshineTokenizer
         from .models.mpnet import MPNetTokenizerFast
         from .models.mt5 import MT5TokenizerFast
         from .models.mvp import MvpTokenizerFast
@@ -7463,11 +7451,7 @@ if TYPE_CHECKING:
             MobileViTV2PreTrainedModel,
         )
         from .models.moonshine import (
-            MoonshineForCausalLM,
-            MoonshineForConditionalGeneration,
-            MoonshineForQuestionAnswering,
-            MoonshineForSequenceClassification,
-            MoonshineForTokenClassification,
+            MoonshineForConditionalGeneration, 
             MoonshineModel,
             MoonshinePreTrainedModel,
         )
