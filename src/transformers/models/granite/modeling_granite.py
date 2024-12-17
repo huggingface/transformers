@@ -521,6 +521,7 @@ class GraniteModel(GranitePreTrainedModel):
         self.norm = GraniteRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = GraniteRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
+        self.embedding_multiplier = config.embedding_multiplier
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -564,6 +565,8 @@ class GraniteModel(GranitePreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
+
+        inputs_embeds = inputs_embeds * self.embedding_multiplier
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache()
@@ -866,6 +869,7 @@ class GraniteForCausalLM(GranitePreTrainedModel, GenerationMixin):
         hidden_states = outputs[0]
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :])
+        logits = logits / self.config.logits_scaling
 
         loss = None
         if labels is not None:
