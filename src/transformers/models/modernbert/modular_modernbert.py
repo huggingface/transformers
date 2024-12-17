@@ -40,7 +40,6 @@ from ...utils import (
     is_flash_attn_2_available,
     is_torch_greater_or_equal,
     logging,
-    replace_return_docstrings,
 )
 from ...utils.import_utils import is_triton_available
 from ..gemma.modeling_gemma import GemmaRotaryEmbedding, apply_rotary_pos_emb
@@ -1116,8 +1115,6 @@ MODERNBERT_INPUTS_DOCSTRING = r"""
             more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-
-    Returns:
 """
 
 
@@ -1144,7 +1141,6 @@ class ModernBertModel(ModernBertPreTrainedModel):
         self.embeddings.tok_embeddings = value
 
     @add_start_docstrings_to_model_forward(MODERNBERT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=BaseModelOutput,
@@ -1291,7 +1287,6 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         return self.decoder(self.head(output))
 
     @add_start_docstrings_to_model_forward(MODERNBERT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=MaskedLMOutput, config_class=_CONFIG_FOR_DOC)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=MaskedLMOutput,
@@ -1398,7 +1393,6 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(MODERNBERT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=SequenceClassifierOutput, config_class=_CONFIG_FOR_DOC)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=SequenceClassifierOutput,
@@ -1499,7 +1493,6 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
         self.post_init()
 
     @add_start_docstrings_to_model_forward(MODERNBERT_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=TokenClassifierOutput, config_class=_CONFIG_FOR_DOC)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
