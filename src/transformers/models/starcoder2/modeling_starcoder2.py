@@ -211,9 +211,11 @@ class Starcoder2Attention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
+            sliding_window=getattr(self.config, "sliding_window", None),
             **kwargs,
         )
 
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
         attn_output = nn.functional.dropout(attn_output, p=self.residual_dropout, training=self.training)
 
