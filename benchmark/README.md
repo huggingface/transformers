@@ -17,6 +17,7 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
 cf [`llama.py`](./llama.py) to see an example of this in practice.
 
 ```py
+from benchmarks_entrypoint import MetricsRecorder
 import psycopg2
 
 def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, num_tokens_to_generate=100):

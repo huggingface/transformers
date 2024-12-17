@@ -3,7 +3,7 @@ import os
 from threading import Event, Thread
 from time import perf_counter, sleep
 from typing import Optional
-from benchmark.benchmarks_entrypoint import MetricsRecorder
+from benchmarks_entrypoint import MetricsRecorder
 import gpustat
 import psutil
 import psycopg2
