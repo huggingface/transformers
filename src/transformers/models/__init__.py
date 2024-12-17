@@ -54,6 +54,7 @@ from . import (
     codegen,
     cohere,
     cohere2,
+    colpali,
     conditional_detr,
     convbert,
     convnext,
