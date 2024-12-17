@@ -324,7 +324,6 @@ class Multimodal1TextDecoderLayer(nn.Module):
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
-
         if output_attentions:
             outputs += (self_attn_weights,)
 
