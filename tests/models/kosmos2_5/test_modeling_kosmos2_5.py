@@ -638,14 +638,14 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 main_input = inputs[main_input_name]
                 model(
                     main_input,
-                    inputs["input_ids"],
+                    inputs["flattened_patches"],
                     inputs["image_embeds_position_mask"],
                 )
                 traced_model = torch.jit.trace(
                     model,
                     (
                         main_input,
-                        inputs["input_ids"],
+                        inputs["flattened_patches"],
                         inputs["image_embeds_position_mask"],
                     ),
                 )
