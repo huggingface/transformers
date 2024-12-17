@@ -72,7 +72,7 @@ class MoonshineConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the decoder.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-5):
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
         decoder_start_token_id (`int`, *optional*, defaults to 1):
             Corresponds to the "<|startoftranscript|>" token, which is automatically used when no `decoder_input_ids`
@@ -80,20 +80,20 @@ class MoonshineConfig(PretrainedConfig):
             the task.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
+        rope_theta (`float`, *optional*, defaults to 10000.0):
+            The base period of the RoPE embeddings.
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Whether the model is used as an encoder/decoder or not.
         min_rotary_ndims (`int`, *optional*, defaults to 32):
             The minimum number of dimensions of the RoPE.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
-        ff_mult (`int`, *optional*, defaults to 4):
-            Factor by which to scale the intermediate size.
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         qk_layernorm (`bool`, *optional*, defaults to `False`):
             Whether or not to normalize the Queries and Keys after projecting the hidden states.
+        ff_mult (`int`, *optional*, defaults to 4):
+            Factor by which to scale the intermediate size.
         bos_token_id (`int`, *optional*, defaults to 1):
             Denotes beginning of sequences token id.
         eos_token_id (`int`, *optional*, defaults to 2):
@@ -110,10 +110,10 @@ class MoonshineConfig(PretrainedConfig):
             actual percentage of masked vectors. This is only relevant if `apply_spec_augment == True`.
         mask_time_length (`int`, *optional*, defaults to 10):
             Length of vector span along the time axis.
-        mask_time_min_masks (`int`, *optional*, defaults to 2),:
             The minimum number of masks of length `mask_feature_length` generated along the time axis, each time step,
             irrespectively of `mask_feature_prob`. Only relevant if ''mask_time_prob*len(time_axis)/mask_time_length <
             mask_time_min_masks''
+        mask_time_min_masks (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
         mask_feature_prob (`float`, *optional*, defaults to 0.0):
             Percentage (between 0 and 1) of all feature vectors along the feature axis which will be masked. The
             masking procecure generates `mask_feature_prob*len(feature_axis)/mask_time_length` independent masks over
@@ -123,10 +123,10 @@ class MoonshineConfig(PretrainedConfig):
             True`.
         mask_feature_length (`int`, *optional*, defaults to 10):
             Length of vector span along the feature axis.
-        mask_feature_min_masks (`int`, *optional*, defaults to 0),:
             The minimum number of masks of length `mask_feature_length` generated along the feature axis, each time
             step, irrespectively of `mask_feature_prob`. Only relevant if
             `mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks`.
+        mask_feature_min_masks (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
 
     Example:
 
