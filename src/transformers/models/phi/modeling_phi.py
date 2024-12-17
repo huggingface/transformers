@@ -9,10 +9,8 @@ from typing import Callable, List, Optional, Tuple, Union
 import torch
 import torch.nn as nn
 
-from transformers.cache_utils import Cache
-
 from ...activations import ACT2FN
-from ...cache_utils import DynamicCache, StaticCache
+from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -276,26 +274,6 @@ class PhiDecoderLayer(nn.Module):
         return outputs
 
 
-class PhiRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        PhiRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
 class PhiRotaryEmbedding(nn.Module):
     def __init__(
         self,
@@ -502,9 +480,10 @@ class PhiModel(PhiPreTrainedModel):
         self.layers = nn.ModuleList(
             [PhiDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
-        self.norm = PhiRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = PhiRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
+        self.embed_dropout = nn.Dropout(config.embd_pdrop)
+        self.final_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -565,6 +544,7 @@ class PhiModel(PhiPreTrainedModel):
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
         )
 
+        inputs_embeds = self.embed_dropout(inputs_embeds)
         hidden_states = inputs_embeds
 
         # create position embeddings to be shared across the decoder layers
@@ -608,7 +588,7 @@ class PhiModel(PhiPreTrainedModel):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
-        hidden_states = self.norm(hidden_states)
+        hidden_states = self.final_layernorm(hidden_states)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
