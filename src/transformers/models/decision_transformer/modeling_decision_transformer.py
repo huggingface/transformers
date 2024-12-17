@@ -299,6 +299,9 @@ class DecisionTransformerGPT2Attention(nn.Module):
         else:
             present = None
 
+        is_cross_attention = encoder_hidden_states is not None
+        is_causal = attention_mask is None and query_states.shape[-2] > 1 and not is_cross_attention
+
         using_eager = self.config._attn_implementation == "eager"
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -324,6 +327,7 @@ class DecisionTransformerGPT2Attention(nn.Module):
                 attention_mask,
                 head_mask=head_mask,
                 dropout=self.attn_dropout.p if self.training else 0.0,
+                is_causal=is_causal,
                 **kwargs,
             )
 

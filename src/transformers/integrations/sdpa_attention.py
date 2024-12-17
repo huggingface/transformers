@@ -23,6 +23,7 @@ def sdpa_attention_forward(
     attention_mask: Optional[torch.Tensor],
     dropout: float = 0.0,
     scaling: Optional[float] = None,
+    is_causal: Optional[bool] = None,
     **kwargs,
 ) -> Tuple[torch.Tensor, None]:
     if hasattr(module, "num_key_value_groups"):
@@ -37,7 +38,9 @@ def sdpa_attention_forward(
     key = key.contiguous()
     value = value.contiguous()
 
-    is_causal = causal_mask is None and query.shape[2] > 1
+    if is_causal is None:
+        is_causal = causal_mask is None and query.shape[2] > 1
+
     attn_output = torch.nn.functional.scaled_dot_product_attention(
         query,
         key,
