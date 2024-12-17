@@ -317,6 +317,8 @@ class BambaMixer(nn.Module):
                 " is None. Falling back to the naive implementation. To install follow https://github.com/state-spaces/mamba/#installation and"
                 " https://github.com/Dao-AILab/causal-conv1d"
             )
+        else:
+            logger.warning_once("The fast path for Bamba will be used when running the model on a GPU")
 
     def cuda_kernels_forward(
         self,
