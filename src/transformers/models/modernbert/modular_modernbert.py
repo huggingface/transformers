@@ -39,6 +39,7 @@ from ...utils import (
     is_torch_greater_or_equal,
     logging,
 )
+from ...utils.import_utils import is_triton_available
 from ..gemma.modeling_gemma import GemmaRotaryEmbedding, apply_rotary_pos_emb
 
 
@@ -167,6 +168,7 @@ class ModernBertConfig(PretrainedConfig):
         deterministic_flash_attn=False,
         sparse_prediction=False,
         sparse_pred_ignore_index=-100,
+        compile=None,
         **kwargs,
     ):
         super().__init__(
@@ -208,6 +210,10 @@ class ModernBertConfig(PretrainedConfig):
         self.deterministic_flash_attn = deterministic_flash_attn
         self.sparse_prediction = sparse_prediction
         self.sparse_pred_ignore_index = sparse_pred_ignore_index
+        self.compile = compile
+
+        if self.compile is None:
+            self.compile = is_triton_available()
 
         if unpad_inputs is None:
             self.unpad_inputs = self._attn_implementation in {"flash_attention_2", "flex_attention"}
@@ -460,8 +466,16 @@ class ModernBertEmbeddings(nn.Module):
         self.drop = nn.Dropout(config.embedding_dropout) if config.embedding_dropout > 0.0 else nn.Identity()
 
     @torch.compile(dynamic=True)
-    def forward(self, input_ids: torch.LongTensor, position_ids: Optional[torch.LongTensor] = None) -> torch.Tensor:
+    def compiled_embeddings(self, input_ids: torch.LongTensor) -> torch.Tensor:
         return self.drop(self.norm(self.tok_embeddings(input_ids)))
+
+    def forward(self, input_ids: torch.LongTensor, position_ids: Optional[torch.LongTensor] = None) -> torch.Tensor:
+        hidden_states = (
+            self.compiled_embeddings(input_ids)
+            if self.config.compile
+            else self.drop(self.norm(self.tok_embeddings(input_ids)))
+        )
+        return hidden_states
 
 
 class ModernBertMLP(nn.Module):
@@ -795,7 +809,10 @@ class ModernBertEncoderLayer(nn.Module):
             output_attentions=output_attentions,
         )
         hidden_states = hidden_states + attn_outputs[0]
-        hidden_states = hidden_states + self.compiled_mlp(hidden_states)
+        mlp_output = (
+            self.compiled_mlp(hidden_states) if self.config.compile else self.mlp(self.mlp_norm(hidden_states))
+        )
+        hidden_states = hidden_states + mlp_output
 
         return (hidden_states,) + attn_outputs[1:]  # add attentions if outputted
 
@@ -1188,7 +1205,11 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
             last_hidden_state = last_hidden_state[mask_tokens]
             labels = labels[mask_tokens]
 
-        logits = self.compiled_head(last_hidden_state)
+        logits = (
+            self.compiled_head(last_hidden_state)
+            if self.config.compile
+            else self.decoder(self.head(last_hidden_state))
+        )
 
         loss = None
         if labels is not None:

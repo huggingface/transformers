@@ -21,6 +21,7 @@
 # limitations under the License.
 
 from ...configuration_utils import PretrainedConfig
+from ...utils.import_utils import is_triton_available
 
 
 class ModernBertConfig(PretrainedConfig):
@@ -133,6 +134,7 @@ class ModernBertConfig(PretrainedConfig):
         deterministic_flash_attn=False,
         sparse_prediction=False,
         sparse_pred_ignore_index=-100,
+        compile=None,
         **kwargs,
     ):
         super().__init__(
@@ -174,6 +176,10 @@ class ModernBertConfig(PretrainedConfig):
         self.deterministic_flash_attn = deterministic_flash_attn
         self.sparse_prediction = sparse_prediction
         self.sparse_pred_ignore_index = sparse_pred_ignore_index
+        self.compile = compile
+
+        if self.compile is None:
+            self.compile = is_triton_available()
 
         if unpad_inputs is None:
             self.unpad_inputs = self._attn_implementation in {"flash_attention_2", "flex_attention"}
