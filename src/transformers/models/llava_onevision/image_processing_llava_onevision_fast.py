@@ -455,8 +455,7 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
             # Group images by size for batched processing
             processed_image_patches_grouped = {}
             grouped_image_patches, grouped_image_patches_index = group_images_by_shape(image_patches)
-            for shape, image_patches in grouped_image_patches.items():
-                stacked_image_patches = torch.stack(image_patches, dim=0)
+            for shape, stacked_image_patches in grouped_image_patches.items():
                 if do_resize:
                     stacked_image_patches = self.resize(
                         image=stacked_image_patches,

@@ -906,138 +906,136 @@ class NumpyToTensor:
         return torch.from_numpy(image.transpose(2, 0, 1)).contiguous()
 
 
-class GroupByShape(torch.nn.Module):
-    """
-    Groups images by shape.
-    Returns a dictionary with the shape as key and a list of images with that shape as value,
-    and a dictionary with the index of the image in the original list as key and the shape and index in the grouped list as value.
-    """
+if is_torch_available():
 
-    def __init__(self):
-        super().__init__()
+    class GroupByShape(torch.nn.Module):
+        """
+        Groups images by shape.
+        Returns a dictionary with the shape as key and a list of images with that shape as value,
+        and a dictionary with the index of the image in the original list as key and the shape and index in the grouped list as value.
+        """
 
-    def forward(self, images: List["torch.Tensor"]):
-        grouped_images, grouped_images_index = group_images_by_shape(images)
-        return {"grouped_images": grouped_images, "grouped_images_index": grouped_images_index}
+        def __init__(self):
+            super().__init__()
 
+        def forward(self, images: List["torch.Tensor"]):
+            grouped_images, grouped_images_index = group_images_by_shape(images)
+            return {"grouped_images": grouped_images, "grouped_images_index": grouped_images_index}
 
-class Resize(torch.nn.Module):
-    """
-    Resize the input images to the specified size.
-    The input images can be a torch.Tensor or images grouped by shape.
-    See `GroupByShape` for more information on grouping images by shape.
-    """
+    class Resize(torch.nn.Module):
+        """
+        Resize the input images to the specified size.
+        The input images can be a torch.Tensor or images grouped by shape.
+        See `GroupByShape` for more information on grouping images by shape.
+        """
 
-    def __init__(
-        self,
-        size: SizeDict,
-        interpolation: "F.InterpolationMode" = F.InterpolationMode.BILINEAR,
-    ):
-        super().__init__()
-        self.size = size
-        self.interpolation = interpolation
+        def __init__(
+            self,
+            size: SizeDict,
+            interpolation: "F.InterpolationMode" = None,
+        ):
+            super().__init__()
+            self.size = size
+            self.interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
 
-    def forward(self, images: Union["torch.Tensor", dict]):
-        def _get_size_tuple(image_group: "torch.Tensor", size: SizeDict):
-            if size.shortest_edge and size.longest_edge:
-                # Resize the image so that the shortest edge or the longest edge is of the given size
-                # while maintaining the aspect ratio of the original image.
-                size_tuple = get_size_with_aspect_ratio(
-                    image_group.size()[-2:],
-                    size.shortest_edge,
-                    size.longest_edge,
-                )
-            elif size.shortest_edge:
-                size_tuple = get_resize_output_image_size(
-                    image_group,
-                    size=size.shortest_edge,
-                    default_to_square=False,
-                    input_data_format=ChannelDimension.FIRST,
-                )
-            elif size.max_height and size.max_width:
-                size_tuple = get_image_size_for_max_height_width(
-                    image_group.size()[-2:], size.max_height, size.max_width
-                )
-            elif size.height and size.width:
-                size_tuple = (size.height, size.width)
-            else:
-                raise ValueError(
-                    "Size must contain 'height' and 'width' keys, or 'max_height' and 'max_width', or 'shortest_edge' key. Got"
-                    f" {size}."
-                )
-            return size_tuple
+        def forward(self, images: Union["torch.Tensor", dict]):
+            def _get_size_tuple(image_group: "torch.Tensor", size: SizeDict):
+                if size.shortest_edge and size.longest_edge:
+                    # Resize the image so that the shortest edge or the longest edge is of the given size
+                    # while maintaining the aspect ratio of the original image.
+                    size_tuple = get_size_with_aspect_ratio(
+                        image_group.size()[-2:],
+                        size.shortest_edge,
+                        size.longest_edge,
+                    )
+                elif size.shortest_edge:
+                    size_tuple = get_resize_output_image_size(
+                        image_group,
+                        size=size.shortest_edge,
+                        default_to_square=False,
+                        input_data_format=ChannelDimension.FIRST,
+                    )
+                elif size.max_height and size.max_width:
+                    size_tuple = get_image_size_for_max_height_width(
+                        image_group.size()[-2:], size.max_height, size.max_width
+                    )
+                elif size.height and size.width:
+                    size_tuple = (size.height, size.width)
+                else:
+                    raise ValueError(
+                        "Size must contain 'height' and 'width' keys, or 'max_height' and 'max_width', or 'shortest_edge' key. Got"
+                        f" {size}."
+                    )
+                return size_tuple
 
-        if isinstance(images, dict):
-            grouped_images = images["grouped_images"]
-            grouped_images_index = images["grouped_images_index"]
-            resized_images = {}
-            for shape, image_group in grouped_images.items():
-                resized_images[shape] = F.resize(
-                    image_group, size=_get_size_tuple(image_group, self.size), interpolation=self.interpolation
-                )
-            return {"grouped_images": resized_images, "grouped_images_index": grouped_images_index}
-        elif isinstance(images, torch.Tensor):
-            return F.resize(images, size=_get_size_tuple(images, self.size), interpolation=self.interpolation)
+            if isinstance(images, dict):
+                grouped_images = images["grouped_images"]
+                grouped_images_index = images["grouped_images_index"]
+                resized_images = {}
+                for shape, image_group in grouped_images.items():
+                    resized_images[shape] = F.resize(
+                        image_group, size=_get_size_tuple(image_group, self.size), interpolation=self.interpolation
+                    )
+                return {"grouped_images": resized_images, "grouped_images_index": grouped_images_index}
+            elif isinstance(images, torch.Tensor):
+                return F.resize(images, size=_get_size_tuple(images, self.size), interpolation=self.interpolation)
 
-        raise ValueError(
-            "Inputs to Resize must be a list of torch.Tensor or a dictionary with 'grouped_images' and 'grouped_images_index' keys, got {images}."
-        )
+            raise ValueError(
+                "Inputs to Resize must be a list of torch.Tensor or a dictionary with 'grouped_images' and 'grouped_images_index' keys, got {images}."
+            )
 
+    class Normalize(torch.nn.Module):
+        def __init__(self, mean: Union[float, List[float]], std: Union[float, List[float]]):
+            super().__init__()
+            self.mean = mean
+            self.std = std
 
-class Normalize(torch.nn.Module):
-    def __init__(self, mean: Union[float, List[float]], std: Union[float, List[float]]):
-        super().__init__()
-        self.mean = mean
-        self.std = std
+        def forward(self, images: Union["torch.Tensor", dict]):
+            if isinstance(images, dict):
+                grouped_images = images["grouped_images"]
+                grouped_images_index = images["grouped_images_index"]
+                normalized_images = {}
+                for shape, image_group in grouped_images.items():
+                    image_group = _cast_tensor_to_float(image_group)
+                    normalized_images[shape] = F.normalize(image_group, mean=self.mean, std=self.std)
 
-    def forward(self, images: Union["torch.Tensor", dict]):
-        if isinstance(images, dict):
-            grouped_images = images["grouped_images"]
-            grouped_images_index = images["grouped_images_index"]
-            normalized_images = {}
-            for shape, image_group in grouped_images.items():
-                image_group = _cast_tensor_to_float(image_group)
-                normalized_images[shape] = F.normalize(image_group, mean=self.mean, std=self.std)
+                return {"grouped_images": normalized_images, "grouped_images_index": grouped_images_index}
+            elif isinstance(images, torch.Tensor):
+                return F.normalize(_cast_tensor_to_float(images), mean=self.mean, std=self.std)
 
-            return {"grouped_images": normalized_images, "grouped_images_index": grouped_images_index}
-        elif isinstance(images, torch.Tensor):
-            return F.normalize(_cast_tensor_to_float(images), mean=self.mean, std=self.std)
+            raise ValueError(
+                f"Inputs to Normalize must be a list of torch.Tensor or a dictionary with 'grouped_images' and 'grouped_images_index' keys, got {images}."
+            )
 
-        raise ValueError(
-            f"Inputs to Normalize must be a list of torch.Tensor or a dictionary with 'grouped_images' and 'grouped_images_index' keys, got {images}."
-        )
+    class Rescale(torch.nn.Module):
+        def __init__(self, rescale_factor: float):
+            super().__init__()
+            self.rescale_factor = rescale_factor
 
+        def forward(self, images: Union["torch.Tensor", dict]):
+            if isinstance(images, dict):
+                grouped_images = images["grouped_images"]
+                grouped_images_index = images["grouped_images_index"]
+                rescaled_images = {}
+                for shape, image_group in grouped_images.items():
+                    image_group = torch.stack(image_group, dim=0)
+                    rescaled_images[shape] = image_group * self.rescale_factor
+                return {"grouped_images": rescaled_images, "grouped_images_index": grouped_images_index}
+            elif isinstance(images, torch.Tensor):
+                return images * self.rescale_factor
 
-class Rescale(torch.nn.Module):
-    def __init__(self, rescale_factor: float):
-        super().__init__()
-        self.rescale_factor = rescale_factor
+            raise ValueError(
+                f"Inputs to Rescale must be a list of torch.Tensor or a dictionary with 'grouped_images' and 'grouped_images_index' keys, got {images}."
+            )
 
-    def forward(self, images: Union["torch.Tensor", dict]):
-        if isinstance(images, dict):
-            grouped_images = images["grouped_images"]
-            grouped_images_index = images["grouped_images_index"]
-            rescaled_images = {}
-            for shape, image_group in grouped_images.items():
-                image_group = torch.stack(image_group, dim=0)
-                rescaled_images[shape] = image_group * self.rescale_factor
-            return {"grouped_images": rescaled_images, "grouped_images_index": grouped_images_index}
-        elif isinstance(images, torch.Tensor):
-            return images * self.rescale_factor
+    class ReorderImages(torch.nn.Module):
+        """
+        Reorders images back to the original order.
+        This transform is used to reorder images after they have been grouped by shape.
+        """
 
-        raise ValueError(
-            f"Inputs to Rescale must be a list of torch.Tensor or a dictionary with 'grouped_images' and 'grouped_images_index' keys, got {images}."
-        )
+        def __init__(self):
+            super().__init__()
 
-
-class ReorderImages(torch.nn.Module):
-    """
-    Reorders images back to the original order.
-    This transform is used to reorder images after they have been grouped by shape.
-    """
-
-    def __init__(self):
-        super().__init__()
-
-    def forward(self, images: dict):
-        return reorder_images(images["grouped_images"], images["grouped_images_index"])
+        def forward(self, images: dict):
+            return reorder_images(images["grouped_images"], images["grouped_images_index"])
