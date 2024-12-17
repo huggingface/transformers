@@ -7451,7 +7451,7 @@ if TYPE_CHECKING:
             MobileViTV2PreTrainedModel,
         )
         from .models.moonshine import (
-            MoonshineForConditionalGeneration, 
+            MoonshineForConditionalGeneration,
             MoonshineModel,
             MoonshinePreTrainedModel,
         )
