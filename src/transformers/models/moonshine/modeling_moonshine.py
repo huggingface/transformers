@@ -33,16 +33,11 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     get_torch_version,
-    is_flash_attn_2_available,
     is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
 )
 from .configuration_moonshine import MoonshineConfig
-
-
-if is_flash_attn_2_available():
-    from ...modeling_flash_attention_utils import _flash_attention_forward
 
 
 logger = logging.get_logger(__name__)
@@ -730,7 +725,7 @@ class MoonshineEncoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.46
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
@@ -1279,7 +1274,10 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
         self.rotary_emb = MoonshineRotaryEmbedding(
             dim=max(config.hidden_size // config.num_attention_heads // 2, config.min_rotary_ndims)
         )
+
         self.gradient_checkpointing = False
+        if getattr(config, "pretraining_tp", 1) != 1:
+            logger.warn("`pretraining_tp` is deprecated, please use `model.tensor_parallel` instead.")
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1852,25 +1850,22 @@ class MoonshineModel(MoonshinePreTrainedModel):
         Returns:
 
         Example:
-        Returns:
-
-        Example:
 
         ```python
-         >>> import torch
-         >>> from transformers import AutoFeatureExtractor, MoonshineModel
-         >>> from datasets import load_dataset
+        >>> import torch
+        >>> from transformers import AutoFeatureExtractor, MoonshineModel
+        >>> from datasets import load_dataset
 
-         >>> model = MoonshineModel.from_pretrained("UsefulSensors/moonshine-tiny")
-         >>> feature_extractor = AutoFeatureExtractor.from_pretrained("UsefulSensors/moonshine-tiny")
-         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-         >>> inputs = feature_extractor(ds[0]["audio"]["array"], return_tensors="pt")
-         >>> input_values = inputs.input_values
-         >>> decoder_input_ids = torch.tensor([[1, 1]]) * model.config.decoder_start_token_id
-         >>> last_hidden_state = model(input_values, decoder_input_ids=decoder_input_ids).last_hidden_state
-         >>> list(last_hidden_state.shape)
-         [1, 2, 288]
-         ```"""
+        >>> model = MoonshineModel.from_pretrained("UsefulSensors/moonshine-tiny")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("UsefulSensors/moonshine-tiny")
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> inputs = feature_extractor(ds[0]["audio"]["array"], return_tensors="pt")
+        >>> input_values = inputs.input_values
+        >>> decoder_input_ids = torch.tensor([[1, 1]]) * model.config.decoder_start_token_id
+        >>> last_hidden_state = model(input_values, decoder_input_ids=decoder_input_ids).last_hidden_state
+        >>> list(last_hidden_state.shape)
+        [1, 2, 288]
+        ```"""
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

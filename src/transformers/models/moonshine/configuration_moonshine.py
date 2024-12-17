@@ -84,7 +84,10 @@ class MoonshineConfig(PretrainedConfig):
             The minimum number of masks of length `mask_feature_length` generated along the time axis, each time step,
             irrespectively of `mask_feature_prob`. Only relevant if ''mask_time_prob*len(time_axis)/mask_time_length <
             mask_time_min_masks''
-        mask_time_min_masks (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
+        mask_time_min_masks (`int`, *optional*, defaults to 2):
+            The minimum number of masks of length `mask_feature_length` generated along the time axis, each time step,
+            irrespectively of `mask_feature_prob`. Only relevant if ''mask_time_prob*len(time_axis)/mask_time_length <
+            mask_time_min_masks''
         mask_feature_prob (`float`, *optional*, defaults to 0.0):
             Percentage (between 0 and 1) of all feature vectors along the feature axis which will be masked. The
             masking procecure generates `mask_feature_prob*len(feature_axis)/mask_time_length` independent masks over
@@ -97,7 +100,10 @@ class MoonshineConfig(PretrainedConfig):
             The minimum number of masks of length `mask_feature_length` generated along the feature axis, each time
             step, irrespectively of `mask_feature_prob`. Only relevant if
             `mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks`.
-        mask_feature_min_masks (`<fill_type>`, *optional*, defaults to 0): <fill_docstring>
+        mask_feature_min_masks (`int`, *optional*, defaults to 0):
+            The minimum number of masks of length `mask_feature_length` generated along the feature axis, each time
+            step, irrespectively of `mask_feature_prob`. Only relevant if
+            `mask_feature_prob*len(feature_axis)/mask_feature_length < mask_feature_min_masks`.
 
     Example:
 
