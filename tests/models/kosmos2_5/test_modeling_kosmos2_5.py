@@ -255,7 +255,7 @@ class Kosmos2_5ModelTester:
     ):
         model = Kosmos2_5Model(config).to(torch_device).eval()
         with torch.no_grad():
-            result = model(flattened_patches, input_ids, image_embeds_position_mask, attention_mask)
+            result = model(input_ids, flattened_patches, image_embeds_position_mask, attention_mask)
         self.parent.assertEqual(
             result.last_hidden_state.shape,
             (
