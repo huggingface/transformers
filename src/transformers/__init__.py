@@ -463,7 +463,6 @@ _import_structure = {
     "models.gpt_bigcode": ["GPTBigCodeConfig"],
     "models.gpt_neo": ["GPTNeoConfig"],
     "models.gpt_neox": ["GPTNeoXConfig"],
-    "models.moonshine": ["MoonshineConfig"],
     "models.gpt_neox_japanese": ["GPTNeoXJapaneseConfig"],
     "models.gpt_sw3": [],
     "models.gptj": ["GPTJConfig"],
@@ -5792,7 +5791,6 @@ if TYPE_CHECKING:
         WhisperProcessor,
         WhisperTokenizer,
     )
-    from .models.moonshine import MoonshineConfig
     from .models.x_clip import (
         XCLIPConfig,
         XCLIPProcessor,
@@ -7466,6 +7464,7 @@ if TYPE_CHECKING:
         )
         from .models.moonshine import (
             MoonshineForCausalLM,
+            MoonshineForConditionalGeneration,
             MoonshineForQuestionAnswering,
             MoonshineForSequenceClassification,
             MoonshineForTokenClassification,
@@ -8171,11 +8170,6 @@ if TYPE_CHECKING:
             WhisperForConditionalGeneration,
             WhisperModel,
             WhisperPreTrainedModel,
-        )
-        from .models.moonshine import (
-            MoonshineModel, 
-            MoonshineForConditionalGeneration,
-            MoonshinePreTrainedModel,
         )
         from .models.x_clip import (
             XCLIPModel,
