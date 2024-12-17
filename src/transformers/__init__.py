@@ -842,6 +842,7 @@ _import_structure = {
         "WhisperProcessor",
         "WhisperTokenizer",
     ],
+    "models.moonshine": ["MoonshineConfig"],
     "models.x_clip": [
         "XCLIPConfig",
         "XCLIPProcessor",
@@ -3722,6 +3723,13 @@ else:
             "WhisperPreTrainedModel",
         ]
     )
+    _import_structure["models.moonshine"].extend(
+        [
+            "MoonshineForConditionalGeneration",
+            "MoonshineModel",
+            "MoonshinePreTrainedModel",
+        ]
+    )
     _import_structure["models.x_clip"].extend(
         [
             "XCLIPModel",
@@ -5784,6 +5792,7 @@ if TYPE_CHECKING:
         WhisperProcessor,
         WhisperTokenizer,
     )
+    from .models.moonshine import MoonshineConfig
     from .models.x_clip import (
         XCLIPConfig,
         XCLIPProcessor,
@@ -8162,6 +8171,11 @@ if TYPE_CHECKING:
             WhisperForConditionalGeneration,
             WhisperModel,
             WhisperPreTrainedModel,
+        )
+        from .models.moonshine import (
+            MoonshineModel, 
+            MoonshineForConditionalGeneration,
+            MoonshinePreTrainedModel,
         )
         from .models.x_clip import (
             XCLIPModel,
