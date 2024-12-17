@@ -41,7 +41,7 @@ class MoonshineConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`MoonshineModel`]. It is used to instantiate a Moonshine
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Moonshine
-    [UsefulSensors/moonshine-tiny](https://huggingface.co/UsefulSensors/moonshine-tiny).
+    [eustlb/moonshine-tiny](https://huggingface.co/eustlb/moonshine-tiny).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -140,7 +140,7 @@ class MoonshineConfig(PretrainedConfig):
     >>> from transformers import MoonshineModel, MoonshineConfig
 
     >>> # Initializing a Moonshine style configuration
-    >>> configuration = MoonshineConfig().from_pretrained("UsefulSensors/moonshine-tiny")
+    >>> configuration = MoonshineConfig().from_pretrained("eustlb/moonshine-tiny")
 
     >>> # Initializing a model from the configuration
     >>> model = MoonshineModel(configuration)
@@ -1484,13 +1484,6 @@ class MoonshineDecoder(LlamaModel):
 
 
 class MoonshineModel(WhisperModel):
-    def __init__(self, config: MoonshineConfig):
-        super().__init__(config)
-        self.encoder = MoonshineEncoder(config)
-        self.decoder = MoonshineDecoder(config)
-
-    @add_start_docstrings_to_model_forward(MOONSHINE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=Seq2SeqModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_values: Optional[torch.FloatTensor] = None,
@@ -1513,8 +1506,8 @@ class MoonshineModel(WhisperModel):
         >>> from transformers import AutoFeatureExtractor, MoonshineModel
         >>> from datasets import load_dataset
 
-        >>> model = MoonshineModel.from_pretrained("UsefulSensors/moonshine-tiny")
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("UsefulSensors/moonshine-tiny")
+        >>> model = MoonshineModel.from_pretrained("eustlb/moonshine-tiny")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("eustlb/moonshine-tiny")
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> inputs = feature_extractor(ds[0]["audio"]["array"], return_tensors="pt")
         >>> input_values = inputs.input_values
@@ -1641,8 +1634,8 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
         >>> from transformers import AutoProcessor, MoonshineForConditionalGeneration
         >>> from datasets import load_dataset
 
-        >>> processor = AutoProcessor.from_pretrained("UsefulSensors/moonshine-tiny")
-        >>> model = MoonshineForConditionalGeneration.from_pretrained("UsefulSensors/moonshine-tiny")
+        >>> processor = AutoProcessor.from_pretrained("eustlb/moonshine-tiny")
+        >>> model = MoonshineForConditionalGeneration.from_pretrained("eustlb/moonshine-tiny")
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
@@ -1653,7 +1646,7 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
 
         >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         >>> transcription
-        ' Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.'
+        'Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.'
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

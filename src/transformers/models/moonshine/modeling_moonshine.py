@@ -1761,6 +1761,7 @@ def _compute_mask_indices(
 class MoonshineModel(MoonshinePreTrainedModel):
     def __init__(self, config: MoonshineConfig):
         super().__init__(config)
+
         self.encoder = MoonshineEncoder(config)
         self.decoder = MoonshineDecoder(config)
         # Initialize weights and apply final processing
@@ -1856,8 +1857,8 @@ class MoonshineModel(MoonshinePreTrainedModel):
         >>> from transformers import AutoFeatureExtractor, MoonshineModel
         >>> from datasets import load_dataset
 
-        >>> model = MoonshineModel.from_pretrained("UsefulSensors/moonshine-tiny")
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("UsefulSensors/moonshine-tiny")
+        >>> model = MoonshineModel.from_pretrained("eustlb/moonshine-tiny")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("eustlb/moonshine-tiny")
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> inputs = feature_extractor(ds[0]["audio"]["array"], return_tensors="pt")
         >>> input_values = inputs.input_values
@@ -2001,8 +2002,8 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
         >>> from transformers import AutoProcessor, MoonshineForConditionalGeneration
         >>> from datasets import load_dataset
 
-        >>> processor = AutoProcessor.from_pretrained("UsefulSensors/moonshine-tiny")
-        >>> model = MoonshineForConditionalGeneration.from_pretrained("UsefulSensors/moonshine-tiny")
+        >>> processor = AutoProcessor.from_pretrained("eustlb/moonshine-tiny")
+        >>> model = MoonshineForConditionalGeneration.from_pretrained("eustlb/moonshine-tiny")
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
@@ -2013,7 +2014,7 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
 
         >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
         >>> transcription
-        ' Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.'
+        'Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.'
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
