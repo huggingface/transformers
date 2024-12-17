@@ -14,7 +14,6 @@
 # limitations under the License.
 """KOSMOS-2.5 model configuration"""
 
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
