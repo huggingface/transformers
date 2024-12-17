@@ -66,10 +66,10 @@ class MetricsRecorder:
 
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.DEBUG)
 
 handler = logging.StreamHandler(sys.stdout)
-handler.setLevel(logging.INFO)
+handler.setLevel(logging.DEBUG)
 formatter = logging.Formatter("[%(levelname)s - %(asctime)s] %(message)s")
 handler.setFormatter(formatter)
 logger.addHandler(handler)
