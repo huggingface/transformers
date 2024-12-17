@@ -898,12 +898,12 @@ def shard_tensor(tensor, num_shards, rank, dim=1):
 def shard_inputs(
     num_shards=1,
     rank=0,
-    input_ids: torch.LongTensor = None,
-    attention_mask: Optional[torch.Tensor] = None,
-    loss_mask: Optional[torch.Tensor] = None,
-    position_ids: Optional[torch.LongTensor] = None,
-    inputs_embeds: Optional[torch.FloatTensor] = None,
-    labels: Optional[torch.LongTensor] = None,
+    input_ids=None,
+    attention_mask=None,
+    loss_mask=None,
+    position_ids=None,
+    input_embeds=None,
+    labels=None,
     **kwargs,
 ):
     if num_shards == 1:
@@ -912,7 +912,7 @@ def shard_inputs(
             "attention_mask": attention_mask,
             "loss_mask": loss_mask,
             "position_ids": position_ids,
-            "inputs_embeds": inputs_embeds,
+            "input_embeds": input_embeds,
             "labels": labels,
             **kwargs,
         }
@@ -922,8 +922,8 @@ def shard_inputs(
         position_ids = position_ids.unsqueeze(0).expand(input_ids.shape[0], -1)
     result = kwargs
     for key, value in zip(
-        ["input_ids", "attention_mask", "loss_mask", "position_ids", "inputs_embeds", "labels"],
-        [input_ids, attention_mask, loss_mask, position_ids, inputs_embeds, labels],
+        ["input_ids", "attention_mask", "loss_mask", "position_ids", "input_embeds", "labels"],
+        [input_ids, attention_mask, loss_mask, position_ids, input_embeds, labels],
     ):
         if value is not None:
             result[key] = shard_tensor(value, num_shards, rank)

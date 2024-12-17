@@ -3644,21 +3644,20 @@ class Trainer:
         labels: Optional[torch.LongTensor] = None,
         **model_kwargs,
     ):
+        inputs = {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "loss_mask": loss_mask,
+            "position_ids": position_ids,
+            "input_embeds": input_embeds,
+            "labels": labels,
+            **model_kwargs,
+        }
         if is_deepspeed_sp_enabled():
             ds_plugin = self.accelerator.state.deepspeed_plugin
             num_shards = ds_plugin.sequence_parallel_size
             rank = ds_plugin.sequence_parallel_rank
-            inputs = shard_inputs(
-                num_shards,
-                rank,
-                input_ids=input_ids,
-                attention_mask=attention_mask,
-                loss_mask=loss_mask,
-                position_ids=position_ids,
-                inputs_embeds=input_embeds,
-                labels=labels,
-                **model_kwargs,
-            )
+            inputs = shard_inputs(num_shards, rank, **inputs)
         return inputs
 
     def compute_loss_context_manager(self):
