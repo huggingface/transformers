@@ -641,6 +641,9 @@ class BartDecoderLayer(nn.Module):
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
+            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+                Indices depicting the position of the input sequence tokens in the sequence. It is used to update the
+                cache in the correct position and to infer the complete sequence length.
         """
         residual = hidden_states
 
@@ -659,20 +662,20 @@ class BartDecoderLayer(nn.Module):
 
         # Cross-Attention Block
         cross_attn_weights = None
-        # if encoder_hidden_states is not None:
-        #     residual = hidden_states
-        #
-        #     hidden_states, cross_attn_weights, past_key_value = self.encoder_attn(
-        #         hidden_states=hidden_states,
-        #         key_value_states=encoder_hidden_states,
-        #         attention_mask=encoder_attention_mask,
-        #         layer_head_mask=cross_attn_layer_head_mask,
-        #         past_key_value=past_key_value,
-        #         output_attentions=output_attentions,
-        #     )
-        #     hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-        #     hidden_states = residual + hidden_states
-        #     hidden_states = self.encoder_attn_layer_norm(hidden_states)
+        if encoder_hidden_states is not None:
+            residual = hidden_states
+
+            hidden_states, cross_attn_weights, past_key_value = self.encoder_attn(
+                hidden_states=hidden_states,
+                key_value_states=encoder_hidden_states,
+                attention_mask=encoder_attention_mask,
+                layer_head_mask=cross_attn_layer_head_mask,
+                past_key_value=past_key_value,
+                output_attentions=output_attentions,
+            )
+            hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+            hidden_states = residual + hidden_states
+            hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
         # Fully Connected
         residual = hidden_states
@@ -1387,6 +1390,7 @@ class BartDecoder(BartPreTrainedModel):
         elif input_ids is not None:
             input = input_ids
             batch_size, seq_length = input.shape[:2]
+            input_ids = input_ids.view(-1, seq_length)
         elif inputs_embeds is not None:
             batch_size, seq_length = inputs_embeds.size()[:-1]
             input = inputs_embeds[:, :, -1]
@@ -2279,7 +2283,6 @@ class BartForCausalLM(BartPreTrainedModel, GenerationMixin):
             return_dict=return_dict,
             cache_position=cache_position,
         )
-        return outputs
 
         logits = self.lm_head(outputs[0])
 
