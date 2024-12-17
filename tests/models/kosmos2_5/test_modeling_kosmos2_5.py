@@ -339,7 +339,7 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             "Kosmos2_5Model",
             "Kosmos2_5ForConditionalGeneration",
         ]:
-            bs, _, _ = inputs_dict["flattened_patches"].shape
+            bs, _ = inputs_dict["input_ids"].shape
             seqlen = self.model_tester.text_model_tester.seq_length
             inputs_dict["input_ids"] = torch.arange(seqlen, device=torch_device).unsqueeze(0).expand(bs, seqlen)
             inputs_dict["input_ids"] = inputs_dict["input_ids"] % self.model_tester.text_model_tester.vocab_size

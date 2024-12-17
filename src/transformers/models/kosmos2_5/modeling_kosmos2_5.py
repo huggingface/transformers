@@ -1862,18 +1862,16 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
         vision_model_output = None
         projection_attentions = None
         if image_embeds is None:
-            if flattened_patches is None:
-                raise ValueError("You have to specify either `flattened_patches` or `image_embeds`.")
-
-            vision_model_output = self.vision_model(
-                flattened_patches=flattened_patches,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            )
-            # normalized features
-            image_embeds = nn.functional.normalize(vision_model_output[0], dim=-1)
-            image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
+            if flattened_patches is not None:
+                vision_model_output = self.vision_model(
+                    flattened_patches=flattened_patches,
+                    output_attentions=output_attentions,
+                    output_hidden_states=output_hidden_states,
+                    return_dict=return_dict,
+                )
+                # normalized features
+                image_embeds = nn.functional.normalize(vision_model_output[0], dim=-1)
+                image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
 
         outputs = self.text_model(
             input_ids=input_ids,
@@ -2175,18 +2173,17 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
 
         vision_model_output = None
         projection_attentions = None
-        if past_key_values is None and image_embeds is None:
-            if flattened_patches is None:
-                raise ValueError("You have to specify either `flattened_patches` or `image_embeds`.")
 
-            vision_model_output = self.vision_model(
-                flattened_patches=flattened_patches,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
-            )
-            image_embeds = nn.functional.normalize(vision_model_output[0], dim=-1)
-            image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
+        if image_embeds is None:
+            if flattened_patches is not None:
+                vision_model_output = self.vision_model(
+                    flattened_patches=flattened_patches,
+                    output_attentions=output_attentions,
+                    output_hidden_states=output_hidden_states,
+                    return_dict=return_dict,
+                )
+                image_embeds = nn.functional.normalize(vision_model_output[0], dim=-1)
+                image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
 
         lm_outputs = self.text_model(
             input_ids=input_ids,
@@ -2247,7 +2244,7 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
         # if cache_position[0] == 0:
             # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
             # Otherwise we need `flattened_patches` to be passed to model
-        model_inputs["flattened_patches"] = model_kwargs["flattened_patches"]
+        model_inputs["flattened_patches"] = model_kwargs.get("flattened_patches", None)
 
         return model_inputs
 
