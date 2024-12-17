@@ -1614,6 +1614,7 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["Kosmos2_5VisionLayer", "Kosmos2_5TextBlock"]
     _supports_flash_attn_2 = True
+    _supports_cache_class = True
     _supports_sdpa = True
 
     def _init_weights(self, module):
