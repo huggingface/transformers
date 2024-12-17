@@ -76,11 +76,6 @@ class Kosmos2_5Processor(ProcessorMixin):
     def __init__(self, image_processor, tokenizer):
         tokenizer.return_token_type_ids = False
         super().__init__(image_processor, tokenizer)
-        self.boi = tokenizer.convert_tokens_to_ids("<image>")
-        self.eoi = tokenizer.convert_tokens_to_ids("</image>")
-        self.pad = tokenizer.convert_tokens_to_ids("<pad>")
-        self.bos = tokenizer.convert_tokens_to_ids("<s>")
-        self.eos = tokenizer.convert_tokens_to_ids("</s>")
 
     def __call__(
         self,
