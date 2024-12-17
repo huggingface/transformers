@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
@@ -21,19 +20,24 @@ import numpy as np
 from .image_processing_utils import (
     BaseImageProcessor,
     BatchFeature,
-    get_patch_output_size,
     get_size_dict,
-    select_best_resolution,
 )
-from .image_transforms import convert_to_rgb, get_resize_output_image_size, get_size_with_aspect_ratio
+from .image_transforms import (
+    convert_to_rgb,
+    get_resize_output_image_size,
+    get_size_with_aspect_ratio,
+    group_images_by_shape,
+    reorder_images,
+)
 from .image_utils import (
     ChannelDimension,
     ImageInput,
     ImageType,
+    SizeDict,
     get_image_size,
+    get_image_size_for_max_height_width,
     get_image_type,
     infer_channel_dimension_format,
-    make_batched_images,
     make_list_of_images,
     validate_fast_preprocess_arguments,
     validate_kwargs,
@@ -60,37 +64,6 @@ if is_torchvision_available():
         from torchvision.transforms.v2 import functional as F
     else:
         from torchvision.transforms import functional as F
-
-
-def get_image_size_for_max_height_width(
-    image_size: Tuple[int, int],
-    max_height: int,
-    max_width: int,
-) -> Tuple[int, int]:
-    """
-    Computes the output image size given the input image and the maximum allowed height and width. Keep aspect ratio.
-    Important, even if image_height < max_height and image_width < max_width, the image will be resized
-    to at least one of the edges be equal to max_height or max_width.
-
-    For example:
-        - input_size: (100, 200), max_height: 50, max_width: 50 -> output_size: (25, 50)
-        - input_size: (100, 200), max_height: 200, max_width: 500 -> output_size: (200, 400)
-
-    Args:
-        image_size (`Tuple[int, int]`):
-            The image to resize.
-        max_height (`int`):
-            The maximum allowed height.
-        max_width (`int`):
-            The maximum allowed width.
-    """
-    height, width = image_size
-    height_scale = max_height / height
-    width_scale = max_width / width
-    min_scale = min(height_scale, width_scale)
-    new_height = int(height * min_scale)
-    new_width = int(width * min_scale)
-    return new_height, new_width
 
 
 def safe_squeeze(tensor: "torch.Tensor", axis: Optional[int] = None) -> "torch.Tensor":
@@ -145,56 +118,6 @@ def divide_to_patches(
             patches.append(patch)
 
     return patches
-
-
-def group_images_by_shape(
-    images: List["torch.Tensor"],
-) -> Tuple[Dict[Tuple[int, int], List["torch.Tensor"]], Dict[int, Tuple[Tuple[int, int], int]]]:
-    """
-    Groups images by shape.
-    Returns a dictionary with the shape as key and a list of images with that shape as value,
-    and a dictionary with the index of the image in the original list as key and the shape and index in the grouped list as value.
-    """
-    grouped_images = {}
-    grouped_images_index = {}
-    for i, image in enumerate(images):
-        shape = image.shape[1:]
-        if shape not in grouped_images:
-            grouped_images[shape] = []
-        grouped_images[shape].append(image)
-        grouped_images_index[i] = (shape, len(grouped_images[shape]) - 1)
-    return grouped_images, grouped_images_index
-
-
-def reorder_images(
-    processed_images: Dict[Tuple[int, int], "torch.Tensor"], grouped_images_index: Dict[int, Tuple[int, int]]
-) -> List["torch.Tensor"]:
-    """
-    Reconstructs a list of images in the original order.
-    """
-    return [
-        processed_images[grouped_images_index[i][0]][grouped_images_index[i][1]]
-        for i in range(len(grouped_images_index))
-    ]
-
-
-@dataclass(frozen=True)
-class SizeDict:
-    """
-    Hashable dictionary to store image size information.
-    """
-
-    height: int = None
-    width: int = None
-    longest_edge: int = None
-    shortest_edge: int = None
-    max_height: int = None
-    max_width: int = None
-
-    def __getitem__(self, key):
-        if hasattr(self, key):
-            return getattr(self, key)
-        raise KeyError(f"Key {key} not found in SizeDict.")
 
 
 class BaseImageProcessorFast(BaseImageProcessor):
@@ -629,8 +552,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images)
         resized_images_grouped = {}
-        for shape, images in grouped_images.items():
-            stacked_images = torch.stack(images, dim=0)
+        for shape, stacked_images in grouped_images.items():
             if do_resize:
                 stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation)
             resized_images_grouped[shape] = stacked_images
@@ -640,8 +562,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         # Needed in case do_resize is False, or resize returns images with different sizes
         grouped_images, grouped_images_index = group_images_by_shape(resized_images)
         processed_images_grouped = {}
-        for shape, images in grouped_images.items():
-            stacked_images = torch.stack(images, dim=0)
+        for shape, stacked_images in grouped_images.items():
             if do_center_crop:
                 stacked_images = self.center_crop(stacked_images, crop_size)
             # Fused rescale and normalize
@@ -662,344 +583,6 @@ class BaseImageProcessorFast(BaseImageProcessor):
         encoder_dict = super().to_dict()
         encoder_dict.pop("_valid_processor_keys", None)
         return encoder_dict
-
-
-class LlavaPatchingMixin:
-    def __init__(
-        self,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
-        image_grid_pinpoints: List = None,
-        resample: Optional[Union["PILImageResampling", "F.InterpolationMode"]] = None,
-        do_center_crop: bool = None,
-        crop_size: Dict[str, int] = None,
-        do_rescale: bool = None,
-        rescale_factor: Union[int, float] = 1 / 255,
-        do_normalize: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        do_pad: Optional[bool] = None,
-        do_convert_rgb: bool = None,
-        **kwargs,
-    ) -> None:
-        super().__init__(
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
-            do_center_crop=do_center_crop,
-            crop_size=crop_size,
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_convert_rgb=do_convert_rgb,
-            **kwargs,
-        )
-        self.image_grid_pinpoints = (
-            image_grid_pinpoints if image_grid_pinpoints is not None else self.image_grid_pinpoints
-        )
-        self.do_pad = do_pad if do_pad is not None else self.do_pad
-
-    def _prepare_images_structure(
-        self,
-        images: ImageInput,
-    ) -> ImageInput:
-        """
-        Prepare the images structure for processing.
-
-        Args:
-            images (`ImageInput`):
-                The input images to process.
-
-        Returns:
-            `ImageInput`: The images with a valid nesting.
-        """
-        return make_batched_images(images)
-
-    def _resize_for_patching(
-        self,
-        image: "torch.Tensor",
-        target_resolution: tuple,
-        interpolation: "F.InterpolationMode",
-        input_data_format: ChannelDimension,
-    ) -> "torch.Tensor":
-        """
-        Resizes an image to a target resolution while maintaining aspect ratio.
-
-        Args:
-            image ("torch.Tensor"):
-                The input image.
-            target_resolution (tuple):
-                The target resolution (height, width) of the image.
-            interpolation (`InterpolationMode`):
-                Resampling filter to use if resizing the image.
-            input_data_format (`ChannelDimension` or `str`):
-                The channel dimension format of the input image.
-
-        Returns:
-            "torch.Tensor": The resized and padded image.
-        """
-        new_height, new_width = get_patch_output_size(image, target_resolution, input_data_format)
-
-        # Resize the image
-        resized_image = F.resize(image, (new_height, new_width), interpolation=interpolation)
-
-        return resized_image
-
-    def _pad_for_patching(
-        self, image: "torch.Tensor", target_resolution: tuple, input_data_format: ChannelDimension
-    ) -> "torch.Tensor":
-        """
-        Pad an image to a target resolution while maintaining aspect ratio.
-        """
-        target_height, target_width = target_resolution
-        new_height, new_width = get_patch_output_size(image, target_resolution, input_data_format)
-
-        paste_x = (target_width - new_width) // 2
-        paste_y = (target_height - new_height) // 2
-
-        padded_image = F.pad(image, padding=[paste_x, paste_y, paste_x, paste_y])
-
-        return padded_image
-
-    def _get_image_patches(
-        self,
-        image: "torch.Tensor",
-        grid_pinpoints,
-        size: tuple,
-        patch_size: int,
-        interpolation: "F.InterpolationMode",
-    ) -> List[np.array]:
-        """
-        Process an image with variable resolutions by dividing it into patches.
-
-        Args:
-            image ("torch.Tensor"):
-                The input image to be processed.
-            grid_pinpoints (List):
-                A string representation of a list of possible resolutions.
-            size (`tuple`):
-                Size to resize the original image to.
-            patch_size (`int`):
-                Size of the patches to divide the image into.
-            interpolation (`"InterpolationMode"`):
-                Resampling filter to use if resizing the image.
-
-        Returns:
-            List["torch.Tensor"]: A list of NumPy arrays containing the processed image patches.
-        """
-        if not isinstance(grid_pinpoints, list):
-            raise TypeError("grid_pinpoints must be a list of possible resolutions.")
-
-        possible_resolutions = grid_pinpoints
-
-        image_size = get_image_size(image, channel_dim=ChannelDimension.FIRST)
-        best_resolution = select_best_resolution(image_size, possible_resolutions)
-        resized_image = self._resize_for_patching(
-            image, best_resolution, interpolation=interpolation, input_data_format=ChannelDimension.FIRST
-        )
-        padded_image = self._pad_for_patching(resized_image, best_resolution, input_data_format=ChannelDimension.FIRST)
-        patches = divide_to_patches(padded_image, patch_size=patch_size)
-        resized_original_image = F.resize(image, size=size, interpolation=interpolation)
-
-        image_patches = [resized_original_image] + patches
-
-        return image_patches
-
-    def _pad_for_batching(
-        self,
-        pixel_values: List["torch.Tensor"],
-    ) -> List["torch.Tensor"]:
-        """
-        Pads images on the `num_of_patches` dimension with zeros to form a batch of same number of patches.
-
-        Args:
-            pixel_values (`List[torch.Tensor]`):
-                An array of pixel values of each images of shape (`batch_size`, `num_patches`, `image_in_3D`)
-
-        Returns:
-            List[`torch.Tensor`]: The padded images.
-        """
-        max_patch = max(len(x) for x in pixel_values)
-        pixel_values = [
-            torch.nn.functional.pad(image, pad=[0, 0, 0, 0, 0, 0, 0, max_patch - image.shape[0]])
-            for image in pixel_values
-        ]
-
-        return pixel_values
-
-    def preprocess(
-        self,
-        images: ImageInput,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
-        image_grid_pinpoints: List = None,
-        resample: Optional[Union["PILImageResampling", "F.InterpolationMode"]] = None,
-        do_center_crop: bool = None,
-        crop_size: int = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        do_pad: Optional[bool] = None,
-        do_convert_rgb: bool = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
-    ) -> BatchFeature:
-        """
-        Preprocess an image or batch of images.
-
-        Args:
-            images (`ImageInput`):
-                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
-                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-                Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
-                Describes the maximum input dimensions to the model.
-            resample (`PILImageResampling` or `InterpolationMode`, *optional*, defaults to self.resample):
-                Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`. Only
-                has an effect if `do_resize` is set to `True`.
-            do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
-                Whether to center crop the image.
-            crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
-                Size of the output image after applying `center_crop`.
-            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image.
-            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
-            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-                Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
-                Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
-                Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
-                `True`.
-            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
-                Whether to convert the image to RGB.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Default to `"pt"` for PyTorch tensors if unset.
-                Fast image processors only support PyTorch tensors.
-            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - Unset: Use the channel dimension format of the input image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-        """
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_extra_kwargs)
-
-        do_resize = do_resize if do_resize is not None else self.do_resize
-        size = size if size is not None else self.size
-        default_to_square = kwargs.pop(
-            "default_to_square", self.default_to_square if self.default_to_square is not None else True
-        )
-        size = get_size_dict(size=size, default_to_square=default_to_square) if size is not None else None
-        image_grid_pinpoints = image_grid_pinpoints if image_grid_pinpoints is not None else self.image_grid_pinpoints
-        resample = resample if resample is not None else self.resample
-        do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
-        crop_size = crop_size if crop_size is not None else self.crop_size
-        crop_size = get_size_dict(crop_size, param_name="crop_size") if crop_size is not None else None
-        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
-        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
-        image_mean = image_mean if image_mean is not None else self.image_mean
-        image_std = image_std if image_std is not None else self.image_std
-        do_pad = do_pad if do_pad is not None else self.do_pad
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
-        device = kwargs.pop("device", None)
-
-        images = self._prepare_input_images(
-            images=images,
-            do_convert_rgb=do_convert_rgb,
-            device=device,
-            input_data_format=input_data_format,
-        )
-
-        image_mean, image_std, size, crop_size, interpolation = self._prepare_process_arguments(
-            device=images[0].device,
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
-            do_center_crop=do_center_crop,
-            crop_size=crop_size,
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_convert_rgb=do_convert_rgb,
-            return_tensors=return_tensors,
-            data_format=data_format,
-            **kwargs,
-        )
-
-        processed_images = []
-        image_sizes = []
-        for image in images:
-            size_tuple = (
-                (size.height, size.width) if size.height and size.width else (size.shortest_edge, size.shortest_edge)
-            )
-            patch_size = (
-                crop_size.height
-                if crop_size is not None and crop_size.height
-                else size.height
-                if size.height
-                else size.shortest_edge
-            )
-            image_patches = self._get_image_patches(
-                image,
-                image_grid_pinpoints,
-                size=size_tuple,
-                patch_size=patch_size,
-                interpolation=interpolation,
-            )
-
-            # Group images by size for batched processing
-            processed_image_patches_grouped = {}
-            grouped_image_patches, grouped_image_patches_index = group_images_by_shape(image_patches)
-            for shape, image_patches in grouped_image_patches.items():
-                stacked_image_patches = torch.stack(image_patches, dim=0)
-                if do_resize:
-                    stacked_image_patches = self.resize(
-                        image=stacked_image_patches,
-                        size=size,
-                        interpolation=interpolation,
-                    )
-                if do_center_crop:
-                    stacked_image_patches = self.center_crop(stacked_image_patches, crop_size)
-                # Fused rescale and normalize
-                if do_rescale and do_normalize:
-                    stacked_image_patches = self.normalize(
-                        stacked_image_patches.to(dtype=torch.float32), image_mean, image_std
-                    )
-                elif do_rescale:
-                    stacked_image_patches = stacked_image_patches * rescale_factor
-                elif do_normalize:
-                    stacked_image_patches = self.normalize(stacked_image_patches, image_mean, image_std)
-                processed_image_patches_grouped[shape] = stacked_image_patches
-            processed_image_patches = reorder_images(processed_image_patches_grouped, grouped_image_patches_index)
-            processed_image_patches = (
-                torch.stack(processed_image_patches, dim=0) if return_tensors else processed_image_patches
-            )
-            processed_images.append(processed_image_patches)
-            image_sizes.append(get_image_size(image, input_data_format))
-
-        if do_pad:
-            processed_images = self._pad_for_batching(processed_images)
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
-        return BatchFeature(
-            data={"pixel_values": processed_images, "image_sizes": image_sizes}, tensor_type=return_tensors
-        )
 
 
 class SemanticSegmentationMixin:

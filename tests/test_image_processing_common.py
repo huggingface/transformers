@@ -179,7 +179,6 @@ class ImageProcessingTestMixin:
 
         encoding_slow = image_processor_slow(dummy_image, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
-
         self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1))
         self.assertLessEqual(
             torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 1e-3
@@ -563,7 +562,6 @@ class ImageProcessingTestMixin:
 
         image_processor = torch.compile(image_processor, mode="reduce-overhead")
         output_compiled = image_processor(input_image, device=torch_device, return_tensors="pt")
-
         self.assertTrue(torch.allclose(output_eager.pixel_values, output_compiled.pixel_values, atol=1e-4))
 
 
