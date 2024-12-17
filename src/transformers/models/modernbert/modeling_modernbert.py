@@ -1236,6 +1236,10 @@ class ModernBertModel(ModernBertPreTrainedModel):
 
         if repad:
             hidden_states = self._pad_outputs(hidden_states, indices, batch_size, seq_len)
+            if all_hidden_states is not None:
+                all_hidden_states = tuple(
+                    self._pad_outputs(hs, indices, batch_size, seq_len) for hs in all_hidden_states
+                )
 
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
