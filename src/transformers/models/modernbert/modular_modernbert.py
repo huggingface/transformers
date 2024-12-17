@@ -102,9 +102,6 @@ class ModernBertConfig(PretrainedConfig):
             Classification token id.
         sep_token_id (`int`, *optional*, defaults to 50282):
             Separation token id.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether the model's input and output word embeddings should be tied. Note that this is only relevant if the
-            model has a output word embedding layer.
         global_rope_theta (`float`, *optional*, defaults to 160000.0):
             The base period of the global RoPE embeddings.
         attention_bias (`bool`, *optional*, defaults to `False`):
@@ -186,7 +183,6 @@ class ModernBertConfig(PretrainedConfig):
         bos_token_id=50281,
         cls_token_id=50281,
         sep_token_id=50282,
-        tie_word_embeddings=True,
         global_rope_theta=160000.0,
         attention_bias=False,
         attention_dropout=0.0,
@@ -215,7 +211,6 @@ class ModernBertConfig(PretrainedConfig):
             eos_token_id=eos_token_id,
             cls_token_id=cls_token_id,
             sep_token_id=sep_token_id,
-            tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
         self.vocab_size = vocab_size

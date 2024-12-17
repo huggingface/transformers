@@ -495,6 +495,8 @@
       - local: model_doc/mobilebert
         title: MobileBERT
       - local: model_doc/mpnet
+        title: ModernBert
+      - local: model_doc/modernbert
         title: MPNet
       - local: model_doc/mpt
         title: MPT
