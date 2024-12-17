@@ -37,7 +37,7 @@ def sdpa_attention_forward(
     key = key.contiguous()
     value = value.contiguous()
 
-    is_causal = True if causal_mask is None and query.shape[1] > 1 else False
+    is_causal = causal_mask is None and query.shape[2] > 1
     attn_output = torch.nn.functional.scaled_dot_product_attention(
         query,
         key,
