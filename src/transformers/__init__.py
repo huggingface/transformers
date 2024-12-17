@@ -605,6 +605,7 @@ _import_structure = {
     "models.mobilenet_v2": ["MobileNetV2Config"],
     "models.mobilevit": ["MobileViTConfig"],
     "models.mobilevitv2": ["MobileViTV2Config"],
+    "models.moonshine": ["MoonshineConfig"],
     "models.moshi": [
         "MoshiConfig",
         "MoshiDepthConfig",
@@ -854,7 +855,6 @@ _import_structure = {
         "WhisperProcessor",
         "WhisperTokenizer",
     ],
-    "models.moonshine": ["MoonshineConfig"],
     "models.x_clip": [
         "XCLIPConfig",
         "XCLIPProcessor",
@@ -2408,13 +2408,6 @@ else:
             "GPTNeoXPreTrainedModel",
         ]
     )
-    _import_structure["models.moonshine"].extend(
-        [
-            "MoonshineForConditionalGeneration",
-            "MoonshineModel",
-            "MoonshinePreTrainedModel",
-        ]
-    )
     _import_structure["models.gpt_neox_japanese"].extend(
         [
             "GPTNeoXJapaneseForCausalLM",
@@ -2867,6 +2860,13 @@ else:
             "MobileViTV2ForSemanticSegmentation",
             "MobileViTV2Model",
             "MobileViTV2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.moonshine"].extend(
+        [
+            "MoonshineForConditionalGeneration",
+            "MoonshineModel",
+            "MoonshinePreTrainedModel",
         ]
     )
     _import_structure["models.moshi"].extend(
