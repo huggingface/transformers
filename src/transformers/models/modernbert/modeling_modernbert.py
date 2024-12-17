@@ -778,7 +778,7 @@ class ModernBertPreTrainedModel(PreTrainedModel):
         if self.config.compile is False:
             return
 
-        if hasattr(self, "hf_device_map"):
+        if hasattr(self, "hf_device_map") and len(self.hf_device_map) > 1:
             if self.config.compile:
                 logger.warning_once(
                     "If `accelerate` split the model across devices, `torch.compile` will not work. "
