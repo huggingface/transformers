@@ -14,7 +14,6 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
-from ...modeling_flash_attention_utils import _flash_attention_forward
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -88,8 +87,6 @@ class Olmo2RotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-# copied from transformers.models.llama.modeling_llama.LlamaLinearScalingRotaryEmbedding with Llama->Olmo2
-# TODO(joao): add me back asap :)
 class Olmo2LinearScalingRotaryEmbedding(Olmo2RotaryEmbedding):
     """Olmo2RotaryEmbedding extended with linear scaling. Credits to the Reddit user /u/kaiokendev"""
 
@@ -100,8 +97,6 @@ class Olmo2LinearScalingRotaryEmbedding(Olmo2RotaryEmbedding):
         return cos, sin
 
 
-# copied from transformers.models.llama.modeling_llama.LlamaDynamicNTKScalingRotaryEmbedding with Llama->Olmo2
-# TODO(joao): add me back asap :)
 class Olmo2DynamicNTKScalingRotaryEmbedding(Olmo2RotaryEmbedding):
     """Olmo2RotaryEmbedding extended with Dynamic NTK scaling. Credits to the Reddit users /u/bloc97 and /u/emozilla"""
 
