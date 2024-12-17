@@ -33,6 +33,7 @@ from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, MaskedLMOutput, SequenceClassifierOutput, TokenClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import is_flash_attn_2_available, is_torch_greater_or_equal, logging
+from ...utils.import_utils import is_triton_available
 from .configuration_modernbert import ModernBertConfig
 
 
@@ -773,6 +774,41 @@ class ModernBertPreTrainedModel(PreTrainedModel):
         elif isinstance(module, (ModernBertForSequenceClassification, ModernBertForTokenClassification)):
             init_weight(module.classifier, stds["final_out"])
 
+    def _maybe_set_compile(self):
+        if self.config.compile is False:
+            return
+
+        if hasattr(self, "hf_device_map"):
+            if self.config.compile:
+                logger.warning_once(
+                    "If `accelerate` split the model across devices, `torch.compile` will not work. "
+                    "Falling back to non-compiled mode."
+                )
+            self.config.compile = False
+
+        if self.device.type == "mps":
+            if self.config.compile:
+                logger.warning_once(
+                    "Compiling the model with `torch.compile` and using a `torch.mps` device is not supported. "
+                    "Falling back to non-compiled mode."
+                )
+            self.config.compile = False
+
+        if self.config.compile is None:
+            self.config.compile = is_triton_available()
+
+    def resize_token_embeddings(self, *args, **kwargs):
+        model_embeds = super().resize_token_embeddings(*args, **kwargs)
+
+        if self.config.compile in {True, None}:
+            if self.config.compile:
+                logger.warning_once(
+                    "Resizing token embeddings with `torch.compile` is not supported. Falling back to non-compiled mode."
+                )
+            self.config.compile = False
+
+        return model_embeds
+
     @torch.no_grad()
     def _unpad_inputs_no_grad(
         self,
@@ -896,6 +932,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
+        self._maybe_set_compile()
         self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
 
         if batch_size is None and seq_len is None:
@@ -1025,6 +1062,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         **kwargs,
     ) -> Union[Tuple[torch.Tensor], MaskedLMOutput]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        self._maybe_set_compile()
 
         if self.config.unpad_inputs:
             if indices is None and cu_seqlens is None and max_seqlen is None:
@@ -1126,6 +1164,7 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        self._maybe_set_compile()
 
         outputs = self.model(
             input_ids,
@@ -1212,6 +1251,7 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        self._maybe_set_compile()
 
         outputs = self.model(
             input_ids,

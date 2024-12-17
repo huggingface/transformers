@@ -23,7 +23,6 @@
 from typing import Literal
 
 from ...configuration_utils import PretrainedConfig
-from ...utils.import_utils import is_triton_available
 
 
 class ModernBertConfig(PretrainedConfig):
@@ -184,9 +183,6 @@ class ModernBertConfig(PretrainedConfig):
             raise ValueError(
                 f'Invalid value for `classifier_pooling`, should be either "cls" or "mean", but is {self.classifier_pooling}.'
             )
-
-        if self.compile is None:
-            self.compile = is_triton_available()
 
         if unpad_inputs is None:
             self.unpad_inputs = self._attn_implementation in {"flash_attention_2", "flex_attention"}

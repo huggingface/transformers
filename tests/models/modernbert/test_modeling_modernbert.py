@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import os
 import unittest
 
 from transformers import ModernBertConfig, is_torch_available
@@ -118,7 +119,7 @@ class ModernBertModelTester:
         """
         Returns a tiny configuration by default.
         """
-        return ModernBertConfig(
+        config = ModernBertConfig(
             vocab_size=self.vocab_size,
             pad_token_id=self.pad_token_id,
             hidden_size=self.hidden_size,
@@ -135,6 +136,15 @@ class ModernBertModelTester:
             is_decoder=False,
             initializer_range=self.initializer_range,
         )
+        if test := os.environ.get("PYTEST_CURRENT_TEST", False):
+            test_name = test.split(":")[-1].split(" ")[0]
+
+            # If we're testing `test_retain_grad_hidden_states_attentions`, we normally get an error
+            # that compilation doesn't work. Users can then set compile=False when loading the model,
+            # much like here. We're testing whether it works once they've done that.
+            if test_name == "test_retain_grad_hidden_states_attentions":
+                config.compile = False
+        return config
 
     def create_and_check_model(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
         model = ModernBertModel(config=config)
