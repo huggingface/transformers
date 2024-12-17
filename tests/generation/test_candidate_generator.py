@@ -79,7 +79,7 @@ class TestAssistantToTargetTranslator(unittest.TestCase):
     def test_get_suppress_input_ids(self):
         """Test the suppression of assistant input IDs not present in the target vocabulary."""
         expected_suppress_ids = [4]
-        actual_suppress_ids = self.translator.suppress_input_ids
+        actual_suppress_ids = self.translator._suppress_input_ids
         self.assertEqual(actual_suppress_ids, expected_suppress_ids)
 
     def test_get_target_ids(self):
