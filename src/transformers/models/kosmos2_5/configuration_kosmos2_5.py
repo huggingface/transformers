@@ -231,7 +231,6 @@ class Kosmos2_5Config(PretrainedConfig):
     """
 
     model_type = "kosmos-2.5"
-    is_composition = True
     sub_configs = {"text_config": Kosmos2_5TextConfig, "vision_config": Kosmos2_5VisionConfig}
 
     def __init__(
