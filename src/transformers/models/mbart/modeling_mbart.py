@@ -1359,20 +1359,21 @@ class MBartDecoder(MBartPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # retrieve input_ids and inputs_embeds
-        if input_ids is not None and inputs_embeds is not None:
+        if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time")
-        elif input_ids is not None:
-            input = input_ids
-            batch_size, seq_length = input.shape[:2]
-            input_ids = input_ids.view(-1, seq_length)
-        elif inputs_embeds is not None:
-            batch_size, seq_length = inputs_embeds.size()[:-1]
-            input = inputs_embeds[:, :, -1]
-        else:
-            raise ValueError("You have to specify either decoder_input_ids or decoder_inputs_embeds")
+
+        if input_ids is not None:
+            input_ids = input_ids.view(-1, input_ids.shape[-1])
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
+
+        if self.gradient_checkpointing and self.training:
+            if use_cache:
+                logger.warning_once(
+                    "`use_cache=True` is incompatible with gradient checkpointing`. Setting `use_cache=False`..."
+                )
+                use_cache = False
 
         # initialize past_key_values
         return_legacy_cache = False
@@ -1392,6 +1393,7 @@ class MBartDecoder(MBartPreTrainedModel):
             elif past_key_values is None:
                 past_key_values = EncoderDecoderCache(DynamicCache(), DynamicCache())
 
+        batch_size, seq_length = inputs_embeds.size()[:-1]
         past_key_values_length = past_key_values.get_seq_length() if past_key_values is not None else 0
         if cache_position is None:
             cache_position = torch.arange(
@@ -1439,13 +1441,6 @@ class MBartDecoder(MBartPreTrainedModel):
         hidden_states = self.layernorm_embedding(hidden_states)
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-
-        if self.gradient_checkpointing and self.training:
-            if use_cache:
-                logger.warning_once(
-                    "`use_cache=True` is incompatible with gradient checkpointing`. Setting `use_cache=False`..."
-                )
-                use_cache = False
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
