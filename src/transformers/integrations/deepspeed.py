@@ -496,11 +496,7 @@ def support_deepspeed_ulysses(module):
 
     def wrapped_forward(
         query_states: torch.Tensor,
-        key_states: torch.Tensor,
-        value_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        query_length: int,
-        is_causal: bool,
+        *args,
         **kwargs,
     ):
         # lazily set if sequence parallelism is enabled to ensure deepspeed is initialized first
@@ -509,11 +505,7 @@ def support_deepspeed_ulysses(module):
 
         return original_forward(
             query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            query_length,
-            is_causal,
+            *args,
             **kwargs,
         )
 
