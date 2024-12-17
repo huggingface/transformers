@@ -2025,8 +2025,9 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
 
             input_ids = input_ids[:, -cache_position.shape[0]:]
             # the image info. is already encoded into the past keys/values
-            image_embeds = None
-            image_embeds_position_mask = None
+            if past_key_values.get_seq_length() > 0:
+                image_embeds = None
+                image_embeds_position_mask = None
         elif image_embeds_position_mask is not None:
             # appending `False` to `image_embeds_position_mask` (because `input_ids` grows during generation)
             batch_size, seq_len = input_ids.size()
