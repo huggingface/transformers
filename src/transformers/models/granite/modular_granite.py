@@ -17,17 +17,17 @@ from typing import Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
-from torch import nn
 
 from ...cache_utils import Cache
 from ...utils import (
     logging,
 )
-from ..llama.modeling_llama import LlamaAttention, LlamaForCausalLM, LlamaDecoderLayer
+from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaForCausalLM
 from .configuration_granite import GraniteConfig
 
 
 logger = logging.get_logger(__name__)
+
 
 class GraniteAttention(LlamaAttention):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
