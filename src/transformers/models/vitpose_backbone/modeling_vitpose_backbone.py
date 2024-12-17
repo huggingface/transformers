@@ -89,16 +89,14 @@ class VitPoseBackboneEmbeddings(nn.Module):
 
         self.patch_embeddings = VitPoseBackbonePatchEmbeddings(config)
         num_patches = self.patch_embeddings.num_patches
-        position_embeddings = torch.zeros(1, num_patches + 1, config.hidden_size)
-        # Pre-compute the modified position embeddings
-        self.position_embeddings = nn.Parameter(position_embeddings[:, 1:] + position_embeddings[:, :1])
+        self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         embeddings = self.patch_embeddings(pixel_values)
 
         # add positional encoding to each token
-        embeddings = embeddings + self.position_embeddings
+        embeddings = embeddings + self.position_embeddings[:, 1:] + self.position_embeddings[:, :1]
 
         embeddings = self.dropout(embeddings)
 
