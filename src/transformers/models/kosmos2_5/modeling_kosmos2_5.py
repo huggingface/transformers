@@ -1848,7 +1848,7 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
         vision_model_output = None
         projection_attentions = None
         if image_embeds is None:
-            if flattened_patches is not None and past_key_values is None:
+            if flattened_patches is not None:
                 vision_model_output = self.vision_model(
                     flattened_patches=flattened_patches,
                     output_attentions=output_attentions,
@@ -2161,7 +2161,7 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
         projection_attentions = None
 
         if image_embeds is None:
-            if flattened_patches is not None and past_key_values is None:
+            if flattened_patches is not None:
                 vision_model_output = self.vision_model(
                     flattened_patches=flattened_patches,
                     output_attentions=output_attentions,
