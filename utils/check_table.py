@@ -157,6 +157,7 @@ MODEL_NAMES_WITH_SAME_CONFIG = {
     "LayoutXLM": "LayoutLMv2",
     "Llama2": "LLaMA",
     "Llama3": "LLaMA",
+    "Falcon3": "LLaMA",
     "MADLAD-400": "T5",
     "MatCha": "Pix2Struct",
     "mBART-50": "mBART",
