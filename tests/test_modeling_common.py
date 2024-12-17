@@ -43,7 +43,6 @@ from transformers import (
     logging,
     set_seed,
 )
-from transformers.cache_utils import DynamicCache
 from transformers.integrations import HfDeepSpeedConfig
 from transformers.integrations.deepspeed import (
     is_deepspeed_available,
@@ -122,6 +121,7 @@ if is_torch_available():
     from transformers import MODEL_MAPPING, AdaptiveEmbedding
     from transformers.modeling_utils import load_state_dict, no_init_weights
     from transformers.pytorch_utils import id_tensor_storage
+    from transformers.cache_utils import DynamicCache
 
 
 if is_tf_available():
@@ -3890,6 +3890,11 @@ class ModelTesterMixin:
                 model_eager = model_eager.eval().to(torch_device)
                 self.assertTrue(model_eager.config._attn_implementation == "eager")
 
+                for name, submodule in model_eager.named_modules():
+                    class_name = submodule.__class__.__name__
+                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                        raise ValueError("The eager model should not have SDPA attention layers")
+
     @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         """
@@ -3941,15 +3946,6 @@ class ModelTesterMixin:
                     class_name = submodule.__class__.__name__
                     if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
                         raise ValueError("The eager model should not have SDPA attention layers")
-
-                has_sdpa = False
-                for name, submodule in model_sdpa.named_modules():
-                    class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                        has_sdpa = True
-                        break
-                if not has_sdpa and any(module_attn == "sdpa" for module_attn in [text_attn, vision_attn]):
-                    raise ValueError("The SDPA model should have SDPA attention layers")
 
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa
