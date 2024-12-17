@@ -269,9 +269,7 @@ def _pad_modernbert_output(
     indices: torch.Tensor,
     batch: int,
     seqlen: int,
-    labels: Optional[torch.Tensor] = None,
-    ignore_index: int = -100,
-) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+) -> torch.Tensor:
     """
     Add padding to sequences.
 
@@ -280,12 +278,9 @@ def _pad_modernbert_output(
         indices: (total_nnz)
         batch: int, batch size
         seqlen: int, max sequence length
-        position_ids: (total_nnz) or None
-        labels: (total_nnz) or None
 
     Returns:
         padded_inputs: (batch, seqlen, ...) or (batch, seqlen)
-        padded_labels: (batch, seqlen) or None
     """
     if inputs.dim() == 1:
         output = torch.zeros(batch * seqlen, dtype=inputs.dtype, device=inputs.device)
@@ -297,20 +292,7 @@ def _pad_modernbert_output(
         output[indices] = inputs
         padded_inputs = output.view(batch, seqlen, *rest)
 
-    padded_labels = None
-    if labels is not None:
-        padded_labels = torch.full(
-            (batch * seqlen,), fill_value=ignore_index, dtype=labels.dtype, device=labels.device
-        )
-        padded_labels[indices] = labels
-        padded_labels = padded_labels.view(batch, seqlen)
-
-    return padded_inputs, padded_labels
-
-    # Copyright (c) 2023, Tri Dao.
-    # License: Apache-2.0
-
-    # if is_flash_attn_2_available():
+    return padded_inputs
 
 
 class ApplyRotaryEmbUnpad(torch.autograd.Function):
@@ -937,16 +919,12 @@ class ModernBertPreTrainedModel(PreTrainedModel):
         indices: torch.Tensor,
         batch_size: int,
         seqlen: int,
-        labels: Optional[torch.Tensor] = None,
-        ignore_index: int = -100,
     ):
         return self._pad_outputs(
             inputs=inputs,
             indices=indices,
             batch_size=batch_size,
             seqlen=seqlen,
-            labels=labels,
-            ignore_index=ignore_index,
         )
 
     def _pad_outputs(
@@ -955,12 +933,8 @@ class ModernBertPreTrainedModel(PreTrainedModel):
         indices: torch.Tensor,
         batch_size: int,
         seqlen: int,
-        labels: Optional[torch.Tensor] = None,
-        ignore_index: int = -100,
     ):
-        return _pad_modernbert_output(
-            inputs=inputs, indices=indices, batch=batch_size, seqlen=seqlen, labels=labels, ignore_index=ignore_index
-        )
+        return _pad_modernbert_output(inputs=inputs, indices=indices, batch=batch_size, seqlen=seqlen)
 
     @classmethod
     def offsets_to_sequence_ids_tensor(cls, offsets):
@@ -1113,7 +1087,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
         hidden_states = self.final_norm(hidden_states)
 
         if repad:
-            hidden_states, _ = self._pad_outputs(hidden_states, indices, batch_size, seq_len)
+            hidden_states = self._pad_outputs(hidden_states, indices, batch_size, seq_len)
 
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
@@ -1220,9 +1194,9 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
 
         if self.config.unpad_inputs:
             if self.config.unpad_no_grad:
-                logits, _ = self._pad_outputs_no_grad(logits, indices, batch_size, seq_len)
+                logits = self._pad_outputs_no_grad(logits, indices, batch_size, seq_len)
             else:
-                logits, _ = self._pad_outputs(logits, indices, batch_size, seq_len)
+                logits = self._pad_outputs(logits, indices, batch_size, seq_len)
         if not return_dict:
             output = (logits,)
             return ((loss,) + output) if loss is not None else output
