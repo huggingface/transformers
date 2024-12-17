@@ -15,8 +15,7 @@
 # limitations under the License.
 
 import math
-from enum import Enum
-from typing import Optional, Tuple, Union
+from typing import Literal, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
@@ -162,7 +161,7 @@ class ModernBertConfig(PretrainedConfig):
         unpad_no_grad=True,
         decoder_bias=True,
         classifier_dropout=0.0,
-        classifier_pooling="mean",
+        classifier_pooling: Literal["cls", "mean"] = "cls",
         classifier_bias=False,
         classifier_activation="gelu",
         deterministic_flash_attn=False,
@@ -212,21 +211,16 @@ class ModernBertConfig(PretrainedConfig):
         self.sparse_pred_ignore_index = sparse_pred_ignore_index
         self.compile = compile
 
+        if self.classifier_pooling not in ["cls", "mean"]:
+            raise ValueError(
+                f'Invalid value for `classifier_pooling`, should be either "cls" or "mean", but is {self.classifier_pooling}.'
+            )
+
         if self.compile is None:
             self.compile = is_triton_available()
 
         if unpad_inputs is None:
             self.unpad_inputs = self._attn_implementation in {"flash_attention_2", "flex_attention"}
-
-
-class ModernBertPoolingType(str, Enum):
-    cls = "cls"
-    mean = "mean"
-    max = "max"
-
-
-# Copyright 2023 OLMo Authors
-# License: Apache-2.0
 
 
 def _unpad_modernbert_input(
@@ -829,6 +823,20 @@ class ModernBertPredictionHead(nn.Module):
         return self.norm(self.act(self.dense(hidden_states)))
 
 
+def cls_pooling(hidden_states: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+    return hidden_states[:, 0]
+
+
+def mean_pooling(hidden_states: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+    return (hidden_states * attention_mask.unsqueeze(-1)).sum(dim=1) / attention_mask.sum(dim=1, keepdim=True)
+
+
+MODERNBERT_POOLING_FUNCTION = {
+    "cls": cls_pooling,
+    "mean": mean_pooling,
+}
+
+
 class ModernBertPoolingHead(nn.Module):
     def __init__(self, config: ModernBertConfig):
         super().__init__()
@@ -837,20 +845,15 @@ class ModernBertPoolingHead(nn.Module):
         self.act = ACT2FN[config.classifier_activation]
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
         self.drop = torch.nn.Dropout(config.classifier_dropout) if config.classifier_dropout > 0 else nn.Identity()
-        self.pooling_type = ModernBertPoolingType(config.classifier_pooling)
+        self.pooling = MODERNBERT_POOLING_FUNCTION[config.classifier_pooling]
 
-    def forward(self, hidden_states: torch.Tensor, pool: Optional[bool] = True) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, attention_mask: torch.Tensor, pool: Optional[bool] = True
+    ) -> torch.Tensor:
         if pool:
-            if self.pooling_type == ModernBertPoolingType.cls:
-                output = hidden_states[:, 0]
-            elif self.pooling_type == ModernBertPoolingType.mean:
-                output = hidden_states.mean(dim=1)
-            elif self.pooling_type == ModernBertPoolingType.max:
-                output = hidden_states.max(dim=1)[0]
-        else:
-            output = hidden_states
+            hidden_states = self.pooling(hidden_states, attention_mask)
 
-        return self.drop(self.norm(self.act(self.dense(output))))
+        return self.drop(self.norm(self.act(self.dense(hidden_states))))
 
 
 class ModernBertPreTrainedModel(PreTrainedModel):
@@ -1284,7 +1287,7 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
         )
         last_hidden_state = outputs[0]
 
-        pooled_output = self.head(last_hidden_state)
+        pooled_output = self.head(last_hidden_state, attention_mask)
         logits = self.classifier(pooled_output)
 
         loss = None

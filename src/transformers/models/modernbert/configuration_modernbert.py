@@ -20,6 +20,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import Literal
+
 from ...configuration_utils import PretrainedConfig
 from ...utils.import_utils import is_triton_available
 
@@ -128,7 +130,7 @@ class ModernBertConfig(PretrainedConfig):
         unpad_no_grad=True,
         decoder_bias=True,
         classifier_dropout=0.0,
-        classifier_pooling="mean",
+        classifier_pooling: Literal["cls", "mean"] = "cls",
         classifier_bias=False,
         classifier_activation="gelu",
         deterministic_flash_attn=False,
@@ -177,6 +179,11 @@ class ModernBertConfig(PretrainedConfig):
         self.sparse_prediction = sparse_prediction
         self.sparse_pred_ignore_index = sparse_pred_ignore_index
         self.compile = compile
+
+        if self.classifier_pooling not in ["cls", "mean"]:
+            raise ValueError(
+                f'Invalid value for `classifier_pooling`, should be either "cls" or "mean", but is {self.classifier_pooling}.'
+            )
 
         if self.compile is None:
             self.compile = is_triton_available()
