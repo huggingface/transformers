@@ -20,7 +20,7 @@ To create the package for pypi.
 1. Create the release branch named: v<RELEASE>-release, for example v4.19-release. For a patch release checkout the
    current release branch.
 
-   If releasing on a special branch, copy the updated README.md on the main branch for your the commit you will make
+   If releasing on a special branch, copy the updated README.md on the main branch for the commit you will make
    for the post-release and run `make fix-copies` on the main branch as well.
 
 2. Run `make pre-release` (or `make pre-patch` for a patch release) and commit these changes with the message:
@@ -179,8 +179,8 @@ _deps = [
     "tf2onnx",
     "timeout-decorator",
     "tiktoken",
-    "timm<=0.9.16",
-    "tokenizers>=0.20,<0.21",
+    "timm<=1.0.11",
+    "tokenizers>=0.21,<0.22",
     "torch",
     "torchaudio",
     "torchvision",
@@ -435,7 +435,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.47.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.48.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",
