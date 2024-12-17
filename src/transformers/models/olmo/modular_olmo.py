@@ -13,7 +13,7 @@ from ..llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaMLP,
-    LlamaRMSNorm,
+    LlamaModel,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -35,11 +35,6 @@ class OlmoLayerNorm(nn.Module):
         return F.layer_norm(hidden_states.to(dtype=torch.float32), self.normalized_shape, None, None, eps=1e-5).to(
             orig_dtype
         )
-
-
-class OlmoRMSNorm(LlamaRMSNorm):
-    pass
-
 
 class OlmoMLP(LlamaMLP):
     def __init__(self, config):
@@ -114,6 +109,12 @@ class OlmoDecoderLayer(LlamaDecoderLayer):
         super().__init__(config, layer_idx)
         self.input_layernorm = OlmoLayerNorm(config.hidden_size)
         self.post_attention_layernorm = OlmoLayerNorm(config.hidden_size)
+
+
+class OlmoModel(LlamaModel):
+    def __init__(self, config: OlmoConfig):
+        super().__init__(config)
+        self.norm = OlmoLayerNorm(config.hidden_size)
 
 
 class OlmoForCausalLM(LlamaForCausalLM):
