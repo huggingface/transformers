@@ -2113,8 +2113,8 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
     )
     def forward(
         self,
-        flattened_patches: Optional[torch.Tensor] = None,
         input_ids: Optional[torch.Tensor] = None,
+        flattened_patches: Optional[torch.Tensor] = None,
         image_embeds_position_mask: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
