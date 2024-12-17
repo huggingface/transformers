@@ -12,10 +12,10 @@ from ..llama.modeling_llama import (
     LlamaForCausalLM,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
-    LlamaMLP,
     apply_rotary_pos_emb,
     eager_attention_forward,  # copied from Llama
 )
+from ..clip.modeling_clip import CLIPMLP
 from .configuration_phi import PhiConfig
 
 
@@ -108,7 +108,7 @@ class PhiAttention(LlamaAttention):
         return attn_output, attn_weights
 
 
-class PhiMLP(LlamaMLP):
+class PhiMLP(CLIPMLP):
     pass
 
 
