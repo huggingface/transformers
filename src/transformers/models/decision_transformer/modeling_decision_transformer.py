@@ -282,12 +282,12 @@ class DecisionTransformerGPT2Attention(nn.Module):
         else:
             query_states, key_states, value_states = self.c_attn(hidden_states).split(self.split_size, dim=2)
 
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
+        shape_q = (*query_states.shape[:-1], -1, self.head_dim)
+        shape_kv = (*key_states.shape[:-1], -1, self.head_dim)
 
-        query_states = query_states.reshape(hidden_shape).transpose(1, 2)
-        key_states = key_states.reshape(hidden_shape).transpose(1, 2)
-        value_states = value_states.reshape(hidden_shape).transpose(1, 2)
+        query_states = query_states.reshape(shape_q).transpose(1, 2)
+        key_states = key_states.reshape(shape_kv).transpose(1, 2)
+        value_states = value_states.reshape(shape_kv).transpose(1, 2)
 
         if layer_past is not None:
             past_key, past_value = layer_past
@@ -327,7 +327,7 @@ class DecisionTransformerGPT2Attention(nn.Module):
                 **kwargs,
             )
 
-        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = attn_output.reshape(*attn_output.shape[:-2], -1).contiguous()
         attn_output = self.c_proj(attn_output)
         attn_output = self.resid_dropout(attn_output)
 
