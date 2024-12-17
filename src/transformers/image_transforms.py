@@ -976,7 +976,7 @@ class Resize(torch.nn.Module):
                     image_group, size=_get_size_tuple(image_group, self.size), interpolation=self.interpolation
                 )
             return {"grouped_images": resized_images, "grouped_images_index": grouped_images_index}
-        elif isinstance(images, "torch.Tensor"):
+        elif isinstance(images, torch.Tensor):
             return F.resize(images, size=_get_size_tuple(images, self.size), interpolation=self.interpolation)
 
         raise ValueError(
@@ -1000,7 +1000,7 @@ class Normalize(torch.nn.Module):
                 normalized_images[shape] = F.normalize(image_group, mean=self.mean, std=self.std)
 
             return {"grouped_images": normalized_images, "grouped_images_index": grouped_images_index}
-        elif isinstance(images, "torch.Tensor"):
+        elif isinstance(images, torch.Tensor):
             return F.normalize(_cast_tensor_to_float(images), mean=self.mean, std=self.std)
 
         raise ValueError(
@@ -1022,7 +1022,7 @@ class Rescale(torch.nn.Module):
                 image_group = torch.stack(image_group, dim=0)
                 rescaled_images[shape] = image_group * self.rescale_factor
             return {"grouped_images": rescaled_images, "grouped_images_index": grouped_images_index}
-        elif isinstance(images, "torch.Tensor"):
+        elif isinstance(images, torch.Tensor):
             return images * self.rescale_factor
 
         raise ValueError(
