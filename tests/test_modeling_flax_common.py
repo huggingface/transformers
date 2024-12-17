@@ -22,8 +22,8 @@ from typing import List, Tuple
 import numpy as np
 
 import transformers
-from transformers.cache_utils import DynamicCache
 from transformers import is_flax_available, is_torch_available
+from transformers.cache_utils import DynamicCache
 from transformers.models.auto import get_values
 from transformers.testing_utils import CaptureLogger, is_pt_flax_cross_test, require_flax, torch_device
 from transformers.utils import CONFIG_NAME, GENERATION_CONFIG_NAME, logging

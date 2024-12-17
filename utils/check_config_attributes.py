@@ -41,7 +41,6 @@ SPECIAL_CASES_TO_ALLOW = {
         "expert_layer_offset",
         "expert_layer_period",
     ],
-    "LlamaConfig": ["pretraining_tp"],
     "Qwen2Config": ["use_sliding_window"],
     "Qwen2MoeConfig": ["use_sliding_window"],
     "Qwen2VLConfig": ["use_sliding_window"],
@@ -311,6 +310,7 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
         # rope attributes may not appear directly in the modeling but are used
         "rope_theta",
         "partial_rotary_factor",
+        "pretraining_tp",
     ]
     attributes_used_in_generation = ["encoder_no_repeat_ngram_size"]
 

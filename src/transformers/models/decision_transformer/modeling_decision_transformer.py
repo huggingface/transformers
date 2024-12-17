@@ -138,6 +138,7 @@ def eager_attention_forward(module, query, key, value, attention_mask, head_mask
         attn_weights = attn_weights * head_mask
 
     attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2)
 
     return attn_output, attn_weights
 
@@ -252,6 +253,7 @@ class DecisionTransformerGPT2Attention(nn.Module):
             attn_weights = attn_weights * head_mask
 
         attn_output = torch.matmul(attn_weights, value)
+        attn_output = attn_output.transpose(1, 2)
 
         return attn_output, attn_weights
 
@@ -325,15 +327,12 @@ class DecisionTransformerGPT2Attention(nn.Module):
                 **kwargs,
             )
 
-        attn_output_reshaped = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.c_proj(attn_output_reshaped)
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.c_proj(attn_output)
         attn_output = self.resid_dropout(attn_output)
 
         outputs = (attn_output, present)
         if output_attentions:
-            # weird but needed to satisfy BC and tests (would normally be None)
-            if self.config._attn_implementation == "flash_attention_2":
-                attn_weights = attn_output_reshaped
             outputs += (attn_weights,)
 
         return outputs  # a, present, (attentions)
