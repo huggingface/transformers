@@ -18,67 +18,10 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-Falcon3 is a class of causal decoder-only models built by [TII](https://www.tii.ae/). The largest Falcon checkpoints
-have been trained on >=1T tokens of text, with a particular emphasis on the [RefinedWeb](https://arxiv.org/abs/2306.01116)
-corpus. They are made available under the Apache 2.0 license.
+Falcon3 represents a natural evolution from previous releases, emphasizing expanding the models' science, math, and code capabilities. This iteration includes five base models: Falcon3-1B-Base, Falcon3-3B-Base, Falcon3-Mamba-7B-Base, Falcon3-7B-Base, and Falcon3-10B-Base. In developing these models, we incorporated several key innovations aimed at improving the models' performances while reducing training costs:
 
-
-Falcon's architecture is modern and optimized for inference, with multi-query attention and support for efficient
-attention variants like `FlashAttention`. Both 'base' models trained only as causal language models as well as
-'instruct' models that have received further fine-tuning are available.
-
-
-Falcon models are (as of 2023) some of the largest and most powerful open-source language models,
-and consistently rank highly in the [OpenLLM leaderboard](https://huggingface.co/spaces/HuggingFaceH4/open_llm_leaderboard).
-
-## Converting custom checkpoints 
-
-<Tip>
-
-Falcon models were initially added to the Hugging Face Hub as custom code checkpoints. However, Falcon is now fully
-supported in the Transformers library. If you fine-tuned a model from a custom code checkpoint, we recommend converting
-your checkpoint to the new in-library format, as this should give significant improvements to stability and
-performance, especially for generation, as well as removing the need to use `trust_remote_code=True`!
-
-</Tip>
-
-You can convert custom code checkpoints to full Transformers checkpoints using the `convert_custom_code_checkpoint.py` 
-script located in the
-[Falcon model directory](https://github.com/huggingface/transformers/tree/main/src/transformers/models/falcon)
-of the Transformers library. To use this script, simply call it with 
-`python convert_custom_code_checkpoint.py --checkpoint_dir my_model`. This will convert your checkpoint in-place, and
-you can immediately load it from the directory afterwards with e.g. `from_pretrained()`. If your model hasn't been
-uploaded to the Hub, we recommend making a backup before attempting the conversion, just in case!
-
-
-## FalconConfig
-
-[[autodoc]] FalconConfig
-    - all
-
-## FalconModel
-
-[[autodoc]] FalconModel
-    - forward
-
-## FalconForCausalLM
-
-[[autodoc]] FalconForCausalLM
-    - forward
-
-## FalconForSequenceClassification
-
-[[autodoc]] FalconForSequenceClassification
-    - forward
-
-## FalconForTokenClassification
-
-[[autodoc]] FalconForTokenClassification
-    - forward
-
-## FalconForQuestionAnswering
-
-[[autodoc]] FalconForQuestionAnswering
-    - forward
+One pre-training: We conducted a single large-scale pretraining run on the 7B model, using 2048 H100 GPU chips, leveraging 14 trillion tokens featuring web, code, STEM, and curated high-quality and multilingual data.
+Depth up-scaling for improved reasoning: Building on recent studies on the effects of model depth, we upscaled the 7B model to a 10B parameters model by duplicating the redundant layers and continuing pre-training with 2TT of high-quality data. This yielded Falcon3-10B-Base which achieves state-of-the-art zero-shot and few-shot performance for models under 13B parameters.
+Knowledge distillation for better tiny models: To provide compact and efficient alternatives, we developed Falcon3-1B-Base and Falcon3-3B-Base by leveraging pruning and knowledge distillation techniques, using less than 100GT of curated high-quality data, thereby redefining pre-training efficiency.
 
 
