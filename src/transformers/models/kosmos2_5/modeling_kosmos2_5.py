@@ -2021,9 +2021,9 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
                 input_ids,
                 padding_idx=self.config.pad_token_id,
                 past_key_values_length=0,
-            )[:, -1:]
+            )[:, -cache_position.shape[0]:]
 
-            input_ids = input_ids[:, -1:]
+            input_ids = input_ids[:, -cache_position.shape[0]:]
             # the image info. is already encoded into the past keys/values
             image_embeds = None
             image_embeds_position_mask = None
