@@ -1784,7 +1784,6 @@ class Kosmos2_5TextModel(Kosmos2_5PreTrainedModel):
 )
 class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
     config_class = Kosmos2_5Config
-    # main_input_name = "flattened_patches"
 
     def __init__(self, config: Kosmos2_5Config):
         super().__init__(config)
@@ -2083,7 +2082,6 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
 )
 class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixin):
     config_class = Kosmos2_5Config
-    # main_input_name = "flattened_patches"
     _tied_weights_keys = ["text_model.lm_head.weight"]
 
     def __init__(self, config: Kosmos2_5Config):
@@ -2241,10 +2239,10 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
             **model_kwargs,
         )
 
-        # if cache_position[0] == 0:
+        if past_key_values is None:
             # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
             # Otherwise we need `flattened_patches` to be passed to model
-        model_inputs["flattened_patches"] = model_kwargs.get("flattened_patches", None)
+            model_inputs["flattened_patches"] = model_kwargs.get("flattened_patches", None)
 
         return model_inputs
 
@@ -2257,46 +2255,6 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
-
-    # @torch.no_grad()
-    # def generate(
-    #     self,
-    #     flattened_patches: Optional[torch.Tensor] = None,
-    #     image_embeds_position_mask: Optional[torch.Tensor] = None,
-    #     input_ids: Optional[torch.Tensor] = None,
-    #     attention_mask: Optional[torch.Tensor] = None,
-    #     image_attention_mask: Optional[torch.Tensor] = None,
-    #     image_embeds: Optional[torch.Tensor] = None,
-    #     **kwargs,
-    # ):
-    #     # in order to allow `inputs` argument (as in `GenerationMixin`)
-    #     inputs = kwargs.pop("inputs", None)
-    #     if flattened_patches is not None and inputs is not None:
-    #         raise ValueError(
-    #             f"`inputs`: {inputs} were passed alongside `flattened_patches` which is not allowed."
-    #             f"Make sure to either pass `inputs` or flattened_patches=..."
-    #         )
-    #     if flattened_patches is None and inputs is not None:
-    #         flattened_patches = inputs
-    #
-    #     if image_embeds is None:
-    #         vision_model_output = self.vision_model(
-    #             flattened_patches=flattened_patches,
-    #             attention_mask=image_attention_mask,
-    #             output_hidden_states=True,
-    #         )
-    #         image_embeds = nn.functional.normalize(vision_model_output[0], dim=-1)
-    #         image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
-    #
-    #     output = self.text_model.generate(
-    #         input_ids=input_ids,
-    #         attention_mask=attention_mask,
-    #         image_embeds=image_embeds,
-    #         image_embeds_position_mask=image_embeds_position_mask,
-    #         **kwargs,
-    #     )
-    #
-    #     return output
 
 
 __all__ = [
