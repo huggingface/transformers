@@ -2216,6 +2216,7 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
     def prepare_inputs_for_generation(
         self,
         input_ids,
+        flattened_patches=None,
         image_embeds=None,
         image_embeds_position_mask=None,
         past_key_values=None,
@@ -2242,7 +2243,7 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
         if past_key_values is None:
             # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
             # Otherwise we need `flattened_patches` to be passed to model
-            model_inputs["flattened_patches"] = model_kwargs.get("flattened_patches", None)
+            model_inputs["flattened_patches"] = flattened_patches
 
         return model_inputs
 
