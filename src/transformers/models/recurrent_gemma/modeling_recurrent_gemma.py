@@ -191,7 +191,7 @@ class RecurrentGemmaSdpaAttention(nn.Module):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        cos, sin = self.rotary_emb(value_states, position_ids, seq_len=None)
+        cos, sin = self.rotary_emb(value_states, position_ids)
 
         # Partial rotary embedding
         query_rot, query_pass = torch.chunk(query_states, int(1 / self.partial_rotary_factor), dim=-1)

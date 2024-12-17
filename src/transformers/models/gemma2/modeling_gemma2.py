@@ -180,7 +180,7 @@ class Gemma2Attention(nn.Module):
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = config.query_pre_attn_scalar**-0.5
-        self.attention_droupout = config.attention_dropout
+        self.attention_dropout = self.config.attention_dropout
         self.is_causal = True
 
         self.q_proj = nn.Linear(
@@ -196,7 +196,6 @@ class Gemma2Attention(nn.Module):
             config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
         )
         self.attn_logit_softcapping = self.config.attn_logit_softcapping
-        self.attention_dropout = self.config.attention_dropout
         self.sliding_window = config.sliding_window if not bool(layer_idx % 2) else None
 
     def forward(
