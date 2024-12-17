@@ -22,13 +22,7 @@ from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     SizeDict,
 )
-from ...image_transforms import (
-    GroupByShape,
-    Normalize,
-    ReorderImages,
-    Rescale,
-    Resize,
-)
+from ...image_transforms import GroupByShape, Normalize, ReorderImages, Rescale, Resize
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,

@@ -1004,7 +1004,7 @@ class Normalize(torch.nn.Module):
             return F.normalize(_cast_tensor_to_float(images), mean=self.mean, std=self.std)
 
         raise ValueError(
-            "Inputs to Normalize must be a list of torch.Tensor or a dictionary with 'grouped_images' and 'grouped_images_index' keys, got {images}."
+            f"Inputs to Normalize must be a list of torch.Tensor or a dictionary with 'grouped_images' and 'grouped_images_index' keys, got {images}."
         )
 
 
@@ -1026,7 +1026,7 @@ class Rescale(torch.nn.Module):
             return images * self.rescale_factor
 
         raise ValueError(
-            "Inputs to Rescale must be a list of torch.Tensor or a dictionary with 'grouped_images' and 'grouped_images_index' keys, got {images}."
+            f"Inputs to Rescale must be a list of torch.Tensor or a dictionary with 'grouped_images' and 'grouped_images_index' keys, got {images}."
         )
 
 
