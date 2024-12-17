@@ -66,10 +66,10 @@ class MetricsRecorder:
 
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 handler = logging.StreamHandler(sys.stdout)
-handler.setLevel(logging.DEBUG)
+handler.setLevel(logging.INFO)
 formatter = logging.Formatter("[%(levelname)s - %(asctime)s] %(message)s")
 handler.setFormatter(formatter)
 logger.addHandler(handler)
@@ -130,7 +130,7 @@ if __name__ == "__main__":
             module = import_from_path(entry.name.split(".")[0], entry.path)
             logger.info(f"runnning benchmarks in: {entry.name}")
             module.run_benchmark(logger, branch, commit_id, commit_msg)
-        except ImportModuleException:
-            logger.debug("failed to load python module")
+        except ImportModuleException as e:
+            logger.error(e)
         except Exception as e:
-            logger.debug(f"error running benchmarks for {entry.name}: {e}")
+            logger.error(f"error running benchmarks for {entry.name}: {e}")
