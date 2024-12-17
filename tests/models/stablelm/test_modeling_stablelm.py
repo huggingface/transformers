@@ -402,13 +402,9 @@ class StableLmModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         # The output should be different for long inputs
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
-
     # Copied from tests.models.gpt_neox.test_modeling_gpt_neox.GPTNeoXModelTest.test_model_rope_scaling with GPTNeoX->StableLm
     def test_model_rope_scaling(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        hidden_size = config.hidden_size
-        num_heads = config.num_attention_heads
-        head_dim = hidden_size // num_heads
         scaling_factor = 10
         short_input_length = 10
         long_input_length = int(config.max_position_embeddings * 1.5)

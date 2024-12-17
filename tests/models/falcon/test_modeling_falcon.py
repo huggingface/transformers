@@ -456,9 +456,6 @@ class FalconModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     # Copied from tests.models.gpt_neox.test_modeling_gpt_neox.GPTNeoXModelTest.test_model_rope_scaling with GPTNeoX->Falcon
     def test_model_rope_scaling(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        hidden_size = config.hidden_size
-        num_heads = config.num_attention_heads
-        head_dim = hidden_size // num_heads
         scaling_factor = 10
         short_input_length = 10
         long_input_length = int(config.max_position_embeddings * 1.5)
