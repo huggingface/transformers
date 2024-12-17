@@ -18,7 +18,7 @@ import inspect
 import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
-
+import time
 import numpy as np
 import torch
 import torch.distributed as dist
@@ -2234,7 +2234,7 @@ class GenerationMixin:
             )
 
             # 12. run sample (it degenerates to greedy search when `generation_config.do_sample=False`)
-            result = self._sample(
+            result, latency_list = self._sample(
                 input_ids,
                 logits_processor=prepared_logits_processor,
                 stopping_criteria=prepared_stopping_criteria,
@@ -2403,7 +2403,7 @@ class GenerationMixin:
                 should_convert_cache = True
             if should_convert_cache:
                 result.past_key_values = result.past_key_values.to_legacy_cache()
-        return result
+        return result, latency_list
 
     def _has_unfinished_sequences(
         self,
@@ -3184,6 +3184,7 @@ class GenerationMixin:
             `model.config.is_encoder_decoder=True`.
         """
         # init values
+        latency_list = []
         pad_token_id = generation_config._pad_token_tensor
         output_attentions = generation_config.output_attentions
         output_hidden_states = generation_config.output_hidden_states
@@ -3217,6 +3218,7 @@ class GenerationMixin:
         while self._has_unfinished_sequences(
             this_peer_finished, synced_gpus, device=input_ids.device, cur_len=cur_len, max_length=max_length
         ):
+            tic = time.time()
             # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
@@ -3226,8 +3228,23 @@ class GenerationMixin:
             # if self.config._attn_implementation == "paged_attention" and model_inputs["input_ids"].shape[1] == 1:
             #     self._set_paged_attention_mod(model_inputs['past_key_values'], model_inputs['input_ids'].shape[0], model_inputs['input_ids'].shape[1], input_ids.device)
             # forward pass to get next token
+            # if model_inputs['input_ids'].shape[1]>1:
+            #     outputs = self(**model_inputs, return_dict=True)
+            #     outputs = self(**model_inputs, return_dict=True)
+            # def trace_handler(prof):
+            #     print(prof.key_averages().table(
+            #         sort_by="self_cpu_time_total", row_limit=-1))
+            # with torch.profiler.profile(
+            #         activities=[
+            #             torch.profiler.ProfilerActivity.CPU],
+            #         schedule=torch.profiler.schedule(
+            #             wait=0,
+            #             warmup=0,
+            #             active=1),
+            #         on_trace_ready=trace_handler
+            #         ) as prof:
             outputs = self(**model_inputs, return_dict=True)
-
+            #   prof.step()
             # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs,
@@ -3289,6 +3306,7 @@ class GenerationMixin:
             # This is needed to properly delete outputs.logits which may be very large for first iteration
             # Otherwise a reference to outputs is kept which keeps the logits alive in the next iteration
             del outputs
+            latency_list.append(time.time() - tic)
 
         if streamer is not None:
             streamer.end()
@@ -3316,7 +3334,7 @@ class GenerationMixin:
                     past_key_values=model_kwargs.get("past_key_values"),
                 )
         else:
-            return input_ids
+            return input_ids, latency_list
 
     def _temporary_reorder_cache(self, past_key_values, beam_idx):
         """

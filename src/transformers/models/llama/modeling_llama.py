@@ -766,8 +766,7 @@ class LlamaPagedAttention(LlamaAttention):
             key_states = repeat_kv(key_states, self.num_key_value_groups)
             value_states = repeat_kv(value_states, self.num_key_value_groups)
             from torch.nn.attention.flex_attention import flex_attention
-            # attn_output = flex_attention(query_states, key_states, value_states, block_mask=past_key_value.block_mask, score_mod=past_key_value.score_mods[idx], return_lse=output_attentions)
-            attn_output = flex_attention(query_states, key_states, value_states, block_mask=past_key_value.block_mask,  return_lse=output_attentions)
+            attn_output = flex_attention(query_states, key_states, value_states, block_mask=past_key_value.block_mask,  return_lse=output_attentions, kernel_options={"SKIP_MASK_SCORE": True})
         attn_weights = None
         if output_attentions:
             attn_output = attn_output[0]

@@ -2146,13 +2146,24 @@ class PagedAttentionCache(Cache):
             self.key_cache.append(torch.zeros(1, KV_H, max_cached_seq_len, QK_D, device=device, dtype=dtype))
             self.value_cache.append(torch.zeros(1, KV_H, max_cached_seq_len, V_D, device=device, dtype=dtype))
             self.batch_reserve(self.paged_attentions[i], torch.tensor([max_cache_len for _ in range(batch_size)]))
-
+        self.batch_size = batch_size
+        self.max_cache_len = max_cache_len
         block_mask = create_block_mask(noop_mask, batch_size, 1, 1, max_cache_len, device=device, BLOCK_SIZE=page_size)
         self.block_mask = self.paged_attentions[0].convert_logical_block_mask(block_mask)
         self.score_mods = []
         self.score_mods.append(None)
         self.score_mods.append(None)
 
+    def reset(self) -> None:
+        """Resets the cache values while preserving the objects."""
+
+        self._seen_tokens = 0
+
+        # Zero out cache.
+        for layer_idx in range(len(self.key_cache)):
+            # In-place ops prevent breaking the static address.
+            self.key_cache[layer_idx].zero_()
+            self.value_cache[layer_idx].zero_()
 
     def batch_reserve(self, paged_attention, target_seq_len):
         (B,) = target_seq_len.shape
