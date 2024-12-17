@@ -43,6 +43,7 @@ if is_pytesseract_available():
 @require_sentencepiece
 @require_tokenizers
 class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    images_input_name = "image"
     tokenizer_class = LayoutXLMTokenizer
     rust_tokenizer_class = LayoutXLMTokenizerFast
     processor_class = LayoutXLMProcessor
@@ -61,6 +62,8 @@ class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # taken from `test_tokenization_layoutxlm.LayoutXLMTokenizationTest.test_save_pretrained`
         self.tokenizer_pretrained_name = "hf-internal-testing/tiny-random-layoutxlm"
+        tokenizer = LayoutXLMTokenizer.from_pretrained(self.tokenizer_pretrained_name)
+        tokenizer.save_pretrained(self.tmpdirname)
 
         tokenizer = self.get_tokenizer()
         image_processor = self.get_image_processor()
@@ -181,6 +184,155 @@ class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         train_data = preprocess_data(datasets["train"])
 
         self.assertEqual(len(train_data["image"]), len(train_data["input_ids"]))
+
+    def test_model_specific_kwargs(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        image_processor = self.get_component("image_processor", apply_ocr=True)
+        tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
+
+        processor = self.processor_class(tokenizer=tokenizer, image_processor=image_processor)
+
+        image_input = self.prepare_image_inputs()
+        with self.assertRaises(ValueError):
+            # LayoutXLM's processor expects `text` to be provided when `apply_ocr` is set to False
+            processor(
+                images=image_input,
+                return_tensors="pt",
+                apply_ocr=False,
+            )
+
+    def test_image_processor_defaults_preserved_by_image_kwargs(self):
+        """
+        We use do_rescale=True, rescale_factor=-1 to ensure that image_processor kwargs are preserved in the processor.
+        We then check that the mean of the pixel_values is less than or equal to 0 after processing.
+        Since the original pixel_values are in [0, 255], this is a good indicator that the rescale_factor is indeed applied.
+        """
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        processor_components = self.prepare_components()
+        processor_components["image_processor"] = self.get_component(
+            "image_processor", do_rescale=True, rescale_factor=-1
+        )
+        processor_components["tokenizer"] = self.get_component("tokenizer", max_length=117, padding="max_length")
+
+        processor = self.processor_class(**processor_components)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = "lower newer"
+        image_input = self.prepare_image_inputs()
+
+        inputs = processor(text=input_str, images=image_input, return_tensors="pt")
+        self.assertLessEqual(inputs[self.images_input_name].shape[-1], 224)
+
+    def test_kwargs_overrides_default_image_processor_kwargs(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        processor_components = self.prepare_components()
+        processor_components["image_processor"] = self.get_component(
+            "image_processor", do_rescale=True, rescale_factor=1
+        )
+        processor_components["tokenizer"] = self.get_component("tokenizer", max_length=117, padding="max_length")
+
+        processor = self.processor_class(**processor_components)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = "lower newer"
+        image_input = self.prepare_image_inputs()
+
+        inputs = processor(text=input_str, images=image_input, do_rescale=True, rescale_factor=-1, return_tensors="pt")
+        self.assertLessEqual(inputs[self.images_input_name].shape[-1], 224)
+
+    def test_unstructured_kwargs(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        processor_components = self.prepare_components()
+        processor = self.processor_class(**processor_components)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = "lower newer"
+        image_input = self.prepare_image_inputs()
+        max_length = 76
+        inputs = processor(
+            text=input_str,
+            images=image_input,
+            return_tensors="pt",
+            do_rescale=True,
+            rescale_factor=-1,
+            padding="max_length",
+            max_length=max_length,
+        )
+
+        self.assertLessEqual(inputs[self.images_input_name].shape[-1], 224)
+        self.assertEqual(inputs[self.text_input_name].shape[-1], 76)
+
+    def test_unstructured_kwargs_batched(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        processor_components = self.prepare_components()
+        processor = self.processor_class(**processor_components)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = ["lower newer", "upper older longer string"]
+        image_input = self.prepare_image_inputs() * 2
+        inputs = processor(
+            text=input_str,
+            images=image_input,
+            return_tensors="pt",
+            do_rescale=True,
+            rescale_factor=-1,
+            padding="longest",
+            max_length=76,
+        )
+
+        self.assertLessEqual(inputs[self.images_input_name].shape[-1], 224)
+        self.assertTrue(
+            len(inputs[self.text_input_name][0]) == len(inputs[self.text_input_name][1])
+            and len(inputs[self.text_input_name][1]) < 76
+        )
+
+    def test_structured_kwargs_nested(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        processor_components = self.prepare_components()
+        processor = self.processor_class(**processor_components)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = "lower newer"
+        image_input = self.prepare_image_inputs()
+
+        # Define the kwargs for each modality
+        all_kwargs = {
+            "common_kwargs": {"return_tensors": "pt"},
+            "images_kwargs": {"do_rescale": True, "rescale_factor": -1},
+            "text_kwargs": {"padding": "max_length", "max_length": 76},
+        }
+
+        inputs = processor(text=input_str, images=image_input, **all_kwargs)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        self.assertLessEqual(inputs[self.images_input_name].shape[-1], 224)
+        self.assertEqual(inputs[self.text_input_name].shape[-1], 76)
+
+    def test_structured_kwargs_nested_from_dict(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        processor_components = self.prepare_components()
+        processor = self.processor_class(**processor_components)
+        self.skip_processor_without_typed_kwargs(processor)
+        input_str = "lower newer"
+        image_input = self.prepare_image_inputs()
+
+        # Define the kwargs for each modality
+        all_kwargs = {
+            "common_kwargs": {"return_tensors": "pt"},
+            "images_kwargs": {"do_rescale": True, "rescale_factor": -1},
+            "text_kwargs": {"padding": "max_length", "max_length": 76},
+        }
+
+        inputs = processor(text=input_str, images=image_input, **all_kwargs)
+        self.assertLessEqual(inputs[self.images_input_name].shape[-1], 224)
+        self.assertEqual(inputs[self.text_input_name].shape[-1], 76)
 
 
 # different use cases tests

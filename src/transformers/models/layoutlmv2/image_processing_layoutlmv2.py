@@ -127,7 +127,7 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Dict[str, int] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         apply_ocr: bool = True,
         ocr_lang: Optional[str] = None,
@@ -198,10 +198,10 @@ class LayoutLMv2ImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
+        do_resize: Optional[bool] = None,
+        size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
-        apply_ocr: bool = None,
+        apply_ocr: Optional[bool] = None,
         ocr_lang: Optional[str] = None,
         tesseract_config: Optional[str] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
