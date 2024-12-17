@@ -333,7 +333,6 @@ class MistralDecoderLayer(nn.Module):
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
-
         if output_attentions:
             outputs += (self_attn_weights,)
 
