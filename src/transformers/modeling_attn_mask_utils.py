@@ -171,7 +171,7 @@ class AttentionMaskConverter:
             context_mask = torch.tril(torch.ones_like(mask, dtype=torch.bool), diagonal=diagonal)
             # Recent changes in PyTorch prevent mutations on tensors converted with aten::_to_copy
             # See https://github.com/pytorch/pytorch/issues/127571
-            if torch._dynamo.is_compiling():
+            if is_torchdynamo_compiling():
                 mask = mask.clone()
             mask.masked_fill_(context_mask, torch.finfo(dtype).min)
 
