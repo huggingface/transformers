@@ -300,9 +300,9 @@ class GPT2Attention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = query_states.view(hidden_shape).transpose(1, 2)
-        key_states = key_states.view(hidden_shape).transpose(1, 2)
-        value_states = value_states.view(hidden_shape).transpose(1, 2)
+        query_states = query_states.reshape(hidden_shape).transpose(1, 2)
+        key_states = key_states.reshape(hidden_shape).transpose(1, 2)
+        value_states = value_states.reshape(hidden_shape).transpose(1, 2)
 
         if layer_past is not None:
             past_key, past_value = layer_past

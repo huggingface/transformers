@@ -119,9 +119,9 @@ if is_torch_available():
     from torch import nn
 
     from transformers import MODEL_MAPPING, AdaptiveEmbedding
+    from transformers.cache_utils import DynamicCache
     from transformers.modeling_utils import load_state_dict, no_init_weights
     from transformers.pytorch_utils import id_tensor_storage
-    from transformers.cache_utils import DynamicCache
 
 
 if is_tf_available():
