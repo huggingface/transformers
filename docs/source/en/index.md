@@ -100,6 +100,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                    [CodeLlama](model_doc/code_llama)                     |       ✅        |         ❌         |      ✅      |
 |                        [Cohere](model_doc/cohere)                        |       ✅        |         ❌         |      ❌      |
 |                       [Cohere2](model_doc/cohere2)                       |       ✅        |         ❌         |      ❌      |
+|                       [ColPali](model_doc/colpali)                       |       ✅        |         ❌         |      ❌      |
 |              [Conditional DETR](model_doc/conditional_detr)              |       ✅        |         ❌         |      ❌      |
 |                      [ConvBERT](model_doc/convbert)                      |       ✅        |         ✅         |      ❌      |
 |                      [ConvNeXT](model_doc/convnext)                      |       ✅        |         ✅         |      ❌      |
