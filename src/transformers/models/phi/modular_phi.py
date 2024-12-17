@@ -25,8 +25,12 @@ logger = logging.get_logger(__name__)
 class PhiAttention(LlamaAttention):
     def __init__(self, config: PhiConfig, layer_idx: int):
         super().__init__(config, layer_idx)
+        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=True)
+        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
+        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=True)
+        self.dense = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=True)
+        del self.o_proj
         self.rotary_ndims = int(self.head_dim * config.partial_rotary_factor)
-        self.dense = self.o_proj
         self.qk_layernorm = config.qk_layernorm
         if self.qk_layernorm:
             self.q_layernorm = nn.LayerNorm(
@@ -100,7 +104,7 @@ class PhiAttention(LlamaAttention):
         )
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
+        attn_output = self.dense(attn_output)
         return attn_output, attn_weights
 
 

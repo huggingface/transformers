@@ -43,6 +43,7 @@ from transformers import (
     logging,
     set_seed,
 )
+from transformers.cache_utils import DynamicCache
 from transformers.integrations import HfDeepSpeedConfig
 from transformers.integrations.deepspeed import (
     is_deepspeed_available,
@@ -1285,6 +1286,11 @@ class ModelTesterMixin:
                             )
                             for i in range(model.config.num_hidden_layers)
                         )
+                        empty_pkv = (
+                            DynamicCache.from_legacy_cache(empty_pkv)
+                            if model_class._supports_cache_class
+                            else empty_pkv
+                        )
 
                         cache_length = 9
                         cache_shape = (batch_size, num_heads, cache_length, head_dim)
@@ -1294,6 +1300,11 @@ class ModelTesterMixin:
                                 torch.rand(cache_shape, dtype=torch.float, device=torch_device),
                             )
                             for i in range(model.config.num_hidden_layers)
+                        )
+                        non_empty_pkv = (
+                            DynamicCache.from_legacy_cache(empty_pkv)
+                            if model_class._supports_cache_class
+                            else non_empty_pkv
                         )
 
                         inps = copy.deepcopy(inputs_to_test[0])
