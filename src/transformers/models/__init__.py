@@ -52,6 +52,8 @@ from . import (
     code_llama,
     codegen,
     cohere,
+    cohere2,
+    colpali,
     conditional_detr,
     convbert,
     convnext,
