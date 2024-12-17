@@ -487,10 +487,10 @@ class SamHQVisionEncoder(nn.Module):
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
                     layer_module.__call__,
-                     hidden_states,
+                    hidden_states,
                 )
             else:
-                layer_outputs = layer_module(hidden_states, output_attentions=output_attentions)
+                layer_outputs = layer_module(hidden_states, output_attentions= output_attentions)
 
             hidden_states = layer_outputs[0]
 
@@ -557,7 +557,7 @@ class SamHQPromptEncoder(nn.Module):
         self.mask_embed = SamHQMaskEmbedding(config)
         self.no_mask_embed = nn.Embedding(1, config.hidden_size)
 
-        self.image_embedding_size = (config.image_embedding_size, config.image_embedding_size)
+        self.image_embedding_size = (config.image_embeddings_size, config.image_embeddings_size)
         self.input_image_size = config.image_size
 
         self.point_embed = nn.ModuleList(
@@ -1005,15 +1005,14 @@ class SamHQMaskDecoder(nn.Module):
         embed_encode = self.activation(self.encoder_norm(embed_encode))
         embed_encode = self.encoder_conv2(embed_encode)
 
-
         com_vit_feat = self.compress_vit_conv1(vit_features)
         com_vit_feat = self.activation(self.compress_vit_norm(com_vit_feat))
         com_vit_feat = self.compress_vit_conv2(com_vit_feat)
 
         hq_features = embed_encode + com_vit_feat
 
-        output_tokens = torch.cat([self.iou_token.weight, self.mask_tokens.weight,self.hq_token.weight], dim=0)
-        output_tokens = output_tokens.repeat(batch_size,point_batch_size,1,1)
+        output_tokens = torch.cat([self.iou_token.weight, self.mask_tokens.weight, self.hq_token.weight], dim=0)
+        output_tokens = output_tokens.repeat(batch_size, point_batch_size, 1,  1)
 
         if sparse_prompt_embeddings.sum().item() != 0:
             tokens = torch.cat([output_tokens, sparse_prompt_embeddings], dim=2)
@@ -1026,8 +1025,6 @@ class SamHQMaskDecoder(nn.Module):
         image_embeddings = image_embeddings.repeat_interleave(point_batch_size, 0)
         image_positional_embeddings = image_positional_embeddings.repeat_interleave(point_batch_size, 0)
 
-
-
         point_embedding, image_embeddings, attentions = self.transformer(
             point_embeddings=point_embeddings,
             image_embeddings=image_embeddings,
@@ -1039,11 +1036,9 @@ class SamHQMaskDecoder(nn.Module):
         iou_token_out = point_embedding[:, :, 0, :]
         mask_tokens_out = point_embedding[:, :, 1 : (1 + self.num_mask_tokens), :]
 
-
         image_embeddings = image_embeddings.transpose(2, 3).reshape(
             batch_size * point_batch_size, num_channels, height, width
         )
-
 
         upscaled_embedding = self.upscale_conv1(image_embeddings)
         upscaled_embedding = self.activation(self.upscale_layer_norm(upscaled_embedding))
@@ -1124,12 +1119,12 @@ class  SamHQPreTrainedModel(PreTrainedModel):
 
 
     def _init_weights(self, module):
-        std = self.config.initializer_range
+        std = self.config.intializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d,nn.ConvTranspose2d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
-        elif isinstance(module,nn.Embedding)
+        elif isinstance(module,nn.Embedding):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()

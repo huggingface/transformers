@@ -31,8 +31,8 @@ if is_torch_available():
     import torch
 
 class SamHQProcessor(ProcessorMixin):
-    attributes = [image_processor]
-    image_processor_class = "SamHQImageProcessor"
+    attributes = ["image_processor"]
+    image_processor_class = "SamImageProcessor"
 
     def __init__(self, image_processor):
         super().__init__(image_processor)
