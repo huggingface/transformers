@@ -258,6 +258,7 @@ class PhiDecoderLayer(nn.Module):
             use_cache=use_cache,
             cache_position=cache_position,
             position_embeddings=position_embeddings,
+            **kwargs,
         )
         attn_outputs = self.resid_dropout(attn_outputs)
 
