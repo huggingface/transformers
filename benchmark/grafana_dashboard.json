@@ -39,7 +39,7 @@
       "datasource": {
         "default": true,
         "type": "grafana-postgresql-datasource",
-        "uid": "de2jt7q9kgwe8b"
+        "uid": "be28nkzirtb0gd"
       },
       "fieldConfig": {
         "defaults": {
@@ -246,7 +246,7 @@
       "datasource": {
         "default": true,
         "type": "grafana-postgresql-datasource",
-        "uid": "de2jt7q9kgwe8b"
+        "uid": "be28nkzirtb0gd"
       },
       "fieldConfig": {
         "defaults": {
@@ -369,7 +369,7 @@
       "datasource": {
         "default": true,
         "type": "grafana-postgresql-datasource",
-        "uid": "de2jt7q9kgwe8b"
+        "uid": "be28nkzirtb0gd"
       },
       "fieldConfig": {
         "defaults": {
@@ -508,7 +508,7 @@
       "datasource": {
         "default": true,
         "type": "grafana-postgresql-datasource",
-        "uid": "de2jt7q9kgwe8b"
+        "uid": "be28nkzirtb0gd"
       },
       "fieldConfig": {
         "defaults": {
@@ -630,7 +630,7 @@
       "datasource": {
         "default": true,
         "type": "grafana-postgresql-datasource",
-        "uid": "de2jt7q9kgwe8b"
+        "uid": "be28nkzirtb0gd"
       },
       "fieldConfig": {
         "defaults": {
@@ -752,7 +752,7 @@
       "datasource": {
         "default": true,
         "type": "grafana-postgresql-datasource",
-        "uid": "de2jt7q9kgwe8b"
+        "uid": "be28nkzirtb0gd"
       },
       "fieldConfig": {
         "defaults": {
@@ -874,7 +874,7 @@
       "datasource": {
         "default": true,
         "type": "grafana-postgresql-datasource",
-        "uid": "de2jt7q9kgwe8b"
+        "uid": "be28nkzirtb0gd"
       },
       "fieldConfig": {
         "defaults": {
@@ -1009,7 +1009,7 @@
       "datasource": {
         "default": true,
         "type": "grafana-postgresql-datasource",
-        "uid": "de2jt7q9kgwe8b"
+        "uid": "be28nkzirtb0gd"
       },
       "fieldConfig": {
         "defaults": {
@@ -1131,7 +1131,7 @@
       "datasource": {
         "default": true,
         "type": "grafana-postgresql-datasource",
-        "uid": "de2jt7q9kgwe8b"
+        "uid": "be28nkzirtb0gd"
       },
       "fieldConfig": {
         "defaults": {
@@ -1253,7 +1253,7 @@
       "datasource": {
         "default": true,
         "type": "grafana-postgresql-datasource",
-        "uid": "de2jt7q9kgwe8b"
+        "uid": "be28nkzirtb0gd"
       },
       "fieldConfig": {
         "defaults": {
@@ -1375,7 +1375,7 @@
       "datasource": {
         "default": true,
         "type": "grafana-postgresql-datasource",
-        "uid": "de2jt7q9kgwe8b"
+        "uid": "be28nkzirtb0gd"
       },
       "fieldConfig": {
         "defaults": {
