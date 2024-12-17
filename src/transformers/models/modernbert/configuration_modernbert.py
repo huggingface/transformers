@@ -88,10 +88,6 @@ class ModernBertConfig(PretrainedConfig):
             Whether to use bias in the MLP layers.
         mlp_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the MLP layers.
-        unpad_inputs (`bool`, *optional*):
-            Whether to unpad the inputs in the forward pass. If set to `None`, then it will be set to `True` if the
-            attention implementation is `flash_attention_2` or `flex_attention`. Otherwise it will be set to `False`.
-            Unpadded inputs can be used to speed up the forward pass for `flash_attention_2` and `flex_attention`.
         unpad_no_grad (`bool`, *optional*, defaults to `True`):
             Whether to use `no_grad` when unpadding the inputs.
         decoder_bias (`bool`, *optional*, defaults to `True`):
@@ -160,7 +156,6 @@ class ModernBertConfig(PretrainedConfig):
         embedding_dropout=0.0,
         mlp_bias=False,
         mlp_dropout=0.0,
-        unpad_inputs=None,
         unpad_no_grad=True,
         decoder_bias=True,
         classifier_dropout=0.0,
@@ -201,7 +196,6 @@ class ModernBertConfig(PretrainedConfig):
         self.embedding_dropout = embedding_dropout
         self.mlp_bias = mlp_bias
         self.mlp_dropout = mlp_dropout
-        self.unpad_inputs = unpad_inputs
         self.unpad_no_grad = unpad_no_grad
         self.decoder_bias = decoder_bias
         self.classifier_dropout = classifier_dropout
@@ -217,6 +211,3 @@ class ModernBertConfig(PretrainedConfig):
             raise ValueError(
                 f'Invalid value for `classifier_pooling`, should be either "cls" or "mean", but is {self.classifier_pooling}.'
             )
-
-        if unpad_inputs is None:
-            self.unpad_inputs = self._attn_implementation in {"flash_attention_2", "flex_attention"}

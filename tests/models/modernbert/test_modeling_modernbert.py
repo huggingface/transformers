@@ -144,6 +144,14 @@ class ModernBertModelTester:
             # much like here. We're testing whether it works once they've done that.
             if test_name == "test_retain_grad_hidden_states_attentions":
                 config.compile = False
+            # Some tests require attentions to be outputted, in that case we'll set the attention implementation to eager
+            # as the others don't support outputted attentions
+            if test_name in (
+                "test_attention_outputs",
+                "test_hidden_states_output",
+                "test_retain_grad_hidden_states_attentions",
+            ):
+                config._attn_implementation = "eager"
         return config
 
     def create_and_check_model(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
