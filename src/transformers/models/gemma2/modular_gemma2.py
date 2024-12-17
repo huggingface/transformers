@@ -35,8 +35,8 @@ from ..gemma.modeling_gemma import (
     GemmaForCausalLM,
     GemmaForSequenceClassification,
     GemmaForTokenClassification,
+    GemmaMLP,
     GemmaModel,
-    GemmaPreTrainedModel,
     GemmaRMSNorm,
     apply_rotary_pos_emb,
     repeat_kv,
@@ -185,19 +185,10 @@ class Gemma2RMSNorm(GemmaRMSNorm):
     pass
 
 
-class Gemma2MLP(nn.Module):
+class Gemma2MLP(GemmaMLP):
     def __init__(self, config):
         super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
         self.act_fn = ACT2FN[config.hidden_activation]
-
-    def forward(self, x):
-        return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
 
 
 def eager_attention_forward(
@@ -369,10 +360,6 @@ class Gemma2DecoderLayer(nn.Module):
             outputs += (present_key_value,)
 
         return outputs
-
-
-class Gemma2PreTrainedModel(GemmaPreTrainedModel):
-    pass
 
 
 class Gemma2Model(GemmaModel):
@@ -712,7 +699,7 @@ __all__ = [
     "Gemma2Config",
     "Gemma2ForCausalLM",
     "Gemma2Model",
-    "Gemma2PreTrainedModel",
+    "Gemma2PreTrainedModel",  # noqa: F822
     "Gemma2ForSequenceClassification",
     "Gemma2ForTokenClassification",
 ]
