@@ -2175,7 +2175,7 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
 
         vision_model_output = None
         projection_attentions = None
-        if image_embeds is None:
+        if past_key_values is None and image_embeds is None:
             if flattened_patches is None:
                 raise ValueError("You have to specify either `flattened_patches` or `image_embeds`.")
 
@@ -2218,45 +2218,88 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
             vision_model_output=vision_model_output,
         )
 
-    @torch.no_grad()
-    def generate(
+    def prepare_inputs_for_generation(
         self,
-        flattened_patches: Optional[torch.Tensor] = None,
-        image_embeds_position_mask: Optional[torch.Tensor] = None,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        image_attention_mask: Optional[torch.Tensor] = None,
-        image_embeds: Optional[torch.Tensor] = None,
-        **kwargs,
+        input_ids,
+        image_embeds=None,
+        image_embeds_position_mask=None,
+        past_key_values=None,
+        attention_mask=None,
+        use_cache=None,
+        cache_position=None,
+        position_ids=None,
+        **model_kwargs,
     ):
-        # in order to allow `inputs` argument (as in `GenerationMixin`)
-        inputs = kwargs.pop("inputs", None)
-        if flattened_patches is not None and inputs is not None:
-            raise ValueError(
-                f"`inputs`: {inputs} were passed alongside `flattened_patches` which is not allowed."
-                f"Make sure to either pass `inputs` or flattened_patches=..."
-            )
-        if flattened_patches is None and inputs is not None:
-            flattened_patches = inputs
+        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
 
-        if image_embeds is None:
-            vision_model_output = self.vision_model(
-                flattened_patches=flattened_patches,
-                attention_mask=image_attention_mask,
-                output_hidden_states=True,
-            )
-            image_embeds = nn.functional.normalize(vision_model_output[0], dim=-1)
-            image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
-
-        output = self.text_model.generate(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
+        model_inputs = self.text_model.prepare_inputs_for_generation(
+            input_ids,
             image_embeds=image_embeds,
             image_embeds_position_mask=image_embeds_position_mask,
-            **kwargs,
+            past_key_values=past_key_values,
+            attention_mask=attention_mask,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            position_ids=position_ids,
+            **model_kwargs,
         )
 
-        return output
+        # if cache_position[0] == 0:
+            # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
+            # Otherwise we need `flattened_patches` to be passed to model
+        model_inputs["flattened_patches"] = model_kwargs["flattened_patches"]
+
+        return model_inputs
+
+    @staticmethod
+    # Copied from transformers.models.umt5.modeling_umt5.UMT5ForConditionalGeneration._reorder_cache
+    def _reorder_cache(past_key_values, beam_idx):
+        reordered_past = ()
+        for layer_past in past_key_values:
+            reordered_past += (
+                tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
+            )
+        return reordered_past
+
+    # @torch.no_grad()
+    # def generate(
+    #     self,
+    #     flattened_patches: Optional[torch.Tensor] = None,
+    #     image_embeds_position_mask: Optional[torch.Tensor] = None,
+    #     input_ids: Optional[torch.Tensor] = None,
+    #     attention_mask: Optional[torch.Tensor] = None,
+    #     image_attention_mask: Optional[torch.Tensor] = None,
+    #     image_embeds: Optional[torch.Tensor] = None,
+    #     **kwargs,
+    # ):
+    #     # in order to allow `inputs` argument (as in `GenerationMixin`)
+    #     inputs = kwargs.pop("inputs", None)
+    #     if flattened_patches is not None and inputs is not None:
+    #         raise ValueError(
+    #             f"`inputs`: {inputs} were passed alongside `flattened_patches` which is not allowed."
+    #             f"Make sure to either pass `inputs` or flattened_patches=..."
+    #         )
+    #     if flattened_patches is None and inputs is not None:
+    #         flattened_patches = inputs
+    #
+    #     if image_embeds is None:
+    #         vision_model_output = self.vision_model(
+    #             flattened_patches=flattened_patches,
+    #             attention_mask=image_attention_mask,
+    #             output_hidden_states=True,
+    #         )
+    #         image_embeds = nn.functional.normalize(vision_model_output[0], dim=-1)
+    #         image_embeds, projection_attentions = self.image_to_text_projection(image_embeds)
+    #
+    #     output = self.text_model.generate(
+    #         input_ids=input_ids,
+    #         attention_mask=attention_mask,
+    #         image_embeds=image_embeds,
+    #         image_embeds_position_mask=image_embeds_position_mask,
+    #         **kwargs,
+    #     )
+    #
+    #     return output
 
 
 __all__ = [
