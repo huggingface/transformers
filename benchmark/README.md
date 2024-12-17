@@ -7,7 +7,7 @@ You will need to define a python function named `run_benchmark` in your python f
 The expected function signature is the following:
 
 ```py
-def run_benchmark(logger: Logger, metrics_recorder: MetricsRecorder, num_tokens_to_generate=100):
+def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, num_tokens_to_generate=100):
 ```
 
 ## Writing metrics to the database
@@ -17,7 +17,10 @@ def run_benchmark(logger: Logger, metrics_recorder: MetricsRecorder, num_tokens_
 cf [`llama.py`](./llama.py) to see an example of this in practice.
 
 ```py
-def run_benchmark(logger: Logger, metrics_recorder: MetricsRecorder, num_tokens_to_generate=100):
+import psycopg2
+
+def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, num_tokens_to_generate=100):
+  metrics_recorder = MetricsRecorder(psycopg2.connect("dbname=metrics"), branch, commit_id, commit_msg)
   benchmark_id = metrics_recorder.initialise_benchmark({"gpu_name": gpu_name, "model_id": model_id})
     # To collect device measurements
     metrics_recorder.collect_device_measurements(

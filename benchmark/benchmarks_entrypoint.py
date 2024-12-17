@@ -120,7 +120,6 @@ if __name__ == "__main__":
 
     branch, commit_id, commit_msg = parse_arguments()
 
-    metrics_recorder = MetricsRecorder(psycopg2.connect("dbname=metrics"), branch, commit_id, commit_msg)
     for entry in os.scandir(benchmarks_folder_path):
         try:
             if not entry.name.endswith(".py"):
