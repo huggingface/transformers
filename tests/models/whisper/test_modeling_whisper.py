@@ -35,7 +35,6 @@ from transformers.testing_utils import (
     is_pt_flax_cross_test,
     require_flash_attn,
     require_non_xpu,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,

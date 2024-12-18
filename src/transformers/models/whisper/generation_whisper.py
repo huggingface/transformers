@@ -149,19 +149,17 @@ def _pad_to_max_length(
         raise ValueError("`cut_off_length` must be specified when `padding='max_length'`")
 
     if force_unique_generate_call:
-        sequences = torch.stack(
-            [
-                segments[0]["result"]
-                if isinstance(segments[0]["result"], torch.Tensor)
-                else segments[0]["result"]["sequences"]
-                for segments in current_segments
-            ],
-            dim=0,
-        )
+        sequences_list = []
+        timestamps_list = []
+        for segments in current_segments:
+            result = segments[0]["result"]
+            sequences_list.append(result if isinstance(result, torch.Tensor) else result["sequences"])
+            if return_token_timestamps:
+                timestamps_list.append(result["token_timestamps"])
+
+        sequences = torch.stack(sequences_list, dim=0)
         if return_token_timestamps:
-            token_timestamps = torch.stack(
-                [segments[0]["result"]["token_timestamps"] for segments in current_segments], dim=0
-            )
+            token_timestamps = torch.stack(timestamps_list, dim=0)
             return sequences, token_timestamps
         return sequences
 
