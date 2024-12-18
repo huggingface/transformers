@@ -310,6 +310,10 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
         "backbone_config",
         "use_timm_backbone",
         "backbone_kwargs",
+        # rope attributes may not appear directly in the modeling but are used
+        "rope_theta",
+        "partial_rotary_factor",
+        "pretraining_tp",
     ]
     attributes_used_in_generation = ["encoder_no_repeat_ngram_size"]
 
