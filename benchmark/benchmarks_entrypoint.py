@@ -20,6 +20,7 @@ class ImportModuleException(Exception):
 class MetricsRecorder:
     def __init__(self, connection, logger: logging.Logger, branch: str, commit_id: str, commit_msg: str):
         self.conn = connection
+        self.conn.autocommit = True
         self.logger = logger
         self.branch = branch
         self.commit_id = commit_id
@@ -73,10 +74,10 @@ class MetricsRecorder:
 
 
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
+logger.setLevel(logging.INFO)
 
 handler = logging.StreamHandler(sys.stdout)
-handler.setLevel(logging.DEBUG)
+handler.setLevel(logging.INFO)
 formatter = logging.Formatter("[%(levelname)s - %(asctime)s] %(message)s")
 handler.setFormatter(formatter)
 logger.addHandler(handler)
