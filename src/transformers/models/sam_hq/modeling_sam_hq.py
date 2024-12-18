@@ -24,6 +24,8 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "SamHQConfig"
 _CHECKPOINT_FOR_DOC = "Uminosachi/sam-hq"
 
+
+@dataclass
 class SamHQVisionEncoderOutput(ModelOutput):
     """
     Base class for SAM-HQ vision model's outputs.
@@ -1150,7 +1152,7 @@ class SamHQModel(SamHQPreTrainedModel):
         return self.vision_encoder.get_input_embeddings()
     
     def get_image_wide_positional_embeddings(self):
-        size = self.config.prompt_encoder_config.image_embedding_size
+        size = self.config.prompt_encoder_config.image_embeddings_size
         target_device = self.shared_image_embedding.positional_embedding.device
         target_dtype = self.shared_image_embedding.positional_embedding.dtype
         grid = torch.ones((size, size), device=target_device, dtype=target_dtype)
