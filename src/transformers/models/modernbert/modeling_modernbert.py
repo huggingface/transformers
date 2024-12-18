@@ -668,7 +668,7 @@ class ModernBertPreTrainedModel(PreTrainedModel):
                     check_device_map=check_device_map,
                 )
             except (ValueError, ImportError):
-                pass
+                config._attn_implementation_internal = None
         return super()._autoset_attn_implementation(
             config,
             use_flash_attention_2=use_flash_attention_2,
