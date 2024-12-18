@@ -20,7 +20,6 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_modernbert import *
     from .modeling_modernbert import *
-    from .processing_modernbert import *
 else:
     import sys
 
