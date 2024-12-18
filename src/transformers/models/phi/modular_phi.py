@@ -168,6 +168,9 @@ class PhiDecoderLayer(nn.Module):
 class PhiModel(LlamaModel):
     def __init__(self, config: PhiConfig):
         super().__init__(config)
+        self.layers = nn.ModuleList(
+            [PhiDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
         self.embed_dropout = nn.Dropout(config.embd_pdrop)
         self.final_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         del self.norm

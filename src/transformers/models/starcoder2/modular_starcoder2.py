@@ -137,6 +137,8 @@ class Starcoder2Attention(MistralAttention):
 class Starcoder2DecoderLayer(MistralDecoderLayer):
     def __init__(self, config: Starcoder2Config, layer_idx: int):
         super().__init__(self)
+        self.self_attn = Starcoder2Attention(config=config, layer_idx=layer_idx)
+        self.mlp = Starcoder2MLP(config)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
 
@@ -147,8 +149,11 @@ STARCODER2_INPUTS_DOCSTRING = None  # will be automatically redefined
 class Starcoder2Model(MistralModel):
     def __init__(self, config: Starcoder2Config):
         super().__init__(config)
-        self.embedding_dropout = config.embedding_dropout
+        self.layers = nn.ModuleList(
+            [Starcoder2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.norm_epsilon)
+        self.embedding_dropout = config.embedding_dropout
 
     @add_start_docstrings_to_model_forward(STARCODER2_INPUTS_DOCSTRING)
     def forward(

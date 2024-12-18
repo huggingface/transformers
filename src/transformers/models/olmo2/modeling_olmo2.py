@@ -226,7 +226,6 @@ class Olmo2DecoderLayer(nn.Module):
     def __init__(self, config: Olmo2Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-
         self.self_attn = Olmo2Attention(config=config, layer_idx=layer_idx)
 
         self.mlp = Olmo2MLP(config)

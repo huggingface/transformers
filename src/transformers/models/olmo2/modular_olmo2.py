@@ -1,6 +1,7 @@
 from typing import Callable, Optional, Tuple
 
 import torch
+from torch import nn
 
 from ...cache_utils import Cache
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -227,6 +228,7 @@ class Olmo2DecoderLayer(OlmoDecoderLayer):
         super().__init__(config, layer_idx=layer_idx)
         self.post_attention_layernorm = Olmo2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_feedforward_layernorm = Olmo2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.self_attn = Olmo2Attention(config=config, layer_idx=layer_idx)
         del self.input_layernorm
 
     def forward(
@@ -277,6 +279,9 @@ class Olmo2Model(OlmoModel):
     def __init__(self, config: Olmo2Config):
         super().__init__(config)
         self.norm = Olmo2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.layers = nn.ModuleList(
+            [Olmo2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
 
 
 # The heads now only need to redefine the model inside to the correct `RobertaModel`

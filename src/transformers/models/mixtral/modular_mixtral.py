@@ -314,6 +314,12 @@ class MixtralDecoderLayer(nn.Module):
 
 
 class MixtralModel(MistralModel):
+    def __init__(self, config: MixtralConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [MixtralDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -441,6 +447,7 @@ class MixtralForCausalLM(MistralForCausalLM):
 
     def __init__(self, config):
         super().__init__(config)
+        self.model = MixtralModel(config)
         self.router_aux_loss_coef = config.router_aux_loss_coef
         self.num_experts = config.num_local_experts
         self.num_experts_per_tok = config.num_experts_per_tok
