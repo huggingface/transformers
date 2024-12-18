@@ -1016,6 +1016,10 @@ MODERNBERT_INPUTS_DOCSTRING = r"""
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
+        local_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding or far-away tokens. In ModernBert, only every few layers
+            perform global attention, while the rest perform local attention. This mask is used to avoid attending to
+            far-away tokens in the local attention layers.
         position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.n_positions - 1]`.
