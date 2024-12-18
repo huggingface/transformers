@@ -1199,9 +1199,9 @@ class BambaDecoderLayer(nn.Module):
                 cache_position=cache_position,
                 attention_mask=attention_mask,
             )
-            self_attn_weights, cache_output = None, past_key_value
+            self_attn_weights = None
         elif self.layer_type == "attention":
-            hidden_states, self_attn_weights, cache_output = self.self_attn(
+            hidden_states, self_attn_weights = self.self_attn(
                 hidden_states=hidden_states,
                 attention_mask=attention_mask,
                 position_ids=position_ids,
@@ -1210,6 +1210,7 @@ class BambaDecoderLayer(nn.Module):
                 use_cache=use_cache,
                 cache_position=cache_position,
                 position_embeddings=position_embeddings,
+                **kwargs,
             )
 
         # residual connection after attention
@@ -1225,9 +1226,6 @@ class BambaDecoderLayer(nn.Module):
 
         if output_attentions:
             outputs += (self_attn_weights,)
-
-        if use_cache:
-            outputs += (cache_output,)
 
         return outputs
 
