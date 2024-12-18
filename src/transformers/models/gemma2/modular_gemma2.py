@@ -360,6 +360,12 @@ class Gemma2DecoderLayer(nn.Module):
 
 
 class Gemma2Model(GemmaModel):
+    def __init__(self, config: Gemma2Config):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [Gemma2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+
     def forward(
         self,
         input_ids: torch.LongTensor = None,

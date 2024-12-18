@@ -13,6 +13,7 @@ from ...processing_utils import Unpack
 from ...utils import logging
 from ..llama.modeling_llama import (
     LlamaAttention,
+    LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
@@ -97,7 +98,20 @@ class MistralAttention(LlamaAttention):
         return attn_output, attn_weights
 
 
+class MistralDecoderLayer(LlamaDecoderLayer):
+    def __init__(self, config: MistralConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+        self.self_attn = MistralAttention(config=config, layer_idx=layer_idx)
+        self.mlp = MistralMLP(config)
+
+
 class MistralModel(LlamaModel):
+    def __init__(self, config: MistralConfig):
+        super().__init__(config)
+        self.layers = nn.ModuleList(
+            [MistralDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+
     def _update_causal_mask(
         self,
         attention_mask: torch.Tensor,

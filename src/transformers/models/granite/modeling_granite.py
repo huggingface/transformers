@@ -235,7 +235,6 @@ class GraniteDecoderLayer(nn.Module):
     def __init__(self, config: GraniteConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-
         self.self_attn = GraniteAttention(config=config, layer_idx=layer_idx)
 
         self.mlp = GraniteMLP(config)

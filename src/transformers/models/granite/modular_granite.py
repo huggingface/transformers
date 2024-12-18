@@ -17,6 +17,7 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
+from torch import nn
 
 from ...cache_utils import Cache, DynamicCache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -34,14 +35,15 @@ class GraniteAttention(LlamaAttention):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config: GraniteConfig, layer_idx: Optional[int] = None):
-        super().__init__()
+        super().__init__(config, layer_idx)
         self.scaling = config.attention_multiplier
 
 
 class GraniteDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: GraniteConfig, layer_idx: int):
-        super().__init__()
+        super().__init__(config, layer_idx)
         self.residual_multiplier = config.residual_multiplier
+        self.self_attn = GraniteAttention(config=config, layer_idx=layer_idx)
 
     def forward(
         self,
@@ -113,6 +115,9 @@ class GraniteModel(LlamaModel):
     def __init__(self, config: GraniteConfig):
         super().__init__(config)
         self.embedding_multiplier = config.embedding_multiplier
+        self.layers = nn.ModuleList(
+            [GraniteDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
 
     def forward(
         self,
