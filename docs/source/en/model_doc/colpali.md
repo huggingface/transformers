@@ -74,8 +74,8 @@ batch_queries = processor(text=queries).to(model.device)
 
 # Forward pass
 with torch.no_grad():
-    image_embeddings = model(**batch_images)
-    query_embeddings = model(**batch_queries)
+    image_embeddings = model(**batch_images).embeddings
+    query_embeddings = model(**batch_queries).embeddings
 
 # Score the queries against the images
 scores = processor.score_retrieval(query_embeddings, image_embeddings)
