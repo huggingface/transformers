@@ -15,11 +15,15 @@
 import os
 import unittest
 
+import pytest
+
 from transformers import ModernBertConfig, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
     CaptureLogger,
+    require_flash_attn,
     require_torch,
+    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -208,6 +212,8 @@ class ModernBertModelTester:
 
 @require_torch
 class ModernBertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    test_torchscript = False
+
     all_model_classes = (
         (
             ModernBertModel,
@@ -338,6 +344,20 @@ class ModernBertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         model_name = "google-bert/bert-base-uncased"
         model = ModernBertModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
+
+    @require_flash_attn
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_inference_equivalence_right_padding(self):
+        self.skipTest(reason="ModernBert flash attention does not support right padding")
+
+    @require_flash_attn
+    @require_torch_gpu
+    @pytest.mark.flash_attn_test
+    @slow
+    def test_flash_attn_2_conversion(self):
+        self.skipTest(reason="ModernBert doesn't use the ModernBertFlashAttention2 class method.")
 
 
 @require_torch
