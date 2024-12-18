@@ -27,10 +27,11 @@ from torch import nn
 
 import transformers.models.jamba.modeling_jamba as modeling_jamba
 from transformers.activations import ACT2FN
+from transformers.models.jamba.modeling_jamba import JambaAttentionDecoderLayer
 from transformers.models.llama.modeling_llama import (
     LlamaAttention,
-    LlamaDecoderLayer,
     LlamaFlashAttention2,
+    LlamaForCausalLM,
     LlamaMLP,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
@@ -44,7 +45,6 @@ from transformers.models.mamba2.modeling_mamba2 import (
     segment_sum,
 )
 
-from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
 )
@@ -145,10 +145,11 @@ class BambaRotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
-# Adapted from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
-# - handles the case if the rotary embedding is smaller than head_dim
+# Adapted from transformers.models.glm.modular_glm.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
+
+    Removes the interleaving of cos and sin from GLM
 
     Args:
         q (`torch.Tensor`): The query tensor.
@@ -170,19 +171,18 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
 
-    m, n = cos.shape[-1], q.shape[-1]
-    assert m <= n
+    # Keep half or full tensor for later concatenation
+    rotary_dim = cos.shape[-1]
+    q_rot, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
+    k_rot, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
 
-    # - follow https://github.com/Dao-AILab/flash-attention/blob/main/flash_attn/layers/rotary.py
-    # to allow for the case where the rotary dim is smaller than the head dim
-    q_sub = q[..., :m]
-    k_sub = k[..., :m]
+    # Apply rotary embeddings on the first half or full tensor
+    q_embed = (q_rot * cos) + (rotate_half(q_rot) * sin)
+    k_embed = (k_rot * cos) + (rotate_half(k_rot) * sin)
 
-    q_embed = (q_sub * cos) + (rotate_half(q_sub) * sin)
-    k_embed = (k_sub * cos) + (rotate_half(k_sub) * sin)
-
-    q_embed = torch.cat([q_embed, q[..., m:]], dim=-1)
-    k_embed = torch.cat([k_embed, k[..., m:]], dim=-1)
+    # Concatenate back to full shape
+    q_embed = torch.cat([q_embed, q_pass], dim=-1)
+    k_embed = torch.cat([k_embed, k_pass], dim=-1)
     return q_embed, k_embed
 
 
@@ -251,6 +251,12 @@ class BambaMixer(nn.Module):
     A, D are input independent (see Mamba paper [1] Section 3.5.2 "Interpretation of A" for why A isn't selective)
     ∆, B, C are input-dependent (this is a key difference between Mamba and the linear time invariant S4,
     and is why Mamba is called **selective** state spaces)
+
+    The are a few differences between this and Mamba2Mixer:
+    - The variable use_precomputed_states is slightly different due to the HybridCache structure
+    - There's a few non-obvious bugs fixed with batching in the slow path that exist in main
+    - Some extra variables that our layer doesn't need have been removed
+    - We ported most of the refactors in https://github.com/huggingface/transformers/pull/35154, which is (as of Dec 18, 2024) unmerged
     """
 
     def __init__(self, config: BambaConfig, layer_idx: int):
@@ -720,16 +726,13 @@ class BambaRMSNorm(LlamaRMSNorm):
     pass
 
 
-class BambaDecoderLayer(LlamaDecoderLayer):
+class BambaDecoderLayer(JambaAttentionDecoderLayer):
     def __init__(self, config: BambaConfig, layer_idx: int, layer_type: str = "mamba"):
         super().__init__()
 
-        del self.self_attn
-
-        del self.mlp
-        del self.post_attention_layernorm
-        self.feed_forward = BambaMLP(config)
-        self.pre_ff_layernorm = BambaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        num_experts = 1
+        ffn_layer_class = BambaMLP if num_experts == 1 else None
+        self.feed_forward = ffn_layer_class(config)
 
         self.layer_type = layer_type
         if layer_type == "mamba":
@@ -1219,39 +1222,9 @@ class BambaModel(BambaPreTrainedModel):
         return mamba_mask
 
 
-# Adapted from transformers.models.jamba.modeling_jamba.JambaForCausalLM
-class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
-
-    def __init__(self, config: BambaConfig):
-        super().__init__(config)
-        self.model = BambaModel(config)
-        self.vocab_size = config.vocab_size
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self):
-        return self.model.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
-
-    def get_output_embeddings(self):
-        return self.lm_head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
-
-    def set_decoder(self, decoder):
-        self.model = decoder
-
-    def get_decoder(self):
-        return self.model
-
+class BambaForCausalLM(LlamaForCausalLM):
     @add_start_docstrings_to_model_forward(BAMBA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
-    # Ignore copy
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1266,7 +1239,7 @@ class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         num_logits_to_keep: Optional[Union[int, None]] = None,
-        **loss_kwargs,
+        **kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -1298,48 +1271,20 @@ class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
-
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            cache_position=cache_position,
-            return_dict=return_dict,
-        )
-
-        hidden_states = outputs[0]
-        if num_logits_to_keep is None:
-            logits = self.lm_head(hidden_states)
-        else:
-            logits = self.lm_head(hidden_states[..., -num_logits_to_keep:, :])
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size, **loss_kwargs)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
-
-        return CausalLMOutputWithPast(
-            loss=loss,
-            logits=logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
+        return super().forward(
+            input_ids,
+            attention_mask,
+            position_ids,
+            past_key_values,
+            inputs_embeds,
+            labels,
+            use_cache,
+            output_attentions,
+            output_hidden_states,
+            return_dict,
+            cache_position,
+            num_logits_to_keep,
+            **kwargs,
         )
 
     def prepare_inputs_for_generation(
@@ -1394,3 +1339,6 @@ class BambaForCausalLM(BambaPreTrainedModel, GenerationMixin):
             }
         )
         return model_inputs
+
+
+__all__ = ["BambaModel", "BambaForCausalLM", "BambaPreTrainedModel"]

@@ -167,12 +167,15 @@ class BambaConfig(PretrainedConfig):
 
         mamba_intermediate = mamba_expand * hidden_size
 
-        assert mamba_intermediate % mamba_n_heads == 0, "mamba_n_heads must divide mamba_expand * hidden_size"
+        if mamba_intermediate % mamba_n_heads != 0:
+            raise ValueError("mamba_n_heads must divide mamba_expand * hidden_size")
 
         # for the mamba_v2, must satisfy the following
         if mamba_d_head == "auto":
             mamba_d_head = mamba_intermediate // mamba_n_heads
-        assert mamba_d_head * mamba_n_heads == mamba_intermediate
+
+        if mamba_d_head * mamba_n_heads != mamba_intermediate:
+            raise ValueError("The dimensions for the Mamba head state do not match the model intermediate_size")
 
         self.mamba_n_heads = mamba_n_heads
         self.mamba_d_head = mamba_d_head
@@ -198,3 +201,6 @@ class BambaConfig(PretrainedConfig):
             "attention" if (self.attn_layer_indices and i in self.attn_layer_indices) else "mamba"
             for i in range(self.num_hidden_layers)
         ]
+
+
+__all__ = ["BambaConfig"]
