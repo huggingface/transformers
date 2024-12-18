@@ -27,7 +27,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The ModernBert model was proposed in [Smarter, Better, Faster, Longer}: A Modern Bidirectional Encoder for Fast, Memory Efficient, and Long Context Finetuning and Inference](#) by Benjamin Warner, Antoine Chaffin, Benjamin Clavié, Orion Weller, Oskar Hallström, Said Taghadouini, Alexis Galalgher, Raja Bisas, Faisal Ladhak, Tom Aarsen, Nathan Cooper, Grifin Adams, Jeremy Howard and Iacopo Poli.
+The ModernBert model was proposed in [Smarter, Better, Faster, Longer: A Modern Bidirectional Encoder for Fast, Memory Efficient, and Long Context Finetuning and Inference](#) by Benjamin Warner, Antoine Chaffin, Benjamin Clavié, Orion Weller, Oskar Hallström, Said Taghadouini, Alexis Galalgher, Raja Bisas, Faisal Ladhak, Tom Aarsen, Nathan Cooper, Grifin Adams, Jeremy Howard and Iacopo Poli.
 
 It is a refresh of the traditional encoder architecture, as used in previous models such as [BERT](https://huggingface.co/docs/transformers/en/model_doc/bert) and [RoBERTa](https://huggingface.co/docs/transformers/en/model_doc/roberta). 
 
@@ -46,19 +46,14 @@ The abstract from the paper is the following:
 
 The original code can be found [here](https://github.com/answerdotai/modernbert).
 
-## Usage tips
-
-- This implementation is similar to [`BertModel`] ...
-- ModernBert doesn't have `token_type_ids`, so you don't need to indicate which token belongs to which segment. 
-- ModernBert is similar to BERT but with ...
-
 ## Resources
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with RoBERTa. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with ModernBert.
 
 <PipelineTag pipeline="sentence-similarity"/>
 
-...
+- A script on how to [finetune for text similarity or information retrieval with Sentence Transformers](https://github.com/AnswerDotAI/ModernBERT/blob/main/examples/train_st.py). 🌎
+- A script on how to [finetune for information retrieval with PyLate](https://github.com/AnswerDotAI/ModernBERT/blob/main/examples/train_pylate.py). 🌎
 
 <PipelineTag pipeline="fill-mask"/>
 
