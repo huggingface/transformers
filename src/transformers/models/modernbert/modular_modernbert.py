@@ -462,7 +462,7 @@ class ModernBertEmbeddings(nn.Module):
         self.config = config
         self.tok_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
-        self.drop = nn.Dropout(config.embedding_dropout) if config.embedding_dropout > 0.0 else nn.Identity()
+        self.drop = nn.Dropout(config.embedding_dropout)
 
     @torch.compile(dynamic=True)
     def compiled_embeddings(self, input_ids: torch.LongTensor) -> torch.Tensor:
@@ -489,7 +489,7 @@ class ModernBertMLP(nn.Module):
         self.config = config
         self.Wi = nn.Linear(config.hidden_size, int(config.intermediate_size) * 2, bias=config.mlp_bias)
         self.act = ACT2FN[config.hidden_activation]
-        self.drop = nn.Dropout(config.mlp_dropout) if config.mlp_dropout > 0.0 else nn.Identity()
+        self.drop = nn.Dropout(config.mlp_dropout)
         self.Wo = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.mlp_bias)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -849,7 +849,7 @@ class ModernBertPoolingHead(nn.Module):
         self.dense = nn.Linear(config.hidden_size, config.hidden_size, config.classifier_bias)
         self.act = ACT2FN[config.classifier_activation]
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
-        self.drop = torch.nn.Dropout(config.classifier_dropout) if config.classifier_dropout > 0 else nn.Identity()
+        self.drop = torch.nn.Dropout(config.classifier_dropout)
         self.pooling = MODERNBERT_POOLING_FUNCTION[config.classifier_pooling]
 
     def forward(
@@ -1539,7 +1539,7 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
         self.num_labels = config.num_labels
 
         self.model = ModernBertModel(config)
-        self.drop = nn.Dropout(config.classifier_dropout) if config.classifier_dropout > 0 else nn.Identity()
+        self.drop = nn.Dropout(config.classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
