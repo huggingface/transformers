@@ -63,6 +63,7 @@ class GgufIntegrationTests(unittest.TestCase):
     mamba_model_id = "jpodivin/mamba-2.8b-hf-GGUF"
     nemotron_original_model_id = "nvidia/Nemotron-Mini-4B-Instruct"
     nemotron_model_id = "bartowski/Nemotron-Mini-4B-Instruct-GGUF"
+    falcon40b_model_id = "tensorblock/falcon-40b-GGUF"
 
     # standard quants
     q4_0_gguf_model_id = "tinyllama-1.1b-chat-v1.0.Q4_0.gguf"
@@ -110,6 +111,7 @@ class GgufIntegrationTests(unittest.TestCase):
     fp16_mamba_model_id = "ggml-model-f16.gguf"
     q6_k_nemotron_model_id = "Nemotron-Mini-4B-Instruct-Q6_K.gguf"
     fp16_nemotron_model_id = "Nemotron-Mini-4B-Instruct-f16.gguf"
+    q2_falcon40b_id = "falcon-40b-Q2_K.gguf"
 
     example_text = "Hello"
 
@@ -611,7 +613,7 @@ class GgufIntegrationTests(unittest.TestCase):
         text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
         out = model.generate(**text, max_new_tokens=10)
 
-        EXPECTED_TEXT = "Hello All,\nI am new to this forum."
+        EXPECTED_TEXT = "Hello All,\nOn ne sait plus quoi manger,"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_falcon7b_q2_k(self):
