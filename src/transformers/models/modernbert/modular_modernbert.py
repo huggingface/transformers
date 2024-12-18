@@ -626,13 +626,17 @@ def sdpa_attention_forward(
 
         attention_mask = attention_mask.to(torch.bool)
 
-    attn_output = F.scaled_dot_product_attention(
-        query,
-        key,
-        value,
-        dropout_p=module.attention_dropout if module.training else 0.0,
-        attn_mask=attention_mask,
-    ).transpose(1, 2)
+    attn_output = (
+        F.scaled_dot_product_attention(
+            query,
+            key,
+            value,
+            dropout_p=module.attention_dropout if module.training else 0.0,
+            attn_mask=attention_mask,
+        )
+        .transpose(1, 2)
+        .contiguous()
+    )
     attn_output = attn_output.view(bs, -1, dim)
     return (attn_output,)
 
