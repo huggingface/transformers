@@ -99,7 +99,7 @@ class GraniteDecoderLayer(LlamaDecoderLayer):
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states * self.residual_multiplier
+        hidden_states = residual + hidden_states * self.residual_multiplier  # main diff with Llama
 
         outputs = (hidden_states,)
 
@@ -147,7 +147,7 @@ class GraniteModel(LlamaModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
-        inputs_embeds = inputs_embeds * self.embedding_multiplier
+        inputs_embeds = inputs_embeds * self.embedding_multiplier  # main diff with Llama
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache()
@@ -267,7 +267,7 @@ class GraniteForCausalLM(LlamaForCausalLM):
         hidden_states = outputs[0]
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
         logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :])
-        logits = logits / self.config.logits_scaling
+        logits = logits / self.config.logits_scaling  # main diff with Llama
 
         loss = None
         if labels is not None:

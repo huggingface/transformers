@@ -128,13 +128,10 @@ def eager_attention_forward(
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
+    scaling: float,
     dropout: float = 0.0,
-    scaling: Optional[float] = None,
     **kwargs,
 ):
-    if scaling is None:
-        scaling = module.head_dim**-0.5
-
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
 
@@ -211,13 +208,15 @@ class Starcoder2Attention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            sliding_window=getattr(self.config, "sliding_window", None),
+            sliding_window=getattr(self.config, "sliding_window", None),  # diff with Llama
             **kwargs,
         )
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-        attn_output = nn.functional.dropout(attn_output, p=self.residual_dropout, training=self.training)
+        attn_output = nn.functional.dropout(
+            attn_output, p=self.residual_dropout, training=self.training
+        )  # diff with Llama
 
         return attn_output, attn_weights
 
@@ -547,7 +546,9 @@ class Starcoder2Model(Starcoder2PreTrainedModel):
         )
 
         hidden_states = inputs_embeds
-        hidden_states = nn.functional.dropout(hidden_states, p=self.embedding_dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.embedding_dropout, training=self.training
+        )  # main diff with Llama
 
         # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)

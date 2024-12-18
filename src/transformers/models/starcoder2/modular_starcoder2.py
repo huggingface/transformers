@@ -33,11 +33,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
-from ...utils import (
-    add_start_docstrings_to_model_forward,
-    is_flash_attn_2_available,
-    logging,
-)
+from ...utils import add_start_docstrings_to_model_forward, logging
 from ..mistral.modeling_mistral import (
     MistralAttention,
     MistralDecoderLayer,
@@ -49,10 +45,6 @@ from ..mistral.modeling_mistral import (
     eager_attention_forward,
 )
 from .configuration_starcoder2 import Starcoder2Config
-
-
-if is_flash_attn_2_available():
-    pass
 
 
 logger = logging.get_logger(__name__)
@@ -129,13 +121,15 @@ class Starcoder2Attention(MistralAttention):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            sliding_window=getattr(self.config, "sliding_window", None),
+            sliding_window=getattr(self.config, "sliding_window", None),  # diff with Llama
             **kwargs,
         )
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-        attn_output = nn.functional.dropout(attn_output, p=self.residual_dropout, training=self.training)
+        attn_output = nn.functional.dropout(
+            attn_output, p=self.residual_dropout, training=self.training
+        )  # diff with Llama
 
         return attn_output, attn_weights
 
@@ -207,7 +201,9 @@ class Starcoder2Model(MistralModel):
         )
 
         hidden_states = inputs_embeds
-        hidden_states = nn.functional.dropout(hidden_states, p=self.embedding_dropout, training=self.training)
+        hidden_states = nn.functional.dropout(
+            hidden_states, p=self.embedding_dropout, training=self.training
+        )  # main diff with Llama
 
         # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)

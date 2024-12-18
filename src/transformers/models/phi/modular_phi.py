@@ -221,7 +221,7 @@ class PhiModel(LlamaModel):
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
         )
 
-        inputs_embeds = self.embed_dropout(inputs_embeds)
+        inputs_embeds = self.embed_dropout(inputs_embeds)  # diff with Llama
         hidden_states = inputs_embeds
 
         # create position embeddings to be shared across the decoder layers
@@ -265,7 +265,7 @@ class PhiModel(LlamaModel):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
-        hidden_states = self.final_layernorm(hidden_states)
+        hidden_states = self.final_layernorm(hidden_states)  # diff with Llama
 
         # add hidden states from the last decoder layer
         if output_hidden_states:

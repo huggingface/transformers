@@ -109,13 +109,10 @@ def eager_attention_forward(
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
+    scaling: float,
     dropout: float = 0.0,
-    scaling: Optional[float] = None,
     **kwargs,
 ):
-    if scaling is None:
-        scaling = module.head_dim**-0.5
-
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
 
@@ -199,7 +196,7 @@ class Qwen2Attention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            sliding_window=sliding_window,
+            sliding_window=sliding_window,  # main diff with Llama
             **kwargs,
         )
 

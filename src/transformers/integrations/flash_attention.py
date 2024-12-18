@@ -19,7 +19,6 @@ def flash_attention_forward(
     scaling: Optional[float] = None,
     sliding_window: Optional[int] = None,
     softcap: Optional[float] = None,
-    target_dtype: torch.dtype = torch.float16,
     **kwargs,
 ) -> Tuple[torch.Tensor, None]:
     # This is before the transpose
@@ -30,11 +29,10 @@ def flash_attention_forward(
     key = key.transpose(1, 2)
     value = value.transpose(1, 2)
 
-    input_dtype = query.dtype
-    if input_dtype == torch.float32:
-        query = query.to(target_dtype)
-        key = key.to(target_dtype)
-        value = value.to(target_dtype)
+    if query.dtype == torch.float32:
+        query = query.to(torch.float16)
+        key = key.to(torch.float16)
+        value = value.to(torch.float16)
 
     attn_output = _flash_attention_forward(
         query,

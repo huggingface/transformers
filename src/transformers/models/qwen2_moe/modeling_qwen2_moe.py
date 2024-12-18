@@ -1556,12 +1556,12 @@ SQuAD (a linear layer on top of the hidden-states output to compute `span start 
 )
 # Copied from transformers.models.mistral.modeling_mistral.MistralForQuestionAnswering with Mistral->Qwen2Moe, MISTRAL->QWEN2MOE
 class Qwen2MoeForQuestionAnswering(Qwen2MoePreTrainedModel):
-    base_model_prefix = "transformer"
+    base_model_prefix = "model"
 
     def __init__(self, config):
         super().__init__(config)
-        self.transformer = Qwen2MoeModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, 2)
+        self.model = Qwen2MoeModel(config)  # diff with Llama: transformer->model
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1599,7 +1599,7 @@ class Qwen2MoeForQuestionAnswering(Qwen2MoePreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.transformer(
+        outputs = self.model(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,

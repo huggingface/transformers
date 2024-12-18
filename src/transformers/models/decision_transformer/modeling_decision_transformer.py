@@ -312,6 +312,9 @@ class DecisionTransformerGPT2Attention(nn.Module):
                     'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
             else:
+                # Attention functions are consistent with previous equivalent attention classes, however they do not support some options
+                # (e.g. layer scaling, head mask) that eager supports. These implementations are thus equivalent to previous code, but
+                # not necessarily to eager (if mentionned options are provided).
                 attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         if using_eager and self.reorder_and_upcast_attn:

@@ -43,16 +43,11 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_flash_attn_2_available,
     logging,
     replace_return_docstrings,
 )
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_gpt2 import GPT2Config
-
-
-if is_flash_attn_2_available():
-    pass
 
 
 logger = logging.get_logger(__name__)
@@ -327,6 +322,9 @@ class GPT2Attention(nn.Module):
                     'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
                 )
             else:
+                # Attention functions are consistent with previous equivalent attention classes, however they do not support some options
+                # (e.g. layer scaling, head mask) that eager supports. These implementations are thus equivalent to previous code, but
+                # not necessarily to eager (if mentionned options are provided).
                 attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         if using_eager and self.reorder_and_upcast_attn:

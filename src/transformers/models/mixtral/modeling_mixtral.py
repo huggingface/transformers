@@ -222,13 +222,10 @@ def eager_attention_forward(
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
+    scaling: float,
     dropout: float = 0.0,
-    scaling: Optional[float] = None,
     **kwargs,
 ):
-    if scaling is None:
-        scaling = module.head_dim**-0.5
-
     key_states = repeat_kv(key, module.num_key_value_groups)
     value_states = repeat_kv(value, module.num_key_value_groups)
 
@@ -304,7 +301,7 @@ class MixtralAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            sliding_window=getattr(self.config, "sliding_window", None),
+            sliding_window=getattr(self.config, "sliding_window", None),  # main diff with Llama
             **kwargs,
         )
 
@@ -1314,12 +1311,12 @@ SQuAD (a linear layer on top of the hidden-states output to compute `span start 
     MIXTRAL_START_DOCSTRING,
 )
 class MixtralForQuestionAnswering(MixtralPreTrainedModel):
-    base_model_prefix = "transformer"
+    base_model_prefix = "model"
 
     def __init__(self, config):
         super().__init__(config)
-        self.transformer = MixtralModel(config)
         self.qa_outputs = nn.Linear(config.hidden_size, 2)
+        self.model = MixtralModel(config)  # diff with Llama: transformer->model
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1357,7 +1354,7 @@ class MixtralForQuestionAnswering(MixtralPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.transformer(
+        outputs = self.model(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,

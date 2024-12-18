@@ -5,7 +5,7 @@ import torch
 from ...cache_utils import Cache
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
-from ...utils import is_flash_attn_2_available, logging
+from ...utils import logging
 from ..llama.modeling_llama import LlamaRMSNorm, eager_attention_forward
 from ..olmo.configuration_olmo import OlmoConfig
 from ..olmo.modeling_olmo import (
@@ -16,9 +16,6 @@ from ..olmo.modeling_olmo import (
     apply_rotary_pos_emb,
 )
 
-
-if is_flash_attn_2_available():
-    pass
 
 logger = logging.get_logger(__name__)
 
