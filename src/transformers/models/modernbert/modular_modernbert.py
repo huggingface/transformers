@@ -676,7 +676,7 @@ def sdpa_attention_forward(
 
 MODERNBERT_ATTENTION_FUNCTION = {
     "flash_attention_2": flash_attention_forward,
-    "flex_attention": flex_attention_forward,
+    # "flex_attention": flex_attention_forward,
     "eager": eager_attention_forward,
     "sdpa": sdpa_attention_forward,
 }
@@ -925,7 +925,7 @@ class ModernBertPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["ModernBertEmbeddings", "ModernBertEncoderLayer"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
-    _supports_flex_attn = True
+    _supports_flex_attn = False
 
     def _init_weights(self, module: nn.Module):
         cutoff_factor = self.config.initializer_cutoff_factor
@@ -1071,6 +1071,7 @@ class ModernBertPreTrainedModel(PreTrainedModel):
         # If flex_attention is requested and it fails, we throw an error.
         # This implementation is not used by default, so we only try to enable it if it is requested.
         if requested_attn_implementation == "flex_attention":
+            raise NotImplementedError("Flex attention is not supported for ModernBert")
             config = cls._check_and_enable_flex_attn(config, hard_check_only=False)
             config._attn_implementation_autoset = True
             return config

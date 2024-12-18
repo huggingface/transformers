@@ -52,7 +52,7 @@ else:
     RotaryEmbedding = object
 
 if is_torch_greater_or_equal("2.5"):
-    from torch.nn.attention.flex_attention import BlockMask, create_block_mask, flex_attention
+    from torch.nn.attention.flex_attention import BlockMask, create_block_mask
 
 logger = logging.get_logger(__name__)
 
@@ -392,39 +392,6 @@ def flash_attention_forward(
     return (attn.view(bs, dim),)
 
 
-def flex_attention_forward(
-    module: "ModernBertAttention",
-    qkv: torch.Tensor,
-    rotary_emb: ModernBertUnpaddedRotaryEmbedding,
-    cu_seqlens: torch.Tensor,
-    block_mask: "BlockMask",
-    local_attention: Tuple[int, int],
-    max_seqlen: int,
-    bs: int,
-    dim: int,
-    **_kwargs,
-) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-    qkv = rotary_emb(qkv, cu_seqlens=cu_seqlens, max_seqlen=max_seqlen)
-    query, key, value = qkv.unbind(dim=1)
-
-    query = query.transpose(0, 1).unsqueeze(0)
-    key = key.transpose(0, 1).unsqueeze(0)
-    value = value.transpose(0, 1).unsqueeze(0)
-
-    attn_output = flex_attention(
-        query,
-        key,
-        value,
-        block_mask=block_mask if local_attention != (-1, -1) else None,
-        enable_gqa=False,
-        scale=None,
-        return_lse=False,
-    )
-
-    attn_output = attn_output.squeeze(0).transpose(0, 1).contiguous()
-    return (attn_output.view(bs, dim),)
-
-
 def sdpa_attention_forward(
     module: "ModernBertAttention",
     qkv: torch.Tensor,
@@ -472,7 +439,7 @@ def sdpa_attention_forward(
 
 MODERNBERT_ATTENTION_FUNCTION = {
     "flash_attention_2": flash_attention_forward,
-    "flex_attention": flex_attention_forward,
+    # "flex_attention": flex_attention_forward,
     "eager": eager_attention_forward,
     "sdpa": sdpa_attention_forward,
 }
@@ -793,7 +760,7 @@ class ModernBertPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["ModernBertEmbeddings", "ModernBertEncoderLayer"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
-    _supports_flex_attn = True
+    _supports_flex_attn = False
 
     def _init_weights(self, module: nn.Module):
         cutoff_factor = self.config.initializer_cutoff_factor
@@ -939,6 +906,7 @@ class ModernBertPreTrainedModel(PreTrainedModel):
         # If flex_attention is requested and it fails, we throw an error.
         # This implementation is not used by default, so we only try to enable it if it is requested.
         if requested_attn_implementation == "flex_attention":
+            raise NotImplementedError("Flex attention is not supported for ModernBert")
             config = cls._check_and_enable_flex_attn(config, hard_check_only=False)
             config._attn_implementation_autoset = True
             return config
