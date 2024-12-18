@@ -247,6 +247,7 @@ def _flash_attention_forward(
     max_length_q: Optional[int] = None,
     max_length_k: Optional[int] = None,
     target_dtype: Optional[torch.dtype] = None,
+    **kwargs,
 ):
     """
     Calls the forward method of Flash Attention - if the input hidden states contain at least one padding token
