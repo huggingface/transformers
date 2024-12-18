@@ -667,9 +667,21 @@ class JinaBertModelIntegrationTest(unittest.TestCase):
             output = model(input_ids, attention_mask=attention_mask)[0]
         expected_shape = torch.Size((1, 11, 768))
         self.assertEqual(output.shape, expected_shape)
-        expected_slice = torch.tensor([[[0.4249, 0.1008, 0.7531], [0.3771, 0.1188, 0.7467], [0.4152, 0.1098, 0.7108]]])
+        expected_slice = torch.tensor([[[0.2854, 0.7062, 0.1720], [0.3288, 0.6177, 0.3865], [0.2126, 0.2910, 0.5779]]])
 
         self.assertTrue(torch.allclose(output[:, 1:4, 1:4], expected_slice, atol=1e-4))
+
+    @slow
+    def test_encode(self):
+        model = JinaBertModel.from_pretrained('jinaai/jina-embeddings-v2-base-code')
+        output = model.encode(
+            [
+                'How do I access the index while iterating over a sequence with a for loop?',
+                '# Use the built-in enumerator\nfor idx, x in enumerate(xs):\n    print(idx, x)',
+            ]
+        )
+        expected_slice = torch.tensor([[[  -2.57177323e-01, -1.17558146e+00,  3.98104578e-01], [ -3.41457665e-01, -3.33318442e-01, -8.68800059e-02]]])
+        self.assertTrue(torch.allclose(torch.tensor(output[:2, 1:4]), expected_slice, atol=1e-4))
 
     @slow
     def test_inference_no_head_relative_embedding_key(self):
