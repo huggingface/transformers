@@ -37,11 +37,7 @@ if is_torch_available():
         GPTNeoXForTokenClassification,
         GPTNeoXModel,
     )
-    from transformers.models.gpt_neox.modeling_gpt_neox import (
-        GPTNeoXDynamicNTKScalingRotaryEmbedding,
-        GPTNeoXLinearScalingRotaryEmbedding,
-        GPTNeoXRotaryEmbedding,
-    )
+    from transformers.models.gpt_neox.modeling_gpt_neox import GPTNeoXRotaryEmbedding
 
 
 class GPTNeoXModelTester:
@@ -400,11 +396,12 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
         # Sanity check linear RoPE scaling
         # New position "x" should match original position with index "x/scaling_factor"
-        linear_scaling_rope = GPTNeoXLinearScalingRotaryEmbedding(
+        linear_scaling_rope = GPTNeoXRotaryEmbedding(
             head_dim,
             max_position_embeddings=config.max_position_embeddings,
             base=config.rotary_emb_base,
             scaling_factor=scaling_factor,
+            rope_type="linear",
         ).to(torch_device)
         linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short)
         linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long)
@@ -418,11 +415,12 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         # Sanity check Dynamic NTK RoPE scaling
         # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
         # with scaling_factor (or that `inv_freq` decreases)
-        ntk_scaling_rope = GPTNeoXDynamicNTKScalingRotaryEmbedding(
+        ntk_scaling_rope = GPTNeoXRotaryEmbedding(
             head_dim,
             max_position_embeddings=config.max_position_embeddings,
             base=config.rotary_emb_base,
             scaling_factor=scaling_factor,
+            rope_type="dynamic",
         ).to(torch_device)
         ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short)
         ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long)
@@ -442,6 +440,31 @@ class GPTNeoXLanguageGenerationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pythia-410m-deduped")
         for checkpointing in [True, False]:
             model = GPTNeoXForCausalLM.from_pretrained("EleutherAI/pythia-410m-deduped")
+
+            if checkpointing:
+                model.gradient_checkpointing_enable()
+            else:
+                model.gradient_checkpointing_disable()
+            model.to(torch_device)
+
+            inputs = tokenizer("My favorite food is", return_tensors="pt").to(torch_device)
+            # The hub repo. is updated on 2023-04-04, resulting in poor outputs.
+            # See: https://github.com/huggingface/transformers/pull/24193
+            expected_output = "My favorite food is a good old-fashioned, old-fashioned, old-fashioned.\n\nI'm not sure"
+
+            output_ids = model.generate(**inputs, do_sample=False, max_new_tokens=20)
+            output_str = tokenizer.batch_decode(output_ids)[0]
+
+            self.assertEqual(output_str, expected_output)
+
+    @slow
+    def test_lm_generate_flex_attn_gptneox(self):
+        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/pythia-410m-deduped")
+        for checkpointing in [True, False]:
+            model = GPTNeoXForCausalLM.from_pretrained(
+                "EleutherAI/pythia-410m-deduped", attn_implementation="flex_attention"
+            )
+            self.assertTrue(model.config._attn_implementation == "flex_attention")
 
             if checkpointing:
                 model.gradient_checkpointing_enable()

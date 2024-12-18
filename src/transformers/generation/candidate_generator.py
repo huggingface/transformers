@@ -21,6 +21,12 @@ from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
 import numpy as np
 import torch
 
+from ..utils import is_sklearn_available
+
+
+if is_sklearn_available():
+    from sklearn.metrics import roc_curve
+
 from ..cache_utils import DynamicCache
 from ..pytorch_utils import isin_mps_friendly
 from .logits_process import (
@@ -186,6 +192,14 @@ class AssistedCandidateGenerator(CandidateGenerator):
         # We need to roll back the cache in assisted generation, only DynamicCache is supported
         self.generation_config.cache_implementation = None
 
+        if (
+            is_sklearn_available()
+            and self.assistant_model.generation_config.assistant_confidence_threshold
+            and type(self) is AssistedCandidateGenerator
+        ):
+            self.probs = []
+            self.matches = []
+
     def get_candidates(self, input_ids: torch.LongTensor) -> Tuple[torch.LongTensor, Optional[torch.FloatTensor]]:
         """
         Fetches the candidates to be tried for the current input.
@@ -237,6 +251,38 @@ class AssistedCandidateGenerator(CandidateGenerator):
             else:
                 self.num_assistant_tokens = max(1.0, self.num_assistant_tokens - 1.0)
 
+        # The assistant's confidence threshold is adjusted throughout the speculative iterations to reduce the number of unnecessary draft and target forward passes. The costs are estimated based on the ROC curve, which considers the probability of the draft token and its match with the target. A cost of 25% is assigned to false positives and 75% to false negatives.
+        # This adaptation is not compatible with UAG, as it relies on the number of matched tokens based on the draft vocabulary, which is unavailable in UAG.
+        if (
+            is_sklearn_available()
+            and self.assistant_model.generation_config.assistant_confidence_threshold
+            and type(self) is AssistedCandidateGenerator
+        ):
+            # update self.matches
+            self.matches.extend([1] * num_matches)
+            if len(self.probs) > len(self.matches):
+                self.matches.append(0)
+
+            # update self.probs
+            excess_length = len(self.probs) - len(self.matches)
+            if excess_length > 0:
+                del self.probs[-excess_length:]
+
+            if (
+                len(self.probs) > 5 and {0, 1}.issubset(self.matches)
+            ):  # require at least 5 samples to calculate the ROC curve and at least one positive and one negative sample
+                fpr, tpr, thresholds = roc_curve(self.matches, self.probs)
+                fnr = 1 - tpr
+
+                # Calculate the cost for each threshold
+                costs = fpr + 3 * fnr
+
+                # Find the threshold that minimizes the cost
+                optimal_threshold_index = np.argmin(costs)
+                best_threshold = thresholds[optimal_threshold_index]
+
+                self.assistant_model.generation_config.assistant_confidence_threshold = best_threshold
+
     def _calculate_new_tokens(self, input_ids: torch.LongTensor) -> Tuple[int, int]:
         """Calculate the minimum and maximum number of new tokens to generate."""
         new_cur_len = input_ids.shape[-1]
@@ -258,7 +304,7 @@ class AssistedCandidateGenerator(CandidateGenerator):
                 self.assistant_kwargs, input_ids.shape[-1], self.assistant_model.config.is_encoder_decoder
             )
             self.assistant_kwargs = _prepare_token_type_ids(self.assistant_kwargs, input_ids.shape[-1])
-
+            
         return has_past_key_values
 
     def _prepare_generation_args(self, input_ids: torch.LongTensor, min_new_tokens: int, max_new_tokens: int) -> Dict:
@@ -275,6 +321,16 @@ class AssistedCandidateGenerator(CandidateGenerator):
         """Generate candidate sequences using the assistant model."""
         assistant_output = self.assistant_model.generate(**generation_args, **self.assistant_kwargs)
         self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
+        if (
+            is_sklearn_available()
+            and self.assistant_model.generation_config.assistant_confidence_threshold
+            and type(self) is AssistedCandidateGenerator
+        ):
+            scores_tensor = torch.cat(assistant_output.scores, dim=0)
+            scores_softmax = torch.softmax(scores_tensor, dim=-1)
+            ids = assistant_output.sequences[-1, -len(assistant_output.scores) :]
+            p = scores_softmax[range(len(ids)), ids]
+            self.probs.extend(p.tolist())
         candidate_logits = torch.stack(assistant_output.scores, dim=1)
         candidate_ids = assistant_output.sequences
         return candidate_ids, candidate_logits
@@ -328,7 +384,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
 
         self.target_tokenizer = target_tokenizer
         self.assistant_tokenizer = assistant_tokenizer
-        self.prev_target_ids = None
+        self.prev_target_ids_len: Optional[int] = None
         self.prev_assistant_ids = None
         self.target_lookbehind = assistant_model.generation_config.target_lookbehind
         self.assistant_lookbehind = assistant_model.generation_config.assistant_lookbehind
@@ -474,11 +530,11 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         new_target_ids = self._process_assistant_outputs(input_ids, assistant_output.sequences, assistant_input_ids)
 
         # Update state
-        self.prev_target_ids = input_ids
+        self.prev_target_ids_len = input_ids.shape[1]
         self.assistant_kwargs["past_key_values"] = assistant_output.past_key_values
         self.prev_assistant_ids = assistant_output.sequences
 
-        if input_ids.shape[1] >= new_target_ids.shape[1]:
+        if self.prev_target_ids_len >= new_target_ids.shape[1]:
             return input_ids, None
 
         return new_target_ids, None
@@ -491,9 +547,9 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
         }
         remove_from_pkv = 0
 
-        if self.prev_assistant_ids is not None and self.prev_target_ids.shape[1] > self.target_lookbehind:
+        if self.prev_assistant_ids is not None and self.prev_target_ids_len > self.target_lookbehind:
             # input_ids contains all target prompt input ids and some new target input ids
-            start_index_in_target_window = self.prev_target_ids.shape[1] - self.target_lookbehind
+            start_index_in_target_window = self.prev_target_ids_len - self.target_lookbehind
 
             new_assistant_ids = self.convert_source_tokens_to_target_tokens(
                 input_ids[:, start_index_in_target_window:], **convert_kwargs
@@ -525,7 +581,7 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
                 assistant_input_ids = torch.cat([assistant_input_ids, new_assistant_ids], dim=-1)
         else:
             assistant_input_ids = self.convert_source_tokens_to_target_tokens(input_ids, **convert_kwargs)
-            self.prev_target_ids = input_ids
+            self.prev_target_ids_len = input_ids.shape[1]
 
         return assistant_input_ids, remove_from_pkv
 
