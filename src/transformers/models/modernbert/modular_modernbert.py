@@ -1214,6 +1214,8 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         if self.config._attn_implementation == "flash_attention_2":
             if indices is None and cu_seqlens is None and max_seqlen is None:
                 batch_size, seq_len = input_ids.shape[:2]
+                if attention_mask is None:
+                    attention_mask = torch.ones((batch_size, seq_len), device=input_ids.device, dtype=torch.bool)
                 if self.config.unpad_no_grad:
                     with torch.no_grad():
                         input_ids, indices, cu_seqlens, max_seqlen, position_ids, labels = _unpad_modernbert_input(
