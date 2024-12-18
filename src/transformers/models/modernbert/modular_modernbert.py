@@ -834,7 +834,7 @@ class ModernBertPreTrainedModel(PreTrainedModel):
             init_weight(module.Wqkv, stds["in"])
             init_weight(module.Wo, stds["out"])
         elif isinstance(module, ModernBertPredictionHead):
-            init_weight(module.dense, stds["in"])  # TODO: Should this be "out"/"final_out"?
+            init_weight(module.dense, stds["in"])
         elif isinstance(module, ModernBertClsPoolingHead):
             init_weight(module.dense, stds["out"])
         elif isinstance(module, ModernBertForMaskedLM):
