@@ -576,51 +576,6 @@ class ModernBertEncoderLayer(nn.Module):
         return (hidden_states,) + attn_outputs[1:]  # add attentions if outputted
 
 
-class ModernBertPredictionHead(nn.Module):
-    def __init__(self, config: ModernBertConfig):
-        super().__init__()
-        self.config = config
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size, config.classifier_bias)
-        self.act = ACT2FN[config.classifier_activation]
-        self.norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return self.norm(self.act(self.dense(hidden_states)))
-
-
-def cls_pooling(hidden_states: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
-    return hidden_states[:, 0]
-
-
-def mean_pooling(hidden_states: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
-    return (hidden_states * attention_mask.unsqueeze(-1)).sum(dim=1) / attention_mask.sum(dim=1, keepdim=True)
-
-
-MODERNBERT_POOLING_FUNCTION = {
-    "cls": cls_pooling,
-    "mean": mean_pooling,
-}
-
-
-class ModernBertPoolingHead(nn.Module):
-    def __init__(self, config: ModernBertConfig):
-        super().__init__()
-        self.config = config
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size, config.classifier_bias)
-        self.act = ACT2FN[config.classifier_activation]
-        self.norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
-        self.drop = torch.nn.Dropout(config.classifier_dropout)
-        self.pooling = MODERNBERT_POOLING_FUNCTION[config.classifier_pooling]
-
-    def forward(
-        self, hidden_states: torch.Tensor, attention_mask: torch.Tensor, pool: Optional[bool] = True
-    ) -> torch.Tensor:
-        if pool:
-            hidden_states = self.pooling(hidden_states, attention_mask)
-
-        return self.drop(self.norm(self.act(self.dense(hidden_states))))
-
-
 MODERNBERT_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -686,7 +641,7 @@ class ModernBertPreTrainedModel(PreTrainedModel):
             init_weight(module.Wo, stds["out"])
         elif isinstance(module, ModernBertPredictionHead):
             init_weight(module.dense, stds["in"])  # TODO: Should this be "out"/"final_out"?
-        elif isinstance(module, ModernBertPoolingHead):
+        elif isinstance(module, ModernBertClsPoolingHead):
             init_weight(module.dense, stds["out"])
         elif isinstance(module, ModernBertForMaskedLM):
             init_weight(module.decoder, stds["out"])
@@ -1135,6 +1090,18 @@ class ModernBertModel(ModernBertPreTrainedModel):
         return global_attention_mask, local_attention_mask
 
 
+class ModernBertPredictionHead(nn.Module):
+    def __init__(self, config: ModernBertConfig):
+        super().__init__()
+        self.config = config
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size, config.classifier_bias)
+        self.act = ACT2FN[config.classifier_activation]
+        self.norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.norm(self.act(self.dense(hidden_states)))
+
+
 @add_start_docstrings(
     "The ModernBert Model with a decoder head on top that is used for masked language modeling.",
     MODERNBERT_START_DOCSTRING,
@@ -1258,6 +1225,20 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         )
 
 
+class ModernBertClsPoolingHead(nn.Module):
+    def __init__(self, config: ModernBertConfig):
+        super().__init__()
+        self.config = config
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size, config.classifier_bias)
+        self.act = ACT2FN[config.classifier_activation]
+        self.norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
+        self.drop = torch.nn.Dropout(config.classifier_dropout)
+
+    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+        hidden_states = hidden_states[:, 0]
+        return self.drop(self.norm(self.act(self.dense(hidden_states))))
+
+
 @add_start_docstrings(
     "The ModernBert Model with a sequence classification head on top that performs pooling.",
     MODERNBERT_START_DOCSTRING,
@@ -1269,7 +1250,7 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
         self.config = config
 
         self.model = ModernBertModel(config)
-        self.head = ModernBertPoolingHead(config)
+        self.head = ModernBertClsPoolingHead(config)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
