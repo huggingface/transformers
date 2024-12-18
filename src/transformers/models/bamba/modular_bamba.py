@@ -30,12 +30,10 @@ from transformers.activations import ACT2FN
 from transformers.models.jamba.modeling_jamba import JambaAttentionDecoderLayer
 from transformers.models.llama.modeling_llama import (
     LlamaAttention,
-    LlamaFlashAttention2,
     LlamaForCausalLM,
     LlamaMLP,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
-    LlamaSdpaAttention,
     rotate_half,
 )
 from transformers.models.mamba2.modeling_mamba2 import (
@@ -187,46 +185,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 
 
 class BambaAttention(LlamaAttention):
-    def __init__(self, config: BambaConfig, layer_idx: Optional[int] = None):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        if layer_idx is None:
-            logger.warning_once(
-                f"Instantiating {self.__class__.__name__} without passing a `layer_idx` is not recommended and will "
-                "lead to errors during the forward call if caching is used. Please make sure to provide a `layer_idx` "
-                "when creating this class."
-            )
-
-        self.attention_dropout = config.attention_dropout
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = getattr(config, "head_dim", self.hidden_size // self.num_heads)
-        self.num_key_value_heads = config.num_key_value_heads
-        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.max_position_embeddings = config.max_position_embeddings
-        self.rope_theta = config.rope_theta
-        self.is_causal = True
-
-        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
-        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
-
-
-class BambaFlashAttention2(LlamaFlashAttention2):
     pass
-
-
-class BambaSdpaAttention(LlamaSdpaAttention):
-    pass
-
-
-BAMBA_ATTENTION_CLASSES = {
-    "eager": BambaAttention,
-    "flash_attention_2": BambaFlashAttention2,
-    "sdpa": BambaSdpaAttention,
-}
 
 
 class BambaRMSNormGated(MambaRMSNormGated):
@@ -738,7 +697,7 @@ class BambaDecoderLayer(JambaAttentionDecoderLayer):
         if layer_type == "mamba":
             self.mamba = BambaMixer(config=config, layer_idx=layer_idx)
         elif layer_type == "attention":
-            self.self_attn = BAMBA_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
+            self.self_attn = BambaAttention(config, layer_idx)
         else:
             raise ValueError("Invalid layer_type")
 
