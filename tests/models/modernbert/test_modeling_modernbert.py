@@ -143,7 +143,7 @@ class ModernBertModelTester:
             # that compilation doesn't work. Users can then set compile=False when loading the model,
             # much like here. We're testing whether it works once they've done that.
             if test_name == "test_retain_grad_hidden_states_attentions":
-                config.compile = False
+                config.reference_compile = False
             # Some tests require attentions to be outputted, in that case we'll set the attention implementation to eager
             # as the others don't support outputted attentions
             if test_name in (

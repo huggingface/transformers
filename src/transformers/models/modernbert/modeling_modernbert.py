@@ -37,7 +37,6 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
-    is_torch_greater_or_equal,
     logging,
 )
 from ...utils.import_utils import is_triton_available
@@ -50,9 +49,6 @@ if is_flash_attn_2_available():
     from flash_attn.ops.triton.rotary import apply_rotary
 else:
     RotaryEmbedding = object
-
-if is_torch_greater_or_equal("2.5"):
-    from torch.nn.attention.flex_attention import BlockMask, create_block_mask
 
 logger = logging.get_logger(__name__)
 
@@ -439,7 +435,6 @@ def sdpa_attention_forward(
 
 MODERNBERT_ATTENTION_FUNCTION = {
     "flash_attention_2": flash_attention_forward,
-    # "flex_attention": flex_attention_forward,
     "eager": eager_attention_forward,
     "sdpa": sdpa_attention_forward,
 }
@@ -484,7 +479,7 @@ class ModernBertAttention(nn.Module):
                 rope_theta = config.local_rope_theta
             max_position_embeddings = config.local_attention
 
-        if config._attn_implementation in {"flash_attention_2", "flex_attention"}:
+        if config._attn_implementation == "flash_attention_2":
             self.rotary_emb = ModernBertUnpaddedRotaryEmbedding(
                 dim=self.head_dim, max_seqlen=max_position_embeddings, base=rope_theta
             )
@@ -525,7 +520,7 @@ class ModernBertAttention(nn.Module):
         qkv = self.Wqkv(hidden_states)
 
         bs = hidden_states.shape[0]
-        if self.config._attn_implementation in ("flash_attention_2", "flex_attention"):
+        if self.config._attn_implementation == "flash_attention_2":
             qkv = qkv.view(-1, 3, self.num_heads, self.head_dim)
         else:
             qkv = qkv.view(bs, -1, 3, self.num_heads, self.head_dim)
@@ -582,7 +577,6 @@ class ModernBertEncoderLayer(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         cu_seqlens: Optional[torch.Tensor] = None,
-        block_mask: Optional["BlockMask"] = None,
         max_seqlen: Optional[int] = None,
         output_attentions: Optional[bool] = False,
     ) -> torch.Tensor:
@@ -599,7 +593,6 @@ class ModernBertEncoderLayer(nn.Module):
             self.attn_norm(hidden_states),
             position_ids=position_ids,
             cu_seqlens=cu_seqlens,
-            block_mask=block_mask,
             max_seqlen=max_seqlen,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
@@ -903,13 +896,9 @@ class ModernBertPreTrainedModel(PreTrainedModel):
                 config._attn_implementation_autoset = True
                 return config
 
-        # If flex_attention is requested and it fails, we throw an error.
-        # This implementation is not used by default, so we only try to enable it if it is requested.
+        # Flex attention is not supported for ModernBert
         if requested_attn_implementation == "flex_attention":
             raise NotImplementedError("Flex attention is not supported for ModernBert")
-            config = cls._check_and_enable_flex_attn(config, hard_check_only=False)
-            config._attn_implementation_autoset = True
-            return config
 
         # If eager is requested, or if None is requested but FA2 and SDPA fail, we set it and return the config.
         config._attn_implementation = "eager"
@@ -1003,33 +992,6 @@ class ModernBertPreTrainedModel(PreTrainedModel):
         device = offsets.device
         counts = offsets[1:] - offsets[:-1]
         return torch.repeat_interleave(torch.arange(len(counts), device=device, dtype=torch.int32), counts)
-
-    def create_attention_mask(self, sequence_ids, cu_seqlens, window_size):
-        """
-        Creates a block mask combining sequence masking and local/or global attention masking.
-        """
-
-        def sliding_window_seq_mask_mod(b, h, q_idx, kv_idx):
-            # only allow attention within the same sequence
-            same_seq = sequence_ids[q_idx] == sequence_ids[kv_idx]
-
-            # get position within the sequence
-            q_pos = q_idx - cu_seqlens[sequence_ids[q_idx]]
-            kv_pos = kv_idx - cu_seqlens[sequence_ids[kv_idx]]
-
-            # sliding window within each sequence
-            in_window = (q_pos - kv_pos).abs() <= window_size
-
-            return same_seq & in_window
-
-        block_mask = create_block_mask(
-            sliding_window_seq_mask_mod,
-            B=None,
-            H=None,
-            Q_LEN=cu_seqlens[-1],
-            KV_LEN=cu_seqlens[-1],
-        )
-        return block_mask
 
 
 MODERNBERT_INPUTS_DOCSTRING = r"""
@@ -1149,7 +1111,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
             attention_mask = torch.ones((batch_size, seq_len), device=input_ids.device, dtype=torch.bool)
 
         repad = False
-        if self.config._attn_implementation in {"flash_attention_2", "flex_attention"}:
+        if self.config._attn_implementation == "flash_attention_2":
             if indices is None and cu_seqlens is None and max_seqlen is None:
                 repad = True
                 if self.config.unpad_no_grad:
@@ -1163,13 +1125,6 @@ class ModernBertModel(ModernBertPreTrainedModel):
 
         hidden_states = self.embeddings(input_ids)
 
-        # create block mask
-        block_mask = None
-        if self.config._attn_implementation == "flex_attention":
-            sequence_ids = self.offsets_to_sequence_ids_tensor(cu_seqlens)
-            window_size = self.config.local_attention // 2
-            block_mask = self.create_attention_mask(sequence_ids, cu_seqlens, window_size)
-
         for encoder_layer in self.layers:
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
@@ -1181,7 +1136,6 @@ class ModernBertModel(ModernBertPreTrainedModel):
                     attention_mask,
                     position_ids,
                     cu_seqlens,
-                    block_mask,
                     max_seqlen,
                     output_attentions,
                 )
@@ -1191,7 +1145,6 @@ class ModernBertModel(ModernBertPreTrainedModel):
                     attention_mask=attention_mask,
                     position_ids=position_ids,
                     cu_seqlens=cu_seqlens,
-                    block_mask=block_mask,
                     max_seqlen=max_seqlen,
                     output_attentions=output_attentions,
                 )
@@ -1275,7 +1228,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         self._maybe_set_compile()
 
-        if self.config._attn_implementation in {"flash_attention_2", "flex_attention"}:
+        if self.config._attn_implementation == "flash_attention_2":
             if indices is None and cu_seqlens is None and max_seqlen is None:
                 batch_size, seq_len = input_ids.shape[:2]
                 if self.config.unpad_no_grad:
@@ -1322,7 +1275,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         if labels is not None:
             loss = self.loss_function(logits, labels, vocab_size=self.config.vocab_size)
 
-        if self.config._attn_implementation in {"flash_attention_2", "flex_attention"}:
+        if self.config._attn_implementation == "flash_attention_2":
             if self.config.unpad_no_grad:
                 logits = self._pad_outputs_no_grad(logits, indices, batch_size, seq_len)
             else:
