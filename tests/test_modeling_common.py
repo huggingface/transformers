@@ -4837,15 +4837,22 @@ class ModelTesterMixin:
 
     @slow
     @require_torch_greater_or_equal("2.3")
-    def test_torch_export(self, config_kwargs=None):
+    def test_torch_export(self, tolerance=1e-4):
+        """
+        Test if model can be exported with torch.export.export()
+
+        Args:
+            tolerance (float):
+                `atol` for torch.allclose(), defined in signature for test overriding
+        """
         if not self.test_torch_exportable:
-            self.skipTest(reason="Torch export test is not enabled for this model.")
+            self.skipTest(reason="test_torch_exportable=False for this model.")
 
         def recursively_check(eager_outputs, exported_outputs):
             is_tested = False
             if isinstance(eager_outputs, torch.Tensor):
                 self.assertEqual(eager_outputs.shape, exported_outputs.shape)
-                self.assertTrue(torch.allclose(eager_outputs, exported_outputs, atol=1e-4))
+                self.assertTrue(torch.allclose(eager_outputs, exported_outputs, atol=tolerance))
                 return True
             elif isinstance(eager_outputs, (tuple, list)):
                 for eager_output, exported_output in zip(eager_outputs, exported_outputs):
@@ -4856,11 +4863,6 @@ class ModelTesterMixin:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         inputs_dict["return_dict"] = False
 
-        # override config kwargs for torch export if needed
-        config_kwargs = config_kwargs if config_kwargs is not None else {}
-        for key, value in config_kwargs.items():
-            setattr(config, key, value)
-
         for model_class in self.all_model_classes:
             if model_class.__name__.endswith("ForPreTraining"):
                 continue
@@ -4868,22 +4870,11 @@ class ModelTesterMixin:
             with self.subTest(model_class.__name__):
                 model = model_class(config).eval().to(torch_device)
 
-                # Prepare exported program inputs based on model.forward function signature
-                signature = inspect.signature(model.forward)
-                kwarg_names = [
-                    name
-                    for name, param in signature.parameters.items()
-                    if param.default is not inspect.Parameter.empty
-                ]
-                arg_names = [name for name in signature.parameters.keys() if name not in kwarg_names]
-                inputs_args = tuple(inputs_dict[name] for name in arg_names if name in inputs_dict)
-                inputs_kwargs = {name: inputs_dict[name] for name in kwarg_names if name in inputs_dict}
-
                 # Export model
                 exported_model = torch.export.export(
                     model,
-                    args=inputs_args,
-                    kwargs=inputs_kwargs,
+                    args=(),
+                    kwargs=inputs_dict,
                     strict=True,
                 )
 
@@ -4896,11 +4887,14 @@ class ModelTesterMixin:
                 # Run exported model and eager model
                 with torch.no_grad():
                     eager_outputs = model(**inputs_dict)
-                    exported_outputs = exported_model.module().forward(*inputs_args, **inputs_kwargs)
+                    exported_outputs = exported_model.module().forward(**inputs_dict)
 
-                # Check if outputs are close
+                # Check if outputs are close:
+                # is_tested is a boolean flag idicating if we comapre any outputs,
+                # e.g. ther might be a situation when outputs are empty list, then is_tested will be False.
+                # In case of outputs are different the error will be rasies in `recursively_check` function.
                 is_tested = recursively_check(eager_outputs, exported_outputs)
-                self.assertTrue(is_tested)
+                self.assertTrue(is_tested, msg=f"No outputs were compared for {model_class.__name__}")
 
 
 global_rng = random.Random()
