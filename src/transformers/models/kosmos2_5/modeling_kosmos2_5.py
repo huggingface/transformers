@@ -1496,7 +1496,7 @@ class Kosmos2_5TextTransformer(nn.Module):
         else:
             # add zero embedding for padding tokens
             bsz, seq_len, dim = positions.size()
-            zero_emb = self.segment_emb(torch.zeros((bsz, 1), dtype=torch.long)).to(positions.device)
+            zero_emb = self.segment_emb(torch.zeros((bsz, 1), dtype=torch.long, device=self.segment_emb.weight.device)).to(positions.device)
             positions += zero_emb
 
         hidden_states = inputs_embeds + positions
