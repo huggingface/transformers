@@ -325,8 +325,7 @@ def eager_attention_forward(
 
     # upcast attention to fp32
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    if module.training:
-        attn_weights = nn.functional.dropout(attn_weights, p=module.attention_dropout)
+    attn_weights = nn.functional.dropout(attn_weights, p=module.attention_dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
     attn_output = attn_output.view(bs, -1, dim)
