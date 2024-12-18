@@ -1731,6 +1731,10 @@ class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
         # class logits + predicted bounding boxes
         logits = self.class_labels_classifier(sequence_output)
 
+        # Index [-2] is valid only if `output_attentions` and `output_hidden_states`
+        # are not specified, otherwise it will be another index which is hard to determine.
+        # Leave it as is, because it's not a common case to use
+        # return_dict=False + output_attentions=True / output_hidden_states=True
         reference = outputs.reference_points if return_dict else outputs[-2]
         reference_before_sigmoid = inverse_sigmoid(reference).transpose(0, 1)
 
