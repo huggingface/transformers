@@ -18,8 +18,9 @@ class ImportModuleException(Exception):
 
 
 class MetricsRecorder:
-    def __init__(self, connection, branch: str, commit_id: str, commit_msg: str):
+    def __init__(self, connection, logger: logging.Logger, branch: str, commit_id: str, commit_msg: str):
         self.conn = connection
+        self.logger = logger
         self.branch = branch
         self.commit_id = commit_id
         self.commit_msg = commit_msg
@@ -34,7 +35,9 @@ class MetricsRecorder:
                 "INSERT INTO benchmarks (branch, commit_id, commit_message, metadata) VALUES (%s, %s, %s, %s) RETURNING benchmark_id",
                 (self.branch, self.commit_id, self.commit_msg, metadata),
             )
-            return cur.fetchone()[0]
+            benchmark_id = cur.fetchone()[0]
+            logger.debug(f"initialised benchmark #{benchmark_id}")
+            return benchmark_id
 
     def collect_device_measurements(self, benchmark_id: int, cpu_util, mem_megabytes, gpu_util, gpu_mem_megabytes):
         """
@@ -45,6 +48,9 @@ class MetricsRecorder:
                 "INSERT INTO device_measurements (benchmark_id, cpu_util, mem_megabytes, gpu_util, gpu_mem_megabytes) VALUES (%s, %s, %s, %s, %s)",
                 (benchmark_id, cpu_util, mem_megabytes, gpu_util, gpu_mem_megabytes),
             )
+        self.logger.debug(
+            f"inserted device measurements for benchmark #{benchmark_id} [CPU util: {cpu_util}, mem MBs: {mem_megabytes}, GPU util: {gpu_util}, GPU mem MBs: {gpu_mem_megabytes}]"
+        )
 
     def collect_model_measurements(self, benchmark_id: int, measurements: Dict[str, float]):
         with self.conn.cursor() as cur:
@@ -60,6 +66,7 @@ class MetricsRecorder:
                     measurements,
                 ),
             )
+        self.logger.debug(f"inserted model measurements for benchmark #{benchmark_id}: {measurements}")
 
     def close(self):
         self.conn.close()

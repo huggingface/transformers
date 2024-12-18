@@ -37,7 +37,7 @@ def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, 
     continue_metric_collection = Event()
     metrics_thread = None
     model_id = "meta-llama/Llama-2-7b-hf"
-    metrics_recorder = MetricsRecorder(psycopg2.connect("dbname=metrics"), branch, commit_id, commit_msg)
+    metrics_recorder = MetricsRecorder(psycopg2.connect("dbname=metrics"), logger, branch, commit_id, commit_msg)
     try:
         gpu_stats = gpustat.GPUStatCollection.new_query()
         gpu_name = gpu_stats[0]["name"]

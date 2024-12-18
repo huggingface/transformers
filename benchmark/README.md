@@ -21,7 +21,7 @@ from benchmarks_entrypoint import MetricsRecorder
 import psycopg2
 
 def run_benchmark(logger: Logger, branch: str, commit_id: str, commit_msg: str, num_tokens_to_generate=100):
-  metrics_recorder = MetricsRecorder(psycopg2.connect("dbname=metrics"), branch, commit_id, commit_msg)
+  metrics_recorder = MetricsRecorder(psycopg2.connect("dbname=metrics"), logger, branch, commit_id, commit_msg)
   benchmark_id = metrics_recorder.initialise_benchmark({"gpu_name": gpu_name, "model_id": model_id})
     # To collect device measurements
     metrics_recorder.collect_device_measurements(
