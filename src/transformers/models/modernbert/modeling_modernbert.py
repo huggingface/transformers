@@ -1424,6 +1424,7 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
 
 __all__ = [
     "ModernBertModel",
+    "ModernBertPreTrainedModel",
     "ModernBertForMaskedLM",
     "ModernBertForSequenceClassification",
     "ModernBertForTokenClassification",
