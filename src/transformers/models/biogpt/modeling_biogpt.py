@@ -719,6 +719,7 @@ class BioGptModel(BioGptPreTrainedModel):
         inputs_embeds: Optional[torch.FloatTensor] = None,
         past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
         use_cache: Optional[bool] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -787,7 +788,6 @@ class BioGptModel(BioGptPreTrainedModel):
         )
 
         # embed positions
-        position_ids = cache_position.unsqueeze(0)
         position_ids = self.embed_positions(attention_mask, past_key_values_length, position_ids=position_ids)
 
         hidden_states = inputs_embeds + position_ids
@@ -900,6 +900,7 @@ class BioGptForCausalLM(BioGptPreTrainedModel, GenerationMixin):
         past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -920,6 +921,7 @@ class BioGptForCausalLM(BioGptPreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             past_key_values=past_key_values,
             use_cache=use_cache,
+            position_ids=position_ids,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
