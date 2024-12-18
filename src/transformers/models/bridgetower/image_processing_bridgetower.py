@@ -543,3 +543,6 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
             encoded_outputs = BatchFeature(data=data, tensor_type=return_tensors)
 
         return encoded_outputs
+
+
+__all__ = ["BridgeTowerImageProcessor"]

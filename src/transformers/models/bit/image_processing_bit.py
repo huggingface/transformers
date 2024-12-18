@@ -323,3 +323,6 @@ class BitImageProcessor(BaseImageProcessor):
             else images
         }
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+
+__all__ = ["BitImageProcessor"]

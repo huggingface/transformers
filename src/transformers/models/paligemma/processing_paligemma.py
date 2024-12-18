@@ -160,11 +160,15 @@ class PaliGemmaProcessor(ProcessorMixin):
 
         self.image_seq_length = image_processor.image_seq_length
 
-        image_token = AddedToken(IMAGE_TOKEN, normalized=False, special=True)
-        tokens_to_add = {"additional_special_tokens": [image_token]}
-        tokenizer.add_special_tokens(tokens_to_add)
+        if not hasattr(tokenizer, "image_token"):
+            image_token = AddedToken(IMAGE_TOKEN, normalized=False, special=True)
+            tokens_to_add = {"additional_special_tokens": [image_token]}
+            tokenizer.add_special_tokens(tokens_to_add)
+            self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
+        else:
+            self.image_token_id = tokenizer.image_token_id
+
         tokenizer.add_tokens(EXTRA_TOKENS)
-        self.image_token_id = tokenizer.convert_tokens_to_ids(IMAGE_TOKEN)
         tokenizer.add_bos_token = False
         tokenizer.add_eos_token = False
 
@@ -265,7 +269,7 @@ class PaliGemmaProcessor(ProcessorMixin):
                 logger.warning(
                     "You are passing both `text` and `images` to `PaliGemmaProcessor`. The processor expects special "
                     "image tokens in the text, as many tokens as there are images per each text. It is recommended to "
-                    "add `<image>` tokens in the very beginning of your text and `<bos>` token after that. For this call, we will infer how many images "
+                    "add `<image>` tokens in the very beginning of your text. For this call, we will infer how many images "
                     "each text has and add special tokens."
                 )
 
@@ -300,9 +304,16 @@ class PaliGemmaProcessor(ProcessorMixin):
                 ]
                 images = make_batched_images(images)
             else:
-                text = [sample.replace(IMAGE_TOKEN, IMAGE_TOKEN * self.image_seq_length) for sample in text]
-                input_strings = [f"{sample}\n" for sample in text]
-
+                expanded_samples = []
+                for sample in text:
+                    expanded_sample = sample.replace(IMAGE_TOKEN, IMAGE_TOKEN * self.image_seq_length)
+                    bos_rfind_index = expanded_sample.rfind(IMAGE_TOKEN)
+                    bos_index = bos_rfind_index + len(IMAGE_TOKEN) if bos_rfind_index != -1 else 0
+                    expanded_sample = (
+                        expanded_sample[:bos_index] + self.tokenizer.bos_token + expanded_sample[bos_index:]
+                    )
+                    expanded_samples.append(expanded_sample)
+                input_strings = [f"{sample}\n" for sample in expanded_samples]
         pixel_values = self.image_processor(images, **output_kwargs["images_kwargs"])["pixel_values"]
 
         # max_length has to account for the image tokens

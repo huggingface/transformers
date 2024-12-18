@@ -514,3 +514,6 @@ class BeitImageProcessor(BaseImageProcessor):
             semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
 
         return semantic_segmentation
+
+
+__all__ = ["BeitImageProcessor"]

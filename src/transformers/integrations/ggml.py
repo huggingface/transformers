@@ -235,6 +235,33 @@ GGUF_TENSOR_MAPPING = {
         "output.weight": "lm_head.weight",
         "output_norm": "model.norm",
     },
+    "mamba": {
+        "token_embd": "backbone.embeddings",
+        "blk": "backbone.layers",
+        "ssm_a": "mixer.A_log",
+        "ssm_conv1d": "mixer.conv1d",
+        "ssm_in": "mixer.in_proj",
+        "ssm_out": "mixer.out_proj",
+        "ssm_x": "mixer.x_proj",
+        "ssm_dt": "mixer.dt_proj",
+        "attn_norm": "norm",
+        "output_norm": "backbone.norm_f",
+        "output.weight": "lm_head.weight",
+    },
+    "nemotron": {
+        "token_embd": "model.embed_tokens",
+        "blk": "model.layers",
+        "ffn_up": "mlp.up_proj",
+        "ffn_down": "mlp.down_proj",
+        "ffn_norm": "post_attention_layernorm",
+        "attn_norm": "input_layernorm",
+        "attn_q": "self_attn.q_proj",
+        "attn_v": "self_attn.v_proj",
+        "attn_k": "self_attn.k_proj",
+        "attn_output": "self_attn.o_proj",
+        "output.weight": "lm_head.weight",
+        "output_norm": "model.norm",
+    },
 }
 
 
@@ -372,6 +399,29 @@ GGUF_CONFIG_MAPPING = {
         "attention.head_count": "num_attention_heads",
         "attention.head_count_kv": "num_key_value_heads",
         "attention.layer_norm_epsilon": "norm_epsilon",
+    },
+    "mamba": {
+        "vocab_size": "vocab_size",
+        "context_length": "max_position_embeddings",
+        "embedding_length": "hidden_size",
+        "attention.layer_norm_rms_epsilon": "layer_norm_epsilon",
+        "block_count": "num_hidden_layers",
+        "ssm.conv_kernel": "conv_kernel",
+        "ssm.state_size": "state_size",
+        "ssm.time_step_rank": "time_step_rank",
+        "ssm.inner_size": "intermediate_size",
+    },
+    "nemotron": {
+        "context_length": "max_position_embeddings",
+        "block_count": "num_hidden_layers",
+        "feed_forward_length": "intermediate_size",
+        "embedding_length": "hidden_size",
+        "rope.dimension_count": None,
+        "rope.freq_base": "rope_theta",
+        "attention.head_count": "num_attention_heads",
+        "attention.head_count_kv": "num_key_value_heads",
+        "attention.layer_norm_rms_epsilon": "norm_eps",
+        "vocab_size": "vocab_size",
     },
 }
 
@@ -768,6 +818,8 @@ GGUF_TO_FAST_CONVERTERS = {
     "gpt2": GGUFGPTConverter,
     "starcoder2": GGUFGPTConverter,
     "t5": GGUFT5Converter,
+    "mamba": GGUFGPTConverter,
+    "nemotron": GGUFGPTConverter,
 }
 
 

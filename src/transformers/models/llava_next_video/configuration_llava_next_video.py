@@ -21,7 +21,7 @@
 
 
 from ...configuration_utils import PretrainedConfig
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 class LlavaNextVideoConfig(PretrainedConfig):
@@ -86,7 +86,7 @@ class LlavaNextVideoConfig(PretrainedConfig):
     ```"""
 
     model_type = "llava_next_video"
-    is_composition = True
+    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
 
     def __init__(
         self,
@@ -158,3 +158,6 @@ class LlavaNextVideoConfig(PretrainedConfig):
         self.text_config = text_config
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+
+
+__all__ = ["LlavaNextVideoConfig"]
