@@ -1595,7 +1595,7 @@ class BigBirdPegasusPreTrainedModel(PreTrainedModel):
         }
         return dummy_inputs
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaModel._update_causal_mask
+    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_causal_mask
     def _update_causal_mask(
         self,
         attention_mask: torch.Tensor,
@@ -1617,6 +1617,7 @@ class BigBirdPegasusPreTrainedModel(PreTrainedModel):
         using_static_cache = isinstance(past_key_values, StaticCache)
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
+        # cross_attn_head_maskis not compatible with SDPA so we fallback to eager
         if (
             self.config._attn_implementation == "sdpa"
             and not using_static_cache

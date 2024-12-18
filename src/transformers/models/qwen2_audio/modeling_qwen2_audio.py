@@ -395,8 +395,8 @@ class Qwen2AudioSdpaAttention(Qwen2AudioAttention):
             key_states = past_key_value.key_cache[self.layer_idx]
             value_states = past_key_value.value_cache[self.layer_idx]
         else:
-            key_states = self.k_proj(current_states).view(bsz, tgt_len, self.num_heads, self.head_dim)
-            value_states = self.v_proj(current_states).view(bsz, tgt_len, self.num_heads, self.head_dim)
+            key_states = self.k_proj(current_states).view(bsz, -1, self.num_heads, self.head_dim)
+            value_states = self.v_proj(current_states).view(bsz, -1, self.num_heads, self.head_dim)
             key_states = key_states.transpose(1, 2).contiguous()
             value_states = value_states.transpose(1, 2).contiguous()
             if past_key_value is not None:
