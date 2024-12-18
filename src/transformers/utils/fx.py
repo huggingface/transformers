@@ -140,6 +140,7 @@ _REGULAR_SUPPORTED_MODEL_NAMES_AND_TASKS = [
     "gptj",
     "hiera",
     "hubert",
+    "ijepa",
     "layoutlm",
     "llama",
     "cohere",
@@ -1416,7 +1417,7 @@ class HFTracer(Tracer):
         your custom tracer.
         """
         attribute = HFAttribute(obj, "keys")()
-        if obj.node.target == "**kwargs":
+        if obj.node.target.startswith("**"):
             return attribute._metadata
         return attribute
 

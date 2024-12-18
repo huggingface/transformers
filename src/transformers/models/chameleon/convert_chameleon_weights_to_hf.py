@@ -24,7 +24,7 @@ from PIL import Image
 
 from transformers import (
     ChameleonConfig,
-    ChameleonForCausalLM,
+    ChameleonForConditionalGeneration,
     ChameleonImageProcessor,
     ChameleonProcessor,
 )
@@ -49,10 +49,10 @@ python src/transformers/models/chameleon/convert_chameleon_weights_to_hf.py \
 Thereafter, models can be loaded via:
 
 ```py
-from transformers import ChameleonForCausalLM, LlamaTokenizer
+from transformers import ChameleonForConditionalGeneration, LlamaTokenizerFast
 
-model = ChameleonForCausalLM.from_pretrained("/output/path")
-tokenizer = LlamaTokenizer.from_pretrained("/output/path")
+model = ChameleonForConditionalGeneration.from_pretrained("/output/path")
+tokenizer = LlamaTokenizerFast.from_pretrained("/output/path")
 ```
 
 Important note: you need to be able to host the whole model in RAM to execute this script (even if the biggest versions
@@ -372,7 +372,7 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
         vocabulary_map=vocabulary_map,
     )
     with init_empty_weights():
-        model = ChameleonForCausalLM(config)
+        model = ChameleonForConditionalGeneration(config)
 
     model.load_state_dict(state_dict, assign=True, strict=False)
     model.save_pretrained(model_path, safe_serialization=True)
@@ -397,7 +397,7 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
     # taken from https://github.com/facebookresearch/chameleon/blob/7a72f40aa5f462965c8374f25257f55b65b25ff4/data/prompts_for_human_evaluations.jsonl
     print("Loading the checkpoint in a Chameleon model...")
     print("*" * 100)
-    model = ChameleonForCausalLM.from_pretrained(
+    model = ChameleonForConditionalGeneration.from_pretrained(
         model_path, attn_implementation="eager", torch_dtype=torch.bfloat16, device_map="auto"
     )
     processor = ChameleonProcessor.from_pretrained(model_path)

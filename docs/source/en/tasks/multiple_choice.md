@@ -270,7 +270,7 @@ At this point, only three steps remain:
 ...     args=training_args,
 ...     train_dataset=tokenized_swag["train"],
 ...     eval_dataset=tokenized_swag["validation"],
-...     tokenizer=tokenizer,
+...     processing_class=tokenizer,
 ...     data_collator=DataCollatorForMultipleChoice(tokenizer=tokenizer),
 ...     compute_metrics=compute_metrics,
 ... )
@@ -419,7 +419,7 @@ Get the class with the highest probability:
 ```py
 >>> predicted_class = logits.argmax().item()
 >>> predicted_class
-'0'
+0
 ```
 </pt>
 <tf>
@@ -448,7 +448,7 @@ Get the class with the highest probability:
 ```py
 >>> predicted_class = int(tf.math.argmax(logits, axis=-1)[0])
 >>> predicted_class
-'0'
+0
 ```
 </tf>
 </frameworkcontent>

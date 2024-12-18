@@ -11,20 +11,67 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import json
+import tempfile
 import unittest
 
 import torch
 
-from transformers.testing_utils import require_vision
+from transformers import AutoProcessor, LlamaTokenizerFast, LlavaNextProcessor
+from transformers.testing_utils import (
+    require_vision,
+)
 from transformers.utils import is_vision_available
+
+from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from transformers import AutoProcessor
+    from transformers import CLIPImageProcessor
 
 
 @require_vision
-class LlavaProcessorTest(unittest.TestCase):
+class LlavaNextProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = LlavaNextProcessor
+
+    def setUp(self):
+        self.tmpdirname = tempfile.mkdtemp()
+
+        image_processor = CLIPImageProcessor()
+        tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b")
+        processor_kwargs = self.prepare_processor_dict()
+        processor = LlavaNextProcessor(image_processor, tokenizer, **processor_kwargs)
+        processor.save_pretrained(self.tmpdirname)
+
+    def get_tokenizer(self, **kwargs):
+        return LlavaNextProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
+
+    def get_image_processor(self, **kwargs):
+        return LlavaNextProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
+
+    def prepare_processor_dict(self):
+        return {"chat_template": "dummy_template"}
+
+    @unittest.skip(
+        "Skip because the model has no processor kwargs except for chat template and"
+        "chat template is saved as a separate file. Stop skipping this test when the processor"
+        "has new kwargs saved in config file."
+    )
+    def test_processor_to_json_string(self):
+        pass
+
+    # Copied from tests.models.llava.test_processor_llava.LlavaProcessorTest.test_chat_template_is_saved
+    def test_chat_template_is_saved(self):
+        processor_loaded = self.processor_class.from_pretrained(self.tmpdirname)
+        processor_dict_loaded = json.loads(processor_loaded.to_json_string())
+        # chat templates aren't serialized to json in processors
+        self.assertFalse("chat_template" in processor_dict_loaded.keys())
+
+        # they have to be saved as separate file and loaded back from that file
+        # so we check if the same template is loaded
+        processor_dict = self.prepare_processor_dict()
+        self.assertTrue(processor_loaded.chat_template == processor_dict.get("chat_template", None))
+
     def test_chat_template(self):
         processor = AutoProcessor.from_pretrained("llava-hf/llava-v1.6-vicuna-7b-hf")
         expected_prompt = "USER: <image>\nWhat is shown in this image? ASSISTANT:"

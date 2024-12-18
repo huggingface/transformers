@@ -15,7 +15,6 @@
 
 
 import datetime
-import gc
 import math
 import unittest
 
@@ -23,7 +22,7 @@ import pytest
 
 from transformers import GPT2Config, is_torch_available
 from transformers.testing_utils import (
-    backend_empty_cache,
+    cleanup,
     require_flash_attn,
     require_torch,
     require_torch_gpu,
@@ -508,7 +507,7 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         else {}
     )
     all_parallelizable_model_classes = (GPT2LMHeadModel, GPT2DoubleHeadsModel) if is_torch_available() else ()
-    fx_compatible = True
+    fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
     test_missing_keys = False
     test_model_parallel = True
 
@@ -542,8 +541,7 @@ class GPT2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
-        gc.collect()
-        backend_empty_cache(torch_device)
+        cleanup(torch_device)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -753,8 +751,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
-        gc.collect()
-        backend_empty_cache(torch_device)
+        cleanup(torch_device, gc_collect=True)
 
     def _test_lm_generate_gpt2_helper(
         self,

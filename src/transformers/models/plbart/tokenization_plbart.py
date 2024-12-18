@@ -130,6 +130,7 @@ class PLBartTokenizer(PreTrainedTokenizer):
         tgt_lang=None,
         sp_model_kwargs: Optional[Dict[str, Any]] = None,
         additional_special_tokens=None,
+        clean_up_tokenization_spaces=True,
         **kwargs,
     ):
         # Mask token behave like a normal word, i.e. include the space before it
@@ -200,6 +201,7 @@ class PLBartTokenizer(PreTrainedTokenizer):
             tgt_lang=tgt_lang,
             additional_special_tokens=_additional_special_tokens,
             sp_model_kwargs=self.sp_model_kwargs,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             **kwargs,
         )
 

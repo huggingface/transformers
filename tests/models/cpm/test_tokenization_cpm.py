@@ -12,18 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import unittest
 
 from transformers.models.cpm.tokenization_cpm import CpmTokenizer
 from transformers.testing_utils import custom_tokenizers
 
-from ..xlnet.test_modeling_xlnet import XLNetModelTest
-
 
 @custom_tokenizers
-class CpmTokenizationTest(XLNetModelTest):
+class CpmTokenizationTest(unittest.TestCase):
     # There is no `CpmModel`
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
         return True
 

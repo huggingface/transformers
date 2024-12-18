@@ -239,7 +239,10 @@ class SuperPointInterestPointDecoder(nn.Module):
         return scores
 
     def _extract_keypoints(self, scores: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-        """Based on their scores, extract the pixels that represent the keypoints that will be used for descriptors computation"""
+        """
+        Based on their scores, extract the pixels that represent the keypoints that will be used for descriptors computation.
+        The keypoints are in the form of relative (x, y) coordinates.
+        """
         _, height, width = scores.shape
 
         # Threshold keypoints by score value
@@ -447,7 +450,7 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
 
         pixel_values = self.extract_one_channel_pixel_values(pixel_values)
 
-        batch_size = pixel_values.shape[0]
+        batch_size, _, height, width = pixel_values.shape
 
         encoder_outputs = self.encoder(
             pixel_values,
@@ -484,6 +487,9 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
             scores[i, : _scores.shape[0]] = _scores
             descriptors[i, : _descriptors.shape[0]] = _descriptors
             mask[i, : _scores.shape[0]] = 1
+
+        # Convert to relative coordinates
+        keypoints = keypoints / torch.tensor([width, height], device=keypoints.device)
 
         hidden_states = encoder_outputs[1] if output_hidden_states else None
         if not return_dict:

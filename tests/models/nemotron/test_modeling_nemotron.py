@@ -19,7 +19,6 @@ import tempfile
 import unittest
 
 import pytest
-from parameterized import parameterized
 
 from transformers import NemotronConfig, is_torch_available
 from transformers.testing_utils import (
@@ -92,21 +91,12 @@ class NemotronModelTest(GemmaModelTest):
     test_pruning = False
     fx_compatible = False
 
-    # used in `test_torch_compile`
-    _torch_compile_test_ckpt = "nvidia/nemotron-3-8b-base-4k-hf"
+    # used in `test_torch_compile_for_training`
+    _torch_compile_train_cls = NemotronForCausalLM if is_torch_available() else None
 
     def setUp(self):
         self.model_tester = NemotronModelTester(self)
         self.config_tester = ConfigTester(self, config_class=NemotronConfig, hidden_size=37)
-
-    @require_torch_sdpa
-    @slow
-    @unittest.skip(
-        reason="Due to custom causal mask, there is a slightly too big difference between eager and sdpa in bfloat16."
-    )
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
-        pass
 
     @unittest.skip("Eager and SDPA do not produce the same outputs, thus this test fails")
     def test_model_outputs_equivalence(self, **kwargs):
