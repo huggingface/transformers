@@ -212,3 +212,6 @@ class ModernBertConfig(PretrainedConfig):
             raise ValueError(
                 f'Invalid value for `classifier_pooling`, should be either "cls" or "mean", but is {self.classifier_pooling}.'
             )
+
+
+__all__ = ["ModernBertConfig"]

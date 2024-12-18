@@ -1076,52 +1076,6 @@ class ModernBertPreTrainedModel(PreTrainedModel):
 
         return model_embeds
 
-    @torch.no_grad()
-    def _unpad_inputs_no_grad(
-        self,
-        input_ids: torch.Tensor,
-        attention_mask: torch.Tensor,
-        position_ids: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-    ):
-        return self._unpad_inputs(
-            input_ids=input_ids, attention_mask=attention_mask, position_ids=position_ids, labels=labels
-        )
-
-    def _unpad_inputs(
-        self,
-        input_ids: torch.Tensor,
-        attention_mask: torch.Tensor,
-        position_ids: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.Tensor | int | None]:
-        return _unpad_modernbert_input(
-            inputs=input_ids, attention_mask=attention_mask, position_ids=position_ids, labels=labels
-        )
-
-    @torch.no_grad()
-    def _pad_outputs_no_grad(
-        self,
-        inputs: torch.Tensor,
-        indices: torch.Tensor,
-        batch_size: int,
-        seqlen: int,
-    ):
-        return self._pad_outputs(
-            inputs=inputs,
-            indices=indices,
-            batch_size=batch_size,
-            seqlen=seqlen,
-        )
-
-    def _pad_outputs(
-        self,
-        inputs: torch.Tensor,
-        indices: torch.Tensor,
-        batch_size: int,
-        seqlen: int,
-    ):
-        return _pad_modernbert_output(inputs=inputs, indices=indices, batch=batch_size, seqlen=seqlen)
 
     @classmethod
     def offsets_to_sequence_ids_tensor(cls, offsets):
@@ -1251,11 +1205,10 @@ class ModernBertModel(ModernBertPreTrainedModel):
             if indices is None and cu_seqlens is None and max_seqlen is None:
                 repad = True
                 if self.config.unpad_no_grad:
-                    input_ids, indices, cu_seqlens, max_seqlen, *_ = self._unpad_inputs_no_grad(
-                        input_ids, attention_mask
-                    )
+                    with torch.no_grad():
+                        input_ids, indices, cu_seqlens, max_seqlen, *_ = _unpad_modernbert_input(inputs=input_ids, attention_mask=attention_mask)
                 else:
-                    input_ids, indices, cu_seqlens, max_seqlen, *_ = self._unpad_inputs(input_ids, attention_mask)
+                    input_ids, indices, cu_seqlens, max_seqlen, *_ = _unpad_modernbert_input(inputs=input_ids, attention_mask=attention_mask)
         elif position_ids is None:
             position_ids = torch.arange(seq_len, device=input_ids.device).unsqueeze(0)
 
@@ -1294,10 +1247,10 @@ class ModernBertModel(ModernBertPreTrainedModel):
         hidden_states = self.final_norm(hidden_states)
 
         if repad:
-            hidden_states = self._pad_outputs(hidden_states, indices, batch_size, seq_len)
+            hidden_states = _pad_modernbert_output(inputs=hidden_states, indices=indices, batch=batch_size, seqlen=seq_len)
             if all_hidden_states is not None:
                 all_hidden_states = tuple(
-                    self._pad_outputs(hs, indices, batch_size, seq_len) for hs in all_hidden_states
+                    _pad_modernbert_output(inputs=hs, indices=indices, batch=batch_size, seqlen=seq_len) for hs in all_hidden_states
                 )
 
         if not return_dict:
@@ -1368,13 +1321,14 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
             if indices is None and cu_seqlens is None and max_seqlen is None:
                 batch_size, seq_len = input_ids.shape[:2]
                 if self.config.unpad_no_grad:
-                    input_ids, indices, cu_seqlens, max_seqlen, position_ids, labels = self._unpad_inputs_no_grad(
-                        input_ids=input_ids, attention_mask=attention_mask, position_ids=position_ids, labels=labels
-                    )
+                    with torch.no_grad():
+                        input_ids, indices, cu_seqlens, max_seqlen, position_ids, labels = _unpad_modernbert_input(
+                            inputs=input_ids, attention_mask=attention_mask, position_ids=position_ids, labels=labels
+                            )
                 else:
-                    input_ids, indices, cu_seqlens, max_seqlen, position_ids, labels = self._unpad_inputs(
-                        input_ids=input_ids, attention_mask=attention_mask, position_ids=position_ids, labels=labels
-                    )
+                    input_ids, indices, cu_seqlens, max_seqlen, position_ids, labels = _unpad_modernbert_input(
+                        inputs=input_ids, attention_mask=attention_mask, position_ids=position_ids, labels=labels
+                        )  
 
         outputs = self.model(
             input_ids,
@@ -1413,9 +1367,10 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
 
         if self.config._attn_implementation == "flash_attention_2":
             if self.config.unpad_no_grad:
-                logits = self._pad_outputs_no_grad(logits, indices, batch_size, seq_len)
+                with torch.no_grad():
+                    logits = _pad_modernbert_output(inputs=logits, indices=indices, batch=batch_size, seqlen=seq_len)
             else:
-                logits = self._pad_outputs(logits, indices, batch_size, seq_len)
+                logits = _pad_modernbert_output(inputs=logits, indices=indices, batch=batch_size, seqlen=seq_len)
         if not return_dict:
             output = (logits,)
             return ((loss,) + output) if loss is not None else output
@@ -1606,3 +1561,11 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+__all__ = [
+    "ModernBertConfig",
+    "ModernBertModel",
+    "ModernBertForMaskedLM",
+    "ModernBertForSequenceClassification",
+    "ModernBertForTokenClassification",
+]
