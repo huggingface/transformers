@@ -269,6 +269,12 @@ class MistralForQuestionAnswering(LlamaForQuestionAnswering):
         self.model = MistralModel(config)  # diff with Llama: transformer->model
         del self.transformer
 
+    def get_input_embeddings(self):
+        return self.model.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.model.embed_tokens = value
+
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,

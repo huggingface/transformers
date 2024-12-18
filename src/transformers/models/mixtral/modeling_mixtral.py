@@ -1322,10 +1322,10 @@ class MixtralForQuestionAnswering(MixtralPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.transformer.embed_tokens
+        return self.model.embed_tokens
 
     def set_input_embeddings(self, value):
-        self.transformer.embed_tokens = value
+        self.model.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(MIXTRAL_INPUTS_DOCSTRING)
     def forward(
