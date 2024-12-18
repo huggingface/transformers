@@ -1297,7 +1297,7 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
         self.num_labels = config.num_labels
 
         self.model = ModernBertModel(config)
-        self.drop = nn.Dropout(config.classifier_dropout)
+        self.head = ModernBertPoolingHead(config)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
@@ -1348,7 +1348,7 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
         )
         last_hidden_state = outputs[0]
 
-        last_hidden_state = self.drop(last_hidden_state)
+        last_hidden_state = self.head(last_hidden_state, attention_mask, pool=False)
         logits = self.classifier(last_hidden_state)
 
         loss = None
