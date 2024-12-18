@@ -1491,7 +1491,7 @@ class Kosmos2_5TextTransformer(nn.Module):
         if image_embeds_position_mask is not None:
             # make every not equal 0 be 1
             image_embeds_position_mask = image_embeds_position_mask.ne(0).long()
-            segment_embeds = self.segment_emb(image_embeds_position_mask)
+            segment_embeds = self.segment_emb(image_embeds_position_mask).to(positions.device)
             positions += segment_embeds
         else:
             # add zero embedding for padding tokens
