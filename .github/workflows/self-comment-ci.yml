@@ -113,6 +113,8 @@ jobs:
         id: create_run
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Create a commit status (pending) for a run of this workflow. The status has to be updated later in `update_run_status`.
+          # See https://docs.github.com/en/rest/commits/statuses?apiVersion=2022-11-28#create-a-commit-status
           GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           gh api \
