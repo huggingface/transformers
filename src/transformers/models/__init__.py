@@ -134,6 +134,7 @@ from . import (
     levit,
     lilt,
     llama,
+    telechat2,
     llava,
     llava_next,
     llava_next_video,

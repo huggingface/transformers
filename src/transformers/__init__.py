@@ -534,6 +534,7 @@ _import_structure = {
     "models.levit": ["LevitConfig"],
     "models.lilt": ["LiltConfig"],
     "models.llama": ["LlamaConfig"],
+    "models.telechat2": ["TeleChat2Config"],
     "models.llava": [
         "LlavaConfig",
         "LlavaProcessor",
@@ -1022,6 +1023,7 @@ else:
     _import_structure["models.gpt_sw3"].append("GPTSw3Tokenizer")
     _import_structure["models.layoutxlm"].append("LayoutXLMTokenizer")
     _import_structure["models.llama"].append("LlamaTokenizer")
+    _import_structure["models.telechat2"].append("TeleChat2Tokenizer")
     _import_structure["models.m2m_100"].append("M2M100Tokenizer")
     _import_structure["models.marian"].append("MarianTokenizer")
     _import_structure["models.mbart"].append("MBartTokenizer")
@@ -2604,6 +2606,16 @@ else:
             "LlamaForTokenClassification",
             "LlamaModel",
             "LlamaPreTrainedModel",
+        ]
+    )
+    _import_structure["models.telechat2"].extend(
+        [
+            "TeleChat2ForCausalLM",
+            "TeleChat2ForQuestionAnswering",
+            "TeleChat2ForSequenceClassification",
+            "TeleChat2ForTokenClassification",
+            "TeleChat2Model",
+            "TeleChat2PreTrainedModel",
         ]
     )
     _import_structure["models.llava"].extend(
@@ -4799,6 +4811,7 @@ else:
     )
     _import_structure["models.gptj"].extend(["FlaxGPTJForCausalLM", "FlaxGPTJModel", "FlaxGPTJPreTrainedModel"])
     _import_structure["models.llama"].extend(["FlaxLlamaForCausalLM", "FlaxLlamaModel", "FlaxLlamaPreTrainedModel"])
+    _import_structure["models.telechat2"].extend(["FlaxTeleChat2ForCausalLM", "FlaxTeleChat2Model", "FlaxTeleChat2PreTrainedModel"])
     _import_structure["models.gemma"].extend(["FlaxGemmaForCausalLM", "FlaxGemmaModel", "FlaxGemmaPreTrainedModel"])
     _import_structure["models.longt5"].extend(
         [
@@ -5442,6 +5455,7 @@ if TYPE_CHECKING:
     from .models.levit import LevitConfig
     from .models.lilt import LiltConfig
     from .models.llama import LlamaConfig
+    from .models.telechat2 import TeleChat2Config
     from .models.llava import (
         LlavaConfig,
         LlavaProcessor,
@@ -5986,6 +6000,7 @@ if TYPE_CHECKING:
         from .models.gpt_sw3 import GPTSw3Tokenizer
         from .models.layoutxlm import LayoutXLMTokenizer
         from .models.llama import LlamaTokenizer
+        from .models.telechat2 import TeleChat2Tokenizer
         from .models.m2m_100 import M2M100Tokenizer
         from .models.marian import MarianTokenizer
         from .models.mbart import MBartTokenizer
@@ -7317,6 +7332,14 @@ if TYPE_CHECKING:
             LlamaForTokenClassification,
             LlamaModel,
             LlamaPreTrainedModel,
+        )
+        from .models.telechat2 import (
+            TeleChat2ForCausalLM,
+            TeleChat2ForQuestionAnswering,
+            TeleChat2ForSequenceClassification,
+            TeleChat2ForTokenClassification,
+            TeleChat2Model,
+            TeleChat2PreTrainedModel,
         )
         from .models.llava import (
             LlavaForConditionalGeneration,
@@ -9081,6 +9104,11 @@ if TYPE_CHECKING:
             FlaxLlamaForCausalLM,
             FlaxLlamaModel,
             FlaxLlamaPreTrainedModel,
+        )
+        from .models.telechat2 import (
+            FlaxTeleChat2ForCausalLM,
+            FlaxTeleChat2Model,
+            FlaxTeleChat2PreTrainedModel,
         )
         from .models.longt5 import (
             FlaxLongT5ForConditionalGeneration,
