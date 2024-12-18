@@ -142,10 +142,11 @@ class ModernBertConfig(PretrainedConfig):
             Whether to use sparse prediction for the masked language model instead of returning the full dense logits.
         sparse_pred_ignore_index (`int`, *optional*, defaults to -100):
             The index to ignore for the sparse prediction.
-        compile (`bool`, *optional*):
-            Whether to compile the model. If `None`, then parts of the model will be compiled if 1) `triton` is
-            installed, 2) the model is not on MPS, 3) the model is not shared between devices, and 4) the model is not
-            resized after initialization. If `True`, then the model may be faster in some scenarios.
+        reference_compile (`bool`, *optional*):
+            Whether to compile the layers of the model which were compiled during pretraining. If `None`, then parts of
+            the model will be compiled if 1) `triton` is installed, 2) the model is not on MPS, 3) the model is not
+            shared between devices, and 4) the model is not resized after initialization. If `True`, then the model may
+            be faster in some scenarios.
 
     Examples:
 
@@ -201,7 +202,7 @@ class ModernBertConfig(PretrainedConfig):
         deterministic_flash_attn=False,
         sparse_prediction=False,
         sparse_pred_ignore_index=-100,
-        compile=None,
+        reference_compile=None,
         **kwargs,
     ):
         super().__init__(
@@ -241,7 +242,7 @@ class ModernBertConfig(PretrainedConfig):
         self.deterministic_flash_attn = deterministic_flash_attn
         self.sparse_prediction = sparse_prediction
         self.sparse_pred_ignore_index = sparse_pred_ignore_index
-        self.compile = compile
+        self.reference_compile = reference_compile
 
         if self.classifier_pooling not in ["cls", "mean"]:
             raise ValueError(
@@ -474,7 +475,7 @@ class ModernBertEmbeddings(nn.Module):
     def forward(self, input_ids: torch.LongTensor, position_ids: Optional[torch.LongTensor] = None) -> torch.Tensor:
         hidden_states = (
             self.compiled_embeddings(input_ids)
-            if self.config.compile
+            if self.config.reference_compile
             else self.drop(self.norm(self.tok_embeddings(input_ids)))
         )
         return hidden_states
@@ -842,7 +843,9 @@ class ModernBertEncoderLayer(nn.Module):
         )
         hidden_states = hidden_states + attn_outputs[0]
         mlp_output = (
-            self.compiled_mlp(hidden_states) if self.config.compile else self.mlp(self.mlp_norm(hidden_states))
+            self.compiled_mlp(hidden_states)
+            if self.config.reference_compile
+            else self.mlp(self.mlp_norm(hidden_states))
         )
         hidden_states = hidden_states + mlp_output
 
@@ -1078,37 +1081,37 @@ class ModernBertPreTrainedModel(PreTrainedModel):
         return config
 
     def _maybe_set_compile(self):
-        if self.config.compile is False:
+        if self.config.reference_compile is False:
             return
 
         if hasattr(self, "hf_device_map") and len(self.hf_device_map) > 1:
-            if self.config.compile:
+            if self.config.reference_compile:
                 logger.warning_once(
                     "If `accelerate` split the model across devices, `torch.compile` will not work. "
                     "Falling back to non-compiled mode."
                 )
-            self.config.compile = False
+            self.config.reference_compile = False
 
         if self.device.type == "mps":
-            if self.config.compile:
+            if self.config.reference_compile:
                 logger.warning_once(
                     "Compiling the model with `torch.compile` and using a `torch.mps` device is not supported. "
                     "Falling back to non-compiled mode."
                 )
-            self.config.compile = False
+            self.config.reference_compile = False
 
-        if self.config.compile is None:
-            self.config.compile = is_triton_available()
+        if self.config.reference_compile is None:
+            self.config.reference_compile = is_triton_available()
 
     def resize_token_embeddings(self, *args, **kwargs):
         model_embeds = super().resize_token_embeddings(*args, **kwargs)
 
-        if self.config.compile in {True, None}:
-            if self.config.compile:
+        if self.config.reference_compile in {True, None}:
+            if self.config.reference_compile:
                 logger.warning_once(
                     "Resizing token embeddings with `torch.compile` is not supported. Falling back to non-compiled mode."
                 )
-            self.config.compile = False
+            self.config.reference_compile = False
 
         return model_embeds
 
@@ -1475,7 +1478,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
 
         logits = (
             self.compiled_head(last_hidden_state)
-            if self.config.compile
+            if self.config.reference_compile
             else self.decoder(self.head(last_hidden_state))
         )
 

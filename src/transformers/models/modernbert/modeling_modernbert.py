@@ -213,7 +213,7 @@ class ModernBertEmbeddings(nn.Module):
     def forward(self, input_ids: torch.LongTensor, position_ids: Optional[torch.LongTensor] = None) -> torch.Tensor:
         hidden_states = (
             self.compiled_embeddings(input_ids)
-            if self.config.compile
+            if self.config.reference_compile
             else self.drop(self.norm(self.tok_embeddings(input_ids)))
         )
         return hidden_states
@@ -639,7 +639,9 @@ class ModernBertEncoderLayer(nn.Module):
         )
         hidden_states = hidden_states + attn_outputs[0]
         mlp_output = (
-            self.compiled_mlp(hidden_states) if self.config.compile else self.mlp(self.mlp_norm(hidden_states))
+            self.compiled_mlp(hidden_states)
+            if self.config.reference_compile
+            else self.mlp(self.mlp_norm(hidden_states))
         )
         hidden_states = hidden_states + mlp_output
 
@@ -947,37 +949,37 @@ class ModernBertPreTrainedModel(PreTrainedModel):
         return config
 
     def _maybe_set_compile(self):
-        if self.config.compile is False:
+        if self.config.reference_compile is False:
             return
 
         if hasattr(self, "hf_device_map") and len(self.hf_device_map) > 1:
-            if self.config.compile:
+            if self.config.reference_compile:
                 logger.warning_once(
                     "If `accelerate` split the model across devices, `torch.compile` will not work. "
                     "Falling back to non-compiled mode."
                 )
-            self.config.compile = False
+            self.config.reference_compile = False
 
         if self.device.type == "mps":
-            if self.config.compile:
+            if self.config.reference_compile:
                 logger.warning_once(
                     "Compiling the model with `torch.compile` and using a `torch.mps` device is not supported. "
                     "Falling back to non-compiled mode."
                 )
-            self.config.compile = False
+            self.config.reference_compile = False
 
-        if self.config.compile is None:
-            self.config.compile = is_triton_available()
+        if self.config.reference_compile is None:
+            self.config.reference_compile = is_triton_available()
 
     def resize_token_embeddings(self, *args, **kwargs):
         model_embeds = super().resize_token_embeddings(*args, **kwargs)
 
-        if self.config.compile in {True, None}:
-            if self.config.compile:
+        if self.config.reference_compile in {True, None}:
+            if self.config.reference_compile:
                 logger.warning_once(
                     "Resizing token embeddings with `torch.compile` is not supported. Falling back to non-compiled mode."
                 )
-            self.config.compile = False
+            self.config.reference_compile = False
 
         return model_embeds
 
@@ -1344,7 +1346,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
 
         logits = (
             self.compiled_head(last_hidden_state)
-            if self.config.compile
+            if self.config.reference_compile
             else self.decoder(self.head(last_hidden_state))
         )
 
