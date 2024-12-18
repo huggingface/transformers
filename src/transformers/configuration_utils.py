@@ -40,6 +40,7 @@ from .utils import (
     is_torch_available,
     logging,
 )
+from .utils.generic import is_timm_config_dict
 
 
 logger = logging.get_logger(__name__)
@@ -702,6 +703,11 @@ class PretrainedConfig(PushToHubMixin):
             config_dict["custom_pipelines"] = add_model_info_to_custom_pipelines(
                 config_dict["custom_pipelines"], pretrained_model_name_or_path
             )
+
+        # timm models are not saved with the model_type in the config file
+        if "model_type" not in config_dict and is_timm_config_dict(config_dict):
+            config_dict["model_type"] = "timm_wrapper"
+
         return config_dict, kwargs
 
     @classmethod
