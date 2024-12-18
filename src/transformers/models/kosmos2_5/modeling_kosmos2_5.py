@@ -407,8 +407,8 @@ class Kosmos2_5VisionEmbeddings(nn.Module):
         flattened_patches = flattened_patches[:, :, 2:]
 
         embeddings = self.patch_projection(flattened_patches)
-        row_embeddings = self.row_embedder(row_indices)
-        col_embeddings = self.column_embedder(col_indices)
+        row_embeddings = self.row_embedder(row_indices).to(embeddings.device)
+        col_embeddings = self.column_embedder(col_indices).to(embeddings.device)
 
         # sum all embeddings together
         embeddings = embeddings + row_embeddings + col_embeddings
@@ -1496,7 +1496,7 @@ class Kosmos2_5TextTransformer(nn.Module):
         else:
             # add zero embedding for padding tokens
             bsz, seq_len, dim = positions.size()
-            zero_emb = self.segment_emb(torch.zeros((bsz, 1), dtype=torch.long, device=positions.device))
+            zero_emb = self.segment_emb(torch.zeros((bsz, 1), dtype=torch.long)).to(positions.device)
             positions += zero_emb
 
         hidden_states = inputs_embeds + positions
