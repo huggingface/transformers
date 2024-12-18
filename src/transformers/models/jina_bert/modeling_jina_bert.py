@@ -159,18 +159,10 @@ class JinaBertSelfAttention(nn.Module):
             self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
 
         self.is_decoder = config.is_decoder
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
-            raise ValueError(
-                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
-                f"heads ({config.num_attention_heads})"
-            )
 
         self.attn_implementation = config.attn_implementation
         self.layer_norm_q = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layer_norm_k = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        if self.position_embedding_type == "relative_key" or self.position_embedding_type == "relative_key_query":
-            self.max_position_embeddings = config.max_position_embeddings
-            self.distance_embedding = nn.Embedding(2 * config.max_position_embeddings - 1, self.attention_head_size)
 
     def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -440,10 +432,6 @@ class JinaBertLayer(nn.Module):
         self.feed_forward_type = config.feed_forward_type
         self.layer_norm_1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.layer_norm_2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        if self.add_cross_attention:
-            if not self.is_decoder:
-                raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = JinaBertAttention(config, position_embedding_type="absolute")
         if self.feed_forward_type.endswith("glu"):
             self.mlp = JinaBertGLUMLP(config)
         else:
@@ -1433,9 +1421,6 @@ class JinaBertLMHeadModel(JinaBertPreTrainedModel, GenerationMixin):
         self.jina_bert = JinaBertModel(config, add_pooling_layer=False)
         self.cls = JinaBertOnlyMLMHead(config)
 
-        if not config.is_decoder:
-            logger.warning("If you want to use `JinaBertLMHeadModel` as a standalone, add `is_decoder=True.`")
-
         self.bert = JinaBertModel(config, add_pooling_layer=False)
 
         # Initialize weights and apply final processing
@@ -1494,29 +1479,6 @@ class JinaBertLMHeadModel(JinaBertPreTrainedModel, GenerationMixin):
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
-
-                encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                    Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
-                    the model is configured as a decoder.
-                encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                    Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
-                    the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
-
-                    - 1 for tokens that are **not masked**,
-                    - 0 for tokens that are **masked**.
-                labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                    Labels for computing the left-to-right language modeling loss (next word prediction). Indices should be in
-                    `[-100, 0, ..., config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are
-                    ignored (masked), the loss is only computed for the tokens with labels n `[0, ..., config.vocab_size]`
-                past_key_values (`tuple(tuple(torch.FloatTensor))` of length `config.n_layers` with each tuple having 4 tensors of shape `(batch_size, num_heads, sequence_length - 1, embed_size_per_head)`):
-                    Contains precomputed key and value hidden states of the attention blocks. Can be used to speed up decoding.
-
-                    If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
-                    don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-                    `decoder_input_ids` of shape `(batch_size, sequence_length)`.
-                use_cache (`bool`, *optional*):
-                    If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-                    `past_key_values`).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         if labels is not None:
