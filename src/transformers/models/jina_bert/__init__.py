@@ -23,8 +23,8 @@ if TYPE_CHECKING:
     from .convert_jina_bert_original_tf_checkpoint_to_pytorch import *
     from .convert_jina_bert_pytorch_checkpoint_to_original_tf import *
     from .convert_jina_bert_token_dropping_original_tf2_checkpoint_to_pytorch import *
-    from .modeling_jina_bert import *
     from .modeling_flax_jina_bert import *
+    from .modeling_jina_bert import *
     from .modeling_tf_jina_bert import *
 else:
     import sys

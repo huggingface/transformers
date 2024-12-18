@@ -91,7 +91,9 @@ def convert_pytorch_checkpoint_to_tf(model: JinaBertModel, ckpt_dir: str, model_
 
 def main(raw_args=None):
     parser = argparse.ArgumentParser()
-    parser.add_argument("--model_name", type=str, required=True, help="model name e.g. jinaai/jina-embeddings-v2-base-code")
+    parser.add_argument(
+        "--model_name", type=str, required=True, help="model name e.g. jinaai/jina-embeddings-v2-base-code"
+    )
     parser.add_argument(
         "--cache_dir", type=str, default=None, required=False, help="Directory containing pytorch model"
     )

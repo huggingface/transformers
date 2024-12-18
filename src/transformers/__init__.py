@@ -213,7 +213,6 @@ _import_structure = {
     "models.jina_bert": [
         "BasicTokenizer",
         "JinaBertConfig",
-       
         "WordpieceTokenizer",
     ],
     "models.bert_generation": ["BertGenerationConfig"],
@@ -5140,12 +5139,6 @@ if TYPE_CHECKING:
         BertTokenizer,
         WordpieceTokenizer,
     )
-    from .models.jina_bert import (
-        BasicTokenizer,
-        JinaBertConfig,
-       
-        WordpieceTokenizer,
-    )
     from .models.bert_generation import BertGenerationConfig
     from .models.bert_japanese import (
         BertJapaneseTokenizer,
@@ -5476,6 +5469,11 @@ if TYPE_CHECKING:
     )
     from .models.jamba import JambaConfig
     from .models.jetmoe import JetMoeConfig
+    from .models.jina_bert import (
+        BasicTokenizer,
+        JinaBertConfig,
+        WordpieceTokenizer,
+    )
     from .models.kosmos2 import (
         Kosmos2Config,
         Kosmos2Processor,
@@ -6559,19 +6557,6 @@ if TYPE_CHECKING:
             BertPreTrainedModel,
             load_tf_weights_in_bert,
         )
-        from .models.jina_bert import (
-            JinaBertForMaskedLM,
-            JinaBertForMultipleChoice,
-            JinaBertForNextSentencePrediction,
-            JinaBertForPreTraining,
-            JinaBertForQuestionAnswering,
-            JinaBertForSequenceClassification,
-            JinaBertForTokenClassification,
-            JinaBertLMHeadModel,
-            JinaBertModel,
-            JinaBertPreTrainedModel,
-            load_tf_weights_in_jina_bert,
-        )
         from .models.bert_generation import (
             BertGenerationDecoder,
             BertGenerationEncoder,
@@ -7355,6 +7340,19 @@ if TYPE_CHECKING:
             JetMoeForSequenceClassification,
             JetMoeModel,
             JetMoePreTrainedModel,
+        )
+        from .models.jina_bert import (
+            JinaBertForMaskedLM,
+            JinaBertForMultipleChoice,
+            JinaBertForNextSentencePrediction,
+            JinaBertForPreTraining,
+            JinaBertForQuestionAnswering,
+            JinaBertForSequenceClassification,
+            JinaBertForTokenClassification,
+            JinaBertLMHeadModel,
+            JinaBertModel,
+            JinaBertPreTrainedModel,
+            load_tf_weights_in_jina_bert,
         )
         from .models.kosmos2 import (
             Kosmos2ForConditionalGeneration,

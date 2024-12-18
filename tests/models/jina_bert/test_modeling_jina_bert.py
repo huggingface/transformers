@@ -673,14 +673,16 @@ class JinaBertModelIntegrationTest(unittest.TestCase):
 
     @slow
     def test_encode(self):
-        model = JinaBertModel.from_pretrained('jinaai/jina-embeddings-v2-base-code')
+        model = JinaBertModel.from_pretrained("jinaai/jina-embeddings-v2-base-code")
         output = model.encode(
             [
-                'How do I access the index while iterating over a sequence with a for loop?',
-                '# Use the built-in enumerator\nfor idx, x in enumerate(xs):\n    print(idx, x)',
+                "How do I access the index while iterating over a sequence with a for loop?",
+                "# Use the built-in enumerator\nfor idx, x in enumerate(xs):\n    print(idx, x)",
             ]
         )
-        expected_slice = torch.tensor([[[  -2.57177323e-01, -1.17558146e+00,  3.98104578e-01], [ -3.41457665e-01, -3.33318442e-01, -8.68800059e-02]]])
+        expected_slice = torch.tensor(
+            [[[-2.57177323e-01, -1.17558146e00, 3.98104578e-01], [-3.41457665e-01, -3.33318442e-01, -8.68800059e-02]]]
+        )
         self.assertTrue(torch.allclose(torch.tensor(output[:2, 1:4]), expected_slice, atol=1e-4))
 
     @slow
@@ -716,8 +718,12 @@ class JinaBertModelIntegrationTest(unittest.TestCase):
     def test_sdpa_ignored_mask(self):
         pkv = []
 
-        model = JinaBertModel.from_pretrained("hf-internal-testing/tiny-random-JinaBertModel", attn_implementation="eager")
-        model_sdpa = JinaBertModel.from_pretrained("hf-internal-testing/tiny-random-JinaBertModel", attn_implementation="sdpa")
+        model = JinaBertModel.from_pretrained(
+            "hf-internal-testing/tiny-random-JinaBertModel", attn_implementation="eager"
+        )
+        model_sdpa = JinaBertModel.from_pretrained(
+            "hf-internal-testing/tiny-random-JinaBertModel", attn_implementation="sdpa"
+        )
 
         model = model.eval()
         model_sdpa = model_sdpa.eval()
