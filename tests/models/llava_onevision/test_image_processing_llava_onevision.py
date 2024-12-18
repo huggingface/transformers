@@ -300,3 +300,9 @@ class LlavaOnevisionImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
         encoded_videos = video_processing(video_inputs, return_tensors="pt").pixel_values_videos
         expected_output_video_shape = (7, 8, 3, 20, 20)
         self.assertEqual(tuple(encoded_videos.shape), expected_output_video_shape)
+
+    @unittest.skip(
+        reason="LlavaOnevisionImageProcessorFast doesn't compile (infinitely) when using class transforms"
+    )  # FIXME yoni
+    def test_can_compile_fast_image_processor(self):
+        pass

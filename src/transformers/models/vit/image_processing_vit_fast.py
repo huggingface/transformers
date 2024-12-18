@@ -113,7 +113,7 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
         image_std: Union[float, List[float]],
     ) -> "Sequential":
         """
-        Given the input settings build the image transforms using `torchvision.transforms.Compose`.
+        Given the input settings build the image transforms using a `Sequential` module.
         """
         transforms = []
 

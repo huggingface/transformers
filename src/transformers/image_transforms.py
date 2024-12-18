@@ -1028,6 +1028,26 @@ if is_torch_available():
                 f"Inputs to Rescale must be a list of torch.Tensor or a dictionary with 'grouped_images' and 'grouped_images_index' keys, got {images}."
             )
 
+    class CenterCrop(torch.nn.Module):
+        def __init__(self, size: Tuple[int, int]):
+            super().__init__()
+            self.size = size
+
+        def forward(self, images: Union["torch.Tensor", dict]):
+            if isinstance(images, dict):
+                grouped_images = images["grouped_images"]
+                grouped_images_index = images["grouped_images_index"]
+                cropped_images = {}
+                for shape, image_group in grouped_images.items():
+                    cropped_images[shape] = F.center_crop(image_group, self.size)
+                return {"grouped_images": cropped_images, "grouped_images_index": grouped_images_index}
+            elif isinstance(images, torch.Tensor):
+                return F.center_crop(images, self.size)
+
+            raise ValueError(
+                f"Inputs to CenterCrop must be a torch.Tensor or a dictionary with 'grouped_images' and 'grouped_images_index' keys, got {images}."
+            )
+
     class ReorderImages(torch.nn.Module):
         """
         Reorders images back to the original order.

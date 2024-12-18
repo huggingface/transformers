@@ -14,15 +14,16 @@
 # limitations under the License.
 """Fast Image processor class for LLaVa-Onevision."""
 
+import functools
 from typing import Dict, List, Optional, Union
 
 from ...image_processing_utils import BatchFeature, get_patch_output_size, get_size_dict, select_best_resolution
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
+    SizeDict,
     divide_to_patches,
-    group_images_by_shape,
-    reorder_images,
 )
+from ...image_transforms import CenterCrop, GroupByShape, Normalize, ReorderImages, Rescale, Resize
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
@@ -43,6 +44,7 @@ from ...utils import (
 
 if is_torch_available():
     import torch
+    from torch.nn import Sequential
 
 if is_torchvision_available():
     if is_torchvision_v2_available():
@@ -318,7 +320,57 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
 
         return pixel_values
 
-    # Copied from transformers.models.llava_next.image_processing_llava_next_fast.LlavaNextImageProcessorFast.preprocess
+    def _build_transforms(
+        self,
+        do_resize: bool,
+        size: SizeDict,
+        interpolation: "F.InterpolationMode",
+        do_center_crop: bool,
+        crop_size: int,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: Union[float, List[float]],
+        image_std: Union[float, List[float]],
+    ) -> "Sequential":
+        """
+        Given the input settings build the image transforms using a `Sequential` module.
+        """
+        transforms = []
+
+        transforms.append(GroupByShape())
+        if do_resize:
+            transforms.append(Resize(size, interpolation=interpolation))
+            # Since the size was changed, we need to group the images by shape again
+            transforms.append(ReorderImages())
+            transforms.append(GroupByShape())
+        if do_center_crop:
+            transforms.append(CenterCrop(crop_size))
+            # Since the size was changed, we need to group the images by shape again
+            transforms.append(ReorderImages())
+            transforms.append(GroupByShape())
+        # We can combine rescale and normalize into a single operation for speed
+        if do_rescale and do_normalize:
+            # image_mean and image_std have already been adjusted for rescaling
+            transforms.append(Normalize(image_mean, image_std))
+        elif do_rescale:
+            transforms.append(Rescale(rescale_factor=rescale_factor))
+        elif do_normalize:
+            transforms.append(Normalize(image_mean, image_std))
+
+        if isinstance(transforms[-1], GroupByShape):
+            # No added transforms, so we can remove the last GroupByShape
+            transforms.pop()
+        else:
+            # We necessarily have grouped images, so we need to reorder them back to the original order
+            transforms.append(ReorderImages())
+
+        return Sequential(*transforms)
+
+    @functools.lru_cache(maxsize=1)
+    def get_transforms(self, **kwargs) -> "Sequential":
+        return self._build_transforms(**kwargs)
+
     def preprocess(
         self,
         images: ImageInput,
@@ -431,6 +483,19 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
             **kwargs,
         )
 
+        patches_transforms = self.get_transforms(
+            do_resize=do_resize,
+            size=size,
+            interpolation=interpolation,
+            do_center_crop=do_center_crop,
+            crop_size=crop_size,
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+        )
+
         processed_images = []
         image_sizes = []
         for image in images:
@@ -452,29 +517,9 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
                 interpolation=interpolation,
             )
 
-            # Group images by size for batched processing
-            processed_image_patches_grouped = {}
-            grouped_image_patches, grouped_image_patches_index = group_images_by_shape(image_patches)
-            for shape, stacked_image_patches in grouped_image_patches.items():
-                if do_resize:
-                    stacked_image_patches = self.resize(
-                        image=stacked_image_patches,
-                        size=size,
-                        interpolation=interpolation,
-                    )
-                if do_center_crop:
-                    stacked_image_patches = self.center_crop(stacked_image_patches, crop_size)
-                # Fused rescale and normalize
-                if do_rescale and do_normalize:
-                    stacked_image_patches = self.normalize(
-                        stacked_image_patches.to(dtype=torch.float32), image_mean, image_std
-                    )
-                elif do_rescale:
-                    stacked_image_patches = stacked_image_patches * rescale_factor
-                elif do_normalize:
-                    stacked_image_patches = self.normalize(stacked_image_patches, image_mean, image_std)
-                processed_image_patches_grouped[shape] = stacked_image_patches
-            processed_image_patches = reorder_images(processed_image_patches_grouped, grouped_image_patches_index)
+            # apply torchvision transforms to patches
+            processed_image_patches = patches_transforms(image_patches)
+
             processed_image_patches = (
                 torch.stack(processed_image_patches, dim=0) if return_tensors else processed_image_patches
             )
