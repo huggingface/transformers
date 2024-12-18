@@ -321,7 +321,7 @@ class BartFlashAttention2(BartAttention):
         bsz, q_len, _ = hidden_states.size()
 
         # get query proj
-        query_states = self.q_proj(hidden_states).view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(bsz, -1, self.num_heads, self.head_dim)
 
         if past_key_value is not None:
             is_updated = past_key_value.is_updated.get(self.layer_idx)
@@ -352,9 +352,10 @@ class BartFlashAttention2(BartAttention):
                 if is_cross_attention:
                     past_key_value.is_updated[self.layer_idx] = True
 
-        causal_mask = None
-        if attention_mask is not None:  # no matter the length, we just slice it
-            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+        # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
+        # to be able to avoid many of these transpose/reshape/view.
+        key_states = key_states.transpose(1, 2)
+        value_states = value_states.transpose(1, 2)
 
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons
         # therefore the input hidden states gets silently casted in float32. Hence, we need
@@ -385,7 +386,7 @@ class BartFlashAttention2(BartAttention):
             query_states,
             key_states,
             value_states,
-            causal_mask,
+            attention_mask,
             q_len,
             dropout=self.dropout if self.training else 0.0,
             is_causal=self.is_causal,
