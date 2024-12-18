@@ -13,49 +13,17 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import (
-    OptionalDependencyNotAvailable,
-    _LazyModule,
-    is_torch_available,
-)
+from ...utils import _LazyModule
+from ...utils.import_utils import define_import_structure
 
-
-_import_structure = {
-    "configuration_modernbert": ["ModernBertConfig"],
-}
-
-try:
-    if not is_torch_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_modernbert"] = [
-        "ModernBertForMaskedLM",
-        "ModernBertModel",
-        "ModernBertPreTrainedModel",
-        "ModernBertForSequenceClassification",
-        "ModernBertForTokenClassification",
-    ]
 
 if TYPE_CHECKING:
-    from .configuration_modernbert import ModernBertConfig
-
-    try:
-        if not is_torch_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_modernbert import (
-            ModernBertForMaskedLM,
-            ModernBertForSequenceClassification,
-            ModernBertForTokenClassification,
-            ModernBertModel,
-            ModernBertPreTrainedModel,
-        )
-
+    from .configuration_modernbert import *
+    from .modeling_modernbert  import *
+    from .processing_modernbert  import *
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    _file = globals()["__file__"]
+    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
+
