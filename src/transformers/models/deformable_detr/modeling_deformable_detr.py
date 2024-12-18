@@ -1607,7 +1607,7 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         Args:
             enc_output (Tensor[batch_size, sequence_length, hidden_size]): Output of the encoder.
             padding_mask (Tensor[batch_size, sequence_length]): Padding mask for `enc_output`.
-            spatial_shapes (Tensor[num_feature_levels, 2]): Spatial shapes of the feature maps.
+            spatial_shapes (List[Tuple[int, int]]): Spatial shapes of the feature maps.
 
         Returns:
             `tuple(torch.FloatTensor)`: A tuple of feature map and bbox prediction.
@@ -1787,7 +1787,7 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         enc_outputs_coord_logits = None
         if self.config.two_stage:
             object_query_embedding, output_proposals = self.gen_encoder_output_proposals(
-                encoder_outputs[0], ~mask_flatten, spatial_shapes
+                encoder_outputs[0], ~mask_flatten, spatial_shapes_list
             )
 
             # hack implementation for two-stage Deformable DETR
