@@ -550,7 +550,10 @@ This script demonstrates how to fine-tune the `google/gemma-2b` model on the IMD
 
 The Schedule Free optimizers have been introduced in [The Road Less Scheduled](https://hf.co/papers/2405.15682).
 Schedule-Free learning replaces the momentum of the base optimizer with a combination of averaging and interpolation, to completely remove the need to anneal the learning rate with a traditional schedule.
-Supported optimizers for SFO are `"schedule_free_adamw"` and `"schedule_free_sgd"`. First install schedulefree from pypi `pip install schedulefree`.
+Supported optimizers for SFO are `"schedule_free_radam"`, `"schedule_free_adamw"` and `"schedule_free_sgd"`. First install schedulefree from pypi `pip install schedulefree`.
+
+Schedule-Free family eliminates the need for learning rate schedules, so by default, we recommend setting `lr_scheduler_type="constant"` in the `TrainingArguments`.
+Setting other `lr_scheduler_type` would also work, but combining Schedule-Free with other learning rate schedules is not well-studied both in research and in practice, as it may affect the optimizer's intended behavior and performance guarantees.
 
 Below is a simple script to demonstrate how to fine-tune [google/gemma-2b](https://huggingface.co/google/gemma-2b) on IMDB dataset in full precision:
 
@@ -566,7 +569,8 @@ args = TrainingArguments(
     output_dir="./test-schedulefree",
     max_steps=1000,
     per_device_train_batch_size=4,
-    optim="schedule_free_adamw",
+    optim="schedule_free_radam",
+    lr_scheduler_type="constant",
     gradient_checkpointing=True,
     logging_strategy="steps",
     logging_steps=1,
