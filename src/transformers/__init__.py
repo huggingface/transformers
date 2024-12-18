@@ -170,6 +170,11 @@ _import_structure = {
         "AltCLIPTextConfig",
         "AltCLIPVisionConfig",
     ],
+    "models.aria": [
+        "AriaConfig",
+        "AriaProcessor",
+        "AriaTextConfig",
+    ],
     "models.audio_spectrogram_transformer": [
         "ASTConfig",
         "ASTFeatureExtractor",
@@ -300,6 +305,11 @@ _import_structure = {
         "CodeGenTokenizer",
     ],
     "models.cohere": ["CohereConfig"],
+    "models.cohere2": ["Cohere2Config"],
+    "models.colpali": [
+        "ColPaliConfig",
+        "ColPaliProcessor",
+    ],
     "models.conditional_detr": ["ConditionalDetrConfig"],
     "models.convbert": [
         "ConvBertConfig",
@@ -777,6 +787,7 @@ _import_structure = {
     "models.time_series_transformer": ["TimeSeriesTransformerConfig"],
     "models.timesformer": ["TimesformerConfig"],
     "models.timm_backbone": ["TimmBackboneConfig"],
+    "models.timm_wrapper": ["TimmWrapperConfig"],
     "models.trocr": [
         "TrOCRConfig",
         "TrOCRProcessor",
@@ -1176,6 +1187,7 @@ else:
     _import_structure["image_processing_base"] = ["ImageProcessingMixin"]
     _import_structure["image_processing_utils"] = ["BaseImageProcessor"]
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
+    _import_structure["models.aria"].extend(["AriaImageProcessor"])
     _import_structure["models.beit"].extend(["BeitFeatureExtractor", "BeitImageProcessor"])
     _import_structure["models.bit"].extend(["BitImageProcessor"])
     _import_structure["models.blip"].extend(["BlipImageProcessor"])
@@ -1265,6 +1277,18 @@ else:
     _import_structure["models.pixtral"].append("PixtralImageProcessorFast")
     _import_structure["models.rt_detr"].append("RTDetrImageProcessorFast")
     _import_structure["models.vit"].append("ViTImageProcessorFast")
+
+try:
+    if not is_torchvision_available() and not is_timm_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    from .utils import dummy_timm_and_torchvision_objects
+
+    _import_structure["utils.dummy_timm_and_torchvision_objects"] = [
+        name for name in dir(dummy_timm_and_torchvision_objects) if not name.startswith("_")
+    ]
+else:
+    _import_structure["models.timm_wrapper"].extend(["TimmWrapperImageProcessor"])
 
 # PyTorch-backed objects
 try:
@@ -1406,6 +1430,15 @@ else:
             "AltCLIPVisionModel",
         ]
     )
+    _import_structure["models.aria"].extend(
+        [
+            "AriaForConditionalGeneration",
+            "AriaPreTrainedModel",
+            "AriaTextForCausalLM",
+            "AriaTextModel",
+            "AriaTextPreTrainedModel",
+        ]
+    )
     _import_structure["models.audio_spectrogram_transformer"].extend(
         [
             "ASTForAudioClassification",
@@ -1439,6 +1472,7 @@ else:
             "MODEL_FOR_OBJECT_DETECTION_MAPPING",
             "MODEL_FOR_PRETRAINING_MAPPING",
             "MODEL_FOR_QUESTION_ANSWERING_MAPPING",
+            "MODEL_FOR_RETRIEVAL_MAPPING",
             "MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING",
             "MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING",
             "MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING",
@@ -1759,6 +1793,13 @@ else:
         ]
     )
     _import_structure["models.cohere"].extend(["CohereForCausalLM", "CohereModel", "CoherePreTrainedModel"])
+    _import_structure["models.cohere2"].extend(["Cohere2ForCausalLM", "Cohere2Model", "Cohere2PreTrainedModel"])
+    _import_structure["models.colpali"].extend(
+        [
+            "ColPaliForRetrieval",
+            "ColPaliPreTrainedModel",
+        ]
+    )
     _import_structure["models.conditional_detr"].extend(
         [
             "ConditionalDetrForObjectDetection",
@@ -2461,6 +2502,8 @@ else:
             "Idefics3Model",
             "Idefics3PreTrainedModel",
             "Idefics3Processor",
+            "Idefics3VisionConfig",
+            "Idefics3VisionTransformer",
         ]
     )
     _import_structure["models.ijepa"].extend(
@@ -3515,6 +3558,9 @@ else:
         ]
     )
     _import_structure["models.timm_backbone"].extend(["TimmBackbone"])
+    _import_structure["models.timm_wrapper"].extend(
+        ["TimmWrapperForImageClassification", "TimmWrapperModel", "TimmWrapperPreTrainedModel"]
+    )
     _import_structure["models.trocr"].extend(
         [
             "TrOCRForCausalLM",
@@ -5033,6 +5079,11 @@ if TYPE_CHECKING:
         AltCLIPTextConfig,
         AltCLIPVisionConfig,
     )
+    from .models.aria import (
+        AriaConfig,
+        AriaProcessor,
+        AriaTextConfig,
+    )
     from .models.audio_spectrogram_transformer import (
         ASTConfig,
         ASTFeatureExtractor,
@@ -5166,6 +5217,11 @@ if TYPE_CHECKING:
         CodeGenTokenizer,
     )
     from .models.cohere import CohereConfig
+    from .models.cohere2 import Cohere2Config
+    from .models.colpali import (
+        ColPaliConfig,
+        ColPaliProcessor,
+    )
     from .models.conditional_detr import (
         ConditionalDetrConfig,
     )
@@ -5712,6 +5768,7 @@ if TYPE_CHECKING:
         TimesformerConfig,
     )
     from .models.timm_backbone import TimmBackboneConfig
+    from .models.timm_wrapper import TimmWrapperConfig
     from .models.trocr import (
         TrOCRConfig,
         TrOCRProcessor,
@@ -6096,6 +6153,7 @@ if TYPE_CHECKING:
         from .image_processing_base import ImageProcessingMixin
         from .image_processing_utils import BaseImageProcessor
         from .image_utils import ImageFeatureExtractionMixin
+        from .models.aria import AriaImageProcessor
         from .models.beit import BeitFeatureExtractor, BeitImageProcessor
         from .models.bit import BitImageProcessor
         from .models.blip import BlipImageProcessor
@@ -6203,6 +6261,14 @@ if TYPE_CHECKING:
         from .models.pixtral import PixtralImageProcessorFast
         from .models.rt_detr import RTDetrImageProcessorFast
         from .models.vit import ViTImageProcessorFast
+
+    try:
+        if not is_torchvision_available() and not is_timm_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        from .utils.dummy_timm_and_torchvision_objects import *
+    else:
+        from .models.timm_wrapper import TimmWrapperImageProcessor
 
     # Modeling
     try:
@@ -6325,6 +6391,13 @@ if TYPE_CHECKING:
             AltCLIPTextModel,
             AltCLIPVisionModel,
         )
+        from .models.aria import (
+            AriaForConditionalGeneration,
+            AriaPreTrainedModel,
+            AriaTextForCausalLM,
+            AriaTextModel,
+            AriaTextPreTrainedModel,
+        )
         from .models.audio_spectrogram_transformer import (
             ASTForAudioClassification,
             ASTModel,
@@ -6355,6 +6428,7 @@ if TYPE_CHECKING:
             MODEL_FOR_OBJECT_DETECTION_MAPPING,
             MODEL_FOR_PRETRAINING_MAPPING,
             MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+            MODEL_FOR_RETRIEVAL_MAPPING,
             MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING,
             MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
             MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
@@ -6625,6 +6699,15 @@ if TYPE_CHECKING:
             CohereForCausalLM,
             CohereModel,
             CoherePreTrainedModel,
+        )
+        from .models.cohere2 import (
+            Cohere2ForCausalLM,
+            Cohere2Model,
+            Cohere2PreTrainedModel,
+        )
+        from .models.colpali import (
+            ColPaliForRetrieval,
+            ColPaliPreTrainedModel,
         )
         from .models.conditional_detr import (
             ConditionalDetrForObjectDetection,
@@ -7189,6 +7272,8 @@ if TYPE_CHECKING:
             Idefics3Model,
             Idefics3PreTrainedModel,
             Idefics3Processor,
+            Idefics3VisionConfig,
+            Idefics3VisionTransformer,
         )
         from .models.ijepa import (
             IJepaForImageClassification,
@@ -8005,6 +8090,11 @@ if TYPE_CHECKING:
             TimesformerPreTrainedModel,
         )
         from .models.timm_backbone import TimmBackbone
+        from .models.timm_wrapper import (
+            TimmWrapperForImageClassification,
+            TimmWrapperModel,
+            TimmWrapperPreTrainedModel,
+        )
         from .models.trocr import (
             TrOCRForCausalLM,
             TrOCRPreTrainedModel,
