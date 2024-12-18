@@ -100,7 +100,7 @@ jobs:
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             repos/${{ github.repository }}/issues/${{ needs.get-pr-number.outputs.PR_NUMBER }}/comments \
-            -f "body=This comment contains run-slow, running the specified job ..."
+            -f "body=This comment contains run-slow, running the specified jobs: ${{ env.models }} ..."
 
   create_run:
     name: Create run
