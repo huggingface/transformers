@@ -640,7 +640,7 @@ class ModernBertPreTrainedModel(PreTrainedModel):
             init_weight(module.Wo, stds["out"])
         elif isinstance(module, ModernBertPredictionHead):
             init_weight(module.dense, stds["in"])
-        elif isinstance(module, ModernBertClsPoolingHead):
+        elif isinstance(module, ModernBertPoolingHead):
             init_weight(module.dense, stds["out"])
         elif isinstance(module, ModernBertForMaskedLM):
             init_weight(module.decoder, stds["out"])
@@ -1151,7 +1151,21 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         )
 
 
-class ModernBertClsPoolingHead(nn.Module):
+def cls_pooling(hidden_states: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+    return hidden_states[:, 0]
+
+
+def mean_pooling(hidden_states: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+    return (hidden_states * attention_mask.unsqueeze(-1)).sum(dim=1) / attention_mask.sum(dim=1, keepdim=True)
+
+
+MODERNBERT_POOLING_FUNCTION = {
+    "cls": cls_pooling,
+    "mean": mean_pooling,
+}
+
+
+class ModernBertPoolingHead(nn.Module):
     def __init__(self, config: ModernBertConfig):
         super().__init__()
         self.config = config
@@ -1159,9 +1173,14 @@ class ModernBertClsPoolingHead(nn.Module):
         self.act = ACT2FN[config.classifier_activation]
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
         self.drop = torch.nn.Dropout(config.classifier_dropout)
+        self.pooling = MODERNBERT_POOLING_FUNCTION[config.classifier_pooling]
 
-    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
-        hidden_states = hidden_states[:, 0]
+    def forward(
+        self, hidden_states: torch.Tensor, attention_mask: torch.Tensor, pool: Optional[bool] = True
+    ) -> torch.Tensor:
+        if pool:
+            hidden_states = self.pooling(hidden_states, attention_mask)
+
         return self.drop(self.norm(self.act(self.dense(hidden_states))))
 
 
@@ -1176,7 +1195,7 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
         self.config = config
 
         self.model = ModernBertModel(config)
-        self.head = ModernBertClsPoolingHead(config)
+        self.head = ModernBertPoolingHead(config)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing

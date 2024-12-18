@@ -15,7 +15,7 @@
 # limitations under the License.
 
 import math
-from typing import Dict, Optional, Tuple, Union
+from typing import Dict, Literal, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
@@ -124,6 +124,9 @@ class ModernBertConfig(PretrainedConfig):
             Whether to use `no_grad` when unpadding the inputs.
         decoder_bias (`bool`, *optional*, defaults to `True`):
             Whether to use bias in the decoder layers.
+        classifier_pooling (`str`, *optional*, defaults to `"cls"`):
+            The pooling method for the classifier. Should be either `"cls"` or `"mean"`. In local attention layers, the
+            CLS token doesn't attend to all tokens on long sequences.
         classifier_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the classifier.
         classifier_bias (`bool`, *optional*, defaults to `False`):
@@ -189,6 +192,7 @@ class ModernBertConfig(PretrainedConfig):
         mlp_dropout=0.0,
         unpad_no_grad=True,
         decoder_bias=True,
+        classifier_pooling: Literal["cls", "mean"] = "cls",
         classifier_dropout=0.0,
         classifier_bias=False,
         classifier_activation="gelu",
@@ -228,6 +232,7 @@ class ModernBertConfig(PretrainedConfig):
         self.mlp_dropout = mlp_dropout
         self.unpad_no_grad = unpad_no_grad
         self.decoder_bias = decoder_bias
+        self.classifier_pooling = classifier_pooling
         self.classifier_dropout = classifier_dropout
         self.classifier_bias = classifier_bias
         self.classifier_activation = classifier_activation
@@ -835,7 +840,7 @@ class ModernBertPreTrainedModel(PreTrainedModel):
             init_weight(module.Wo, stds["out"])
         elif isinstance(module, ModernBertPredictionHead):
             init_weight(module.dense, stds["in"])
-        elif isinstance(module, ModernBertClsPoolingHead):
+        elif isinstance(module, ModernBertPoolingHead):
             init_weight(module.dense, stds["out"])
         elif isinstance(module, ModernBertForMaskedLM):
             init_weight(module.decoder, stds["out"])
@@ -1274,7 +1279,21 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         )
 
 
-class ModernBertClsPoolingHead(nn.Module):
+def cls_pooling(hidden_states: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+    return hidden_states[:, 0]
+
+
+def mean_pooling(hidden_states: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+    return (hidden_states * attention_mask.unsqueeze(-1)).sum(dim=1) / attention_mask.sum(dim=1, keepdim=True)
+
+
+MODERNBERT_POOLING_FUNCTION = {
+    "cls": cls_pooling,
+    "mean": mean_pooling,
+}
+
+
+class ModernBertPoolingHead(nn.Module):
     def __init__(self, config: ModernBertConfig):
         super().__init__()
         self.config = config
@@ -1282,9 +1301,14 @@ class ModernBertClsPoolingHead(nn.Module):
         self.act = ACT2FN[config.classifier_activation]
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
         self.drop = torch.nn.Dropout(config.classifier_dropout)
+        self.pooling = MODERNBERT_POOLING_FUNCTION[config.classifier_pooling]
 
-    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
-        hidden_states = hidden_states[:, 0]
+    def forward(
+        self, hidden_states: torch.Tensor, attention_mask: torch.Tensor, pool: Optional[bool] = True
+    ) -> torch.Tensor:
+        if pool:
+            hidden_states = self.pooling(hidden_states, attention_mask)
+
         return self.drop(self.norm(self.act(self.dense(hidden_states))))
 
 
@@ -1299,7 +1323,7 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
         self.config = config
 
         self.model = ModernBertModel(config)
-        self.head = ModernBertClsPoolingHead(config)
+        self.head = ModernBertPoolingHead(config)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
