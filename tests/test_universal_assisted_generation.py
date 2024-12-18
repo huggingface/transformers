@@ -1,11 +1,9 @@
 import unittest
 
 import torch
-import logging
 from transformers import AutoTokenizer, AutoModelForCausalLM, GenerationConfig
 from transformers.generation.candidate_generator import UniversalSpeculativeDecodingGenerator
 
-logging.basicConfig(level=logging.DEBUG, format='%(message)s')
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -16,11 +14,11 @@ class TestUniversalSpeculativeDecoding(unittest.TestCase):
         cls.main_model = AutoModelForCausalLM.from_pretrained(
             "meta-llama/Llama-3.2-1B-Instruct").to(device)
         cls.assistant_model = AutoModelForCausalLM.from_pretrained(
-            "Qwen/Qwen2.5-0.5B-Instruct").to(device)
+            "hf-internal-testing/tiny-random-gpt2").to(device)
         cls.main_tokenizer = AutoTokenizer.from_pretrained(
             "meta-llama/Llama-3.2-1B-Instruct")
         cls.assistant_tokenizer = AutoTokenizer.from_pretrained(
-            "Qwen/Qwen2.5-0.5B-Instruct")
+            "hf-internal-testing/tiny-random-gpt2")
         cls.generation_config = GenerationConfig()
 
         # Ensure required tokens exist
@@ -62,34 +60,15 @@ class TestUniversalSpeculativeDecoding(unittest.TestCase):
         # Find a token that is not in the assistant tokenizer but in 
         # the main tokenizer.
         missing_token = next(
-            token
-            for token in self.main_tokenizer.get_vocab()
-            if token not in self.assistant_tokenizer.get_vocab()
+            token for token in self.main_tokenizer.get_vocab()
+            if token not in self.assistant_tokenizer.get_vocab() and
+               token not in self.main_tokenizer.all_special_tokens and
+               "reserved_" not in token
         )
-
-        input_ids = torch.tensor([[self.main_tokenizer.convert_tokens_to_ids(missing_token)]])
+        input_ids = torch.tensor([[self.main_tokenizer.convert_tokens_to_ids(missing_token)]]) 
         self.generator.input_ids = input_ids
         candidates, scores = self.generator.get_candidates(input_ids)
         self.assertIsNotNone(candidates)
-
-    def test_empty_input(self):
-        if False:
-            """Test handling of empty input"""
-            input_ids = torch.tensor([[]], dtype=torch.long)
-            self.generator.input_ids = input_ids
-            with self.assertRaises(ValueError):
-                self.generator.get_candidates(input_ids)
-
-    def test_long_sequence(self):
-        if False:
-            """Test handling of very long input sequences"""
-            long_input = torch.ones((1, 2048), dtype=torch.long)
-            self.generator.input_ids = long_input
-            candidates, scores = self.generator.get_candidates(long_input)
-            self.assertLessEqual(
-                candidates.shape[1],
-                self.main_model.config.max_position_embeddings,
-            )
 
     def test_speculation_depth(self):
         """Test different speculation depths"""
