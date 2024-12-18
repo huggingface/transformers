@@ -26,9 +26,9 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ..llama.modeling_llama import LlamaDecoderLayer, LlamaModel
+from ..llama.modeling_llama import LlamaDecoderLayer, LlamaModel, repeat_kv
 from ..phi.modeling_phi import PhiAttention, PhiFlashAttention2, PhiMLP, PhiRotaryEmbedding, PhiSdpaAttention
-from ..whisper.modeling_whisper import WhisperModel
+from ..whisper.modeling_whisper import WhisperModel, shift_tokens_right
 
 
 logger = logging.get_logger(__name__)
@@ -224,35 +224,6 @@ class MoonshineConfig(PretrainedConfig):
             decoder_start_token_id=decoder_start_token_id,
             **kwargs,
         )
-
-
-# Copied from transformers.models.bart.modeling_bart.shift_tokens_right
-def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
-    """
-    Shift input ids one token to the right.
-    """
-    shifted_input_ids = input_ids.new_zeros(input_ids.shape)
-    shifted_input_ids[:, 1:] = input_ids[:, :-1].clone()
-    shifted_input_ids[:, 0] = decoder_start_token_id
-
-    if pad_token_id is None:
-        raise ValueError("self.model.config.pad_token_id has to be defined.")
-    # replace possible -100 values in labels by `pad_token_id`
-    shifted_input_ids.masked_fill_(shifted_input_ids == -100, pad_token_id)
-
-    return shifted_input_ids
-
-
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
 def rotate_every_two(x: torch.Tensor) -> torch.Tensor:

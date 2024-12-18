@@ -1921,7 +1921,6 @@ class MoonshineModel(MoonshinePreTrainedModel):
         )
 
 
-# Copied from transformers.models.bart.modeling_bart.shift_tokens_right
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
     """
     Shift input ids one token to the right.
