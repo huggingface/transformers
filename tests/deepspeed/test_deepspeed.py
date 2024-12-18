@@ -1372,7 +1372,7 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
         # Run deepspeed sp with 2 GPUs and different sp_size
         self.assertFalse(is_deepspeed_sp_enabled())
         ds_args = [f"--sequence-length={sp_size}"]
-        script = [f"{self.test_file_dir_str}/test_ulysses.py"]
+        script = [f"{self.test_file_dir_str}/run_ulysses.py"]
         distributed = True
         launcher = get_launcher(distributed)
 

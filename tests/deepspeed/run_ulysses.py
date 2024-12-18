@@ -24,7 +24,7 @@ from transformers.modeling_flash_attention_utils import _flash_attention_forward
 
 
 # Call transformer flash attention with and without deepspeed sp enabled and compare they match
-def test_transformer_flash_attention(seq_len=2) -> None:
+def run_ulysses_flash_attention(seq_len=2) -> None:
     model = AutoModel.from_pretrained("bert-base-uncased")
     batch_size = 2
 
@@ -78,4 +78,4 @@ def test_transformer_flash_attention(seq_len=2) -> None:
 if __name__ == "__main__":
     torch.manual_seed(0)
     seq_len = int((sys.argv[2]).split("=")[1])
-    test_transformer_flash_attention(seq_len=seq_len)
+    run_ulysses_flash_attention(seq_len=seq_len)

@@ -898,33 +898,29 @@ def shard_tensor(tensor, num_shards, rank, dim=1):
 def shard_inputs(
     num_shards=1,
     rank=0,
-    input_ids=None,
-    attention_mask=None,
-    loss_mask=None,
-    position_ids=None,
-    input_embeds=None,
-    labels=None,
     **kwargs,
 ):
     if num_shards == 1:
-        return {
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "loss_mask": loss_mask,
-            "position_ids": position_ids,
-            "input_embeds": input_embeds,
-            "labels": labels,
-            **kwargs,
-        }
-    if position_ids is None and input_ids is not None:
+        return kwargs
+    if "input_ids" in kwargs and "position_ids" not in kwargs:
         # expand the position_ids to match batch size
+        input_ids = kwargs["input_ids"]
         position_ids = torch.arange(input_ids.shape[1], dtype=torch.long, device=input_ids.device)
         position_ids = position_ids.unsqueeze(0).expand(input_ids.shape[0], -1)
+        kwargs["position_ids"] = position_ids
     result = kwargs
-    for key, value in zip(
-        ["input_ids", "attention_mask", "loss_mask", "position_ids", "input_embeds", "labels"],
-        [input_ids, attention_mask, loss_mask, position_ids, input_embeds, labels],
-    ):
-        if value is not None:
+    for key, value in kwargs.items():
+        if (
+            key
+            in [
+                "input_ids",
+                "attention_mask",
+                "loss_mask",
+                "position_ids",
+                "input_embeds",
+                "labels",
+            ]
+            and value is not None
+        ):
             result[key] = shard_tensor(value, num_shards, rank)
     return result

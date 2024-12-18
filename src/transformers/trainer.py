@@ -3633,25 +3633,7 @@ class Trainer:
 
         return inputs
 
-    def _finalize_inputs(
-        self,
-        input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        loss_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        input_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        **model_kwargs,
-    ):
-        inputs = {
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "loss_mask": loss_mask,
-            "position_ids": position_ids,
-            "input_embeds": input_embeds,
-            "labels": labels,
-            **model_kwargs,
-        }
+    def _finalize_inputs(self, **inputs):
         if is_deepspeed_sp_enabled():
             ds_plugin = self.accelerator.state.deepspeed_plugin
             num_shards = ds_plugin.sequence_parallel_size
