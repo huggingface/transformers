@@ -333,7 +333,7 @@ def eager_attention_forward(
             # Create sliding window mask (1 for positions within window, 0 outside)
             window_mask = (distance <= local_attention[0]).unsqueeze(0).unsqueeze(0).to(attention_mask.device)
             # Combine with existing mask
-            expanded_mask.masked_fill_(window_mask.logical_not(), float("-inf"))
+            expanded_mask.masked_fill_(window_mask.logical_not(), torch.finfo(attn_weights.dtype).min)
 
         attn_weights = attn_weights + expanded_mask
 
