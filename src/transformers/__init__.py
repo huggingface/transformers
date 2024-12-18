@@ -210,6 +210,12 @@ _import_structure = {
         "BertTokenizer",
         "WordpieceTokenizer",
     ],
+    "models.jina_bert": [
+        "BasicTokenizer",
+        "JinaBertConfig",
+       
+        "WordpieceTokenizer",
+    ],
     "models.bert_generation": ["BertGenerationConfig"],
     "models.bert_japanese": [
         "BertJapaneseTokenizer",
@@ -1585,6 +1591,21 @@ else:
             "BertModel",
             "BertPreTrainedModel",
             "load_tf_weights_in_bert",
+        ]
+    )
+    _import_structure["models.jina_bert"].extend(
+        [
+            "JinaBertForMaskedLM",
+            "JinaBertForMultipleChoice",
+            "JinaBertForNextSentencePrediction",
+            "JinaBertForPreTraining",
+            "JinaBertForQuestionAnswering",
+            "JinaBertForSequenceClassification",
+            "JinaBertForTokenClassification",
+            "JinaBertLMHeadModel",
+            "JinaBertModel",
+            "JinaBertPreTrainedModel",
+            "load_tf_weights_in_jina_bert",
         ]
     )
     _import_structure["models.bert_generation"].extend(
@@ -5119,6 +5140,12 @@ if TYPE_CHECKING:
         BertTokenizer,
         WordpieceTokenizer,
     )
+    from .models.jina_bert import (
+        BasicTokenizer,
+        JinaBertConfig,
+       
+        WordpieceTokenizer,
+    )
     from .models.bert_generation import BertGenerationConfig
     from .models.bert_japanese import (
         BertJapaneseTokenizer,
@@ -6531,6 +6558,19 @@ if TYPE_CHECKING:
             BertModel,
             BertPreTrainedModel,
             load_tf_weights_in_bert,
+        )
+        from .models.jina_bert import (
+            JinaBertForMaskedLM,
+            JinaBertForMultipleChoice,
+            JinaBertForNextSentencePrediction,
+            JinaBertForPreTraining,
+            JinaBertForQuestionAnswering,
+            JinaBertForSequenceClassification,
+            JinaBertForTokenClassification,
+            JinaBertLMHeadModel,
+            JinaBertModel,
+            JinaBertPreTrainedModel,
+            load_tf_weights_in_jina_bert,
         )
         from .models.bert_generation import (
             BertGenerationDecoder,

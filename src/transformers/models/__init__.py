@@ -26,6 +26,7 @@ from . import (
     bartpho,
     beit,
     bert,
+    jina_bert,
     bert_generation,
     bert_japanese,
     bertweet,
