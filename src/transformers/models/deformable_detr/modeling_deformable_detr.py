@@ -40,6 +40,7 @@ from ...utils import (
     is_ninja_available,
     is_timm_available,
     is_torch_cuda_available,
+    is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
     requires_backends,
@@ -705,7 +706,7 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
         else:
             raise ValueError(f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
 
-        if self.disable_custom_kernels or MultiScaleDeformableAttention is None:
+        if self.disable_custom_kernels or MultiScaleDeformableAttention is None or is_torchdynamo_compiling():
             # PyTorch implementation
             output = multi_scale_deformable_attention(
                 value, spatial_shapes_list, sampling_locations, attention_weights
