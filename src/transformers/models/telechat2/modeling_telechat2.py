@@ -476,6 +476,7 @@ class TeleChat2FlashSelfAttention(TeleChat2Attention):
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
         )
 
+
         attn_output = attn_output.reshape(bsz, q_len, self.hidden_size).contiguous()
         attn_output = self.o_proj(attn_output)
 
