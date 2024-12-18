@@ -872,12 +872,6 @@ class ModernBertPreTrainedModel(PreTrainedModel):
 
         return model_embeds
 
-    @classmethod
-    def offsets_to_sequence_ids_tensor(cls, offsets):
-        device = offsets.device
-        counts = offsets[1:] - offsets[:-1]
-        return torch.repeat_interleave(torch.arange(len(counts), device=device, dtype=torch.int32), counts)
-
 
 def _unpad_modernbert_input(
     inputs: torch.Tensor,
