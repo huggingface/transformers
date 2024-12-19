@@ -4889,7 +4889,10 @@ class ModelTesterMixin:
 
                 # Run exported model and eager model
                 with torch.no_grad():
+                    # set seed in case anything is not deterministic in model (e.g. vit_mae noise)
+                    torch.manual_seed(1234)
                     eager_outputs = model(**inputs_dict)
+                    torch.manual_seed(1234)
                     exported_outputs = exported_model.module().forward(**inputs_dict)
 
                 # Check if outputs are close:
