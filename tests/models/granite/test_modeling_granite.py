@@ -14,14 +14,12 @@
 # limitations under the License.
 """Testing suite for the PyTorch Granite model."""
 
-import tempfile
 import unittest
 
 from parameterized import parameterized
 
 from transformers import GraniteConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
-    require_flash_attn,
     require_read_token,
     require_torch,
     require_torch_gpu,

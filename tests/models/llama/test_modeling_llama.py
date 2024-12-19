@@ -14,10 +14,8 @@
 # limitations under the License.
 """Testing suite for the PyTorch LLaMA model."""
 
-import tempfile
 import unittest
 
-import pytest
 from packaging import version
 from parameterized import parameterized
 
@@ -25,7 +23,6 @@ from transformers import AutoTokenizer, LlamaConfig, StaticCache, is_torch_avail
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
     cleanup,
-    require_flash_attn,
     require_read_token,
     require_torch,
     require_torch_accelerator,
@@ -542,7 +539,6 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         # from a config with specific rope type but missing one of its mandatory parameters -> ❌ throws exception
         with self.assertRaises(KeyError):
             config = _reinitialize_config(base_config, {"rope_scaling": {"rope_type": "linear"}})  # missing "factor"
-
 
 
 @require_torch_gpu
