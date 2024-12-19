@@ -82,6 +82,7 @@ class Zamba2ModelTester:
         scope=None,
         layers_block_type=["mamba", "hybrid"],
         num_mem_blocks=1,
+        use_mem_rope=True,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -112,6 +113,7 @@ class Zamba2ModelTester:
         self.scope = scope
         self.layers_block_type = layers_block_type
         self.num_mem_blocks = num_mem_blocks
+        self.use_mem_rope = use_mem_rope
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -155,6 +157,7 @@ class Zamba2ModelTester:
             use_mamba_kernels=False,
             layers_block_type=self.layers_block_type,
             num_mem_blocks=self.num_mem_blocks,
+            use_mem_rope=self.use_mem_rope,
         )
 
     def prepare_config_and_inputs_for_decoder(self):

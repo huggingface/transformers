@@ -233,11 +233,15 @@ class Zamba2Config(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.num_mem_blocks = num_mem_blocks
-        self.use_mem_rope = use_mem_rope
-        self.rope_theta = rope_theta
         self.attention_hidden_size = 2 * hidden_size
         self.attention_head_dim = 2 * self.hidden_size // self.num_attention_heads
         self.attention_dropout = attention_dropout
+        self.use_mem_rope = use_mem_rope
+        self.use_long_context = use_long_context
+        if use_mem_rope and use_long_context:
+            a = 8
+            rope_theta = rope_theta * a ** (self.attention_head_dim / (self.attention_head_dim - 2))
+        self.rope_theta = rope_theta
         self.mamba_d_state = mamba_d_state
         self.mamba_d_conv = mamba_d_conv
         self.mamba_expand = mamba_expand
@@ -251,7 +255,6 @@ class Zamba2Config(PretrainedConfig):
         self.use_shared_mlp_adapter = use_shared_mlp_adapter
         self.use_shared_attention_adapter = use_shared_attention_adapter
         self.adapter_rank = adapter_rank
-        self.use_long_context = use_long_context
         self.time_step_min = time_step_min
         self.time_step_max = time_step_max
         self.time_step_floor = time_step_floor
@@ -380,7 +383,14 @@ class Zamba2HybridDynamicCache(ZambaHybridDynamicCache):
 
 
 class Zamba2RotaryEmbedding(GemmaRotaryEmbedding):
-    pass
+    def __init__(
+        self,
+        config: Zamba2Config,
+        device=None,
+    ):
+        super().__init__(config, device)
+        self.rope_kwargs = {'base': config.rope_theta, 'dim': config.attention_head_dim}
+        inv_freq, self.attention_scaling = self.rope_init_fn(config=None, device=device, **self.rope_kwargs)
 
 
 class Zamba2Attention(ZambaAttention):
@@ -1693,15 +1703,7 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
         self._attn_implementation = config._attn_implementation
         self.final_layernorm = Zamba2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         if config.use_mem_rope:
-            rope_theta = config.rope_theta
-            if config.use_long_context:
-                a = 8
-                rope_theta = rope_theta * a ** (config.attention_head_dim / (config.attention_head_dim - 2))
-            self.rotary_emb = Zamba2RotaryEmbedding(
-                config.attention_head_dim,
-                max_position_embeddings=config.max_position_embeddings,
-                base=rope_theta,
-            )
+            self.rotary_emb = Zamba2RotaryEmbedding(config)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
