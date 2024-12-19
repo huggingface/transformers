@@ -29,18 +29,13 @@ def flash_attention_forward(
     key = key.transpose(1, 2)
     value = value.transpose(1, 2)
 
-    if query.dtype == torch.float32:
-        query = query.to(torch.float16)
-        key = key.to(torch.float16)
-        value = value.to(torch.float16)
-
     attn_output = _flash_attention_forward(
         query,
         key,
         value,
         attention_mask,
-        seq_len,
-        module.is_causal,
+        query_length=seq_len,
+        is_causal=module.is_causal,
         dropout=dropout,
         softmax_scale=scaling,
         sliding_window=sliding_window,
