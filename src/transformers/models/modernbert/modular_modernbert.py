@@ -496,7 +496,7 @@ def eager_attention_forward(
     module: "ModernBertAttention",
     qkv: torch.Tensor,
     attention_mask: torch.Tensor,
-    local_attention_mask: torch.Tensor,
+    sliding_window_mask: torch.Tensor,
     position_ids: Optional[torch.LongTensor],
     local_attention: Tuple[int, int],
     bs: int,
@@ -514,7 +514,7 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scale
 
     if local_attention != (-1, -1):
-        attention_mask = local_attention_mask
+        attention_mask = sliding_window_mask
 
     attn_weights = attn_weights + attention_mask
 
@@ -576,7 +576,7 @@ def sdpa_attention_forward(
     module: "ModernBertAttention",
     qkv: torch.Tensor,
     attention_mask: torch.Tensor,
-    local_attention_mask: torch.Tensor,
+    sliding_window_mask: torch.Tensor,
     position_ids: Optional[torch.LongTensor],
     local_attention: Tuple[int, int],
     bs: int,
@@ -590,7 +590,7 @@ def sdpa_attention_forward(
     query, key = apply_rotary_pos_emb(query, key, cos, sin)
 
     if local_attention != (-1, -1):
-        attention_mask = local_attention_mask
+        attention_mask = sliding_window_mask
 
     attn_output = (
         F.scaled_dot_product_attention(
@@ -672,25 +672,6 @@ class ModernBertAttention(nn.Module):
         output_attentions: Optional[bool] = False,
         **kwargs,
     ) -> torch.Tensor:
-        """Perform self-attention.
-
-        There are two attention implementations supported: PyTorch's SDPA attention and Flash Attention 2.
-
-        The arguments are unpadded. The SDPA implementation of attention requires padded arguments while the
-        Flash Attention implementation does not. If using SDPA we first call `pad_input`. Once we compute
-        attention, we re-unpad our outputs for the other layers. The pad/unpad operations add overhead, but not
-        sending pad tokens through ffs saves compute.
-
-        Args:
-            hidden_states: (total_nnz, dim)
-            cu_seqlens: (batch + 1,)
-            max_seqlen: int
-            indices: (total_nnz,)
-            attn_mask: (batch, max_seqlen)
-
-        Returns:
-            attention: (total_nnz, dim)
-        """
         qkv = self.Wqkv(hidden_states)
 
         bs = hidden_states.shape[0]
@@ -735,25 +716,16 @@ class ModernBertEncoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        local_attention_mask: Optional[torch.Tensor] = None,
+        sliding_window_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         cu_seqlens: Optional[torch.Tensor] = None,
         max_seqlen: Optional[int] = None,
         output_attentions: Optional[bool] = False,
     ) -> torch.Tensor:
-        """Forward pass for a ModernBert layer, including both attention and MLP.
-
-        Args:
-            hidden_states: (total_nnz, dim)
-            attention_mask: (batch, max_seqlen)
-            position_ids: (total_nnz,)
-            cu_seqlens: (batch + 1,)
-            max_seqlen: int
-        """
         attn_outputs = self.attn(
             self.attn_norm(hidden_states),
             attention_mask=attention_mask,
-            local_attention_mask=local_attention_mask,
+            sliding_window_mask=sliding_window_mask,
             position_ids=position_ids,
             cu_seqlens=cu_seqlens,
             max_seqlen=max_seqlen,
@@ -939,7 +911,7 @@ MODERNBERT_INPUTS_DOCSTRING = r"""
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
-        local_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+        sliding_window_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding or far-away tokens. In ModernBert, only every few layers
             perform global attention, while the rest perform local attention. This mask is used to avoid attending to
             far-away tokens in the local attention layers.
@@ -1001,7 +973,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
-        local_attention_mask: Optional[torch.Tensor] = None,
+        sliding_window_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         indices: Optional[torch.Tensor] = None,
         cu_seqlens: Optional[torch.Tensor] = None,
@@ -1042,7 +1014,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
             if position_ids is None:
                 position_ids = torch.arange(seq_len, device=input_ids.device).unsqueeze(0)
 
-            attention_mask, local_attention_mask = self._update_attention_mask(
+            attention_mask, sliding_window_mask = self._update_attention_mask(
                 attention_mask, output_attentions=output_attentions
             )
 
@@ -1057,7 +1029,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
                     encoder_layer.__call__,
                     hidden_states,
                     attention_mask,
-                    local_attention_mask,
+                    sliding_window_mask,
                     position_ids,
                     cu_seqlens,
                     max_seqlen,
@@ -1067,7 +1039,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
                 layer_outputs = encoder_layer(
                     hidden_states,
                     attention_mask=attention_mask,
-                    local_attention_mask=local_attention_mask,
+                    sliding_window_mask=sliding_window_mask,
                     position_ids=position_ids,
                     cu_seqlens=cu_seqlens,
                     max_seqlen=max_seqlen,
@@ -1127,11 +1099,9 @@ class ModernBertModel(ModernBertPreTrainedModel):
             (distance <= self.config.local_attention // 2).unsqueeze(0).unsqueeze(0).to(attention_mask.device)
         )
         # Combine with existing mask
-        local_attention_mask = global_attention_mask.masked_fill(
-            window_mask.logical_not(), torch.finfo(self.dtype).min
-        )
+        sliding_window_mask = global_attention_mask.masked_fill(window_mask.logical_not(), torch.finfo(self.dtype).min)
 
-        return global_attention_mask, local_attention_mask
+        return global_attention_mask, sliding_window_mask
 
 
 class ModernBertPredictionHead(nn.Module):
@@ -1186,7 +1156,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         self,
         input_ids: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
-        local_attention_mask: Optional[torch.Tensor] = None,
+        sliding_window_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         indices: Optional[torch.Tensor] = None,
@@ -1215,7 +1185,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         outputs = self.model(
             input_ids,
             attention_mask=attention_mask,
-            local_attention_mask=local_attention_mask,
+            sliding_window_mask=sliding_window_mask,
             position_ids=position_ids,
             indices=indices,
             cu_seqlens=cu_seqlens,
@@ -1323,7 +1293,7 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
         self,
         input_ids: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
-        local_attention_mask: Optional[torch.Tensor] = None,
+        sliding_window_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         indices: Optional[torch.Tensor] = None,
@@ -1348,7 +1318,7 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
         outputs = self.model(
             input_ids,
             attention_mask=attention_mask,
-            local_attention_mask=local_attention_mask,
+            sliding_window_mask=sliding_window_mask,
             position_ids=position_ids,
             indices=indices,
             cu_seqlens=cu_seqlens,
@@ -1425,7 +1395,7 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
         self,
         input_ids: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
-        local_attention_mask: Optional[torch.Tensor] = None,
+        sliding_window_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         indices: Optional[torch.Tensor] = None,
@@ -1447,7 +1417,7 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
         outputs = self.model(
             input_ids,
             attention_mask=attention_mask,
-            local_attention_mask=local_attention_mask,
+            sliding_window_mask=sliding_window_mask,
             position_ids=position_ids,
             indices=indices,
             cu_seqlens=cu_seqlens,
