@@ -40,7 +40,7 @@ from ...utils import (
     logging,
 )
 from ...utils.import_utils import is_triton_available
-from ..gemma.modeling_gemma import GemmaRotaryEmbedding, apply_rotary_pos_emb
+from ..gemma.modeling_gemma import apply_rotary_pos_emb
 
 
 if is_flash_attn_2_available():
