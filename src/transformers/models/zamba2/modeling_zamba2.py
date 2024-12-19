@@ -389,17 +389,6 @@ class Zamba2Attention(nn.Module):
                 self.linear_k_adapter_list.append(linear_k_adapter)
                 self.linear_v_adapter_list.append(linear_v_adapter)
 
-        if config.use_mem_rope:
-            rope_theta = config.rope_theta
-            if config.use_long_context:
-                a = 8
-                rope_theta = rope_theta * a ** (config.attention_head_dim / (config.attention_head_dim - 2))
-            self.rotary_emb = Zamba2RotaryEmbedding(
-                config.attention_head_dim,
-                max_position_embeddings=config.max_position_embeddings,
-                base=rope_theta,
-            )
-
         self.layer_dic = {value: index for index, value in enumerate(self.layer_block_map)}
 
     def forward(
