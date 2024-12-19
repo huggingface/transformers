@@ -458,6 +458,7 @@ class GenerationTesterMixin:
             if model.config.is_encoder_decoder:
                 self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + 1)
             else:
+                print(output_generate.shape[-1], self.max_new_tokens, inputs_dict["input_ids"].shape[-1])
                 self.assertTrue(output_generate.shape[-1] == self.max_new_tokens + inputs_dict["input_ids"].shape[-1])
 
     @pytest.mark.generate
