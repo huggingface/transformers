@@ -19,7 +19,6 @@ import logging
 import re
 from collections import OrderedDict
 
-import numpy as np
 import requests
 import torch
 from huggingface_hub import hf_hub_download
@@ -108,8 +107,7 @@ def prepare_config(size_config_url, size):
             backbone_config["stage4"]["out_channels"][-1],
         ],
         out_features=["stage1", "stage2", "stage3", "stage4"],
-        out_indices=[1, 2, 3, 4],
-        image_size=(size, size),
+        out_indices=[1, 2, 3, 4]
     )
 
     return textnet_config
