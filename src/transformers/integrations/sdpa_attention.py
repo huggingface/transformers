@@ -1,6 +1,20 @@
 from typing import Optional, Tuple
 
 import torch
+from packaging import version
+
+from ..utils import get_torch_version
+
+
+def sdpa_needs_contiguous_inputs():
+    """Check if the currently installed version of torch sdpa is bugged with non-contiguous inputs.
+    Reference: https://github.com/pytorch/pytorch/issues/112577
+    """
+    torch_version = version.parse(get_torch_version())
+    return version.parse("2.1.0") <= torch_version < version.parse("2.2.0")
+
+
+_needs_contiguous_inputs = sdpa_needs_contiguous_inputs()
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -34,10 +48,15 @@ def sdpa_attention_forward(
     if attention_mask is not None:
         causal_mask = causal_mask[:, :, :, : key.shape[-2]]
 
-    query = query.contiguous()
-    key = key.contiguous()
-    value = value.contiguous()
+    # SDPA with memory-efficient backend is bugged with non-contiguous inputs and custom attn_mask for some torch versions
+    # Reference: https://github.com/pytorch/pytorch/issues/112577.
+    if _needs_contiguous_inputs:
+        query = query.contiguous()
+        key = key.contiguous()
+        value = value.contiguous()
 
+    # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
+    # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
     if is_causal is None:
         is_causal = causal_mask is None and query.shape[2] > 1
 
