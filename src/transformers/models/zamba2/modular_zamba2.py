@@ -1623,12 +1623,25 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
         mamba_layers = iter(mamba_layers)
         linear_layers = iter(linear_layers)
         blocks = cycle(blocks)
+        layers = self.get_layers(blocks, linear_layers, mamba_layers)
+        self.layers = nn.ModuleList(layers)
+
+        self._attn_implementation = config._attn_implementation
+        self.final_layernorm = Zamba2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        if config.use_mem_rope:
+            self.rotary_emb = Zamba2RotaryEmbedding(config)
+        self.gradient_checkpointing = False
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_layers(self, blocks, linear_layers, mamba_layers):
         layers = []
         self._tied_weights_keys = []
         for layer_id, layer_type in enumerate(self.layers_block_type):
             if layer_type == "hybrid":
                 block = next(blocks)
-                if config.num_mem_blocks * len(layer_type_list(config)) > 1:
+                if self.config.num_mem_blocks * len(layer_type_list(self.config)) > 1:
                     prefix_name = f"layers.{layer_id}."
                     tied_keys = [
                         "shared_transformer.self_attn.q_proj.weight",
@@ -1641,11 +1654,11 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
                         "shared_transformer.pre_ff_layernorm.weight",
                     ]
                     self._tied_weights_keys = [*self._tied_weights_keys, *[prefix_name + key for key in tied_keys]]
-                    if config.use_shared_mlp_adapter:
+                    if self.config.use_shared_mlp_adapter:
                         tied_keys_adapter = []
                         adapter_id = 0
                         for _layer_type in self.layers_block_type:
-                            if _layer_type == "hybrid" and adapter_id % config.num_mem_blocks == block.block_id:
+                            if _layer_type == "hybrid" and adapter_id % self.config.num_mem_blocks == block.block_id:
                                 tied_keys_adapter.append(
                                     "shared_transformer.feed_forward.gate_up_proj_adapter_list."
                                     + str(adapter_id)
@@ -1658,11 +1671,11 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
                                 )
                             adapter_id += 1
                         self._tied_weights_keys = [*self._tied_weights_keys, *tied_keys_adapter]
-                    if config.use_shared_attention_adapter:
+                    if self.config.use_shared_attention_adapter:
                         tied_keys_adapter = []
                         adapter_id = 0
                         for _layer_type in self.layers_block_type:
-                            if _layer_type == "hybrid" and adapter_id % config.num_mem_blocks == block.block_id:
+                            if _layer_type == "hybrid" and adapter_id % self.config.num_mem_blocks == block.block_id:
                                 tied_keys_adapter.append(
                                     "shared_transformer.self_attn.linear_q_adapter_list."
                                     + str(adapter_id)
@@ -1698,16 +1711,7 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
                 layers.append(Zamba2HybridLayer(block, next(linear_layers), next(mamba_layers)))
             else:
                 layers.append(next(mamba_layers))
-        self.layers = nn.ModuleList(layers)
-
-        self._attn_implementation = config._attn_implementation
-        self.final_layernorm = Zamba2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        if config.use_mem_rope:
-            self.rotary_emb = Zamba2RotaryEmbedding(config)
-        self.gradient_checkpointing = False
-
-        # Initialize weights and apply final processing
-        self.post_init()
+        return layers
 
     @add_start_docstrings_to_model_forward(ZAMBA2_INPUTS_DOCSTRING)
     def forward(
