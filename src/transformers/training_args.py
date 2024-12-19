@@ -22,7 +22,7 @@ from dataclasses import asdict, dataclass, field, fields
 from datetime import timedelta
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Type, TypeVar, Union
 
 from huggingface_hub import get_full_repo_name
 from packaging import version
@@ -66,6 +66,8 @@ from .utils.import_utils import is_optimum_neuron_available
 logger = logging.get_logger(__name__)
 log_levels = logging.get_log_levels_dict().copy()
 trainer_log_levels = dict(**log_levels, passive=-1)
+
+T = TypeVar("T", bound="TrainingArguments")
 
 if is_torch_available():
     import torch
@@ -218,7 +220,6 @@ def _convert_str_dict(passed_value: dict):
     return passed_value
 
 
-# TODO: `TrainingArguments` users rely on it being fully mutable. In the future see if we can narrow this to a few keys: https://github.com/huggingface/transformers/pull/25903
 @dataclass
 class TrainingArguments:
     """
@@ -2529,24 +2530,32 @@ class TrainingArguments:
         d = {field.name: getattr(self, field.name) for field in fields(self) if field.init}
 
         for k, v in d.items():
-            if isinstance(v, Enum):
-                d[k] = v.value
-            if isinstance(v, list) and len(v) > 0 and isinstance(v[0], Enum):
-                d[k] = [x.value for x in v]
-            if k.endswith("_token"):
-                d[k] = f"<{k.upper()}>"
-            # Handle the accelerator_config if passed
-            if is_accelerate_available() and isinstance(v, AcceleratorConfig):
-                d[k] = v.to_dict()
+            d[k] = serialize_parameter(k, v)
         self._dict_torch_dtype_to_str(d)
 
         return d
 
     def to_json_string(self):
         """
-        Serializes this instance to a JSON string.
+        Serializes the TrainingArguments into a JSON string.
         """
         return json.dumps(self.to_dict(), indent=2)
+
+    def to_json_file(self, json_file_path: str):
+        """
+        Save this instance's parameters to a json file.
+        """
+        with open(json_file_path, "w", encoding="utf-8") as writer:
+            writer.write(self.to_json_string())
+
+    @classmethod
+    def from_json_file(cls: Type[T], json_file_path: str) -> T:
+        """
+        Loads and initializes the TrainingArguments from a json file.
+        """
+        with open(json_file_path, "r", encoding="utf-8") as reader:
+            params = json.load(reader)
+        return cls(**params)
 
     def to_sanitized_dict(self) -> Dict[str, Any]:
         """
@@ -3104,3 +3113,21 @@ class ParallelMode(Enum):
     SAGEMAKER_MODEL_PARALLEL = "sagemaker_model_parallel"
     SAGEMAKER_DATA_PARALLEL = "sagemaker_data_parallel"
     TPU = "tpu"
+
+
+def serialize_parameter(k, v):
+    if k == "torch_dtype" and not isinstance(v, str):
+        return str(v).split(".")[1]
+    if isinstance(v, dict):
+        return {key: serialize_parameter(key, value) for key, value in v.items()}
+    if isinstance(v, Enum):
+        return v.value
+    if isinstance(v, list) and len(v) > 0 and isinstance(v[0], Enum):
+        l = [x.value for x in v]
+        return l
+    if k.endswith("_token"):
+        return f"<{k.upper()}>"
+    # Handle the accelerator_config if passed
+    if is_accelerate_available() and isinstance(v, AcceleratorConfig):
+        return v.to_dict()
+    return v
