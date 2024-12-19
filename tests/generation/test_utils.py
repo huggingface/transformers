@@ -1625,7 +1625,7 @@ class GenerationTesterMixin:
             #   checks without adding test complexity. Ditto for `pixel_values_videos` and `pixel_values_images`
             pixel_values_is_mutually_exclusive = any(
                 model_name in model_class.__name__.lower()
-                for model_name in ["llava", "idefics2", "idefics3", "mllama", "paligemma"]
+                for model_name in ["llava", "idefics2", "idefics3", "mllama", "paligemma", "molmo"]
             )
             if pixel_values_is_mutually_exclusive:
                 inputs_dict.pop("pixel_values", None)
@@ -1699,17 +1699,30 @@ class GenerationTesterMixin:
             if "inputs_embeds" not in inspect.signature(model.prepare_inputs_for_generation).parameters.keys():
                 self.skipTest(reason="This model does not support `inputs_embeds` in generation")
 
+            #   Some VLMs assume `inputs_embeds` and `pixel_values` are mutually exclusive AND fall in the
+            #   exception above (complex `inputs_embeds` computation). Popping `pixel_values` allow us to run the
+            #   checks without adding test complexity. Ditto for `pixel_values_videos` and `pixel_values_images`
+            pixel_values_is_mutually_exclusive = any(
+                model_name in model_class.__name__.lower()
+                for model_name in ["llava", "idefics2", "idefics3", "mllama", "paligemma", "molmo"]
+            )
+            if pixel_values_is_mutually_exclusive:
+                inputs_dict.pop("pixel_values", None)
+                inputs_dict.pop("pixel_values_videos", None)
+                inputs_dict.pop("pixel_values_images", None)
+
             input_ids = inputs_dict.pop("input_ids")
 
             model.config.use_cache = True
             model.config.is_decoder = True
             batch_size = input_ids.shape[0]
-            max_cache_len = 30
+            max_new_tokens = 5
+            max_cache_len = max_new_tokens + input_ids.shape[1]
 
             # here we force to not stop at eos and go until max-length
             model.generation_config.eos_token_id = model.config.get_text_config().eos_token_id = -1
             generation_kwargs = {
-                "max_length": max_cache_len,
+                "max_new_tokens": max_new_tokens,
                 "cache_implementation": "static",
                 "return_dict_in_generate": True,  # Required to return `past_key_values`
             }
@@ -1728,7 +1741,6 @@ class GenerationTesterMixin:
             num_hidden_layers = text_config.num_hidden_layers
 
             inputs_embeds = model.get_input_embeddings()(input_ids)
-            max_cache_len += inputs_embeds.shape[1]
             outputs = model.generate(inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict)
 
             # we should get `max_length` in shape, not `max_length - embeds_length`
@@ -1867,12 +1879,12 @@ class GenerationTesterMixin:
             new_cache_converted = new_results.past_key_values.to_legacy_cache()
             for layer_idx in range(len(legacy_cache)):
                 for kv_idx in range(len(legacy_cache[layer_idx])):
-                    # TODO: @raushan, please look into this for new cache format
                     if legacy_cache[layer_idx][kv_idx] != []:
                         self.assertTrue(
                             torch.allclose(
                                 legacy_cache[layer_idx][kv_idx],
                                 new_cache_converted[layer_idx][kv_idx],
+                                atol=1e-05,  # some VLMs can have higher diff due to the vision backbone
                             )
                         )
 
@@ -1880,12 +1892,12 @@ class GenerationTesterMixin:
             legacy_cache_converted = cache_cls.from_legacy_cache(legacy_results.past_key_values)
             for layer_idx in range(len(new_cache)):
                 for kv_idx in range(len(new_cache[layer_idx])):
-                    # TODO: @raushan, please look into this for new cache format
                     if new_cache[layer_idx][kv_idx] != []:
                         self.assertTrue(
                             torch.allclose(
                                 new_cache[layer_idx][kv_idx],
                                 legacy_cache_converted[layer_idx][kv_idx],
+                                atol=1e-05,  # some VLMs can have higher diff due to the vision backbone
                             )
                         )
 
