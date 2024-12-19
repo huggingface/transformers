@@ -2718,6 +2718,7 @@ else:
     _import_structure["models.mamba"].extend(
         [
             "MambaForCausalLM",
+            "MambaForSequenceClassification",
             "MambaModel",
             "MambaPreTrainedModel",
         ]
@@ -7450,6 +7451,7 @@ if TYPE_CHECKING:
         )
         from .models.mamba import (
             MambaForCausalLM,
+            MambaForSequenceClassification,
             MambaModel,
             MambaPreTrainedModel,
         )
