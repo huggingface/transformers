@@ -50,6 +50,10 @@ The original code can be found [here](https://github.com/answerdotai/modernbert)
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with ModernBert.
 
+<PipelineTag pipeline="text-classification"/>
+
+- A notebook on how to [finetune for General Language Understanding Evaluation (GLUE) with Transformers](https://github.com/AnswerDotAI/ModernBERT/blob/main/examples/finetune_modernbert_on_glue.ipynb), also available as a Google Colab [notebook](https://colab.research.google.com/github/AnswerDotAI/ModernBERT/blob/main/examples/finetune_modernbert_on_glue.ipynb). 🌎
+
 <PipelineTag pipeline="sentence-similarity"/>
 
 - A script on how to [finetune for text similarity or information retrieval with Sentence Transformers](https://github.com/AnswerDotAI/ModernBERT/blob/main/examples/train_st.py). 🌎
