@@ -325,6 +325,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                         [TAPAS](model_doc/tapas)                         |       ✅        |         ✅         |      ❌      |
 |                         [TAPEX](model_doc/tapex)                         |       ✅        |         ✅         |      ✅      |
 |       [Time Series Transformer](model_doc/time_series_transformer)       |       ✅        |         ❌         |      ❌      |
+|                       [TimesFM](model_doc/timesfm)                       |       ✅        |         ❌         |      ❌      |
 |                   [TimeSformer](model_doc/timesformer)                   |       ✅        |         ❌         |      ❌      |
 |                [TimmWrapperModel](model_doc/timm_wrapper)                |       ✅        |         ❌         |      ❌      |
 |        [Trajectory Transformer](model_doc/trajectory_transformer)        |       ✅        |         ❌         |      ❌      |
