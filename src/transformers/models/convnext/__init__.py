@@ -18,6 +18,7 @@ from ...utils import (
     _LazyModule,
     is_tf_available,
     is_torch_available,
+    is_torchvision_available,
     is_vision_available,
 )
 
@@ -32,6 +33,14 @@ except OptionalDependencyNotAvailable:
 else:
     _import_structure["feature_extraction_convnext"] = ["ConvNextFeatureExtractor"]
     _import_structure["image_processing_convnext"] = ["ConvNextImageProcessor"]
+
+try:
+    if not is_torchvision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["image_processing_convnext_fast"] = ["ConvNextImageProcessorFast"]
 
 try:
     if not is_torch_available():
@@ -69,6 +78,14 @@ if TYPE_CHECKING:
     else:
         from .feature_extraction_convnext import ConvNextFeatureExtractor
         from .image_processing_convnext import ConvNextImageProcessor
+
+    try:
+        if not is_torchvision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .image_processing_convnext_fast import ConvNextImageProcessorFast
 
     try:
         if not is_torch_available():
