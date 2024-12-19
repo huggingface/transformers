@@ -107,7 +107,7 @@ def prepare_config(size_config_url, size):
             backbone_config["stage4"]["out_channels"][-1],
         ],
         out_features=["stage1", "stage2", "stage3", "stage4"],
-        out_indices=[1, 2, 3, 4]
+        out_indices=[1, 2, 3, 4],
     )
 
     return textnet_config
@@ -124,19 +124,17 @@ def convert_textnet_checkpoint(checkpoint_url, checkpoint_config_filename, pytor
     if "tiny" in content[checkpoint_config_filename]["config"]:
         config = prepare_config(tiny_config_url, size)
         expected_slice_backbone = torch.tensor(
-            [0.0000, 0.0000, 0.0000, 0.0000, 0.5300, 0.0000, 0.0000, 0.0000, 0.0000,
-        1.1221])
+            [0.0000, 0.0000, 0.0000, 0.0000, 0.5300, 0.0000, 0.0000, 0.0000, 0.0000, 1.1221]
+        )
     elif "small" in content[checkpoint_config_filename]["config"]:
         config = prepare_config(small_config_url, size)
         expected_slice_backbone = torch.tensor(
-            [0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000,
-        0.1394]
+            [0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.1394]
         )
     else:
         config = prepare_config(base_config_url, size)
         expected_slice_backbone = torch.tensor(
-            [0.9210, 0.6099, 0.0000, 0.0000, 0.0000, 0.0000, 3.2207, 2.6602, 1.8925,
-        0.0000]
+            [0.9210, 0.6099, 0.0000, 0.0000, 0.0000, 0.0000, 3.2207, 2.6602, 1.8925, 0.0000]
         )
 
     model = TextNetBackbone(config)
@@ -166,8 +164,9 @@ def convert_textnet_checkpoint(checkpoint_url, checkpoint_config_filename, pytor
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
 
-    original_pixel_values = torch.tensor([0.1939, 0.3481, 0.4166, 0.3309, 0.4508, 0.4679, 0.4851, 0.4851, 0.3309,
-        0.4337])
+    original_pixel_values = torch.tensor(
+        [0.1939, 0.3481, 0.4166, 0.3309, 0.4508, 0.4679, 0.4851, 0.4851, 0.3309, 0.4337]
+    )
     pixel_values = textnet_image_processor(image, return_tensors="pt").pixel_values
 
     assert torch.allclose(original_pixel_values, pixel_values[0][0][3][:10], atol=1e-4)

@@ -192,7 +192,6 @@ class TextNetModelTester:
         self.parent.assertEqual(len(model.channels), 1)
         self.parent.assertListEqual(model.channels, [config.hidden_sizes[-1]])
 
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values, labels = config_and_inputs

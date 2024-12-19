@@ -322,9 +322,7 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
         self.classifier = nn.Sequential(
             nn.AdaptiveAvgPool2d((1, 1)),
             nn.Flatten(),
-            nn.Linear(config.hidden_sizes[-1], config.num_labels)
-            if config.num_labels > 0
-            else nn.Identity(),
+            nn.Linear(config.hidden_sizes[-1], config.num_labels) if config.num_labels > 0 else nn.Identity(),
         )
         # initialize weights and apply final processing
         self.post_init()
