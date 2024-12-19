@@ -910,12 +910,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
         if self.config._attn_implementation == "flash_attention_2":
             if indices is None and cu_seqlens is None and max_seqlen is None:
                 repad = True
-                if self.config.unpad_no_grad:
-                    with torch.no_grad():
-                        input_ids, indices, cu_seqlens, max_seqlen, *_ = _unpad_modernbert_input(
-                            inputs=input_ids, attention_mask=attention_mask
-                        )
-                else:
+                with torch.no_grad():
                     input_ids, indices, cu_seqlens, max_seqlen, *_ = _unpad_modernbert_input(
                         inputs=input_ids, attention_mask=attention_mask
                     )
@@ -1088,12 +1083,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
                 batch_size, seq_len = input_ids.shape[:2]
                 if attention_mask is None:
                     attention_mask = torch.ones((batch_size, seq_len), device=input_ids.device, dtype=torch.bool)
-                if self.config.unpad_no_grad:
-                    with torch.no_grad():
-                        input_ids, indices, cu_seqlens, max_seqlen, position_ids, labels = _unpad_modernbert_input(
-                            inputs=input_ids, attention_mask=attention_mask, position_ids=position_ids, labels=labels
-                        )
-                else:
+                with torch.no_grad():
                     input_ids, indices, cu_seqlens, max_seqlen, position_ids, labels = _unpad_modernbert_input(
                         inputs=input_ids, attention_mask=attention_mask, position_ids=position_ids, labels=labels
                     )
@@ -1135,10 +1125,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
             loss = self.loss_function(logits, labels, vocab_size=self.config.vocab_size)
 
         if self.config._attn_implementation == "flash_attention_2":
-            if self.config.unpad_no_grad:
-                with torch.no_grad():
-                    logits = _pad_modernbert_output(inputs=logits, indices=indices, batch=batch_size, seqlen=seq_len)
-            else:
+            with torch.no_grad():
                 logits = _pad_modernbert_output(inputs=logits, indices=indices, batch=batch_size, seqlen=seq_len)
         if not return_dict:
             output = (logits,)

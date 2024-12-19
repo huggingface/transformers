@@ -87,8 +87,6 @@ class ModernBertConfig(PretrainedConfig):
             Whether to use bias in the MLP layers.
         mlp_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the MLP layers.
-        unpad_no_grad (`bool`, *optional*, defaults to `True`):
-            Whether to use `no_grad` when unpadding the inputs.
         decoder_bias (`bool`, *optional*, defaults to `True`):
             Whether to use bias in the decoder layers.
         classifier_pooling (`str`, *optional*, defaults to `"cls"`):
@@ -157,7 +155,6 @@ class ModernBertConfig(PretrainedConfig):
         embedding_dropout=0.0,
         mlp_bias=False,
         mlp_dropout=0.0,
-        unpad_no_grad=True,
         decoder_bias=True,
         classifier_pooling: Literal["cls", "mean"] = "cls",
         classifier_dropout=0.0,
@@ -197,7 +194,6 @@ class ModernBertConfig(PretrainedConfig):
         self.embedding_dropout = embedding_dropout
         self.mlp_bias = mlp_bias
         self.mlp_dropout = mlp_dropout
-        self.unpad_no_grad = unpad_no_grad
         self.decoder_bias = decoder_bias
         self.classifier_pooling = classifier_pooling
         self.classifier_dropout = classifier_dropout

@@ -119,8 +119,6 @@ class ModernBertConfig(PretrainedConfig):
             Whether to use bias in the MLP layers.
         mlp_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the MLP layers.
-        unpad_no_grad (`bool`, *optional*, defaults to `True`):
-            Whether to use `no_grad` when unpadding the inputs.
         decoder_bias (`bool`, *optional*, defaults to `True`):
             Whether to use bias in the decoder layers.
         classifier_pooling (`str`, *optional*, defaults to `"cls"`):
@@ -189,7 +187,6 @@ class ModernBertConfig(PretrainedConfig):
         embedding_dropout=0.0,
         mlp_bias=False,
         mlp_dropout=0.0,
-        unpad_no_grad=True,
         decoder_bias=True,
         classifier_pooling: Literal["cls", "mean"] = "cls",
         classifier_dropout=0.0,
@@ -229,7 +226,6 @@ class ModernBertConfig(PretrainedConfig):
         self.embedding_dropout = embedding_dropout
         self.mlp_bias = mlp_bias
         self.mlp_dropout = mlp_dropout
-        self.unpad_no_grad = unpad_no_grad
         self.decoder_bias = decoder_bias
         self.classifier_pooling = classifier_pooling
         self.classifier_dropout = classifier_dropout
@@ -1038,12 +1034,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
         if self.config._attn_implementation == "flash_attention_2":
             if indices is None and cu_seqlens is None and max_seqlen is None:
                 repad = True
-                if self.config.unpad_no_grad:
-                    with torch.no_grad():
-                        input_ids, indices, cu_seqlens, max_seqlen, *_ = _unpad_modernbert_input(
-                            inputs=input_ids, attention_mask=attention_mask
-                        )
-                else:
+                with torch.no_grad():
                     input_ids, indices, cu_seqlens, max_seqlen, *_ = _unpad_modernbert_input(
                         inputs=input_ids, attention_mask=attention_mask
                     )
@@ -1216,12 +1207,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
                 batch_size, seq_len = input_ids.shape[:2]
                 if attention_mask is None:
                     attention_mask = torch.ones((batch_size, seq_len), device=input_ids.device, dtype=torch.bool)
-                if self.config.unpad_no_grad:
-                    with torch.no_grad():
-                        input_ids, indices, cu_seqlens, max_seqlen, position_ids, labels = _unpad_modernbert_input(
-                            inputs=input_ids, attention_mask=attention_mask, position_ids=position_ids, labels=labels
-                        )
-                else:
+                with torch.no_grad():
                     input_ids, indices, cu_seqlens, max_seqlen, position_ids, labels = _unpad_modernbert_input(
                         inputs=input_ids, attention_mask=attention_mask, position_ids=position_ids, labels=labels
                     )
@@ -1263,10 +1249,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
             loss = self.loss_function(logits, labels, vocab_size=self.config.vocab_size)
 
         if self.config._attn_implementation == "flash_attention_2":
-            if self.config.unpad_no_grad:
-                with torch.no_grad():
-                    logits = _pad_modernbert_output(inputs=logits, indices=indices, batch=batch_size, seqlen=seq_len)
-            else:
+            with torch.no_grad():
                 logits = _pad_modernbert_output(inputs=logits, indices=indices, batch=batch_size, seqlen=seq_len)
         if not return_dict:
             output = (logits,)
