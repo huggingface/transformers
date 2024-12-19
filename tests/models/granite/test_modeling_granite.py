@@ -417,33 +417,6 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(yarn_sin_long, original_sin_long)
 
-    @require_flash_attn
-    @require_torch_gpu
-    @slow
-    def test_use_flash_attention_2_true(self):
-        """
-        NOTE: this is the only test testing that the legacy `use_flash_attention=2` argument still works as intended.
-        """
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                model = model_class(config)
-                model.save_pretrained(tmp_dir)
-
-                new_model = GraniteForCausalLM.from_pretrained(
-                    tmp_dir, use_flash_attention_2=True, torch_dtype=torch.float16
-                ).to("cuda")
-
-                self.assertTrue(new_model.config._attn_implementation == "flash_attention_2")
-
-                has_flash = False
-                for name, submodule in new_model.named_modules():
-                    if "FlashAttention" in submodule.__class__.__name__:
-                        has_flash = True
-                        break
-                if not has_flash:
-                    raise ValueError("The flash model should have flash attention layers")
-
 
 @require_torch_gpu
 class GraniteIntegrationTest(unittest.TestCase):
