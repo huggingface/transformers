@@ -322,8 +322,9 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
         scale_w = config.image_size[1] // 32
         # classification head
         self.classifier = nn.Sequential(
+            nn.AdaptiveAvgPool2d((1, 1)),
             nn.Flatten(),
-            nn.Linear(config.hidden_sizes[-1] * scale_h * scale_w, config.num_labels)
+            nn.Linear(config.hidden_sizes[-1], config.num_labels)
             if config.num_labels > 0
             else nn.Identity(),
         )
