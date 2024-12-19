@@ -1247,13 +1247,16 @@ class ModernBertPoolingHead(nn.Module):
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
         self.drop = torch.nn.Dropout(config.classifier_dropout)
 
-    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
-        if self.config.classifier_pooling == "cls":
-            hidden_states = hidden_states[:, 0]
-        elif self.config.classifier_pooling == "mean":
-            hidden_states = (hidden_states * attention_mask.unsqueeze(-1)).sum(dim=1) / attention_mask.sum(
-                dim=1, keepdim=True
-            )
+    def forward(
+        self, hidden_states: torch.Tensor, attention_mask: torch.Tensor, apply_pooling: bool = True
+    ) -> torch.Tensor:
+        if apply_pooling:
+            if self.config.classifier_pooling == "cls":
+                hidden_states = hidden_states[:, 0]
+            elif self.config.classifier_pooling == "mean":
+                hidden_states = (hidden_states * attention_mask.unsqueeze(-1)).sum(dim=1) / attention_mask.sum(
+                    dim=1, keepdim=True
+                )
 
         return self.drop(self.norm(self.act(self.dense(hidden_states))))
 
@@ -1371,7 +1374,7 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
         self.num_labels = config.num_labels
 
         self.model = ModernBertModel(config)
-        self.drop = nn.Dropout(config.classifier_dropout)
+        self.head = ModernBertPoolingHead(config)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
@@ -1422,7 +1425,7 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
         )
         last_hidden_state = outputs[0]
 
-        last_hidden_state = self.drop(last_hidden_state)
+        last_hidden_state = self.head(last_hidden_state, attention_mask, apply_pooling=False)
         logits = self.classifier(last_hidden_state)
 
         loss = None
