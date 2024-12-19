@@ -45,6 +45,9 @@ from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
 from .generation import CompileConfig, GenerationConfig, GenerationMixin
 from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
+from .integrations.flash_attention import flash_attention_forward
+from .integrations.flex_attention import flex_attention_forward
+from .integrations.sdpa_attention import sdpa_attention_forward
 from .loss.loss_utils import LOSS_MAPPING
 from .pytorch_utils import (  # noqa: F401
     Conv1D,
@@ -171,9 +174,7 @@ else:
 if is_peft_available():
     from .utils import find_adapter_config_file
 
-
 SpecificPreTrainedModelType = TypeVar("SpecificPreTrainedModelType", bound="PreTrainedModel")
-
 
 TORCH_INIT_FUNCTIONS = {
     "uniform_": nn.init.uniform_,
@@ -5634,3 +5635,14 @@ def get_disk_only_shard_files(device_map, sharded_metadata, start_prefix):
         files_content[filename].append(device_map[weight_name])
 
     return [fname for fname, devices in files_content.items() if set(devices) == {"disk"}]
+
+
+ALL_ATTENTION_FUNCTIONS: Dict[str, Dict[str, Callable]] = {}
+
+ALL_ATTENTION_FUNCTIONS.update(
+    {
+        "flash_attention_2": flash_attention_forward,
+        "flex_attention": flex_attention_forward,
+        "sdpa": sdpa_attention_forward,
+    }
+)
