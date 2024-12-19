@@ -20,14 +20,14 @@ rendered properly in your Markdown viewer.
 <a href="https://huggingface.co/models?filter=modernbert">
 <img alt="Models" src="https://img.shields.io/badge/All_model_pages-modernbert-blueviolet">
 </a>
-<!-- <a href="">
-<img alt="Paper page" src="https://img.shields.io/badge/Paper%20page--green">
-</a> -->
+<a href="https://arxiv.org/abs/2412.13663">
+<img alt="Paper page" src="https://img.shields.io/badge/Paper%20page-2412.13663-green">
+</a>
 </div>
 
 ## Overview
 
-The ModernBert model was proposed in [Smarter, Better, Faster, Longer: A Modern Bidirectional Encoder for Fast, Memory Efficient, and Long Context Finetuning and Inference](#) by Benjamin Warner, Antoine Chaffin, Benjamin Clavié, Orion Weller, Oskar Hallström, Said Taghadouini, Alexis Galalgher, Raja Bisas, Faisal Ladhak, Tom Aarsen, Nathan Cooper, Grifin Adams, Jeremy Howard and Iacopo Poli.
+The ModernBert model was proposed in [Smarter, Better, Faster, Longer: A Modern Bidirectional Encoder for Fast, Memory Efficient, and Long Context Finetuning and Inference](https://arxiv.org/abs/2412.13663) by Benjamin Warner, Antoine Chaffin, Benjamin Clavié, Orion Weller, Oskar Hallström, Said Taghadouini, Alexis Galalgher, Raja Bisas, Faisal Ladhak, Tom Aarsen, Nathan Cooper, Grifin Adams, Jeremy Howard and Iacopo Poli.
 
 It is a refresh of the traditional encoder architecture, as used in previous models such as [BERT](https://huggingface.co/docs/transformers/en/model_doc/bert) and [RoBERTa](https://huggingface.co/docs/transformers/en/model_doc/roberta). 
 
