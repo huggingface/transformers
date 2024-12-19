@@ -186,4 +186,5 @@ class EncodecConfig(PretrainedConfig):
 
     @property
     def num_quantizers(self) -> int:
-        return int(1000 * self.target_bandwidths[-1] // (self.frame_rate * 10))
+        return int(max(1, math.floor(self.target_bandwidths[-1] * 1000 / (self.frame_rate * math.log2(self.codebook_size)))))
+
