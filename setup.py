@@ -148,6 +148,7 @@ _deps = [
     "pyyaml>=5.1",
     "pydantic",
     "pytest>=7.2.0,<8.0.0",
+    "pytest-subtests",
     "pytest-timeout",
     "pytest-xdist",
     "python>=3.9.0",
@@ -320,6 +321,7 @@ extras["testing"] = (
     deps_list(
         "pytest",
         "pytest-rich",
+        "pytest-subtests",
         "pytest-xdist",
         "timeout-decorator",
         "parameterized",

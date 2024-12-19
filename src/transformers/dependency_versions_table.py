@@ -54,6 +54,7 @@ deps = {
     "pyyaml": "pyyaml>=5.1",
     "pydantic": "pydantic",
     "pytest": "pytest>=7.2.0,<8.0.0",
+    "pytest-subtests": "pytest-subtests",
     "pytest-timeout": "pytest-timeout",
     "pytest-xdist": "pytest-xdist",
     "python": "python>=3.9.0",
