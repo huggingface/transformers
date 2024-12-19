@@ -283,6 +283,7 @@ class DPTImageProcessor(BaseImageProcessor):
         return pad(image, ((pad_size_left, pad_size_right), (pad_size_top, pad_size_bottom)), data_format=data_format)
 
     def reduce_label(self, label: ImageInput) -> np.ndarray:
+        # Copied from transformers.models.beit.image_processing_beit
         label = to_numpy_array(label)
         # Avoid using underflow conversion
         label[label == 0] = 255
@@ -429,6 +430,7 @@ class DPTImageProcessor(BaseImageProcessor):
         return segmentation_map
 
     def __call__(self, images, segmentation_maps=None, **kwargs):
+        # Copied from transformers.models.beit.image_processing_beit
         # Overrides the `__call__` method of the `Preprocessor` class such that the images and segmentation maps can both
         # be passed in as positional arguments.
         return super().__call__(images, segmentation_maps=segmentation_maps, **kwargs)
