@@ -193,6 +193,7 @@ _import_structure = {
         "AutoTokenizer",
     ],
     "models.autoformer": ["AutoformerConfig"],
+    "models.bamba": ["BambaConfig"],
     "models.bark": [
         "BarkCoarseConfig",
         "BarkConfig",
@@ -305,6 +306,11 @@ _import_structure = {
         "CodeGenTokenizer",
     ],
     "models.cohere": ["CohereConfig"],
+    "models.cohere2": ["Cohere2Config"],
+    "models.colpali": [
+        "ColPaliConfig",
+        "ColPaliProcessor",
+    ],
     "models.conditional_detr": ["ConditionalDetrConfig"],
     "models.convbert": [
         "ConvBertConfig",
@@ -601,6 +607,7 @@ _import_structure = {
     "models.mobilenet_v2": ["MobileNetV2Config"],
     "models.mobilevit": ["MobileViTConfig"],
     "models.mobilevitv2": ["MobileViTV2Config"],
+    "models.modernbert": ["ModernBertConfig"],
     "models.moshi": [
         "MoshiConfig",
         "MoshiDepthConfig",
@@ -783,6 +790,7 @@ _import_structure = {
     "models.time_series_transformer": ["TimeSeriesTransformerConfig"],
     "models.timesformer": ["TimesformerConfig"],
     "models.timm_backbone": ["TimmBackboneConfig"],
+    "models.timm_wrapper": ["TimmWrapperConfig"],
     "models.trocr": [
         "TrOCRConfig",
         "TrOCRProcessor",
@@ -1273,6 +1281,18 @@ else:
     _import_structure["models.rt_detr"].append("RTDetrImageProcessorFast")
     _import_structure["models.vit"].append("ViTImageProcessorFast")
 
+try:
+    if not is_torchvision_available() and not is_timm_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    from .utils import dummy_timm_and_torchvision_objects
+
+    _import_structure["utils.dummy_timm_and_torchvision_objects"] = [
+        name for name in dir(dummy_timm_and_torchvision_objects) if not name.startswith("_")
+    ]
+else:
+    _import_structure["models.timm_wrapper"].extend(["TimmWrapperImageProcessor"])
+
 # PyTorch-backed objects
 try:
     if not is_torch_available():
@@ -1455,6 +1475,7 @@ else:
             "MODEL_FOR_OBJECT_DETECTION_MAPPING",
             "MODEL_FOR_PRETRAINING_MAPPING",
             "MODEL_FOR_QUESTION_ANSWERING_MAPPING",
+            "MODEL_FOR_RETRIEVAL_MAPPING",
             "MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING",
             "MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING",
             "MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING",
@@ -1520,6 +1541,13 @@ else:
             "AutoformerForPrediction",
             "AutoformerModel",
             "AutoformerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.bamba"].extend(
+        [
+            "BambaForCausalLM",
+            "BambaModel",
+            "BambaPreTrainedModel",
         ]
     )
     _import_structure["models.bark"].extend(
@@ -1775,6 +1803,13 @@ else:
         ]
     )
     _import_structure["models.cohere"].extend(["CohereForCausalLM", "CohereModel", "CoherePreTrainedModel"])
+    _import_structure["models.cohere2"].extend(["Cohere2ForCausalLM", "Cohere2Model", "Cohere2PreTrainedModel"])
+    _import_structure["models.colpali"].extend(
+        [
+            "ColPaliForRetrieval",
+            "ColPaliPreTrainedModel",
+        ]
+    )
     _import_structure["models.conditional_detr"].extend(
         [
             "ConditionalDetrForObjectDetection",
@@ -2844,6 +2879,15 @@ else:
             "MobileViTV2PreTrainedModel",
         ]
     )
+    _import_structure["models.modernbert"].extend(
+        [
+            "ModernBertForMaskedLM",
+            "ModernBertForSequenceClassification",
+            "ModernBertForTokenClassification",
+            "ModernBertModel",
+            "ModernBertPreTrainedModel",
+        ]
+    )
     _import_structure["models.moshi"].extend(
         [
             "MoshiForCausalLM",
@@ -3541,6 +3585,9 @@ else:
         ]
     )
     _import_structure["models.timm_backbone"].extend(["TimmBackbone"])
+    _import_structure["models.timm_wrapper"].extend(
+        ["TimmWrapperForImageClassification", "TimmWrapperModel", "TimmWrapperPreTrainedModel"]
+    )
     _import_structure["models.trocr"].extend(
         [
             "TrOCRForCausalLM",
@@ -5084,6 +5131,7 @@ if TYPE_CHECKING:
     from .models.autoformer import (
         AutoformerConfig,
     )
+    from .models.bamba import BambaConfig
     from .models.bark import (
         BarkCoarseConfig,
         BarkConfig,
@@ -5197,6 +5245,11 @@ if TYPE_CHECKING:
         CodeGenTokenizer,
     )
     from .models.cohere import CohereConfig
+    from .models.cohere2 import Cohere2Config
+    from .models.colpali import (
+        ColPaliConfig,
+        ColPaliProcessor,
+    )
     from .models.conditional_detr import (
         ConditionalDetrConfig,
     )
@@ -5532,6 +5585,7 @@ if TYPE_CHECKING:
     from .models.mobilevitv2 import (
         MobileViTV2Config,
     )
+    from .models.modernbert import ModernBertConfig
     from .models.moshi import (
         MoshiConfig,
         MoshiDepthConfig,
@@ -5744,6 +5798,7 @@ if TYPE_CHECKING:
         TimesformerConfig,
     )
     from .models.timm_backbone import TimmBackboneConfig
+    from .models.timm_wrapper import TimmWrapperConfig
     from .models.trocr import (
         TrOCRConfig,
         TrOCRProcessor,
@@ -6237,6 +6292,14 @@ if TYPE_CHECKING:
         from .models.rt_detr import RTDetrImageProcessorFast
         from .models.vit import ViTImageProcessorFast
 
+    try:
+        if not is_torchvision_available() and not is_timm_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        from .utils.dummy_timm_and_torchvision_objects import *
+    else:
+        from .models.timm_wrapper import TimmWrapperImageProcessor
+
     # Modeling
     try:
         if not is_torch_available():
@@ -6395,6 +6458,7 @@ if TYPE_CHECKING:
             MODEL_FOR_OBJECT_DETECTION_MAPPING,
             MODEL_FOR_PRETRAINING_MAPPING,
             MODEL_FOR_QUESTION_ANSWERING_MAPPING,
+            MODEL_FOR_RETRIEVAL_MAPPING,
             MODEL_FOR_SEMANTIC_SEGMENTATION_MAPPING,
             MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING,
             MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING,
@@ -6459,6 +6523,7 @@ if TYPE_CHECKING:
             AutoformerModel,
             AutoformerPreTrainedModel,
         )
+        from .models.bamba import BambaForCausalLM, BambaModel, BambaPreTrainedModel
         from .models.bark import (
             BarkCausalModel,
             BarkCoarseModel,
@@ -6665,6 +6730,15 @@ if TYPE_CHECKING:
             CohereForCausalLM,
             CohereModel,
             CoherePreTrainedModel,
+        )
+        from .models.cohere2 import (
+            Cohere2ForCausalLM,
+            Cohere2Model,
+            Cohere2PreTrainedModel,
+        )
+        from .models.colpali import (
+            ColPaliForRetrieval,
+            ColPaliPreTrainedModel,
         )
         from .models.conditional_detr import (
             ConditionalDetrForObjectDetection,
@@ -7509,6 +7583,13 @@ if TYPE_CHECKING:
             MobileViTV2Model,
             MobileViTV2PreTrainedModel,
         )
+        from .models.modernbert import (
+            ModernBertForMaskedLM,
+            ModernBertForSequenceClassification,
+            ModernBertForTokenClassification,
+            ModernBertModel,
+            ModernBertPreTrainedModel,
+        )
         from .models.moshi import (
             MoshiForCausalLM,
             MoshiForConditionalGeneration,
@@ -8053,6 +8134,11 @@ if TYPE_CHECKING:
             TimesformerPreTrainedModel,
         )
         from .models.timm_backbone import TimmBackbone
+        from .models.timm_wrapper import (
+            TimmWrapperForImageClassification,
+            TimmWrapperModel,
+            TimmWrapperPreTrainedModel,
+        )
         from .models.trocr import (
             TrOCRForCausalLM,
             TrOCRPreTrainedModel,
