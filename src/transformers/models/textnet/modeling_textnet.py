@@ -318,8 +318,6 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.textnet = TextNetModel(config)
-        scale_h = config.image_size[0] // 32
-        scale_w = config.image_size[1] // 32
         # classification head
         self.classifier = nn.Sequential(
             nn.AdaptiveAvgPool2d((1, 1)),
