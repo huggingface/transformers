@@ -723,6 +723,13 @@ _import_structure = {
         "SamPromptEncoderConfig",
         "SamVisionConfig",
     ],
+    "models.sam_hq": [
+        "SamHQConfig",
+        "SamHQMaskDecoderConfig",
+        "SamHQProcessor",
+        "SamHQVisionConfig",
+        "SamHQPromptEncoderConfig",
+    ],
     "models.seamless_m4t": [
         "SeamlessM4TConfig",
         "SeamlessM4TFeatureExtractor",
@@ -1232,6 +1239,7 @@ else:
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
     _import_structure["models.qwen2_vl"].extend(["Qwen2VLImageProcessor"])
     _import_structure["models.rt_detr"].extend(["RTDetrImageProcessor"])
+    _import_structure["models.sam"].extend(["SamImageProcessor"])
     _import_structure["models.sam"].extend(["SamImageProcessor"])
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
     _import_structure["models.seggpt"].extend(["SegGptImageProcessor"])
@@ -3293,6 +3301,12 @@ else:
         [
             "SamModel",
             "SamPreTrainedModel",
+        ]
+    )
+    _import_structure["models.sam_hq"].extend(
+        [
+            "SamHQModel",
+            "SamHQPreTrainedModel",
         ]
     )
     _import_structure["models.seamless_m4t"].extend(
@@ -5638,6 +5652,13 @@ if TYPE_CHECKING:
         SamPromptEncoderConfig,
         SamVisionConfig,
     )
+    from .models.sam_hq import (
+        SamHQConfig,
+        SamHQProcessor,
+        SamHQMaskDecoderConfig,
+        SamHQPromptEncoderConfig,
+        SamHQVisionConfig,
+    )
     from .models.seamless_m4t import (
         SeamlessM4TConfig,
         SeamlessM4TFeatureExtractor,
@@ -6166,6 +6187,7 @@ if TYPE_CHECKING:
         from .models.pvt import PvtImageProcessor
         from .models.qwen2_vl import Qwen2VLImageProcessor
         from .models.rt_detr import RTDetrImageProcessor
+        from .models.sam import SamImageProcessor
         from .models.sam import SamImageProcessor
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.seggpt import SegGptImageProcessor
@@ -7826,6 +7848,10 @@ if TYPE_CHECKING:
         from .models.sam import (
             SamModel,
             SamPreTrainedModel,
+        )
+        from .models.sam_hq import (
+            SamHQModel,
+            SamHQPreTrainedModel,
         )
         from .models.seamless_m4t import (
             SeamlessM4TCodeHifiGan,

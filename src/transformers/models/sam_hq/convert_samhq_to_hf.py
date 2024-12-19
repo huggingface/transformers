@@ -24,22 +24,18 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-# from transformers import (
-#     SamHQConfig,
-#     SamHQImageProcessor,
-#     SamHQModel,
-#     SamHQProcessor,
-#     SamHQVisionConfig,
-# )
+from transformers import SamHQConfig, SamHQModel, SamHQVisionConfig, SamHQProcessor
+
 
 from transformers import SamImageProcessor
-from transformers.models.sam_hq.configuration_sam_hq import SamHQConfig,SamHQVisionConfig
-from transformers.models.sam_hq.modeling_sam_hq import SamHQModel
-from transformers.models.sam_hq.processing_samhq import SamHQProcessor
+
+
+
 
 def get_config(model_name):
     if "sam_hq_vit_b" in model_name:
         vision_config = SamHQVisionConfig()
+        vit_dim = 768  # Base model dimension
     elif "sam_hq_vit_l" in model_name:
         vision_config = SamHQVisionConfig(
             hidden_size=1024,
@@ -47,6 +43,7 @@ def get_config(model_name):
             num_attention_heads=16,
             global_attn_indexes=[5, 11, 17, 23],
         )
+        vit_dim = 1024  # Large model dimension
     elif "sam_hq_vit_h" in model_name:
         vision_config = SamHQVisionConfig(
             hidden_size=1280,
@@ -54,9 +51,16 @@ def get_config(model_name):
             num_attention_heads=16,
             global_attn_indexes=[7, 15, 23, 31],
         )
+        vit_dim = 1280  # Huge model dimension
+
+    # Create mask decoder config with appropriate vit_dim
+    mask_decoder_config = {
+        "vit_dim": vit_dim
+    }
 
     config = SamHQConfig(
         vision_config=vision_config,
+        mask_decoder_config=mask_decoder_config,
     )
 
     return config
@@ -186,7 +190,8 @@ def convert_sam_hq_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, 
         with torch.no_grad():
             hf_model(**inputs)
 
-        input_boxes = ((75, 275, 1725, 850),)
+        input_boxes = [[[75.0, 275.0, 1725.0, 850.0]]]
+        
 
         inputs = processor(images=np.array(raw_image), input_boxes=input_boxes, return_tensors="pt").to(device)
 

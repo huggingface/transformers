@@ -27,6 +27,7 @@ from ...tokenization_utils_base import BatchEncoding
 from ...utils import TensorType,  is_torch_available
 
 
+
 if is_torch_available():
     import torch
 
@@ -148,6 +149,8 @@ class SamHQProcessor(ProcessorMixin):
                 input_labels = torch.from_numpy(input_labels)
                 input_labels = input_labels.unsqueeze(1) if len(input_labels.shape) != 3 else input_labels
             encoding_image_processor.update({"input_labels": input_labels})
+
+        return encoding_image_processor
 
 
     def _pad_points_and_labels(self, input_points, input_labels):

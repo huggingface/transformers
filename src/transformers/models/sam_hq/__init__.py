@@ -65,7 +65,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .image_processing_samhq import SamHQImageProcessor
+        from transformers.models.sam.image_processing_sam import SamImageProcessor
 
 
 else:

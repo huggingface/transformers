@@ -57,7 +57,7 @@ class SamHQVisionEncoderOutput(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
-
+# Copied from transformers.models.sam.modeling_sam.SamImageSegmentationOutput with Sam->SamHQ
 @dataclass
 class SamHQImageSegmentationOutput(ModelOutput):
     """
@@ -87,8 +87,14 @@ class SamHQImageSegmentationOutput(ModelOutput):
     vision_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
     mask_decoder_attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
-
+# Copied from transformers.models.sam.modeling_sam.SamPatchEmbeddings with Sam->SamHQ
 class SamHQPatchEmbeddings(nn.Module):
+    """
+    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
+    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
+    Transformer.
+    """
+
     def __init__(self, config):
         super().__init__()
         image_size, patch_size = config.image_size, config.patch_size
@@ -115,10 +121,10 @@ class SamHQPatchEmbeddings(nn.Module):
                 f"Input image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
             )
         embeddings = self.projection(pixel_values).permute(0, 2, 3, 1)
-        print(embeddings)
         return embeddings
     
 
+# Copied from transformers.models.sam.modeling_sam.SamMLPBlock with Sam->SamHQ
 class SamHQMLPBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -132,6 +138,7 @@ class SamHQMLPBlock(nn.Module):
         hidden_states = self.lin2(hidden_states)
         return hidden_states
 
+# Copied from transformers.models.sam.modeling_sam.SamVisionAttention with Sam->SamHQ
 class SamHQVisionAttention(nn.Module):
     """Multi-head Attention block with relative position embeddings."""
 
@@ -273,7 +280,7 @@ class SamHQVisionAttention(nn.Module):
     
 
     
-
+# Copied from transformers.models.sam.modeling_sam.SamVisionLayer with Sam->SamHQ
 class SamHQVisionLayer(nn.Module):
     def __init__(self, config, window_size):
         super().__init__()
@@ -372,7 +379,7 @@ class SamHQVisionLayer(nn.Module):
         return outputs
 
 
-
+# Copied from transformers.models.convnext.modeling_convnext.ConvNextLayerNorm with ConvNext->SamHQ
 class SamHQLayerNorm(nn.Module):
     r"""LayerNorm that supports two data formats: channels_last (default) or channels_first.
     The ordering of the dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height,
@@ -402,6 +409,7 @@ class SamHQLayerNorm(nn.Module):
             x = self.weight[:, None, None] * x + self.bias[:, None, None]
         return x
 
+# Copied from transformers.models.sam.modeling_sam.SamVisionNeck with Sam -> SamHQ
 class SamHQVisionNeck(nn.Module):
     def __init__(self, config: SamHQVisionConfig):
         super().__init__()
@@ -524,7 +532,7 @@ class SamHQVisionEncoder(nn.Module):
             attentions=all_self_attentions,
         )
 
-
+# Copied from transformers.models.sam.modeling_sam.SamMaskEmbedding with Sam->SamHQ
 class SamHQMaskEmbedding(nn.Module):
     def __init__(self, config: SamHQPromptEncoderConfig):
         super().__init__()
@@ -551,7 +559,7 @@ class SamHQMaskEmbedding(nn.Module):
         dense_embeddings = self.conv3(hidden_states)
         return dense_embeddings
     
-
+# Copied from transformers.models.sam.modeling_sam.SamPromptEncoder with Sam->SamHQ
 class SamHQPromptEncoder(nn.Module):
     def __init__(self, config: SamHQPromptEncoderConfig, shared_patch_embedding):
         super().__init__()
@@ -668,7 +676,7 @@ class SamHQPromptEncoder(nn.Module):
 
         return sparse_embeddings, dense_embeddings
 
-
+# Copied from transformers.models.sam.modeling_sam.SamAttention with Sam->SamHQ
 class SamHQAttention(nn.Module):
     """
     SAM's attention layer that allows for downscaling the size of the embedding after projection to queries, keys, and
@@ -731,6 +739,7 @@ class SamHQAttention(nn.Module):
 
         return out      
 
+# Copied from transformer.models.sam.modeling_sam.SamTwoWayAttentionBlock with Sam->SamHQ
 class SamHQTwoWayAttentionBlock(nn.Module):
     def __init__(self, config, attention_downsample_rate: int = 2, skip_first_layer_pe: bool = False):
         """
@@ -818,7 +827,7 @@ class SamHQTwoWayAttentionBlock(nn.Module):
         return outputs
 
 
-
+# Copied from transformers.models.sam.modeling_sam.SamPositionalEmbedding with Sam->SamHQ
 class SamHQPositionalEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -842,6 +851,7 @@ class SamHQPositionalEmbedding(nn.Module):
         return torch.cat([torch.sin(coordinates), torch.cos(coordinates)], dim=-1)
 
 
+# Copied from transformers.models.sam.modeling_sam.SamTwoWayTransformer with Sam->SamHQ
 class SamHQTwoWayTransformer(nn.Module):
     def __init__(self, config: SamHQMaskDecoderConfig):
         super().__init__()
@@ -912,6 +922,7 @@ class SamHQTwoWayTransformer(nn.Module):
         queries = self.layer_norm_final_attn(queries)
         return queries, keys, all_attentions
 
+# Copied from transformers.models.sam.modeling_sam.SamFeedForward with Sam->SamHQ
 class SamHQFeedForward(nn.Module):
     def __init__(
         self, input_dim: int, hidden_dim: int, output_dim: int, num_layers: int, sigmoid_output: bool = False
@@ -1132,7 +1143,101 @@ class  SamHQPreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
+SAM_HQ_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
 
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`SamHQConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+SAM_HQ_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`SamHQProcessor`]. See [`SamHQProcessor.__call__`] for
+            details.
+        input_points (`torch.FloatTensor` of shape `(batch_size, num_points, 2)`):
+            Input 2D spatial points, this is used by the prompt encoder to encode the prompt. Generally yields to much
+            better results. The points can be obtained by passing a list of list of list to the processor that will
+            create corresponding `torch` tensors of dimension 4. The first dimension is the image batch size, the
+            second dimension is the point batch size (i.e. how many segmentation masks do we want the model to predict
+            per input point), the third dimension is the number of points per segmentation mask (it is possible to pass
+            multiple points for a single mask), and the last dimension is the x (vertical) and y (horizontal)
+            coordinates of the point. If a different number of points is passed either for each image, or for each
+            mask, the processor will create "PAD" points that will correspond to the (0, 0) coordinate, and the
+            computation of the embedding will be skipped for these points using the labels.
+        input_labels (`torch.LongTensor` of shape `(batch_size, point_batch_size, num_points)`):
+            Input labels for the points, this is used by the prompt encoder to encode the prompt. According to the
+            official implementation, there are 3 types of labels:
+
+            - `1`: the point is a point that contains the object of interest
+            - `0`: the point is a point that does not contain the object of interest
+            - `-1`: the point corresponds to the background
+
+            We added the label:
+
+            - `-10`: the point is a padding point, thus should be ignored by the prompt encoder
+
+            The padding labels should be automatically done by the processor.
+        input_boxes (`torch.FloatTensor` of shape `(batch_size, num_boxes, 4)`):
+            Input boxes for the points, this is used by the prompt encoder to encode the prompt. Generally yields to
+            much better generated masks. The boxes can be obtained by passing a list of list of list to the processor,
+            that will generate a `torch` tensor, with each dimension corresponding respectively to the image batch
+            size, the number of boxes per image and the coordinates of the top left and botton right point of the box.
+            In the order (`x1`, `y1`, `x2`, `y2`):
+
+            - `x1`: the x coordinate of the top left point of the input box
+            - `y1`: the y coordinate of the top left point of the input box
+            - `x2`: the x coordinate of the bottom right point of the input box
+            - `y2`: the y coordinate of the bottom right point of the input box
+
+        input_masks (`torch.FloatTensor` of shape `(batch_size, image_size, image_size)`):
+            SAM-HQ model also accepts segmentation masks as input. The mask will be embedded by the prompt encoder to
+            generate a corresponding embedding, that will be fed later on to the mask decoder. These masks needs to be
+            manually fed by the user, and they need to be of shape (`batch_size`, `image_size`, `image_size`).
+
+        image_embeddings (`torch.FloatTensor` of shape `(batch_size, output_channels, window_size, window_size)`):
+            Image embeddings, this is used by the mask decoder to generate masks and iou scores. For more memory
+            efficient computation, users can first retrieve the image embeddings using the `get_image_embeddings`
+            method, and then feed them to the `forward` method instead of feeding the `pixel_values`.
+        multimask_output (`bool`, *optional*):
+            In the original implementation and paper, the model always outputs 3 masks per image (or per point / per
+            bounding box if relevant). However, it is possible to just output a single mask, that corresponds to the
+            "best" mask, by specifying `multimask_output=False`.
+        hq_token_only (`bool`, *optional*, defaults to `False`):
+            Whether to use only the HQ token path for mask generation. When False, combines both standard and HQ paths.
+            This is specific to SAM-HQ's architecture.
+        attention_similarity (`torch.FloatTensor`, *optional*):
+            Attention similarity tensor, to be provided to the mask decoder for target-guided attention in case the
+            model is used for personalization as introduced in [PerSAM](https://arxiv.org/abs/2305.03048).
+        target_embedding (`torch.FloatTensor`, *optional*):
+            Embedding of the target concept, to be provided to the mask decoder for target-semantic prompting in case
+            the model is used for personalization as introduced in [PerSAM](https://arxiv.org/abs/2305.03048).
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        interm_embeddings (`List[torch.FloatTensor]`, *optional*):
+            Intermediate embeddings from vision encoder's non-windowed blocks, used by SAM-HQ for enhanced mask quality.
+            Required when providing pre-computed image_embeddings instead of pixel_values.
+"""
+
+@add_start_docstrings(
+    "Segment Anything Model HQ (SAM-HQ) for generating masks,given an input image and",
+    " optional 2D location and bounding boxes.",
+    SAM_HQ_START_DOCSTRING,
+)
 class SamHQModel(SamHQPreTrainedModel):
     _tied_weights_keys = ["prompt_encoder.shared_embedding.positional_embedding"]
 
@@ -1175,6 +1280,20 @@ class SamHQModel(SamHQPreTrainedModel):
         return_dict: Optional[bool] = None,
 
     ):
+        r"""
+        Returns the image embeddings by passing the pixel values through the vision encoder.
+
+        Args:
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+                Input pixel values
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers.
+            output_hidden_states (`bool`, *optional*):
+                Whether or not to return the hidden states of all layers.
+            return_dict (`bool`, *optional*):
+                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+
+        """
         vision_output = self.vision_encoder(
             pixel_values=pixel_values,
             output_attentions=output_attentions,
@@ -1201,6 +1320,23 @@ class SamHQModel(SamHQPreTrainedModel):
         input_boxes: Optional[torch.FloatTensor]= None,
         input_masks: Optional[torch.LongTensor]= None,
     ):
+        r"""
+        Returns the prompt embeddings by passing the input points, labels, boxes and masks through the prompt encoder.
+
+        Args:
+            input_points (`torch.FloatTensor` of shape `(batch_size, point_batch_size, num_points_per_image, 2)`):
+                Optional input points for the prompt encoder. The padding of the point is automatically done by the
+                processor. `point_batch_size` refers to the number of masks that we want the model to predict per
+                point. The model will output `point_batch_size` times 3 masks in total.
+            input_labels (`torch.LongTensor` of shape `(batch_size, point_batch_size, num_points_per_image)`):
+                Optional input labels for the prompt encoder. The padding of the labels is automatically done by the
+                processor, or can be fed by the user.
+            input_boxes (`torch.FloatTensor` of shape `(batch_size, num_boxes_per_image, 4)`):
+                Optional input boxes for the prompt encoder. The padding of the boxes is automatically done by the
+                processor. users can also pass manually the input boxes.
+            input_masks (`torch.LongTensor` of shape `(batch_size, image_size, image_size)`):
+                Optional input masks for the prompt encoder.
+        """
         prompt_output = self.prompt_encoder(
             input_points=input_points,
             input_labels=input_labels,
@@ -1229,11 +1365,8 @@ class SamHQModel(SamHQPreTrainedModel):
         interm_embeddings: Optional[List[torch.FloatTensor]] = None,
         **kwargs,
     ) -> List[Dict[str, torch.Tensor]]:
-        """
-        Main forward method for SamHQ. The key differences from SAM are:
-        1. Handles intermediate embeddings for HQ features
-        2. Additional hq_token_only parameter
-        3. Modified mask decoder outputs
+        r"""
+        
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
