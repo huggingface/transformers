@@ -15,9 +15,11 @@
 """Testing suite for the PyTorch Llava-NeXT model."""
 
 import unittest
+from unittest.mock import patch
 
 import requests
 from huggingface_hub import hf_hub_download
+from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
@@ -25,6 +27,7 @@ from transformers import (
     LlavaNextForConditionalGeneration,
     is_torch_available,
     is_vision_available,
+    modeling_outputs,
 )
 from transformers.testing_utils import (
     cleanup,
@@ -321,6 +324,50 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
             pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
             image_sizes = torch.cat([image_sizes, image_sizes], dim=0)
             _ = model(input_ids=input_ids, pixel_values=pixel_values, image_sizes=image_sizes)
+
+    @parameterized.expand(
+        [
+            (4, True, "default"),
+            (5, True, "full"),
+            (4, False, "default"),
+            (4, False, "full"),
+        ],
+    )
+    def test_visual_encoder_cls_behavior(self, num_expected_features, has_cls, strategy):
+        """
+        Test that we correctly handle error checking for the dimensions of visual encoders
+        that do/don't have CLS tokens. If the visual encoder has no CLS, i.e., produces a
+        feature count of # patches height X # patches width, the strategy is always treated
+        as FULL, because we have nothing to remove.
+        """
+        # Mock the tower outputs; 5 means we have CLS, 4 means we don't,
+        # since area in patches for the test model is 2x2 -> 4 features
+        num_features = 5 if has_cls else 4
+        tower_output = modeling_outputs.BaseModelOutputWithPooling(
+            hidden_states=[torch.Tensor(15, num_features, 32).to(torch_device) for x in range(3)]
+        )
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            # Get the image features using the selected strategy and mocked tower outputs
+            with patch.object(model.vision_tower, "forward", return_value=tower_output):
+                image_features = model.get_image_features(
+                    pixel_values=input_dict["pixel_values"],
+                    image_sizes=input_dict["image_sizes"],
+                    vision_feature_layer=-1,
+                    vision_feature_select_strategy=strategy,
+                )
+            # Ensure that that our dimensions match up based on tower output and strategy
+            assert image_features[0].shape[1] == num_expected_features
+            # Run the validation that is used when packing images
+            height = width = config.vision_config.image_size // config.vision_config.patch_size
+            model.validate_image_feature_dims(
+                image_feature=image_features[0],
+                height=height,
+                width=width,
+                has_cls=has_cls,
+                vision_feature_select_strategy=strategy,
+            )
 
     @unittest.skip(
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
