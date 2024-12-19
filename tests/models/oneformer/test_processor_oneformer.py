@@ -22,10 +22,12 @@ import numpy as np
 from datasets import load_dataset
 from huggingface_hub import hf_hub_download
 
+from transformers import CLIPTokenizerFast
 from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import prepare_image_inputs
+from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_torch_available():
@@ -187,20 +189,23 @@ class OneFormerProcessorTester:
 
 @require_torch
 @require_vision
-class OneFormerProcessingTest(unittest.TestCase):
-    processing_class = OneFormerProcessor if (is_vision_available() and is_torch_available()) else None
+class OneFormerProcessingTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = OneFormerProcessor
     # only for test_feat_extracttion_common.test_feat_extract_to_json_string
-    feature_extraction_class = processing_class
+    feature_extraction_class = processor_class
 
     def setUp(self):
         self.processing_tester = OneFormerProcessorTester(self)
+        self.tmpdirname = tempfile.mkdtemp()
+        processor = self.processor_class(**self.processor_dict)
+        processor.save_pretrained(self.tmpdirname)
 
     @property
     def processor_dict(self):
         return self.processing_tester.prepare_processor_dict()
 
     def test_feat_extract_properties(self):
-        processor = self.processing_class(**self.processor_dict)
+        processor = self.processor_class(**self.processor_dict)
         self.assertTrue(hasattr(processor, "image_processor"))
         self.assertTrue(hasattr(processor, "tokenizer"))
 
@@ -210,7 +215,7 @@ class OneFormerProcessingTest(unittest.TestCase):
 
     def test_call_pil(self):
         # Initialize processor
-        processor = self.processing_class(**self.processor_dict)
+        processor = self.processor_class(**self.processor_dict)
         # create random PIL images
         image_inputs = self.processing_tester.prepare_image_inputs(equal_resolution=False)
         for image in image_inputs:
@@ -262,7 +267,7 @@ class OneFormerProcessingTest(unittest.TestCase):
 
     def test_call_numpy(self):
         # Initialize processor
-        processor = self.processing_class(**self.processor_dict)
+        processor = self.processor_class(**self.processor_dict)
         # create random numpy tensors
         image_inputs = self.processing_tester.prepare_image_inputs(equal_resolution=False, numpify=True)
         for image in image_inputs:
@@ -314,7 +319,7 @@ class OneFormerProcessingTest(unittest.TestCase):
 
     def test_call_pytorch(self):
         # Initialize processor
-        processor = self.processing_class(**self.processor_dict)
+        processor = self.processor_class(**self.processor_dict)
         # create random PyTorch tensors
         image_inputs = self.processing_tester.prepare_image_inputs(equal_resolution=False, torchify=True)
         for image in image_inputs:
@@ -365,7 +370,7 @@ class OneFormerProcessingTest(unittest.TestCase):
         )
 
     def comm_get_processor_inputs(self, with_segmentation_maps=False, is_instance_map=False, segmentation_type="np"):
-        processor = self.processing_class(**self.processor_dict)
+        processor = self.processor_class(**self.processor_dict)
         # prepare image and target
         num_labels = self.processing_tester.num_labels
         annotations = None
@@ -484,8 +489,6 @@ class OneFormerProcessingTest(unittest.TestCase):
             pixel_values_list,
             ["semantic", "semantic"],
             [panoptic_map1, panoptic_map2],
-            max_seq_length=self.processing_tester.max_seq_length,
-            task_seq_length=self.processing_tester.task_seq_length,
             instance_id_to_semantic_id=[inst2class1, inst2class2],
             return_tensors="pt",
         )
@@ -572,8 +575,6 @@ class OneFormerProcessingTest(unittest.TestCase):
             pixel_values_list,
             ["instance", "instance"],
             [panoptic_map1, panoptic_map2],
-            max_seq_length=self.processing_tester.max_seq_length,
-            task_seq_length=self.processing_tester.task_seq_length,
             instance_id_to_semantic_id=[inst2class1, inst2class2],
             return_tensors="pt",
         )
@@ -660,8 +661,6 @@ class OneFormerProcessingTest(unittest.TestCase):
             pixel_values_list,
             ["panoptic", "panoptic"],
             [panoptic_map1, panoptic_map2],
-            max_seq_length=self.processing_tester.max_seq_length,
-            task_seq_length=self.processing_tester.task_seq_length,
             instance_id_to_semantic_id=[inst2class1, inst2class2],
             return_tensors="pt",
         )
