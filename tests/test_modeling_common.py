@@ -3457,6 +3457,8 @@ class ModelTesterMixin:
                 "Data2VecAudioForSequenceClassification",
                 "UniSpeechForSequenceClassification",
                 "PvtForImageClassification",
+                "ModernBertForSequenceClassification",
+                "ModernBertForTokenClassification",
                 "TimmWrapperForImageClassification",
             ]
             special_param_names = [
@@ -4042,7 +4044,12 @@ class ModelTesterMixin:
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model_sdpa = model_class.from_pretrained(tmpdirname, torch_dtype=torch_dtype)
+                try:
+                    model_sdpa = model_class.from_pretrained(
+                        tmpdirname, torch_dtype=torch_dtype, attn_implementation="sdpa"
+                    )
+                except ValueError:
+                    model_sdpa = model_class.from_pretrained(tmpdirname, torch_dtype=torch_dtype)
                 model_sdpa = model_sdpa.eval().to(torch_device, dtype=torch_dtype)
 
                 model_eager = model_class.from_pretrained(
