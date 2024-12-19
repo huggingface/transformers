@@ -21,7 +21,7 @@ import unittest
 import pytest
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, ZambaConfig, is_torch_available
+from transformers import AutoTokenizer, Zamba2Config, is_torch_available
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
@@ -41,34 +41,34 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        ZambaForCausalLM,
-        ZambaForSequenceClassification,
-        ZambaModel,
+        Zamba2ForCausalLM,
+        Zamba2ForSequenceClassification,
+        Zamba2Model,
     )
-    from transformers.models.zamba.modeling_zamba import (
-        ZambaHybridDynamicCache,
+    from transformers.models.zamba2.modeling_zamba2 import (
+        Zamba2HybridDynamicCache,
     )
 
 
-class ZambaModelTester:
+class Zamba2ModelTester:
     def __init__(
         self,
         parent,
-        batch_size=13,
+        batch_size=14,
         seq_length=7,
         is_training=True,
         use_input_mask=True,
         use_labels=True,
         vocab_size=99,
-        hidden_size=64,
-        mamba_dt_rank=32,
-        num_hidden_layers=5,
-        attn_layer_offset=1,
-        attn_layer_period=8,
-        num_attention_heads=4,
-        num_key_value_heads=4,
-        n_mamba_heads=2,
-        intermediate_size=37,
+        hidden_size=16,
+        mamba_d_state=2,
+        chunk_size=8,
+        mamba_dt_rank="auto",
+        num_hidden_layers=2,
+        num_attention_heads=2,
+        n_mamba_heads=8,
+        mamba_ngroups=8,
+        intermediate_size=4,
         hidden_act="gelu",
         hidden_mamba_act="silu",
         hidden_dropout_prob=0.1,
@@ -80,6 +80,8 @@ class ZambaModelTester:
         num_labels=3,
         num_choices=4,
         scope=None,
+        layers_block_type=["mamba", "hybrid"],
+        num_mem_blocks=1,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -90,12 +92,12 @@ class ZambaModelTester:
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.mamba_dt_rank = mamba_dt_rank
+        self.mamba_d_state = mamba_d_state
         self.num_hidden_layers = num_hidden_layers
-        self.attn_layer_offset = attn_layer_offset
-        self.attn_layer_period = attn_layer_period
         self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
         self.n_mamba_heads = n_mamba_heads
+        self.mamba_ngroups = mamba_ngroups
+        self.chunk_size = chunk_size
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.hidden_mamba_act = hidden_mamba_act
@@ -108,6 +110,8 @@ class ZambaModelTester:
         self.num_labels = num_labels
         self.num_choices = num_choices
         self.scope = scope
+        self.layers_block_type = layers_block_type
+        self.num_mem_blocks = num_mem_blocks
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -129,18 +133,18 @@ class ZambaModelTester:
         return config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
 
     def get_config(self):
-        return ZambaConfig(
+        return Zamba2Config(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
             mamba_dt_rank=self.mamba_dt_rank,
+            mamba_d_state=self.mamba_d_state,
             num_hidden_layers=self.num_hidden_layers,
-            attn_layer_offset=self.attn_layer_offset,
-            attn_layer_period=self.attn_layer_period,
             num_attention_heads=self.num_attention_heads,
-            num_key_value_heads=self.num_key_value_heads,
             n_mamba_heads=self.n_mamba_heads,
             intermediate_size=self.intermediate_size,
+            chunk_size=self.chunk_size,
             hidden_act=self.hidden_act,
+            mamba_ngroups=self.mamba_ngroups,
             hidden_mamba_act=self.hidden_mamba_act,
             hidden_dropout_prob=self.hidden_dropout_prob,
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
@@ -149,6 +153,8 @@ class ZambaModelTester:
             is_decoder=True,
             initializer_range=self.initializer_range,
             use_mamba_kernels=False,
+            layers_block_type=self.layers_block_type,
+            num_mem_blocks=self.num_mem_blocks,
         )
 
     def prepare_config_and_inputs_for_decoder(self):
@@ -173,7 +179,7 @@ class ZambaModelTester:
         )
 
     def create_and_check_model(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
-        model = ZambaModel(config=config)
+        model = Zamba2Model(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask)
@@ -189,7 +195,7 @@ class ZambaModelTester:
         token_labels,
         choice_labels,
     ):
-        model = ZambaForCausalLM(config=config)
+        model = Zamba2ForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
@@ -208,14 +214,14 @@ class ZambaModelTester:
         choice_labels,
     ):
         config.is_decoder = True
-        config.add_cross_attention = True
-        model = ZambaForCausalLM(config=config)
+        config.add_cross_attention = False
+        model = Zamba2ForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
 
         # first forward pass
-        # Attention: Zamba needs the cache to be initialized to return a cache!
-        past_key_values = ZambaHybridDynamicCache(config, input_ids.shape[0], model.dtype, device=model.device)
+        # Attention: Zamba2 needs the cache to be initialized to return a cache!
+        past_key_values = Zamba2HybridDynamicCache(config, input_ids.shape[0], model.dtype, device=model.device)
         outputs = model(
             input_ids,
             attention_mask=input_mask,
@@ -225,8 +231,8 @@ class ZambaModelTester:
         past_key_values = outputs.past_key_values
 
         # create hypothetical multiple next token and extent to next_input_ids
-        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
-        next_mask = ids_tensor((self.batch_size, 3), vocab_size=2)
+        next_tokens = ids_tensor((self.batch_size, 1), config.vocab_size)
+        next_mask = ids_tensor((self.batch_size, 1), vocab_size=2)
 
         # append to next input_ids and
         next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
@@ -249,7 +255,7 @@ class ZambaModelTester:
 
         # select random slice
         random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_no_past_slice = output_from_no_past[:, -1:, random_slice_idx].detach()
         output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
 
         self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
@@ -261,7 +267,7 @@ class ZambaModelTester:
         self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
     ):
         config.num_labels = self.num_labels
-        model = ZambaForSequenceClassification(config)
+        model = Zamba2ForSequenceClassification(config)
         model.to(torch_device)
         model.eval()
         result = model(input_ids, attention_mask=input_mask, labels=sequence_labels)
@@ -282,23 +288,24 @@ class ZambaModelTester:
 
 
 @require_torch
-class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    test_torchscript = False
     all_model_classes = (
         (
-            ZambaModel,
-            ZambaForCausalLM,
-            ZambaForSequenceClassification,
+            Zamba2Model,
+            Zamba2ForCausalLM,
+            Zamba2ForSequenceClassification,
         )
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = (ZambaForCausalLM,) if is_torch_available() else ()
+    all_generative_model_classes = (Zamba2ForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "feature-extraction": ZambaModel,
-            "text-classification": ZambaForSequenceClassification,
-            "text-generation": ZambaForCausalLM,
-            "zero-shot": ZambaForSequenceClassification,
+            "feature-extraction": Zamba2Model,
+            "text-classification": Zamba2ForSequenceClassification,
+            "text-generation": Zamba2ForCausalLM,
+            "zero-shot": Zamba2ForSequenceClassification,
         }
         if is_torch_available()
         else {}
@@ -307,8 +314,12 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     test_pruning = False
 
     def setUp(self):
-        self.model_tester = ZambaModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ZambaConfig, hidden_size=37)
+        self.model_tester = Zamba2ModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=Zamba2Config, hidden_size=37)
+
+    @unittest.skip("position_ids cannot be used to pad due to Mamba2 layers")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -341,18 +352,12 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             for name, param in model.named_parameters():
                 if param.requires_grad:
                     if "A_log" in name:
-                        A = torch.arange(1, config.mamba_d_state + 1, dtype=torch.float32)[None, :]
+                        A = torch.arange(1, config.n_mamba_heads + 1, dtype=torch.float32)[None, :]
                         self.assertTrue(torch.allclose(param.data, torch.log(A), atol=1e-5, rtol=1e-5))
                     elif "D" in name:
                         # check if it's a ones like
                         self.assertTrue(torch.allclose(param.data, torch.ones_like(param.data), atol=1e-5, rtol=1e-5))
-                    elif "x_proj" in name or "dt_proj_weight" in name:
-                        self.assertIn(
-                            ((param.data.mean() * 1e2).round() / 1e2).item(),
-                            [0.0, 1.0],
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized (raw value {param.data.mean()})",
-                        )
-                    elif "dt_proj_bias" in name:
+                    elif "dt_bias" in name:
                         dt = torch.exp(
                             torch.tensor([0, 1]) * (math.log(config.time_step_max) - math.log(config.time_step_min))
                             + math.log(config.time_step_min)
@@ -373,11 +378,11 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         Overriding the test_mismatched_shapes_have_properly_initialized_weights test because A_log and D params of the
         Mamba block are initialized differently and we tested that in test_initialization
         """
-        self.skipTest("Cumbersome and redundant for Zamba")
+        self.skipTest("Cumbersome and redundant for Zamba2")
 
     def test_attention_outputs(self):
         r"""
-        Overriding the test_attention_outputs test as the Zamba model outputs attention only for its attention layers
+        Overriding the test_attention_outputs test as the Zamba2 model outputs attention only for its attention layers
         """
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
@@ -385,14 +390,6 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         seq_len = getattr(self.model_tester, "seq_length", None)
         encoder_seq_length = getattr(self.model_tester, "encoder_seq_length", seq_len)
         encoder_key_length = getattr(self.model_tester, "key_length", encoder_seq_length)
-
-        expected_num_attentions = (
-            math.ceil(
-                (self.model_tester.num_hidden_layers - self.model_tester.attn_layer_offset)
-                / self.model_tester.attn_layer_period
-            )
-            + 1
-        )
 
         for model_class in self.all_model_classes:
             inputs_dict["output_attentions"] = True
@@ -405,7 +402,6 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
-            self.assertEqual(len(attentions), expected_num_attentions)
 
             # check that output_attentions also work using config
             del inputs_dict["output_attentions"]
@@ -416,7 +412,6 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             with torch.no_grad():
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
             attentions = outputs.attentions
-            self.assertEqual(len(attentions), expected_num_attentions)
 
             self.assertListEqual(
                 list(attentions[0].shape[-3:]),
@@ -438,7 +433,6 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
             self_attentions = outputs.attentions
 
-            self.assertEqual(len(self_attentions), expected_num_attentions)
             self.assertListEqual(
                 list(self_attentions[0].shape[-3:]),
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
@@ -466,7 +460,7 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         # See https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535
 
         # First, filter out models that don't support left padding - generative and decoder-only.
-        # Zamba is a decoder-only architecture
+        # Zamba2 is a decoder-only architecture
         decoder_only_classes = self.all_generative_model_classes
 
         # Then, test left-padding
@@ -508,7 +502,7 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     @slow
     def test_flash_attn_2_fp32_ln(self):
         r"""
-        Overriding the test_flash_attn_2_fp32_ln test as the Zamba model, like Mixtral, doesn't support
+        Overriding the test_flash_attn_2_fp32_ln test as the Zamba2 model, like Mixtral, doesn't support
         right padding + use cache with FA2
         """
         for model_class in self.all_generative_model_classes:
@@ -520,7 +514,7 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
                 dummy_input = inputs_dict[model.main_input_name]
                 dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
-                # NOTE: Zamba does not support right padding + use_cache with FA2.
+                # NOTE: Zamba2 does not support right padding + use_cache with FA2.
                 dummy_attention_mask[:, -1] = 1
 
                 model = model_class.from_pretrained(
@@ -546,30 +540,30 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         r"""
-        Overriding the test_flash_attn_2_inference_padding_right test as the Zamba model, like Mixtral, doesn't support
+        Overriding the test_flash_attn_2_inference_padding_right test as the Zamba2 model, like Mixtral, doesn't support
         right padding + use cache with FA2
         """
-        self.skipTest(reason="Zamba flash attention does not support right padding")
+        self.skipTest(reason="Zamba2 flash attention does not support right padding")
 
-    @unittest.skip(reason="Zamba has its own special cache type")
+    @unittest.skip(reason="Zamba2 has its own special cache type")
     @parameterized.expand([(1, False), (1, True), (4, False)])
     def test_new_cache_format(self, num_beams, do_sample):
         pass
 
 
 @require_torch
-class ZambaModelIntegrationTest(unittest.TestCase):
+class Zamba2ModelIntegrationTest(unittest.TestCase):
     model = None
     tokenizer = None
 
     @classmethod
     @slow
     def setUpClass(cls):
-        model_id = "Zyphra/Zamba-7B-v1"
-        cls.model = ZambaForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True, use_mamba_kernels=False
+        model_id = "Zyphra/Zamba2-1.2B"
+        cls.model = Zamba2ForCausalLM.from_pretrained(
+            model_id, torch_dtype=torch.float32, low_cpu_mem_usage=True, revision="PR"
         )
-        cls.tokenizer = AutoTokenizer.from_pretrained(model_id)
+        cls.tokenizer = AutoTokenizer.from_pretrained(model_id, revision="PR")
 
     @slow
     def test_simple_generate(self):
@@ -582,65 +576,66 @@ class ZambaModelIntegrationTest(unittest.TestCase):
         output_sentence = self.tokenizer.decode(out[0, :])
         self.assertEqual(
             output_sentence,
-            "<s> Hey how are you doing on this lovely evening? I hope you are all doing well. I am",
+            "<s> Hey how are you doing on this lovely evening?\n\nI'm doing well, thanks for",
         )
 
         with torch.no_grad():
-            logits = self.model(input_ids=input_ids).logits
+            logits = self.model(input_ids=input_ids).logits.to(dtype=torch.float32)
 
         EXPECTED_LOGITS_NO_GRAD = torch.tensor(
             [
-                -7.9375,  8.1875,  1.3984, -6.0000, -7.9375, -7.9375, -7.9375, -7.9375,
-                -7.9375, -7.9375, -7.9375, -7.9375,  2.7500, 13.0625, -7.9375, -7.9375,
-                -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375,
-                -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375,
-                -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375
+               -5.9587, 10.5152,  7.0382, -2.8728, -4.8143, -4.8142, -4.8142, -4.8144,
+               -4.8143, -4.8143, -4.8142, -4.8142,  6.0185, 18.0037, -4.8142, -4.8144,
+               -4.8143, -4.8142, -4.8143, -4.8143, -4.8143, -4.8143, -4.8142, -4.8143,
+               -4.8144, -4.8143, -4.8143, -4.8141, -4.8142, -4.8142, -4.8142, -4.8144,
+               -4.8143, -4.8143, -4.8143, -4.8142, -4.8144, -4.8144, -4.8142, -4.8142
             ]
             , dtype=torch.float32)  # fmt: skip
-
         torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD, rtol=1e-3, atol=1e-3)
 
     @slow
     def test_simple_batched_generate_with_padding(self):
         self.model.to(torch_device)
-        self.tokenizer.add_special_tokens({"pad_token": "[PAD]"})
-        self.model.resize_token_embeddings(len(self.tokenizer))
 
         inputs = self.tokenizer(
-            ["Hey how are you doing on this lovely evening?", "Tell me a story"], padding=True, return_tensors="pt"
+            ["Hey how are you doing on this lovely evening?", "When did the Roman empire "],
+            padding=True,
+            return_tensors="pt",
         ).to(torch_device)
         out = self.model.generate(**inputs, do_sample=False, max_new_tokens=10)
         output_sentences = self.tokenizer.batch_decode(out)
         self.assertEqual(
             output_sentences[0],
-            "<s> Hey how are you doing on this lovely evening? I hope you are all doing well. I am",
+            "<s> Hey how are you doing on this lovely evening?\n\nI'm doing well, thanks for",
         )
+
         self.assertEqual(
             output_sentences[1],
-            "[PAD][PAD][PAD][PAD][PAD][PAD]<s> Tell me a story about a time when you were in a difficult situation",
+            "[PAD][PAD][PAD][PAD]<s> When did the Roman empire 1st fall?\nThe Roman Empire fell in",
         )
 
         with torch.no_grad():
-            logits = self.model(input_ids=inputs["input_ids"], attention_mask=inputs["attention_mask"]).logits
+            logits = self.model(input_ids=inputs["input_ids"], attention_mask=inputs["attention_mask"]).logits.to(
+                dtype=torch.float32
+            )
 
         EXPECTED_LOGITS_NO_GRAD_0 = torch.tensor(
             [
-                -7.9375,  8.1250,  1.3594, -6.0000, -7.9375, -7.9375, -7.9375, -7.9375,
-                -7.9375, -7.9375, -7.9375, -7.9375,  2.7344, 13.0625, -7.9375, -7.9375,
-                -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375,
-                -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375,
-                -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375, -7.9375
+                -5.9611, 10.5208,  7.0411, -2.8743, -4.8167, -4.8167, -4.8167, -4.8168,
+                -4.8167, -4.8167, -4.8167, -4.8166,  6.0218, 18.0062, -4.8167, -4.8168,
+                -4.8167, -4.8167, -4.8167, -4.8168, -4.8168, -4.8168, -4.8167, -4.8167,
+                -4.8168, -4.8167, -4.8167, -4.8165, -4.8167, -4.8167, -4.8167, -4.8169,
+                -4.8168, -4.8168, -4.8168, -4.8166, -4.8169, -4.8168, -4.8167, -4.8167
             ]
             , dtype=torch.float32)  # fmt: skip
 
         EXPECTED_LOGITS_NO_GRAD_1 = torch.tensor(
             [
-               -6.3750,  3.4219,  0.6719, -5.0312, -8.5000, -8.5000, -8.5000, -8.5000,
-               -8.5000, -8.5000, -8.5000, -8.5000,  2.0625, 10.3750, -8.5000, -8.5000,
-               -8.5000, -8.5000, -8.5000, -8.5000, -8.5000, -8.5000, -8.5000, -8.5000,
-               -8.5000, -8.5000, -8.5000, -8.5000, -8.5000, -8.5000, -8.5000, -8.5000,
-               -8.5000, -8.5000, -8.5000, -8.5000, -8.5000, -8.5000, -8.5000, -8.5000
-            ]
+               0.1966,  6.3449,  3.8350, -5.7291, -6.5106, -6.5104, -6.5103, -6.5104,
+               -6.5103, -6.5104, -6.5106, -6.5105,  7.8700, 13.5434, -6.5104, -6.5096,
+               -6.5106, -6.5102, -6.5106, -6.5106, -6.5105, -6.5106, -6.5104, -6.5106,
+               -6.5105, -6.5106, -6.5106, -6.5113, -6.5102, -6.5105, -6.5108, -6.5105,
+               -6.5104, -6.5106, -6.5106, -6.5104, -6.5106, -6.5107, -6.5103, -6.5105          ]
             , dtype=torch.float32)  # fmt: skip
 
         torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_0, rtol=1e-3, atol=1e-3)
