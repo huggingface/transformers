@@ -699,6 +699,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("swin", "SwinForImageClassification"),
         ("swinv2", "Swinv2ForImageClassification"),
         ("textnet", "TextNetForImageClassification"),
+        ("timm_wrapper", "TimmWrapperForImageClassification"),
         ("van", "VanForImageClassification"),
         ("vit", "ViTForImageClassification"),
         ("vit_hybrid", "ViTHybridForImageClassification"),
