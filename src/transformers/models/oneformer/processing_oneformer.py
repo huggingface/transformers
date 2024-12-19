@@ -29,11 +29,6 @@ if is_torch_available():
     import torch
 
 
-class OneFormerTextKwargs(TextKwargs):
-    max_seq_length: int
-    task_seq_length: int
-
-
 class OneFormerImagesKwargs(ImagesKwargs):
     segmentation_maps: Optional[ImageInput]
     task_inputs: Optional[Union[TextInput, PreTokenizedInput]]
@@ -51,8 +46,6 @@ class OneFormerProcessorKwargs(ProcessingKwargs, total=False):
     images_kwargs: OneFormerImagesKwargs
     _defaults = {
         "text_kwargs": {
-            "max_seq_length": 77,
-            "task_seq_length": 77,
             "padding": "max_length",
             "truncation": True,
         },
@@ -85,25 +78,30 @@ class OneFormerProcessor(ProcessorMixin):
         self,
         image_processor=None,
         tokenizer=None,
+        max_seq_length: int = 77,
+        task_seq_length: int = 77,
     ):
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
         if tokenizer is None:
             raise ValueError("You need to specify a `tokenizer`.")
 
+        self.max_seq_length = max_seq_length
+        self.task_seq_length = task_seq_length
+
         super().__init__(image_processor, tokenizer)
 
     def _preprocess_text(
         self,
         text_list: PreTokenizedInput,
-        max_length: Optional[int] = None,
+        max_length: int = 77,
         text_kwargs: Optional[dict] = None,
     ):
         if text_kwargs is None:
             text_kwargs = {}
         tokens = self.tokenizer(
             text_list,
-            max_length=max_length if max_length is not None else text_kwargs.get("max_length", 77),
+            max_length=text_kwargs.get("max_length") if text_kwargs.get("max_length") is not None else max_length,
             padding=text_kwargs.get("padding", "max_length"),
             truncation=text_kwargs.get("truncation", True),
         )
@@ -200,7 +198,7 @@ class OneFormerProcessor(ProcessorMixin):
             task_token_inputs.append(task_input)
         encoded_inputs["task_inputs"] = self._preprocess_text(
             task_token_inputs,
-            max_length=output_kwargs["text_kwargs"]["task_seq_length"],
+            max_length=self.task_seq_length,
             text_kwargs=output_kwargs["text_kwargs"],
         )
 
@@ -208,7 +206,7 @@ class OneFormerProcessor(ProcessorMixin):
             text_inputs = [
                 self._preprocess_text(
                     texts,
-                    max_length=output_kwargs["text_kwargs"]["max_seq_length"],
+                    max_length=self.max_seq_length,
                     text_kwargs=output_kwargs["text_kwargs"],
                 ).unsqueeze(0)
                 for texts in encoded_inputs.text_inputs
@@ -222,8 +220,6 @@ class OneFormerProcessor(ProcessorMixin):
         images=None,
         task_inputs=None,
         segmentation_maps=None,
-        max_seq_length: int = 77,
-        task_seq_length: int = 77,
         **kwargs,
     ):
         """
@@ -241,11 +237,11 @@ class OneFormerProcessor(ProcessorMixin):
         for task in task_inputs:
             task_input = f"the task is {task}"
             task_token_inputs.append(task_input)
-        encoded_inputs["task_inputs"] = self._preprocess_text(task_token_inputs, max_length=task_seq_length)
+        encoded_inputs["task_inputs"] = self._preprocess_text(task_token_inputs, max_length=self.task_seq_length)
 
         if hasattr(encoded_inputs, "text_inputs"):
             text_inputs = [
-                self._preprocess_text(texts, max_length=max_seq_length).unsqueeze(0)
+                self._preprocess_text(texts, max_length=self.max_seq_length).unsqueeze(0)
                 for texts in encoded_inputs.text_inputs
             ]
             encoded_inputs["text_inputs"] = torch.cat(text_inputs, dim=0)
