@@ -26,7 +26,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_tf_available, is_torch_available, is_vision_available
 
-from ...test_processing_common import ProcessorTesterMixin
+from ...test_processing_common import ProcessorTesterMixin, prepare_image_inputs
 
 
 if is_vision_available():
@@ -164,9 +164,7 @@ class SamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
 @require_vision
 @require_tf
-class TFSamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
-    processor_class = SamProcessor
-
+class TFSamProcessorTest(unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
         image_processor = SamImageProcessor()
@@ -179,20 +177,10 @@ class TFSamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
-    def test_chat_template_save_loading(self):
-        self.skipTest("SamProcessor does not have a tokenizer")
-
-    def test_image_processor_defaults_preserved_by_image_kwargs(self):
-        self.skipTest("SamProcessor does not have a tokenizer")
-
-    def test_kwargs_overrides_default_image_processor_kwargs(self):
-        self.skipTest("SamProcessor does not have a tokenizer")
-
-    def test_kwargs_overrides_default_tokenizer_kwargs(self):
-        self.skipTest("SamProcessor does not have a tokenizer")
-
-    def test_tokenizer_defaults_preserved_by_kwargs(self):
-        self.skipTest("SamProcessor does not have a tokenizer")
+    # This is to avoid repeating the skipping of the common tests
+    def prepare_image_inputs(self):
+        """This function prepares a list of PIL images."""
+        return prepare_image_inputs()
 
     def test_save_load_pretrained_additional_features(self):
         processor = SamProcessor(image_processor=self.get_image_processor())
@@ -259,9 +247,7 @@ class TFSamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
 @require_vision
 @require_torchvision
-class SamProcessorEquivalenceTest(ProcessorTesterMixin, unittest.TestCase):
-    processor_class = SamProcessor
-
+class SamProcessorEquivalenceTest(unittest.TestCase):
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
         image_processor = SamImageProcessor()
@@ -274,20 +260,10 @@ class SamProcessorEquivalenceTest(ProcessorTesterMixin, unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
-    def test_chat_template_save_loading(self):
-        self.skipTest("SamProcessor does not have a tokenizer")
-
-    def test_image_processor_defaults_preserved_by_image_kwargs(self):
-        self.skipTest("SamProcessor does not have a tokenizer")
-
-    def test_kwargs_overrides_default_image_processor_kwargs(self):
-        self.skipTest("SamProcessor does not have a tokenizer")
-
-    def test_kwargs_overrides_default_tokenizer_kwargs(self):
-        self.skipTest("SamProcessor does not have a tokenizer")
-
-    def test_tokenizer_defaults_preserved_by_kwargs(self):
-        self.skipTest("SamProcessor does not have a tokenizer")
+    # This is to avoid repeating the skipping of the common tests
+    def prepare_image_inputs(self):
+        """This function prepares a list of PIL images."""
+        return prepare_image_inputs()
 
     @is_pt_tf_cross_test
     def test_post_process_masks_equivalence(self):
