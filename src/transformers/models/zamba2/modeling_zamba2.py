@@ -422,9 +422,9 @@ class Zamba2Attention(nn.Module):
         value_states = self.v_proj(hidden_states)
         if self.config.use_shared_attention_adapter:
             adapter_layer_idx = self.layer_dic[layer_idx]
-            query_states += self.linear_q_adapter_list[adapter_layer_idx](hidden_states)
-            key_states += self.linear_k_adapter_list[adapter_layer_idx](hidden_states)
-            value_states += self.linear_v_adapter_list[adapter_layer_idx](hidden_states)
+            query_states = query_states + self.linear_q_adapter_list[adapter_layer_idx](hidden_states)
+            key_states = key_states + self.linear_k_adapter_list[adapter_layer_idx](hidden_states)
+            value_states = value_states + self.linear_v_adapter_list[adapter_layer_idx](hidden_states)
 
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
@@ -550,9 +550,9 @@ class Zamba2FlashAttention2(Zamba2Attention):
         value_states = self.v_proj(hidden_states)
         if self.config.use_shared_attention_adapter:
             adapter_layer_idx = self.layer_dic[layer_idx]
-            query_states += self.linear_q_adapter_list[adapter_layer_idx](hidden_states)
-            key_states += self.linear_k_adapter_list[adapter_layer_idx](hidden_states)
-            value_states += self.linear_v_adapter_list[adapter_layer_idx](hidden_states)
+            query_states = query_states + self.linear_q_adapter_list[adapter_layer_idx](hidden_states)
+            key_states = key_states + self.linear_k_adapter_list[adapter_layer_idx](hidden_states)
+            value_states = value_states + self.linear_v_adapter_list[adapter_layer_idx](hidden_states)
 
         # Flash attention requires the input to have the shape
         # batch_size x seq_length x head_dim x hidden_dim
@@ -674,9 +674,9 @@ class Zamba2SdpaAttention(Zamba2Attention):
         value_states = self.v_proj(hidden_states)
         if self.config.use_shared_attention_adapter:
             adapter_layer_idx = self.layer_dic[layer_idx]
-            query_states += self.linear_q_adapter_list[adapter_layer_idx](hidden_states)
-            key_states += self.linear_k_adapter_list[adapter_layer_idx](hidden_states)
-            value_states += self.linear_v_adapter_list[adapter_layer_idx](hidden_states)
+            query_states = query_states + self.linear_q_adapter_list[adapter_layer_idx](hidden_states)
+            key_states = key_states + self.linear_k_adapter_list[adapter_layer_idx](hidden_states)
+            value_states = value_states + self.linear_v_adapter_list[adapter_layer_idx](hidden_states)
 
         query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
@@ -1260,7 +1260,7 @@ class Zamba2MLP(nn.Module):
         gate_up_state = self.gate_up_proj(hidden_state)
         if self.config.use_shared_mlp_adapter:
             layer_idx = self.layer_dic[layer_idx]
-            gate_up_state += self.gate_up_proj_adapter_list[layer_idx](hidden_state)
+            gate_up_state = gate_up_state + self.gate_up_proj_adapter_list[layer_idx](hidden_state)
 
         hidden_state = self.gated_act_fn(gate_up_state)
         output = self.down_proj(hidden_state)
