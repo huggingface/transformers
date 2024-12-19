@@ -610,8 +610,6 @@ class ModernBertPreTrainedModel(PreTrainedModel):
             init_weight(module.Wqkv, stds["in"])
             init_weight(module.Wo, stds["out"])
         elif isinstance(module, ModernBertPredictionHead):
-            init_weight(module.dense, stds["in"])
-        elif isinstance(module, ModernBertPoolingHead):
             init_weight(module.dense, stds["out"])
         elif isinstance(module, ModernBertForMaskedLM):
             init_weight(module.decoder, stds["out"])
@@ -1109,26 +1107,6 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         )
 
 
-class ModernBertPoolingHead(nn.Module):
-    def __init__(self, config: ModernBertConfig):
-        super().__init__()
-        self.config = config
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size, config.classifier_bias)
-        self.act = ACT2FN[config.classifier_activation]
-        self.norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
-        self.drop = torch.nn.Dropout(config.classifier_dropout)
-
-    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
-        if self.config.classifier_pooling == "cls":
-            hidden_states = hidden_states[:, 0]
-        elif self.config.classifier_pooling == "mean":
-            hidden_states = (hidden_states * attention_mask.unsqueeze(-1)).sum(dim=1) / attention_mask.sum(
-                dim=1, keepdim=True
-            )
-
-        return self.drop(self.norm(self.act(self.dense(hidden_states))))
-
-
 @add_start_docstrings(
     "The ModernBert Model with a sequence classification head on top that performs pooling.",
     MODERNBERT_START_DOCSTRING,
@@ -1140,7 +1118,8 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
         self.config = config
 
         self.model = ModernBertModel(config)
-        self.head = ModernBertPoolingHead(config)
+        self.head = ModernBertPredictionHead(config)
+        self.drop = torch.nn.Dropout(config.classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
@@ -1194,7 +1173,15 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
         )
         last_hidden_state = outputs[0]
 
-        pooled_output = self.head(last_hidden_state, attention_mask)
+        if self.config.classifier_pooling == "cls":
+            last_hidden_state = last_hidden_state[:, 0]
+        elif self.config.classifier_pooling == "mean":
+            last_hidden_state = (last_hidden_state * attention_mask.unsqueeze(-1)).sum(dim=1) / attention_mask.sum(
+                dim=1, keepdim=True
+            )
+
+        pooled_output = self.head(last_hidden_state)
+        pooled_output = self.drop(pooled_output)
         logits = self.classifier(pooled_output)
 
         loss = None
@@ -1242,7 +1229,8 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
         self.num_labels = config.num_labels
 
         self.model = ModernBertModel(config)
-        self.drop = nn.Dropout(config.classifier_dropout)
+        self.head = ModernBertPredictionHead(config)
+        self.drop = torch.nn.Dropout(config.classifier_dropout)
         self.classifier = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing
@@ -1293,6 +1281,7 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
         )
         last_hidden_state = outputs[0]
 
+        last_hidden_state = self.head(last_hidden_state)
         last_hidden_state = self.drop(last_hidden_state)
         logits = self.classifier(last_hidden_state)
 
