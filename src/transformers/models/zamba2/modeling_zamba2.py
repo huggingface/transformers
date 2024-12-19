@@ -1016,7 +1016,10 @@ class Zamba2MambaMixer(nn.Module):
         batch_size, seq_len, _ = input_states.shape
         dtype = input_states.dtype
         # Gated MLP's linear projection
-        projected_states =  self.in_proj(input_states.squeeze(1))
+        if cache_params is not None and cache_params.has_previous_state:
+            projected_states =  self.in_proj(input_states.squeeze(1))
+        else:
+            projected_states =  self.in_proj(input_states)
         d_mlp = (projected_states.shape[-1] - 2 * self.intermediate_size -  2 * self.n_groups * self.ssm_state_size- self.num_heads) // 2
         _, _, gate, hidden_states, dt = projected_states.split(
                 [d_mlp, d_mlp, self.intermediate_size,  self.conv_dim, self.num_heads], dim=-1
@@ -1038,6 +1041,10 @@ class Zamba2MambaMixer(nn.Module):
                     hidden_states += self.conv1d.bias
                 hidden_states = self.act(hidden_states).to(dtype)[:, None, ...]         # [batch, 1, intermediate_size] : decoding
             else:
+                if attention_mask is not None and not torch.all(attention_mask==1):
+                    dtype = hidden_states.dtype
+                    # tune out hidden states for pad tokens, see https://github.com/state-spaces/mamba/issues/66
+                    hidden_states = (hidden_states * attention_mask[:, :, None]).to(dtype)
                 hidden_states = hidden_states.transpose(1,2)
                 conv_state = nn.functional.pad(
                     hidden_states,
