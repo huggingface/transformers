@@ -236,6 +236,11 @@ class ModernBertConfig(PretrainedConfig):
         self.sparse_pred_ignore_index = sparse_pred_ignore_index
         self.reference_compile = reference_compile
 
+        if self.classifier_pooling not in ["cls", "mean"]:
+            raise ValueError(
+                f'Invalid value for `classifier_pooling`, should be either "cls" or "mean", but is {self.classifier_pooling}.'
+            )
+
 
 def _unpad_modernbert_input(
     inputs: torch.Tensor,
@@ -1233,20 +1238,6 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         )
 
 
-def cls_pooling(hidden_states: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
-    return hidden_states[:, 0]
-
-
-def mean_pooling(hidden_states: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
-    return (hidden_states * attention_mask.unsqueeze(-1)).sum(dim=1) / attention_mask.sum(dim=1, keepdim=True)
-
-
-MODERNBERT_POOLING_FUNCTION = {
-    "cls": cls_pooling,
-    "mean": mean_pooling,
-}
-
-
 class ModernBertPoolingHead(nn.Module):
     def __init__(self, config: ModernBertConfig):
         super().__init__()
@@ -1255,13 +1246,14 @@ class ModernBertPoolingHead(nn.Module):
         self.act = ACT2FN[config.classifier_activation]
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
         self.drop = torch.nn.Dropout(config.classifier_dropout)
-        self.pooling = MODERNBERT_POOLING_FUNCTION[config.classifier_pooling]
 
-    def forward(
-        self, hidden_states: torch.Tensor, attention_mask: torch.Tensor, pool: Optional[bool] = True
-    ) -> torch.Tensor:
-        if pool:
-            hidden_states = self.pooling(hidden_states, attention_mask)
+    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
+        if self.config.classifier_pooling == "cls":
+            hidden_states = hidden_states[:, 0]
+        elif self.config.classifier_pooling == "mean":
+            hidden_states = (hidden_states * attention_mask.unsqueeze(-1)).sum(dim=1) / attention_mask.sum(
+                dim=1, keepdim=True
+            )
 
         return self.drop(self.norm(self.act(self.dense(hidden_states))))
 

@@ -204,5 +204,10 @@ class ModernBertConfig(PretrainedConfig):
         self.sparse_pred_ignore_index = sparse_pred_ignore_index
         self.reference_compile = reference_compile
 
+        if self.classifier_pooling not in ["cls", "mean"]:
+            raise ValueError(
+                f'Invalid value for `classifier_pooling`, should be either "cls" or "mean", but is {self.classifier_pooling}.'
+            )
+
 
 __all__ = ["ModernBertConfig"]
