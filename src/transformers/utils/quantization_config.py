@@ -1111,7 +1111,8 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         config_groups (`typing.Dict[str, typing.Union[ForwardRef('QuantizationScheme'), typing.List[str]]]`, *optional*):
             dictionary mapping group name to a quantization scheme definition
         format (`str`, *optional*, defaults to `"dense"`):
-            format the model is represented as
+            format the model is represented as. Set `run_compressed` True to execute model as the
+            compressed format if not `dense`
         quantization_status (`QuantizationStatus`, *optional*, defaults to `"initialized"`):
             status of model in the quantization lifecycle, ie 'initialized', 'calibration', 'frozen'
         kv_cache_scheme (`typing.Union[QuantizationArgs, NoneType]`, *optional*):
@@ -1124,6 +1125,8 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             configuration for sparsity compression
         quant_method (`str`, *optional*, defaults to `"compressed-tensors"`):
             do not override, should be compressed-tensors
+        run_compressed (`bool`, *optional*, defaults to `True`): alter submodules (usually linear) in order to
+            emulate compressed model execution if True, otherwise use default submodule
     """
 
     def __init__(
@@ -1136,13 +1139,16 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         ignore: Optional[List[str]] = None,
         sparsity_config: Dict[str, Any] = None,
         quant_method: str = "compressed-tensors",
+        run_compressed: bool = True,
         **kwargs,
     ):
-        from compressed_tensors import QuantizationConfig
         from compressed_tensors.config import SparsityCompressionConfig
+        from compressed_tensors.quantization import QuantizationConfig
 
         self.quantization_config = None
         self.sparsity_config = None
+
+        self.run_compressed = run_compressed
 
         # parse from dict to load nested QuantizationScheme objects
         if config_groups or kv_cache_scheme:
@@ -1155,6 +1161,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
                     "kv_cache_scheme": kv_cache_scheme,
                     "global_compression_ratio": global_compression_ratio,
                     "ignore": ignore,
+                    "run_compressed": run_compressed,
                     **kwargs,
                 }
             )
@@ -1183,6 +1190,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
 
         Returns:
             [`QuantizationConfigMixin`]: The configuration object instantiated from those parameters.
+
         """
 
         if "quantization_config" in config_dict:
@@ -1233,6 +1241,9 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
                 serializable_config_dict[key] = value
 
         return serializable_config_dict
+
+    def get_loading_attributes(self):
+        return {"run_compressed": self.run_compressed}
 
 
 @dataclass
