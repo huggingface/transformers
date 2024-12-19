@@ -491,16 +491,18 @@ def deepspeed_ulysses_attention(attn_func, seq_dim=1, head_dim=2):
 
 def support_deepspeed_ulysses(module):
     module._supports_sequence_parallel = True
+    module._sp_group_size = None
 
-    original_forward = module.forward
+    @property
+    def sp_group_size(self):
+        if not self._supports_sequence_parallel:
+            return None
+        if self._sp_group_size is None:
+            self._sp_group_size = 1
+            if is_deepspeed_sp_enabled():
+                self._sp_group_size = deepspeed_groups._get_sequence_parallel_group().size()
+        return self._sp_group_size
 
-    def wrapped_forward(*args, **kwargs):
-        # lazily set if sequence parallelism is enabled to ensure deepspeed is initialized first
-        if is_deepspeed_sp_enabled():
-            module.sp_group_size = deepspeed_groups._get_sequence_parallel_world_size()
-
-        return original_forward(*args, **kwargs)
-
-    module.forward = wrapped_forward
+    module.sp_group_size = sp_group_size
 
     return module
