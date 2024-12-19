@@ -606,6 +606,7 @@ _import_structure = {
     "models.mobilenet_v2": ["MobileNetV2Config"],
     "models.mobilevit": ["MobileViTConfig"],
     "models.mobilevitv2": ["MobileViTV2Config"],
+    "models.moonshine": ["MoonshineConfig"],
     "models.moshi": [
         "MoshiConfig",
         "MoshiDepthConfig",
@@ -2867,6 +2868,13 @@ else:
             "MobileViTV2ForSemanticSegmentation",
             "MobileViTV2Model",
             "MobileViTV2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.moonshine"].extend(
+        [
+            "MoonshineForConditionalGeneration",
+            "MoonshineModel",
+            "MoonshinePreTrainedModel",
         ]
     )
     _import_structure["models.moshi"].extend(
@@ -5565,6 +5573,7 @@ if TYPE_CHECKING:
     from .models.mobilevitv2 import (
         MobileViTV2Config,
     )
+    from .models.moonshine import MoonshineConfig
     from .models.moshi import (
         MoshiConfig,
         MoshiDepthConfig,
@@ -7555,6 +7564,11 @@ if TYPE_CHECKING:
             MobileViTV2ForSemanticSegmentation,
             MobileViTV2Model,
             MobileViTV2PreTrainedModel,
+        )
+        from .models.moonshine import (
+            MoonshineForConditionalGeneration,
+            MoonshineModel,
+            MoonshinePreTrainedModel,
         )
         from .models.moshi import (
             MoshiForCausalLM,
