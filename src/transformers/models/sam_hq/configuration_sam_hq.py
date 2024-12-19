@@ -21,7 +21,7 @@ from ...utils import logging
 
 logger = logging.get_logger(__name__)
 
-
+#Copied from transformer.models.sam.configuration_sam.SamPromptEncoderConfig with Sam->SamHQ
 class SamHQPromptEncoderConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SamHQPromptEncoderModel`].The [`SamHQPromptEncoderModel`]
@@ -68,7 +68,7 @@ class SamHQPromptEncoderConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.layer_norm_eps = layer_norm_eps
 
-
+# Copied from transformer.models.sam.configuration_sam.SamVisionConfig with Sam->SamHQ
 class SamHQVisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SamVisionModel`]. It is used to instantiate a SAM-HQ model
@@ -157,7 +157,7 @@ class SamHQMaskDecoderConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.vit_dim = vit_dim
 
-
+# Copied from transformer.models.sam.configuration_sam.SamConfig with Sam->SamHQ
 class SamHQConfig(PretrainedConfig):
     model_type = "sam-hq"
 
