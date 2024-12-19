@@ -712,7 +712,7 @@ class GPTQConfig(QuantizationConfigMixin):
         if is_gptqmodel_available():
             # convert auto-gptq control into gptqmodel backend
             if self.backend is None:
-                self.backend = "auto_trainable" if not self.use_exllama else "auto"
+                self.backend = "auto_trainable" if self.use_exllama is not None and not self.use_exllama else "auto"
         else:
             # convert gptqmodel backend `auto_trainable` into auto-gptq control
             if self.backend == "auto_trainable":

@@ -86,6 +86,7 @@ class GPTQTest(unittest.TestCase):
     EXPECTED_OUTPUTS = set()
     # flaky test: gptqmodel and auto-gptq are not output equivalent nor is string compare deterministic even between transformer/torch versions
     EXPECTED_OUTPUTS.add("Hello my name is Katie, I am a 22 year")
+    EXPECTED_OUTPUTS.add("Hello my name is Katie. I am a 20 year")
 
     # this seems a little small considering that we are doing 4bit quant but we have a small model and ww don't quantize the embeddings
     EXPECTED_RELATIVE_DIFFERENCE = 2.06183008
@@ -226,6 +227,8 @@ class GPTQTest(unittest.TestCase):
         if self.device_map is None:
             self.check_inference_correctness(self.quantized_model.to(0))
         else:
+            if self.device_map == "cpu" and self.quantized_model.device.type != "cpu":
+                self.quantized_model.to("cpu")
             self.check_inference_correctness(self.quantized_model)
 
     def test_serialization(self):

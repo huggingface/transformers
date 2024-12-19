@@ -70,13 +70,13 @@ class GptqHfQuantizer(HfQuantizer):
             "0.4.2"
         ):
             raise ImportError(
-                "You need a version of auto_gptq >= 0.4.2 to use GPTQ: `pip install --upgrade auto-gptq` or use gptqmodel by `pip install gptqmodel>=1.4.2`. Please notice that auto-gptq will be deprecated in the future."
+                "You need a version of auto_gptq >= 0.4.2 to use GPTQ: `pip install --upgrade auto-gptq` or use gptqmodel by `pip install gptqmodel>=1.4.3`. Please notice that auto-gptq will be deprecated in the future."
             )
         elif is_gptqmodel_available() and (
-            version.parse(importlib.metadata.version("gptqmodel")) < version.parse("1.4.2")
+            version.parse(importlib.metadata.version("gptqmodel")) < version.parse("1.4.3")
             or version.parse(importlib.metadata.version("optimum")) < version.parse("1.23.99")
         ):
-            raise ImportError("The gptqmodel version should be >= 1.4.2, optimum version should >= 1.24.0")
+            raise ImportError("The gptqmodel version should be >= 1.4.3, optimum version should >= 1.24.0")
 
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
