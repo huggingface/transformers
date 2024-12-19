@@ -138,6 +138,7 @@ SPECIAL_MODEL_NAME_LINK_MAPPING = {
     "Data2VecText": "[Data2VecText](model_doc/data2vec)",
     "Data2VecVision": "[Data2VecVision](model_doc/data2vec)",
     "DonutSwin": "[DonutSwin](model_doc/donut)",
+    "EXAONE": "[EXAONEv3.0](model_doc/exaone3)",
 }
 
 MODEL_NAMES_WITH_SAME_CONFIG = {
