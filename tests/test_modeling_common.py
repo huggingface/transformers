@@ -4858,10 +4858,13 @@ class ModelTesterMixin:
                 for eager_output, exported_output in zip(eager_outputs, exported_outputs):
                     is_tested = is_tested or recursively_check(eager_output, exported_output)
                 return is_tested
+            elif isinstance(eager_outputs, dict):
+                for key in eager_outputs:
+                    is_tested = is_tested or recursively_check(eager_outputs[key], exported_outputs[key])
+                return is_tested
             return is_tested
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        inputs_dict["return_dict"] = False
 
         for model_class in self.all_model_classes:
             if model_class.__name__.endswith("ForPreTraining"):
@@ -4891,8 +4894,8 @@ class ModelTesterMixin:
 
                 # Check if outputs are close:
                 # is_tested is a boolean flag idicating if we comapre any outputs,
-                # e.g. ther might be a situation when outputs are empty list, then is_tested will be False.
-                # In case of outputs are different the error will be rasies in `recursively_check` function.
+                # e.g. there might be a situation when outputs are empty list, then is_tested will be False.
+                # In case of outputs are different the error will be rasied in `recursively_check` function.
                 is_tested = recursively_check(eager_outputs, exported_outputs)
                 self.assertTrue(is_tested, msg=f"No outputs were compared for {model_class.__name__}")
 
