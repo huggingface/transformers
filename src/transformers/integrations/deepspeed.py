@@ -490,13 +490,10 @@ def deepspeed_ulysses_attention(attn_func, seq_dim=1, head_dim=2):
 
 
 def support_deepspeed_ulysses(module):
-    module._supports_sequence_parallel = True
     module._sp_group_size = None
 
     @property
     def sp_group_size(self):
-        if not self._supports_sequence_parallel:
-            return None
         if self._sp_group_size is None:
             self._sp_group_size = 1
             if is_deepspeed_sp_enabled():
