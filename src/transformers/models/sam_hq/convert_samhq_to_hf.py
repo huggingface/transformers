@@ -166,7 +166,6 @@ def convert_sam_hq_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, 
     input_labels = [[1]]
 
     # Basic test without prompts
-    print(processor)
     inputs = processor(images=np.array(raw_image), return_tensors="pt").to(device)
     
 
@@ -215,7 +214,7 @@ def convert_sam_hq_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, 
         hf_model.save_pretrained(pytorch_dump_folder)
 
     if push_to_hub:
-        repo_id = f"Uminosachi/{model_name}"
+        repo_id = f"sushmanth/{model_name}"
         processor.push_to_hub(repo_id)
         hf_model.push_to_hub(repo_id)
 
