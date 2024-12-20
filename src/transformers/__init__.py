@@ -122,6 +122,7 @@ _import_structure = {
     "feature_extraction_utils": ["BatchFeature", "FeatureExtractionMixin"],
     "file_utils": [],
     "generation": [
+        "AsyncTextIteratorStreamer",
         "CompileConfig",
         "GenerationConfig",
         "TextIteratorStreamer",
@@ -193,6 +194,7 @@ _import_structure = {
         "AutoTokenizer",
     ],
     "models.autoformer": ["AutoformerConfig"],
+    "models.bamba": ["BambaConfig"],
     "models.bark": [
         "BarkCoarseConfig",
         "BarkConfig",
@@ -605,6 +607,7 @@ _import_structure = {
     "models.mobilenet_v2": ["MobileNetV2Config"],
     "models.mobilevit": ["MobileViTConfig"],
     "models.mobilevitv2": ["MobileViTV2Config"],
+    "models.modernbert": ["ModernBertConfig"],
     "models.moshi": [
         "MoshiConfig",
         "MoshiDepthConfig",
@@ -998,6 +1001,7 @@ _import_structure = {
         "HqqConfig",
         "QuantoConfig",
         "TorchAoConfig",
+        "VptqConfig",
     ],
 }
 
@@ -1538,6 +1542,13 @@ else:
             "AutoformerForPrediction",
             "AutoformerModel",
             "AutoformerPreTrainedModel",
+        ]
+    )
+    _import_structure["models.bamba"].extend(
+        [
+            "BambaForCausalLM",
+            "BambaModel",
+            "BambaPreTrainedModel",
         ]
     )
     _import_structure["models.bark"].extend(
@@ -2859,6 +2870,15 @@ else:
             "MobileViTV2ForSemanticSegmentation",
             "MobileViTV2Model",
             "MobileViTV2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.modernbert"].extend(
+        [
+            "ModernBertForMaskedLM",
+            "ModernBertForSequenceClassification",
+            "ModernBertForTokenClassification",
+            "ModernBertModel",
+            "ModernBertPreTrainedModel",
         ]
     )
     _import_structure["models.moshi"].extend(
@@ -5036,7 +5056,14 @@ if TYPE_CHECKING:
     from .feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 
     # Generation
-    from .generation import CompileConfig, GenerationConfig, TextIteratorStreamer, TextStreamer, WatermarkingConfig
+    from .generation import (
+        AsyncTextIteratorStreamer,
+        CompileConfig,
+        GenerationConfig,
+        TextIteratorStreamer,
+        TextStreamer,
+        WatermarkingConfig,
+    )
     from .hf_argparser import HfArgumentParser
 
     # Integrations
@@ -5104,6 +5131,7 @@ if TYPE_CHECKING:
     from .models.autoformer import (
         AutoformerConfig,
     )
+    from .models.bamba import BambaConfig
     from .models.bark import (
         BarkCoarseConfig,
         BarkConfig,
@@ -5556,6 +5584,7 @@ if TYPE_CHECKING:
     from .models.mobilevitv2 import (
         MobileViTV2Config,
     )
+    from .models.modernbert import ModernBertConfig
     from .models.moshi import (
         MoshiConfig,
         MoshiDepthConfig,
@@ -5997,6 +6026,7 @@ if TYPE_CHECKING:
         HqqConfig,
         QuantoConfig,
         TorchAoConfig,
+        VptqConfig,
     )
 
     try:
@@ -6493,6 +6523,7 @@ if TYPE_CHECKING:
             AutoformerModel,
             AutoformerPreTrainedModel,
         )
+        from .models.bamba import BambaForCausalLM, BambaModel, BambaPreTrainedModel
         from .models.bark import (
             BarkCausalModel,
             BarkCoarseModel,
@@ -7545,6 +7576,13 @@ if TYPE_CHECKING:
             MobileViTV2ForSemanticSegmentation,
             MobileViTV2Model,
             MobileViTV2PreTrainedModel,
+        )
+        from .models.modernbert import (
+            ModernBertForMaskedLM,
+            ModernBertForSequenceClassification,
+            ModernBertForTokenClassification,
+            ModernBertModel,
+            ModernBertPreTrainedModel,
         )
         from .models.moshi import (
             MoshiForCausalLM,

@@ -64,5 +64,5 @@ torchrun --nproc-per-node 4 demo.py
 以下是 [Llama](https://huggingface.co/docs/transformers/model_doc/llama#transformers.LlamaModel) 模型在序列长度为 512 且不同批量大小情况下的单次前向推理的预期加速效果：
 
 <div style="text-align: center">
-<img src="huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/Meta-Llama-3-8B-Instruct, seqlen = 512, python, w_ compile.png">
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/Meta-Llama-3-8B-Instruct%2C%20seqlen%20%3D%20512%2C%20python%2C%20w_%20compile.png">
 </div>
