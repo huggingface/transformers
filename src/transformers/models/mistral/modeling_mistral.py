@@ -240,8 +240,6 @@ class MistralDecoderLayer(nn.Module):
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
 
-        # vllm_in = torch.load("language_model_layer_0_input.pt", weights_only=True, map_location=hidden_states.device)
-        # assert torch.all(vllm_in == hidden_states)
         hidden_states = self.input_layernorm(hidden_states)
 
 
@@ -542,13 +540,7 @@ class MistralModel(MistralPreTrainedModel):
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
         )
 
-        # vllm_inputs_embeds = torch.load("inputs_embeds_post_merge.pt", weights_only=True, map_location=inputs_embeds.device).unsqueeze(0)
-        # diff = inputs_embeds - vllm_inputs_embeds
-        # print("Mean LM inputs embeds diff: ", diff.abs().mean().item())
-        # print("Max LM inputs embeds diff: ", diff.abs().max().item())
         hidden_states = inputs_embeds
-        # print("\n\nUsing VLLM states for debugging!\n\n")
-        # hidden_states = vllm_inputs_embeds
 
         # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
@@ -574,9 +566,6 @@ class MistralModel(MistralPreTrainedModel):
                     position_embeddings,
                 )
             else:
-                decoder_layer = decoder_layer.to("cuda")
-                hidden_states = hidden_states.to("cuda")
-                position_ids = position_ids.to("cuda")
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=causal_mask,
@@ -588,20 +577,13 @@ class MistralModel(MistralPreTrainedModel):
                     position_embeddings=position_embeddings,
                     **flash_attn_kwargs,
                 )
-                decoder_layer = decoder_layer.to("cpu")
 
 
             hidden_states = layer_outputs[0]
-            # vllm_out = torch.load(f"language_model_hidden_states_{i}.pt", weights_only=True, map_location=hidden_states.device)
-            # vllm_residual = torch.load(f"language_model_residual_{i}.pt", weights_only=True, map_location=hidden_states.device)
-            # diff = hidden_states - (vllm_out + vllm_residual.to(torch.float32)).to(hidden_states.dtype)
-            # print(f"Mean diff after layer {i}", diff.abs().mean().item())
-            # print(f"Max diff after layer {i}", diff.abs().max().item())
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
-        hidden_states = hidden_states.to("cpu")
         hidden_states = self.norm(hidden_states)
 
         # add hidden states from the last decoder layer
