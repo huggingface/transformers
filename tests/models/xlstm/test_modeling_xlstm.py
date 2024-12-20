@@ -36,9 +36,9 @@ if is_torch_available():
         xLSTMModel,
     )
     from transformers.models.xlstm.modeling_xlstm import xLSTMCache, mLSTMBlock
-    from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_0
+    from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_2
 else:
-    is_torch_greater_or_equal_than_2_0 = False
+    is_torch_greater_or_equal_than_2_2 = False
 
 
 class xLSTMModelTester:
@@ -164,7 +164,7 @@ class xLSTMModelTester:
 
 
 @unittest.skipIf(
-    not is_torch_greater_or_equal_than_2_0, reason="See https://github.com/huggingface/transformers/pull/24204"
+    not is_torch_greater_or_equal_than_2_2, reason="See https://github.com/huggingface/transformers/pull/24204"
 )
 @require_torch
 class xLSTMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
