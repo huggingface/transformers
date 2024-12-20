@@ -1177,7 +1177,7 @@ class  SamHQPreTrainedModel(PreTrainedModel):
 
 
     def _init_weights(self, module):
-        std = self.config.intializer_range
+        std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv2d,nn.ConvTranspose2d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
