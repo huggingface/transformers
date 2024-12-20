@@ -258,6 +258,176 @@ class GPTJAttention(nn.Module):
 
         return outputs  # a, present, (attentions)
 
+class GPTJPagedAttention(nn.Module):
+    def __init__(self, config, layer_idx=None):
+        super().__init__()
+        self.config = config
+        max_positions = config.max_position_embeddings
+
+        self.attn_dropout = nn.Dropout(config.attn_pdrop)
+        self.resid_dropout = nn.Dropout(config.resid_pdrop)
+
+        self.is_causal = True
+        self.layer_idx = layer_idx
+        if layer_idx is None:
+            logger.warning_once(
+                f"Instantiating {self.__class__.__name__} without passing a `layer_idx` is not recommended and will "
+                "lead to errors during the forward call if caching is used. Please make sure to provide a `layer_idx` "
+                "when creating this class."
+            )
+
+        self.embed_dim = config.hidden_size
+        self.num_attention_heads = config.num_attention_heads
+        self.head_dim = self.embed_dim // self.num_attention_heads
+        if self.head_dim * self.num_attention_heads != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_attention_heads (got `embed_dim`: {self.embed_dim} and"
+                f" `num_attention_heads`: {self.num_attention_heads})."
+            )
+        self.scale_attn = torch.sqrt(torch.tensor(self.head_dim, dtype=torch.float32)).to(torch.get_default_dtype())
+
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
+        self.rotary_dim = config.rotary_dim
+        pos_embd_dim = self.rotary_dim or self.embed_dim
+        self.embed_positions = create_sinusoidal_positions(max_positions, pos_embd_dim)
+
+    def _split_heads(self, tensor, num_attention_heads, attn_head_size, rotary):
+        """
+        Splits hidden dim into attn_head_size and num_attention_heads
+        """
+        new_shape = tensor.size()[:-1] + (num_attention_heads, attn_head_size)
+        tensor = tensor.view(new_shape)
+        if rotary:
+            return tensor
+        if len(tensor.shape) == 5:
+            return tensor.permute(0, 1, 3, 2, 4)  # (batch, blocks, head, block_length, head_features)
+        elif len(tensor.shape) == 4:
+            return tensor.permute(0, 2, 1, 3)  # (batch, head, seq_length, head_features)
+        else:
+            raise ValueError(f"Input tensor rank should be one of [4, 5], but is: {len(tensor.shape)}")
+
+    def _merge_heads(self, tensor, num_attention_heads, attn_head_size):
+        """
+        Merges attn_head_size dim and num_attn_heads dim into hidden dim
+        """
+        if len(tensor.shape) == 5:
+            tensor = tensor.permute(0, 1, 3, 2, 4).contiguous()
+        elif len(tensor.shape) == 4:
+            tensor = tensor.permute(0, 2, 1, 3).contiguous()
+        else:
+            raise ValueError(f"Input tensor rank should be one of [4, 5], but is: {len(tensor.shape)}")
+        new_shape = tensor.size()[:-2] + (num_attention_heads * attn_head_size,)
+        return tensor.view(new_shape)
+
+    def _get_embed_positions(self, position_ids):
+        embed_positions = self.embed_positions
+        if embed_positions.device != position_ids.device:
+            embed_positions = embed_positions.to(position_ids.device)
+            self.embed_positions = embed_positions
+        return embed_positions.repeat(position_ids.shape[0], 1, 1)
+
+    def forward(
+        self,
+        hidden_states: torch.FloatTensor,
+        layer_past: Optional[Cache] = None,
+        attention_mask: Optional[torch.FloatTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        use_cache: Optional[bool] = False,
+        output_attentions: Optional[bool] = False,
+        cache_position: Optional[torch.LongTensor] = None,
+    ) -> Union[
+        Tuple[torch.Tensor, Tuple[torch.Tensor]],
+        Optional[Tuple[torch.Tensor, Tuple[torch.Tensor], Tuple[torch.Tensor, ...]]],
+    ]:
+        bsz, q_len, _ = hidden_states.size()
+        query = self.q_proj(hidden_states)
+        key = self.k_proj(hidden_states)
+        value = self.v_proj(hidden_states)
+
+        query = self._split_heads(query, self.num_attention_heads, self.head_dim, True)
+        key = self._split_heads(key, self.num_attention_heads, self.head_dim, True)
+        value = self._split_heads(value, self.num_attention_heads, self.head_dim, False)
+
+        if is_torch_fx_proxy(position_ids) or torch.jit.is_tracing():
+            # The logic to conditionally copy to GPU could not be traced, so we do this
+            # every time in the torch.fx case
+            embed_positions = get_embed_positions(self.embed_positions, position_ids)
+        else:
+            embed_positions = self._get_embed_positions(position_ids)
+
+        repeated_position_ids = position_ids.unsqueeze(-1).repeat(1, 1, embed_positions.shape[-1])
+        sincos = torch.gather(embed_positions, 1, repeated_position_ids)
+        sin, cos = torch.split(sincos, sincos.shape[-1] // 2, dim=-1)
+
+        if self.rotary_dim is not None:
+            k_rot = key[:, :, :, : self.rotary_dim]
+            k_pass = key[:, :, :, self.rotary_dim :]
+
+            q_rot = query[:, :, :, : self.rotary_dim]
+            q_pass = query[:, :, :, self.rotary_dim :]
+
+            k_rot = apply_rotary_pos_emb(k_rot, sin, cos)
+            q_rot = apply_rotary_pos_emb(q_rot, sin, cos)
+
+            key = torch.cat([k_rot, k_pass], dim=-1)
+            query = torch.cat([q_rot, q_pass], dim=-1)
+        else:
+            key = apply_rotary_pos_emb(key, sin, cos)
+            query = apply_rotary_pos_emb(query, sin, cos)
+
+        key = key.permute(0, 2, 1, 3)
+        query = query.permute(0, 2, 1, 3)
+
+        if q_len > 1:
+            causal_mask = attention_mask
+            if attention_mask is not None:
+                causal_mask = causal_mask[:, :, :, : key.shape[-2]]
+            is_causal = True if causal_mask is None and q_len > 1 else False
+            attn_output = torch.nn.functional.scaled_dot_product_attention(
+                query,
+                key,
+                value,
+                attn_mask=causal_mask,
+                dropout_p=self.attention_dropout if self.training else 0.0,
+                is_causal=is_causal,
+            )
+            if layer_past is not None:
+                cache_kwargs = {
+                    "sin": sin,
+                    "cos": cos,
+                    "partial_rotation_size": self.rotary_dim,
+                    "cache_position": cache_position,
+                }
+                key, value = layer_past.update(key, value, self.layer_idx, cache_kwargs)
+
+        else:
+            if layer_past is not None:
+                cache_kwargs = {
+                    "sin": sin,
+                    "cos": cos,
+                    "partial_rotation_size": self.rotary_dim,
+                    "cache_position": cache_position,
+                }
+                key, value = layer_past.update(key, value, self.layer_idx, cache_kwargs)
+
+            from torch.nn.attention.flex_attention import flex_attention
+            attn_output = flex_attention(query.to(key.dtype), key, value, block_mask=layer_past.block_mask,  return_lse=False, kernel_options={"SKIP_MASK_SCORE": True})
+
+        attn_weights = None
+
+        attn_output = self._merge_heads(attn_output, self.num_attention_heads, self.head_dim)
+        attn_output = self.out_proj(attn_output)
+        attn_output = self.resid_dropout(attn_output)
+
+        outputs = (attn_output, layer_past)
+        if output_attentions:
+            outputs += (attn_weights,)
+
+        return outputs  # a, present, (attentions)
 
 class GPTJFlashAttention2(GPTJAttention):
     """
@@ -407,6 +577,7 @@ class GPTJFlashAttention2(GPTJAttention):
 GPTJ_ATTENTION_CLASSES = {
     "eager": GPTJAttention,
     "flash_attention_2": GPTJFlashAttention2,
+    "paged_attention": GPTJPagedAttention,
 }
 
 

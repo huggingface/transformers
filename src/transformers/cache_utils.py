@@ -2134,7 +2134,7 @@ class PagedAttentionCache(Cache):
             self.n_pages = n_pages
         else:
             self.n_pages = (max_cache_len + page_size - 1) // page_size * batch_size
-        KV_H = config.num_key_value_heads
+        KV_H = config.num_key_value_heads if hasattr(config, "num_key_value_heads") else config.num_attention_heads
         QK_D = config.hidden_size // config.num_attention_heads
         V_D = QK_D
         from torch.nn.attention.experimental._paged_attention import PagedAttention
