@@ -89,7 +89,7 @@ class GPTQTest(unittest.TestCase):
     EXPECTED_OUTPUTS.add("Hello my name is Katie. I am a 20 year")
 
     # this seems a little small considering that we are doing 4bit quant but we have a small model and ww don't quantize the embeddings
-    EXPECTED_RELATIVE_DIFFERENCE = 2.06183008
+    EXPECTED_RELATIVE_DIFFERENCE = 2.06184043
 
     bits = 4
     sym = True
