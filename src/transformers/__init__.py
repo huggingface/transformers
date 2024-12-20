@@ -22,6 +22,7 @@ __version__ = "4.51.0.dev0"
 
 from typing import TYPE_CHECKING
 
+
 # Check the dependencies satisfy the minimal versions required.
 from . import dependency_versions_check
 from .utils import (
@@ -590,6 +591,7 @@ _import_structure = {
     "models.m2m_100": ["M2M100Config"],
     "models.mamba": ["MambaConfig"],
     "models.mamba2": ["Mamba2Config"],
+    "models.xlstm": ["xLSTMConfig"],
     "models.marian": ["MarianConfig"],
     "models.markuplm": [
         "MarkupLMConfig",
@@ -2895,6 +2897,13 @@ else:
             "Mamba2ForCausalLM",
             "Mamba2Model",
             "Mamba2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.xlstm"].extend(
+        [
+            "xLSTMForCausalLM",
+            "xLSTMModel",
+            "xLSTMPreTrainedModel",
         ]
     )
     _import_structure["models.marian"].extend(
@@ -5805,6 +5814,7 @@ if TYPE_CHECKING:
     from .models.m2m_100 import M2M100Config
     from .models.mamba import MambaConfig
     from .models.mamba2 import Mamba2Config
+    from .models.xlstm import xLSTMConfig
     from .models.marian import MarianConfig
     from .models.markuplm import (
         MarkupLMConfig,
@@ -7852,6 +7862,11 @@ if TYPE_CHECKING:
             Mamba2ForCausalLM,
             Mamba2Model,
             Mamba2PreTrainedModel,
+        )
+        from .models.xlstm import (
+            xLSTMForCausalLM,
+            xLSTMModel,
+            xLSTMPreTrainedModel,
         )
         from .models.marian import MarianForCausalLM, MarianModel, MarianMTModel, MarianPreTrainedModel
         from .models.markuplm import (

@@ -53,6 +53,7 @@ if is_torch_available():
         HQQQuantizedCache,
         HybridCache,
         MambaCache,
+        xLSTMCache,
         OffloadedStaticCache,
         QuantizedCacheConfig,
         QuantoQuantizedCache,
@@ -70,6 +71,7 @@ if is_torch_available():
         "sliding_window": SlidingWindowCache,
         "hybrid": HybridCache,
         "mamba": MambaCache,
+        "xlstm": xLSTMCache,
     }
     QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
     ALL_CACHE_IMPLEMENTATIONS = (
@@ -181,6 +183,7 @@ class GenerationConfig(PushToHubMixin):
             - `"sliding_window"`: [`SlidingWindowCache`]
             - `"hybrid"`: [`HybridCache`]
             - `"mamba"`: [`MambaCache`]
+            - `"xlstm"`: [`xLSTMCache`]
             - `"quantized"`: [`QuantizedCache`]
 
             If none is specified, we will use the default cache for the model (which is often [`DynamicCache`]). See
