@@ -691,9 +691,7 @@ class BambaDecoderLayer(JambaAttentionDecoderLayer):
 
         del self.self_attn
 
-        num_experts = 1
-        ffn_layer_class = BambaMLP if num_experts == 1 else None
-        self.feed_forward = ffn_layer_class(config)
+        self.feed_forward = BambaMLP(config)
 
         self.layer_type = layer_type
         if layer_type == "mamba":
