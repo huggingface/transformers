@@ -1060,8 +1060,10 @@ class AutoConfig:
                     f"The checkpoint you are trying to load has model type `{config_dict['model_type']}` "
                     "but Transformers does not recognize this architecture. This could be because of an "
                     "issue with the checkpoint, or because your version of Transformers is out of date. "
-                    "If this checkpoint was released very recently then you may need to install "
-                    "the latest version of Transformers from source with the command "
+                    "You can update transformers with the command `pip install --upgrade transformers`. If this "
+                    "does not work, and the checkpoint is very new, then there may not be a release version "
+                    "that supports this model yet. In this case, you can get the most up-to-date code by installing "
+                    "Transformers from source with the command "
                     "`pip install git+https://github.com/huggingface/transformers.git`"
                 )
             return config_class.from_dict(config_dict, **unused_kwargs)
