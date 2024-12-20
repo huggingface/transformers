@@ -30,8 +30,6 @@ from ...utils import (
 )
 from .configuration_pixtral import PixtralVisionConfig
 
-from xformers import ops as xops
-
 
 logger = logging.get_logger(__name__)
 
