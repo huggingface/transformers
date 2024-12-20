@@ -389,7 +389,7 @@ class Zamba2RotaryEmbedding(GemmaRotaryEmbedding):
         device=None,
     ):
         super().__init__(config, device)
-        self.rope_kwargs = {'base': config.rope_theta, 'dim': config.attention_head_dim}
+        self.rope_kwargs = {"base": config.rope_theta, "dim": config.attention_head_dim}
         inv_freq, self.attention_scaling = self.rope_init_fn(config=None, device=device, **self.rope_kwargs)
 
 
