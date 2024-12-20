@@ -19,7 +19,12 @@ import unittest
 import pytest
 from parameterized import parameterized
 
-from transformers import StableLmConfig, is_torch_available, set_seed
+from transformers import (
+    PretrainedConfig,
+    StableLmConfig,
+    is_torch_available,
+    set_seed,
+)
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
@@ -30,7 +35,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, RoPETesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -278,9 +283,20 @@ class StableLmModelTester:
         return config, inputs_dict
 
 
+def stablelm_set_partial_rotary_factor(self, kwargs, val):
+    kwargs["partial_rotary_factor"] = val
+
+
+def stablelm_get_rotary_ndims(self, config: PretrainedConfig) -> int:
+    head_size = config.hidden_size // config.num_attention_heads
+    return int(head_size * config.partial_rotary_factor)
+
+
 @require_torch
 # Copied from transformers.tests.persimmon.test_modeling_persimmon.PersimmonModelTest with Persimmon -> StableLm
-class StableLmModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class StableLmModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, RoPETesterMixin, unittest.TestCase
+):
     all_model_classes = (
         (StableLmModel, StableLmForCausalLM, StableLmForSequenceClassification, StableLmForTokenClassification)
         if is_torch_available()
@@ -301,6 +317,11 @@ class StableLmModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
     test_headmasking = False
     test_pruning = False
+    # RoPETesterMixin:
+    config_type = StableLmConfig
+    model_type = StableLmModel
+    set_partial_rotary_factor = stablelm_set_partial_rotary_factor
+    get_rotary_ndims = stablelm_get_rotary_ndims
 
     def setUp(self):
         self.model_tester = StableLmModelTester(self)

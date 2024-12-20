@@ -120,8 +120,9 @@ class MoonshineConfig(PretrainedConfig):
                     Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
                 `high_freq_factor` (`float`, *optional*):
                     Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
-        partial_rotary_factor (`float`, *optional*, defaults to 0.9):
+        partial_rotary_factor (`float`, *optional*, defaults to 1.0):
             Percentage of the query and keys which will have rotary embedding.
+            This parameter is not supported at the moment.
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Whether the model is used as an encoder/decoder or not.
         attention_bias (`bool`, *optional*, defaults to `False`):
@@ -176,7 +177,7 @@ class MoonshineConfig(PretrainedConfig):
         use_cache=True,
         rope_theta=10000.0,
         rope_scaling=None,
-        partial_rotary_factor=0.9,
+        partial_rotary_factor=1.0,  # TODO: Not used in code
         is_encoder_decoder=True,
         attention_bias=False,
         attention_dropout=0.0,
@@ -210,7 +211,10 @@ class MoonshineConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.rope_theta = rope_theta
         self.rope_scaling = rope_scaling
-        self.partial_rotary_factor = partial_rotary_factor
+        # TODO: Not used in code!
+        if partial_rotary_factor != 1.0:
+            print("WARNING: config.partial_rotary_factor not used in code. Setting it to 1.0.")
+        self.partial_rotary_factor = 1.0
         self.is_encoder_decoder = is_encoder_decoder
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout

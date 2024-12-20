@@ -45,7 +45,8 @@ class GlmConfig(PretrainedConfig):
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
             `num_attention_heads`.
-        partial_rotary_factor (`float`, *optional*, defaults to 0.5): The factor of the partial rotary position.
+        partial_rotary_factor (`float`, *optional*, defaults to 1.0): The factor of the partial rotary position.
+            This parameter is not supported at the moment.
         head_dim (`int`, *optional*, defaults to 128):
             The attention head dimension.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
@@ -107,7 +108,7 @@ class GlmConfig(PretrainedConfig):
         num_hidden_layers=40,
         num_attention_heads=32,
         num_key_value_heads=2,
-        partial_rotary_factor=0.5,
+        partial_rotary_factor=1.0,  # TODO: Not used in code
         head_dim=128,
         hidden_act="silu",
         attention_dropout=0.0,
@@ -129,7 +130,10 @@ class GlmConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.partial_rotary_factor = partial_rotary_factor
+        # TODO: Not used in code!
+        if partial_rotary_factor != 1.0:
+            print("WARNING: config.partial_rotary_factor not used in code. Setting it to 1.0.")
+        self.partial_rotary_factor = 1.0
         self.head_dim = head_dim
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act

@@ -15,11 +15,17 @@
 """Testing suite for the PyTorch OLMo model."""
 
 import unittest
+from typing import Any, Dict
 
 from packaging import version
 from parameterized import parameterized
 
-from transformers import OlmoConfig, is_torch_available, set_seed
+from transformers import (
+    OlmoConfig,
+    PretrainedConfig,
+    is_torch_available,
+    set_seed,
+)
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.models.gpt_neox.tokenization_gpt_neox_fast import GPTNeoXTokenizerFast
@@ -32,7 +38,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, RoPETesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -271,8 +277,16 @@ class OlmoModelTester:
         return config, inputs_dict
 
 
+def olmo_transform_rope_scaling(
+    self,
+    kwargs: Dict[str, Any],
+    config: PretrainedConfig,
+) -> Dict[str, Any]:
+    return {k: v for k, v in kwargs.items() if k not in ("rope_type", "original_max_position_embeddings")}
+
+
 @require_torch
-class OlmoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class OlmoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, RoPETesterMixin, unittest.TestCase):
     all_model_classes = (OlmoModel, OlmoForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -284,6 +298,11 @@ class OlmoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     )
     test_pruning = False
     fx_compatible = False
+    # RoPETesterMixin
+    config_type = OlmoConfig
+    model_type = OlmoModel
+    supported_rope_types = ("linear", "dynamic")
+    transform_rope_scaling = olmo_transform_rope_scaling
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer

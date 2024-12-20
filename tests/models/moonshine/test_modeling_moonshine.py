@@ -16,13 +16,16 @@
 
 import copy
 import unittest
+from typing import Any, Dict
 
-from transformers import MoonshineConfig, is_torch_available
+from transformers import MoonshineConfig, PretrainedConfig, is_torch_available
+from transformers.models.moonshine.modeling_moonshine import MoonshineDecoder
 from transformers.testing_utils import cleanup, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
+    RoPETesterMixin,
     floats_tensor,
     random_attention_mask,
 )
@@ -166,8 +169,31 @@ class MoonshineModelTester:
         return config, inputs_dict
 
 
+def moonshine_initialize_config_kwargs(
+    self,
+    vocab_size: int,
+    max_position_embeddings: int,
+    hidden_size: int,
+    num_hidden_layers: int,
+    num_attention_heads: int,
+    intermediate_size: int,
+) -> Dict[str, Any]:
+    return {
+        "vocab_size": vocab_size,
+        "max_position_embeddings": max_position_embeddings,
+        "hidden_size": hidden_size,
+        "decoder_num_hidden_layers": num_hidden_layers,
+        "decoder_num_attention_heads": num_attention_heads,
+        "intermediate_size": intermediate_size,
+    }
+
+
+def moonshine_get_rotary_ndims(self, config: PretrainedConfig) -> int:
+    return config.hidden_size // config.decoder_num_attention_heads
+
+
 @require_torch
-class MoonshineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class MoonshineModelTest(ModelTesterMixin, PipelineTesterMixin, RoPETesterMixin, unittest.TestCase):
     all_model_classes = (MoonshineModel, MoonshineForConditionalGeneration) if is_torch_available() else ()
     # Doesn't run generation tests. TODO (eustache): remove this line and then make CI green
     all_generative_model_classes = ()
@@ -181,6 +207,11 @@ class MoonshineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     )
     test_pruning = False
     test_headmasking = False
+    # RoPETesterMixin
+    config_type = MoonshineConfig
+    model_type = MoonshineDecoder
+    initialize_config_kwargs = moonshine_initialize_config_kwargs
+    get_rotary_ndims = moonshine_get_rotary_ndims
 
     def setUp(self):
         self.model_tester = MoonshineModelTester(self)

@@ -21,6 +21,7 @@
 
 import math
 from contextlib import nullcontext
+from functools import partial
 from typing import Dict, Optional, Tuple, Union
 
 import torch
@@ -248,19 +249,34 @@ class ModernBertMLP(nn.Module):
 
 
 class ModernBertRotaryEmbedding(nn.Module):
-    def __init__(self, config: ModernBertConfig, dim: int, base: float, device: Optional[torch.device] = None):
+    def __init__(
+        self,
+        config: ModernBertConfig,
+        device: Optional[torch.device] = None,
+        rope_theta: Optional[float] = None,
+    ):
         super().__init__()
         # BC: "rope_type" was originally "type"
         if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
             self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+            if rope_theta is not None:
+                raise ValueError("Either need config or rope_theta")
         else:
+            if rope_theta is None:
+                raise ValueError("Either need config or rope_theta")
             self.rope_type = "default"
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
+        self.rotary_ndims = config.hidden_size // config.num_attention_heads
 
-        self.config = config
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = self.rope_init_fn(None, device, dim=dim, base=base)
+        if rope_theta is not None:
+            rope_kwargs = {"base": rope_theta, "dim": self.rotary_ndims}
+        else:
+            rope_kwargs = {"config": config}
+        self.rope_init_fn = partial(self.rope_init_fn, **rope_kwargs)
+
+        inv_freq, self.attention_scaling = self.rope_init_fn(device=device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
 
@@ -272,7 +288,7 @@ class ModernBertRotaryEmbedding(nn.Module):
         """
         seq_len = torch.max(position_ids) + 1
         if seq_len > self.max_seq_len_cached:  # growth
-            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
+            inv_freq, self.attention_scaling = self.rope_init_fn(device=device, seq_len=seq_len)
             self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
             self.max_seq_len_cached = seq_len
 
@@ -297,6 +313,9 @@ class ModernBertRotaryEmbedding(nn.Module):
         with torch.autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded.float().to(x.device) @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
+            # Happens if self.rotary_ndims is odd
+            if emb.shape[-1] > self.rotary_ndims:
+                emb = emb[..., : self.rotary_ndims]
             cos = emb.cos()
             sin = emb.sin()
 
@@ -314,7 +333,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -322,8 +341,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -507,7 +524,10 @@ class ModernBertAttention(nn.Module):
                 dim=self.head_dim, max_seqlen=max_position_embeddings, base=rope_theta
             )
         else:
-            self.rotary_emb = ModernBertRotaryEmbedding(config=config, dim=self.head_dim, base=rope_theta)
+            self.rotary_emb = ModernBertRotaryEmbedding(
+                config=config,
+                rope_theta=rope_theta,
+            )
 
         self.Wo = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
         self.out_drop = nn.Dropout(config.attention_dropout) if config.attention_dropout > 0.0 else nn.Identity()

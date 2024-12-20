@@ -15,13 +15,14 @@
 """Testing suite for the PyTorch DBRX model."""
 
 import unittest
+from typing import Any, Tuple
 
-from transformers import DbrxConfig, is_torch_available
+from transformers import DbrxConfig, PreTrainedModel, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, RoPETesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -319,12 +320,27 @@ class DbrxModelTester:
         return config, inputs_dict
 
 
+def dbrx_cos_sin_from_model(
+    self,
+    model: PreTrainedModel,
+    x: Any,
+    position_ids: Any,
+) -> Tuple[Any, Any]:
+    rotary_emb = model.blocks[0].norm_attn_norm.attn.rotary_emb
+    cos, sin = rotary_emb(x, position_ids)
+    return cos, sin
+
+
 @require_torch
-class DbrxModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class DbrxModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, RoPETesterMixin, unittest.TestCase):
     all_model_classes = (DbrxModel, DbrxForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = {"text-generation": DbrxForCausalLM} if is_torch_available() else {}
     test_headmasking = False
     test_pruning = False
+    # RoPETesterMixin
+    config_type = DbrxConfig
+    model_type = DbrxModel
+    cos_sin_from_model = dbrx_cos_sin_from_model
 
     def setUp(self):
         self.model_tester = DbrxModelTester(self)

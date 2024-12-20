@@ -16,10 +16,17 @@
 
 import gc
 import unittest
+from typing import Any, Dict, Tuple
 
 import pytest
 
-from transformers import AutoTokenizer, JetMoeConfig, is_torch_available
+from transformers import (
+    AutoTokenizer,
+    JetMoeConfig,
+    PretrainedConfig,
+    PreTrainedModel,
+    is_torch_available,
+)
 from transformers.testing_utils import (
     backend_empty_cache,
     require_flash_attn,
@@ -31,7 +38,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, RoPETesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -275,8 +282,48 @@ class JetMoeModelTester:
         return config, inputs_dict
 
 
+def jetmoe_initialize_config_kwargs(
+    self,
+    vocab_size: int,
+    max_position_embeddings: int,
+    hidden_size: int,
+    num_hidden_layers: int,
+    num_attention_heads: int,
+    intermediate_size: int,
+) -> Dict[str, Any]:
+    return {
+        "vocab_size": vocab_size,
+        "max_position_embeddings": max_position_embeddings,
+        "hidden_size": hidden_size,
+        "num_hidden_layers": num_hidden_layers,
+        "num_key_value_heads": num_attention_heads,
+        "intermediate_size": intermediate_size,
+        "kv_channels": hidden_size // num_attention_heads,
+        "num_experts_per_tok": 1,
+    }
+
+
+def jetmoe_get_rotary_ndims(self, config: PretrainedConfig) -> int:
+    return config.kv_channels
+
+
+def jetmoe_cos_sin_from_model(
+    self,
+    model: PreTrainedModel,
+    x: Any,
+    position_ids: Any,
+) -> Tuple[Any, Any]:
+    if position_ids.dim() == 1:
+        position_ids = position_ids[None, :]
+    attn = model.layers[0].self_attention
+    rotary_emb = attn.rotary_emb
+    return rotary_emb(x, position_ids)
+
+
 @require_torch
-class JetMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class JetMoeModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, RoPETesterMixin, unittest.TestCase
+):
     all_model_classes = (
         (JetMoeModel, JetMoeForCausalLM, JetMoeForSequenceClassification) if is_torch_available() else ()
     )
@@ -296,6 +343,12 @@ class JetMoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     test_cpu_offload = False
     test_disk_offload_bin = False
     test_disk_offload_safetensors = False
+    # RoPETesterMixin
+    config_type = JetMoeConfig
+    model_type = JetMoeModel
+    initialize_config_kwargs = jetmoe_initialize_config_kwargs
+    get_rotary_ndims = jetmoe_get_rotary_ndims
+    cos_sin_from_model = jetmoe_cos_sin_from_model
 
     def setUp(self):
         self.model_tester = JetMoeModelTester(self)

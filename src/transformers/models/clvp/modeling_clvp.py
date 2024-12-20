@@ -251,8 +251,8 @@ class ClvpRotaryPositionalEmbedding(nn.Module):
 
     def __init__(self, config):
         super().__init__()
-        dim = max(config.projection_dim // (config.num_attention_heads * 2), 32)
-        inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
+        self.dim = max(config.projection_dim // (config.num_attention_heads * 2), 32)
+        inv_freq = 1.0 / (10000 ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float() / self.dim))
 
         self.register_buffer("inv_freq", inv_freq)
         self.cached_sequence_length = None
@@ -267,9 +267,12 @@ class ClvpRotaryPositionalEmbedding(nn.Module):
         self.cached_sequence_length = sequence_length
         time_stamps = torch.arange(sequence_length, device=hidden_states.device).type_as(self.inv_freq)
         freqs = torch.einsum("i,j->ij", time_stamps, self.inv_freq)
-        embeddings = torch.cat((freqs, freqs), dim=-1)
+        emb = torch.cat((freqs, freqs), dim=-1)
+        # Happens if self.dim is odd
+        if emb.shape[-1] > self.dim:
+            emb = emb[..., : self.dim]
 
-        self.cached_rotary_positional_embedding = embeddings.unsqueeze(0)
+        self.cached_rotary_positional_embedding = emb.unsqueeze(0)
         return self.cached_rotary_positional_embedding
 
 
@@ -313,7 +316,7 @@ class ClvpSelfAttention(nn.Module):
         rotary_pos_emb: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.LongTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
+        past_key_value: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         use_cache: Optional[bool] = False,
         head_mask: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = False,

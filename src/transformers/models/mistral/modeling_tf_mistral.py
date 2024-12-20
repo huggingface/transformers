@@ -139,6 +139,9 @@ class TFMistralRotaryEmbedding(keras.layers.Layer):
         t = tf.cast(tf.range(seq_len, dtype=tf.int64), self.inv_freq.dtype)
         freqs = tf.einsum("i,j->ij", t, self.inv_freq)
         emb = tf.concat([freqs, freqs], axis=-1)
+        # Happens if self.dim is odd
+        if emb.shape[-1] > self.dim:
+            emb = emb[:, : self.dim]
         cos_values = tf.cast(tf.cos(emb), x.dtype)
         sin_values = tf.cast(tf.sin(emb), x.dtype)
 

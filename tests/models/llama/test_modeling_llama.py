@@ -32,7 +32,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, RoPETesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -277,7 +277,7 @@ class LlamaModelTester:
 
 
 @require_torch
-class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, RoPETesterMixin, unittest.TestCase):
     all_model_classes = (
         (
             LlamaModel,
@@ -304,6 +304,9 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     test_headmasking = False
     test_pruning = False
     fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
+    # RoPETesterMixin
+    config_type = LlamaConfig
+    model_type = LlamaModel
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer

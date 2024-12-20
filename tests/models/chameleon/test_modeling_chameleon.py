@@ -16,11 +16,19 @@
 
 import copy
 import unittest
+from typing import Any, Dict, Tuple
 
 import requests
 from parameterized import parameterized
 
-from transformers import ChameleonConfig, is_torch_available, is_vision_available, set_seed
+from transformers import (
+    ChameleonConfig,
+    PretrainedConfig,
+    PreTrainedModel,
+    is_torch_available,
+    is_vision_available,
+    set_seed,
+)
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_read_token,
@@ -31,7 +39,12 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import (
+    ModelTesterMixin,
+    RoPETesterMixin,
+    floats_tensor,
+    ids_tensor,
+)
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -271,8 +284,47 @@ class ChameleonModelTester:
         return config, inputs_dict
 
 
+def cham_initialize_config_kwargs(
+    self,
+    vocab_size: int,
+    max_position_embeddings: int,
+    hidden_size: int,
+    num_hidden_layers: int,
+    num_attention_heads: int,
+    intermediate_size: int,
+) -> Dict[str, Any]:
+    return {
+        "vocab_size": vocab_size,
+        "max_position_embeddings": max_position_embeddings,
+        "hidden_size": hidden_size,
+        "num_hidden_layers": num_hidden_layers,
+        "num_attention_heads": num_attention_heads,
+        "intermediate_size": intermediate_size,
+        "vocabulary_map": {"<image>": 0},
+    }
+
+
+def cham_cos_sin_from_model(
+    self,
+    model: PreTrainedModel,
+    x: Any,
+    position_ids: Any,
+) -> Tuple[Any, Any]:
+    if position_ids.dim() == 1:
+        position_ids = position_ids.unsqueeze(0)
+    attn = model.layers[0].self_attn
+    rotary_emb = attn.rotary_emb
+    return rotary_emb(x, position_ids)
+
+
+def cham_transform_rope_scaling(self, kwargs: Dict[str, Any], config: PretrainedConfig) -> Dict[str, Any]:
+    return {k: v for k, v in kwargs.items() if k not in ("rope_type", "original_max_position_embeddings")}
+
+
 @require_torch
-class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class ChameleonModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, RoPETesterMixin, unittest.TestCase
+):
     all_model_classes = (ChameleonModel, ChameleonForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -285,6 +337,13 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     test_headmasking = False
     test_pruning = False
     fx_compatible = False
+    # RoPETesterMixin
+    config_type = ChameleonConfig
+    model_type = ChameleonModel
+    initialize_config_kwargs = cham_initialize_config_kwargs
+    supported_rope_types = ("linear", "dynamic")
+    cos_sin_from_model = cham_cos_sin_from_model
+    transform_rope_scaling = cham_transform_rope_scaling
 
     def setUp(self):
         self.model_tester = ChameleonModelTester(self)

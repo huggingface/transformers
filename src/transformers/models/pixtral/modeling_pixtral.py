@@ -125,7 +125,8 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+# Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -133,8 +134,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -173,11 +172,13 @@ class PixtralAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
+        if position_embeddings is None:
+            raise ValueError("position_embeddings = (cos, sin) must be given")
 
         batch_size, patches, _ = hidden_states.size()
 
@@ -259,9 +260,9 @@ class PixtralAttentionLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
+        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
         attention_mask: torch.Tensor,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-        output_attentions: Optional[bool] = None,
+        output_attentions: Optional[bool] = False,
     ) -> Tuple[torch.FloatTensor]:
         """
         Args:
@@ -278,8 +279,8 @@ class PixtralAttentionLayer(nn.Module):
         hidden_states = self.attention_norm(hidden_states)
         hidden_states, attn_weights = self.attention(
             hidden_states=hidden_states,
-            attention_mask=attention_mask,
             position_embeddings=position_embeddings,
+            attention_mask=attention_mask,
             output_attentions=output_attentions,
         )
         hidden_states = residual + hidden_states
@@ -308,8 +309,8 @@ class PixtralTransformer(nn.Module):
     def forward(
         self,
         inputs_embeds,
+        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -351,15 +352,15 @@ class PixtralTransformer(nn.Module):
                 layer_outputs = self._gradient_checkpointing_func(
                     encoder_layer.__call__,
                     hidden_states,
-                    attention_mask,
                     position_embeddings,
+                    attention_mask,
                     output_attentions,
                 )
             else:
                 layer_outputs = encoder_layer(
                     hidden_states,
-                    attention_mask,
                     position_embeddings=position_embeddings,
+                    attention_mask=attention_mask,
                     output_attentions=output_attentions,
                 )
 

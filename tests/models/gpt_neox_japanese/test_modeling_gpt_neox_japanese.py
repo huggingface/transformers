@@ -16,13 +16,18 @@
 
 import unittest
 
-from transformers import GPTNeoXJapaneseConfig, is_torch_available
+from transformers import GPTNeoXJapaneseConfig, PretrainedConfig, is_torch_available
 from transformers.models.gpt_neox_japanese.tokenization_gpt_neox_japanese import GPTNeoXJapaneseTokenizer
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_common import (
+    ModelTesterMixin,
+    RoPETesterMixin,
+    ids_tensor,
+    random_attention_mask,
+)
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -195,8 +200,23 @@ class GPTNeoXJapaneseModelTester:
         return config, inputs_dict
 
 
+def gptneox_set_partial_rotary_factor(self, kwargs, val):
+    kwargs["rotary_pct"] = val
+
+
+def gptneox_get_rotary_ndims(self, config: PretrainedConfig) -> int:
+    head_size = config.hidden_size // config.num_attention_heads
+    return int(head_size * config.rotary_pct)
+
+
 @require_torch
-class GPTNeoXModelJapaneseTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class GPTNeoXModelJapaneseTest(
+    ModelTesterMixin,
+    GenerationTesterMixin,
+    PipelineTesterMixin,
+    RoPETesterMixin,
+    unittest.TestCase,
+):
     all_model_classes = (GPTNeoXJapaneseModel, GPTNeoXJapaneseForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {"feature-extraction": GPTNeoXJapaneseModel, "text-generation": GPTNeoXJapaneseForCausalLM}
@@ -207,6 +227,11 @@ class GPTNeoXModelJapaneseTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
     test_missing_keys = False
     test_model_parallel = False
     test_head_masking = False
+    # RoPETesterMixin:
+    config_type = GPTNeoXJapaneseConfig
+    model_type = GPTNeoXJapaneseModel
+    set_partial_rotary_factor = gptneox_set_partial_rotary_factor
+    get_rotary_ndims = gptneox_get_rotary_ndims
 
     def setUp(self):
         self.model_tester = GPTNeoXJapaneseModelTester(self)

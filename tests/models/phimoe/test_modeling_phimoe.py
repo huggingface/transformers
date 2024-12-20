@@ -16,11 +16,18 @@
 """Testing suite for the PyTorch PhiMoE model."""
 
 import unittest
-from typing import List
+from typing import Any, Dict, List, Tuple
 
 from parameterized import parameterized
 
-from transformers import PhimoeConfig, StaticCache, is_torch_available, set_seed
+from transformers import (
+    PhimoeConfig,
+    PretrainedConfig,
+    PreTrainedModel,
+    StaticCache,
+    is_torch_available,
+    set_seed,
+)
 from transformers.testing_utils import (
     is_flaky,
     require_torch,
@@ -30,7 +37,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, RoPETesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -334,8 +341,38 @@ class PhimoeModelTester:
         return config, inputs_dict
 
 
+def phimoe_transform_rope_scaling(
+    self,
+    kwargs: Dict[str, Any],
+    config: PretrainedConfig,
+) -> Dict[str, Any]:
+    return {
+        **kwargs,
+        "short_mscale": 0.5,
+        "long_mscale": 1.0,
+        "original_max_position_embeddings": config.max_position_embeddings,
+    }
+
+
+def phimoe_cos_sin_from_model(
+    self,
+    model: PreTrainedModel,
+    x: Any,
+    position_ids: Any,
+) -> Tuple[Any, Any]:
+    if position_ids.dim() == 1:
+        position_ids = position_ids[None, :]
+    seq_len = position_ids.flatten().max().int() + 1
+    cos, sin = model.rotary_emb(x, seq_len)
+    cos = cos[position_ids]
+    sin = sin[position_ids]
+    return cos, sin
+
+
 @require_torch
-class PhimoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class PhimoeModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, RoPETesterMixin, unittest.TestCase
+):
     all_model_classes = (
         (PhimoeModel, PhimoeForCausalLM, PhimoeForSequenceClassification) if is_torch_available() else ()
     )
@@ -352,6 +389,11 @@ class PhimoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
     test_headmasking = False
     test_pruning = False
+    # RoPETesterMixin
+    config_type = PhimoeConfig
+    model_type = PhimoeModel
+    transform_rope_scaling = phimoe_transform_rope_scaling
+    cos_sin_from_model = phimoe_cos_sin_from_model
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79292/workflows/fa2ba644-8953-44a6-8f67-ccd69ca6a476/jobs/1012905
     def is_pipeline_test_to_skip(

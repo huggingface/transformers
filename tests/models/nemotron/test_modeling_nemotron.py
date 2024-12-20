@@ -20,7 +20,7 @@ import unittest
 
 import pytest
 
-from transformers import NemotronConfig, is_torch_available
+from transformers import NemotronConfig, PretrainedConfig, is_torch_available
 from transformers.testing_utils import (
     is_flaky,
     require_flash_attn,
@@ -35,6 +35,7 @@ from transformers.testing_utils import (
 
 from ...models.gemma.test_modeling_gemma import GemmaModelTest, GemmaModelTester
 from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import RoPETesterMixin
 
 
 if is_torch_available():
@@ -59,8 +60,17 @@ class NemotronModelTester(GemmaModelTester):
         for_token_class = NemotronForTokenClassification
 
 
+def nemotron_set_partial_rotary_factor(self, kwargs, val):
+    kwargs["partial_rotary_factor"] = val
+
+
+def nemotron_get_rotary_ndims(self, config: PretrainedConfig) -> int:
+    head_size = config.hidden_size // config.num_attention_heads
+    return int(head_size * config.partial_rotary_factor)
+
+
 @require_torch
-class NemotronModelTest(GemmaModelTest):
+class NemotronModelTest(GemmaModelTest, RoPETesterMixin):
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
     model_split_percents = [0.5, 0.7, 0.8]
@@ -90,6 +100,12 @@ class NemotronModelTest(GemmaModelTest):
     test_headmasking = False
     test_pruning = False
     fx_compatible = False
+    # RoPETesterMixin
+    config_type = NemotronConfig
+    model_type = NemotronModel
+    set_partial_rotary_factor = nemotron_set_partial_rotary_factor
+    get_rotary_ndims = nemotron_get_rotary_ndims
+    cos_sin_from_model = None  # Reset to default
 
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = NemotronForCausalLM if is_torch_available() else None

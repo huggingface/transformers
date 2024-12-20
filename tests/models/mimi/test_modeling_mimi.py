@@ -18,12 +18,19 @@ import inspect
 import os
 import tempfile
 import unittest
+from typing import Any, Dict, Tuple
 
 import numpy as np
 from datasets import Audio, load_dataset
 from pytest import mark
 
-from transformers import AutoFeatureExtractor, MimiConfig
+from transformers import (
+    AutoFeatureExtractor,
+    MimiConfig,
+    PretrainedConfig,
+    PreTrainedModel,
+)
+from transformers.models.mimi.modeling_mimi import MimiTransformerModel
 from transformers.testing_utils import (
     is_flaky,
     is_torch_available,
@@ -35,7 +42,13 @@ from transformers.testing_utils import (
 )
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import (
+    ModelTesterMixin,
+    RoPETesterMixin,
+    _config_zero_init,
+    floats_tensor,
+    ids_tensor,
+)
 
 
 if is_torch_available():
@@ -155,14 +168,61 @@ class MimiModelTester:
         )
 
 
+def mimi_initialize_config_kwargs(
+    self,
+    vocab_size: int,
+    max_position_embeddings: int,
+    hidden_size: int,
+    num_hidden_layers: int,
+    num_attention_heads: int,
+    intermediate_size: int,
+) -> Dict[str, Any]:
+    return {
+        "max_position_embeddings": max_position_embeddings,
+        "hidden_size": hidden_size,
+        "num_hidden_layers": num_hidden_layers,
+        "num_attention_heads": num_attention_heads,
+        "intermediate_size": intermediate_size,
+    }
+
+
+def mimi_cos_sin_from_model(
+    self,
+    model: PreTrainedModel,
+    x: Any,
+    position_ids: Any,
+) -> Tuple[Any, Any]:
+    if position_ids.dim() == 1:
+        position_ids = position_ids[None, :]
+    rotary_emb = model.layers[0].self_attn.rotary_emb
+    return rotary_emb(x, position_ids)
+
+
+def mimi_input_to_model_forward(
+    self,
+    input_ids: Any,
+    config: PretrainedConfig,
+) -> Any:
+    # Model needs embeddings as input
+    if input_ids.dim() == 1:
+        input_ids = input_ids[None, :]
+    return torch.zeros((1, 1, 1)).expand(*input_ids.shape, config.hidden_size)
+
+
 @require_torch
-class MimiModelTest(ModelTesterMixin, unittest.TestCase):
+class MimiModelTest(ModelTesterMixin, RoPETesterMixin, unittest.TestCase):
     all_model_classes = (MimiModel,) if is_torch_available() else ()
     is_encoder_decoder = True
     test_pruning = False
     test_headmasking = False
     test_resize_embeddings = False
     test_torchscript = False
+    # RoPETesterMixin
+    config_type = MimiConfig
+    model_type = MimiTransformerModel
+    initialize_config_kwargs = mimi_initialize_config_kwargs
+    cos_sin_from_model = mimi_cos_sin_from_model
+    input_to_model_forward = mimi_input_to_model_forward
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         # model does support returning hidden states

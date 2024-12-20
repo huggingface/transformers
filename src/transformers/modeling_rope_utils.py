@@ -155,7 +155,8 @@ def _compute_dynamic_ntk_parameters(
     seq_len = seq_len if seq_len is not None and seq_len > max_position_embeddings else max_position_embeddings
 
     # Compute the inverse frequencies
-    base = base * ((factor * seq_len / max_position_embeddings) - (factor - 1)) ** (dim / (dim - 2))
+    if dim != 2:
+        base = base * ((factor * seq_len / max_position_embeddings) - (factor - 1)) ** (dim / (dim - 2))
     inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).float().to(device) / dim))
     return inv_freq, attention_factor
 
@@ -248,7 +249,7 @@ def _compute_yarn_parameters(
     low, high = find_correction_range(beta_fast, beta_slow, dim, base, original_max_position_embeddings)
 
     # Get n-dimensional rotational scaling corrected for extrapolation
-    inv_freq_extrapolation_factor = 1 - linear_ramp_factor(low, high, dim // 2).float().to(device)
+    inv_freq_extrapolation_factor = 1 - linear_ramp_factor(low, high, pos_freqs.shape[0]).float().to(device)
     inv_freq = (
         inv_freq_interpolation * (1 - inv_freq_extrapolation_factor)
         + inv_freq_extrapolation * inv_freq_extrapolation_factor

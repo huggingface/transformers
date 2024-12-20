@@ -58,6 +58,7 @@ class Cohere2RotaryEmbedding(nn.Module):
             self.rope_type = "default"
         self.max_seq_len_cached = config.max_position_embeddings
         self.original_max_seq_len = config.max_position_embeddings
+        self.rotary_ndims = config.hidden_size // config.num_attention_heads
 
         self.config = config
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
@@ -99,6 +100,9 @@ class Cohere2RotaryEmbedding(nn.Module):
         with torch.autocast(device_type=device_type, enabled=False):
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.repeat_interleave(freqs, 2, dim=-1)  # diff from Llama: we interleave() instead of cat()
+            # Happens if self.rotary_ndims is odd
+            if emb.shape[-1] > self.rotary_ndims:
+                emb = emb[..., : self.rotary_ndims]
             cos = emb.cos()
             sin = emb.sin()
 
@@ -168,11 +172,10 @@ def rotate_half(x):
     # Split and rotate. Note that this function is different from e.g. Llama.
     x1 = x[..., ::2]
     x2 = x[..., 1::2]
-    rot_x = torch.stack([-x2, x1], dim=-1).flatten(-2)
-    return rot_x
+    return torch.cat((-x2, x1), dim=-1)
 
 
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -180,8 +183,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -326,7 +327,6 @@ class Cohere2DecoderLayer(nn.Module):
         attention_mask: Optional[torch.Tensor] = None,
         past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         last_cache_position: int = 0,
         **kwargs: Unpack[FlashAttentionKwargs],
@@ -344,9 +344,6 @@ class Cohere2DecoderLayer(nn.Module):
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
             cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
                 Indices depicting the position of the input sequence tokens in the sequence
             last_cache_position (`int`): equivalent to `cache_position[-1]` but allow indexing without breaking dynamo tracing
@@ -385,7 +382,6 @@ class Cohere2DecoderLayer(nn.Module):
             attention_mask=attention_mask,
             past_key_value=past_key_value,
             output_attentions=output_attentions,
-            use_cache=use_cache,
             cache_position=cache_position,
             **kwargs,
         )
@@ -640,9 +636,9 @@ class Cohere2Model(Cohere2PreTrainedModel):
                     causal_mask,
                     past_key_values,
                     output_attentions,
-                    use_cache,
                     cache_position,
                     last_cache_position,
+                    **flash_attn_kwargs,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -651,7 +647,6 @@ class Cohere2Model(Cohere2PreTrainedModel):
                     attention_mask=causal_mask,
                     past_key_value=past_key_values,
                     output_attentions=output_attentions,
-                    use_cache=use_cache,
                     cache_position=cache_position,
                     last_cache_position=last_cache_position,
                     **flash_attn_kwargs,

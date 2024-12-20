@@ -15,12 +15,13 @@
 """Testing suite for the PyTorch ESM model."""
 
 import unittest
+from typing import Any, Dict, Tuple
 
-from transformers import EsmConfig, is_torch_available
+from transformers import EsmConfig, PreTrainedModel, is_torch_available
 from transformers.testing_utils import TestCasePlus, require_bitsandbytes, require_torch, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, RoPETesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -181,8 +182,44 @@ class EsmModelTester:
         return config, inputs_dict
 
 
+def esm_initialize_config_kwargs(
+    self,
+    vocab_size: int,
+    max_position_embeddings: int,
+    hidden_size: int,
+    num_hidden_layers: int,
+    num_attention_heads: int,
+    intermediate_size: int,
+) -> Dict[str, Any]:
+    return {
+        "vocab_size": vocab_size,
+        "max_position_embeddings": max_position_embeddings,
+        "hidden_size": hidden_size,
+        "num_hidden_layers": num_hidden_layers,
+        "num_attention_heads": num_attention_heads,
+        "intermediate_size": intermediate_size,
+        "position_embedding_type": "rotary",
+        "pad_token_id": 0,
+    }
+
+
+def esm_cos_sin_from_model(
+    self,
+    model: PreTrainedModel,
+    x: Any,
+    position_ids: Any,
+) -> Tuple[Any, Any]:
+    if position_ids.dim() == 1:
+        position_ids = position_ids.unsqueeze(0)
+    rotary_emb = model.encoder.layer[0].attention.self.rotary_embeddings
+    cos, sin = rotary_emb._update_cos_sin_tables(x, position_ids)
+    cos = cos.squeeze(1)
+    sin = sin.squeeze(1)
+    return cos, sin
+
+
 @require_torch
-class EsmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class EsmModelTest(ModelTesterMixin, PipelineTesterMixin, RoPETesterMixin, unittest.TestCase):
     test_mismatched_shapes = False
 
     all_model_classes = (
@@ -208,6 +245,11 @@ class EsmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
     test_sequence_classification_problem_types = True
     model_split_percents = [0.5, 0.8, 0.9]
+    # RoPETesterMixin
+    config_type = EsmConfig
+    model_type = EsmModel
+    initialize_config_kwargs = esm_initialize_config_kwargs
+    cos_sin_from_model = esm_cos_sin_from_model
 
     def setUp(self):
         self.model_tester = EsmModelTester(self)

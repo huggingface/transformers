@@ -15,6 +15,7 @@
 
 import math
 from contextlib import nullcontext
+from functools import partial
 from typing import Dict, Literal, Optional, Tuple, Union
 
 import torch
@@ -33,6 +34,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_code_sample_docstrings,
@@ -42,7 +44,7 @@ from ...utils import (
     logging,
 )
 from ...utils.import_utils import is_triton_available
-from ..gemma.modeling_gemma import GemmaRotaryEmbedding, apply_rotary_pos_emb
+from ..gemma.modeling_gemma import apply_rotary_pos_emb
 
 
 if is_flash_attn_2_available():
@@ -505,12 +507,6 @@ class ModernBertMLP(nn.Module):
         return self.Wo(self.drop(self.act(input) * gate))
 
 
-class ModernBertRotaryEmbedding(GemmaRotaryEmbedding):
-    def __init__(self, config: ModernBertConfig, dim: int, base: float, device: Optional[torch.device] = None):
-        super().__init__(self, config=config, device=device)
-        inv_freq, self.attention_scaling = self.rope_init_fn(None, device, dim=dim, base=base)
-
-
 def eager_attention_forward(
     module: "ModernBertAttention",
     qkv: torch.Tensor,
@@ -633,6 +629,84 @@ MODERNBERT_ATTENTION_FUNCTION = {
 }
 
 
+class ModernBertRotaryEmbedding(nn.Module):
+    def __init__(
+        self,
+        config: ModernBertConfig,
+        device: Optional[torch.device] = None,
+        rope_theta: Optional[float] = None,
+    ):
+        super().__init__()
+        # BC: "rope_type" was originally "type"
+        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+            if rope_theta is not None:
+                raise ValueError("Either need config or rope_theta")
+        else:
+            if rope_theta is None:
+                raise ValueError("Either need config or rope_theta")
+            self.rope_type = "default"
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+        self.rotary_ndims = config.hidden_size // config.num_attention_heads
+
+        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        if rope_theta is not None:
+            rope_kwargs = {"base": rope_theta, "dim": self.rotary_ndims}
+        else:
+            rope_kwargs = {"config": config}
+        self.rope_init_fn = partial(self.rope_init_fn, **rope_kwargs)
+
+        inv_freq, self.attention_scaling = self.rope_init_fn(device=device)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = self.inv_freq
+
+    def _dynamic_frequency_update(self, position_ids, device):
+        """
+        dynamic RoPE layers should recompute `inv_freq` in the following situations:
+        1 - growing beyond the cached sequence length (allow scaling)
+        2 - the current sequence length is in the original scale (avoid losing precision with small sequences)
+        """
+        seq_len = torch.max(position_ids) + 1
+        if seq_len > self.max_seq_len_cached:  # growth
+            inv_freq, self.attention_scaling = self.rope_init_fn(device=device, seq_len=seq_len)
+            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
+            self.max_seq_len_cached = seq_len
+
+        if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
+            # This .to() is needed if the model has been moved to a device after being initialized (because
+            # the buffer is automatically moved, but not the original copy)
+            self.original_inv_freq = self.original_inv_freq.to(device)
+            self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
+            self.max_seq_len_cached = self.original_max_seq_len
+
+    @torch.no_grad()
+    def forward(self, x, position_ids):
+        if "dynamic" in self.rope_type:
+            self._dynamic_frequency_update(position_ids, device=x.device)
+
+        # Core RoPE block
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        position_ids_expanded = position_ids[:, None, :].float()
+        # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
+        device_type = x.device.type
+        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):
+            freqs = (inv_freq_expanded.float().to(x.device) @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            # Happens if self.rotary_ndims is odd
+            if emb.shape[-1] > self.rotary_ndims:
+                emb = emb[..., : self.rotary_ndims]
+            cos = emb.cos()
+            sin = emb.sin()
+
+        # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
+        cos = cos * self.attention_scaling
+        sin = sin * self.attention_scaling
+
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
 class ModernBertAttention(nn.Module):
     """Performs multi-headed self attention on a batch of unpadded sequences.
 
@@ -677,7 +751,10 @@ class ModernBertAttention(nn.Module):
                 dim=self.head_dim, max_seqlen=max_position_embeddings, base=rope_theta
             )
         else:
-            self.rotary_emb = ModernBertRotaryEmbedding(config=config, dim=self.head_dim, base=rope_theta)
+            self.rotary_emb = ModernBertRotaryEmbedding(
+                config=config,
+                rope_theta=rope_theta,
+            )
 
         self.Wo = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
         self.out_drop = nn.Dropout(config.attention_dropout) if config.attention_dropout > 0.0 else nn.Identity()

@@ -20,7 +20,12 @@ import unittest
 import datasets
 import numpy as np
 
-from transformers import ClvpConfig, ClvpDecoderConfig, ClvpEncoderConfig
+from transformers import (
+    ClvpConfig,
+    ClvpDecoderConfig,
+    ClvpEncoder,
+    ClvpEncoderConfig,
+)
 from transformers.testing_utils import (
     cleanup,
     require_torch,

@@ -28,7 +28,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, RoPETesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -272,7 +272,9 @@ class CohereModelTester:
 
 
 @require_torch
-class CohereModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class CohereModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, RoPETesterMixin, unittest.TestCase
+):
     all_model_classes = (CohereModel, CohereForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
@@ -285,6 +287,9 @@ class CohereModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     test_headmasking = False
     test_pruning = False
     fx_compatible = False
+    # RoPETesterMixin
+    config_type = CohereConfig
+    model_type = CohereModel
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer

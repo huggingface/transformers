@@ -16,11 +16,18 @@
 """Testing suite for the PyTorch Phi-3 model."""
 
 import unittest
-from typing import List
+from typing import Any, Dict, List, Tuple
 
 from parameterized import parameterized
 
-from transformers import Phi3Config, StaticCache, is_torch_available, set_seed
+from transformers import (
+    Phi3Config,
+    PretrainedConfig,
+    PreTrainedModel,
+    StaticCache,
+    is_torch_available,
+    set_seed,
+)
 from transformers.models.auto.configuration_auto import AutoConfig
 from transformers.testing_utils import (
     require_torch,
@@ -30,7 +37,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, RoPETesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -327,8 +334,47 @@ class Phi3ModelTester:
         return config, inputs_dict
 
 
+def phi3_transform_rope_scaling(
+    self,
+    kwargs: Dict[str, Any],
+    config: PretrainedConfig,
+) -> Dict[str, Any]:
+    return {k: v for k, v in kwargs.items() if k not in ("rope_type", "factor")}
+
+
+def phi3_initialize_config_kwargs(
+    self,
+    vocab_size: int,
+    max_position_embeddings: int,
+    hidden_size: int,
+    num_hidden_layers: int,
+    num_attention_heads: int,
+    intermediate_size: int,
+) -> Dict[str, Any]:
+    return {
+        "vocab_size": vocab_size,
+        "max_position_embeddings": max_position_embeddings,
+        "hidden_size": hidden_size,
+        "num_hidden_layers": num_hidden_layers,
+        "num_attention_heads": num_attention_heads,
+        "intermediate_size": intermediate_size,
+        "pad_token_id": 0,
+    }
+
+
+def phi3_cos_sin_from_model(
+    self,
+    model: PreTrainedModel,
+    x: Any,
+    position_ids: Any,
+) -> Tuple[Any, Any]:
+    rotary_emb = model.rotary_emb
+    cos, sin = rotary_emb(x, position_ids)
+    return cos, sin
+
+
 @require_torch
-class Phi3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class Phi3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, RoPETesterMixin, unittest.TestCase):
     all_model_classes = (
         (Phi3Model, Phi3ForCausalLM, Phi3ForSequenceClassification, Phi3ForTokenClassification)
         if is_torch_available()
@@ -348,6 +394,13 @@ class Phi3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     test_headmasking = False
     test_pruning = False
+    # RoPETesterMixin
+    config_type = Phi3Config
+    model_type = Phi3Model
+    supported_rope_types = ("longrope",)
+    transform_rope_scaling = phi3_transform_rope_scaling
+    initialize_config_kwargs = phi3_initialize_config_kwargs
+    cos_sin_from_model = phi3_cos_sin_from_model
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79292/workflows/fa2ba644-8953-44a6-8f67-ccd69ca6a476/jobs/1012905
     def is_pipeline_test_to_skip(

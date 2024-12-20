@@ -20,7 +20,12 @@ import unittest
 import pytest
 from packaging import version
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, GemmaConfig, is_torch_available
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    GemmaConfig,
+    is_torch_available,
+)
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
     is_flaky,
@@ -37,7 +42,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, RoPETesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -294,7 +299,7 @@ class GemmaModelTester:
 
 
 @require_torch
-class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, RoPETesterMixin, unittest.TestCase):
     all_model_classes = (
         (GemmaModel, GemmaForCausalLM, GemmaForSequenceClassification, GemmaForTokenClassification)
         if is_torch_available()
@@ -313,6 +318,9 @@ class GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     )
     test_headmasking = False
     test_pruning = False
+    # RoPETesterMixin
+    config_type = GemmaConfig
+    model_type = GemmaModel
 
     # Need to remove 0.9 in `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer

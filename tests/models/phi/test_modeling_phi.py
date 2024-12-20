@@ -19,7 +19,7 @@ import unittest
 
 from parameterized import parameterized
 
-from transformers import PhiConfig, is_torch_available, set_seed
+from transformers import PhiConfig, PretrainedConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
     require_torch,
     slow,
@@ -28,7 +28,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, RoPETesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -271,8 +271,17 @@ class PhiModelTester:
         return config, inputs_dict
 
 
+def phi_set_partial_rotary_factor(self, kwargs, val):
+    kwargs["partial_rotary_factor"] = val
+
+
+def phi_get_rotary_ndims(self, config: PretrainedConfig) -> int:
+    head_size = config.hidden_size // config.num_attention_heads
+    return int(head_size * config.partial_rotary_factor)
+
+
 @require_torch
-class PhiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class PhiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, RoPETesterMixin, unittest.TestCase):
     all_model_classes = (
         (PhiModel, PhiForCausalLM, PhiForSequenceClassification, PhiForTokenClassification)
         if is_torch_available()
@@ -292,6 +301,11 @@ class PhiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     test_headmasking = False
     test_pruning = False
+    # RoPETesterMixin
+    config_type = PhiConfig
+    model_type = PhiModel
+    set_partial_rotary_factor = phi_set_partial_rotary_factor
+    get_rotary_ndims = phi_get_rotary_ndims
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79292/workflows/fa2ba644-8953-44a6-8f67-ccd69ca6a476/jobs/1012905
     def is_pipeline_test_to_skip(

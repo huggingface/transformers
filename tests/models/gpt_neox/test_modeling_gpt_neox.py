@@ -18,12 +18,24 @@ import unittest
 
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, DynamicCache, GPTNeoXConfig, is_torch_available, set_seed
+from transformers import (
+    AutoTokenizer,
+    DynamicCache,
+    GPTNeoXConfig,
+    PretrainedConfig,
+    is_torch_available,
+    set_seed,
+)
 from transformers.testing_utils import require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
+from ...test_modeling_common import (
+    ModelTesterMixin,
+    RoPETesterMixin,
+    ids_tensor,
+    random_attention_mask,
+)
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -222,9 +234,9 @@ class GPTNeoXModelTester:
         model.eval()
 
         # We want this for SDPA, eager works with a `None` attention mask
-        assert model.config._attn_implementation == "sdpa", (
-            "This test assumes the model to have the SDPA implementation for its attention calculations."
-        )
+        assert (
+            model.config._attn_implementation == "sdpa"
+        ), "This test assumes the model to have the SDPA implementation for its attention calculations."
 
         # Prepare cache and non_cache input, needs a full attention mask
         cached_len = input_ids.shape[-1] // 2
@@ -261,8 +273,23 @@ class GPTNeoXModelTester:
         return config, inputs_dict
 
 
+def gptneox_set_partial_rotary_factor(self, kwargs, val):
+    kwargs["rotary_pct"] = val
+
+
+def gptneox_get_rotary_ndims(self, config: PretrainedConfig) -> int:
+    head_size = config.hidden_size // config.num_attention_heads
+    return int(head_size * config.rotary_pct)
+
+
 @require_torch
-class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class GPTNeoXModelTest(
+    ModelTesterMixin,
+    GenerationTesterMixin,
+    PipelineTesterMixin,
+    RoPETesterMixin,
+    unittest.TestCase,
+):
     all_model_classes = (
         (
             GPTNeoXModel,
@@ -290,6 +317,11 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     test_missing_keys = False
     test_model_parallel = False
     test_head_masking = False
+    # RoPETesterMixin:
+    config_type = GPTNeoXConfig
+    model_type = GPTNeoXModel
+    set_partial_rotary_factor = gptneox_set_partial_rotary_factor
+    get_rotary_ndims = gptneox_get_rotary_ndims
 
     def setUp(self):
         self.model_tester = GPTNeoXModelTester(self)

@@ -225,7 +225,6 @@ SPECIAL_CASES_TO_ALLOW = {
         "giou_cost",
         "giou_loss_coefficient",
     ],
-    "GPTNeoXConfig": ["rotary_emb_base"],
     "Gemma3Config": ["boi_token_index", "eoi_token_index"],
     "Gemma3TextConfig": ["cache_implementation", "tie_word_embeddings"],
     "ShieldGemma2Config": [
@@ -235,6 +234,14 @@ SPECIAL_CASES_TO_ALLOW = {
         "mm_tokens_per_image",
         "text_config",
         "vision_config",
+    ],
+    "GPTNeoXConfig": [
+        "rotary_emb_base",  # Doubles for rope_theta
+        "rotary_pct",  # Doubles for partial_rotary_factor
+    ],
+    "GPTNeoXJapaneseConfig": [
+        "rotary_emb_base",  # Doubles for rope_theta
+        "rotary_pct",  # Doubles for partial_rotary_factor
     ],
 }
 

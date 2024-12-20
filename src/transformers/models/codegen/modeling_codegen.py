@@ -59,14 +59,18 @@ def create_sinusoidal_positions(num_pos: int, dim: int) -> torch.Tensor:
 def rotate_every_two(x: torch.Tensor) -> torch.Tensor:
     x1 = x[:, :, :, ::2]
     x2 = x[:, :, :, 1::2]
-    x = torch.stack((-x2, x1), dim=-1)
-    return x.flatten(-2)  # in einsum notation: rearrange(x, '... d j -> ... (d j)')
+    return torch.concat((-x2, x1), dim=-1)
 
 
 # Copied from transformers.models.gptj.modeling_gptj.apply_rotary_pos_emb
 def apply_rotary_pos_emb(tensor: torch.Tensor, sin: torch.Tensor, cos: torch.Tensor) -> torch.Tensor:
-    sin = torch.repeat_interleave(sin[:, :, None, :], 2, 3)
-    cos = torch.repeat_interleave(cos[:, :, None, :], 2, 3)
+    sin = torch.repeat_interleave(sin, 2, dim=-1)
+    cos = torch.repeat_interleave(cos, 2, dim=-1)
+    # Happens if `rotary_dim` is odd
+    emb_size = tensor.shape[-1]
+    if cos.shape[-1] > emb_size:
+        cos = cos[..., :emb_size]
+        sin = sin[..., :emb_size]
     return (tensor * cos) + (rotate_every_two(tensor) * sin)
 
 
@@ -98,7 +102,12 @@ class CodeGenAttention(nn.Module):
 
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.rotary_dim = config.rotary_dim
-        pos_embd_dim = self.rotary_dim or self.embed_dim
+        if self.rotary_dim is not None and self.rotary_dim > self.head_dim:
+            raise ValueError(
+                f"config.rotary_dim = {self.rotary_dim}, must be <= {self.head_dim} = config.hidden_size // config.num_attention_heads"
+            )
+        pos_embd_dim = self.rotary_dim or self.head_dim
+        # `embed_positions` of shape `(max_positions, pos_embd_dim)`
         self.embed_positions = create_sinusoidal_positions(max_positions, pos_embd_dim)
 
     def _split_heads(self, x, n_head, dim_head, mp_num):
@@ -106,17 +115,14 @@ class CodeGenAttention(nn.Module):
         reshaped = reshaped.reshape(x.shape[:-2] + (-1,) + reshaped.shape[-1:])
         return reshaped
 
-    def _merge_heads(self, tensor, num_attention_heads, attn_head_size):
+    def _merge_heads(self, tensor: torch.Tensor) -> torch.Tensor:
         """
         Merges attn_head_size dim and num_attn_heads dim into n_ctx
         """
-        if len(tensor.shape) == 5:
-            tensor = tensor.permute(0, 1, 3, 2, 4).contiguous()
-        elif len(tensor.shape) == 4:
-            tensor = tensor.permute(0, 2, 1, 3).contiguous()
-        else:
-            raise ValueError(f"Input tensor rank should be one of [4, 5], but is: {len(tensor.shape)}")
-        new_shape = tensor.size()[:-2] + (num_attention_heads * attn_head_size,)
+        if not (4 <= tensor.dim() <= 5):
+            raise ValueError(f"Input tensor rank should be one of [4, 5], but is: {tensor.dim()}")
+        tensor = tensor.transpose(-2, -3).contiguous()
+        new_shape = tensor.size()[:-2] + (self.num_attention_heads * self.head_dim,)
         return tensor.view(new_shape)
 
     def _attn(
@@ -157,40 +163,51 @@ class CodeGenAttention(nn.Module):
         attention_mask: Optional[torch.FloatTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         head_mask: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = False,
         output_attentions: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Union[
         Tuple[torch.Tensor, Tuple[torch.Tensor]],
         Optional[Tuple[torch.Tensor, Tuple[torch.Tensor], Tuple[torch.Tensor, ...]]],
     ]:
-        qkv = self.qkv_proj(hidden_states)
+        if position_ids is None:
+            raise ValueError("position_ids must be given")
+        if position_ids.dim() == 1:
+            position_ids = position_ids.unsqueeze(0)
+
+        qkv = self.qkv_proj(hidden_states)  # (B, T, 3 * n_head * head_dim)
         # TODO(enijkamp): factor out number of logical TPU-v4 cores or make forward pass agnostic
         mp_num = 4
         qkv_split = qkv.reshape(qkv.shape[:-1] + (mp_num, -1))
 
         local_dim = self.head_dim * self.num_attention_heads // mp_num
         query, value, key = torch.split(qkv_split, local_dim, dim=-1)
+        # Shapes (B, T, mp_num, local_dim), local_dim = n_head * head_dim // mp_num
         query = self._split_heads(query, self.num_attention_heads, self.head_dim, mp_num=mp_num)
         key = self._split_heads(key, self.num_attention_heads, self.head_dim, mp_num=mp_num)
-
         value = self._split_heads(value, self.num_attention_heads, self.head_dim, mp_num=mp_num)
-        value = value.permute(0, 2, 1, 3)
+        value = value.transpose(1, 2)
+        # query, key: (B, T, n_head, head_dim)
+        # value: (B, n_head, T, head_dim)
 
         embed_positions = self.embed_positions
         if embed_positions.device != position_ids.device:
             embed_positions = embed_positions.to(position_ids.device)
             self.embed_positions = embed_positions
 
-        sincos = embed_positions[position_ids]
+        embed_positions = embed_positions.unsqueeze(0).repeat(position_ids.shape[0], 1, 1)
+        repeated_position_ids = position_ids.unsqueeze(-1).repeat(1, 1, embed_positions.shape[-1])
+        sincos = torch.gather(embed_positions, 1, repeated_position_ids)
         sin, cos = torch.split(sincos, sincos.shape[-1] // 2, dim=-1)
+        sin = sin.unsqueeze(2)
+        cos = cos.unsqueeze(2)
+        # cos, sin: (B, T, 1, rotary_dim // 2)
 
         if self.rotary_dim is not None:
-            k_rot = key[:, :, :, : self.rotary_dim]
-            k_pass = key[:, :, :, self.rotary_dim :]
+            k_rot = key[..., : self.rotary_dim]
+            k_pass = key[..., self.rotary_dim :]
 
-            q_rot = query[:, :, :, : self.rotary_dim]
-            q_pass = query[:, :, :, self.rotary_dim :]
+            q_rot = query[..., : self.rotary_dim]
+            q_pass = query[..., self.rotary_dim :]
 
             k_rot = apply_rotary_pos_emb(k_rot, sin, cos)
             q_rot = apply_rotary_pos_emb(q_rot, sin, cos)
@@ -201,8 +218,9 @@ class CodeGenAttention(nn.Module):
             key = apply_rotary_pos_emb(key, sin, cos)
             query = apply_rotary_pos_emb(query, sin, cos)
 
-        key = key.permute(0, 2, 1, 3)
-        query = query.permute(0, 2, 1, 3)
+        key = key.transpose(1, 2)
+        query = query.transpose(1, 2)
+        # query, key, value: (B, n_head, T, head_dim)
 
         # Note that this cast is quite ugly, but is not implemented before ROPE as k_rot in the original codebase is always in fp32.
         # Reference: https://github.com/salesforce/CodeGen/blob/f210c3bb1216c975ad858cd4132c0fdeabf4bfc2/codegen1/jaxformer/hf/codegen/modeling_codegen.py#L38
@@ -218,7 +236,7 @@ class CodeGenAttention(nn.Module):
         # compute self-attention: V x Softmax(QK^T)
         attn_output, attn_weights = self._attn(query, key, value, attention_mask, head_mask)
 
-        attn_output = self._merge_heads(attn_output, self.num_attention_heads, self.head_dim)
+        attn_output = self._merge_heads(attn_output)
         attn_output = self.out_proj(attn_output)
         attn_output = self.resid_dropout(attn_output)
 
@@ -249,9 +267,7 @@ class CodeGenMLP(nn.Module):
         return hidden_states
 
 
-# Copied from transformers.models.gptj.modeling_gptj.GPTJBlock with GPTJ->CodeGen
 class CodeGenBlock(nn.Module):
-    # Ignore copy
     def __init__(self, config, layer_idx=None):
         super().__init__()
         inner_dim = config.n_inner if config.n_inner is not None else 4 * config.n_embd
@@ -278,7 +294,6 @@ class CodeGenBlock(nn.Module):
             attention_mask=attention_mask,
             position_ids=position_ids,
             head_mask=head_mask,
-            use_cache=use_cache,
             output_attentions=output_attentions,
             cache_position=cache_position,
         )

@@ -24,8 +24,9 @@ import re
 import tempfile
 import warnings
 from collections import defaultdict
+from collections.abc import Callable
 from contextlib import contextmanager
-from typing import Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 from packaging import version
@@ -48,6 +49,7 @@ from transformers.integrations.deepspeed import (
     is_deepspeed_zero3_enabled,
     unset_hf_deepspeed_config,
 )
+from transformers.modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from transformers.models.auto import get_values
 from transformers.models.auto.modeling_auto import (
     MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES,
@@ -3235,9 +3237,9 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             model = model_class(config)
             num_params = model.num_parameters()
-            assert num_params < 1000000, (
-                f"{model_class} is too big for the common tests ({num_params})! It should have 1M max."
-            )
+            assert (
+                num_params < 1000000
+            ), f"{model_class} is too big for the common tests ({num_params})! It should have 1M max."
 
     @require_flash_attn
     @require_torch_gpu
@@ -4526,3 +4528,266 @@ def floats_tensor(shape, scale=1.0, rng=None, name=None):
         values.append(rng.random() * scale)
 
     return torch.tensor(data=values, dtype=torch.float, device=torch_device).view(shape).contiguous()
+
+
+def _default_cos_sin_from_model(
+    model: PreTrainedModel,
+    x: Any,
+    position_ids: Any,
+) -> Tuple[Any, Any]:
+    """
+    This default of `RoPETesterMixin.cos_sin_from_model` works for many models.
+    It assumes that the model class has a member `rotary_emb` for a rotary
+    embedding class, whose `forward` returns `cos`, `sin`, given `x` and
+    `position_ids`.
+
+    This works because rotary embeddings can in general be shared across all
+    self-attention blocks of all transformer layers, and `cos`, `sin` can
+    be precomputed. Unfortunately, a number of models don't do this.
+
+    Args:
+        model: Model object
+        x: Argument supplying `dtype`, `device`
+        position_ids: Supplies position indices
+
+    Returns:
+        cos, sin: Tensors used in RoPE
+    """
+    rotary_emb = model.rotary_emb
+    cos, sin = rotary_emb(x, position_ids)
+    return cos, sin
+
+
+def _default_initialize_config_kwargs(
+    vocab_size: int,
+    max_position_embeddings: int,
+    hidden_size: int,
+    num_hidden_layers: int,
+    num_attention_heads: int,
+    intermediate_size: int,
+) -> Dict[str, Any]:
+    """
+    Default for `RoPETesterMixin.initialize_config_kwargs`.
+
+    Args:
+        vocab_size: Number of tokens in vocabulary
+        max_position_embeddings: Maximum sequence lenght supported
+        hidden_size: Size of embedding vectors per token
+        num_hidden_layers: Number of transformer layers
+        num_attention_heads: Number of attention heads. hidden_size must be
+            a multiple of this
+        intermediate_size: Hidden layer size of MLP block in transformer
+
+    Returns:
+        kwargs to create config object from
+    """
+    return {
+        "vocab_size": vocab_size,
+        "max_position_embeddings": max_position_embeddings,
+        "hidden_size": hidden_size,
+        "num_hidden_layers": num_hidden_layers,
+        "num_attention_heads": num_attention_heads,
+        "intermediate_size": intermediate_size,
+    }
+
+
+@require_torch
+class RoPETesterMixin:
+    """
+    Provides tests for rotary positional embedding (RoPE), as supported in
+    some models.
+
+    - `model_type`: `PreTrainedModel` child class to be tested
+    - `config_type`: Configuration class for the model
+    - `initialize_config_kwargs`: Function
+       `initialize_config_kwargs(vocab_size, max_position_embeddings,
+       hidden_size, num_hidden_layers, num_attention_heads, intermediate_size)`
+       returns parameters with which `config` object is created. See
+       :func:`_default_initialize_config_kwargs` for the default.
+    - `set_partial_rotary_factor`: Some models implement partial RoPE, where
+      embeddings are applied to an initial fraction along the sequence dimension
+      only. If so, this function `set_partial_rotary_factor(kwargs, val)` sets
+      parameters in `kwargs` (used to create `config`) so that this fraction
+      has value `val`. If not given, RoPE is applied along the full length
+    - `get_rotary_ndims`: Coupled with `set_partial_rotary_factor`. Returns the
+      size of the initial fraction RoPE embeddings are applied to.
+    - `supported_rope_types`: Some models do not support all RoPE embedding types
+      in :const:`ROPE_INIT_FUNCTIONS`. If so, list the supported ones here
+    - `cos_sin_from_model`: RoPE embeddings are defined by `cos`, `sin` tensors.
+      This argument is a function which returns these. Inputs are the model and
+      two tensors `x`, `position_ids`. The first is only used for `x.dtype`,
+      `x.device`, in that `cos`. The second provides position indices of the
+      input sequence(s), can be batched
+    - `transform_rope_scaling`: By default, `config.rope_scaling` is built by
+      :meth:`_get_rope_scaling` below. But some models need modifications
+    - `input_to_model_forward`: By default, a transformer model takes token
+      indices `input_ids` as input directly, but some do not
+    """
+
+    config_type: type[PretrainedConfig] = None
+    model_type: type[PreTrainedModel] = None
+    initialize_config_kwargs: Callable[[int, int, int, int, int, int], Dict[str, Any]] = None
+    set_partial_rotary_factor: Optional[Callable[[Dict[str, Any], float], None]] = None
+    get_rotary_ndims: Callable[[PretrainedConfig], int] = None
+    supported_rope_types: Tuple[str] = None
+    cos_sin_from_model: Callable[[PreTrainedModel, Any, Any], Tuple[Any, Any]] = None
+    transform_rope_scaling: Callable[[Dict[str, Any], PretrainedConfig], Dict[str, Any]] = None
+    input_to_model_forward: Callable[[Any, PretrainedConfig], Any] = None
+
+    def _check_parameters(self):
+        if self.config_type is None:
+            raise ValueError("config_type must be set for RoPETesterMixin")
+        if self.model_type is None:
+            raise ValueError("model_type must be set for RoPETesterMixin")
+        if self.supported_rope_types is None:
+            self.supported_rope_types = tuple(ROPE_INIT_FUNCTIONS.keys())
+        if self.cos_sin_from_model is None:
+            self.cos_sin_from_model = _default_cos_sin_from_model
+        if self.get_rotary_ndims is None:
+            if self.set_partial_rotary_factor is not None:
+                raise ValueError("get_rotary_ndims must be given if set_partial_rotary_factor is given")
+            # Works only if the corresponding fields are called `hidden_size` and
+            # `num_attention_heads`
+            self.get_rotary_ndims = lambda config: config.hidden_size // config.num_attention_heads
+        if self.initialize_config_kwargs is None:
+            self.initialize_config_kwargs = _default_initialize_config_kwargs
+        if self.transform_rope_scaling is None:
+            self.transform_rope_scaling = lambda kwargs, config: kwargs
+        if self.input_to_model_forward is None:
+            self.input_to_model_forward = lambda input_ids, config: input_ids
+
+    def _get_rope_scaling(self, rope_type: str, config: PretrainedConfig) -> Dict[str, Any]:
+        result = {
+            "type": rope_type,
+            "rope_type": rope_type,
+            "factor": 1.5,
+        }
+        if rope_type in ("dynamic", "logrope", "llama3") and hasattr(config, "max_position_embeddings"):
+            result["original_max_position_embeddings"] = config.max_position_embeddings // 2
+        if rope_type == "llama3":
+            result["low_freq_factor"] = 0.5
+            result["high_freq_factor"] = 1.0
+        elif rope_type == "longrope":
+            rotary_ndims = self.get_rotary_ndims(config)
+            factor_size = math.ceil(rotary_ndims / 2)
+            factors = [1.0] * factor_size
+            result["short_factor"] = factors
+            result["long_factor"] = factors
+        return self.transform_rope_scaling(result, config)
+
+    @staticmethod
+    def _update_config(config: PretrainedConfig):
+        if hasattr(config, "head_dim"):
+            try:
+                config.head_dim = config.hidden_size // config.num_attention_heads
+            except AttributeError:
+                pass
+        if hasattr(config, "num_key_value_heads") and hasattr(config, "num_attention_heads"):
+            config.num_key_value_heads = config.num_attention_heads
+
+    def test_rope_forward_if_rotary_ndims_odd(self):
+        # rotary_ndims = int(head_size * partial_rotary_factor) is the slice of the Q, K
+        # tensors on which RoPE embeddings are applied to. This can be odd,
+        # and forward should work then.
+        max_position_embeddings = 16
+        vocab_size = 16
+        self._check_parameters()
+        if self.set_partial_rotary_factor is not None:
+            # rotary_ndims odd due to partial_rotary_factor
+            kwargs = self.initialize_config_kwargs(
+                vocab_size,
+                max_position_embeddings,
+                16,  # hidden_size
+                2,  # num_hidden_layers
+                4,  # num_attention_heads
+                48,  # intermediate_size
+            )
+            self.set_partial_rotary_factor(kwargs, 0.75)
+            # head_size = hidden_size // num_attention_heads = 4
+            # rotary_ndims = int(head_size * rotary_pct) = 3
+            _config = self.config_type(**kwargs)
+            for rope_type in self.supported_rope_types:
+                config = self.config_type(rope_scaling=self._get_rope_scaling(rope_type, _config), **kwargs)
+                self._update_config(config)
+                model = self.model_type(config)
+                input_ids = torch.randint(0, vocab_size, (1, max_position_embeddings))
+                input_ids = self.input_to_model_forward(input_ids, config)
+                logits = model(input_ids).last_hidden_state
+                print(f"logits.shape = {logits.shape}")
+        # rotary_ndims == head_size is odd
+        kwargs = self.initialize_config_kwargs(
+            vocab_size,
+            max_position_embeddings,
+            20,  # hidden_size
+            2,  # num_hidden_layers
+            4,  # num_attention_heads
+            48,  # intermediate_size
+        )
+        if self.set_partial_rotary_factor is not None:
+            self.set_partial_rotary_factor(kwargs, 1.0)
+        # head_size = hidden_size // num_attention_heads = 5
+        _config = self.config_type(**kwargs)
+        for rope_type in self.supported_rope_types:
+            config = self.config_type(rope_scaling=self._get_rope_scaling(rope_type, _config), **kwargs)
+            self._update_config(config)
+            model = self.model_type(config)
+            input_ids = torch.randint(0, vocab_size, (1, max_position_embeddings))
+            input_ids = self.input_to_model_forward(input_ids, config)
+            logits = model(input_ids).last_hidden_state
+            print(f"logits.shape = {logits.shape}")
+
+    def test_rope_params_shape_if_rotary_ndims_odd(self) -> Dict[str, Any]:
+        # rotary_ndims = int(head_size * partial_rotary_factor) is the slice of the Q, K
+        # tensors on which RoPE embeddings are applied to. This can be odd,
+        # in which case the shape of RoPE `cos`, `sin` parameters must match
+        # the Q, K shapes.
+        self._check_parameters()
+        max_position_embeddings = 16
+        seq_len = 12
+        batch_size = 3
+        vocab_size = 16
+        x = torch.randn((1,))
+        position_ids = torch.randint(0, max_position_embeddings, (batch_size, seq_len))
+        if self.set_partial_rotary_factor is not None:
+            # rotary_ndims odd due to partial_rotary_factor
+            for partial_rotary_factor in (0.25, 0.5, 0.75, 1.0):
+                kwargs = self.initialize_config_kwargs(
+                    vocab_size,
+                    max_position_embeddings,
+                    16,  # hidden_size
+                    2,  # num_hidden_layers
+                    4,  # num_attention_heads
+                    48,  # intermediate_size
+                )
+                self.set_partial_rotary_factor(kwargs, partial_rotary_factor)
+                _config = self.config_type(**kwargs)
+                for rope_type in self.supported_rope_types:
+                    config = self.config_type(rope_scaling=self._get_rope_scaling(rope_type, _config), **kwargs)
+                    self._update_config(config)
+                    rotary_ndims = self.get_rotary_ndims(config)
+                    model = self.model_type(config)
+                    cos, sin = self.cos_sin_from_model(model, x, position_ids)
+                    required_shape = (batch_size, seq_len, rotary_ndims)
+                    self.assertEqual(cos.shape, required_shape)
+                    self.assertEqual(sin.shape, required_shape)
+        # rotary_ndims == head_size is odd
+        kwargs = self.initialize_config_kwargs(
+            vocab_size,
+            max_position_embeddings,
+            20,  # hidden_size
+            2,  # num_hidden_layers
+            4,  # num_attention_heads
+            48,  # intermediate_size
+        )
+        if self.set_partial_rotary_factor is not None:
+            self.set_partial_rotary_factor(kwargs, 1.0)
+        _config = self.config_type(**kwargs)
+        for rope_type in self.supported_rope_types:
+            config = self.config_type(rope_scaling=self._get_rope_scaling(rope_type, _config), **kwargs)
+            self._update_config(config)
+            head_size = self.get_rotary_ndims(config)
+            model = self.model_type(config)
+            cos, sin = self.cos_sin_from_model(model, x, position_ids)
+            required_shape = (batch_size, seq_len, head_size)
+            self.assertEqual(cos.shape, required_shape)
+            self.assertEqual(sin.shape, required_shape)

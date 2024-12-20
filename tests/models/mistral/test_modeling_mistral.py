@@ -20,7 +20,12 @@ import unittest
 import pytest
 from packaging import version
 
-from transformers import AutoTokenizer, MistralConfig, is_torch_available, set_seed
+from transformers import (
+    AutoTokenizer,
+    MistralConfig,
+    is_torch_available,
+    set_seed,
+)
 from transformers.testing_utils import (
     backend_empty_cache,
     cleanup,
@@ -37,7 +42,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, RoPETesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -289,7 +294,9 @@ class MistralModelTester:
 
 
 @require_torch
-class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class MistralModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, RoPETesterMixin, unittest.TestCase
+):
     all_model_classes = (
         (
             MistralModel,
@@ -316,6 +323,9 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     test_headmasking = False
     test_pruning = False
     fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
+    # RoPETesterMixin
+    config_type = MistralConfig
+    model_type = MistralModel
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(

@@ -15,10 +15,20 @@
 """Testing suite for the PyTorch RecurrentGemma model."""
 
 import unittest
+from typing import Any, Dict, Tuple
 
 import pytest
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, RecurrentGemmaConfig, is_torch_available, set_seed
+from transformers import (
+    AutoModelForCausalLM,
+    AutoTokenizer,
+    PretrainedConfig,
+    PreTrainedModel,
+    RecurrentGemmaConfig,
+    is_torch_available,
+    set_seed,
+)
+from transformers.models.recurrent_gemma.modeling_recurrent_gemma import RecurrentGemmaSdpaAttention
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_read_token,
@@ -29,7 +39,7 @@ from transformers.testing_utils import (
 )
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, RoPETesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -281,8 +291,52 @@ class RecurrentGemmaModelTester:
         return config, inputs_dict
 
 
+def rgemma_initialize_config_kwargs(
+    self,
+    vocab_size: int,
+    max_position_embeddings: int,
+    hidden_size: int,
+    num_hidden_layers: int,
+    num_attention_heads: int,
+    intermediate_size: int,
+) -> Dict[str, Any]:
+    return {
+        "vocab_size": vocab_size,
+        "max_position_embeddings": max_position_embeddings,
+        "hidden_size": hidden_size,
+        "num_hidden_layers": num_hidden_layers,
+        "num_attention_heads": num_attention_heads,
+        "intermediate_size": intermediate_size,
+        "block_types": ("recurrent", "attention"),
+    }
+
+
+def rgemma_set_partial_rotary_factor(self, kwargs, val):
+    kwargs["partial_rotary_factor"] = val
+
+
+def rgemma_get_rotary_ndims(self, config: PretrainedConfig) -> int:
+    head_size = config.hidden_size // config.num_attention_heads
+    return int(head_size * config.partial_rotary_factor)
+
+
+def rgemma_cos_sin_from_model(
+    self,
+    model: PreTrainedModel,
+    x: Any,
+    position_ids: Any,
+) -> Tuple[Any, Any]:
+    attn = None
+    for layer in model.layers:
+        attn = layer.temporal_block
+        if isinstance(attn, RecurrentGemmaSdpaAttention):
+            break
+    cos, sin = attn.rotary_emb(x, position_ids)
+    return cos, sin
+
+
 @require_torch
-class RecurrentGemmaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class RecurrentGemmaModelTest(ModelTesterMixin, PipelineTesterMixin, RoPETesterMixin, unittest.TestCase):
     all_model_classes = (RecurrentGemmaForCausalLM,) if is_torch_available() else ()
     # Doesn't run generation tests. TODO @gante not fully supported
     all_generative_model_classes = ()
@@ -300,6 +354,13 @@ class RecurrentGemmaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
     test_model_parallel = False
     test_pruning = False
     test_head_masking = False  # RecurrentGemma does not have attention heads
+    # RoPETesterMixin:
+    config_type = RecurrentGemmaConfig
+    model_type = RecurrentGemmaModel
+    initialize_config_kwargs = rgemma_initialize_config_kwargs
+    set_partial_rotary_factor = rgemma_set_partial_rotary_factor
+    get_rotary_ndims = rgemma_get_rotary_ndims
+    cos_sin_from_model = rgemma_cos_sin_from_model
 
     # Need to remove 0.9 in `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer

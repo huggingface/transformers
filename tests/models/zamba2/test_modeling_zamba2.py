@@ -17,11 +17,12 @@
 import math
 import tempfile
 import unittest
+from typing import Any, Dict
 
 import pytest
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, Zamba2Config, is_torch_available
+from transformers import AutoTokenizer, PretrainedConfig, Zamba2Config, is_torch_available
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
@@ -33,7 +34,13 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor, random_attention_mask
+from ...test_modeling_common import (
+    ModelTesterMixin,
+    RoPETesterMixin,
+    _config_zero_init,
+    ids_tensor,
+    random_attention_mask,
+)
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -290,8 +297,36 @@ class Zamba2ModelTester:
         return config, inputs_dict
 
 
+def zamba2_initialize_config_kwargs(
+    self,
+    vocab_size: int,
+    max_position_embeddings: int,
+    hidden_size: int,
+    num_hidden_layers: int,
+    num_attention_heads: int,
+    intermediate_size: int,
+) -> Dict[str, Any]:
+    return {
+        "vocab_size": vocab_size,
+        "max_position_embeddings": max_position_embeddings,
+        "hidden_size": hidden_size,
+        "num_hidden_layers": num_hidden_layers,
+        "num_attention_heads": num_attention_heads,
+        "intermediate_size": intermediate_size,
+        "layers_block_type": ["mamba"] * num_hidden_layers,
+        "use_mem_rope": True,
+        "use_cache": False,
+    }
+
+
+def zamba2_get_rotary_ndims(self, config: PretrainedConfig) -> int:
+    return config.attention_head_dim
+
+
 @require_torch
-class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class Zamba2ModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, RoPETesterMixin, unittest.TestCase
+):
     test_torchscript = False
     all_model_classes = (
         (
@@ -314,6 +349,12 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     )
     test_headmasking = False
     test_pruning = False
+    # RoPETesterMixin
+    config_type = Zamba2Config
+    model_type = Zamba2Model
+    get_rotary_ndims = zamba2_get_rotary_ndims
+    initialize_config_kwargs = zamba2_initialize_config_kwargs
+    supported_rope_types = ["default"]
 
     def setUp(self):
         self.model_tester = Zamba2ModelTester(self)

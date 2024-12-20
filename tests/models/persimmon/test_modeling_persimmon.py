@@ -32,7 +32,7 @@ from transformers.testing_utils import (
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, RoPETesterMixin, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -45,6 +45,7 @@ if is_torch_available():
         PersimmonForSequenceClassification,
         PersimmonForTokenClassification,
         PersimmonModel,
+        PretrainedConfig,
     )
     from transformers.models.persimmon.modeling_persimmon import PersimmonRotaryEmbedding
 
@@ -276,8 +277,19 @@ class PersimmonModelTester:
         return config, inputs_dict
 
 
+def persimmon_set_partial_rotary_factor(self, kwargs, val):
+    kwargs["partial_rotary_factor"] = val
+
+
+def persimmon_get_rotary_ndims(self, config: PretrainedConfig) -> int:
+    head_size = config.hidden_size // config.num_attention_heads
+    return int(head_size * config.partial_rotary_factor)
+
+
 @require_torch
-class PersimmonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class PersimmonModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, RoPETesterMixin, unittest.TestCase
+):
     all_model_classes = (
         (PersimmonModel, PersimmonForCausalLM, PersimmonForSequenceClassification, PersimmonForTokenClassification)
         if is_torch_available()
@@ -298,6 +310,11 @@ class PersimmonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     test_headmasking = False
     test_pruning = False
+    # RoPETesterMixin
+    config_type = PersimmonConfig
+    model_type = PersimmonModel
+    set_partial_rotary_factor = persimmon_set_partial_rotary_factor
+    get_rotary_ndims = persimmon_get_rotary_ndims
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.setUp with Llama->Persimmon
     def setUp(self):
