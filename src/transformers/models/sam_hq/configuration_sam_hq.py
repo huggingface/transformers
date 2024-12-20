@@ -230,6 +230,51 @@ class SamHQMaskDecoderConfig(PretrainedConfig):
 
 # Copied from transformer.models.sam.configuration_sam.SamConfig with Sam->SamHQ
 class SamHQConfig(PretrainedConfig):
+    r"""
+    [`SamHQConfig`] is the configuration class to store the configuration of a [`SamHQModel`]. It is used to instantiate a
+    SAM-HQ model according to the specified arguments, defining the vision model, prompt-encoder model and mask decoder
+    configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the
+    SAM-HQ-ViT-H [sushmanth/sam_hq_vit_h](https://huggingface.co/sushmanth/sam_hq_vit_h) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        vision_config (Union[`dict`, `SamHQVisionConfig`], *optional*):
+            Dictionary of configuration options used to initialize [`SamHQVisionConfig`].
+        prompt_encoder_config (Union[`dict`, `SamHQPromptEncoderConfig`], *optional*):
+            Dictionary of configuration options used to initialize [`SamHQPromptEncoderConfig`].
+        mask_decoder_config (Union[`dict`, `SamHQMaskDecoderConfig`], *optional*):
+            Dictionary of configuration options used to initialize [`SamHQMaskDecoderConfig`].
+        kwargs (*optional*):
+            Dictionary of keyword arguments.
+
+    Example:
+    ```python
+    >>> from transformers import (
+    ...     SamHQVisionConfig,
+    ...     SamHQPromptEncoderConfig,
+    ...     SamHQMaskDecoderConfig,
+    ...     SamHQModel,
+    ... )
+
+    >>> # Initializing a SamHQConfig with `"sushmanth/sam_hq_vit_h"` style configuration
+    >>> configuration = SamHQConfig()
+
+    >>> # Initializing a SamHQModel (with random weights) from the `"sushmanth/sam_hq_vit_h"` style configuration
+    >>> model = SamHQModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+
+    >>> # We can also initialize a SamHQConfig from a SamHQVisionConfig, SamHQPromptEncoderConfig, and SamHQMaskDecoderConfig
+    >>> # Initializing SAM-HQ vision, prompt encoder and mask decoder configurations
+    >>> vision_config = SamHQVisionConfig()
+    >>> prompt_encoder_config = SamHQPromptEncoderConfig()
+    >>> mask_decoder_config = SamHQMaskDecoderConfig()
+    >>> config = SamHQConfig(vision_config, prompt_encoder_config, mask_decoder_config)
+    ```"""
+
     model_type = "sam-hq"
 
     def __init__(
@@ -237,7 +282,7 @@ class SamHQConfig(PretrainedConfig):
         vision_config=None,
         prompt_encoder_config=None,
         mask_decoder_config=None,
-        intializer_range=0.02,
+        initializer_range=0.02,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -255,4 +300,4 @@ class SamHQConfig(PretrainedConfig):
         self.vision_config = SamHQVisionConfig(**vision_config)
         self.prompt_encoder_config = SamHQPromptEncoderConfig(**prompt_encoder_config)
         self.mask_decoder_config = SamHQMaskDecoderConfig(**mask_decoder_config)
-        self.intializer_range = intializer_range
+        self.initializer_range = initializer_range
