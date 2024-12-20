@@ -428,7 +428,7 @@ class Kosmos2Processor(ProcessorMixin):
             return clean_text_and_extract_entities_with_bboxes(caption)
         return caption
 
-    def post_process_image_text_to_text(self, generated_outputs):
+    def post_process_image_text_to_text(self, generated_outputs, **kwargs):
         """
         Post-process the output of the model to decode the text.
 
@@ -440,7 +440,8 @@ class Kosmos2Processor(ProcessorMixin):
         Returns:
             `List[str]`: The decoded text.
         """
-        generated_texts = self.batch_decode(generated_outputs, skip_special_tokens=True)
+        skip_special_tokens = kwargs.pop("skip_special_tokens", True)
+        generated_texts = self.batch_decode(generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs)
         return [self.post_process_generation(text, cleanup_and_extract=False) for text in generated_texts]
 
     @property
