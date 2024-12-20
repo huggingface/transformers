@@ -168,6 +168,7 @@ from . import (
     mobilevit,
     mobilevitv2,
     modernbert,
+    moonshine,
     moshi,
     mpnet,
     mpt,
