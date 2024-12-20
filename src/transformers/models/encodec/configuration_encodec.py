@@ -201,8 +201,6 @@ class EncodecDiscriminatorConfig(PretrainedConfig):
     Configuration class for EncodecDiscriminator.
 
     Args:
-        model_type (`str`, *optional*, defaults to `"encodec_discriminator"`):
-            The model type.
         filters (`int`, *optional*, defaults to 32):
             The number of filters in the initial convolutional layer.
         in_channels (`int`, *optional*, defaults to 1):
@@ -233,17 +231,10 @@ class EncodecDiscriminatorConfig(PretrainedConfig):
             Activation function to use.
         activation_params (`Dict`, *optional*, defaults to `<factory>`):
             Parameters for the activation function.
-        output_hidden_states (`bool`, *optional*, defaults to `False`):
-            Whether to return the hidden states of each discriminator layer.
-        output_attentions (`bool`, *optional*, defaults to `False`):
-            Whether to return the attentions tensors of all attention layers.
         return_dict (`bool`, *optional*, defaults to `False`):
             Whether to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        torchscript (`bool`, *optional*, defaults to `False`):
-            Whether the model is used with torchscript.
     """
 
-    model_type: str = "encodec_discriminator"
     filters: int = 32
     in_channels: int = 1
     out_channels: int = 1
@@ -259,7 +250,4 @@ class EncodecDiscriminatorConfig(PretrainedConfig):
     norm: str = "weight_norm"
     activation: str = "LeakyReLU"
     activation_params: dict = field(default_factory=lambda: {"negative_slope": 0.2})
-    output_hidden_states: bool = False
-    output_attentions: bool = False
     return_dict: bool = False
-    torchscript: bool = False
