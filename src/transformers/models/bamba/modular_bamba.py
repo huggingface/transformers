@@ -687,7 +687,7 @@ class BambaRMSNorm(LlamaRMSNorm):
 
 class BambaDecoderLayer(JambaAttentionDecoderLayer):
     def __init__(self, config: BambaConfig, layer_idx: int, layer_type: str = "mamba"):
-        super().__init__()
+        super().__init__(config=config, layer_idx=layer_idx)
 
         del self.self_attn
 
