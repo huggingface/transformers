@@ -90,8 +90,8 @@ class DPTImageProcessingTester(unittest.TestCase):
         )
 
 
+# Copied from transformers.tests.models.beit.test_image_processing_beit.prepare_semantic_single_inputs
 def prepare_semantic_single_inputs():
-    # Copied from transformers.tests.models.beit.test_image_processing_beit
     dataset = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
 
     image = Image.open(dataset[0]["file"])
@@ -100,8 +100,8 @@ def prepare_semantic_single_inputs():
     return image, map
 
 
+# Copied from transformers.tests.models.beit.test_image_processing_beit.prepare_semantic_batch_inputs
 def prepare_semantic_batch_inputs():
-    # Copied from transformers.tests.models.beit.test_image_processing_beit
     ds = load_dataset("hf-internal-testing/fixtures_ade20k", split="test", trust_remote_code=True)
 
     image1 = Image.open(ds[0]["file"])
@@ -171,8 +171,8 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         self.assertEqual(list(pixel_values.shape), [1, 3, 512, 672])
 
+    # Copied from transformers.tests.models.beit.test_image_processing_beit.BeitImageProcessingTest.test_call_segmentation_maps
     def test_call_segmentation_maps(self):
-        # Copied from transformers.tests.models.beit.test_image_processing_beit
         # Initialize image_processor
         image_processor = self.image_processing_class(**self.image_processor_dict)
         # create random PyTorch tensors
@@ -278,8 +278,8 @@ class DPTImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertTrue(encoding["labels"].min().item() >= 0)
         self.assertTrue(encoding["labels"].max().item() <= 255)
 
+    # Copied from transformers.tests.models.beit.test_image_processing_beit.BeitImageProcessingTest.test_reduce_labels
     def test_reduce_labels(self):
-        # Copied from transformers.tests.models.beit.test_image_processing_beit
         # Initialize image_processor
         image_processor = self.image_processing_class(**self.image_processor_dict)
 
