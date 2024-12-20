@@ -271,7 +271,6 @@ Load an audio file for inference. Remember to resample the sampling rate of the 
 >>> audio_file = dataset[0]["audio"]["path"]
 ```
 
-audio-classification
 The simplest way to try out your fine-tuned model for inference is to use it in a [`pipeline`]. Instantiate a `pipeline` for audio classification with your model, and pass your audio file to it:
 
 ```py
