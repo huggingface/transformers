@@ -821,21 +821,14 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
             raise ValueError("Input must be a 5D tensor of shape (batch_size, 2, num_channels, height, width)")
 
         batch_size, _, channels, height, width = pixel_values.shape
+        pixel_values = pixel_values.reshape(batch_size * 2, channels, height, width)
+        keypoint_detections = self.keypoint_detector(pixel_values)
 
-        list_keypoint_detection = [self.keypoint_detector(image_pair) for image_pair in pixel_values]
-
-        max_keypoints = max([keypoint_detection[0].shape[1] for keypoint_detection in list_keypoint_detection])
-        keypoints = torch.zeros((batch_size, 2, max_keypoints, 2), device=pixel_values.device)
-        scores = torch.zeros((batch_size, 2, max_keypoints), device=pixel_values.device)
-        descriptors = torch.zeros((batch_size, 2, max_keypoints, self.config.hidden_size), device=pixel_values.device)
-        mask = torch.zeros((batch_size, 2, max_keypoints), device=pixel_values.device, dtype=torch.int)
-
-        for i, keypoint_detection_output in enumerate(list_keypoint_detection):
-            _keypoints, _scores, _descriptors, _mask = keypoint_detection_output[:4]
-            keypoints[i, :, : _keypoints.shape[1], :] = _keypoints
-            scores[i, :, : _scores.shape[1]] = _scores
-            descriptors[i, :, : _descriptors.shape[1], :] = _descriptors
-            mask[i, :, : _mask.shape[1]] = _mask
+        keypoints, scores, descriptors, mask = keypoint_detections[:4]
+        keypoints = keypoints.reshape(batch_size, 2, -1, 2).to(pixel_values)
+        scores = scores.reshape(batch_size, 2, -1).to(pixel_values)
+        descriptors = descriptors.reshape(batch_size, 2, -1, self.config.hidden_size).to(pixel_values)
+        mask = mask.reshape(batch_size, 2, -1)
 
         absolute_keypoints = keypoints.clone()
         absolute_keypoints[:, :, :, 0] = absolute_keypoints[:, :, :, 0] * width
