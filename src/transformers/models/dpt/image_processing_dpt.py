@@ -282,8 +282,8 @@ class DPTImageProcessor(BaseImageProcessor):
 
         return pad(image, ((pad_size_left, pad_size_right), (pad_size_top, pad_size_bottom)), data_format=data_format)
 
+    # Copied from transformers.models.beit.image_processing_beit.BeitImageProcessor.reduce_label
     def reduce_label(self, label: ImageInput) -> np.ndarray:
-        # Copied from transformers.models.beit.image_processing_beit
         label = to_numpy_array(label)
         # Avoid using underflow conversion
         label[label == 0] = 255
@@ -309,8 +309,6 @@ class DPTImageProcessor(BaseImageProcessor):
         size_divisor: int = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
-        # Adapted from transformers.models.beit.image_processing_beit
-
         if do_reduce_labels:
             image = self.reduce_label(image)
 
@@ -354,7 +352,6 @@ class DPTImageProcessor(BaseImageProcessor):
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.ndarray:
         """Preprocesses a single image."""
-        # Adapted from transformers.models.beit.image_processing_beit
         # All transformations expect numpy arrays.
         image = to_numpy_array(image)
         if is_scaled_image(image) and do_rescale:
@@ -399,7 +396,6 @@ class DPTImageProcessor(BaseImageProcessor):
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ):
         """Preprocesses a single segmentation map."""
-        # Adapted from transformers.models.beit.image_processing_beit
         # All transformations expect numpy arrays.
         segmentation_map = to_numpy_array(segmentation_map)
         # Add an axis to the segmentation maps for transformations.
@@ -429,8 +425,8 @@ class DPTImageProcessor(BaseImageProcessor):
         segmentation_map = segmentation_map.astype(np.int64)
         return segmentation_map
 
+    # Copied from transformers.models.beit.image_processing_beit.BeitImageProcessor.__call__
     def __call__(self, images, segmentation_maps=None, **kwargs):
-        # Copied from transformers.models.beit.image_processing_beit
         # Overrides the `__call__` method of the `Preprocessor` class such that the images and segmentation maps can both
         # be passed in as positional arguments.
         return super().__call__(images, segmentation_maps=segmentation_maps, **kwargs)
