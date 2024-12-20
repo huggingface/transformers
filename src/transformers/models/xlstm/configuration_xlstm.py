@@ -212,14 +212,14 @@ class xLSTMConfig(PretrainedConfig):
     def qk_dim(self):
         return round_up_to_next_multiple_of(
             self.embedding_dim * self.qk_dim_factor,
-            multiple_of=self.mlstm_round_up_to_multiple_of,
+            multiple_of=64,
         )
 
     @property
     def v_dim(self):
         return round_up_to_next_multiple_of(
             self.embedding_dim * self.v_dim_factor,
-            multiple_of=self.mlstm_round_up_to_multiple_of,
+            multiple_of=64,
         )
 
     @property
