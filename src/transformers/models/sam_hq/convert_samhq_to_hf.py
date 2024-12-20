@@ -13,7 +13,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Convert SAM-HQ checkpoints from the original repository."""
+"""
+Convert SAM-HQ checkpoints from the original repository.
+
+URL: https://github.com/SysCV/sam-hq
+
+"""
 
 import argparse
 import re
@@ -24,12 +29,7 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import SamHQConfig, SamHQModel, SamHQVisionConfig, SamHQProcessor
-
-
-from transformers import SamImageProcessor
-
-
+from transformers import SamHQConfig, SamHQModel, SamHQVisionConfig, SamHQProcessor, SamImageProcessor
 
 
 def get_config(model_name):
