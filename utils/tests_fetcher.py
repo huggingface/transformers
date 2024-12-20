@@ -1229,6 +1229,6 @@ if __name__ == "__main__":
             diff_with_last_commit = True
 
         infer_tests_to_run(
-            args.output_file, diff_with_last_commit=diff_with_last_commit, filter_models=False, test_all=args.fetch_all
+            args.output_file, diff_with_last_commit=diff_with_last_commit, filter_models=False, test_all=commit_flags["test_all"]
         )
         filter_tests(args.output_file, ["repo_utils"])
