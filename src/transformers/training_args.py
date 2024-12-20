@@ -2047,8 +2047,7 @@ class TrainingArguments:
             self.dataloader_pin_memory = False
 
         if (
-            not is_torch_available()
-            and self.dataloader_num_workers == 0
+            self.dataloader_num_workers == 0
             and self.dataloader_prefetch_factor is not None
         ):
             raise ValueError(
