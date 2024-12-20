@@ -29,6 +29,21 @@ def flash_attention_forward(
     key = key.transpose(1, 2)
     value = value.transpose(1, 2)
 
+    # In PEFT, usually we cast the layer norms in float32 for training stability reasons
+    # therefore the input hidden states gets silently casted in float32. Hence, we need
+    # cast them back in the correct dtype just to be sure everything works as expected.
+    # This might slowdown training & inference so it is recommended to not cast the LayerNorms
+    # in fp32. (usually our RMSNorm modules handle it correctly)
+    target_dtype = None
+    if query.dtype == torch.float32:
+        if torch.is_autocast_enabled():
+            target_dtype = torch.get_autocast_gpu_dtype()
+        # Handle the case where the model is quantized
+        elif hasattr(module.config, "_pre_quantization_dtype"):
+            target_dtype = module.config._pre_quantization_dtype
+        else:
+            target_dtype = next(layer for layer in module.modules() if isinstance(layer, torch.nn.Linear)).weight.dtype
+
     attn_output = _flash_attention_forward(
         query,
         key,
@@ -41,6 +56,7 @@ def flash_attention_forward(
         sliding_window=sliding_window,
         softcap=softcap,
         use_top_left_mask=_use_top_left_mask,
+        target_dtype=target_dtype,
         **kwargs,
     )
 

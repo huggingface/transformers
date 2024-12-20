@@ -1473,7 +1473,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     ' We recommend to just use `attn_implementation="flash_attention_2"` when loading the model.'
                 )
 
-            if not isinstance(config._attn_implementation, dict) and config._attn_implementation not in ["eager"] + list(ALL_ATTENTION_FUNCTIONS.keys()):
+            if not isinstance(config._attn_implementation, dict) and config._attn_implementation not in [
+                "eager"
+            ] + list(ALL_ATTENTION_FUNCTIONS.keys()):
                 message = f'Specified `attn_implementation="{config._attn_implementation}"` is not supported. The only possible arguments are `attn_implementation="eager"` (manual attention implementation)'
                 if cls._supports_flash_attn_2:
                     message += ', `"attn_implementation=flash_attention_2"` (implementation using flash attention 2)'
