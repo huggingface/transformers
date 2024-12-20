@@ -222,7 +222,7 @@ def convert_mistral_model(input_dir, output_dir):
             param_json[v] = value
         if "hidden_act" not in vision_config:
             vision_config["hidden_act"] = "silu"
-        text_config = MistralConfig(**param_json, hidden_act="silu", sliding_window=None,tie_word_embeddings=False, is_composition=True)
+        text_config = MistralConfig(**param_json, hidden_act="silu", sliding_window=None,tie_word_embeddings=False, is_composition=True, rms_norm_eps=1e-5)
     else:
         text_config = MistralConfig(
             attention_dropout=0.0,
