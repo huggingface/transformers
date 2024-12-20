@@ -1019,7 +1019,7 @@ def infer_tests_to_run(
     if not test_all:
         modified_files = get_modified_python_files(diff_with_last_commit=diff_with_last_commit)
     else:
-        modified_files = [ str(k) for k in PATH_TO_TESTS.glob("*/*") if str(k).endswith(".py") and "test_" in str(k)]
+        modified_files = [str(k) for k in PATH_TO_TESTS.glob("*/*") if str(k).endswith(".py") and "test_" in str(k)]
         print("\n### test_all is TRUE, FETCHING ALL FILES###\n")
     print(f"\n### MODIFIED FILES ###\n{_print_list(modified_files)}")
 
@@ -1229,6 +1229,9 @@ if __name__ == "__main__":
             diff_with_last_commit = True
 
         infer_tests_to_run(
-            args.output_file, diff_with_last_commit=diff_with_last_commit, filter_models=False, test_all=commit_flags["test_all"]
+            args.output_file,
+            diff_with_last_commit=diff_with_last_commit,
+            filter_models=False,
+            test_all=commit_flags["test_all"],
         )
         filter_tests(args.output_file, ["repo_utils"])
