@@ -1132,7 +1132,7 @@ class ProcessorMixin(PushToHubMixin):
             conversation, chat_template=chat_template, tokenize=tokenize, **kwargs
         )
 
-    def post_process_image_text_to_text(self, generated_outputs):
+    def post_process_image_text_to_text(self, generated_outputs, **kwargs):
         """
         Post-process the output of a vlm to decode the text.
 
@@ -1144,7 +1144,8 @@ class ProcessorMixin(PushToHubMixin):
         Returns:
             `List[str]`: The decoded text.
         """
-        return self.tokenizer.batch_decode(generated_outputs, skip_special_tokens=True)
+        skip_special_tokens = kwargs.pop("skip_special_tokens", True)
+        return self.tokenizer.batch_decode(generated_outputs, skip_special_tokens=skip_special_tokens, **kwargs)
 
 
 def _validate_images_text_input_order(images, text):
