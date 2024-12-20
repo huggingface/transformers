@@ -71,11 +71,10 @@ def rotate_every_two(x: tf.Tensor) -> tf.Tensor:
     return rotate_half_tensor
 
 
-def apply_rotary_pos_emb(tensor: tf.Tensor, sincos: tf.Tensor) -> tf.Tensor:
-    sin_pos, cos_pos = sincos
-    sin_pos = tf.repeat(sin_pos[:, :, None, :], 2, 3)
-    cos_pos = tf.repeat(cos_pos[:, :, None, :], 2, 3)
-    return (tensor * cos_pos) + (rotate_every_two(tensor) * sin_pos)
+def apply_rotary_pos_emb(tensor: tf.Tensor, sin: tf.Tensor, cos: tf.Tensor) -> tf.Tensor:
+    sin = tf.repeat(sin, 2, 3)
+    cos = tf.repeat(cos, 2, 3)
+    return (tensor * cos) + (rotate_every_two(tensor) * sin)
 
 
 class TFGPTJAttention(keras.layers.Layer):
@@ -121,13 +120,13 @@ class TFGPTJAttention(keras.layers.Layer):
             name="out_proj",
         )
 
-        self.max_positions = config.max_position_embeddings
+        max_positions = config.max_position_embeddings
         self.lower_triangle_mask = tf.reshape(
-            tf.cast(tf.experimental.numpy.tril(tf.ones((self.max_positions, self.max_positions))), tf.int8),
-            (1, 1, self.max_positions, self.max_positions),
+            tf.cast(tf.experimental.numpy.tril(tf.ones((max_positions, max_positions))), tf.int8),
+            (1, 1, max_positions, max_positions),
         )
-        pos_embd_dim = self.rotary_dim or self.embed_dim
-        self.embed_positions = create_sinusoidal_positions(self.max_positions, pos_embd_dim)
+        pos_embd_dim = self.rotary_dim or self.head_dim
+        self.embed_positions = create_sinusoidal_positions(max_positions, pos_embd_dim)
 
     def get_causal_mask(self, key_length, query_length) -> tf.Tensor:
         return tf.cast(self.lower_triangle_mask[:, :, key_length - query_length : key_length, :key_length], tf.bool)
@@ -136,14 +135,12 @@ class TFGPTJAttention(keras.layers.Layer):
     def get_masked_bias(dtype: tf.DType) -> tf.Tensor:
         return tf.cast(tf.constant(-1e9), dtype)
 
-    def _split_heads(self, hidden_states: tf.Tensor, rotary: bool) -> tf.Tensor:
+    def _split_heads(self, hidden_states: tf.Tensor) -> tf.Tensor:
         """
         Splits hidden dim into attn_head_size and num_attention_heads
         """
         new_shape = shape_list(hidden_states)[:-1] + [self.num_attention_heads, self.head_dim]
         hidden_states = tf.reshape(hidden_states, new_shape)
-        if rotary:
-            return hidden_states
         if len(shape_list(hidden_states)) == 4:
             return tf.transpose(hidden_states, (0, 2, 1, 3))  # (batch, head, seq_length, head_features)
         if len(shape_list(hidden_states)) == 5:
@@ -210,16 +207,21 @@ class TFGPTJAttention(keras.layers.Layer):
         use_cache: bool = False,
         output_attentions: bool = False,
     ):
-        query = self.q_proj(hidden_states)
-        key = self.k_proj(hidden_states)
-        value = self.v_proj(hidden_states)
-
-        query = self._split_heads(query, True)
-        key = self._split_heads(key, True)
-        value = self._split_heads(value, False)
+        if position_ids is None:
+            raise ValueError("position_ids must be given")
+        if len(position_ids.shape) == 1:
+            position_ids = position_ids.reshape(1, -1)
+        query = self._split_heads(self.q_proj(hidden_states))
+        key = self._split_heads(self.k_proj(hidden_states))
+        value = self._split_heads(self.v_proj(hidden_states))
+        # query, key, value: (B, n_head, T, head_dim)
 
         sincos = tf.cast(tf.gather(self.embed_positions, position_ids, axis=0), hidden_states.dtype)
-        sincos = tf.split(sincos, 2, axis=-1)
+        sin, cos = tf.split(sincos, 2, axis=-1)
+        sin = sin[:, None, :, :]
+        cos = cos[:, None, :, :]
+        # cos, sin: (B, 1, T, rotary_dim // 2)
+
         if self.rotary_dim is not None:
             k_rot = key[:, :, :, : self.rotary_dim]
             k_pass = key[:, :, :, self.rotary_dim :]
@@ -227,17 +229,14 @@ class TFGPTJAttention(keras.layers.Layer):
             q_rot = query[:, :, :, : self.rotary_dim]
             q_pass = query[:, :, :, self.rotary_dim :]
 
-            k_rot = apply_rotary_pos_emb(k_rot, sincos)
-            q_rot = apply_rotary_pos_emb(q_rot, sincos)
+            k_rot = apply_rotary_pos_emb(k_rot, sin, cos)
+            q_rot = apply_rotary_pos_emb(q_rot, sin, cos)
 
             key = tf.concat((k_rot, k_pass), axis=-1)
             query = tf.concat((q_rot, q_pass), axis=-1)
         else:
-            key = apply_rotary_pos_emb(key, sincos)
-            query = apply_rotary_pos_emb(query, sincos)
-
-        key = tf.transpose(key, (0, 2, 1, 3))
-        query = tf.transpose(query, (0, 2, 1, 3))
+            key = apply_rotary_pos_emb(key, sin, cos)
+            query = apply_rotary_pos_emb(query, sin, cos)
 
         if layer_past is not None:
             past_key = layer_past[0]
