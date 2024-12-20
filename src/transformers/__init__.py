@@ -2877,6 +2877,8 @@ else:
             "MoonshineForConditionalGeneration",
             "MoonshineModel",
             "MoonshinePreTrainedModel",
+        ]
+    )
     _import_structure["models.modernbert"].extend(
         [
             "ModernBertForMaskedLM",
@@ -7580,6 +7582,7 @@ if TYPE_CHECKING:
             MoonshineForConditionalGeneration,
             MoonshineModel,
             MoonshinePreTrainedModel,
+        )
         from .models.modernbert import (
             ModernBertForMaskedLM,
             ModernBertForSequenceClassification,

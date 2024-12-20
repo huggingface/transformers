@@ -6419,6 +6419,12 @@ class MobileViTV2PreTrainedModel(metaclass=DummyObject):
 
 
 class MoonshineForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class ModernBertForMaskedLM(metaclass=DummyObject):
     _backends = ["torch"]
 
