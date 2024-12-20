@@ -509,43 +509,43 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_torch
     @require_vision
     def test_text_only_inference(self):
-            """Test that the processor works correctly with text-only input."""
-            processor = self.get_processor()
+        """Test that the processor works correctly with text-only input."""
+        processor = self.get_processor()
 
-            text = "This is a simple text without images."
-            inputs = processor(text=text)
+        text = "This is a simple text without images."
+        inputs = processor(text=text)
 
-            tokenized_sentence = processor.tokenizer(text, add_special_tokens=False)
-            expected_input_ids = [[self.bos_token_id] + tokenized_sentence["input_ids"]]
+        tokenized_sentence = processor.tokenizer(text, add_special_tokens=False)
+        expected_input_ids = [[self.bos_token_id] + tokenized_sentence["input_ids"]]
 
-            self.assertEqual(inputs["input_ids"], expected_input_ids)
-            self.assertEqual(inputs["attention_mask"], [[1] * len(expected_input_ids[0])])
-            self.assertTrue("pixel_values" not in inputs)
-            self.assertTrue("pixel_attention_mask" not in inputs)
+        self.assertEqual(inputs["input_ids"], expected_input_ids)
+        self.assertEqual(inputs["attention_mask"], [[1] * len(expected_input_ids[0])])
+        self.assertTrue("pixel_values" not in inputs)
+        self.assertTrue("pixel_attention_mask" not in inputs)
 
-            # Test batch of texts without image tokens
-            texts = ["First text.", "Second piece of text."]
-            batch_inputs = processor(text=texts, padding=True)
+        # Test batch of texts without image tokens
+        texts = ["First text.", "Second piece of text."]
+        batch_inputs = processor(text=texts, padding=True)
 
-            tokenized_1 = processor.tokenizer(texts[0], add_special_tokens=False)
-            tokenized_2 = processor.tokenizer(texts[1], add_special_tokens=False)
+        tokenized_1 = processor.tokenizer(texts[0], add_special_tokens=False)
+        tokenized_2 = processor.tokenizer(texts[1], add_special_tokens=False)
 
-            expected_1 = [self.bos_token_id] + tokenized_1["input_ids"]
-            expected_2 = [self.bos_token_id] + tokenized_2["input_ids"]
+        expected_1 = [self.bos_token_id] + tokenized_1["input_ids"]
+        expected_2 = [self.bos_token_id] + tokenized_2["input_ids"]
 
-            # Pad the shorter sequence
-            pad_len = len(expected_2) - len(expected_1)
-            if pad_len > 0:
-                padded_expected_1 = [self.padding_token_id] * pad_len + expected_1
-                expected_attention_1 = [0] * pad_len + [1] * len(expected_1)
-                self.assertEqual(batch_inputs["input_ids"], [padded_expected_1, expected_2])
-                self.assertEqual(batch_inputs["attention_mask"], [expected_attention_1, [1] * len(expected_2)])
-            else:
-                pad_len = -pad_len
-                padded_expected_2 = [self.padding_token_id] * pad_len + expected_2
-                expected_attention_2 = [0] * pad_len + [1] * len(expected_2)
-                self.assertEqual(batch_inputs["input_ids"], [expected_1, padded_expected_2])
-                self.assertEqual(batch_inputs["attention_mask"], [[1] * len(expected_1), expected_attention_2])
+        # Pad the shorter sequence
+        pad_len = len(expected_2) - len(expected_1)
+        if pad_len > 0:
+            padded_expected_1 = [self.padding_token_id] * pad_len + expected_1
+            expected_attention_1 = [0] * pad_len + [1] * len(expected_1)
+            self.assertEqual(batch_inputs["input_ids"], [padded_expected_1, expected_2])
+            self.assertEqual(batch_inputs["attention_mask"], [expected_attention_1, [1] * len(expected_2)])
+        else:
+            pad_len = -pad_len
+            padded_expected_2 = [self.padding_token_id] * pad_len + expected_2
+            expected_attention_2 = [0] * pad_len + [1] * len(expected_2)
+            self.assertEqual(batch_inputs["input_ids"], [expected_1, padded_expected_2])
+            self.assertEqual(batch_inputs["attention_mask"], [[1] * len(expected_1), expected_attention_2])
 
     @require_torch
     @require_vision
@@ -568,12 +568,11 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             processor(text=texts)
         self.assertTrue("tokens in the text but no images were passed" in str(context.exception))
 
-        # Test with empty images list
+        # Test with None as Images
         with self.assertRaises(ValueError) as context:
-            processor(text=text, images=[])
+            processor(text=text, images=None)
         self.assertTrue("tokens in the text but no images were passed" in str(context.exception))
 
-        # Test with batch and empty images lists
         with self.assertRaises(ValueError) as context:
-            processor(text=texts, images=[[], []])
+            processor(text=texts, images=None)
         self.assertTrue("tokens in the text but no images were passed" in str(context.exception))
