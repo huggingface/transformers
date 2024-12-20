@@ -1010,6 +1010,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        inputs_embeds: torch.Tensor = None,
     ) -> Union[Tuple[torch.Tensor, ...], BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1024,7 +1025,12 @@ class ModernBertModel(ModernBertPreTrainedModel):
         self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
 
         if batch_size is None and seq_len is None:
-            batch_size, seq_len = input_ids.shape[:2]
+            if inputs_embeds is not None: 
+                device = inputs_embeds.device
+                batch_size, seq_len = inputs_embeds.shape[:2]
+            else:
+                device = input_ids.device
+                batch_size, seq_len = input_ids.shape[:2]
 
         if attention_mask is None:
             attention_mask = torch.ones((batch_size, seq_len), device=input_ids.device, dtype=torch.bool)
@@ -1033,19 +1039,27 @@ class ModernBertModel(ModernBertPreTrainedModel):
         if self.config._attn_implementation == "flash_attention_2":
             if indices is None and cu_seqlens is None and max_seqlen is None:
                 repad = True
-                with torch.no_grad():
-                    input_ids, indices, cu_seqlens, max_seqlen, *_ = _unpad_modernbert_input(
-                        inputs=input_ids, attention_mask=attention_mask
+                if inputs_embeds is None:
+                    with torch.no_grad():
+                        input_ids, indices, cu_seqlens, max_seqlen, *_ = _unpad_modernbert_input(
+                            inputs=input_ids, attention_mask=attention_mask
+                        )
+                else:
+                    inputs_embeds, indices, cu_seqlens, max_seqlen, *_ = _unpad_modernbert_input(
+                        inputs=inputs_embeds, attention_mask=attention_mask
                     )
         else:
             if position_ids is None:
-                position_ids = torch.arange(seq_len, device=input_ids.device).unsqueeze(0)
+                position_ids = torch.arange(seq_len, device=device).unsqueeze(0)
 
             attention_mask, sliding_window_mask = self._update_attention_mask(
                 attention_mask, output_attentions=output_attentions
             )
-
-        hidden_states = self.embeddings(input_ids)
+        
+        if inputs_embeds is not None: 
+            hidden_states = inputs_embeds
+        else: 
+            hidden_states = self.embeddings(input_ids)
 
         for encoder_layer in self.layers:
             if output_hidden_states:
