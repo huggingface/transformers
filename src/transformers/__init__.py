@@ -4983,7 +4983,14 @@ if TYPE_CHECKING:
     from .feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 
     # Generation
-    from .generation import AsyncTextIteratorStreamer, CompileConfig, GenerationConfig, TextIteratorStreamer, TextStreamer, WatermarkingConfig
+    from .generation import (
+        AsyncTextIteratorStreamer,
+        CompileConfig,
+        GenerationConfig,
+        TextIteratorStreamer,
+        TextStreamer,
+        WatermarkingConfig,
+    )
     from .hf_argparser import HfArgumentParser
 
     # Integrations

@@ -13,12 +13,19 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import pytest
 import unittest
 from queue import Empty
 from threading import Thread
 
-from transformers import AsyncTextIteratorStreamer, AutoTokenizer, TextIteratorStreamer, TextStreamer, is_torch_available
+import pytest
+
+from transformers import (
+    AsyncTextIteratorStreamer,
+    AutoTokenizer,
+    TextIteratorStreamer,
+    TextStreamer,
+    is_torch_available,
+)
 from transformers.testing_utils import CaptureStdout, require_torch, torch_device
 
 from ..test_modeling_common import ids_tensor
