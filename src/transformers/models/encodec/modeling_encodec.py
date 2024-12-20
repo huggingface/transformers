@@ -25,12 +25,12 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn.utils import spectral_norm, weight_norm
 
-from ... import is_torchaudio_available
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_torchaudio_available,
     logging,
     replace_return_docstrings,
 )
