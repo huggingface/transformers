@@ -14,7 +14,8 @@
 # limitations under the License.
 
 """PyTorch Phi-3 model."""
-from typing import Callable, List, Optional, Tuple
+
+from typing import Callable, Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
@@ -26,11 +27,16 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import logging
-
-from ...utils import logging
+from ..mistral.modeling_mistral import (
+    MistralDecoderLayer,
+    MistralForCausalLM,
+    MistralForSequenceClassification,
+    MistralForTokenClassification,
+    MistralPreTrainedModel,
+    apply_rotary_pos_emb,
+    eager_attention_forward,
+)
 from .configuration_phi3 import Phi3Config
-
-from ..mistral.modeling_mistral import MistralDecoderLayer, MistralPreTrainedModel, MistralForCausalLM, MistralForSequenceClassification, MistralForTokenClassification, eager_attention_forward, apply_rotary_pos_emb
 
 
 logger = logging.get_logger(__name__)
@@ -209,7 +215,6 @@ class Phi3PreTrainedModel(MistralPreTrainedModel):
     _version = "0.0.5"
 
 
-
 class Phi3ForCausalLM(MistralForCausalLM, Phi3PreTrainedModel):
     def prepare_inputs_for_generation(
         self,
@@ -257,5 +262,3 @@ class Phi3ForSequenceClassification(MistralForSequenceClassification):
 
 class Phi3ForTokenClassification(MistralForTokenClassification):
     pass
-
-
