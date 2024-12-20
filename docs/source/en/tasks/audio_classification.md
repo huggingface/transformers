@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 <Youtube id="KWwzcmG98Ds"/>
 
-Audio classification - just like with text - assigns a class label as output from the input data.. The only difference is instead of text inputs, you have raw audio waveforms. Some practical applications of audio classification include identifying speaker intent, language classification, and even animal species by their sounds.
+Audio classification - just like with text - assigns a class label as output from the input data. The only difference is instead of text inputs, you have raw audio waveforms. Some practical applications of audio classification include identifying speaker intent, language classification, and even animal species by their sounds.
 
 This guide will show you how to:
 
@@ -57,7 +57,7 @@ Start by loading the MInDS-14 dataset from the 🤗 Datasets library:
 >>> minds = load_dataset("PolyAI/minds14", name="en-US", split="train")
 ```
 
-Split the `train` split of the dataset into smaller train and test sets using the [`~datasets.Dataset.train_test_split`] method. This will give you a chance to experiment and make sure everything works before spending more time on the full dataset.
+Split the dataset's `train` split into a smaller train and test set with the [`~datasets.Dataset.train_test_split`] method. This will give you a chance to experiment and make sure everything works before spending more time on the full dataset.
 
 ```py
 >>> minds = minds.train_test_split(test_size=0.2)
@@ -164,7 +164,7 @@ To apply the preprocessing function over the entire dataset, use 🤗 Datasets [
 
 ## Evaluate
 
-Including a metric during training can be helpful for evaluating your model's performance. You can quickly load an evaluation method with the 🤗 [Evaluate](https://huggingface.co/docs/evaluate/index) library. For this task, load the [accuracy](https://huggingface.co/spaces/evaluate-metric/accuracy) metric (see the 🤗 Evaluate [quick tour](https://huggingface.co/docs/evaluate/a_quick_tour) to learn more about how to load and compute a metric):
+Including a metric during training is often helpful for evaluating your model's performance. You can quickly load an evaluation method with the 🤗 [Evaluate](https://huggingface.co/docs/evaluate/index) library. For this task, load the [accuracy](https://huggingface.co/spaces/evaluate-metric/accuracy) metric (see the 🤗 Evaluate [quick tour](https://huggingface.co/docs/evaluate/a_quick_tour) to learn more about how to load and compute a metric):
 
 ```py
 >>> import evaluate
@@ -272,8 +272,6 @@ Load an audio file for inference. Remember to resample the sampling rate of the 
 ```
 
 audio-classification
-To perform inference with your fine-tuned model, use a [pipeline]. Instantiate a `pipeline` for audio classification with your model, and pass your audio file to it:
-
 The simplest way to try out your fine-tuned model for inference is to use it in a [`pipeline`]. Instantiate a `pipeline` for audio classification with your model, and pass your audio file to it:
 main
 
