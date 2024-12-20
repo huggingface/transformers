@@ -5584,8 +5584,8 @@ if TYPE_CHECKING:
     from .models.mobilevitv2 import (
         MobileViTV2Config,
     )
-    from .models.moonshine import MoonshineConfig
     from .models.modernbert import ModernBertConfig
+    from .models.moonshine import MoonshineConfig
     from .models.moshi import (
         MoshiConfig,
         MoshiDepthConfig,
@@ -7578,17 +7578,17 @@ if TYPE_CHECKING:
             MobileViTV2Model,
             MobileViTV2PreTrainedModel,
         )
-        from .models.moonshine import (
-            MoonshineForConditionalGeneration,
-            MoonshineModel,
-            MoonshinePreTrainedModel,
-        )
         from .models.modernbert import (
             ModernBertForMaskedLM,
             ModernBertForSequenceClassification,
             ModernBertForTokenClassification,
             ModernBertModel,
             ModernBertPreTrainedModel,
+        )
+        from .models.moonshine import (
+            MoonshineForConditionalGeneration,
+            MoonshineModel,
+            MoonshinePreTrainedModel,
         )
         from .models.moshi import (
             MoshiForCausalLM,

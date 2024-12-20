@@ -6437,8 +6437,8 @@ class MoonshineModel(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
-        
-        
+
+
 class ModernBertForSequenceClassification(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -6451,8 +6451,8 @@ class MoonshinePreTrainedModel(metaclass=DummyObject):
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
-        
-        
+
+
 class ModernBertForTokenClassification(metaclass=DummyObject):
     _backends = ["torch"]
 

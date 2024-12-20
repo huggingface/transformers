@@ -500,10 +500,10 @@
         title: mLUKE
       - local: model_doc/mobilebert
         title: MobileBERT
-      - local: model_doc/moonshine
-        title: moonshine
       - local: model_doc/modernbert
         title: ModernBert
+      - local: model_doc/moonshine
+        title: moonshine
       - local: model_doc/mpnet
         title: MPNet
       - local: model_doc/mpt

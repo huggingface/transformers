@@ -41,6 +41,8 @@ class MoonshineConfig(PretrainedConfig):
             The non-linear activation function (function or string) in the encoder.
         decoder_hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
+        max_position_embeddings (`int`, *optional*, defaults to 2048):
+            The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-05):
@@ -61,8 +63,6 @@ class MoonshineConfig(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        qk_layernorm (`bool`, *optional*, defaults to `False`):
-            Whether or not to normalize the Queries and Keys after projecting the hidden states.
         ff_mult (`int`, *optional*, defaults to 4):
             Factor by which to scale the intermediate size.
         bos_token_id (`int`, *optional*, defaults to 1):
@@ -133,6 +133,7 @@ class MoonshineConfig(PretrainedConfig):
         num_key_value_heads=None,
         encoder_hidden_act="gelu",
         decoder_hidden_act="silu",
+        max_position_embeddings=2048,
         initializer_range=0.02,
         layer_norm_eps=1e-5,
         decoder_start_token_id=1,
@@ -142,7 +143,6 @@ class MoonshineConfig(PretrainedConfig):
         min_rotary_ndims=32,
         attention_bias=False,
         attention_dropout=0.0,
-        qk_layernorm=False,
         ff_mult=4,
         bos_token_id=1,
         eos_token_id=2,
@@ -167,6 +167,7 @@ class MoonshineConfig(PretrainedConfig):
         self.num_key_value_heads = num_key_value_heads
         self.encoder_hidden_act = encoder_hidden_act
         self.decoder_hidden_act = decoder_hidden_act
+        self.max_position_embeddings = max_position_embeddings
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.decoder_start_token_id = decoder_start_token_id
@@ -176,7 +177,6 @@ class MoonshineConfig(PretrainedConfig):
         self.min_rotary_ndims = min_rotary_ndims
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        self.qk_layernorm = qk_layernorm
         self.ff_mult = ff_mult
 
         # fine-tuning config parameters for SpecAugment: https://arxiv.org/abs/1904.08779
