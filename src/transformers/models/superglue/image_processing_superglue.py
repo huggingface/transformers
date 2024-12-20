@@ -468,7 +468,7 @@ class SuperGlueImageProcessor(BaseImageProcessor):
         with coordinates absolute to the original image sizes.
         Args:
             outputs ([`KeypointMatchingOutput`]):
-                Raw outputs of the model.q
+                Raw outputs of the model.
             target_sizes (`torch.Tensor` or `List[Tuple[Tuple[int, int]]]`, *optional*):
                 Tensor of shape `(batch_size, 2, 2)` or list of tuples of tuples (`Tuple[int, int]`) containing the
                 target size `(height, width)` of each image in the batch. This must be the original image size (before

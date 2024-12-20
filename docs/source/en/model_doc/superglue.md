@@ -58,18 +58,6 @@ model = AutoModel.from_pretrained("magic-leap-community/superglue_outdoor")
 inputs = processor(images, return_tensors="pt")
 with torch.no_grad():
     outputs = model(**inputs)
-
-# Get the respective image masks 
-image0_mask, image1_mask = outputs.mask[0] > 0
-
-image0_indices = torch.nonzero(image0_mask).squeeze()
-image1_indices = torch.nonzero(image1_mask).squeeze()
-
-image0_matches = outputs.matches[0, 0][image0_indices]
-image1_matches = outputs.matches[0, 1][image1_indices]
-
-image0_matching_scores = outputs.matching_scores[0, 0][image0_indices]
-image1_matching_scores = outputs.matching_scores[0, 1][image1_indices]
 ```
 
 You can use the `post_process_keypoint_matching` method from the `SuperGlueImageProcessor` to get the keypoints and matches in a more readable format:
@@ -147,3 +135,4 @@ The original code can be found [here](https://github.com/magicleap/SuperGluePret
 [[autodoc]] SuperGlueForKeypointMatching
 
 - forward
+- post_process_keypoint_matching
