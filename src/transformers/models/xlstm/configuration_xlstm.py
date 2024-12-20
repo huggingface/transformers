@@ -20,9 +20,9 @@ from xlstm.xlstm_large.model import (
     DtypeType,
     SequenceKernelType,
     StepKernelType,
-    xLSTMLargeConfig,
     WeightModeType,
     round_up_to_next_multiple_of,
+    xLSTMLargeConfig,
 )
 
 from ...configuration_utils import PretrainedConfig
@@ -43,64 +43,66 @@ class xLSTMConfig(PretrainedConfig):
 
 
     Args:
-        vocab_size (int, optional): Defaults to 50304.
+        vocab_size (int, optional, *optional*, defaults to 50304):
             Vocabulary size of the xLSTM model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`xLSTMModel`]. Defaults to the GPT2-NeoX tokenizer size.
-        embedding_dim (int, optional): Defaults to 4096.
+        embedding_dim (int, optional, *optional*, defaults to 4096):
             Dimensionality of the embeddings or hidden states.
-        num_blocks (int, optional): Defaults to 32.
+        num_blocks (int, optional, *optional*, defaults to 32):
             Number of blocks of the xLSTM model.
-        num_heads (int, optional): Defaults to 8.
+        num_heads (int, optional, *optional*, defaults to 8):
             Number of heads for the xLSTM Layer/Cell.
-        use_bias (bool, optional): Defaults to False.
+        use_bias (bool, optional, *optional*, defaults to `False`):
             Whether to use biases in the xLSTM model.
-        norm_reduction_force_float32 (bool, optional): Defaults to True.
+        norm_reduction_force_float32 (bool, optional, *optional*, defaults to `True`):
             Whether to force the float32 norm reduction op to be done in fp32 precision.
-        tie_word_embeddings (bool, optional): Defaults to False.
+        tie_word_embeddings (bool, optional, *optional*, defaults to `False`):
             Whether to tie word embeddings to the lm head weights.
-        add_out_norm (bool, optional): Defaults to True.
+        add_out_norm (bool, optional, *optional*, defaults to `True`):
             Whether to add an output norm after the blocks before the LMHead.
-        norm_eps (float, optional): Defaults to 1e-6.
+        norm_eps (float, optional, *optional*, defaults to 1e-06):
             Norm eps for RMSNorm and Layer Norm.
-        qk_dim_factor (float, optional): Defaults to 0.5.
+        qk_dim_factor (float, optional, *optional*, defaults to 0.5):
             Scale factor for the query and key dimension.
-        v_dim_factor (float, optional): Defaults to 1.0.
+        v_dim_factor (float, optional, *optional*, defaults to 1.0):
             Scale factor for the value dimension.
-        chunkwise_kernel (ChunkwiseKernelType, optional): Defaults to "chunkwise--native_autograd".
+        chunkwise_kernel (ChunkwiseKernelType, optional, *optional*, defaults to `"chunkwise--native_autograd"`):
             Kernel type for chunkwise processing mode.
-        sequence_kernel (SequenceKernelType, optional): Defaults to "native_sequence__native".
+        sequence_kernel (SequenceKernelType, optional, *optional*, defaults to `"native_sequence__native"`):
             Kernel type for sequence processing mode.
-        step_kernel (StepKernelType, optional): Defaults to "native".
+        step_kernel (StepKernelType, optional, *optional*, defaults to `"native"`):
             Kernel type for step processing mode.
-        mode (BackendModeType, optional): Defaults to "inference".
+        mode (BackendModeType, optional, *optional*, defaults to `"inference"`):
             Operation mode (inference is needed for generation).
-        chunk_size (int, optional): Defaults to 64.
+        chunk_size (int, optional, *optional*, defaults to 64):
             Internal chunk size.
-        return_last_states (bool, optional): Defaults to True.
+        return_last_states (bool, optional, *optional*, defaults to `True`):
             If to return the last states / cache internally. Needed as True for generation.
-        autocast_kernel_dtype (DtypeType, optional): Defaults to "bfloat16".
+        autocast_kernel_dtype (DtypeType, optional, *optional*, defaults to `"bfloat16"`):
             Kernel dtype for the states.
-        eps (float, optional): Defaults to 1e-6.
+        eps (float, optional, *optional*, defaults to 1e-06):
             Epsilon for the mLSTM cell post norm.
-        inference_state_dtype (DtypeType, optional): Defaults to "float32".
+        inference_state_dtype (DtypeType, optional, *optional*, defaults to `"float32"`):
             Kernel dtype for states in inference.
-        ffn_proj_factor (float, optional): Defaults to 2.667.
+        ffn_proj_factor (float, optional, *optional*, defaults to 2.667):
             Size factor of the post-up projection gated Feed Forward network.
-        ffn_round_up_to_multiple_of (int, optional): Defaults to 64.
+        ffn_round_up_to_multiple_of (int, optional, *optional*, defaults to 64):
             Size factor round value of the post-up projection gated Feed Forward network.
-        gate_soft_cap (float, optional): Defaults to 15.0.
+        gate_soft_cap (float, optional, *optional*, defaults to 15.0):
             Gate soft cap scale.
-        output_logit_soft_cap (float, optional): Defaults to 30.0.
+        output_logit_soft_cap (float, optional, *optional*, defaults to 30.0):
             Output logit soft cap scale.
-        use_cache (bool, optional): Defaults to True.
+        weight_mode (`Literal`, *optional*, defaults to `"single"`):
+            Whether parallel linear layers are separated or fused (single).
+        use_cache (bool, optional, *optional*, defaults to `True`):
             Whether to use the cache (xLSTMCache).
-        pad_token_id (int, optional): Defaults to 1.
+        pad_token_id (int, optional, *optional*, defaults to 1):
             Pad token id needed for generation.
-        bos_token_id (int, optional): Defaults to 0.
+        bos_token_id (int, optional, *optional*, defaults to 0):
             BOS token id needed for generation.
-        eos_token_id (int, optional): Defaults to 2.
+        eos_token_id (int, optional, *optional*, defaults to 2):
             EOS token id needed for generation.
-        force_bos_token_insert (bool, optional): Defaults to True.
+        force_bos_token_insert (bool, optional, *optional*, defaults to `True`):
             Whether to force the insertion of a BOS token for prompting.
 
     Example:

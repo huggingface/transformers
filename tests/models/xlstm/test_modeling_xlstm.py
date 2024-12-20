@@ -19,7 +19,7 @@ from typing import Dict, List, Tuple
 
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, xLSTMConfig, is_torch_available
+from transformers import AutoTokenizer, is_torch_available, xLSTMConfig
 from transformers.testing_utils import require_read_token, require_torch, require_torch_gpu, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -173,7 +173,6 @@ class xLSTMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     test_model_parallel = False
     test_pruning = False
     test_head_masking = False  # xLSTM does not have attention heads
-
 
     def setUp(self):
         self.model_tester = xLSTMModelTester(self)

@@ -22,7 +22,6 @@ __version__ = "4.51.0.dev0"
 
 from typing import TYPE_CHECKING
 
-
 # Check the dependencies satisfy the minimal versions required.
 from . import dependency_versions_check
 from .utils import (
@@ -5814,7 +5813,6 @@ if TYPE_CHECKING:
     from .models.m2m_100 import M2M100Config
     from .models.mamba import MambaConfig
     from .models.mamba2 import Mamba2Config
-    from .models.xlstm import xLSTMConfig
     from .models.marian import MarianConfig
     from .models.markuplm import (
         MarkupLMConfig,
@@ -6195,6 +6193,7 @@ if TYPE_CHECKING:
         XLMRobertaXLConfig,
     )
     from .models.xlnet import XLNetConfig
+    from .models.xlstm import xLSTMConfig
     from .models.xmod import XmodConfig
     from .models.yolos import YolosConfig
     from .models.yoso import YosoConfig
@@ -7863,11 +7862,6 @@ if TYPE_CHECKING:
             Mamba2Model,
             Mamba2PreTrainedModel,
         )
-        from .models.xlstm import (
-            xLSTMForCausalLM,
-            xLSTMModel,
-            xLSTMPreTrainedModel,
-        )
         from .models.marian import MarianForCausalLM, MarianModel, MarianMTModel, MarianPreTrainedModel
         from .models.markuplm import (
             MarkupLMForQuestionAnswering,
@@ -8802,6 +8796,11 @@ if TYPE_CHECKING:
             XLNetModel,
             XLNetPreTrainedModel,
             load_tf_weights_in_xlnet,
+        )
+        from .models.xlstm import (
+            xLSTMForCausalLM,
+            xLSTMModel,
+            xLSTMPreTrainedModel,
         )
         from .models.xmod import (
             XmodForCausalLM,

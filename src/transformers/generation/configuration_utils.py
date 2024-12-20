@@ -53,13 +53,13 @@ if is_torch_available():
         HQQQuantizedCache,
         HybridCache,
         MambaCache,
-        xLSTMCache,
         OffloadedStaticCache,
         QuantizedCacheConfig,
         QuantoQuantizedCache,
         SlidingWindowCache,
         StaticCache,
         StaticCacheConfig,
+        xLSTMCache,
     )
     from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
 
