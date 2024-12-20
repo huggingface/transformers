@@ -46,7 +46,7 @@ class xLSTMConfig(PretrainedConfig):
     """
     This is the configuration class to store the configuration of a [`xLSTM`]. It is used to instantiate a xLSTM
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the XLSTM
+    defaults will yield a similar configuration to that of the xLSTM-7b [NX-AI/xLSTM-7b](https://huggingface.co/NX-AI/xLSTM-7b) model.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
