@@ -30,6 +30,8 @@ from ...utils import (
 )
 from .configuration_pixtral import PixtralVisionConfig
 
+from xformers import ops as xops
+
 
 logger = logging.get_logger(__name__)
 
@@ -97,7 +99,7 @@ class PixtralRotaryEmbedding(nn.Module):
             emb = freqs
             cos = emb.cos()
             sin = emb.sin()
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+        return cos.to(dtype=torch.float32), sin.to(dtype=torch.float32)
 
     def _dynamic_frequency_update(self, position_ids, device):
         """
@@ -151,7 +153,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     sin = sin.unsqueeze(unsqueeze_dim)
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
+    return q_embed.to(q.dtype), k_embed.to(k.dtype)
 
 
 class PixtralAttention(nn.Module):
@@ -182,6 +184,12 @@ class PixtralAttention(nn.Module):
         """Input shape: Batch x Time x Channel"""
 
         batch_size, patches, _ = hidden_states.size()
+        DEBUG_MODE = False  # TODO remove when all this is done
+
+        if DEBUG_MODE:
+            vllm_attention_in = torch.load("vision_layer_0_attention_in.pt", weights_only=True, map_location=hidden_states.device)
+            diff = torch.mean(torch.abs(hidden_states - vllm_attention_in))
+            print("Mean diff for attention input:", diff.item())
 
         query_states = self.q_proj(hidden_states)
         key_states = self.k_proj(hidden_states)
@@ -191,25 +199,57 @@ class PixtralAttention(nn.Module):
         key_states = key_states.view(batch_size, patches, self.num_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(batch_size, patches, self.num_heads, self.head_dim).transpose(1, 2)
 
+        if DEBUG_MODE:
+            vllm_q = torch.load("vision_layer_0_pre_rotary_emb_q.pt", weights_only=True, map_location=hidden_states.device)
+            vllm_k = torch.load("vision_layer_0_pre_rotary_emb_k.pt", weights_only=True, map_location=hidden_states.device)
+            vllm_v = torch.load("vision_layer_0_pre_rotary_emb_v.pt", weights_only=True, map_location=hidden_states.device)
+
+            q_diff = torch.mean(torch.abs(query_states.transpose(1, 2)[:, :, :, :44] - vllm_q[:, :, :, ::2]))
+            k_diff = torch.mean(torch.abs(key_states.transpose(1, 2)[:, :, :, :44] - vllm_k[:, :, :, ::2]))
+            v_diff = torch.mean(torch.abs(value_states.transpose(1, 2) - vllm_v))
+
+            print("Mean diff for query:", q_diff.item())
+            print("Mean diff for key:", k_diff.item())
+            print("Mean diff for value:", v_diff.item())
+
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=0)
 
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * self.scale
+        if DEBUG_MODE:
+
+            vllm_post_rotary_q = torch.load("vision_layer_0_post_rotary_emb_q.pt", weights_only=True, map_location=hidden_states.device)
+            vllm_post_rotary_k = torch.load("vision_layer_0_post_rotary_emb_k.pt", weights_only=True, map_location=hidden_states.device)
+
+            rotary_q_diff = torch.mean(torch.abs(query_states.transpose(1, 2)[:, :, :, :44] - vllm_post_rotary_q[:, :, :, ::2]))
+            rotary_k_diff = torch.mean(torch.abs(key_states.transpose(1, 2)[:, :, :, :44] - vllm_post_rotary_k[:, :, :, ::2]))
+
+            print("Mean diff for post rotary query:", rotary_q_diff.item())
+            print("Mean diff for post rotary key:", rotary_k_diff.item())
+
+        attn_weights = torch.matmul(query_states.float(), key_states.float().transpose(2, 3)) * self.scale
 
         if attention_mask is not None:
-            attn_weights = attn_weights + attention_mask
+           attn_weights = attn_weights + attention_mask
 
         # upcast attention to fp32
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-        attn_output = torch.matmul(attn_weights, value_states)
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32)
+        attn_output = torch.matmul(attn_weights, value_states.float()).to(hidden_states.dtype)
 
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.reshape(batch_size, patches, -1)
 
+        if DEBUG_MODE:
+            vllm_attn_out = torch.load("vision_layer_0_attention_out.pt", weights_only=True, map_location=hidden_states.device)
+            print("Mean diff for attn output:", torch.mean(torch.abs(attn_output - vllm_attn_out)).item())
+
         attn_output = self.o_proj(attn_output)
 
-        return attn_output, attn_weights
+        if DEBUG_MODE:
+            vllm_attn_out = torch.load("vision_layer_0_attention_wo_out.pt", weights_only=True, map_location=hidden_states.device)
+            print("Mean diff for post-wo attention output:", torch.mean(torch.abs(attn_output - vllm_attn_out)).item())
+
+
+        return attn_output, None
 
 
 # Copied from transformers.models.mistral.modeling_mistral.MistralMLP with Mistral->Pixtral
@@ -276,8 +316,16 @@ class PixtralAttentionLayer(nn.Module):
                 returned tensors for more detail.
         """
         residual = hidden_states
+        DEBUG_MODE = False
+
+        if DEBUG_MODE:
+            vllm_in = torch.load("vision_layer_0_in.pt", weights_only=True, map_location=hidden_states.device)
+            print("Mean diff before attention:", torch.mean(torch.abs(hidden_states - vllm_in)).item())
 
         hidden_states = self.attention_norm(hidden_states)
+        if DEBUG_MODE:
+            vllm_norm = torch.load("vision_layer_0_pre_attention_norm.pt", weights_only=True, map_location=hidden_states.device)
+            print("Mean diff after attention norm:", torch.mean(torch.abs(hidden_states - vllm_norm)).item())
         hidden_states, attn_weights = self.attention(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
@@ -285,11 +333,27 @@ class PixtralAttentionLayer(nn.Module):
             output_attentions=output_attentions,
         )
         hidden_states = residual + hidden_states
+        if DEBUG_MODE:
+            vllm_plus_residual = torch.load(f"vision_layer_0_attention_out_plus_residual.pt", weights_only=True, map_location=hidden_states.device)
+            vllm_plus_residual_diff = torch.mean(torch.abs(hidden_states - vllm_plus_residual))
+            print("Mean diff after attention:", vllm_plus_residual_diff.item())
 
         residual = hidden_states
         hidden_states = self.ffn_norm(hidden_states)
+        if DEBUG_MODE:
+            vllm_ffn_norm_out = torch.load("vision_layer_0_pre_ffn_norm.pt", weights_only=True, map_location=hidden_states.device)
+            ffn_norm_diff = torch.mean(torch.abs(hidden_states - vllm_ffn_norm_out))
+            print("Mean diff after ffn norm:", ffn_norm_diff.item())
         hidden_states = self.feed_forward(hidden_states)
+        if DEBUG_MODE:
+            vllm_ffn_out = torch.load("vision_layer_0_ffn_out.pt", weights_only=True, map_location=hidden_states.device)
+            ffn_out_diff = torch.mean(torch.abs(hidden_states - vllm_ffn_out))
+            print("Mean diff after ffn:", ffn_out_diff.item())
         hidden_states = residual + hidden_states
+        if DEBUG_MODE:
+            vllm_plus_residual_ffn = torch.load(f"vision_layer_0_ffn_out_plus_residual.pt", weights_only=True, map_location=hidden_states.device)
+            ffn_out_diff_with_residual = torch.mean(torch.abs(hidden_states - vllm_plus_residual_ffn))
+            print("Mean diff after ffn with residual:", ffn_out_diff_with_residual.item())
 
         outputs = (hidden_states,)
 
@@ -346,7 +410,11 @@ class PixtralTransformer(nn.Module):
         all_attentions = () if output_attentions else None
 
         hidden_states = inputs_embeds
-        for encoder_layer in self.layers:
+        # vllm_inputs_embeds = torch.load("vision_layer_0_in.pt", weights_only=True, map_location=hidden_states.device)
+        # print("Mean diff before vision tower:", torch.mean(torch.abs(hidden_states - vllm_inputs_embeds)).item())
+        # print("Max diff before vision tower:", torch.max(torch.abs(hidden_states - vllm_inputs_embeds)).item())
+        # print("Max diff / max magnitude before vision tower:", torch.mean(torch.abs(hidden_states)).item())
+        for i, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             if self.gradient_checkpointing and self.training:
@@ -366,6 +434,10 @@ class PixtralTransformer(nn.Module):
                 )
 
             hidden_states = layer_outputs[0]
+            # vllm_out = torch.load(f"vision_layer_{i}_out.pt", weights_only=True, map_location=hidden_states.device)
+            # print(f"Mean diff after layer {i}", torch.mean(torch.abs(hidden_states - vllm_out)).item())
+            # print(f"Max diff after layer {i}", torch.max(torch.abs(hidden_states - vllm_out)).item())
+            # print(f"Mean tensor magnitude after layer {i}:", torch.mean(torch.abs(hidden_states)).item())
 
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
@@ -491,11 +563,20 @@ class PixtralVisionModel(PixtralPreTrainedModel):
                 all tokens of all images of shape (N_toks, D)
         """
         # pass images through initial convolution independently
-        patch_embeds_list = [self.patch_conv(img.unsqueeze(0).to(self.dtype)) for img in pixel_values]
+        if len(pixel_values) > 1:
+            raise ValueError("Batching/padding not supported yet!")
+        patch_embeds_list = [self.patch_conv(img.to(self.dtype)) for sample in pixel_values for img in sample]
+        # vllm_patch_embeds_list = torch.load("patch_embeds_list.pt", weights_only=True, map_location=patch_embeds_list[0].device)
+        # print("Mean error for patch embeds list", torch.mean(torch.abs(patch_embeds_list[0] - vllm_patch_embeds_list[0])))
+        # print("Max error for patch embeds list", torch.max(torch.abs(patch_embeds_list[0] - vllm_patch_embeds_list[0])))
 
         # flatten to a single sequence
-        patch_embeds = torch.cat([p.flatten(2).permute(0, 2, 1) for p in patch_embeds_list], dim=1)
+        patch_embeds = torch.cat([p.flatten(1).T for p in patch_embeds_list], dim=0).unsqueeze(0)
         patch_embeds = self.ln_pre(patch_embeds)
+        # vLLM tensor is saved after LN
+        # vllm_patch_embeds = torch.load("patch_embeds.pt", weights_only=True, map_location=patch_embeds.device)
+        # print("Mean error for patch embeds", torch.mean(torch.abs(patch_embeds - vllm_patch_embeds)))
+        # print("Max error for patch embeds", torch.max(torch.abs(patch_embeds - vllm_patch_embeds)))
 
         # positional embeddings
         position_ids = position_ids_in_meshgrid(
@@ -503,7 +584,13 @@ class PixtralVisionModel(PixtralPreTrainedModel):
         ).to(self.device)
 
         position_embedding = self.patch_positional_embedding(patch_embeds, position_ids)
+        # vllm_freqs_cis = torch.load("freqs_cis.pt", weights_only=True, map_location=position_embedding[0].device)
+        # assert torch.mean(torch.abs(vllm_freqs_cis.real - position_embedding[0][:, :44])) < 1e-8
+        # assert torch.mean(torch.abs(vllm_freqs_cis.imag - position_embedding[1][:, :44])) < 1e-8
+
+
         attention_mask = generate_block_attention_mask(
             [p.shape[-2] * p.shape[-1] for p in patch_embeds_list], patch_embeds
         )
-        return self.transformer(patch_embeds, attention_mask, position_embedding)
+        out = self.transformer(patch_embeds, attention_mask, position_embedding)
+        return out

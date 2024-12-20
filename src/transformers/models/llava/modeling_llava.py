@@ -286,7 +286,9 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
         Returns:
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
-        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
+        self.vision_tower = self.vision_tower.to("cuda")
+        image_outputs = self.vision_tower([[im.to("cuda") for im in sample] for sample in pixel_values], output_hidden_states=True)
+        self.vision_tower = self.vision_tower.to("cpu")
         # this is not memory efficient at all (output_hidden_states=True) will save all the hidden stated.
         selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
         if vision_feature_select_strategy == "default":
@@ -295,8 +297,10 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
             selected_image_feature = selected_image_feature
         else:
             raise ValueError(f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}")
+        self.multi_modal_projector = self.multi_modal_projector.to("cuda")
         image_features = self.multi_modal_projector(selected_image_feature)
-        return image_features
+        self.multi_modal_projector = self.multi_modal_projector.to("cpu")
+        return image_features.to("cpu")
 
     def _merge_input_ids_with_image_features(self, image_features, inputs_embeds, input_ids, attention_mask, labels):
         num_images, num_image_patches, embed_dim = image_features.shape
