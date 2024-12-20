@@ -325,6 +325,10 @@ class Idefics3Processor(ProcessorMixin):
                 inputs.update(text_inputs)
 
         elif text is not None:
+            if any(n_images_in_text):
+                raise ValueError(
+                    f"Found {sum(n_images_in_text)} {self.image_token.content} tokens in the text but no images were passed."
+                )
             text_inputs = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
             inputs.update(text_inputs)
 
