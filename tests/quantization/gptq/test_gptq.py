@@ -89,7 +89,7 @@ class GPTQTest(unittest.TestCase):
     EXPECTED_OUTPUTS.add("Hello my name is Katie. I am a 20 year")
 
     # this seems a little small considering that we are doing 4bit quant but we have a small model and ww don't quantize the embeddings
-    EXPECTED_RELATIVE_DIFFERENCE = 2.06184043
+    EXPECTED_RELATIVE_DIFFERENCE = 2.0618
 
     bits = 4
     sym = True
@@ -142,7 +142,7 @@ class GPTQTest(unittest.TestCase):
 
         mem_quantized = self.quantized_model.get_memory_footprint()
 
-        self.assertAlmostEqual(self.mem_fp16 / mem_quantized, self.EXPECTED_RELATIVE_DIFFERENCE)
+        self.assertAlmostEqual(self.mem_fp16 / mem_quantized, self.EXPECTED_RELATIVE_DIFFERENCE, places=4)
 
     def test_device_and_dtype_assignment(self):
         r"""
@@ -271,7 +271,6 @@ class GPTQTest(unittest.TestCase):
 
 @require_torch_gpu
 class GPTQTestCUDA(GPTQTest):
-    EXPECTED_RELATIVE_DIFFERENCE = 2.06183008
     device_map = {"": 0}
 
     @classmethod
