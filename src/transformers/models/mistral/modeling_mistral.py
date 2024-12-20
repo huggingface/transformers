@@ -270,11 +270,7 @@ class MistralDecoderLayer(nn.Module):
 
 
 class MistralRotaryEmbedding(nn.Module):
-    def __init__(
-        self,
-        config: MistralConfig,
-        device=None,
-    ):
+    def __init__(self, config: MistralConfig, device=None):
         super().__init__()
         self.rope_kwargs = {}
         # BC: "rope_type" was originally "type"

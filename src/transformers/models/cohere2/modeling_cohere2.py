@@ -53,11 +53,7 @@ _CONFIG_FOR_DOC = "Cohere2Config"
 
 
 class Cohere2RotaryEmbedding(nn.Module):
-    def __init__(
-        self,
-        config: Cohere2Config,
-        device=None,
-    ):
+    def __init__(self, config: Cohere2Config, device=None):
         super().__init__()
         self.rope_kwargs = {}
         # BC: "rope_type" was originally "type"

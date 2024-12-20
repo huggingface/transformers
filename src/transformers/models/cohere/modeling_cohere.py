@@ -73,11 +73,7 @@ class CohereLayerNorm(nn.Module):
 
 
 class CohereRotaryEmbedding(nn.Module):
-    def __init__(
-        self,
-        config: CohereConfig,
-        device=None,
-    ):
+    def __init__(self, config: CohereConfig, device=None):
         super().__init__()
         self.rope_kwargs = {}
         # BC: "rope_type" was originally "type"

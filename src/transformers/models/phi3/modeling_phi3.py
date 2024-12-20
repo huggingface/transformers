@@ -318,11 +318,7 @@ class Phi3DecoderLayer(nn.Module):
 
 
 class Phi3RotaryEmbedding(nn.Module):
-    def __init__(
-        self,
-        config: Phi3Config,
-        device=None,
-    ):
+    def __init__(self, config: Phi3Config, device=None):
         super().__init__()
         self.rope_kwargs = {}
         # BC: "rope_type" was originally "type"
@@ -339,6 +335,9 @@ class Phi3RotaryEmbedding(nn.Module):
         inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, **self.rope_kwargs)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
+        if self.rope_type == "longrope":
+            short_inv_freq, _ = self.rope_init_fn(self.config, device, seq_len=0, **self.rope_kwargs)
+            self.register_buffer("short_inv_freq", short_inv_freq, persistent=False)
 
     def _dynamic_frequency_update(self, position_ids, device):
         """
@@ -360,11 +359,17 @@ class Phi3RotaryEmbedding(nn.Module):
 
     @torch.no_grad()
     def forward(self, x, position_ids):
+        inv_freq = self.inv_freq
         if "dynamic" in self.rope_type:
             self._dynamic_frequency_update(position_ids, device=x.device)
+            inv_freq = self.inv_freq
+        elif self.rope_type == "longrope":
+            seq_len = torch.max(position_ids) + 1
+            if seq_len <= self.config.original_max_position_embeddings:
+                inv_freq = self.short_inv_freq
 
         # Core RoPE block
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
         # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
         device_type = x.device.type
