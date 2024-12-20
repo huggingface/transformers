@@ -26,6 +26,7 @@ from ....transformers.models.dinov2.modeling_dinov2 import (
     Dinov2ForImageClassification,
     Dinov2Model,
     Dinov2PatchEmbeddings,
+    Dinov2PreTrainedModel,
 )
 from ...configuration_utils import PretrainedConfig
 from ...modeling_outputs import BackboneOutput
@@ -265,6 +266,10 @@ class Dinov2WithRegistersEncoder(Dinov2Encoder):
     pass
 
 
+class Dinov2WithRegistersPreTrainedModel(Dinov2PreTrainedModel):
+    pass
+
+
 class Dinov2WithRegistersModel(Dinov2Model):
     pass
 
@@ -365,3 +370,12 @@ class Dinov2WithRegistersBackbone(Dinov2Backbone):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions if output_attentions else None,
         )
+
+
+__all__ = [
+    "Dinov2WithRegistersConfig",
+    "Dinov2WithRegistersPreTrainedModel",
+    "Dinov2WithRegistersModel",
+    "Dinov2WithRegistersForImageClassification",
+    "Dinov2WithRegistersBackbone",
+]

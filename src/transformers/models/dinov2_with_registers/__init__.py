@@ -13,45 +13,15 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import (
-    OptionalDependencyNotAvailable,
-    _LazyModule,
-    is_torch_available,
-)
+from ...utils import _LazyModule
+from ...utils.import_utils import define_import_structure
 
-
-_import_structure = {"configuration_dinov2_with_registers": ["Dinov2WithRegistersConfig"]}
-
-try:
-    if not is_torch_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_dinov2_with_registers"] = [
-        "Dinov2WithRegistersForImageClassification",
-        "Dinov2WithRegistersModel",
-        "Dinov2WithRegistersPreTrainedModel",
-        "Dinov2WithRegistersBackbone",
-    ]
 
 if TYPE_CHECKING:
-    from .configuration_dinov2_with_registers import Dinov2WithRegistersConfig
-
-    try:
-        if not is_torch_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_dinov2_with_registers import (
-            Dinov2WithRegistersBackbone,
-            Dinov2WithRegistersForImageClassification,
-            Dinov2WithRegistersModel,
-            Dinov2WithRegistersPreTrainedModel,
-        )
-
+    from .configuration_dinov2_with_registers import *
+    from .modeling_dinov2_with_registers import *
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    _file = globals()["__file__"]
+    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)

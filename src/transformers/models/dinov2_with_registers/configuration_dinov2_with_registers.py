@@ -161,3 +161,6 @@ class Dinov2WithRegistersConfig(BackboneConfigMixin, PretrainedConfig):
         )
         self.apply_layernorm = apply_layernorm
         self.reshape_hidden_states = reshape_hidden_states
+
+
+__all__ = ["Dinov2WithRegistersConfig"]

@@ -914,3 +914,11 @@ class Dinov2WithRegistersBackbone(Dinov2WithRegistersPreTrainedModel, BackboneMi
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions if output_attentions else None,
         )
+
+
+__all__ = [
+    "Dinov2WithRegistersPreTrainedModel",
+    "Dinov2WithRegistersModel",
+    "Dinov2WithRegistersForImageClassification",
+    "Dinov2WithRegistersBackbone",
+]
