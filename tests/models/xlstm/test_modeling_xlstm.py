@@ -35,7 +35,7 @@ if is_torch_available():
         xLSTMForCausalLM,
         xLSTMModel,
     )
-    from transformers.models.xlstm.modeling_xlstm import xLSTMCache, mLSTMBlock
+    from transformers.models.xlstm.modeling_xlstm import mLSTMBlock, xLSTMCache
     from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_2
 else:
     is_torch_greater_or_equal_than_2_2 = False
@@ -53,7 +53,7 @@ class xLSTMModelTester:
         vocab_size=99,
         embedding_dim=128,
         qk_dim_factor=0.5,
-        v_dim_factor=1.,
+        v_dim_factor=1.0,
         num_blocks=2,
         max_position_embeddings=512,
         type_vocab_size=16,
@@ -94,7 +94,6 @@ class xLSTMModelTester:
         self.num_hidden_layers = self.num_blocks
         self.hidden_size = self.embedding_dim
 
-
     def get_large_model_config(self):
         cfg = xLSTMConfig.from_pretrained("NX-AI/xLSTM-7b")
         # this is needed for compatibility with generic tests
@@ -102,9 +101,7 @@ class xLSTMModelTester:
         cfg.num_hidden_layers = cfg.num_blocks
         return cfg
 
-    def prepare_config_and_inputs(
-        self, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
-    ):
+    def prepare_config_and_inputs(self, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
 
         sequence_labels = None

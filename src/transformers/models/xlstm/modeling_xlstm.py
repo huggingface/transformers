@@ -8,8 +8,6 @@ import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-
-
 from ...generation import GenerationMixin
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -21,13 +19,14 @@ from ...utils import (
     is_xlstm_available,
 )
 
+
 if is_xlstm_available():
     from xlstm.xlstm_large.model import (
         RMSNorm,
         mLSTMBlock,
         mLSTMStateType,
         soft_cap,
-    )    
+    )
 else:
     mLSTMBlock = None
 
@@ -421,7 +420,11 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         inserted_bos_token = False
-        if (cache_params is None or cache_params.rnn_state_initial) and self.config.force_bos_token_insert and input_ids is not None:
+        if (
+            (cache_params is None or cache_params.rnn_state_initial)
+            and self.config.force_bos_token_insert
+            and input_ids is not None
+        ):
             if not is_torchdynamo_compiling():
                 if bool(torch.all(input_ids[0, 0] != self.config.bos_token_id).cpu()):
                     input_ids = torch.cat(
@@ -444,9 +447,21 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
         if inserted_bos_token:
             hidden_states = hidden_states[:, 1:]
             if hasattr(xlstm_outputs, "hidden_states"):
-                xlstm_outputs_mod = (hidden_states, xlstm_outputs.cache_params, tuple(hidden_state[:, 1:] for hidden_state in xlstm_outputs.hidden_states) if xlstm_outputs.hidden_states is not None else None)
-            elif len(xlstm_outputs) == 3: 
-                xlstm_outputs_mod = (hidden_states, xlstm_outputs[1], tuple(hidden_state[:, 1:] for hidden_state in xlstm_outputs[2]) if xlstm_outputs[2] is not None else None)
+                xlstm_outputs_mod = (
+                    hidden_states,
+                    xlstm_outputs.cache_params,
+                    tuple(hidden_state[:, 1:] for hidden_state in xlstm_outputs.hidden_states)
+                    if xlstm_outputs.hidden_states is not None
+                    else None,
+                )
+            elif len(xlstm_outputs) == 3:
+                xlstm_outputs_mod = (
+                    hidden_states,
+                    xlstm_outputs[1],
+                    tuple(hidden_state[:, 1:] for hidden_state in xlstm_outputs[2])
+                    if xlstm_outputs[2] is not None
+                    else None,
+                )
             elif len(xlstm_outputs) == 2:
                 xlstm_outputs_mod = (hidden_states, xlstm_outputs[1])
             elif len(xlstm_outputs) == 1:

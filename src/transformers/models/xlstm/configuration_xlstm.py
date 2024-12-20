@@ -14,10 +14,9 @@
 # limitations under the License.
 """XLSTM configuration"""
 
-
-
 from ...configuration_utils import PretrainedConfig
-from ...utils import logging, is_xlstm_available
+from ...utils import is_xlstm_available, logging
+
 
 if is_xlstm_available():
     from xlstm.xlstm_large.model import (
