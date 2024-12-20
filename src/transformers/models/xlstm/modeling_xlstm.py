@@ -7,12 +7,8 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
-from xlstm.xlstm_large.model import (
-    RMSNorm,
-    mLSTMBlock,
-    mLSTMStateType,
-    soft_cap,
-)
+
+
 
 from ...generation import GenerationMixin
 from ...modeling_utils import PreTrainedModel
@@ -22,7 +18,19 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_torchdynamo_compiling,
+    is_xlstm_available,
 )
+
+if is_xlstm_available():
+    from xlstm.xlstm_large.model import (
+        RMSNorm,
+        mLSTMBlock,
+        mLSTMStateType,
+        soft_cap,
+    )    
+else:
+    mLSTMBlock = None
+
 from .configuration_xlstm import xLSTMConfig
 
 

@@ -14,19 +14,30 @@
 # limitations under the License.
 """XLSTM configuration"""
 
-from xlstm.xlstm_large.model import (
-    BackendModeType,
-    ChunkwiseKernelType,
-    DtypeType,
-    SequenceKernelType,
-    StepKernelType,
-    WeightModeType,
-    round_up_to_next_multiple_of,
-    xLSTMLargeConfig,
-)
+
 
 from ...configuration_utils import PretrainedConfig
-from ...utils import logging
+from ...utils import logging, is_xlstm_available
+
+if is_xlstm_available():
+    from xlstm.xlstm_large.model import (
+        BackendModeType,
+        ChunkwiseKernelType,
+        DtypeType,
+        SequenceKernelType,
+        StepKernelType,
+        WeightModeType,
+        round_up_to_next_multiple_of,
+        xLSTMLargeConfig,
+    )
+else:
+    xLSTMLargeConfig = None
+    BackendModeType = None
+    ChunkwiseKernelType = None
+    DtypeType = None
+    SequenceKernelType = None
+    StepKernelType = None
+    WeightModeType = None
 
 
 logger = logging.get_logger(__name__)
