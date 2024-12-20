@@ -322,10 +322,11 @@ class Idefics3Processor(ProcessorMixin):
                     prompt_strings.append(sample)
 
                 text_inputs = self.tokenizer(text=prompt_strings, **output_kwargs["text_kwargs"])
+                inputs.update(text_inputs)
+
         elif text is not None:
             text_inputs = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
-
-        inputs.update(text_inputs)
+            inputs.update(text_inputs)
 
         return inputs
 
