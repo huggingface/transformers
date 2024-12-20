@@ -384,7 +384,7 @@ class xLSTMIntegrationTest(unittest.TestCase):
 
     @slow
     @require_torch_gpu
-    def test_xlstm_mixer_train_vs_eval_equivalence(self):
+    def test_xlstm_block_train_vs_eval_equivalence(self):
         # Based on https://github.com/sustcsonglin/flash-linear-attention/issues/63
         # Credit to zhixuan-lin
 
@@ -395,13 +395,13 @@ class xLSTMIntegrationTest(unittest.TestCase):
         torch.manual_seed(42)
         with torch.amp.autocast(device_type="cuda", dtype=dtype):
             with torch.no_grad():
-                mixer = mLSTMBlock(config, layer_idx=0).to("cuda")
+                block = mLSTMBlock(config, layer_idx=0).to("cuda")
                 hidden_states = torch.rand(size=(B, T, D), dtype=dtype, device="cuda")
 
-                mixer.train()
+                block.train()
                 out_train = block(hidden_states)
 
-                mixer.eval()
+                block.eval()
                 out_eval = block(hidden_states)
 
                 self.assertTrue(torch.allclose(out_train, out_eval, atol=1e-3))
