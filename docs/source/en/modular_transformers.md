@@ -46,7 +46,11 @@ be moved to the new Modular Transformers format in the coming months.
 
 ### Details 
 
-To generate the single-files from the modular file, run `python utils/modular_model_converter.py --files-to-parse src/transformers/models/<your_model>/modular_<your_model>.py`.
+To generate a single file from the modular file, run the following command.
+
+```bash
+python utils/modular_model_converter.py --files-to-parse src/transformers/models/<your_model>/modular_<your_model>.py
+```
 
 The "linter", which unravels the inheritance and creates all single-files from the modular file, will flatten the 
 inheritance while trying to be invisible to Python users. At this time, the linter flattens a **single** level of
@@ -64,7 +68,11 @@ file, and the corresponding files will be created for you.
 
 ### Enforcement
 
-You can run `python utils/check_modular_conversion.py --files src/transformers/models/<your_model>/modular_<your_model>.py` to make sure the generated content matches what is present in `modular_<your_model>.py`
+Run the command below to ensure the generated content matches `modular_<your_model>.py`
+
+```bash
+python utils/check_modular_conversion.py --files src/transformers/models/<your_model>/modular_<your_model>.py
+```
 
 ### Examples
 
