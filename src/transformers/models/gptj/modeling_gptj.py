@@ -66,14 +66,13 @@ def create_sinusoidal_positions(num_pos: int, dim: int) -> torch.Tensor:
 
 @torch.fx.wrap
 def get_embed_positions(embed_positions, position_ids):
-    return embed_positions.to(position_ids.device).repeat(position_ids.shape[0], 1, 1)
+    return embed_positions.to(position_ids.device).unsqueeze(0).repeat(position_ids.shape[0], 1, 1)
 
 
 def rotate_every_two(x: torch.Tensor) -> torch.Tensor:
     x1 = x[:, :, :, ::2]
     x2 = x[:, :, :, 1::2]
-    x = torch.stack((-x2, x1), dim=-1)
-    return x.flatten(-2)  # in einsum notation: rearrange(x, '... d j -> ... (d j)')
+    return torch.concat((-x2, x1), dim=-1)
 
 
 def apply_rotary_pos_emb(tensor: torch.Tensor, sin: torch.Tensor, cos: torch.Tensor) -> torch.Tensor:
@@ -115,7 +114,8 @@ class GPTJAttention(nn.Module):
         self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.out_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=False)
         self.rotary_dim = config.rotary_dim
-        pos_embd_dim = self.rotary_dim or self.embed_dim
+        pos_embd_dim = self.rotary_dim or self.head_dim
+        # `embed_positions` of shape `(max_positions, 2 * pos_embd_dim)`
         self.embed_positions = create_sinusoidal_positions(max_positions, pos_embd_dim)
 
     def _split_heads(self, tensor, num_attention_heads, attn_head_size, rotary):
@@ -178,11 +178,22 @@ class GPTJAttention(nn.Module):
         return attn_output, attn_weights
 
     def _get_embed_positions(self, position_ids):
+        """
+        This method does not subselect according to `position_ids`, it only
+        deals with device and shape.
+
+        Args:
+            position_ids: Position indices
+
+        Returns:
+            `embed_positions`, with device and shape according to `position_ids`
+
+        """
         embed_positions = self.embed_positions
         if embed_positions.device != position_ids.device:
             embed_positions = embed_positions.to(position_ids.device)
             self.embed_positions = embed_positions
-        return embed_positions.repeat(position_ids.shape[0], 1, 1)
+        return embed_positions.unsqueeze(0).repeat(position_ids.shape[0], 1, 1)
 
     def forward(
         self,
@@ -198,6 +209,8 @@ class GPTJAttention(nn.Module):
         Tuple[torch.Tensor, Tuple[torch.Tensor]],
         Optional[Tuple[torch.Tensor, Tuple[torch.Tensor], Tuple[torch.Tensor, ...]]],
     ]:
+        if position_ids is None:
+            raise ValueError("position_ids must be given")
         query = self.q_proj(hidden_states)
         key = self.k_proj(hidden_states)
         value = self.v_proj(hidden_states)
@@ -205,6 +218,9 @@ class GPTJAttention(nn.Module):
         query = self._split_heads(query, self.num_attention_heads, self.head_dim, True)
         key = self._split_heads(key, self.num_attention_heads, self.head_dim, True)
         value = self._split_heads(value, self.num_attention_heads, self.head_dim, False)
+        # Attention, different shapes:
+        # query, key: (B, T, n_head, rotary_dim)
+        # value: (B, n_head, T, rotary_dim)
 
         if is_torch_fx_proxy(position_ids) or torch.jit.is_tracing():
             # The logic to conditionally copy to GPU could not be traced, so we do this
@@ -235,6 +251,7 @@ class GPTJAttention(nn.Module):
 
         key = key.permute(0, 2, 1, 3)
         query = query.permute(0, 2, 1, 3)
+        # At this point, all have shape (B, n_head, T, rotary_dim)
 
         if layer_past is not None:
             cache_kwargs = {
@@ -288,6 +305,8 @@ class GPTJFlashAttention2(GPTJAttention):
         Tuple[torch.Tensor, Tuple[torch.Tensor]],
         Optional[Tuple[torch.Tensor, Tuple[torch.Tensor], Tuple[torch.Tensor, ...]]],
     ]:
+        if position_ids is None:
+            raise ValueError("position_ids must be given")
         query = self.q_proj(hidden_states)
         key = self.k_proj(hidden_states)
         value = self.v_proj(hidden_states)
@@ -323,7 +342,7 @@ class GPTJFlashAttention2(GPTJAttention):
             key = apply_rotary_pos_emb(key, sin, cos)
             query = apply_rotary_pos_emb(query, sin, cos)
 
-        # tanspose to have the desired shape
+        # transpose to have the desired shape
         # before transpose: batch_size x seq_length x num_attention_heads x head_dim
         # after transpose: batch_size x num_attention_heads x seq_length x head_dim
         key = key.permute(0, 2, 1, 3)

@@ -48,8 +48,7 @@ def create_sinusoidal_positions(num_pos: int, dim: int) -> torch.Tensor:
 def rotate_every_two(x: torch.Tensor) -> torch.Tensor:
     x1 = x[:, :, :, ::2]
     x2 = x[:, :, :, 1::2]
-    x = torch.stack((-x2, x1), dim=-1)
-    return x.flatten(-2)  # in einsum notation: rearrange(x, '... d j -> ... (d j)')
+    return torch.concat((-x2, x1), dim=-1)
 
 
 # Copied from transformers.models.gptj.modeling_gptj.apply_rotary_pos_emb
