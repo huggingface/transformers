@@ -197,7 +197,7 @@ class PixtralAttention(nn.Module):
         attn_weights = torch.matmul(query_states.float(), key_states.float().transpose(2, 3)) * self.scale
 
         if attention_mask is not None:
-           attn_weights = attn_weights + attention_mask
+            attn_weights = attn_weights + attention_mask
 
         # upcast attention to fp32
         attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32)
@@ -503,7 +503,6 @@ class PixtralVisionModel(PixtralPreTrainedModel):
         ).to(self.device)
 
         position_embedding = self.patch_positional_embedding(patch_embeds, position_ids)
-
 
         attention_mask = generate_block_attention_mask(
             [p.shape[-2] * p.shape[-1] for p in patch_embeds_list], patch_embeds

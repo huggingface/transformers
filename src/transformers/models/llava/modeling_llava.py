@@ -86,9 +86,13 @@ class LlavaCausalLMOutputWithPast(ModelOutput):
 class LlavaMultiModalProjector(nn.Module):
     def __init__(self, config: LlavaConfig):
         super().__init__()
-        self.linear_1 = nn.Linear(config.vision_config.hidden_size, config.text_config.hidden_size, bias=config.multimodal_projector_bias)
+        self.linear_1 = nn.Linear(
+            config.vision_config.hidden_size, config.text_config.hidden_size, bias=config.multimodal_projector_bias
+        )
         self.act = ACT2FN[config.projector_hidden_act]
-        self.linear_2 = nn.Linear(config.text_config.hidden_size, config.text_config.hidden_size, bias=config.multimodal_projector_bias)
+        self.linear_2 = nn.Linear(
+            config.text_config.hidden_size, config.text_config.hidden_size, bias=config.multimodal_projector_bias
+        )
 
     def forward(self, image_features):
         hidden_states = self.linear_1(image_features)
@@ -287,7 +291,9 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
         self.vision_tower = self.vision_tower.to("cuda")
-        image_outputs = self.vision_tower([[im.to("cuda") for im in sample] for sample in pixel_values], output_hidden_states=True)
+        image_outputs = self.vision_tower(
+            [[im.to("cuda") for im in sample] for sample in pixel_values], output_hidden_states=True
+        )
         self.vision_tower = self.vision_tower.to("cpu")
         # this is not memory efficient at all (output_hidden_states=True) will save all the hidden stated.
         selected_image_feature = image_outputs.hidden_states[vision_feature_layer]

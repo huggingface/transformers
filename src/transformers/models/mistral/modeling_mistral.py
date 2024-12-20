@@ -242,8 +242,6 @@ class MistralDecoderLayer(nn.Module):
 
         hidden_states = self.input_layernorm(hidden_states)
 
-
-
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
@@ -577,7 +575,6 @@ class MistralModel(MistralPreTrainedModel):
                     position_embeddings=position_embeddings,
                     **flash_attn_kwargs,
                 )
-
 
             hidden_states = layer_outputs[0]
 

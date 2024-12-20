@@ -13,8 +13,9 @@
 # limitations under the License.
 import argparse
 import json
-import regex as re
 import os
+
+import regex as re
 import torch
 from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
 from safetensors.torch import load_file as safe_load_file
@@ -28,7 +29,6 @@ from transformers import (
     PixtralImageProcessor,
     PixtralProcessor,
     PixtralVisionConfig,
-    PreTrainedTokenizerFast,
 )
 from transformers.convert_slow_tokenizer import bytes_to_unicode
 
@@ -159,6 +159,7 @@ class MistralConverter:
 
 def convert_mistral_tokenizer(model_file):
     from transformers import LlamaTokenizer
+
     mistral_tokenizer = MistralTokenizer.from_file(model_file)
     vocab = mistral_tokenizer.instruct_tokenizer.tokenizer.vocab()
     control_token_ids = mistral_tokenizer.instruct_tokenizer.tokenizer._control_tokens
@@ -204,25 +205,35 @@ def convert_dictionnary(original_state_dict, vision_config, text_config):
         new_dict[new_key] = value
     return new_dict
 
+
 MISTRAL_CONFIG_MAPPING = {
-    "dim":"hidden_size",
-    "hidden_dim":"intermediate_size",
-    "n_kv_heads":"num_key_value_heads",
-    "n_heads":"num_attention_heads",
-    "n_layers":"num_hidden_layers"
+    "dim": "hidden_size",
+    "hidden_dim": "intermediate_size",
+    "n_kv_heads": "num_key_value_heads",
+    "n_heads": "num_attention_heads",
+    "n_layers": "num_hidden_layers",
 }
+
 
 def convert_mistral_model(input_dir, output_dir):
     vision_config = {}
     if os.path.isfile(f"{input_dir}/params.json"):
-        with open(f'{input_dir}/params.json') as f: param_json = json.load(f) 
+        with open(f"{input_dir}/params.json") as f:
+            param_json = json.load(f)
         vision_config = param_json.pop("vision_encoder")
-        for k,v in MISTRAL_CONFIG_MAPPING.items():
+        for k, v in MISTRAL_CONFIG_MAPPING.items():
             value = param_json.pop(k)
             param_json[v] = value
         if "hidden_act" not in vision_config:
             vision_config["hidden_act"] = "silu"
-        text_config = MistralConfig(**param_json, hidden_act="silu", sliding_window=None,tie_word_embeddings=False, is_composition=True, rms_norm_eps=1e-5)
+        text_config = MistralConfig(
+            **param_json,
+            hidden_act="silu",
+            sliding_window=None,
+            tie_word_embeddings=False,
+            is_composition=True,
+            rms_norm_eps=1e-5,
+        )
     else:
         text_config = MistralConfig(
             attention_dropout=0.0,
@@ -258,8 +269,8 @@ def convert_mistral_model(input_dir, output_dir):
     config.architectures = ["LlavaForConditionalGeneration"]
     config.save_pretrained(output_dir)
     full_original_state_dict = {}
-    safetensors_files =  sorted([file for file in os.listdir(input_dir) if file.endswith(".safetensors")])
-    if len(safetensors_files)==1:
+    safetensors_files = sorted([file for file in os.listdir(input_dir) if file.endswith(".safetensors")])
+    if len(safetensors_files) == 1:
         full_original_state_dict = safe_load_file(f"{input_dir}/consolidated.safetensors")
     else:
         for file in safetensors_files:
@@ -271,7 +282,8 @@ def convert_mistral_model(input_dir, output_dir):
         model = LlavaForConditionalGeneration(config)
     model.load_state_dict(new_dict, strict=True, assign=True)
     model.save_pretrained(output_dir)
-    
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -282,10 +294,7 @@ def main():
         "--output_dir",
         help="Location to write HF model and tokenizer",
     )
-    parser.add_argument(
-        "--tokenizer_file",
-        help="Location of the specific tokenizer model file to use."
-    )
+    parser.add_argument("--tokenizer_file", help="Location of the specific tokenizer model file to use.")
     parser.add_argument(
         "--chat_template_file",
         help="Optional file containing a raw chat template. Will be set as the processor's chat template.",
@@ -300,7 +309,6 @@ def main():
     if args.chat_template_file:
         processor.chat_template = open(args.chat_template_file).read()
     processor.save_pretrained(args.output_dir)
-
 
 
 if __name__ == "__main__":
