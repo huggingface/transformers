@@ -33,6 +33,17 @@ if is_torch_available():
 
 #Copied from transformer.models.sam.processing_samhq.SamProcessor with Sam->SamHQ
 class SamHQProcessor(ProcessorMixin):
+    r"""
+    Constructs a SAM processor which wraps a SAM image processor and an 2D points & Bounding boxes processor into a
+    single processor.
+
+    [`SamHQProcessor`] offers all the functionalities of [`SamImageProcessor`]. See the docstring of
+    [`~SamImageProcessor.__call__`] for more information.
+
+    Args:
+        image_processor (`SamImageProcessor`):
+            An instance of [`SamImageProcessor`]. The image processor is a required input.
+    """
     attributes = ["image_processor"]
     image_processor_class = "SamImageProcessor"
 
@@ -66,7 +77,7 @@ class SamHQProcessor(ProcessorMixin):
         )
 
 
-    # pop arguments that are not used in the foward but used nevertheless
+        # pop arguments that are not used in the foward but used nevertheless
         original_sizes = encoding_image_processor["original_sizes"]
 
         if hasattr(original_sizes, "numpy"):  # Checks if Torch or TF tensor

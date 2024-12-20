@@ -1,3 +1,17 @@
+# coding=utf-8
+# Copyright 2023 The Meta AI Authors and The HuggingFace Team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 """PyTorch SAM-HQ model. """
 
 import collections
@@ -1010,6 +1024,37 @@ class SamHQMaskDecoder(nn.Module):
             attention_similarity: torch.Tensor = None,
             target_embedding: torch.Tensor = None,
     ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+    Predict high-quality masks given image and prompt embeddings.
+
+    Args:
+        image_embeddings (`torch.Tensor`):
+            The embeddings from the image encoder.
+        image_positional_embedding (`torch.Tensor`):
+            Positional encoding with the shape of image_embeddings.
+        sparse_prompt_embeddings (`torch.Tensor`):
+            The embeddings of the points and boxes.
+        dense_prompt_embeddings (`torch.Tensor`):
+            The embeddings of the mask inputs.
+        multimask_output (bool):
+            Whether to return multiple masks or a single mask.
+        hq_token_only (bool): 
+            Whether to use only the high-quality token output or combine with SAM output.
+        interm_embeddings (`torch.Tensor`):
+            Intermediate embeddings from the vision encoder for feature fusion.
+        output_attentions (bool, *optional*):
+            Whether or not to return the attentions tensors of all attention layers.
+        attention_similarity (`torch.Tensor`, *optional*):
+            Optional tensor for attention similarity computation.
+        target_embedding (`torch.Tensor`, *optional*):
+            Optional target embedding for transformer processing.
+            
+    Returns:
+        `Tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor]]`: A tuple of tensors containing:
+            - A tensor of shape `(batch_size, num_prompts, num_masks, height, width)` containing the output masks.
+            - A tensor of shape `(batch_size, num_prompts, num_masks)` containing the iou predictions for each mask.
+            - (Optional) A tuple containing attention tensors if output_attentions is True.
+    """
         batch_size, num_channels, height, width = image_embeddings.shape
         point_batch_size = sparse_prompt_embeddings.shape[1]
         vit_features = interm_embeddings[0].permute(0, 3, 1, 2)
@@ -1346,7 +1391,7 @@ class SamHQModel(SamHQPreTrainedModel):
         return prompt_output
     
 
-    
+    @add_start_docstrings_to_model_forward(SAM_HQ_INPUTS_DOCSTRING)
     def forward(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
@@ -1366,7 +1411,32 @@ class SamHQModel(SamHQPreTrainedModel):
         **kwargs,
     ) -> List[Dict[str, torch.Tensor]]:
         r"""
-        
+        Example:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoModel, AutoProcessor
+
+        >>> model = AutoModel.from_pretrained("sushmanth/sam_hq_vit_b")
+        >>> processor = AutoProcessor.from_pretrained("sushmanth/sam_hq_vit_b")
+
+        >>> img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-car.png"
+        >>> raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+        >>> input_points = [[[400, 650]]]  # 2D location of a window on the car
+        >>> inputs = processor(images=raw_image, input_points=input_points, return_tensors="pt")
+
+        >>> # Get high-quality segmentation mask
+        >>> outputs = model(**inputs)
+
+        >>> # For high-quality mask only
+        >>> outputs = model(**inputs, hq_token_only=True)
+
+        >>> # Postprocess masks
+        >>> masks = processor.post_process_masks(
+        ...     outputs.pred_masks, inputs["original_sizes"], inputs["reshaped_input_sizes"]
+        ... )
+        ```
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
