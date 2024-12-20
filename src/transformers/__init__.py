@@ -606,6 +606,7 @@ _import_structure = {
     "models.mobilenet_v2": ["MobileNetV2Config"],
     "models.mobilevit": ["MobileViTConfig"],
     "models.mobilevitv2": ["MobileViTV2Config"],
+    "models.modernbert": ["ModernBertConfig"],
     "models.moshi": [
         "MoshiConfig",
         "MoshiDepthConfig",
@@ -2868,6 +2869,15 @@ else:
             "MobileViTV2ForSemanticSegmentation",
             "MobileViTV2Model",
             "MobileViTV2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.modernbert"].extend(
+        [
+            "ModernBertForMaskedLM",
+            "ModernBertForSequenceClassification",
+            "ModernBertForTokenClassification",
+            "ModernBertModel",
+            "ModernBertPreTrainedModel",
         ]
     )
     _import_structure["models.moshi"].extend(
@@ -5574,6 +5584,7 @@ if TYPE_CHECKING:
     from .models.mobilevitv2 import (
         MobileViTV2Config,
     )
+    from .models.modernbert import ModernBertConfig
     from .models.moshi import (
         MoshiConfig,
         MoshiDepthConfig,
@@ -7565,6 +7576,13 @@ if TYPE_CHECKING:
             MobileViTV2ForSemanticSegmentation,
             MobileViTV2Model,
             MobileViTV2PreTrainedModel,
+        )
+        from .models.modernbert import (
+            ModernBertForMaskedLM,
+            ModernBertForSequenceClassification,
+            ModernBertForTokenClassification,
+            ModernBertModel,
+            ModernBertPreTrainedModel,
         )
         from .models.moshi import (
             MoshiForCausalLM,
