@@ -33,6 +33,7 @@ from ..mistral.modeling_mistral import (
     MistralForSequenceClassification,
     MistralForTokenClassification,
     MistralPreTrainedModel,
+    MistralRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -94,7 +95,7 @@ class Phi3Attention(nn.Module):
         hidden_shape = (*input_shape, -1, self.head_dim)
 
         qkv = self.qkv_proj(hidden_states)
-        query_pos = self.num_heads * self.head_dim
+        query_pos = self.config.num_attention_heads * self.head_dim
         query_states = qkv[..., :query_pos]
         key_states = qkv[..., query_pos : query_pos + self.num_key_value_heads * self.head_dim]
         value_states = qkv[..., query_pos + self.num_key_value_heads * self.head_dim :]
@@ -209,6 +210,10 @@ class Phi3DecoderLayer(MistralDecoderLayer):
             outputs += (self_attn_weights,)
 
         return outputs
+
+
+class Phi3RotaryEmbedding(MistralRotaryEmbedding):
+    pass
 
 
 class Phi3PreTrainedModel(MistralPreTrainedModel):
