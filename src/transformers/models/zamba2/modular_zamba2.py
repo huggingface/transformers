@@ -1629,6 +1629,10 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
         self._attn_implementation = config._attn_implementation
         self.final_layernorm = Zamba2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         if config.use_mem_rope:
+            if config.use_long_context:
+                logger.warning_once(
+                "`use_long_context` set to `True`, using rescaled `rope_theta` and extended `max_position_embeddings`."
+                )
             self.rotary_emb = Zamba2RotaryEmbedding(config)
         self.gradient_checkpointing = False
 
