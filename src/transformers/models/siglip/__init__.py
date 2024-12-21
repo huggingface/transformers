@@ -18,6 +18,7 @@ from ...utils import (
     _LazyModule,
     is_sentencepiece_available,
     is_torch_available,
+    is_torchvision_available,
     is_vision_available,
 )
 
@@ -47,6 +48,14 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["image_processing_siglip"] = ["SiglipImageProcessor"]
+
+try:
+    if not is_torchvision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["image_processing_siglip_fast"] = ["SiglipImageProcessorFast"]
 
 try:
     if not is_torch_available():
@@ -86,6 +95,14 @@ if TYPE_CHECKING:
         pass
     else:
         from .image_processing_siglip import SiglipImageProcessor
+
+    try:
+        if not is_torchvision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .image_processing_siglip_fast import SiglipImageProcessorFast
 
     try:
         if not is_torch_available():
