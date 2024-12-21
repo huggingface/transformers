@@ -305,7 +305,7 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "Raghavan/textnet-base"
+        model_name = "jadechoghari/textnet-base"
         model = TextNetModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -314,9 +314,9 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 @require_vision
 class TextNetModelIntegrationTest(unittest.TestCase):
     @slow
-    def test_inference_textnet_image_classification(self):
-        processor = TextNetImageProcessor.from_pretrained("Raghavan/textnet-base")
-        model = TextNetForImageClassification.from_pretrained("Raghavan/textnet-base").to(torch_device)
+    def test_inference_no_head(self):
+        processor = TextNetImageProcessor.from_pretrained("jadechoghari/textnet-base")
+        model = TextNetModel.from_pretrained("jadechoghari/textnet-base").to(torch_device)
 
         # prepare image
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -329,7 +329,11 @@ class TextNetModelIntegrationTest(unittest.TestCase):
 
         # verify logits
         self.assertEqual(output.logits.shape, torch.Size([1, 2]))
-        self.assertTrue(torch.allclose(output.logits[:3, :3]), torch.zeros_like((output.logits[:3, :3])), atol=1e-3)
+        expected_slice_backbone = torch.tensor(
+            [0.9210, 0.6099, 0.0000, 0.0000, 0.0000, 0.0000, 3.2207, 2.6602, 1.8925, 0.0000],
+            device=torch_device,
+        )
+        self.assertTrue(torch.allclose(output.feature_maps[-1][0][10][12][:10], expected_slice_backbone, atol=1e-3))
 
 
 @require_torch

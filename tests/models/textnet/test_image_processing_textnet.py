@@ -37,6 +37,7 @@ class TextNetImageProcessingTester(unittest.TestCase):
         max_resolution=400,
         do_resize=True,
         size=None,
+        size_divisor=32,
         do_center_crop=True,
         crop_size=None,
         do_normalize=True,
@@ -54,6 +55,7 @@ class TextNetImageProcessingTester(unittest.TestCase):
         self.max_resolution = max_resolution
         self.do_resize = do_resize
         self.size = size
+        self.size_divisor = size_divisor
         self.do_center_crop = do_center_crop
         self.crop_size = crop_size
         self.do_normalize = do_normalize
@@ -65,6 +67,7 @@ class TextNetImageProcessingTester(unittest.TestCase):
         return {
             "do_resize": self.do_resize,
             "size": self.size,
+            "size_divisor": self.size_divisor,
             "do_center_crop": self.do_center_crop,
             "crop_size": self.crop_size,
             "do_normalize": self.do_normalize,
@@ -105,6 +108,7 @@ class TextNetImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image_processing = self.image_processing_class(**self.image_processor_dict)
         self.assertTrue(hasattr(image_processing, "do_resize"))
         self.assertTrue(hasattr(image_processing, "size"))
+        self.assertTrue(hasattr(image_processing, "size_divisor"))
         self.assertTrue(hasattr(image_processing, "do_center_crop"))
         self.assertTrue(hasattr(image_processing, "center_crop"))
         self.assertTrue(hasattr(image_processing, "do_normalize"))

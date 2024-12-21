@@ -60,6 +60,8 @@ class TextNetImageProcessor(BaseImageProcessor):
             Size of the image after resizing. The shortest edge of the image is resized to size["shortest_edge"], with
             the longest edge resized to keep the input aspect ratio. Can be overridden by `size` in the `preprocess`
             method.
+        size_divisor (`int`, *optional*, defaults to 32):
+            Ensures height and width are rounded to a multiple of this value after resizing.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
         do_center_crop (`bool`, *optional*, defaults to `False`):
@@ -93,6 +95,7 @@ class TextNetImageProcessor(BaseImageProcessor):
         self,
         do_resize: bool = True,
         size: Dict[str, int] = None,
+        size_divisor: int = 32,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_center_crop: bool = False,
         crop_size: Dict[str, int] = None,
@@ -112,6 +115,7 @@ class TextNetImageProcessor(BaseImageProcessor):
 
         self.do_resize = do_resize
         self.size = size
+        self.size_divisor = size_divisor
         self.resample = resample
         self.do_center_crop = do_center_crop
         self.crop_size = crop_size
@@ -126,6 +130,7 @@ class TextNetImageProcessor(BaseImageProcessor):
             "images",
             "do_resize",
             "size",
+            "size_divisor",
             "resample",
             "do_center_crop",
             "crop_size",
@@ -158,6 +163,8 @@ class TextNetImageProcessor(BaseImageProcessor):
                 Image to resize.
             size (`Dict[str, int]`):
                 Size of the output image.
+            size_divisor (`int`, *optional*, defaults to `32`):
+                Ensures height and width are rounded to a multiple of this value after resizing.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 Resampling filter to use when resiizing the image.
             data_format (`str` or `ChannelDimension`, *optional*):
@@ -176,29 +183,29 @@ class TextNetImageProcessor(BaseImageProcessor):
         else:
             raise ValueError("Size must contain either 'shortest_edge' or 'height' and 'width'.")
 
-        height, weight = get_resize_output_image_size(
+        height, width = get_resize_output_image_size(
             image, size=size, input_data_format=input_data_format, default_to_square=False
         )
-        if height % 32 != 0:
-            height = height + (32 - height % 32)
-        if weight % 32 != 0:
-            weight = weight + (32 - weight % 32)
+        if height % self.size_divisor != 0:
+            height += self.size_divisor - (height % self.size_divisor)
+        if width % self.size_divisor != 0:
+            width += self.size_divisor - (width % self.size_divisor)
 
         return resize(
             image,
-            size=(height, weight),
+            size=(height, width),
             resample=resample,
             data_format=data_format,
             input_data_format=input_data_format,
             **kwargs,
         )
 
-    # Copied from transformers.models.clip.image_processing_clip.CLIPImageProcessor.preprocess
     def preprocess(
         self,
         images: ImageInput,
         do_resize: bool = None,
         size: Dict[str, int] = None,
+        size_divisor: int = None,
         resample: PILImageResampling = None,
         do_center_crop: bool = None,
         crop_size: int = None,
@@ -225,6 +232,8 @@ class TextNetImageProcessor(BaseImageProcessor):
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
                 Size of the image after resizing. Shortest edge of the image is resized to size["shortest_edge"], with
                 the longest edge resized to keep the input aspect ratio.
+            size_divisor (`int`, *optional*, defaults to `32`):
+                Ensures height and width are rounded to a multiple of this value after resizing.
             resample (`int`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`. Only
                 has an effect if `do_resize` is set to `True`.
@@ -267,6 +276,7 @@ class TextNetImageProcessor(BaseImageProcessor):
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
         size = get_size_dict(size, param_name="size", default_to_square=False)
+        size_divisor = size_divisor if size_divisor is not None else self.size_divisor
         resample = resample if resample is not None else self.resample
         do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
         crop_size = crop_size if crop_size is not None else self.crop_size

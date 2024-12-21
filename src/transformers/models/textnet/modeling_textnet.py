@@ -43,32 +43,8 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "TextNetConfig"
-_CHECKPOINT_FOR_DOC = "Raghavan/textnet-base"
+_CHECKPOINT_FOR_DOC = "jadechoghari/textnet-base"
 _EXPECTED_OUTPUT_SHAPE = [1, 512, 20, 27]
-
-TEXTNET_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`TextNetConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-TEXTNET_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`TextNetImageProcessor.__call__`] for details.
-
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-"""
 
 
 class TextNetConvLayer(nn.Module):
@@ -116,7 +92,7 @@ class TextNetRepConvLayer(nn.Module):
 
         padding = ((kernel_size[0] - 1) // 2, (kernel_size[1] - 1) // 2)
 
-        self.nonlinearity = nn.ReLU()
+        self.activation_function = nn.ReLU()
 
         self.main_conv = nn.Conv2d(
             in_channels=in_channels,
@@ -181,7 +157,7 @@ class TextNetRepConvLayer(nn.Module):
             id_out = self.rbr_identity(hidden_states)
             main_outputs = main_outputs + id_out
 
-        return self.nonlinearity(main_outputs)
+        return self.activation_function(main_outputs)
 
 
 class TextNetStage(nn.Module):
@@ -235,6 +211,31 @@ class TextNetEncoder(nn.Module):
             return output + (hidden_states,) if output_hidden_states else output
 
         return BaseModelOutputWithNoAttention(last_hidden_state=hidden_state, hidden_states=hidden_states)
+
+
+TEXTNET_START_DOCSTRING = r"""
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
+    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
+
+    Parameters:
+        config ([`TextNetConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+TEXTNET_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`TextNetImageProcessor.__call__`] for details.
+
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
 
 
 class TextNetPreTrainedModel(PreTrainedModel):
@@ -354,8 +355,8 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> processor = TextNetImageProcessor.from_pretrained("Raghavan/textnet-base")
-        >>> model = TextNetForImageClassification.from_pretrained("Raghavan/textnet-base")
+        >>> processor = TextNetImageProcessor.from_pretrained("jadechoghari/textnet-base")
+        >>> model = TextNetForImageClassification.from_pretrained("jadechoghari/textnet-base")
 
         >>> inputs = processor(images=image, return_tensors="pt", size={"height": 640, "width": 640})
         >>> with torch.no_grad():
@@ -434,8 +435,8 @@ class TextNetBackbone(TextNetPreTrainedModel, BackboneMixin):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> processor = AutoImageProcessor.from_pretrained("Raghavan/textnet-base")
-        >>> model = AutoBackbone.from_pretrained("Raghavan/textnet-base")
+        >>> processor = AutoImageProcessor.from_pretrained("jadechoghari/textnet-base")
+        >>> model = AutoBackbone.from_pretrained("jadechoghari/textnet-base")
 
         >>> inputs = processor(image, return_tensors="pt")
         >>> with torch.no_grad():
