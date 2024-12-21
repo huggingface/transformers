@@ -27,8 +27,6 @@ alt="drawing" width="600"/>
 
 This model was contributed by [Raghavan](https://huggingface.co/Raghavan), [jadechoghari](https://huggingface.co/jadechoghari) and [nielsr](https://huggingface.co/nielsr).
 
-This model was contributed by [nandwalritik](https://huggingface.co/nandwalritik).
-The original code can be found [here](https://github.com/czczup/FAST).
 
 ## TextNetConfig
 
