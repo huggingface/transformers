@@ -34,7 +34,7 @@ python utils/check_copies.py --fix_and_overwrite
 ```
 
 for a check that will fix all inconsistencies automatically (used by `make fix-copies`).
-"""
+"""    
 
 import argparse
 import glob
@@ -1072,7 +1072,7 @@ SPECIAL_MODEL_NAMES = {
     "OpenAI GPT": "GPT",
     "Perceiver": "Perceiver IO",
     "SAM": "Segment Anything",
-    "SAM_HQ": "Segment Anything High Quality"
+    "SAM_HQ": "Segment Anything High Quality",
     "ViT": "Vision Transformer (ViT)",
 }
 
