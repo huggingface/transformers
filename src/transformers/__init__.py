@@ -831,6 +831,8 @@ _import_structure = {
     "models.vit_msn": ["ViTMSNConfig"],
     "models.vitdet": ["VitDetConfig"],
     "models.vitmatte": ["VitMatteConfig"],
+    "models.vitpose": ["VitPoseConfig"],
+    "models.vitpose_backbone": ["VitPoseBackboneConfig"],
     "models.vits": [
         "VitsConfig",
         "VitsTokenizer",
@@ -1261,6 +1263,7 @@ else:
     _import_structure["models.vilt"].extend(["ViltFeatureExtractor", "ViltImageProcessor", "ViltProcessor"])
     _import_structure["models.vit"].extend(["ViTFeatureExtractor", "ViTImageProcessor"])
     _import_structure["models.vitmatte"].append("VitMatteImageProcessor")
+    _import_structure["models.vitpose"].append("VitPoseImageProcessor")
     _import_structure["models.vivit"].append("VivitImageProcessor")
     _import_structure["models.yolos"].extend(["YolosFeatureExtractor", "YolosImageProcessor"])
     _import_structure["models.zoedepth"].append("ZoeDepthImageProcessor")
@@ -3724,6 +3727,18 @@ else:
             "VitMattePreTrainedModel",
         ]
     )
+    _import_structure["models.vitpose"].extend(
+        [
+            "VitPoseForPoseEstimation",
+            "VitPosePreTrainedModel",
+        ]
+    )
+    _import_structure["models.vitpose_backbone"].extend(
+        [
+            "VitPoseBackbone",
+            "VitPoseBackbonePreTrainedModel",
+        ]
+    )
     _import_structure["models.vits"].extend(
         [
             "VitsModel",
@@ -5843,6 +5858,8 @@ if TYPE_CHECKING:
     from .models.vit_msn import ViTMSNConfig
     from .models.vitdet import VitDetConfig
     from .models.vitmatte import VitMatteConfig
+    from .models.vitpose import VitPoseConfig
+    from .models.vitpose_backbone import VitPoseBackboneConfig
     from .models.vits import (
         VitsConfig,
         VitsTokenizer,
@@ -6275,6 +6292,7 @@ if TYPE_CHECKING:
         from .models.vilt import ViltFeatureExtractor, ViltImageProcessor, ViltProcessor
         from .models.vit import ViTFeatureExtractor, ViTImageProcessor
         from .models.vitmatte import VitMatteImageProcessor
+        from .models.vitpose import VitPoseImageProcessor
         from .models.vivit import VivitImageProcessor
         from .models.yolos import YolosFeatureExtractor, YolosImageProcessor
         from .models.zoedepth import ZoeDepthImageProcessor
@@ -8238,6 +8256,11 @@ if TYPE_CHECKING:
             VitMatteForImageMatting,
             VitMattePreTrainedModel,
         )
+        from .models.vitpose import (
+            VitPoseForPoseEstimation,
+            VitPosePreTrainedModel,
+        )
+        from .models.vitpose_backbone import VitPoseBackbone, VitPoseBackbonePreTrainedModel
         from .models.vits import (
             VitsModel,
             VitsPreTrainedModel,
