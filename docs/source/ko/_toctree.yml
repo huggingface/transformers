@@ -692,8 +692,8 @@
       sections:
       - local: in_translation
         title: (번역중) ALIGN
-      - local: in_translation
-        title: (번역중) AltCLIP
+      - local: model_doc/altclip
+        title: AltCLIP
       - local: model_doc/blip-2
         title: BLIP-2
       - local: model_doc/blip
