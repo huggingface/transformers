@@ -48,18 +48,8 @@ from .configuration_diffllama import DiffLlamaConfig
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "kajuma/DiffLlama-0.3B-handcut"
 _CONFIG_FOR_DOC = "DiffLlamaConfig"
-
-
-class DiffLlamaRMSNorm(LlamaRMSNorm):
-    pass
-
-
-ALL_LAYERNORM_LAYERS.append(DiffLlamaRMSNorm)
-
-
-class DiffLlamaRotaryEmbedding(LlamaRotaryEmbedding):
-    pass
 
 
 class DiffLlamaMLP(MistralMLP):
@@ -427,18 +417,6 @@ class DiffLlamaSdpaAttention(DiffLlamaAttention):
         attn_output = self.o_proj(attn_output)
 
         return attn_output, None, past_key_value
-
-
-class DiffLlamaDecoderLayer(LlamaDecoderLayer):
-    pass
-
-
-class DiffLlamaPreTrainedModel(LlamaPreTrainedModel):
-    pass
-
-
-class DiffLlamaModel(DiffLlamaPreTrainedModel, LlamaModel):
-    pass
 
 
 class DiffLlamaForCausalLM(GemmaForCausalLM):

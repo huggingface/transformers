@@ -24,7 +24,8 @@ from ...modeling_rope_utils import rope_config_validation
 class DiffLlamaConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DiffLlamaModel`]. It is used to instantiate an DiffLlama
-    model according to the specified arguments, defining the model architecture.
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the defaults
+    will yield a similar configuration to that of the [kajuma/DiffLlama-0.3B-handcut](https://huggingface.co/kajuma/DiffLlama-0.3B-handcut).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -34,11 +35,11 @@ class DiffLlamaConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 32000):
             Vocabulary size of the DiffLlama model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`DiffLlamaModel`]
-        hidden_size (`int`, *optional*, defaults to 4096):
+        hidden_size (`int`, *optional*, defaults to 2048):
             Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 11008):
+        intermediate_size (`int`, *optional*, defaults to 8192):
             Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
+        num_hidden_layers (`int`, *optional*, defaults to 16):
             Number of hidden layers in the Transformer decoder.
         num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer decoder.
@@ -53,11 +54,10 @@ class DiffLlamaConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 2048):
-            The maximum sequence length that this model might ever be used with. DiffLlama 1 supports up to 2048 tokens,
-            DiffLlama 2 up to 4096, CodeDiffLlama up to 16384.
+            The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
+        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the rms normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
@@ -137,15 +137,15 @@ class DiffLlamaConfig(PretrainedConfig):
     def __init__(
         self,
         vocab_size=32000,
-        hidden_size=4096,
-        intermediate_size=11008,
-        num_hidden_layers=32,
+        hidden_size=2048,
+        intermediate_size=8192,
+        num_hidden_layers=16,
         num_attention_heads=32,
         num_key_value_heads=None,
         hidden_act="silu",
         max_position_embeddings=2048,
         initializer_range=0.02,
-        rms_norm_eps=1e-6,
+        rms_norm_eps=1e-5,
         use_cache=True,
         pad_token_id=None,
         bos_token_id=1,
