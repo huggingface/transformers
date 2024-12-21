@@ -884,7 +884,7 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
 
         if "max_size" in kwargs:
             logger.warning_once(
-                "The `max_size` parameter is deprecated and will be removed in v4.26. "
+                "The `max_size` parameter is deprecated and will be removed in a future version. "
                 "Please specify in `size['longest_edge'] instead`.",
             )
             max_size = kwargs.pop("max_size")
@@ -1018,7 +1018,7 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
         """
         if "max_size" in kwargs:
             logger.warning_once(
-                "The `max_size` parameter is deprecated and will be removed in v4.26. "
+                "The `max_size` parameter is deprecated and will be removed in a future version. "
                 "Please specify in `size['longest_edge'] instead`.",
             )
             max_size = kwargs.pop("max_size")
@@ -1370,7 +1370,6 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
             )
             do_pad = kwargs.pop("pad_and_return_pixel_mask")
 
-        max_size = None
         if "max_size" in kwargs:
             logger.warning_once(
                 "The `max_size` argument is deprecated and will be removed in a future version, use"
@@ -1380,7 +1379,7 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
 
         do_resize = self.do_resize if do_resize is None else do_resize
         size = self.size if size is None else size
-        size = get_size_dict(size=size, max_size=max_size, default_to_square=False)
+        size = get_size_dict(size=size, default_to_square=False)
         resample = self.resample if resample is None else resample
         do_rescale = self.do_rescale if do_rescale is None else do_rescale
         rescale_factor = self.rescale_factor if rescale_factor is None else rescale_factor
@@ -1476,7 +1475,7 @@ class GroundingDinoImageProcessor(BaseImageProcessor):
                 for image, target in zip(images, annotations):
                     orig_size = get_image_size(image, input_data_format)
                     resized_image = self.resize(
-                        image, size=size, max_size=max_size, resample=resample, input_data_format=input_data_format
+                        image, size=size, resample=resample, input_data_format=input_data_format
                     )
                     resized_annotation = self.resize_annotation(
                         target, orig_size, get_image_size(resized_image, input_data_format)
