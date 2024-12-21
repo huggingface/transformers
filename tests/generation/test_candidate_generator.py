@@ -265,12 +265,11 @@ class TestUniversalSpeculativeDecoding(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        cls.assistant_model = AutoModelForCausalLM.from_pretrained(
-            "hf-internal-testing/tiny-random-gpt2").to(cls.device)
-        cls.main_tokenizer = AutoTokenizer.from_pretrained(
-            "meta-llama/Llama-3.2-1B-Instruct")
-        cls.assistant_tokenizer = AutoTokenizer.from_pretrained(
-            "hf-internal-testing/tiny-random-gpt2")
+        cls.assistant_model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(
+            cls.device
+        )
+        cls.main_tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-1B-Instruct")
+        cls.assistant_tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         cls.generation_config = GenerationConfig()
 
         # Ensure required tokens exist
@@ -312,10 +311,11 @@ class TestUniversalSpeculativeDecoding(unittest.TestCase):
         # Find a token that is not in the assistant tokenizer but in
         # the main tokenizer.
         missing_token = next(
-            token for token in self.main_tokenizer.get_vocab()
-            if token not in self.assistant_tokenizer.get_vocab() and
-               token not in self.main_tokenizer.all_special_tokens and
-               "reserved_" not in token
+            token
+            for token in self.main_tokenizer.get_vocab()
+            if token not in self.assistant_tokenizer.get_vocab()
+            and token not in self.main_tokenizer.all_special_tokens
+            and "reserved_" not in token
         )
         input_ids = torch.tensor([[self.main_tokenizer.convert_tokens_to_ids(missing_token)]])
         self.generator.input_ids = input_ids
@@ -330,15 +330,12 @@ class TestUniversalSpeculativeDecoding(unittest.TestCase):
         for depth in [1, 8, 17]:
             self.generator.num_assistant_tokens = depth
             candidates, scores = self.generator.get_candidates(input_ids)
-            self.assertLessEqual(
-                candidates.shape[1] - input_ids.shape[1], depth
-            )
+            self.assertLessEqual(candidates.shape[1] - input_ids.shape[1], depth)
 
     def test_device_consistency(self):
         """Test handling of inputs on different devices"""
         if torch.cuda.is_available():
-            input_ids = torch.tensor([[1, 2, 3]]).to(
-                self.generator.assistant_model.device)
+            input_ids = torch.tensor([[1, 2, 3]]).to(self.generator.assistant_model.device)
             self.generator.input_ids = input_ids
             candidates, scores = self.generator.get_candidates(input_ids)
             self.assertEqual(candidates.device, input_ids.device)
