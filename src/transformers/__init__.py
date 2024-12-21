@@ -122,6 +122,7 @@ _import_structure = {
     "feature_extraction_utils": ["BatchFeature", "FeatureExtractionMixin"],
     "file_utils": [],
     "generation": [
+        "AsyncTextIteratorStreamer",
         "CompileConfig",
         "GenerationConfig",
         "TextIteratorStreamer",
@@ -606,6 +607,7 @@ _import_structure = {
     "models.mobilenet_v2": ["MobileNetV2Config"],
     "models.mobilevit": ["MobileViTConfig"],
     "models.mobilevitv2": ["MobileViTV2Config"],
+    "models.modernbert": ["ModernBertConfig"],
     "models.moshi": [
         "MoshiConfig",
         "MoshiDepthConfig",
@@ -1000,6 +1002,7 @@ _import_structure = {
         "HqqConfig",
         "QuantoConfig",
         "TorchAoConfig",
+        "VptqConfig",
     ],
 }
 
@@ -2869,6 +2872,15 @@ else:
             "MobileViTV2ForSemanticSegmentation",
             "MobileViTV2Model",
             "MobileViTV2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.modernbert"].extend(
+        [
+            "ModernBertForMaskedLM",
+            "ModernBertForSequenceClassification",
+            "ModernBertForTokenClassification",
+            "ModernBertModel",
+            "ModernBertPreTrainedModel",
         ]
     )
     _import_structure["models.moshi"].extend(
@@ -5054,7 +5066,14 @@ if TYPE_CHECKING:
     from .feature_extraction_utils import BatchFeature, FeatureExtractionMixin
 
     # Generation
-    from .generation import CompileConfig, GenerationConfig, TextIteratorStreamer, TextStreamer, WatermarkingConfig
+    from .generation import (
+        AsyncTextIteratorStreamer,
+        CompileConfig,
+        GenerationConfig,
+        TextIteratorStreamer,
+        TextStreamer,
+        WatermarkingConfig,
+    )
     from .hf_argparser import HfArgumentParser
 
     # Integrations
@@ -5575,6 +5594,7 @@ if TYPE_CHECKING:
     from .models.mobilevitv2 import (
         MobileViTV2Config,
     )
+    from .models.modernbert import ModernBertConfig
     from .models.moshi import (
         MoshiConfig,
         MoshiDepthConfig,
@@ -6017,6 +6037,7 @@ if TYPE_CHECKING:
         HqqConfig,
         QuantoConfig,
         TorchAoConfig,
+        VptqConfig,
     )
 
     try:
@@ -7567,6 +7588,13 @@ if TYPE_CHECKING:
             MobileViTV2ForSemanticSegmentation,
             MobileViTV2Model,
             MobileViTV2PreTrainedModel,
+        )
+        from .models.modernbert import (
+            ModernBertForMaskedLM,
+            ModernBertForSequenceClassification,
+            ModernBertForTokenClassification,
+            ModernBertModel,
+            ModernBertPreTrainedModel,
         )
         from .models.moshi import (
             MoshiForCausalLM,
