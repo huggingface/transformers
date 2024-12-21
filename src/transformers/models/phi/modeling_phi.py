@@ -270,11 +270,7 @@ class PhiDecoderLayer(nn.Module):
 
 
 class PhiRotaryEmbedding(nn.Module):
-    def __init__(
-        self,
-        config: PhiConfig,
-        device=None,
-    ):
+    def __init__(self, config: PhiConfig, device=None):
         super().__init__()
         self.rope_kwargs = {}
         # BC: "rope_type" was originally "type"
