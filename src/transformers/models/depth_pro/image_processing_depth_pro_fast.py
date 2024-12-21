@@ -15,7 +15,10 @@
 """Fast Image processor class for DepthPro."""
 
 import functools
-from typing import Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Dict, List, Tuple, Optional, Union
+
+if TYPE_CHECKING:
+    from ...modeling_outputs import DepthProDepthEstimatorOutput
 
 from ...image_processing_base import BatchFeature
 from ...image_processing_utils import get_size_dict
@@ -307,11 +310,11 @@ class DepthProImageProcessorFast(BaseImageProcessorFast):
         data = {"pixel_values": torch.stack(transformed_images, dim=0)}
         return BatchFeature(data, tensor_type=return_tensors)
 
+    # Copied from transformers.models.depth_pro.image_processing_depth_pro.DepthProImageProcessor.post_process_depth_estimation
     def post_process_depth_estimation(
         self,
-        predicted_depths: Union[TensorType, List[TensorType]],
-        fovs: Optional[Union[TensorType, List[TensorType], None]] = None,
-        target_sizes: Optional[Union[TensorType, List[tuple[int, int]], None]] = None,
+        outputs: "DepthProDepthEstimatorOutput",
+        target_sizes: Optional[Union[TensorType, List[Tuple[int, int]], None]] = None,
     ) -> Dict[str, List[TensorType]]:
         """
         Post-processes the raw depth predictions from the model to generate final depth predictions and optionally
@@ -319,22 +322,16 @@ class DepthProImageProcessorFast(BaseImageProcessorFast):
         and adjusts depth values accordingly.
 
         Args:
-            predicted_depths (`Union[TensorType, List[TensorType]]`):
-                Raw depth predictions output by the model. Can be a single tensor or a list of tensors, each
-                corresponding to an image in the batch.
-            fovs (`Optional[Union[TensorType, List[TensorType], None]]`, *optional*, defaults to `None`):
-                Field of view (FoV) values corresponding to each depth prediction. Should have the same length
-                as `predicted_depths` if provided. If `None`, FoV scaling is skipped.
-            target_sizes (`Optional[Union[TensorType, List[tuple[int, int]], None]]`, *optional*, defaults to `None`):
+            outputs ([`DepthProDepthEstimatorOutput`]):
+                Raw outputs of the model.
+            target_sizes (`Optional[Union[TensorType, List[Tuple[int, int]], None]]`, *optional*, defaults to `None`):
                 Target sizes to resize the depth predictions. Can be a tensor of shape `(batch_size, 2)`
                 or a list of tuples `(height, width)` for each image in the batch. If `None`, no resizing
                 is performed.
 
         Returns:
-            `Dict[str, List[TensorType]]`:
-                A dictionary containing:
-                    - `"predicted_depth"`: A list of processed depth tensors.
-                    - `"fov"`: A list of processed FoV values if provided, otherwise `None`.
+            `List[Dict[str, TensorType]]`: A list of dictionaries of tensors representing the processed depth
+            predictions.
 
         Raises:
             `ValueError`:
@@ -342,44 +339,47 @@ class DepthProImageProcessorFast(BaseImageProcessorFast):
         """
         requires_backends(self, "torch")
 
-        if (fovs is not None) and (len(predicted_depths) != len(fovs)):
+        predicted_depth = outputs.predicted_depth
+        fov = outputs.fov
+
+        batch_size = len(predicted_depth)
+
+        if target_sizes is not None and batch_size != len(target_sizes):
             raise ValueError(
                 "Make sure that you pass in as many fov values as the batch dimension of the predicted depth"
             )
-        if (target_sizes is not None) and (len(predicted_depths) != len(target_sizes)):
-            raise ValueError(
-                "Make sure that you pass in as many fov values as the batch dimension of the predicted depth"
-            )
 
-        outputs = {"predicted_depth": [], "fov": [] if fovs is not None else None}
-
-        fovs = [None] * len(predicted_depths) if fovs is None else fovs
-        target_sizes = [None] * len(predicted_depths) if target_sizes is None else target_sizes
-
-        for predicted_depth, fov, target_size in zip(predicted_depths, fovs, target_sizes):
+        results = []
+        fov = [None] * batch_size if fov is None else fov
+        target_sizes = [None] * batch_size if target_sizes is None else target_sizes
+        for depth, fov_value, target_size in zip(predicted_depth, fov, target_sizes):
             if target_size is not None:
                 # scale image w.r.t fov
-                if fov is not None:
+                if fov_value is not None:
                     width = target_size[1]
-                    fov = 0.5 * width / torch.tan(0.5 * torch.deg2rad(fov))
-                    predicted_depth = predicted_depth * width / fov
-                    outputs["fov"].append(fov)
+                    fov_value = 0.5 * width / torch.tan(0.5 * torch.deg2rad(fov_value))
+                    depth = depth * width / fov_value
 
                 # interpolate
-                predicted_depth = torch.nn.functional.interpolate(
+                depth = torch.nn.functional.interpolate(
                     # input should be (B, C, H, W)
-                    input=predicted_depth.unsqueeze(0).unsqueeze(1),
+                    input=depth.unsqueeze(0).unsqueeze(1),
                     size=target_size,
                     mode=pil_torch_interpolation_mapping[self.resample].value,
                     antialias=self.antialias,
                 ).squeeze()
 
             # inverse the depth
-            predicted_depth = 1.0 / torch.clamp(predicted_depth, min=1e-4, max=1e4)
+            depth = 1.0 / torch.clamp(depth, min=1e-4, max=1e4)
 
-            outputs["predicted_depth"].append(predicted_depth)
+            results.append(
+                {
+                    "predicted_depth": depth,
+                    "fov": fov_value,
+                }
+            )
 
-        return outputs
+        return results
 
 
 __all__ = ["DepthProImageProcessorFast"]
