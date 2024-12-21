@@ -59,25 +59,25 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"fov.head.head.(\d+).(weight|bias)":                                       r"fov_model.head.\1.\2",
 
     # upsamples (hard coded; regex is not very feasible here)
-    "encoder.upsample_latent0.0.weight":                                        "depth_pro.encoder.upsample_intermediate.1.proj.weight",
-    "encoder.upsample_latent0.1.weight":                                        "depth_pro.encoder.upsample_intermediate.1.upsample_blocks.0.weight",
-    "encoder.upsample_latent0.2.weight":                                        "depth_pro.encoder.upsample_intermediate.1.upsample_blocks.1.weight",
-    "encoder.upsample_latent0.3.weight":                                        "depth_pro.encoder.upsample_intermediate.1.upsample_blocks.2.weight",
-    "encoder.upsample_latent1.0.weight":                                        "depth_pro.encoder.upsample_intermediate.0.proj.weight",
-    "encoder.upsample_latent1.1.weight":                                        "depth_pro.encoder.upsample_intermediate.0.upsample_blocks.0.weight",
-    "encoder.upsample_latent1.2.weight":                                        "depth_pro.encoder.upsample_intermediate.0.upsample_blocks.1.weight",
-    "encoder.upsample0.0.weight":                                               "depth_pro.encoder.upsample_scaled_images.2.proj.weight",
-    "encoder.upsample0.1.weight":                                               "depth_pro.encoder.upsample_scaled_images.2.upsample_blocks.0.weight",
-    "encoder.upsample1.0.weight":                                               "depth_pro.encoder.upsample_scaled_images.1.proj.weight",
-    "encoder.upsample1.1.weight":                                               "depth_pro.encoder.upsample_scaled_images.1.upsample_blocks.0.weight",
-    "encoder.upsample2.0.weight":                                               "depth_pro.encoder.upsample_scaled_images.0.proj.weight",
-    "encoder.upsample2.1.weight":                                               "depth_pro.encoder.upsample_scaled_images.0.upsample_blocks.0.weight",
-    "encoder.upsample_lowres.weight":                                           "depth_pro.encoder.upsample_image.upsample_blocks.0.weight",
-    "encoder.upsample_lowres.bias":                                             "depth_pro.encoder.upsample_image.upsample_blocks.0.bias",
+    "encoder.upsample_latent0.0.weight":                                        "depth_pro.encoder.feature_upsample.upsample_blocks.5.0.weight",
+    "encoder.upsample_latent0.1.weight":                                        "depth_pro.encoder.feature_upsample.upsample_blocks.5.1.weight",
+    "encoder.upsample_latent0.2.weight":                                        "depth_pro.encoder.feature_upsample.upsample_blocks.5.2.weight",
+    "encoder.upsample_latent0.3.weight":                                        "depth_pro.encoder.feature_upsample.upsample_blocks.5.3.weight",
+    "encoder.upsample_latent1.0.weight":                                        "depth_pro.encoder.feature_upsample.upsample_blocks.4.0.weight",
+    "encoder.upsample_latent1.1.weight":                                        "depth_pro.encoder.feature_upsample.upsample_blocks.4.1.weight",
+    "encoder.upsample_latent1.2.weight":                                        "depth_pro.encoder.feature_upsample.upsample_blocks.4.2.weight",
+    "encoder.upsample0.0.weight":                                               "depth_pro.encoder.feature_upsample.upsample_blocks.3.0.weight",
+    "encoder.upsample0.1.weight":                                               "depth_pro.encoder.feature_upsample.upsample_blocks.3.1.weight",
+    "encoder.upsample1.0.weight":                                               "depth_pro.encoder.feature_upsample.upsample_blocks.2.0.weight",
+    "encoder.upsample1.1.weight":                                               "depth_pro.encoder.feature_upsample.upsample_blocks.2.1.weight",
+    "encoder.upsample2.0.weight":                                               "depth_pro.encoder.feature_upsample.upsample_blocks.1.0.weight",
+    "encoder.upsample2.1.weight":                                               "depth_pro.encoder.feature_upsample.upsample_blocks.1.1.weight",
+    "encoder.upsample_lowres.weight":                                           "depth_pro.encoder.feature_upsample.upsample_blocks.0.0.weight",
+    "encoder.upsample_lowres.bias":                                             "depth_pro.encoder.feature_upsample.upsample_blocks.0.0.bias",
 
     # projections between encoder and fusion
     r"decoder.convs.(\d+).weight": lambda match: (
-        f"projections.{4-int(match.group(1))}.weight"
+        f"depth_pro.encoder.feature_projection.projections.{4-int(match.group(1))}.weight"
     ),
 
     # fusion stage
@@ -274,6 +274,7 @@ def main():
     )
 
     if args.push_to_hub:
+        print("Pushing to hub...")
         model.push_to_hub(args.hub_repo_id)
         image_processor.push_to_hub(args.hub_repo_id)
 
