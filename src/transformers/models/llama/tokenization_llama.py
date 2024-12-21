@@ -25,6 +25,7 @@ from shutil import copyfile
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
+import base64
 
 from ...convert_slow_tokenizer import import_protobuf
 from ...tokenization_utils import AddedToken, PreTrainedTokenizer
@@ -38,9 +39,7 @@ logger = logging.get_logger(__name__)
 
 VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model"}
 
-SPIECE_UNDERLINE = "▁"
-
-B_INST, E_INST = "[INST]", "[/INST]"
+B_INST, E_INST = "]", "]"
 B_SYS, E_SYS = "<<SYS>>\n", "\n<</SYS>>\n\n"
 
 DEFAULT_SYSTEM_PROMPT = """You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe. Your \
@@ -144,31 +143,25 @@ class LlamaTokenizer(PreTrainedTokenizer):
         add_prefix_space=True,
         **kwargs,
     ):
+        # 1. Set basic attributes first
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
-        bos_token = AddedToken(bos_token, normalized=False, special=True) if isinstance(bos_token, str) else bos_token
-        eos_token = AddedToken(eos_token, normalized=False, special=True) if isinstance(eos_token, str) else eos_token
-        unk_token = AddedToken(unk_token, normalized=False, special=True) if isinstance(unk_token, str) else unk_token
-        pad_token = AddedToken(pad_token, normalized=False, special=True) if isinstance(pad_token, str) else pad_token
-
-        if legacy is None:
-            logger.warning_once(
-                f"You are using the default legacy behaviour of the {self.__class__}. This is"
-                " expected, and simply means that the `legacy` (previous) behavior will be used so nothing changes for you."
-                " If you want to use the new behaviour, set `legacy=False`. This should only be set if you understand what it"
-                " means, and thoroughly read the reason why this was added as explained in"
-                " https://github.com/huggingface/transformers/pull/24565 - if you loaded a llama tokenizer from a GGUF file"
-                " you can ignore this message"
-            )
-            legacy = True
-
-        self.legacy = legacy
         self.vocab_file = vocab_file
         self.add_bos_token = add_bos_token
         self.add_eos_token = add_eos_token
         self.use_default_system_prompt = use_default_system_prompt
-        self.sp_model = self.get_spm_processor(kwargs.pop("from_slow", False))
         self.add_prefix_space = add_prefix_space
+        self.legacy = legacy if legacy is not None else True
 
+        # 2. Set protected token attributes that sp_model will need
+        self._unk_token = unk_token
+        self._bos_token = bos_token
+        self._eos_token = eos_token
+        self._pad_token = pad_token
+
+        # 3. Initialize sp_model before parent class
+        self.sp_model = self.get_spm_processor(kwargs.pop("from_slow", False))
+
+        # 4. Now we can safely initialize parent class since sp_model exists for vocab_size
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
@@ -176,11 +169,11 @@ class LlamaTokenizer(PreTrainedTokenizer):
             pad_token=pad_token,
             add_bos_token=add_bos_token,
             add_eos_token=add_eos_token,
-            sp_model_kwargs=self.sp_model_kwargs,
+            sp_model_kwargs=sp_model_kwargs or {},
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             use_default_system_prompt=use_default_system_prompt,
             spaces_between_special_tokens=spaces_between_special_tokens,
-            legacy=legacy,
+            legacy=legacy if legacy is not None else True,
             add_prefix_space=add_prefix_space,
             **kwargs,
         )
@@ -192,20 +185,165 @@ class LlamaTokenizer(PreTrainedTokenizer):
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.get_spm_processor
     def get_spm_processor(self, from_slow=False):
         tokenizer = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        if self.legacy or from_slow:  # no dependency on protobuf
+        try:
+            # First try normal loading
             tokenizer.Load(self.vocab_file)
             return tokenizer
+        except Exception as e:
+            try:
+                from sentencepiece import sentencepiece_model_pb2 as model_pb2
 
-        with open(self.vocab_file, "rb") as f:
-            sp_model = f.read()
-            model_pb2 = import_protobuf(f"The new behaviour of {self.__class__.__name__} (with `self.legacy = False`)")
-            model = model_pb2.ModelProto.FromString(sp_model)
-            normalizer_spec = model_pb2.NormalizerSpec()
-            normalizer_spec.add_dummy_prefix = False
-            model.normalizer_spec.MergeFrom(normalizer_spec)
-            sp_model = model.SerializeToString()
-            tokenizer.LoadFromSerializedProto(sp_model)
-        return tokenizer
+                model = model_pb2.ModelProto()
+                model.normalizer_spec.add_dummy_prefix = False
+                model.normalizer_spec.remove_extra_whitespaces = False
+
+                vocab = []
+                special_tokens_dict = {
+                    self._unk_token: model_pb2.ModelProto.SentencePiece.Type.UNKNOWN,
+                    self._bos_token: model_pb2.ModelProto.SentencePiece.Type.USER_DEFINED,
+                    self._eos_token: model_pb2.ModelProto.SentencePiece.Type.USER_DEFINED,
+                }
+
+                # Zero-width characters to check for
+                zero_width_chars = {
+                    '\u200b',  # Zero-width space
+                    '\u200c',  # Zero-width non-joiner
+                    '\u200d',  # Zero-width joiner
+                    '\ufeff',  # Zero-width no-break space
+                    '\u2060',  # Word joiner
+                }
+
+                unk_token_found = False
+
+                with open(self.vocab_file, 'r', encoding='utf-8') as f:
+                    token_set = set()
+                    for line_num, line in enumerate(f, 1):
+                        try:
+                            b64_str, idx = line.strip().split()
+                            token_bytes = base64.b64decode(b64_str)
+                            token = token_bytes.decode('utf-8', errors='replace')
+                            
+                            # Strip whitespace as before
+                            token = token.strip()
+
+                            # Skip if token is empty after stripping
+                            if not token:
+                                print(f"Line {line_num}: Empty token after stripping. Skipping.")
+                                continue
+
+                            # Check for zero-width characters
+                            if any(zwc in token for zwc in zero_width_chars):
+                                print(f"Line {line_num}: Token contains zero-width characters. Cleaning.")
+                                for zwc in zero_width_chars:
+                                    token = token.replace(zwc, '')
+                                # Skip if token becomes empty after cleaning
+                                if not token:
+                                    print(f"Line {line_num}: Token empty after cleaning zero-width chars. Skipping.")
+                                    continue
+
+                            # Check for null bytes
+                            if '\x00' in token:
+                                print(f"Line {line_num}: Token contains null bytes. Skipping.")
+                                continue
+
+                            if token in token_set:
+                                print(f"Line {line_num}: Duplicate token '{token}' found. Skipping.")
+                                continue
+
+                            token_set.add(token)
+
+                            if token == self._unk_token:
+                                piece_type = model_pb2.ModelProto.SentencePiece.Type.UNKNOWN
+                                unk_token_found = True
+                            elif token in special_tokens_dict:
+                                piece_type = special_tokens_dict[token]
+                            else:
+                                piece_type = model_pb2.ModelProto.SentencePiece.Type.NORMAL
+
+                            vocab.append((int(idx), token, piece_type))
+
+                        except Exception as decode_error:
+                            print(f"Line {line_num}: Error processing token: {decode_error}")
+                            continue
+
+                # Sort vocab by index before adjusting
+                vocab.sort(key=lambda x: x[0])
+                
+                # Debug print to see what's happening with SPIECE_UNDERLINE
+                underline_tokens = [(idx, token) for idx, token, _ in vocab if token == '▁']
+                print(f"SPIECE_UNDERLINE tokens found: {underline_tokens}")
+                
+                # Create adjusted vocab preserving specific token indices
+                adjusted_vocab = []
+                seen_tokens = set()
+                next_idx = 0
+
+                # First pass: find the original index of SPIECE_UNDERLINE
+                original_underline_idx = None
+                for idx, token, _ in vocab:
+                    if token == '▁':
+                        original_underline_idx = idx
+                        break
+                
+                print(f"Original SPIECE_UNDERLINE index: {original_underline_idx}")
+
+                # Second pass: preserve SPIECE_UNDERLINE index
+                for idx, token, piece_type in vocab:
+                    if token in seen_tokens:
+                        print(f"Skipping duplicate token: {token}")
+                        continue
+                        
+                    if token == '▁':
+                        # Keep original index for SPIECE_UNDERLINE
+                        new_idx = original_underline_idx
+                        print(f"Adding SPIECE_UNDERLINE with index {new_idx}")
+                    else:
+                        new_idx = next_idx
+                        while new_idx == original_underline_idx:
+                            next_idx += 1
+                            new_idx = next_idx
+                        next_idx += 1
+                    
+                    adjusted_vocab.append((new_idx, token, piece_type))
+                    seen_tokens.add(token)
+                    
+                    if len(adjusted_vocab) < 10:
+                        print(f"Added token: '{token}' with index {new_idx}")
+
+                # If unk token not found, add it
+                if not unk_token_found:
+                    print("Unknown token not found in vocabulary. Adding it.")
+                    unk_idx = next_idx
+                    while unk_idx == original_underline_idx:
+                        next_idx += 1
+                        unk_idx = next_idx
+                    adjusted_vocab.append((unk_idx, self._unk_token, model_pb2.ModelProto.SentencePiece.Type.UNKNOWN))
+                    
+                print(f"Number of tokens after adjustment: {len(adjusted_vocab)}")
+                
+                # Sort by new indices
+                adjusted_vocab.sort(key=lambda x: x[0])
+                
+                # Add tokens to model.pieces
+                for idx, token, piece_type in adjusted_vocab:
+                    piece = model.pieces.add()
+                    piece.piece = token
+                    piece.score = 0.0
+                    piece.type = piece_type
+                    if idx < 10:
+                        print(f"Final token added: '{token}' with index {idx}")
+
+                # Set the unknown token ID
+                unk_idx = next(i for i, (_, token, _) in enumerate(adjusted_vocab) if token == self._unk_token)
+                model.trainer_spec.unk_id = unk_idx
+                model.trainer_spec.vocab_size = len(adjusted_vocab)
+
+                model_data = model.SerializeToString()
+                tokenizer.LoadFromSerializedProto(model_data)
+                return tokenizer
+
+            except Exception as final_e:
+                raise ValueError(f"Failed to load tokenizer: {str(final_e)}")
 
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -232,40 +370,14 @@ class LlamaTokenizer(PreTrainedTokenizer):
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer.tokenize
     def tokenize(self, text: "TextInput", **kwargs) -> List[str]:
         """
-        Converts a string to a list of tokens. If `self.legacy` is set to `False`, a prefix token is added unless the
-        first token is special.
+        Converts a string to a list of tokens.
         """
-        if self.legacy or len(text) == 0:
-            return super().tokenize(text, **kwargs)
-
-        text = text.replace(SPIECE_UNDERLINE, " ")
-        if self.add_prefix_space:
-            text = SPIECE_UNDERLINE + text
-
-        tokens = super().tokenize(text, **kwargs)
-
-        if len(tokens) > 1 and tokens[0] == SPIECE_UNDERLINE and tokens[1] in self.all_special_tokens:
-            tokens = tokens[1:]
-        return tokens
+        return super().tokenize(text, **kwargs)
 
     # Copied from transformers.models.t5.tokenization_t5.T5Tokenizer._tokenize
     def _tokenize(self, text, **kwargs):
-        """
-        Returns a tokenized string.
-
-        We de-activated the `add_dummy_prefix` option, thus the sentencepiece internals will always strip any
-        SPIECE_UNDERLINE. For example: `self.sp_model.encode(f"{SPIECE_UNDERLINE}Hey", out_type = str)` will give
-        `['H', 'e', 'y']` instead of `['▁He', 'y']`. Thus we always encode `f"{unk_token}text"` and strip the
-        `unk_token`. Here is an example with `unk_token = "<unk>"` and `unk_token_length = 4`.
-        `self.tokenizer.sp_model.encode("<unk> Hey", out_type = str)[4:]`.
-        """
-        if self.legacy or not text.startswith((SPIECE_UNDERLINE, " ")):
-            return self.sp_model.encode(text, out_type=str)
-
-        # 1. Encode string + prefix ex: "<unk> Hey"
-        tokens = self.sp_model.encode(self.unk_token + text, out_type=str)
-        # 2. Remove self.unk_token from ['<','unk','>', '▁Hey']
-        return tokens[self.unk_token_length :] if len(tokens) >= self.unk_token_length else tokens
+        """Returns a tokenized string."""
+        return self.sp_model.encode(text, out_type=str)
 
     def _convert_token_to_id(self, token):
         """Converts a token (str) in an id using the vocab."""
@@ -278,27 +390,22 @@ class LlamaTokenizer(PreTrainedTokenizer):
 
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
-        # since we manually add the prefix space, we have to remove it when decoding
-        if tokens[0].startswith(SPIECE_UNDERLINE) and self.add_prefix_space:
-            tokens[0] = tokens[0][1:]
-
         current_sub_tokens = []
         out_string = ""
         prev_is_special = False
-        for i, token in enumerate(tokens):
+        for token in tokens:
             # make sure that special tokens are not decoded using sentencepiece model
             if token in self.all_special_tokens:
-                if not prev_is_special and i != 0 and self.legacy:
-                    out_string += " "
-                out_string += self.sp_model.decode(current_sub_tokens) + token
-                prev_is_special = True
+                if current_sub_tokens:
+                    out_string += self.sp_model.decode(current_sub_tokens)
+                out_string += token
                 current_sub_tokens = []
+                prev_is_special = True
             else:
-                if prev_is_special and i == 1 and self.add_prefix_space and not token.startswith(SPIECE_UNDERLINE):
-                    out_string += " "
                 current_sub_tokens.append(token)
                 prev_is_special = False
-        out_string += self.sp_model.decode(current_sub_tokens)
+        if current_sub_tokens:
+            out_string += self.sp_model.decode(current_sub_tokens)
         return out_string
 
     def save_vocabulary(self, save_directory, filename_prefix: Optional[str] = None) -> Tuple[str]:
