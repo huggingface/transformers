@@ -346,9 +346,10 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
 
         Examples:
         ```python
-        >>> from transformers import TextNetForImageClassification,TextNetImageProcessor
-        >>> from PIL import Image
+        >>> import torch
         >>> import requests
+        >>> from transformers import TextNetForImageClassification, TextNetImageProcessor
+        >>> from PIL import Image
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
@@ -357,7 +358,8 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
         >>> model = TextNetForImageClassification.from_pretrained("Raghavan/textnet-base")
 
         >>> inputs = processor(images=image, return_tensors="pt", size={"height": 640, "width": 640})
-        >>> outputs = model(**inputs)
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
         >>> outputs.logits.shape
         torch.Size([1, 2])
         ```"""
