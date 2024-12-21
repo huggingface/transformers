@@ -274,3 +274,26 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         if batch_size < 1:
             raise ValueError("batch_size must be greater than 0")
         return [[super().prepare_image_inputs()]] * batch_size
+
+    def test_batch_feature_mix_to(self):
+        # This test is here because BatchFeatureMix.to() was breaking the structure of some inputs
+        # so we ensure it doesn't regress
+        processor = self.processor_class.from_pretrained(self.tmpdirname)
+        prompt_string = "USER: [IMG][IMG]\nWhat's the difference between these two images? ASSISTANT:"
+
+        # Make small for checking image token expansion
+        processor.image_processor.size = {"longest_edge": 30}
+        processor.image_processor.patch_size = {"height": 2, "width": 2}
+
+        # Test passing in an image
+        inputs_image = processor(text=prompt_string, images=[self.image_0, self.image_1], return_tensors="pt")
+        # Convert to a random other dtype and ensure structure is preserved
+        inputs_image = inputs_image.to(torch.bfloat16)
+        self.assertIn("input_ids", inputs_image)
+        self.assertTrue(len(inputs_image["input_ids"]) == 1)
+        self.assertIsInstance(inputs_image["input_ids"], torch.Tensor)
+        self.assertIsInstance(inputs_image["pixel_values"], list)
+        self.assertTrue(len(inputs_image["pixel_values"]) == 1)
+        self.assertIsInstance(inputs_image["pixel_values"][0], list)
+        self.assertTrue(len(inputs_image["pixel_values"][0]) == 2)
+        self.assertIsInstance(inputs_image["pixel_values"][0][0], torch.Tensor)
