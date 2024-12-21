@@ -306,28 +306,60 @@ class xLSTMModel(xLSTMPreTrainedModel):
             cache_params = None
 
         hidden_states = inputs_embeds
-        all_hidden_states = () if output_hidden_states else None
-        for i, xlstm_block in enumerate(self.blocks):
-            if self.gradient_checkpointing and self.training:
-                hidden_states, rnn_state = self._gradient_checkpointing_func(
-                    xlstm_block.__call__,
-                    hidden_states,
-                    cache_params.rnn_state[i] if cache_params is not None else None,
-                )
-            else:
-                hidden_states, rnn_state = xlstm_block(
-                    hidden_states,
-                    state=cache_params.rnn_state[i] if cache_params is not None else None,
-                )
-            if cache_params:
-                for state_idx in range(len(cache_params.rnn_state[i])):
-                    local_rnn_state = rnn_state[state_idx]
-                    local_rnn_state = rnn_state[state_idx]
-                    cache_params.rnn_state[i][state_idx].copy_(local_rnn_state)
-                cache_params.rnn_state_initial = False
 
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
+        if (
+            not self.training
+            and self.config.max_inference_chunksize < hidden_states.shape[1]
+            and not output_hidden_states
+        ):
+            all_hidden_states = None
+            offset = 0
+            with torch.no_grad():
+                if cache_params is None:
+                    cache_params = xLSTMCache(config=self.config, batch_size=hidden_states.shape[0])
+                final_state = torch.zeros_like(hidden_states)
+                while offset < hidden_states.shape[1]:
+                    hidden_states_chunk = hidden_states[
+                        :, offset : min(offset + self.config.max_inference_chunksize, hidden_states.shape[1])
+                    ]
+                    for i, xlstm_block in enumerate(self.blocks):
+                        hidden_states_chunk, rnn_state = xlstm_block(
+                            hidden_states_chunk,
+                            state=cache_params.rnn_state[i],
+                        )
+                        for state_idx in range(len(cache_params.rnn_state[i])):
+                            local_rnn_state = rnn_state[state_idx]
+                            local_rnn_state = rnn_state[state_idx]
+                            cache_params.rnn_state[i][state_idx].copy_(local_rnn_state)
+                        cache_params.rnn_state_initial = False
+                    final_state[
+                        :, offset : min(offset + self.config.max_inference_chunksize, hidden_states.shape[1])
+                    ] = hidden_states_chunk
+                    offset += self.config.max_inference_chunksize
+                hidden_states = final_state
+        else:
+            all_hidden_states = () if output_hidden_states else None
+            for i, xlstm_block in enumerate(self.blocks):
+                if self.gradient_checkpointing and self.training:
+                    hidden_states, rnn_state = self._gradient_checkpointing_func(
+                        xlstm_block.__call__,
+                        hidden_states,
+                        cache_params.rnn_state[i] if cache_params is not None else None,
+                    )
+                else:
+                    hidden_states, rnn_state = xlstm_block(
+                        hidden_states,
+                        state=cache_params.rnn_state[i] if cache_params is not None else None,
+                    )
+                if cache_params:
+                    for state_idx in range(len(cache_params.rnn_state[i])):
+                        local_rnn_state = rnn_state[state_idx]
+                        local_rnn_state = rnn_state[state_idx]
+                        cache_params.rnn_state[i][state_idx].copy_(local_rnn_state)
+                    cache_params.rnn_state_initial = False
+
+                if output_hidden_states:
+                    all_hidden_states = all_hidden_states + (hidden_states,)
 
         if use_cache:
             cache_params.seqlen_offset += inputs_embeds.shape[1]
@@ -507,7 +539,17 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
 
         logits = self.lm_head(hidden_states.to(self.lm_head.weight.dtype)).float()
 
-        logits = soft_cap(logits, self.config.output_logit_soft_cap)
+        if not self.training and self.config.max_inference_chunksize < logits.shape[1]:
+            offset = 0
+            with torch.no_grad():
+                while offset < logits.shape[1]:
+                    logits[:, offset : min(offset + self.config.max_inference_chunksize, logits.shape[1])] = soft_cap(
+                        logits[:, offset : min(offset + self.config.max_inference_chunksize, logits.shape[1])],
+                        self.config.output_logit_soft_cap,
+                    )
+                    offset += self.config.max_inference_chunksize
+        else:
+            logits = soft_cap(logits, self.config.output_logit_soft_cap)
 
         loss = None
         if labels is not None:
