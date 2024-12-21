@@ -268,7 +268,7 @@ class TestUniversalSpeculativeDecoding(unittest.TestCase):
         cls.assistant_model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(
             cls.device
         )
-        cls.main_tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.2-1B-Instruct")
+        cls.main_tokenizer = AutoTokenizer.from_pretrained("allenai/Llama-3.1-Tulu-3-8B-SFT")
         cls.assistant_tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         cls.generation_config = GenerationConfig()
 
