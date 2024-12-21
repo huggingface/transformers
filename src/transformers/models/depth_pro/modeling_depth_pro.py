@@ -1674,3 +1674,5 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
             hidden_states=depth_pro_outputs.hidden_states,
             attentions=depth_pro_outputs.attentions,
         )
+
+__all__ = ["DepthProPreTrainedModel", "DepthProModel", "DepthProForDepthEstimation"]

@@ -380,3 +380,5 @@ class DepthProImageProcessorFast(BaseImageProcessorFast):
             outputs["predicted_depth"].append(predicted_depth)
 
         return outputs
+
+__all__ = ["DepthProImageProcessorFast"]

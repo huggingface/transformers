@@ -407,3 +407,5 @@ class DepthProImageProcessor(BaseImageProcessor):
             outputs["predicted_depth"].append(predicted_depth)
 
         return outputs
+
+__all__ = ["DepthProImageProcessor"]
