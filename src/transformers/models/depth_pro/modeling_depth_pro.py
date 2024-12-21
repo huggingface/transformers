@@ -42,9 +42,117 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "DepthProConfig"
 
 
+DEPTH_PRO_START_DOCSTRING = r"""
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
+    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
+
+    Parameters:
+        config ([`DepthProConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+DEPTH_PRO_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`DPTImageProcessor.__call__`]
+            for details.
+
+        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+"""
+
+DEPTH_PRO_FOR_DEPTH_ESTIMATION_START_DOCSTRING = r"""
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
+    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
+
+    Parameters:
+        config ([`DepthProConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+        use_fov_model (`bool`, *optional*, defaults to `True`):
+            Whether to use `DepthProFOVModel` to generate the field of view.
+"""
+
+
+@dataclass
+class DepthProOutput(ModelOutput):
+    """
+    Base class for DepthPro's outputs.
+
+    Args:
+        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_patches, sequence_length, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the model.
+        features (`List[torch.FloatTensor]`, *optional*:
+            Features from scaled images and hidden_states.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, num_patches, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer and the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_patches, num_heads, patch_size,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    last_hidden_state: torch.FloatTensor = None
+    features: Optional[List[torch.FloatTensor]] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+
+
+@dataclass
+class DepthProDepthEstimatorOutput(ModelOutput):
+    """
+    Base class for DepthProForDepthEstimation's output.
+
+    Args:
+        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
+            Classification (or regression if config.num_labels==1) loss.
+        predicted_depth (`torch.FloatTensor` of shape `(batch_size, height, width)`):
+            Predicted depth for each pixel.
+        fov (`torch.FloatTensor` of shape `(batch_size,)`, *optional*, returned when `use_fov_model` is provided):
+            Field of View Scaler.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, num_patches, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer and the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_patches, num_heads, patch_size,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
+    """
+
+    loss: Optional[torch.FloatTensor] = None
+    predicted_depth: torch.FloatTensor = None
+    fov: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+
+
 def patch_to_batch(data: torch.Tensor, batch_size: int) -> torch.Tensor:
     """
-    converts tensor from shape:
+    Converts tensor from shape:
     (num_patches, seq_len, hidden_size) -> (batch_size, num_patches_per_batch, seq_len, hidden_size)
     """
     data = data.reshape(-1, batch_size, *data.shape[1:])
@@ -54,7 +162,7 @@ def patch_to_batch(data: torch.Tensor, batch_size: int) -> torch.Tensor:
 
 def batch_to_patch(data: torch.Tensor) -> torch.Tensor:
     """
-    converts tensor from shape:
+    Converts tensor from shape:
     (batch_size, num_patches_per_batch, seq_len, hidden_size) -> (num_patches, seq_len, hidden_size)
     """
     data = data.transpose(0, 1)
@@ -62,12 +170,16 @@ def batch_to_patch(data: torch.Tensor) -> torch.Tensor:
     return data
 
 
+# Copied from transformers.models.dinov2.modeling_dinov2.Dinov2PatchEmbeddings with Dinov2->DepthProViT
 class DepthProViTPatchEmbeddings(nn.Module):
     """
-    Copied from transformers.models.dinov2.modeling_dinov2.Dinov2PatchEmbeddings
-    with addition of config parameter patch_embeddings_size
+    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
+    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
+    Transformer.
     """
 
+    # Ignore copy
+    # addition of config parameter patch_embeddings_size
     def __init__(self, config):
         super().__init__()
 
@@ -84,7 +196,6 @@ class DepthProViTPatchEmbeddings(nn.Module):
             stride=(self.patch_embeddings_size, self.patch_embeddings_size),
         )
 
-    # Copied from transformers.models.dinov2.modeling_dinov2.Dinov2PatchEmbeddings.forward
     def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         num_channels = pixel_values.shape[1]
         if num_channels != self.num_channels:
@@ -103,7 +214,7 @@ class DepthProViTEmbeddings(nn.Module):
     and enabling dynamic embeddings.
     """
 
-    def __init__(self, config: DepthProConfig) -> None:
+    def __init__(self, config: DepthProConfig):
         super().__init__()
 
         self.config = config
@@ -179,8 +290,8 @@ class DepthProViTEmbeddings(nn.Module):
         return embeddings
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTSelfAttention with ViTConfig->DepthProConfig, ViT->DepthProViT
 class DepthProViTSelfAttention(nn.Module):
-    # Copied from transformers.models.vit.modeling_vit.ViTSelfAttention.__init__ with ViT->DepthPro
     def __init__(self, config: DepthProConfig) -> None:
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -199,14 +310,13 @@ class DepthProViTSelfAttention(nn.Module):
 
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
-    # Copied from transformers.models.vit.modeling_vit.ViTSelfAttention.transpose_for_scores with ViT->DepthPro
     def transpose_for_scores(self, x: torch.Tensor) -> torch.Tensor:
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
         x = x.view(new_x_shape)
         return x.permute(0, 2, 1, 3)
 
-    # Taken from transformers.models.vit.modeling_vit.ViTSelfAttention.forward with ViT->DepthPro
-    # with the addition of `batch_size`
+    # Ignore copy
+    # addition of parameter batch_size
     def forward(
         self,
         hidden_states,
@@ -253,14 +363,14 @@ class DepthProViTSelfAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.dinov2.modeling_dinov2.Dinov2SdpaSelfAttention with Dinov2Config->DepthProConfig, Dinov2->DepthProViT
 class DepthProViTSdpaSelfAttention(DepthProViTSelfAttention):
-    # Copied from transformers.models.dinov2.modeling_dinov2.Dinov2SdpaSelfAttention.__init__ with Dinov2Config->DepthProConfig, Dinov2->DepthProViT
     def __init__(self, config: DepthProConfig) -> None:
         super().__init__(config)
         self.attention_probs_dropout_prob = config.attention_probs_dropout_prob
 
-    # Taken from transformers.models.dinov2.modeling_dinov2.Dinov2SdpaSelfAttention.forward with Dinov2Config->DepthProConfig, Dinov2->DepthProViT
-    # with the addition of `batch_size`
+    # Ignore copy
+    # addition of `batch_size`
     def forward(
         self,
         hidden_states,
@@ -323,15 +433,14 @@ class DepthProViTSelfOutput(nn.Module):
         return hidden_states
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTAttention with ViTConfig->DepthProConfig, ViT->DepthProViT
 class DepthProViTAttention(nn.Module):
-    # Copied from transformers.models.vit.modeling_vit.ViTAttention.__init__ with ViTConfig->DepthProConfig, ViT->DepthProViT
     def __init__(self, config: DepthProConfig) -> None:
         super().__init__()
         self.attention = DepthProViTSelfAttention(config)
         self.output = DepthProViTSelfOutput(config)
         self.pruned_heads = set()
 
-    # Copied from transformers.models.vit.modeling_vit.ViTAttention.prune_heads
     def prune_heads(self, heads: Set[int]) -> None:
         if len(heads) == 0:
             return
@@ -350,8 +459,8 @@ class DepthProViTAttention(nn.Module):
         self.attention.all_head_size = self.attention.attention_head_size * self.attention.num_attention_heads
         self.pruned_heads = self.pruned_heads.union(heads)
 
-    # Taken from transformers.models.vit.modeling_vit.ViTAttention.prune_heads
-    # with the addition of `batch_size`
+    # Ignore copy
+    # addition of `batch_size`
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -464,10 +573,10 @@ DEPTHPROVIT_ATTENTION_CLASSES = {
 }
 
 
+# Copied from transformers.models.dinov2.modeling_dinov2.Dinov2Layer with Dinov2Config->DepthProConfig, Dinov2->DepthProViT all-casing
 class DepthProViTLayer(nn.Module):
     """This corresponds to the Block class in the original implementation."""
 
-    # Copied from transformers.models.dinov2.modeling_dinov2.Dinov2Layer.__init__ with Dinov2Config->DepthProConfig, Dinov2->DepthProViT all-casing
     def __init__(self, config: DepthProConfig) -> None:
         super().__init__()
 
@@ -484,8 +593,8 @@ class DepthProViTLayer(nn.Module):
             self.mlp = DepthProViTMLP(config)
         self.layer_scale2 = DepthProViTLayerScale(config)
 
-    # Taken from transformers.models.dinov2.modeling_dinov2.Dinov2Layer.forward
-    # with the addition of `batch_size`
+    # Ignore copy
+    # addition of `batch_size`
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -526,16 +635,16 @@ class DepthProViTLayer(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.vit.modeling_vit.ViTEncoder with ViTConfig->DepthProConfig, ViT->DepthProViT
 class DepthProViTEncoder(nn.Module):
-    # Copied from transformers.models.vit.modeling_vit.ViTEncoder.__init__ with ViTConfig->DepthProConfig, ViT->DepthProViT
     def __init__(self, config: DepthProConfig) -> None:
         super().__init__()
         self.config = config
         self.layer = nn.ModuleList([DepthProViTLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
-    # Taken from transformers.models.vit.modeling_vit.ViTEncoder.__init__
-    # with the addition of `batch_size`
+    # Ignore copy
+    # addition of `batch_size`
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -643,7 +752,7 @@ class DepthProUpsampleBlock(nn.Module):
         n_upsample_layers,
         use_proj=True,
         bias=False,
-    ) -> None:
+    ):
         super().__init__()
 
         # create first projection block
@@ -768,37 +877,8 @@ def merge(patches, batch_size, merge_out_size):
     return boxes
 
 
-@dataclass
-class DepthProOutput(ModelOutput):
-    """
-    Base class for DepthPro's outputs.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        features (`List[torch.FloatTensor]`, *optional*:
-            Features from scaled images and hidden_states.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-    """
-
-    last_hidden_state: torch.FloatTensor = None
-    features: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-
-
 class DepthProEncoder(nn.Module):
-    def __init__(self, config: DepthProConfig) -> None:
+    def __init__(self, config: DepthProConfig):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -1112,40 +1192,6 @@ class DepthProPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-DEPTH_PRO_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`DepthProConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-DEPTH_PRO_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`DPTImageProcessor.__call__`]
-            for details.
-
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
-"""
-
-
 @add_start_docstrings(
     "The bare DepthPro Model transformer outputting raw hidden-states without any specific head on top.",
     DEPTH_PRO_START_DOCSTRING,
@@ -1190,20 +1236,20 @@ class DepthProModel(DepthProPreTrainedModel):
         >>> from PIL import Image
         >>> import requests
         >>> from transformers import AutoProcessor, DepthProModel
-        >>>
+
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>>
+
         >>> checkpoint = "geetu040/DepthPro"
         >>> processor = AutoProcessor.from_pretrained(checkpoint)
         >>> model = DepthProModel.from_pretrained(checkpoint)
-        >>>
+
         >>> # prepare image for the model
         >>> inputs = processor(images=image, return_tensors="pt")
-        >>>
+
         >>> with torch.no_grad():
         ...     output = model(**inputs)
-        ...
+
         >>> output.last_hidden_state.shape
         torch.Size([1, 35, 577, 1024])
         ```"""
@@ -1296,7 +1342,7 @@ class DepthProPreActResidualLayer(nn.Module):
 # Taken from transformers.models.dpt.modeling_dpt.DPTFeatureFusionLayer
 # except it uses deconv annd skip_add
 class DepthProFeatureFusionLayer(nn.Module):
-    def __init__(self, config: DepthProConfig, use_deconv: bool = True) -> None:
+    def __init__(self, config: DepthProConfig, use_deconv: bool = True):
         super().__init__()
         self.config = config
         self.use_deconv = use_deconv
@@ -1317,7 +1363,7 @@ class DepthProFeatureFusionLayer(nn.Module):
         self.projection = nn.Conv2d(config.fusion_hidden_size, config.fusion_hidden_size, kernel_size=1, bias=True)
         self.skip_add = nn.quantized.FloatFunctional()
 
-    def forward(self, hidden_state, residual=None):
+    def forward(self, hidden_state: torch.Tensor, residual: Optional[torch.Tensor] = None) -> torch.Tensor:
         if residual is not None:
             if hidden_state.shape != residual.shape:
                 residual = nn.functional.interpolate(
@@ -1345,7 +1391,7 @@ class DepthProFeatureFusionStage(nn.Module):
         # final layer doesnot require deconvolution
         self.layers.append(DepthProFeatureFusionLayer(config, use_deconv=False))
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: List[torch.Tensor]) -> List[torch.Tensor]:
         if self.num_layers != len(hidden_states):
             raise ValueError(
                 f"num_layers={self.num_layers} in DepthProFeatureFusionStage"
@@ -1366,7 +1412,7 @@ class DepthProFeatureFusionStage(nn.Module):
 
 
 class DepthProFOVModel(nn.Module):
-    def __init__(self, config: DepthProConfig) -> None:
+    def __init__(self, config: DepthProConfig):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -1487,53 +1533,6 @@ class DepthProDepthEstimationHead(nn.Module):
         return predicted_depth
 
 
-@dataclass
-class DepthProDepthEstimatorOutput(ModelOutput):
-    """
-    Base class for DepthProForDepthEstimation's output.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Classification (or regression if config.num_labels==1) loss.
-        predicted_depth (`torch.FloatTensor` of shape `(batch_size, height, width)`):
-            Predicted depth for each pixel.
-        fov (`torch.FloatTensor` of shape `(batch_size,)`, *optional*, returned when `use_fov_model` is provided):
-            Field of View Scaler.
-
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, num_channels, height, width)`.
-
-            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, patch_size,
-            sequence_length)`.
-
-            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
-            heads.
-    """
-
-    loss: Optional[torch.FloatTensor] = None
-    predicted_depth: torch.FloatTensor = None
-    fov: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-
-
-DEPTH_PRO_FOR_DEPTH_ESTIMATION_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`DepthProConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-        use_fov_model (`bool`, *optional*, defaults to `True`):
-            Whether to use `DepthProFOVModel` to generate the field of view.
-"""
-
-
 @add_start_docstrings(
     """
     DepthPro Model with a depth estimation head on top (consisting of 3 convolutional layers).
@@ -1605,27 +1604,27 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
         >>> import torch
         >>> from PIL import Image
         >>> import requests
-        >>>
+
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
-        >>>
+
         >>> checkpoint = "geetu040/DepthPro"
         >>> processor = AutoImageProcessor.from_pretrained(checkpoint)
         >>> model = DepthProForDepthEstimation.from_pretrained(checkpoint)
-        >>>
+
         >>> # prepare image for the model
         >>> inputs = processor(images=image, return_tensors="pt")
-        >>>
+
         >>> with torch.no_grad():
         ...     outputs = model(**inputs)
-        ...
+
         >>> # interpolate to original size
         >>> post_processed_output = processor.post_process_depth_estimation(
-        ...     outputs.predicted_depth, outputs.fov, target_sizes=[(image.height, image.width)],
+        ...     outputs, target_sizes=[(image.height, image.width)],
         ... )
-        >>>
+
         >>> # visualize the prediction
-        >>> predicted_depth = post_processed_output["predicted_depth"][0]
+        >>> predicted_depth = post_processed_output[0]["predicted_depth"]
         >>> depth = predicted_depth * 255 / predicted_depth.max()
         >>> depth = depth.detach().cpu().numpy()
         >>> depth = Image.fromarray(depth.astype("uint8"))

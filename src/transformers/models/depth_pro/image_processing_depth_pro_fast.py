@@ -110,7 +110,7 @@ class DepthProImageProcessorFast(BaseImageProcessorFast):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         **kwargs,
-    ) -> None:
+    ):
         super().__init__(**kwargs)
         size = size if size is not None else {"height": 1536, "width": 1536}
         size = get_size_dict(size)
