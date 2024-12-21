@@ -324,7 +324,8 @@ class TextNetModelIntegrationTest(unittest.TestCase):
         inputs = processor(images=image, return_tensors="pt").to(torch_device)
 
         # forward pass
-        output = model(**inputs)
+        with torch.no_grad():
+            output = model(**inputs)
 
         # verify logits
         self.assertEqual(output.logits.shape, torch.Size([1, 2]))
