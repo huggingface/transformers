@@ -55,6 +55,8 @@ from .generic import (
     is_tensor,
     is_tf_symbolic_tensor,
     is_tf_tensor,
+    is_timm_config_dict,
+    is_timm_local_checkpoint,
     is_torch_device,
     is_torch_dtype,
     is_torch_tensor,
@@ -231,6 +233,7 @@ from .import_utils import (
     is_training_run_on_sagemaker,
     is_uroman_available,
     is_vision_available,
+    is_vptq_available,
     requires_backends,
     torch_only_method,
 )
