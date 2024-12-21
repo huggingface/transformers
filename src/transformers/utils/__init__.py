@@ -234,6 +234,7 @@ from .import_utils import (
     is_uroman_available,
     is_vision_available,
     is_vptq_available,
+    is_xlstm_available,
     requires_backends,
     torch_only_method,
 )
