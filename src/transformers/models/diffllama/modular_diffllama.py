@@ -24,7 +24,6 @@ from torch import nn
 
 from ...cache_utils import Cache, StaticCache
 from ...modeling_flash_attention_utils import _flash_attention_forward
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     is_flash_attn_greater_or_equal_2_10,
     logging,
@@ -37,8 +36,6 @@ from ..llama.modeling_llama import (
     LlamaForTokenClassification,
     LlamaModel,
     LlamaPreTrainedModel,
-    LlamaRMSNorm,
-    LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     repeat_kv,
 )
@@ -163,7 +160,7 @@ class DiffLlamaAttention(nn.Module):
         if not output_attentions:
             attn_weights = None
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights
 
 
 class DiffLlamaFlashAttention2(DiffLlamaAttention):
@@ -313,7 +310,7 @@ class DiffLlamaFlashAttention2(DiffLlamaAttention):
         if not output_attentions:
             attn_weights = None
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights
 
 
 class DiffLlamaSdpaAttention(DiffLlamaAttention):
@@ -416,7 +413,29 @@ class DiffLlamaSdpaAttention(DiffLlamaAttention):
         attn_output = attn_output.view(bsz, q_len, -1)
         attn_output = self.o_proj(attn_output)
 
-        return attn_output, None, past_key_value
+        return attn_output, None
+
+
+DIFFLLAMA_ATTENTION_CLASSES = {
+    "eager": DiffLlamaAttention,
+    "flash_attention_2": DiffLlamaFlashAttention2,
+    "sdpa": DiffLlamaSdpaAttention,
+}
+
+
+class DiffLlamaDecoderLayer(LlamaDecoderLayer):
+    def __init__(self, config: DiffLlamaConfig, layer_idx: int):
+        super().__init__(config, layer_idx)
+
+        self.self_attn = DIFFLLAMA_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
+
+
+class DiffLlamaPreTrainedModel(LlamaPreTrainedModel):
+    pass
+
+
+class DiffLlamaModel(LlamaModel):
+    pass
 
 
 class DiffLlamaForCausalLM(GemmaForCausalLM):
@@ -437,7 +456,7 @@ class DiffLlamaForTokenClassification(LlamaForTokenClassification):
 
 __all__ = [
     "DiffLlamaPreTrainedModel",
-    "DiffLlamaModel",
+    "DiffLlamaModel",  # noqa: F822
     "DiffLlamaForCausalLM",
     "DiffLlamaForSequenceClassification",
     "DiffLlamaForQuestionAnswering",
