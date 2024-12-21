@@ -15,7 +15,8 @@
 """Fast Image processor class for DepthPro."""
 
 import functools
-from typing import TYPE_CHECKING, Dict, List, Tuple, Optional, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
+
 
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthProDepthEstimatorOutput
