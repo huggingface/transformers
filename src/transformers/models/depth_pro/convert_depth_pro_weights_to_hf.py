@@ -182,7 +182,7 @@ def write_model(
     # Convert weights
     # ------------------------------------------------------------
 
-    # downlaod and load state_dict from hf repo
+    # download and load state_dict from hf repo
     file_path = hf_hub_download(hf_repo_id, "depth_pro.pt")
     # file_path = "/home/geetu/work/hf/depth_pro/depth_pro.pt" # when you already have the files locally
     loaded = torch.load(file_path, weights_only=True)
@@ -214,8 +214,9 @@ def write_model(
     # Safety check: reload the converted model
     gc.collect()
     print("Reloading the model to check if it's saved correctly.")
-    DepthProForDepthEstimation.from_pretrained(output_dir, torch_dtype=torch.bfloat16, device_map="auto")
+    model = DepthProForDepthEstimation.from_pretrained(output_dir, device_map="auto")
     print("Model reloaded successfully.")
+    return model
 
 
 def write_image_processor(output_dir: str):
@@ -231,6 +232,7 @@ def write_image_processor(output_dir: str):
         image_std=0.5,
     )
     image_processor.save_pretrained(output_dir)
+    return image_processor
 
 
 def main():
@@ -243,22 +245,37 @@ def main():
     parser.add_argument(
         "--output_dir",
         default="apple_DepthPro",
-        help="Location to write HF model and processor",
+        help="Location to write the converted model and processor",
     )
     parser.add_argument(
         "--safe_serialization", default=True, type=bool, help="Whether or not to save using `safetensors`."
     )
+    parser.add_argument(
+        "--push_to_hub",
+        default=True,
+        type=bool,
+        help="Whether or not to push the converted model to the huggingface hub.",
+    )
+    parser.add_argument(
+        "--hub_repo_id",
+        default="geetu040/DepthPro",
+        help="Huggingface hub repo to write the converted model and processor",
+    )
     args = parser.parse_args()
 
-    write_model(
+    model = write_model(
         hf_repo_id=args.hf_repo_id,
         output_dir=args.output_dir,
         safe_serialization=args.safe_serialization,
     )
 
-    write_image_processor(
+    image_processor = write_image_processor(
         output_dir=args.output_dir,
     )
+
+    if args.push_to_hub:
+        model.push_to_hub(args.hub_repo_id)
+        image_processor.push_to_hub(args.hub_repo_id)
 
 
 if __name__ == "__main__":

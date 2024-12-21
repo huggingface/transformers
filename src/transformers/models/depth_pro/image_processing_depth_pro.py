@@ -157,6 +157,11 @@ class DepthProImageProcessor(BaseImageProcessor):
             raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
         output_size = (size["height"], size["width"])
 
+        # we use torch interpolation instead of image.resize because DepthProImageProcessor
+        # rescales, then normalizes, which may cause some values to become negative, before resizing the image.
+        # image.resize expects all values to be in range [0, 1] or [0, 255] and throws an exception otherwise,
+        # however pytorch interpolation works with negative values.
+        # relevant issue here: https://github.com/huggingface/transformers/issues/34920
         return (
             torch.nn.functional.interpolate(
                 # input should be (B, C, H, W)
@@ -182,9 +187,6 @@ class DepthProImageProcessor(BaseImageProcessor):
         image_std: Union[float, List[float]],
         data_format: Union[str, ChannelDimension],
     ):
-        if data_format != ChannelDimension.FIRST:
-            raise ValueError("Only channel first data format is currently supported.")
-
         if do_resize and None in (size, resample, antialias):
             raise ValueError("Size, resample and antialias must be specified if do_resize is True.")
 
@@ -199,8 +201,8 @@ class DepthProImageProcessor(BaseImageProcessor):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
-        resample: PILImageResampling = None,
+        size: Optional[Dict[str, int]] = None,
+        resample: Optional[PILImageResampling] = None,
         antialias: Optional[bool] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
@@ -302,36 +304,28 @@ class DepthProImageProcessor(BaseImageProcessor):
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images[0])
 
-        if do_rescale:
-            images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
-                for image in images
-            ]
+        all_images = []
+        for image in images:
+            if do_rescale:
+                image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
 
-        if do_normalize:
-            images = [
-                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
-                for image in images
-            ]
-
-        images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
-        ]
-
-        # depth-pro scales the image before resizing it
-        # uses torch interpolation which requires ChannelDimension.FIRST
-        if do_resize:
-            images = [
-                self.resize(
-                    image=image,
-                    size=size,
-                    resample=resample,
-                    antialias=antialias,
+            if do_normalize:
+                image = self.normalize(
+                    image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
                 )
-                for image in images
-            ]
 
-        data = {"pixel_values": images}
+            # depth-pro rescales and normalizes the image before resizing it
+            # uses torch interpolation which requires ChannelDimension.FIRST
+            if do_resize:
+                image = to_channel_dimension_format(image, ChannelDimension.FIRST, input_channel_dim=input_data_format)
+                image = self.resize(image=image, size=size, resample=resample, antialias=antialias)
+                image = to_channel_dimension_format(image, data_format, input_channel_dim=ChannelDimension.FIRST)
+            else:
+                image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+
+            all_images.append(image)
+
+        data = {"pixel_values": all_images}
         return BatchFeature(data=data, tensor_type=return_tensors)
 
     def post_process_depth_estimation(
@@ -407,5 +401,6 @@ class DepthProImageProcessor(BaseImageProcessor):
             outputs["predicted_depth"].append(predicted_depth)
 
         return outputs
+
 
 __all__ = ["DepthProImageProcessor"]

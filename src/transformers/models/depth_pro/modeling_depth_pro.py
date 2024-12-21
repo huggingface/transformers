@@ -1675,4 +1675,5 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
             attentions=depth_pro_outputs.attentions,
         )
 
+
 __all__ = ["DepthProPreTrainedModel", "DepthProModel", "DepthProForDepthEstimation"]

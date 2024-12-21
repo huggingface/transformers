@@ -202,8 +202,8 @@ class DepthProImageProcessorFast(BaseImageProcessorFast):
         self,
         images: ImageInput,
         do_resize: Optional[bool] = None,
-        size: Dict[str, int] = None,
-        resample: PILImageResampling = None,
+        size: Optional[Dict[str, int]] = None,
+        resample: Optional[PILImageResampling] = None,
         antialias: Optional[bool] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
@@ -380,5 +380,6 @@ class DepthProImageProcessorFast(BaseImageProcessorFast):
             outputs["predicted_depth"].append(predicted_depth)
 
         return outputs
+
 
 __all__ = ["DepthProImageProcessorFast"]

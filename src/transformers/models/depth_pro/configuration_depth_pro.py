@@ -169,4 +169,5 @@ class DepthProConfig(PretrainedConfig):
         self.scaled_images_overlap_ratios = scaled_images_overlap_ratios
         self.scaled_images_feature_dims = scaled_images_feature_dims
 
+
 __all__ = ["DepthProConfig"]
