@@ -43,7 +43,7 @@ Come risultato, puoi caricare una specifica versione di un modello con il parame
 
 ```py
 >>> model = AutoModel.from_pretrained(
-...     "julien-c/EsperBERTo-small", revision="v2.0.1"  # nome di un tag, di un branch, o commit hash
+...     "julien-c/EsperBERTo-small", revision="4c77982"  # nome di un tag, di un branch, o commit hash
 ... )
 ```
 

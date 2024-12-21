@@ -95,7 +95,7 @@ class LlavaNextVideoPooler(nn.Module):
         mode = config.spatial_pool_mode
         stride = config.spatial_pool_stride
         out_channels = getattr(config, "spatial_pool_out_channels", config.vision_config.hidden_size)
-        self.image_size = config.vision_config.image_size // config.vision_config.patch_size**2
+        self.image_size = (config.vision_config.image_size // config.vision_config.patch_size) ** 2
 
         if mode == "average":
             self.pool = nn.AvgPool2d(kernel_size=stride, stride=stride)
@@ -120,21 +120,6 @@ class LlavaNextVideoPooler(nn.Module):
         image_features_spatial_pool = self.pool(image_features_spatial)
 
         return image_features_spatial_pool.flatten(2).transpose(1, 2).contiguous()
-
-
-class LlavaNextVideoMultiModalProjector(nn.Module):
-    def __init__(self, config: LlavaNextVideoConfig):
-        super().__init__()
-
-        self.linear_1 = nn.Linear(config.vision_config.hidden_size, config.text_config.hidden_size, bias=True)
-        self.act = ACT2FN[config.projector_hidden_act]
-        self.linear_2 = nn.Linear(config.text_config.hidden_size, config.text_config.hidden_size, bias=True)
-
-    def forward(self, image_features):
-        hidden_states = self.linear_1(image_features)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.linear_2(hidden_states)
-        return hidden_states
 
 
 LLAVA_NEXT_VIDEO_START_DOCSTRING = r"""
@@ -189,6 +174,21 @@ class LlavaNextVideoPreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+
+
+class LlavaNextVideoMultiModalProjector(nn.Module):
+    def __init__(self, config: LlavaNextVideoConfig):
+        super().__init__()
+
+        self.linear_1 = nn.Linear(config.vision_config.hidden_size, config.text_config.hidden_size, bias=True)
+        self.act = ACT2FN[config.projector_hidden_act]
+        self.linear_2 = nn.Linear(config.text_config.hidden_size, config.text_config.hidden_size, bias=True)
+
+    def forward(self, image_features):
+        hidden_states = self.linear_1(image_features)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.linear_2(hidden_states)
+        return hidden_states
 
 
 def get_anyres_image_grid_shape(image_size, grid_pinpoints, patch_size):
@@ -1157,3 +1157,6 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
         video_features = self.multi_modal_projector(video_features)
         video_features = torch.split(video_features, frames, dim=0)
         return video_features
+
+
+__all__ = ["LlavaNextVideoForConditionalGeneration", "LlavaNextVideoPreTrainedModel"]

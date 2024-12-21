@@ -39,6 +39,7 @@ class QuantizationMethod(str, Enum):
     GPTQ = "gptq"
     AWQ = "awq"
     AQLM = "aqlm"
+    VPTQ = "vptq"
     QUANTO = "quanto"
     EETQ = "eetq"
     HQQ = "hqq"
@@ -995,6 +996,102 @@ class AqlmConfig(QuantizationConfigMixin):
 
 
 @dataclass
+class VptqLayerConfig(QuantizationConfigMixin):
+    """
+    This is used to explain vptq config params for each layer
+    Args:
+        enable_norm (`bool`, *optional*, defaults to `True`): to control if we have scale/bias for fp-weight
+        enable_perm (`bool`, *optional*, defaults to `True`): to perm input_channel or not
+        group_num (`int`, *optional*, defaults to `1`): how many single groups for vector-quantization
+        group_size (`int`, *optional*, defaults to `-1`): depends on out-features
+        indices_as_float (`bool`, *optional*, defaults to `False`): for Finetuning
+        is_indice_packed (`bool`, *optional*, defaults to `True`): should always be True
+        num_centroids (`list`, *optional*, defaults to `[-1, -1]`): centriod numbers of clusters
+        num_res_centroids (`list`, *optional*, defaults to `[-1, -1]`): ditto for residual
+        outlier_size (`int`, *optional*, defaults to `1`): outliers
+        vector_lens (`list`, *optional*, defaults to `[-1, -1]`): centroid vector length in quantization
+    """
+
+    def __init__(
+        self,
+        enable_norm: bool = True,
+        enable_perm: bool = True,
+        group_num: int = 1,
+        group_size: int = -1,
+        in_features: int = -1,
+        indices_as_float: bool = False,
+        is_indice_packed: bool = True,
+        num_centroids: tuple = [-1, -1],
+        num_res_centroids: tuple = [-1, -1],
+        out_features: int = -1,
+        outlier_size: int = 0,
+        vector_lens: tuple = [-1, -1],
+        **kwargs,
+    ):
+        self.enable_norm = enable_norm
+        self.enable_perm = enable_perm
+        self.group_num = group_num
+        self.group_size = group_size
+        self.in_features = in_features
+        self.indices_as_float = indices_as_float
+        self.is_indice_packed = is_indice_packed
+        self.num_centroids = num_centroids
+        self.num_res_centroids = num_res_centroids
+        self.out_features = out_features
+        self.outlier_size = outlier_size
+        self.vector_lens = vector_lens
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct
+        """
+        if self.is_indice_packed is False:
+            raise ValueError("is_indice_packed should always be True")
+
+
+@dataclass
+class VptqConfig(QuantizationConfigMixin):
+    """
+    This is a wrapper class about `vptq` parameters.
+
+    Args:
+        enable_proxy_error (`bool`, *optional*, defaults to `False`): calculate proxy error for each layer
+        config_for_layers (`Dict`, *optional*, defaults to `{}`): quantization params for each layer
+        shared_layer_config (`Dict`, *optional*, defaults to `{}`): shared quantization params among layers
+        modules_to_not_convert (`list`, *optional*, default to `None`):
+            The list of modules to not quantize, useful for quantizing models that explicitly require to have
+            some modules left in their original precision (e.g. Whisper encoder, Llava encoder, Mixtral gate layers).
+        kwargs (`Dict[str, Any]`, *optional*):
+            Additional parameters from which to initialize the configuration object.
+    """
+
+    def __init__(
+        self,
+        enable_proxy_error: bool = False,
+        config_for_layers: Dict[str, Any] = {},
+        shared_layer_config: Dict[str, Any] = {},
+        modules_to_not_convert: Optional[List] = None,
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.VPTQ
+        self.enable_proxy_error = enable_proxy_error
+        self.config_for_layers: Dict[str, Any] = config_for_layers
+        self.shared_layer_config: Dict[str, Any] = shared_layer_config
+        self.modules_to_not_convert = modules_to_not_convert
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct
+        """
+        for layer_name, layer_param in self.config_for_layers.items():
+            VptqLayerConfig(**layer_param)
+        if self.enable_proxy_error is True:
+            raise ValueError("enable_proxy_error should always be False until we support training")
+
+
+@dataclass
 class QuantoConfig(QuantizationConfigMixin):
     """
     This is a wrapper class about all possible attributes and features that you can play with a model that has been
@@ -1077,7 +1174,8 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         config_groups (`typing.Dict[str, typing.Union[ForwardRef('QuantizationScheme'), typing.List[str]]]`, *optional*):
             dictionary mapping group name to a quantization scheme definition
         format (`str`, *optional*, defaults to `"dense"`):
-            format the model is represented as
+            format the model is represented as. Set `run_compressed` True to execute model as the
+            compressed format if not `dense`
         quantization_status (`QuantizationStatus`, *optional*, defaults to `"initialized"`):
             status of model in the quantization lifecycle, ie 'initialized', 'calibration', 'frozen'
         kv_cache_scheme (`typing.Union[QuantizationArgs, NoneType]`, *optional*):
@@ -1090,6 +1188,8 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
             configuration for sparsity compression
         quant_method (`str`, *optional*, defaults to `"compressed-tensors"`):
             do not override, should be compressed-tensors
+        run_compressed (`bool`, *optional*, defaults to `True`): alter submodules (usually linear) in order to
+            emulate compressed model execution if True, otherwise use default submodule
     """
 
     def __init__(
@@ -1102,13 +1202,16 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
         ignore: Optional[List[str]] = None,
         sparsity_config: Dict[str, Any] = None,
         quant_method: str = "compressed-tensors",
+        run_compressed: bool = True,
         **kwargs,
     ):
-        from compressed_tensors import QuantizationConfig
         from compressed_tensors.config import SparsityCompressionConfig
+        from compressed_tensors.quantization import QuantizationConfig
 
         self.quantization_config = None
         self.sparsity_config = None
+
+        self.run_compressed = run_compressed
 
         # parse from dict to load nested QuantizationScheme objects
         if config_groups or kv_cache_scheme:
@@ -1121,6 +1224,7 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
                     "kv_cache_scheme": kv_cache_scheme,
                     "global_compression_ratio": global_compression_ratio,
                     "ignore": ignore,
+                    "run_compressed": run_compressed,
                     **kwargs,
                 }
             )
@@ -1149,7 +1253,9 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
 
         Returns:
             [`QuantizationConfigMixin`]: The configuration object instantiated from those parameters.
+
         """
+
         if "quantization_config" in config_dict:
             config_dict = dict(
                 sparsity_config=config_dict.get("sparsity_config"),
@@ -1160,16 +1266,23 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
 
     def to_dict(self) -> Dict[str, Any]:
         """
+        Quantization config to be added to config.json
+
         Serializes this instance to a Python dictionary. Returns:
             `Dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
-        quantization_config = self.quantization_config.dict() if self.quantization_config is not None else None
-        sparsity_config = self.sparsity_config.dict() if self.sparsity_config is not None else None
+        quantization_config = {}
+        if self.quantization_config is not None:
+            quantization_config = self.quantization_config.dict()
+        else:
+            quantization_config["quant_method"] = QuantizationMethod.COMPRESSED_TENSORS
 
-        return {
-            "quantization_config": quantization_config,
-            "sparsity_config": sparsity_config,
-        }
+        if self.sparsity_config is not None:
+            quantization_config["sparsity_config"] = self.sparsity_config.dict()
+        else:
+            quantization_config["sparsity_config"] = {}
+
+        return quantization_config
 
     def to_diff_dict(self) -> Dict[str, Any]:
         """
@@ -1191,6 +1304,9 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
                 serializable_config_dict[key] = value
 
         return serializable_config_dict
+
+    def get_loading_attributes(self):
+        return {"run_compressed": self.run_compressed}
 
 
 @dataclass
@@ -1264,8 +1380,13 @@ class TorchAoConfig(QuantizationConfigMixin):
         r"""
         Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
         """
-        if not version.parse(importlib.metadata.version("torchao")) >= version.parse("0.4.0"):
-            raise ValueError("Requires torchao 0.4.0 version and above")
+        if is_torchao_available():
+            if not version.parse(importlib.metadata.version("torchao")) >= version.parse("0.4.0"):
+                raise ValueError("Requires torchao 0.4.0 version and above")
+        else:
+            raise ValueError(
+                "TorchAoConfig requires torchao to be installed, please install with `pip install torchao`"
+            )
 
         _STR_TO_METHOD = self._get_torchao_quant_type_to_method()
         if self.quant_type not in _STR_TO_METHOD.keys():
@@ -1309,7 +1430,8 @@ class TorchAoConfig(QuantizationConfigMixin):
         return _STR_TO_METHOD[self.quant_type](**self.quant_type_kwargs)
 
     def __repr__(self):
-        return f"{self.quant_type}({', '.join(str(k) + '=' + str(v) for k, v in self.kwargs.items())})"
+        config_dict = self.to_dict()
+        return f"{self.__class__.__name__} {json.dumps(config_dict, indent=2, sort_keys=True)}\n"
 
 
 @dataclass
