@@ -991,8 +991,8 @@ class TimesFMModelForPrediction(TimesFMPreTrainedModel):
 
     def _quantile_loss(self, predictions: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
         losses = []
-        for q in self.config.quantiles:
-            errors = targets - predictions
+        for i, q in enumerate(self.config.quantiles):
+            errors = targets - predictions[..., i]
             loss = torch.max((q - 1) * errors, q * errors)
             losses.append(loss.mean())
         return torch.stack(losses).mean()
