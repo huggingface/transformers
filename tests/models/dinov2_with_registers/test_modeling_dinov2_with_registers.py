@@ -310,7 +310,7 @@ class Dinov2WithRegistersModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "facebook/dinov2-with-registers"
+        model_name = "nielsr/dinov2-with-registers-base"
         model = Dinov2WithRegistersModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -327,14 +327,12 @@ class Dinov2WithRegistersModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
-            AutoImageProcessor.from_pretrained("facebook/dinov2-with-registers-base")
-            if is_vision_available()
-            else None
+            AutoImageProcessor.from_pretrained("nielsr/dinov2-with-registers-base") if is_vision_available() else None
         )
 
     @slow
     def test_inference_no_head(self):
-        model = Dinov2WithRegistersModel.from_pretrained("facebook/dinov2-with-registers-base").to(torch_device)
+        model = Dinov2WithRegistersModel.from_pretrained("nielsr/dinov2-with-registers-base").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -345,11 +343,14 @@ class Dinov2WithRegistersModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         # verify the last hidden states
-        expected_shape = torch.Size((1, 257, 768))
+        # in Dinov2 With Registers, the seq length equals the number of patches + 1 + num_register_tokens (we add 1 for the [CLS] token)
+        num_patches = (image_processor.crop_size["height"] // model.config.patch_size) ** 2
+        expected_seq_length = num_patches + 1 + model.config.num_register_tokens
+        expected_shape = torch.Size((1, expected_seq_length, model.config.hidden_size))
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-2.1747, -0.4729, 1.0936], [-3.2780, -0.8269, -0.9210], [-2.9129, 1.1284, -0.7306]],
+            [[-0.4636, -1.4582, -0.0274], [-1.4738, -0.8858, 0.3002], [0.0714, -0.2407, -1.5940]],
             device=torch_device,
         )
         self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))

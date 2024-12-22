@@ -257,8 +257,8 @@ def convert_dinov2_with_registers_checkpoint(model_name, pytorch_dump_folder_pat
         }
 
         name = model_name_to_hf_name[model_name]
-        model.push_to_hub(f"facebook/{name}")
-        processor.push_to_hub(f"facebook/{name}")
+        model.push_to_hub(f"nielsr/{name}")
+        processor.push_to_hub(f"nielsr/{name}")
 
 
 if __name__ == "__main__":
