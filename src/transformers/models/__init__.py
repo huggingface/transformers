@@ -126,6 +126,7 @@ from . import (
     informer,
     instructblip,
     instructblipvideo,
+    iris,
     jamba,
     jetmoe,
     kosmos2,

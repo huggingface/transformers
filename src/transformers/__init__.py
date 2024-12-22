@@ -512,6 +512,7 @@ _import_structure = {
         "InstructBlipVideoQFormerConfig",
         "InstructBlipVideoVisionConfig",
     ],
+    "models.iris": ["IrisConfig"],
     "models.jamba": ["JambaConfig"],
     "models.jetmoe": ["JetMoeConfig"],
     "models.kosmos2": [
@@ -2554,6 +2555,12 @@ else:
             "InstructBlipVideoPreTrainedModel",
             "InstructBlipVideoQFormerModel",
             "InstructBlipVideoVisionModel",
+        ]
+    )
+    _import_structure["models.iris"].extend(
+        [
+            "IrisModel",
+            "IrisPreTrainedModel",
         ]
     )
     _import_structure["models.jamba"].extend(
@@ -5475,6 +5482,9 @@ if TYPE_CHECKING:
         InstructBlipVideoQFormerConfig,
         InstructBlipVideoVisionConfig,
     )
+    from .models.iris import (
+        IrisConfig,
+    )
     from .models.jamba import JambaConfig
     from .models.jetmoe import JetMoeConfig
     from .models.kosmos2 import (
@@ -7334,6 +7344,10 @@ if TYPE_CHECKING:
             InstructBlipVideoPreTrainedModel,
             InstructBlipVideoQFormerModel,
             InstructBlipVideoVisionModel,
+        )
+        from .models.iris import (
+            IrisModel,
+            IrisPreTrainedModel,
         )
         from .models.jamba import (
             JambaForCausalLM,
