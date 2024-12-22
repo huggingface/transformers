@@ -3156,7 +3156,6 @@ class Trainer:
     def _determine_best_metric(self, metrics, trial):
         """
         Determine if the model should be saved based on the evaluation metrics.
-        If args.metric_for_best_model is not set, the loss is used.
 
         Returns:
             bool: True if a new best metric was found, else False
