@@ -3,10 +3,9 @@ import os
 import shutil
 
 import numpy as np
-
+import timesfm
 import torch
 
-import timesfm
 from transformers import TimesFMConfig, TimesFMModelForPrediction
 
 
