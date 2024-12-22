@@ -44,6 +44,9 @@ def flash_attention_forward(
         else:
             target_dtype = next(layer for layer in module.modules() if isinstance(layer, torch.nn.Linear)).weight.dtype
 
+    # FA2 always relies on the value set in the module, so remove it if present in kwargs
+    kwargs.pop("is_causal", None)
+
     attn_output = _flash_attention_forward(
         query,
         key,
