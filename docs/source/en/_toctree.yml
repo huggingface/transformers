@@ -167,6 +167,8 @@
     title: AWQ
   - local: quantization/aqlm
     title: AQLM
+  - local: quantization/vptq
+    title: VPTQ
   - local: quantization/quanto
     title: Quanto
   - local: quantization/eetq
@@ -322,6 +324,8 @@
       sections:
       - local: model_doc/albert
         title: ALBERT
+      - local: model_doc/bamba
+        title: Bamba
       - local: model_doc/bart
         title: BART
       - local: model_doc/barthez
@@ -362,6 +366,8 @@
         title: CodeLlama
       - local: model_doc/cohere
         title: Cohere
+      - local: model_doc/cohere2
+        title: Cohere2
       - local: model_doc/convbert
         title: ConvBERT
       - local: model_doc/cpm
@@ -394,6 +400,8 @@
         title: ESM
       - local: model_doc/falcon
         title: Falcon
+      - local: model_doc/falcon3
+        title: Falcon3
       - local: model_doc/falcon_mamba
         title: FalconMamba
       - local: model_doc/fastspeech2_conformer
@@ -492,6 +500,8 @@
         title: mLUKE
       - local: model_doc/mobilebert
         title: MobileBERT
+      - local: model_doc/modernbert
+        title: ModernBert
       - local: model_doc/mpnet
         title: MPNet
       - local: model_doc/mpt
@@ -705,6 +715,8 @@
         title: Swin2SR
       - local: model_doc/table-transformer
         title: Table Transformer
+      - local: model_doc/timm_wrapper
+        title: Timm Wrapper
       - local: model_doc/upernet
         title: UperNet
       - local: model_doc/van
@@ -830,6 +842,8 @@
         title: CLIPSeg
       - local: model_doc/clvp
         title: CLVP
+      - local: model_doc/colpali
+        title: ColPali
       - local: model_doc/data2vec
         title: Data2Vec
       - local: model_doc/deplot
