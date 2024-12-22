@@ -69,16 +69,16 @@ class GgufQuantizationTests(unittest.TestCase):
     # k-quants
     @parameterized.expand(
         [
-            (QuantType.Q2_K.name, "Hello, World!\n\n[10:0"),
-            (QuantType.Q3_K.name, "Hello, World!\n\n```\n<|user"),
-            (QuantType.Q4_K.name, "Hello, World!\n\n5. Python:\n"),
-            (QuantType.Q5_K.name, "Hello, World!\n\nStep 3: Add"),
-            (QuantType.Q6_K.name, "Hello, World!\n\nStep 3: Add"),
+            (QuantType.Q2_K.name, "Hello, I'm a 22 year old female"),
+            (QuantType.Q3_K.name, "Hello\n\nI am trying to create a simple program that"),
+            (QuantType.Q4_K.name, "Hello\n\nI am trying to create a simple program that"),
+            (QuantType.Q5_K.name, "Helloveda is a 1999 Indian"),
+            (QuantType.Q6_K.name, "Hello\n\nI am trying to create a simple program that"),
         ],
     )
     def test_k_quants(self, quant_type: str, expected_text: str):
-        gguf_model_id = "legraphista/Llama-3.2-1B-Instruct-IMat-GGUF"
-        filename_format = "Llama-3.2-1B-Instruct.{quant_type}.gguf"
+        gguf_model_id = "legraphista/Qwen2.5-0.5B-Instruct-IMat-GGUF"
+        filename_format = "Qwen2.5-0.5B-Instruct.{quant_type}.gguf"
         gguf_filename = filename_format.format(quant_type=quant_type)
         self.run_gguf_model(gguf_model_id, gguf_filename, expected_text)
 
