@@ -90,6 +90,8 @@ class EncodecConfig(PretrainedConfig):
             an identity function will be used, giving a generic residual connection.
         commitment_weight (`float`, *optional*, defaults to 1.0):
             The weight of the VQ commitment loss term. Controls how strongly the encoder's output is pulled towards the codebook vectors.
+        num_mels_for_training (`int`, *optional*, defaults to 64):
+            The number of Mel bins to use when computing the Mel spectrogram.
 
     Example:
 
@@ -135,6 +137,7 @@ class EncodecConfig(PretrainedConfig):
         codebook_dim=None,
         use_conv_shortcut=True,
         commitment_weight=1.0,
+        num_mels_for_training=64,
         **kwargs,
     ):
         self.target_bandwidths = target_bandwidths
@@ -161,6 +164,7 @@ class EncodecConfig(PretrainedConfig):
         self.codebook_dim = codebook_dim if codebook_dim is not None else hidden_size
         self.use_conv_shortcut = use_conv_shortcut
         self.commitment_weight = commitment_weight
+        self.num_mels_for_training = num_mels_for_training
 
         if self.norm_type not in ["weight_norm", "time_group_norm"]:
             raise ValueError(

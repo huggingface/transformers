@@ -30,6 +30,8 @@ def EncodecLoss(model, input_values, audio_values):
         commitment_loss += loss
     commitment_loss *= model.commitment_weight
 
+    n_mels = model.num_mels_for_training
+
     # Compute reconstruction loss
     # Time domain loss
     time_loss = F.l1_loss(audio_values, input_values)
@@ -40,10 +42,10 @@ def EncodecLoss(model, input_values, audio_values):
     for scale in scales:
         n_fft = scale
         hop_length = scale // 4
-        S_x = model.compute_mel_spectrogram(input_values, n_fft, hop_length, n_mels=64)
-        S_x_hat = model.compute_mel_spectrogram(audio_values, n_fft, hop_length, n_mels=64)
-        l1 = F.l1_loss(S_x_hat, S_x)
-        l2 = F.mse_loss(S_x_hat, S_x)
+        mel_spectrogram_original = model.compute_mel_spectrogram(input_values, n_fft, hop_length, n_mels=n_mels)
+        mel_spectrogram_reconstructed = model.compute_mel_spectrogram(audio_values, n_fft, hop_length, n_mels=n_mels)
+        l1 = F.l1_loss(mel_spectrogram_reconstructed, mel_spectrogram_original)
+        l2 = F.mse_loss(mel_spectrogram_reconstructed, mel_spectrogram_original)
         frequency_loss += l1 + l2
 
     frequency_loss = frequency_loss / (len(scales) * 2)

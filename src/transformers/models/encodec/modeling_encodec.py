@@ -581,6 +581,7 @@ class EncodecModel(EncodecPreTrainedModel):
         self.quantizer = EncodecResidualVectorQuantizer(config)
 
         self.commitment_weight = config.commitment_weight
+        self.num_mels_for_training = config.num_mels_for_training
 
         self.bits_per_codebook = int(math.log2(self.config.codebook_size))
         if 2**self.bits_per_codebook != self.config.codebook_size:
@@ -797,10 +798,10 @@ class EncodecModel(EncodecPreTrainedModel):
             return (audio_values,)
         return EncodecDecoderOutput(audio_values)
 
-    def compute_mel_spectrogram(self, audio, n_fft, hop_length, n_mels=64):
+    def compute_mel_spectrogram(self, audio, n_fft, hop_length, n_mels):
         # Adjust n_mels if necessary to avoid warnings
         n_mels = min(n_mels, n_fft // 2 + 1)
-        # Create the window function on the correct device
+
         window = torch.hann_window(n_fft, device=audio.device)
         mel_spec_transform = torchaudio.transforms.MelSpectrogram(
             sample_rate=self.config.sampling_rate,
