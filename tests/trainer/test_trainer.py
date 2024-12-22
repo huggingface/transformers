@@ -4232,8 +4232,20 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                     save_strategy="best",
                     compute_metrics=AlmostAccuracy(),
                 )
-
             self.assertIn("`args.metric_for_best_model` must be provided", str(context.exception))
+
+        # Case 4: Metric name not provided and save_best_strategy is "steps" (i.e., not "best").
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with self.assertRaises(ValueError) as context:
+                trainer = get_regression_trainer(
+                    a=1.5,
+                    b=2.5,
+                    output_dir=tmpdir,
+                    learning_rate=0.1,
+                    eval_strategy="epoch",
+                    save_strategy="steps",
+                )
+            self.assertTrue(trainer.args.metric_for_best_model == "loss")
 
 
 @require_torch
