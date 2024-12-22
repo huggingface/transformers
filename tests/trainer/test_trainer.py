@@ -4241,7 +4241,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 b=2.5,
                 output_dir=tmpdir,
                 learning_rate=0.1,
-                eval_strategy="epoch",
+                eval_strategy="steps",
                 save_strategy="steps",
                 load_best_model_at_end=True,
             )
