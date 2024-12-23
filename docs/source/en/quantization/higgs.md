@@ -52,7 +52,14 @@ Currently, FLUTE, and HIGGS by extension, **only support Llama 3 and 3.0 of 8B, 
 
 **torch.compile**
 
-Currently, HIGGS doesn't support `torch.compile` because `fast_hadamard_transform` library doesn't declare fake operations. We're working on supporting it.
+HIGGS is fully compatible with `torch.compile`. Compiling `model.forward`, as described [here](../perf_torch_compile.md), here're the speedups it provides on RTX 4090 for `Llama-3.1-8B-Instruct` (forward passes/sec):
+
+| Batch Size | BF16 (With `torch.compile`) | HIGGS 4bit (No `torch.compile`) | HIGGS 4bit (With `torch.compile`) |
+|------------|-----------------------------|----------------------------------|-----------------------------------|
+| 1          | 59                          | 41                               | 124                               |
+| 4          | 57                          | 42                               | 123                               |
+| 16         | 56                          | 41                               | 120                               |
+
 
 **Quantized training**
 

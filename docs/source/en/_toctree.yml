@@ -171,6 +171,8 @@
     title: Quanto
   - local: quantization/eetq
     title: EETQ
+  - local: quantization/higgs
+    title: HIGGS
   - local: quantization/hqq
     title: HQQ
   - local: quantization/fbgemm_fp8

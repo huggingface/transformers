@@ -65,7 +65,7 @@ class HiggsHfQuantizer(HfQuantizer):
             raise ImportError("Using `higgs` quantization requires Accelerate: `pip install accelerate`")
 
         if not is_flute_available():
-            raise ImportError("Using `higgs` quantization requires FLUTE: `pip install flute-kernel`")
+            raise ImportError("Using `higgs` quantization requires FLUTE: `pip install flute-kernel>=0.3.0`")
 
         if not is_hadamard_available():
             raise ImportError(
