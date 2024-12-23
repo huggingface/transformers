@@ -878,7 +878,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
 
         if "max_size" in kwargs:
             logger.warning_once(
-                "The `max_size` parameter is deprecated and will be removed in a future version. "
+                "The `max_size` parameter is deprecated and will be removed in v4.26. "
                 "Please specify in `size['longest_edge'] instead`.",
             )
             max_size = kwargs.pop("max_size")
@@ -1012,7 +1012,7 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
         """
         if "max_size" in kwargs:
             logger.warning_once(
-                "The `max_size` parameter is deprecated and will be removed in a future version. "
+                "The `max_size` parameter is deprecated and will be removed in v4.26. "
                 "Please specify in `size['longest_edge'] instead`.",
             )
             max_size = kwargs.pop("max_size")
