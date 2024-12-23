@@ -76,6 +76,7 @@ from . import (
     depth_anything,
     depth_pro,
     detr,
+    d_fine,
     dialogpt,
     diffllama,
     dinat,
