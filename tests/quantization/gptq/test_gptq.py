@@ -87,6 +87,7 @@ class GPTQTest(unittest.TestCase):
     # flaky test: gptqmodel and auto-gptq are not output equivalent nor is string compare deterministic even between transformer/torch versions
     EXPECTED_OUTPUTS.add("Hello my name is Katie, I am a 22 year")
     EXPECTED_OUTPUTS.add("Hello my name is Katie. I am a 20 year")
+    EXPECTED_OUTPUTS.add("Hello my name is Kyle. I am a 22 year")
 
     # this seems a little small considering that we are doing 4bit quant but we have a small model and ww don't quantize the embeddings
     EXPECTED_RELATIVE_DIFFERENCE = 2.0618

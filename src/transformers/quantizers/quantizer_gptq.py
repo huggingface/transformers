@@ -93,6 +93,10 @@ class GptqHfQuantizer(HfQuantizer):
             model = self.optimum_quantizer.convert_model(model, **kwargs)
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
+        # Only with auto-gptq do not support CPU, we should move the model to cuda if available.
+        if model.device.type == "cpu" and not is_gptqmodel_available() and torch.cuda.is_available():
+            model = model.to(0)
+            model.hf_device_map = {"": 0}
         if self.pre_quantized:
             model = self.optimum_quantizer.post_init_model(model)
         else:
