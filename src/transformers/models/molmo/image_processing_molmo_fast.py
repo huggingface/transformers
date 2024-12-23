@@ -36,12 +36,11 @@ from ...image_utils import (
     validate_kwargs,
 )
 from ...utils import TensorType, is_torchvision_v2_available, logging
-from .image_processing_molmo import get_resize_output_image_size, make_batched_images
-
+from .image_processing_molmo import make_batched_images
+from torch.profiler import profile, record_function, ProfilerActivity
 
 if is_torch_available:
     import torch
-    from torch.nn import functional as F
 
 if is_vision_available:
     pass
@@ -60,6 +59,21 @@ if TYPE_CHECKING:
 
 logger = logging.get_logger(__name__)
 
+
+def get_resize_output_image_size(
+    image: torch.tensor,
+    size: Union[int, Tuple[int, int], List[int], Tuple[int]],
+) -> tuple:
+    original_height, original_width = get_image_size(image)
+
+    scale_y = size["height"] / original_height
+    scale_x = size["width"] / original_width
+    scale = min(scale_x, scale_y)
+
+    # Compute new dimensions
+    new_height = int(original_height * scale)
+    new_width = int(original_width * scale)
+    return {"height": new_height, "width": new_width}
 
 def pad_to_bounding_box(
     image: torch.Tensor, offset_height: int, offset_width: int, target_height: int, target_width: int, value: int = 0
@@ -172,6 +186,7 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
             "do_split_into_crops",
             "padding_mode",
             "padding_value",
+            "device",
         ]
 
         # TODO move these to configuration once processing is done.
@@ -200,18 +215,13 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
     ) -> torch.Tensor:
-        size = get_size_dict(size)
-        if "height" not in size or "width" not in size:
-            raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
-        output_size = [size["height"], size["width"]]
+        output_size = (size["height"], size["width"])
         if input_data_format == ChannelDimension.LAST:
             image = image.permute(2, 0, 1)
-        elif input_data_format == ChannelDimension.FIRST:
-            pass  # already in C x H x W
-        else:
-            raise ValueError(f"Invalid input_data_format: {input_data_format}")
-        interpolation = pil_torch_interpolation_mapping[resample]
-        resized_image = F.resize(image, size=output_size, interpolation=interpolation, antialias=True)
+        # mode = pil_torch_interpolation_mapping[resample].value,
+        resized_image = torch.nn.functional.interpolate(
+            image.unsqueeze(0), size=output_size, mode="bilinear", align_corners=False, antialias=True
+        )[0]
         if input_data_format == ChannelDimension.LAST:
             resized_image = resized_image.permute(1, 2, 0)
         return resized_image
@@ -235,7 +245,6 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
         padding_bottom = padding_height - padding_top
         padding_left = padding_width // 2
         padding_right = padding_width - padding_left
-
         padding = [padding_left, padding_top, padding_right, padding_bottom]
         padded_image = F.pad(image, padding=padding, fill=constant_values, padding_mode=mode)
 
@@ -252,12 +261,17 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
         return padded_image, image_mask
 
     def find_best_crop_grid_for_image_size(self, image: torch.Tensor):
+        """
+        Decide how best to divide an image of size {"width": width, "height": height}]
+        in up to max_num_crops of size crop_size
+        """
         original_size = torch.tensor(
             [image.shape[-2] - self.total_margin_pixels, image.shape[-1] - self.total_margin_pixels],
             dtype=torch.float32,
             device=image.device,
         )
         crop_grid = [(i, j) for i in range(1, self.max_num_crops + 1) for j in range(1, (self.max_num_crops // i) + 1)]
+        # sort so argmin and argmax favour smaller crop_grid in the event of a tie
         crop_grid.sort(key=lambda x: (x[0] * x[1], x[0]))
         candidate_crop_grid = torch.tensor(crop_grid, dtype=torch.int32, device=image.device)
         candidate_resolutions = candidate_crop_grid.float() * self.crop_window_size
@@ -268,7 +282,7 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
         else:
             required_scale = torch.where(required_scale < 1.0, float("inf"), required_scale)
             selected_index = torch.argmin(required_scale)
-        return candidate_crop_grid[selected_index].tolist()
+        return candidate_crop_grid[selected_index]
 
     def reshape_into_patches(self, global_image, input_data_format):
         if input_data_format == ChannelDimension.FIRST:
@@ -295,6 +309,22 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
         crop_grid: Tuple[int, int],
         input_data_format,
     ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """
+        Split the image into crops (patches), while keeping track of the patch ordering and generating masks for each crop.
+
+        Args:
+            image: The resized and padded image as a NumPy array.
+            image_mask: The mask corresponding to the image, indicating valid pixels.
+            crop_grid: Tuple (num_rows, num_cols) representing how the image is divided into crops (crop grid).
+            crop_stride: The step size or stride used to move between crops.
+            patch_grid_height: The number of patches along the height of the image grid.
+            patch_grid_width: The number of patches along the width of the image grid.
+
+        Returns:
+            crops: Array of image patches/crops.
+            patch_ordering: Array representing the ordering of patches within the original image.
+            cropped_masks: Array of masks corresponding to the image crops.
+        """
         if input_data_format == ChannelDimension.FIRST:
             image = image.permute(1, 2, 0)
         crops = []
@@ -355,12 +385,13 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
                 cropped_masks.append(cropped_mask)
 
                 patch_index += pooled_height * pooled_width
+        
         crops = torch.stack(crops)
         patch_orderings = torch.stack(patch_orderings)
         cropped_masks = torch.stack(cropped_masks)
 
         leading_crops_dim, h, w, channels = crops.shape
-        crops = crops.reshape(
+        crops = crops.view(
             leading_crops_dim,
             self.patches_per_image_height,
             self.image_patch_size,
@@ -369,14 +400,15 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
             channels,
         )
         crops = crops.permute(0, 1, 3, 2, 4, 5)
-        crops = crops.reshape(
+        crops = crops.contiguous()
+        crops = crops.view(
             leading_crops_dim,
             self.patches_per_image_width * self.patches_per_image_height,
             self.image_patch_size * self.image_patch_size * channels,
         )
 
         leading_mask_dim = cropped_masks.shape[0]
-        cropped_masks = cropped_masks.reshape(
+        cropped_masks = cropped_masks.view(
             leading_mask_dim,
             self.patches_per_image_height,
             self.image_patch_size,
@@ -384,7 +416,8 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
             self.image_patch_size,
         )
         cropped_masks = cropped_masks.permute(0, 1, 3, 2, 4)
-        cropped_masks = cropped_masks.reshape(
+        cropped_masks = cropped_masks.contiguous()
+        cropped_masks = cropped_masks.view(
             leading_mask_dim,
             self.patches_per_image_width * self.patches_per_image_height,
             self.image_patch_size * self.image_patch_size,
@@ -392,7 +425,7 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
 
         cropped_masks = cropped_masks.float().mean(dim=-1)
         cropped_masks = torch.nn.functional.pad(cropped_masks, (0, 0, 0, 1), value=-1)
-        patch_orderings = patch_orderings.reshape(-1)
+        patch_orderings = patch_orderings.view(-1)
         return crops, patch_orderings, cropped_masks
 
     def transpose_patch_orderings(self, crop_grid, patch_orderings):
@@ -402,20 +435,20 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
         patch_ordering_left_right = patch_ordering_left_right.permute(0, 2, 1, 3)
         patch_ordering_left_right = patch_ordering_left_right.reshape(-1)
         mask = patch_orderings >= 0
-        patch_orderings[mask] = patch_ordering_left_right[mask]
+        patch_orderings[mask] = patch_ordering_left_right[patch_ordering_left_right >= 0]
         return patch_orderings
 
     def _prepare_crop_grids(self, data):
         crop_grids = data["crop_grids"]
-        data["crop_grids"] = torch.stack([torch.tensor(grid) for grid in crop_grids], dim=0)
+        data["crop_grids"] = torch.stack(crop_grids)
 
-    def _pad_patch_orderings(self, data):
+    def _pad_patch_orderings(self, data, device):
         patch_orderings = data["patch_orderings"]
         batch_size = len(patch_orderings)
         max_length = max(ordering.shape[0] for ordering in patch_orderings)
         fill_value = -2
         batched_patch_orderings = torch.full(
-            (batch_size, max_length), fill_value=fill_value, dtype=patch_orderings[0].dtype
+            (batch_size, max_length), fill_value=fill_value, dtype=patch_orderings[0].dtype, device=device
         )
 
         for idx, ordering in enumerate(patch_orderings):
@@ -424,13 +457,13 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
 
         data["patch_orderings"] = batched_patch_orderings
 
-    def _pad_for_batching(self, data: Dict):
+    def _pad_for_batching(self, data: Dict, device: str):
         crops = data["pixel_values"]
         max_num_crops = max(image.shape[0] for image in crops)
         batch_size = len(crops)
         crop_shape = crops[0].shape[1:]
 
-        batched_crops = torch.zeros((batch_size, max_num_crops, *crop_shape), dtype=crops[0].dtype)
+        batched_crops = torch.zeros((batch_size, max_num_crops, *crop_shape), dtype=crops[0].dtype, device=device)
         for idx, image in enumerate(crops):
             num_crops = image.shape[0]
             batched_crops[idx, :num_crops, ...] = image
@@ -443,13 +476,14 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
             (batch_size, max_num_crops, *mask_shape),
             fill_value=-1,
             dtype=image_masks[0].dtype,
+            device=device
         )
         for idx, mask in enumerate(image_masks):
             num_crops = mask.shape[0]
             batched_image_masks[idx, :num_crops, ...] = mask
 
         data["image_masks"] = batched_image_masks
-        self._pad_patch_orderings(data)
+        self._pad_patch_orderings(data, device=device)
         self._prepare_crop_grids(data)
         return data
 
@@ -472,6 +506,7 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        device: str = None,
         **kwargs,
     ) -> BatchFeature:
         do_resize = do_resize if do_resize is not None else self.do_resize
@@ -488,7 +523,6 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
-        device = kwargs.pop("device", None)
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
         images = make_batched_images(images)
         image_type = get_image_type(images[0])
@@ -499,6 +533,9 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
             images = [F.pil_to_tensor(image) for image in images]
         elif image_type == ImageType.NUMPY:
             images = [torch.from_numpy(image).contiguous() for image in images]
+        if device is not None:
+            images = [image.to(device) for image in images]
+
         all_images = []
         all_crop_grids = []
         all_cropped_masks = []
@@ -545,22 +582,34 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
                 global_image = (global_image - image_mean_tensor) / image_std_tensor
 
             if do_split_into_crops:
-                crops, patch_orderings, cropped_masks = self.fully_batched_split_image_into_crops(
+                crops, patch_orderings, cropped_masks = self.split_image_into_crops(
                     image=image, image_mask=image_mask, crop_grid=crop_grid, input_data_format=input_data_format
                 )
-
                 patch_orderings = self.transpose_patch_orderings(crop_grid, patch_orderings)
             global_image = self.reshape_into_patches(global_image, input_data_format=input_data_format)
-            crops = torch.cat([global_image.unsqueeze(0), crops], dim=0)
-            patch_orderings = torch.where(patch_orderings >= 0, patch_orderings + self.tokens_per_image, -1)
-            patch_orderings = torch.cat(
-                [torch.arange(0, self.tokens_per_image, device=device), patch_orderings], dim=0
+            new_crops = torch.empty(
+                (crops.shape[0] + 1, crops.shape[1], crops.shape[2]),
+                device=crops.device,
+                dtype=crops.dtype
             )
+            new_crops[0] = global_image
+            new_crops[1:] = crops
+            crops = new_crops
+            # slightly more efficient way
+            patch_orderings = torch.where(patch_orderings >= 0, patch_orderings + self.tokens_per_image, -1)
+            prefix = torch.arange(0, self.tokens_per_image, device=device)
+            new_patch_orderings = torch.empty(
+                (patch_orderings.shape[0] + prefix.shape[0],),
+                device=patch_orderings.device,
+                dtype=patch_orderings.dtype
+            )
+            new_patch_orderings[:prefix.shape[0]] = prefix
+            new_patch_orderings[prefix.shape[0]:] = patch_orderings
+            patch_orderings = new_patch_orderings
             all_images.append(crops)
             all_crop_grids.append(crop_grid)
             all_cropped_masks.append(cropped_masks)
             all_patch_orderings.append(patch_orderings)
-
         data = {
             "pixel_values": all_images,
             "crop_grids": all_crop_grids,
@@ -568,7 +617,7 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
             "image_masks": all_cropped_masks,
         }
         if do_pad:
-            data = self._pad_for_batching(data)
+            data = self._pad_for_batching(data, device=device)
         return BatchFeature(data=data, tensor_type=return_tensors)
 
 
