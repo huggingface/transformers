@@ -48,8 +48,6 @@ class LlavaConfig(PretrainedConfig):
             Can be one of `"default"` or `"full"`.
         vision_feature_layer (`int`, *optional*, defaults to -2):
             The index of the layer to select the vision feature.
-        image_seq_length (`int`, *optional*, defaults to 576):
-            Sequence length of one image embedding.
         multimodal_projector_bias (`bool`, *optional*, defaults to `True`):
             Whether to use bias in the multimodal projector.
 
