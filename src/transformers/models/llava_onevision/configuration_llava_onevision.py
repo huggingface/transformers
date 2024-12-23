@@ -103,6 +103,7 @@ class LlavaOnevisionConfig(PretrainedConfig):
         self.image_token_index = image_token_index
         self.video_token_index = video_token_index
         self.projector_hidden_act = projector_hidden_act
+        self.multimodal_projector_bias = multimodal_projector_bias
 
         if vision_feature_select_strategy not in ["default", "full"]:
             raise ValueError(

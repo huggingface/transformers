@@ -94,12 +94,14 @@ class LlavaNextConfig(PretrainedConfig):
         image_grid_pinpoints=None,
         tie_word_embeddings=False,
         image_seq_length=576,
+        multimodal_projector_bias=True,
         **kwargs,
     ):
         self.ignore_index = ignore_index
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
         self.image_seq_length = image_seq_length
+        self.multimodal_projector_bias = multimodal_projector_bias
 
         if vision_feature_select_strategy not in ["default", "full"]:
             raise ValueError(

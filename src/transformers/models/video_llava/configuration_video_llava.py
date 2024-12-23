@@ -105,6 +105,7 @@ class VideoLlavaConfig(PretrainedConfig):
         self.vision_feature_layer = vision_feature_layer
         self.image_seq_length = image_seq_length
         self.video_seq_length = video_seq_length
+        self.multimodal_projector_bias = multimodal_projector_bias
 
         self.vision_config = vision_config
 
