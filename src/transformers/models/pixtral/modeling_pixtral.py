@@ -207,7 +207,7 @@ class PixtralAttention(nn.Module):
 
         attn_output = self.o_proj(attn_output)
 
-        return attn_output, None
+        return attn_output, attn_weights
 
 
 # Copied from transformers.models.mistral.modeling_mistral.MistralMLP with Mistral->Pixtral
