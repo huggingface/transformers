@@ -48,8 +48,7 @@ if is_torch_available():
     import torch
 
     from transformers.models.llava_next.modeling_llava_next import image_size_to_num_patches
-else:
-    is_torch_greater_or_equal_than_2_0 = False
+
 
 if is_vision_available():
     from PIL import Image
@@ -622,6 +621,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
         # check processing with expansion of inputs
         processor.vision_feature_select_strategy = "default"
         processor.patch_size = 14
+        processor.num_additional_image_tokens = 1
         inputs_expanded = processor(text=prompt, images=[raw_image, deer_image], return_tensors="pt").to(
             torch_device, torch.float16
         )
@@ -630,6 +630,7 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
         # check processing without expansion of inputs (legacy behavior)
         processor.vision_feature_select_strategy = None
         processor.patch_size = None
+        processor.num_additional_image_tokens = None
         inputs = processor(text=prompt, images=[raw_image, deer_image], return_tensors="pt").to(
             torch_device, torch.float16
         )
@@ -656,12 +657,14 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
         # check processing with expansion of inputs
         processor.vision_feature_select_strategy = "default"
         processor.patch_size = 14
+        processor.num_additional_image_tokens = 1
         inputs_expanded = processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
         self.assertTrue(inputs_expanded.input_ids.shape[-1] == 2356)
 
         # check processing without expansion of inputs (legacy behavior)
         processor.vision_feature_select_strategy = None
         processor.patch_size = None
+        processor.num_additional_image_tokens = None
         inputs = processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
         self.assertTrue(inputs.input_ids.shape[-1] == 17)
 
