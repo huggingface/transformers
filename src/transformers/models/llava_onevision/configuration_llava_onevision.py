@@ -58,6 +58,8 @@ class LlavaOnevisionConfig(PretrainedConfig):
             of the form `(height, width)`.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
+        multimodal_projector_bias (`bool`, *optional*, defaults to `True`):
+            Whether to use bias in the multimodal projector.
 
     Example:
 
@@ -95,6 +97,7 @@ class LlavaOnevisionConfig(PretrainedConfig):
         vision_aspect_ratio="anyres_max_9",
         image_grid_pinpoints=None,
         tie_word_embeddings=False,
+        multimodal_projector_bias=True,
         **kwargs,
     ):
         self.image_token_index = image_token_index

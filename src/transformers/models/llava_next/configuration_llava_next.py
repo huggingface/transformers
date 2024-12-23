@@ -55,6 +55,8 @@ class LlavaNextConfig(PretrainedConfig):
             Whether the model's input and output word embeddings should be tied.
         image_seq_length (`int`, *optional*, defaults to 576):
             Sequence length of one image embedding.
+        multimodal_projector_bias (`bool`, *optional*, defaults to `True`):
+            Whether to use bias in the multimodal projector.
 
     Example:
 
