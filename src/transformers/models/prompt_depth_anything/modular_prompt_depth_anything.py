@@ -1,14 +1,22 @@
 from typing import List, Optional, Tuple, Union
+
 import torch
 import torch.nn as nn
+
 from transformers.models.depth_anything.configuration_depth_anything import DepthAnythingConfig
-from transformers.models.depth_anything.modeling_depth_anything import DepthAnythingFeatureFusionLayer, DepthAnythingForDepthEstimation, DepthAnythingNeck
+from transformers.models.depth_anything.modeling_depth_anything import (
+    DepthAnythingFeatureFusionLayer,
+    DepthAnythingForDepthEstimation,
+    DepthAnythingNeck,
+)
+
 from ...file_utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
 from ...modeling_outputs import DepthEstimatorOutput
+
 
 _CONFIG_FOR_DOC = "PromptDepthAnythingConfig"
 
@@ -44,7 +52,6 @@ class PromptDepthAnythingConfig(DepthAnythingConfig):
 
 
 class PromptDepthAnythingResidualLayer(nn.Module):
-
     def __init__(self, config):
         super().__init__()
         self.convolution1 = nn.Conv2d(
@@ -76,7 +83,6 @@ class PromptDepthAnythingResidualLayer(nn.Module):
             bias=True,
         )
 
-
     def forward(self, prompt_depth: torch.Tensor) -> torch.Tensor:
         residual = prompt_depth
         residual = self.convolution1(residual)
@@ -85,6 +91,7 @@ class PromptDepthAnythingResidualLayer(nn.Module):
         residual = self.activation2(residual)
         residual = self.convolution3(residual)
         return residual
+
 
 class PromptDepthAnythingFeatureFusionLayer(DepthAnythingFeatureFusionLayer):
     def __init__(self, config):
@@ -103,10 +110,7 @@ class PromptDepthAnythingFeatureFusionLayer(DepthAnythingFeatureFusionLayer):
 
         if prompt_depth is not None:
             prompt_depth = nn.functional.interpolate(
-                prompt_depth, 
-                hidden_state.shape[2:], 
-                mode='bilinear', 
-                align_corners=False
+                prompt_depth, hidden_state.shape[2:], mode="bilinear", align_corners=False
             )
             res = self.residual_layer_depth(prompt_depth)
             hidden_state = hidden_state + res
@@ -157,7 +161,9 @@ class PromptDepthAnythingNeck(DepthAnythingNeck):
         super().__init__(config)
         self.fusion_stage = PromptDepthAnythingFeatureFusionStage(config)
 
-    def forward(self, hidden_states: List[torch.Tensor], patch_height=None, patch_width=None, prompt_depth=None) -> List[torch.Tensor]:
+    def forward(
+        self, hidden_states: List[torch.Tensor], patch_height=None, patch_width=None, prompt_depth=None
+    ) -> List[torch.Tensor]:
         """
         Args:
             hidden_states (`List[torch.FloatTensor]`, each of shape `(batch_size, sequence_length, hidden_size)` or `(batch_size, hidden_size, height, width)`):
@@ -178,6 +184,7 @@ class PromptDepthAnythingNeck(DepthAnythingNeck):
         output = self.fusion_stage(features, prompt_depth=prompt_depth)
 
         return output
+
 
 @add_start_docstrings(
     """
@@ -241,7 +248,7 @@ class PromptDepthAnythingForDepthEstimation(DepthAnythingForDepthEstimation):
 
         >>> # visualize the prediction
         >>> predicted_depth = post_processed_output[0]["predicted_depth"]
-        >>> depth = predicted_depth * 1000 
+        >>> depth = predicted_depth * 1000.
         >>> depth = depth.detach().cpu().numpy()
         >>> depth = Image.fromarray(depth.astype("uint16")) # mm
         ```"""
@@ -265,17 +272,18 @@ class PromptDepthAnythingForDepthEstimation(DepthAnythingForDepthEstimation):
         patch_height = height // patch_size
         patch_width = width // patch_size
 
-
         # normalize prompt depth
         B = len(prompt_depth)
-        depth_min, depth_max = torch.min(prompt_depth.reshape(B, -1), dim=1).values, torch.max(prompt_depth.reshape(B, -1), dim=1).values
+        depth_min, depth_max = (
+            torch.min(prompt_depth.reshape(B, -1), dim=1).values,
+            torch.max(prompt_depth.reshape(B, -1), dim=1).values,
+        )
         invalid_mask = (depth_max - depth_min) <= 0
         if invalid_mask.any():
             depth_max[invalid_mask] = depth_min[invalid_mask] + 1e-6
         depth_min, depth_max = depth_min.view(B, 1, 1, 1), depth_max.view(B, 1, 1, 1)
         prompt_depth = (prompt_depth - depth_min) / (depth_max - depth_min)
         # normalize done
-
 
         hidden_states = self.neck(hidden_states, patch_height, patch_width, prompt_depth=prompt_depth)
 

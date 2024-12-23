@@ -16,7 +16,10 @@
 
 import unittest
 
-from transformers import PromptDepthAnythingConfig, Dinov2Config
+import numpy as np
+import requests
+
+from transformers import Dinov2Config, PromptDepthAnythingConfig
 from transformers.file_utils import is_torch_available, is_vision_available
 from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
@@ -25,8 +28,6 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-import requests
-import numpy as np
 
 if is_torch_available():
     import torch
@@ -137,7 +138,9 @@ class PromptDepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
     """
 
     all_model_classes = (PromptDepthAnythingForDepthEstimation,) if is_torch_available() else ()
-    pipeline_model_mapping = {"depth-estimation": PromptDepthAnythingForDepthEstimation} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"depth-estimation": PromptDepthAnythingForDepthEstimation} if is_torch_available() else {}
+    )
 
     test_pruning = False
     test_resize_embeddings = False
@@ -156,7 +159,9 @@ class PromptDepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(reason="Prompt Depth Anything with AutoBackbone does not have a base model and hence no input_embeddings")
+    @unittest.skip(
+        reason="Prompt Depth Anything with AutoBackbone does not have a base model and hence no input_embeddings"
+    )
     def test_inputs_embeds(self):
         pass
 
@@ -172,7 +177,9 @@ class PromptDepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="Prompt Depth Anything with AutoBackbone does not have a base model and hence no input_embeddings")
+    @unittest.skip(
+        reason="Prompt Depth Anything with AutoBackbone does not have a base model and hence no input_embeddings"
+    )
     def test_model_get_set_embeddings(self):
         pass
 
@@ -233,16 +240,21 @@ def prepare_img():
     image = Image.open(requests.get(url, stream=True).raw)
     return image
 
+
 @require_torch
 @require_vision
 @slow
 class PromptDepthAnythingModelIntegrationTest(unittest.TestCase):
     def test_inference(self):
         image_processor = DPTImageProcessor.from_pretrained("depth-anything/promptda_vits_hf")
-        model = PromptDepthAnythingForDepthEstimation.from_pretrained("depth-anything/promptda_vits_hf").to(torch_device)
+        model = PromptDepthAnythingForDepthEstimation.from_pretrained("depth-anything/promptda_vits_hf").to(
+            torch_device
+        )
 
         image = prepare_img()
-        prompt_depth_url = "https://github.com/DepthAnything/PromptDA/blob/main/assets/example_images/arkit_depth.png?raw=true"
+        prompt_depth_url = (
+            "https://github.com/DepthAnything/PromptDA/blob/main/assets/example_images/arkit_depth.png?raw=true"
+        )
         prompt_depth = Image.open(requests.get(prompt_depth_url, stream=True).raw)
         prompt_depth = torch.tensor((np.asarray(prompt_depth) / 1000.0).astype(np.float32))
         prompt_depth = prompt_depth.unsqueeze(0).unsqueeze(0)

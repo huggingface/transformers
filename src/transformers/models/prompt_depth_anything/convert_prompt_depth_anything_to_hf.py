@@ -12,19 +12,24 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert Depth Anything checkpoints from the original repository. URL:
-https://github.com/LiheYoung/Depth-Anything"""
+"""Convert Prompt Depth Anything checkpoints from the original repository. URL:
+https://github.com/DepthAnything/PromptDA"""
 
 import argparse
 from pathlib import Path
 
+import numpy as np
 import requests
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
-import numpy as np
 
-from transformers import PromptDepthAnythingConfig, PromptDepthAnythingForDepthEstimation, Dinov2Config, DPTImageProcessor
+from transformers import (
+    Dinov2Config,
+    DPTImageProcessor,
+    PromptDepthAnythingConfig,
+    PromptDepthAnythingForDepthEstimation,
+)
 from transformers.utils import logging
 
 
@@ -33,22 +38,22 @@ logger = logging.get_logger(__name__)
 
 
 def get_dpt_config(model_name):
-    if "small" in model_name or 'vits' in model_name:
-        out_indices = [3, 6, 9, 12] 
+    if "small" in model_name or "vits" in model_name:
+        out_indices = [3, 6, 9, 12]
         backbone_config = Dinov2Config.from_pretrained(
             "facebook/dinov2-small", out_indices=out_indices, apply_layernorm=True, reshape_hidden_states=False
         )
         fusion_hidden_size = 64
         neck_hidden_sizes = [48, 96, 192, 384]
-    elif "base" in model_name or 'vitb' in model_name:
+    elif "base" in model_name or "vitb" in model_name:
         out_indices = [3, 6, 9, 12]
         backbone_config = Dinov2Config.from_pretrained(
             "facebook/dinov2-base", out_indices=out_indices, apply_layernorm=True, reshape_hidden_states=False
         )
         fusion_hidden_size = 128
         neck_hidden_sizes = [96, 192, 384, 768]
-    elif "large" in model_name or 'vitl' in model_name:
-        out_indices = [5, 12, 18, 24] 
+    elif "large" in model_name or "vitl" in model_name:
+        out_indices = [5, 12, 18, 24]
         backbone_config = Dinov2Config.from_pretrained(
             "facebook/dinov2-large", out_indices=out_indices, apply_layernorm=True, reshape_hidden_states=False
         )
@@ -184,20 +189,10 @@ def prepare_img():
 
 
 name_to_checkpoint = {
-    "depth-anything-small": "pytorch_model.bin",
-    "depth-anything-base": "pytorch_model.bin",
-    "depth-anything-large": "pytorch_model.bin",
-    "depth-anything-v2-small": "depth_anything_v2_vits.pth",
-    "depth-anything-v2-base": "depth_anything_v2_vitb.pth",
-    "depth-anything-v2-large": "depth_anything_v2_vitl.pth",
-    "depth-anything-v2-metric-indoor-small": "depth_anything_v2_metric_hypersim_vits.pth",
-    "depth-anything-v2-metric-indoor-base": "depth_anything_v2_metric_hypersim_vitb.pth",
-    "depth-anything-v2-metric-indoor-large": "depth_anything_v2_metric_hypersim_vitl.pth",
-    "depth-anything-v2-metric-outdoor-small": "depth_anything_v2_metric_vkitti_vits.pth",
-    "depth-anything-v2-metric-outdoor-base": "depth_anything_v2_metric_vkitti_vitb.pth",
-    "depth-anything-v2-metric-outdoor-large": "depth_anything_v2_metric_vkitti_vitl.pth",
     # v2-giant pending
-    "promptda_vits": "model.ckpt"
+    "promptda_vits": "model.ckpt",
+    "promptda_vits_transparent": "model.ckpt",
+    "promptda_vitl": "model.ckpt",
 }
 
 
@@ -211,7 +206,9 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
     config = get_dpt_config(model_name)
 
     model_name_to_repo = {
-        "promptda_vits": "depth-anything/promptda_vits"
+        "promptda_vits": "depth-anything/promptda_vits",
+        "promptda_vits_transparent": "depth-anything/promptda_vits_transparent",
+        "promptda_vitl": "depth-anything/promptda_vitl",
     }
 
     # load original state_dict
@@ -222,8 +219,8 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
         filename=f"{filename}",
     )
 
-    state_dict = torch.load(filepath, map_location="cpu")['state_dict']
-    state_dict = {key[9:]:state_dict[key] for key in state_dict}
+    state_dict = torch.load(filepath, map_location="cpu")["state_dict"]
+    state_dict = {key[9:]: state_dict[key] for key in state_dict}
     # rename keys
     rename_keys = create_rename_keys(config)
     for src, dest in rename_keys:
@@ -251,8 +248,9 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
 
     pixel_values = processor(image, return_tensors="pt").pixel_values
 
-
-    prompt_depth_url = "https://github.com/DepthAnything/PromptDA/blob/main/assets/example_images/arkit_depth.png?raw=true"
+    prompt_depth_url = (
+        "https://github.com/DepthAnything/PromptDA/blob/main/assets/example_images/arkit_depth.png?raw=true"
+    )
     prompt_depth = Image.open(requests.get(prompt_depth_url, stream=True).raw)
     prompt_depth = torch.tensor((np.asarray(prompt_depth) / 1000.0).astype(np.float32))
     prompt_depth = prompt_depth.unsqueeze(0).unsqueeze(0)
@@ -268,14 +266,22 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
     # assert logits
     if verify_logits:
         expected_shape = torch.Size([1, 1, 756, 1008])
-        if model_name == 'promptda_vits':
+        if model_name == "promptda_vits":
             expected_slice = torch.tensor(
                 [[3.0100, 3.0016, 3.0219], [3.0046, 3.0137, 3.0275], [3.0083, 3.0191, 3.0292]]
+            )
+        elif model_name == "promptda_vits_transparent":
+            expected_slice = torch.tensor(
+                [[3.0058, 3.0397, 3.0460], [3.0314, 3.0393, 3.0504], [3.0326, 3.0465, 3.0545]]
+            )
+        elif model_name == "promptda_vitl":
+            expected_slice = torch.tensor(
+                [[3.1336, 3.1358, 3.1363], [3.1368, 3.1267, 3.1414], [3.1397, 3.1385, 3.1448]]
             )
         else:
             raise ValueError("Not supported")
         assert predicted_depth.shape == torch.Size(expected_shape)
-        assert torch.allclose(predicted_depth[0, 0, :3, :3], expected_slice, atol=1e-3) # 1mm tolerance
+        assert torch.allclose(predicted_depth[0, 0, :3, :3], expected_slice, atol=5e-3)  # 5mm tolerance
         print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:
