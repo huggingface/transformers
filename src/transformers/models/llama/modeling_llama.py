@@ -743,6 +743,10 @@ class LlamaPagedAttention(LlamaAttention):
             if attention_mask is not None:
                 causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
             is_causal = True if causal_mask is None and q_len > 1 else False
+            if past_key_value is not None:
+                # sin and cos are specific to RoPE models; cache_position needed for the static cache
+                cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+                past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
             key_states = repeat_kv(key_states, self.num_key_value_groups)
             value_states = repeat_kv(value_states, self.num_key_value_groups)
             attn_output = torch.nn.functional.scaled_dot_product_attention(
@@ -754,10 +758,6 @@ class LlamaPagedAttention(LlamaAttention):
                 is_causal=is_causal,
             )
 
-            if past_key_value is not None:
-                # sin and cos are specific to RoPE models; cache_position needed for the static cache
-                cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-                key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
         else:
             if past_key_value is not None:
                 # sin and cos are specific to RoPE models; cache_position needed for the static cache
