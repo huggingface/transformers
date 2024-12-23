@@ -2460,7 +2460,6 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
             raise ValueError(
                 "You cannot specify both pixel_values and inputs_embeds at the same time, and must specify either one"
             )
-
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
@@ -2477,9 +2476,9 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
 
             valid_crops_flat = valid_crops.view(-1)
 
-            all_pixel_values = pixel_values_flat[valid_crops_flat]
-            all_image_masks = image_masks_flat[valid_crops_flat]
-            all_image_token_indices = image_token_indices_flat[valid_crops_flat]
+            all_pixel_values = pixel_values_flat[valid_crops_flat.to(pixel_values_flat.device)]
+            all_image_masks = image_masks_flat[valid_crops_flat.to(image_masks_flat.device)]
+            all_image_token_indices = image_token_indices_flat[valid_crops_flat.to(image_token_indices_flat.device)]
 
             batch_indices = (
                 torch.arange(batch_size, device=pixel_values.device).unsqueeze(1).expand(-1, num_crops).reshape(-1)
@@ -2510,7 +2509,7 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
                 valid_positions.to(valid_batch_indices_expanded.device)
             ].long()
 
-            flat_indices = valid_batch_indices * seq_len + valid_indices
+            flat_indices = valid_batch_indices * seq_len + valid_indices.to(valid_batch_indices.device)
             inputs_embeds_flat = inputs_embeds.view(-1, hidden_size)
 
             inputs_embeds_flat.index_add_(0, flat_indices, valid_features.to(inputs_embeds_flat.device))
