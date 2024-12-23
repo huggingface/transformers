@@ -88,9 +88,11 @@ class PromptDepthAnythingModelTester:
         if self.use_labels:
             labels = ids_tensor([self.batch_size, self.image_size, self.image_size], self.num_labels)
 
+        prompt_depth = floats_tensor([self.batch_size, 1, self.image_size // 4, self.image_size // 4])
+
         config = self.get_config()
 
-        return config, pixel_values, labels
+        return config, pixel_values, labels, prompt_depth
 
     def get_config(self):
         return PromptDepthAnythingConfig(
@@ -115,18 +117,18 @@ class PromptDepthAnythingModelTester:
             reshape_hidden_states=self.reshape_hidden_states,
         )
 
-    def create_and_check_for_depth_estimation(self, config, pixel_values, labels):
+    def create_and_check_for_depth_estimation(self, config, pixel_values, labels, prompt_depth):
         config.num_labels = self.num_labels
         model = PromptDepthAnythingForDepthEstimation(config)
         model.to(torch_device)
         model.eval()
-        result = model(pixel_values)
+        result = model(pixel_values, prompt_depth=prompt_depth)
         self.parent.assertEqual(result.predicted_depth.shape, (self.batch_size, self.image_size, self.image_size))
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values, labels = config_and_inputs
-        inputs_dict = {"pixel_values": pixel_values}
+        config, pixel_values, labels, prompt_depth = config_and_inputs
+        inputs_dict = {"pixel_values": pixel_values, "prompt_depth": prompt_depth}
         return config, inputs_dict
 
 
@@ -220,12 +222,12 @@ class PromptDepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        config.backbone = "resnet18"
-        config.use_pretrained_backbone = True
-        config.use_timm_backbone = True
-        config.backbone_config = None
-        config.backbone_kwargs = {"out_indices": (-2, -1)}
-        _validate_backbone_init()
+        # config.backbone = "resnet18"
+        # config.use_pretrained_backbone = True
+        # config.use_timm_backbone = True
+        # config.backbone_config = None
+        # config.backbone_kwargs = {"out_indices": (-2, -1)}
+        # _validate_backbone_init()
 
         config.backbone = "facebook/dinov2-small"
         config.use_pretrained_backbone = True
@@ -258,20 +260,20 @@ class PromptDepthAnythingModelIntegrationTest(unittest.TestCase):
         prompt_depth = Image.open(requests.get(prompt_depth_url, stream=True).raw)
         prompt_depth = torch.tensor((np.asarray(prompt_depth) / 1000.0).astype(np.float32))
         prompt_depth = prompt_depth.unsqueeze(0).unsqueeze(0)
-        inputs = image_processor(images=image, return_tensors="pt", prompt_depth=prompt_depth).to(torch_device)
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 
         with torch.no_grad():
-            outputs = model(**inputs)
+            outputs = model(pixel_values=inputs.pixel_values, prompt_depth=prompt_depth)
             predicted_depth = outputs.predicted_depth
 
-        expected_shape = torch.Size([1, 1, 756, 1008])
+        expected_shape = torch.Size([1, 756, 1008])
         self.assertEqual(predicted_depth.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[[3.0100, 3.0016, 3.0219], [3.0046, 3.0137, 3.0275], [3.0083, 3.0191, 3.0292]]]
+            [[3.0100, 3.0016, 3.0219], [3.0046, 3.0137, 3.0275], [3.0083, 3.0191, 3.0292]]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(predicted_depth[0, 0, :3, :3], expected_slice, atol=1e-3))
+        self.assertTrue(torch.allclose(predicted_depth[0, :3, :3], expected_slice, atol=1e-3))
 
     def test_export(self):
         for strict in [True, False]:

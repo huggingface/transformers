@@ -265,7 +265,7 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
 
     # assert logits
     if verify_logits:
-        expected_shape = torch.Size([1, 1, 756, 1008])
+        expected_shape = torch.Size([1, 756, 1008])
         if model_name == "promptda_vits":
             expected_slice = torch.tensor(
                 [[3.0100, 3.0016, 3.0219], [3.0046, 3.0137, 3.0275], [3.0083, 3.0191, 3.0292]]
@@ -281,7 +281,7 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
         else:
             raise ValueError("Not supported")
         assert predicted_depth.shape == torch.Size(expected_shape)
-        assert torch.allclose(predicted_depth[0, 0, :3, :3], expected_slice, atol=5e-3)  # 5mm tolerance
+        assert torch.allclose(predicted_depth[0, :3, :3], expected_slice, atol=5e-3)  # 5mm tolerance
         print("Looks ok!")
 
     if pytorch_dump_folder_path is not None:

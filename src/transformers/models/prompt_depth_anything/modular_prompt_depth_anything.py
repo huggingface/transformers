@@ -235,10 +235,10 @@ class PromptDepthAnythingForDepthEstimation(DepthAnythingForDepthEstimation):
         >>> prompt_depth = prompt_depth.unsqueeze(0).unsqueeze(0)
 
         >>> # prepare image for the model
-        >>> inputs = image_processor(images=image, return_tensors="pt", prompt_depth=prompt_depth)
+        >>> inputs = image_processor(images=image, return_tensors="pt")
 
         >>> with torch.no_grad():
-        ...     outputs = model(**inputs)
+        ...     outputs = model(pixel_values=inputs.pixel_values, prompt_depth=prompt_depth)
 
         >>> # interpolate to original size
         >>> post_processed_output = image_processor.post_process_depth_estimation(
@@ -289,6 +289,7 @@ class PromptDepthAnythingForDepthEstimation(DepthAnythingForDepthEstimation):
 
         predicted_depth = self.head(hidden_states, patch_height, patch_width)
         # denormalize predicted depth
+        depth_min, depth_max = depth_min.squeeze(1), depth_max.squeeze(1)
         predicted_depth = predicted_depth * (depth_max - depth_min) + depth_min
         # denormalize done
 
