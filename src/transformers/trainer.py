@@ -2465,6 +2465,7 @@ class Trainer:
             if remainder == 0:
                 remainder = args.gradient_accumulation_steps
             update_step = -1
+            # Note: total_updates can be larger than dataloader length
             total_updates = steps_in_epoch // args.gradient_accumulation_steps + 1
             for _ in range(total_updates):
                 update_step += 1
@@ -5151,6 +5152,9 @@ class Trainer:
                 num_items_in_batch = sum([(batch["labels"].ne(-100)).sum() for batch in batch_samples])
             except (TypeError, AttributeError):
                 pass
+
+        if num_items_in_batch is None:
+            num_items_in_batch = torch.tensor(0).to(self.args.device)
 
         if self.args.average_tokens_across_devices:
             num_items_in_batch = self.accelerator.gather(num_items_in_batch).sum().item()
