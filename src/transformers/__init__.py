@@ -693,6 +693,9 @@ _import_structure = {
         "ProphetNetConfig",
         "ProphetNetTokenizer",
     ],
+    "models.prompt_depth_anything": [
+        "PromptDepthAnythingConfig",
+    ],
     "models.pvt": ["PvtConfig"],
     "models.pvt_v2": ["PvtV2Config"],
     "models.qwen2": [
@@ -3191,6 +3194,12 @@ else:
             "ProphetNetPreTrainedModel",
         ]
     )
+    _import_structure["models.prompt_depth_anything"].extend(
+        [
+            "PromptDepthAnythingForDepthEstimation",
+            "PromptDepthAnythingPreTrainedModel",
+        ]
+    )
     _import_structure["models.pvt"].extend(
         [
             "PvtForImageClassification",
@@ -5682,6 +5691,7 @@ if TYPE_CHECKING:
     from .models.pop2piano import (
         Pop2PianoConfig,
     )
+    from .models.prompt_depth_anything import PromptDepthAnythingConfig
     from .models.prophetnet import (
         ProphetNetConfig,
         ProphetNetTokenizer,
@@ -7818,6 +7828,10 @@ if TYPE_CHECKING:
         from .models.pop2piano import (
             Pop2PianoForConditionalGeneration,
             Pop2PianoPreTrainedModel,
+        )
+        from .models.prompt_depth_anything import (
+            PromptDepthAnythingForDepthEstimation,
+            PromptDepthAnythingPreTrainedModel,
         )
         from .models.prophetnet import (
             ProphetNetDecoder,

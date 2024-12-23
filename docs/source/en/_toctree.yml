@@ -550,6 +550,8 @@
         title: PhoBERT
       - local: model_doc/plbart
         title: PLBart
+      - local: model_doc/prompt_depth_anything
+        title: Prompt Depth Anything
       - local: model_doc/prophetnet
         title: ProphetNet
       - local: model_doc/qdqbert
