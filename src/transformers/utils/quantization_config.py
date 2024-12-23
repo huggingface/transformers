@@ -1383,10 +1383,14 @@ class HiggsConfig(QuantizationConfigMixin):
         r"""
         Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
         """
-        assert self.bits in [2, 3, 4], "bits must be 2, 3 or 4"
-        assert self.p in [1, 2], "p must be 1 or 2. 2 is always better in practice"
-        assert self.group_size in [64, 128, 256], "group_size must be 64, 128 or 256"
-        assert self.hadamard_size % self.group_size == 0, "hadamard_size must be divisible by group_size"
+        if self.bits not in [2, 3, 4]:
+            raise ValueError("bits must be 2, 3, or 4")
+        if self.p not in [1, 2]:
+            raise ValueError("p must be 1 or 2. 2 is always better in practice")
+        if self.group_size not in [64, 128, 256]:
+            raise ValueError("group_size must be 64, 128, or 256")
+        if self.hadamard_size % self.group_size != 0:
+            raise ValueError("hadamard_size must be divisible by group_size")
 
 
 @dataclass
