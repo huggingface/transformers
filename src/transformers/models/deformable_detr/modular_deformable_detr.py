@@ -18,7 +18,6 @@ logger = logging.get_logger(__name__)
 
 
 class DeformableDetrImageProcessorFast(DetrImageProcessorFast):
-    # Copied from transformers.models.deformable_detr.image_processing_deformable_detr.DeformableDetrImageProcessor.post_process
     def post_process(self, outputs, target_sizes):
         """
         Converts the raw output of [`DeformableDetrForObjectDetection`] into final bounding boxes in (top_left_x,
@@ -64,7 +63,6 @@ class DeformableDetrImageProcessorFast(DetrImageProcessorFast):
 
         return results
 
-    # Copied from transformers.models.deformable_detr.image_processing_deformable_detr.DeformableDetrImageProcessor.post_process_object_detection
     def post_process_object_detection(
         self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, List[Tuple]] = None, top_k: int = 100
     ):

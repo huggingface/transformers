@@ -13,7 +13,7 @@ def topological_sort(dependencies):
             if dep_name == node_name:
                 # Skip self dependencies for topological sort as they create cycles
                 continue
-            if "example" not in node and "auto" not in dep:
+            if "example" not in node and "auto" not in dep and node_name not in graph[dep_name]:
                 graph[dep_name].append(node_name)
         new_dependencies[node_name] = node
 

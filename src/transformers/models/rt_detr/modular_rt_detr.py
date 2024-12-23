@@ -477,7 +477,6 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
             ]
         return encoded_inputs
 
-    # Copied from transformers.models.rt_detr.image_processing_rt_detr.RTDetrImageProcessor.post_process_object_detection
     def post_process_object_detection(
         self,
         outputs,
