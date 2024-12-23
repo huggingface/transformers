@@ -23,17 +23,20 @@
 from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 
 import numpy as np
-import torch
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import is_torch_available
 
 
 if TYPE_CHECKING:
     from ...processing_utils import ProcessorMixin
 
+if is_torch_available():
+    # Some fast processing utils depend on torch
+    import torch
 
 ### PROCESSING CODE
 
