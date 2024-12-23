@@ -5604,6 +5604,7 @@ if TYPE_CHECKING:
     from .models.mobilevitv2 import (
         MobileViTV2Config,
     )
+    from .models.modernbert import ModernBertConfig
     from .models.molmo import (
         MolmoConfig,
         MolmoImageProcessor,
@@ -5612,7 +5613,6 @@ if TYPE_CHECKING:
         MolmoTextConfig,
         MolmoVisionConfig,
     )
-    from .models.modernbert import ModernBertConfig
     from .models.moshi import (
         MoshiConfig,
         MoshiDepthConfig,
@@ -7608,17 +7608,18 @@ if TYPE_CHECKING:
             MobileViTV2Model,
             MobileViTV2PreTrainedModel,
         )
-        from .models.molmo import (
-            MolmoForCausalLM,
-            MolmoForConditionalGeneration,
-            MolmoPreTrainedModel,
-            MolmoTextModel,
         from .models.modernbert import (
             ModernBertForMaskedLM,
             ModernBertForSequenceClassification,
             ModernBertForTokenClassification,
             ModernBertModel,
             ModernBertPreTrainedModel,
+        )
+        from .models.molmo import (
+            MolmoForCausalLM,
+            MolmoForConditionalGeneration,
+            MolmoPreTrainedModel,
+            MolmoTextModel,
         )
         from .models.moshi import (
             MoshiForCausalLM,

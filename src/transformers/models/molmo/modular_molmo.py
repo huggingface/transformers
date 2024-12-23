@@ -1249,7 +1249,6 @@ class MolmoForConditionalGeneration(LlavaForConditionalGeneration):
             all_image_masks = image_masks_flat[valid_crops_flat.to(image_masks_flat.device)]
             all_image_token_indices = image_token_indices_flat[valid_crops_flat.to(image_token_indices_flat.device)]
 
-
             batch_indices = (
                 torch.arange(batch_size, device=pixel_values.device).unsqueeze(1).expand(-1, num_crops).reshape(-1)
             )
