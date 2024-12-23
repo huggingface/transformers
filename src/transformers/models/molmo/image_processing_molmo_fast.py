@@ -37,7 +37,7 @@ from ...image_utils import (
 )
 from ...utils import TensorType, is_torchvision_v2_available, logging
 from .image_processing_molmo import make_batched_images
-from torch.profiler import profile, record_function, ProfilerActivity
+
 
 if is_torch_available:
     import torch
@@ -46,8 +46,6 @@ if is_vision_available:
     pass
 
 if is_torchvision_available():
-    if is_vision_available():
-        from ...image_utils import pil_torch_interpolation_mapping
 
     if is_torchvision_v2_available():
         from torchvision.transforms.v2 import functional as F
@@ -74,6 +72,7 @@ def get_resize_output_image_size(
     new_height = int(original_height * scale)
     new_width = int(original_width * scale)
     return {"height": new_height, "width": new_width}
+
 
 def pad_to_bounding_box(
     image: torch.Tensor, offset_height: int, offset_width: int, target_height: int, target_width: int, value: int = 0
@@ -385,7 +384,7 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
                 cropped_masks.append(cropped_mask)
 
                 patch_index += pooled_height * pooled_width
-        
+
         crops = torch.stack(crops)
         patch_orderings = torch.stack(patch_orderings)
         cropped_masks = torch.stack(cropped_masks)
@@ -473,10 +472,7 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
         image_masks = data["image_masks"]
         mask_shape = image_masks[0].shape[1:]
         batched_image_masks = torch.full(
-            (batch_size, max_num_crops, *mask_shape),
-            fill_value=-1,
-            dtype=image_masks[0].dtype,
-            device=device
+            (batch_size, max_num_crops, *mask_shape), fill_value=-1, dtype=image_masks[0].dtype, device=device
         )
         for idx, mask in enumerate(image_masks):
             num_crops = mask.shape[0]
@@ -588,9 +584,7 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
                 patch_orderings = self.transpose_patch_orderings(crop_grid, patch_orderings)
             global_image = self.reshape_into_patches(global_image, input_data_format=input_data_format)
             new_crops = torch.empty(
-                (crops.shape[0] + 1, crops.shape[1], crops.shape[2]),
-                device=crops.device,
-                dtype=crops.dtype
+                (crops.shape[0] + 1, crops.shape[1], crops.shape[2]), device=crops.device, dtype=crops.dtype
             )
             new_crops[0] = global_image
             new_crops[1:] = crops
@@ -601,10 +595,10 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
             new_patch_orderings = torch.empty(
                 (patch_orderings.shape[0] + prefix.shape[0],),
                 device=patch_orderings.device,
-                dtype=patch_orderings.dtype
+                dtype=patch_orderings.dtype,
             )
-            new_patch_orderings[:prefix.shape[0]] = prefix
-            new_patch_orderings[prefix.shape[0]:] = patch_orderings
+            new_patch_orderings[: prefix.shape[0]] = prefix
+            new_patch_orderings[prefix.shape[0] :] = patch_orderings
             patch_orderings = new_patch_orderings
             all_images.append(crops)
             all_crop_grids.append(crop_grid)

@@ -327,10 +327,9 @@ class MolmoImageProcessor(BaseImageProcessor):
         in up to max_num_crops of size crop_size
         """
         original_size = np.array(
-            [image.shape[0] - self.total_margin_pixels, image.shape[1] - self.total_margin_pixels], dtype=np.float32
+            [image.shape[1] - self.total_margin_pixels, image.shape[2] - self.total_margin_pixels], dtype=np.float32
         )
         crop_grid = [(i, j) for i in range(1, self.max_num_crops + 1) for j in range(1, (self.max_num_crops // i) + 1)]
-
         # sort so argmin and argmax favour smaller crop_grid in the event of a tie
         crop_grid.sort(key=lambda x: (x[0] * x[1], x[0]))
         candidate_crop_grid = np.array(crop_grid, dtype=np.int32)  # [n_resolutions, 2]
@@ -338,7 +337,6 @@ class MolmoImageProcessor(BaseImageProcessor):
 
         required_scale_step = candidate_resolutions.astype(np.float32) / original_size
         required_scale = np.min(required_scale_step, axis=-1, keepdims=True)  # [n_resolutions, 1]
-
         if np.all(required_scale < 1):
             # min downscaling
             selected_index = np.argmax(required_scale)
@@ -717,6 +715,7 @@ class MolmoImageProcessor(BaseImageProcessor):
                 crops, patch_orderings, cropped_masks = self.split_image_into_crops(
                     image=image, image_mask=image_mask, crop_grid=crop_grid, input_data_format=input_data_format
                 )
+
                 # 4. Reorder patches left-to-right instead of crop-by-crop.
                 patch_orderings = self.transpose_patch_orderings(crop_grid, patch_orderings)
             global_image = self.reshape_into_patches(global_image, input_data_format=input_data_format)
@@ -725,6 +724,7 @@ class MolmoImageProcessor(BaseImageProcessor):
 
             # 6. Global image goes first, so the order of patches in previous crops gets increased
             # by an amount corresponding to the number of tokens per image
+
             patch_orderings = np.where(patch_orderings >= 0, patch_orderings + self.tokens_per_image, -1)
             patch_orderings = np.concatenate([np.arange(0, self.tokens_per_image), patch_orderings], 0)
             # 7. Add an extra dim for the image mask padding
