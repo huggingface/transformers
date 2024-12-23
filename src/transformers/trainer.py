@@ -5153,10 +5153,9 @@ class Trainer:
             except (TypeError, AttributeError):
                 pass
 
-        if num_items_in_batch is None:
-            num_items_in_batch = torch.tensor(0).to(self.args.device)
-
         if self.args.average_tokens_across_devices:
+            if num_items_in_batch is None:
+                num_items_in_batch = torch.tensor(0).to(self.args.device)
             num_items_in_batch = self.accelerator.gather(num_items_in_batch).sum().item()
 
         if torch.is_tensor(num_items_in_batch):
