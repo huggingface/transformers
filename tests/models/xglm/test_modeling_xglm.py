@@ -451,3 +451,25 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
             self.assertFalse(
                 torch.isnan(outputs.logits[0]).any().item()
             )  # the first logits could contain NaNs if it fails
+
+    def test_loss_with_padding(self):
+        tokenizer = XGLMTokenizer.from_pretrained("facebook/xglm-564M")
+        model = XGLMForCausalLM.from_pretrained("facebook/xglm-564M")
+        model.to(torch_device)
+
+        tokenizer.padding_side = "right"
+
+        sequence = "Sequence"
+
+        tokenized_non_padded = tokenizer(sequence, return_tensors="pt")
+        tokenized_non_padded.to(torch_device)
+        labels_non_padded = tokenized_non_padded.input_ids.clone()
+        loss_non_padded = model(**tokenized_non_padded, labels=labels_non_padded).loss
+
+        tokenized_padded = tokenizer(sequence, padding="max_length", max_length=16, return_tensors="pt")
+        tokenized_padded.to(torch_device)
+        labels_padded = tokenized_padded.input_ids.clone()
+        labels_padded[labels_padded == tokenizer.pad_token_id] = -100
+        loss_padded = model(**tokenized_padded, labels=labels_padded).loss
+
+        torch.testing.assert_close(loss_non_padded, loss_padded, rtol=1e-3, atol=1e-3)
