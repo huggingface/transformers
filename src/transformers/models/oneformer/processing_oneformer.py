@@ -80,6 +80,7 @@ class OneFormerProcessor(ProcessorMixin):
         tokenizer=None,
         max_seq_length: int = 77,
         task_seq_length: int = 77,
+        **kwargs,
     ):
         if image_processor is None:
             raise ValueError("You need to specify an `image_processor`.")
