@@ -813,17 +813,17 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             kwargs["end_of_word_suffix"] = tokenizer_json["model"]["end_of_word_suffix"]
         if tokenizer_json["model"]["type"] == "Unigram" and unk_token is not None:
             kwargs["unk_token"] = unk_token
-        if (
-            tokenizer_json["pre_tokenizer"] is not None
-            and tokenizer_json["pre_tokenizer"]["type"] == "ByteLevel"
-            or tokenizer_json["pre_tokenizer"]["type"] == "Sequence"
-            and "pretokenizers" in tokenizer_json["pre_tokenizer"]
-            and any(
-                pretokenizer["type"] == "ByteLevel"
-                for pretokenizer in tokenizer_json["pre_tokenizer"]["pretokenizers"]
-            )
-        ):
-            kwargs["initial_alphabet"] = pre_tokenizers_fast.ByteLevel.alphabet()
+        if tokenizer_json["pre_tokenizer"] is not None:
+            if (
+                tokenizer_json["pre_tokenizer"]["type"] == "ByteLevel"
+                or tokenizer_json["pre_tokenizer"]["type"] == "Sequence"
+                and "pretokenizers" in tokenizer_json["pre_tokenizer"]
+                and any(
+                    pretokenizer["type"] == "ByteLevel"
+                    for pretokenizer in tokenizer_json["pre_tokenizer"]["pretokenizers"]
+                )
+            ):
+                kwargs["initial_alphabet"] = pre_tokenizers_fast.ByteLevel.alphabet()
 
         trainer_class = MODEL_TO_TRAINER_MAPPING[tokenizer_json["model"]["type"]]
         trainer = trainer_class(vocab_size=vocab_size, special_tokens=special_tokens, **kwargs)
