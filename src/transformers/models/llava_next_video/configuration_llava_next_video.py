@@ -48,6 +48,8 @@ class LlavaNextVideoConfig(PretrainedConfig):
             The feature selection strategy used to select the vision feature from the vision backbone.
             Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
             If `"full"`, the full vision features are used.
+        multimodal_projector_bias (`bool`, *optional*, defaults to `True`):
+            Whether to use bias in the multimodal projector.
         vision_feature_layer (`int`, *optional*, defaults to -2):
             The index of the layer to select the vision feature.
         image_grid_pinpoints (`List`, *optional*, defaults to `[[336, 672], [672, 336], [672, 672], [1008, 336], [336, 1008]]`):
@@ -104,6 +106,7 @@ class LlavaNextVideoConfig(PretrainedConfig):
         spatial_pool_stride=2,
         image_seq_length=576,
         video_seq_length=288,
+        multimodal_projector_bias=True,
         **kwargs,
     ):
         self.video_token_index = video_token_index
@@ -114,6 +117,7 @@ class LlavaNextVideoConfig(PretrainedConfig):
         self.ignore_index = ignore_index
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
+        self.multimodal_projector_bias = multimodal_projector_bias
 
         if vision_feature_select_strategy not in ["default", "full"]:
             raise ValueError(
