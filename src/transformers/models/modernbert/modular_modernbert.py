@@ -901,10 +901,11 @@ class ModernBertPreTrainedModel(PreTrainedModel):
             self.config.reference_compile = False
 
         if self.device.type == "cpu":
-            logger.warning_once(
-                "Compiling the model with `torch.compile` and using a `torch.cpu` device is not supported. "
-                "Falling back to non-compiled mode."
-            )
+            if self.config.reference_compile:
+                logger.warning_once(
+                    "Compiling the model with `torch.compile` and using a `torch.cpu` device is not supported. "
+                    "Falling back to non-compiled mode."
+                )
             self.config.reference_compile = False
 
         if self.config.reference_compile is None:
