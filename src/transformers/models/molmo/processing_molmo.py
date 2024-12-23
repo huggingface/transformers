@@ -20,13 +20,14 @@
 # limitations under the License.
 
 
-from typing import TYPE_CHECKING, List, Union
+from typing import TYPE_CHECKING, List, Optional, Tuple, Union
 
 import numpy as np
+import torch
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 
 
@@ -37,7 +38,16 @@ if TYPE_CHECKING:
 ### PROCESSING CODE
 
 
+class MolmoImagesKwargs(ImagesKwargs, total=False):
+    device: Optional[str]
+    max_crops: Optional[int]
+    overlap_margins: Optional[Tuple[int, int]]
+    tokens_per_image_height: Optional[int]
+    tokens_per_image_width: Optional[int]
+
+
 class MolmoProcessorKwargs(ProcessingKwargs, total=False):
+    images_kwargs: MolmoImagesKwargs
     _defaults = {
         "images_kwargs": {
             "max_crops": 12,
@@ -46,6 +56,7 @@ class MolmoProcessorKwargs(ProcessingKwargs, total=False):
             "tokens_per_image_height": 12,
             "image_patch_size": 14,
             "image_padding_mask": True,
+            "device": None,
         },
         "text_kwargs": {
             "padding": False,
@@ -154,7 +165,9 @@ class MolmoProcessor(ProcessorMixin):
             for crop_grid, patch_ordering in zip(image_inputs.pop("crop_grids"), image_inputs.pop("patch_orderings")):
                 overlap_margins = self.image_processor.overlap_margins
                 crop_window_patches = self.image_processor.crop_window_patches
-
+                if isinstance(crop_grid, torch.Tensor):
+                    crop_grid = crop_grid.cpu().numpy()
+                    patch_ordering = patch_ordering.cpu().numpy()
                 full_height = crop_grid[0] * crop_window_patches + (overlap_margins[1] + overlap_margins[0])
                 full_width = crop_grid[1] * crop_window_patches + (overlap_margins[1] + overlap_margins[0])
                 tokens_per_row = np.full(
@@ -185,10 +198,11 @@ class MolmoProcessor(ProcessorMixin):
 
                 image_token_mask = np.nonzero(all_image_tokens == self.im_patch_token)[0].astype(np.int32)
                 number_of_tokens = image_token_mask.shape[0]
+
                 patch_ordering = np.reshape(patch_ordering, [-1])
                 valid = patch_ordering >= 0
-                number_of_valid_patches = valid.sum()
 
+                number_of_valid_patches = valid.sum()
                 sorted_patch_ixs = np.zeros([number_of_tokens], np.int32)
                 sorted_patch_ixs[patch_ordering[valid]] = np.arange(number_of_valid_patches, dtype=np.int32)
 
@@ -214,6 +228,8 @@ class MolmoProcessor(ProcessorMixin):
         text_inputs = self.tokenizer(
             [f"{self.bos_token}{prompt}" for prompt in prompt_strings], **output_kwargs["text_kwargs"]
         )
+        if kwargs.get("device", None) is not None:
+            text_inputs = text_inputs.to(device=kwargs.get("device"))
         # there is no bos token in Qwen tokenizer
         return BatchFeature(
             data={**text_inputs, **image_inputs}, tensor_type=output_kwargs["common_kwargs"]["return_tensors"]
