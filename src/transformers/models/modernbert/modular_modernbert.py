@@ -13,8 +13,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from contextlib import nullcontext
 import math
+from contextlib import nullcontext
 from typing import Dict, Literal, Optional, Tuple, Union
 
 import torch
