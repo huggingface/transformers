@@ -689,12 +689,12 @@ _import_structure = {
     "models.plbart": ["PLBartConfig"],
     "models.poolformer": ["PoolFormerConfig"],
     "models.pop2piano": ["Pop2PianoConfig"],
+    "models.prompt_depth_anything": [
+        "PromptDepthAnythingConfig"
+    ],
     "models.prophetnet": [
         "ProphetNetConfig",
         "ProphetNetTokenizer",
-    ],
-    "models.prompt_depth_anything": [
-        "PromptDepthAnythingConfig",
     ],
     "models.pvt": ["PvtConfig"],
     "models.pvt_v2": ["PvtV2Config"],
@@ -3184,6 +3184,12 @@ else:
             "Pop2PianoPreTrainedModel",
         ]
     )
+    _import_structure["models.prompt_depth_anything"].extend(
+        [
+            "PromptDepthAnythingForDepthEstimation",
+            "PromptDepthAnythingPreTrainedModel",
+        ]
+    )
     _import_structure["models.prophetnet"].extend(
         [
             "ProphetNetDecoder",
@@ -3192,12 +3198,6 @@ else:
             "ProphetNetForConditionalGeneration",
             "ProphetNetModel",
             "ProphetNetPreTrainedModel",
-        ]
-    )
-    _import_structure["models.prompt_depth_anything"].extend(
-        [
-            "PromptDepthAnythingForDepthEstimation",
-            "PromptDepthAnythingPreTrainedModel",
         ]
     )
     _import_structure["models.pvt"].extend(
