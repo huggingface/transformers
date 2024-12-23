@@ -63,7 +63,7 @@ _import_structure = {
         "load_dequant_gguf_tensor",
         "load_gguf",
     ],
-    "higgs": ["HiggsLinear", "quantize_with_higgs", "replace_with_higgs_linear", "dequantize_higgs"],
+    "higgs": ["HiggsLinear", "dequantize_higgs", "quantize_with_higgs", "replace_with_higgs_linear"],
     "hqq": ["prepare_for_hqq_linear"],
     "integration_utils": [
         "INTEGRATION_TO_CALLBACK",
