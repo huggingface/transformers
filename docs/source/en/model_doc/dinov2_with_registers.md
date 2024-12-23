@@ -13,11 +13,23 @@ specific language governing permissions and limitations under the License.
 
 The Dinov2 With Registers model was proposed in [Vision Transformers Need Registers](https://arxiv.org/abs/2309.16588) by Timothée Darcet, Maxime Oquab, Julien Mairal, Piotr Bojanowski.
 
-This paper shows that by adding more tokens to the input sequence of a Vision Transformer useful for internal computations, one can enhance the performance.
+The Vision Transformer (ViT) is a transformer encoder model (BERT-like) [originally introduced](https://arxiv.org/abs/2010.11929) to do supervised image classification on ImageNet.
+
+Next, people figured out ways to make ViT work really well on self-supervised image feature extraction (i.e. learning meaningful features, also called embeddings) on images without requiring any labels. Some example papers here include [DINOv2](https://huggingface.co/papers/2304.07193) and [MAE](https://arxiv.org/abs/2111.06377).
+
+The authors of DINOv2 noticed that ViTs have artifacts in attention maps. It’s due to the model using some image patches as “registers”. The authors propose a fix: just add some new tokens (called "register" tokens), which you only use during pre-training (and throw away afterwards). This results in:
+- no artifacts
+- interpretable attention maps
+- and improved performances.
 
 The abstract from the paper is the following:
 
 *Transformers have recently emerged as a powerful tool for learning visual representations. In this paper, we identify and characterize artifacts in feature maps of both supervised and self-supervised ViT networks. The artifacts correspond to high-norm tokens appearing during inference primarily in low-informative background areas of images, that are repurposed for internal computations. We propose a simple yet effective solution based on providing additional tokens to the input sequence of the Vision Transformer to fill that role. We show that this solution fixes that problem entirely for both supervised and self-supervised models, sets a new state of the art for self-supervised visual models on dense visual prediction tasks, enables object discovery methods with larger models, and most importantly leads to smoother feature maps and attention maps for downstream visual processing.*
+
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/dinov2_with_registers_visualization.png"
+alt="drawing" width="600"/>
+
+<small> Visualization of attention maps of various models trained with vs. without registers. Taken from the <a href="https://arxiv.org/abs/2309.16588">original paper</a>. </small>
 
 Tips:
 
