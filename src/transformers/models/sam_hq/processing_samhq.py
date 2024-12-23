@@ -31,7 +31,7 @@ from ...utils import TensorType,  is_torch_available
 if is_torch_available():
     import torch
 
-#Copied from transformer.models.sam.processing_samhq.SamProcessor with Sam->SamHQ
+
 class SamHQProcessor(ProcessorMixin):
     r"""
     Constructs a SAM processor which wraps a SAM image processor and an 2D points & Bounding boxes processor into a
