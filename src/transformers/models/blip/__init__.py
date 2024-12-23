@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from .configuration_blip import *
     from .convert_blip_original_pytorch_to_hf import *
     from .image_processing_blip import *
+    from .image_processing_blip_fast import *
     from .modeling_blip import *
     from .modeling_blip_text import *
     from .modeling_tf_blip import *

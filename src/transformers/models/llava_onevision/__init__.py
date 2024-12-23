@@ -13,7 +13,13 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_torch_available,
+    is_torchvision_available,
+    is_vision_available,
+)
 
 
 _import_structure = {
@@ -28,6 +34,14 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["image_processing_llava_onevision"] = ["LlavaOnevisionImageProcessor"]
+
+try:
+    if not is_torchvision_available():
+        raise OptionalDependencyNotAvailable()
+except OptionalDependencyNotAvailable:
+    pass
+else:
+    _import_structure["image_processing_llava_onevision_fast"] = ["LlavaOnevisionImageProcessorFast"]
 
     _import_structure["video_processing_llava_onevision"] = ["LlavaOnevisionVideoProcessor"]
 
@@ -53,6 +67,14 @@ if TYPE_CHECKING:
         pass
     else:
         from .image_processing_llava_onevision import LlavaOnevisionImageProcessor
+
+    try:
+        if not is_torchvision_available():
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .image_processing_llava_onevision_fast import LlavaOnevisionImageProcessorFast
         from .video_processing_llava_onevision import LlavaOnevisionVideoProcessor
 
     try:
