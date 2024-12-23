@@ -43,7 +43,6 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import is_torch_greater_or_equal_than_2_2
 from ...utils import (
-    LossKwargs,
     ModelOutput,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -1113,9 +1112,6 @@ class MolmoTextModel(MolmoTextPreTrainedModel):
         return causal_mask
 
 
-class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
-
-
 class MolmoForCausalLM(MolmoTextPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
@@ -1151,19 +1147,19 @@ class MolmoForCausalLM(MolmoTextPreTrainedModel, GenerationMixin):
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        num_logits_to_keep: int = 0,
-        **kwargs: Unpack[KwargsForCausalLM],
+        input_ids=None,
+        attention_mask=None,
+        position_ids=None,
+        past_key_values=None,
+        inputs_embeds=None,
+        labels=None,
+        use_cache=None,
+        output_attentions=None,
+        output_hidden_states=None,
+        return_dict=None,
+        cache_position=None,
+        num_logits_to_keep=0,
+        **kwargs,
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -1184,8 +1180,8 @@ class MolmoForCausalLM(MolmoTextPreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, MolmoForCausalLM
 
-        >>> model = MolmoForCausalLM.from_pretrained("meta-molmo/Molmo-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-molmo/Molmo-2-7b-hf")
+        >>> model = MolmoForCausalLM.from_pretrained("...")
+        >>> tokenizer = AutoTokenizer.from_pretrained("...")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
