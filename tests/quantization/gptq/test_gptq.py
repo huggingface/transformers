@@ -28,7 +28,7 @@ from transformers.testing_utils import (
     require_torch_multi_gpu,
     slow,
 )
-from transformers.utils import is_auto_gptq_available, is_gptqmodel_available
+from transformers.utils import is_auto_gptq_available, is_gptqmodel_available, is_ipex_available
 
 
 if is_torch_available():
@@ -91,6 +91,9 @@ class GPTQTest(unittest.TestCase):
     EXPECTED_OUTPUTS.add("Hello my name is John and I am a very good looking man.")
     EXPECTED_OUTPUTS.add("Hello my name is Alyson, I am a student in the")
     EXPECTED_OUTPUTS.add("Hello my name is Alyson and I am a very sweet,")
+    EXPECTED_OUTPUTS.add("Hello my name is Aiden, I am a student at the University")
+    EXPECTED_OUTPUTS.add("Hello my name is Nate and I am a member of the N")
+    EXPECTED_OUTPUTS.add("Hello my name is Nellie and I am a student at the")
 
     # this seems a little small considering that we are doing 4bit quant but we have a small model and ww don't quantize the embeddings
     EXPECTED_RELATIVE_DIFFERENCE = 1.664253062
@@ -254,7 +257,10 @@ class GPTQTest(unittest.TestCase):
                         tmpdirname, device_map=self.device_map
                     )
             else:
-                quant_type = "ipex" if self.device_map == "cpu" else "exllama"
+                if self.device_map == "cpu":
+                    quant_type = "ipex" if is_ipex_available() else "torch"
+                else:
+                    quant_type = "exllama"
                 quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(
                     tmpdirname, device_map=self.device_map
                 )
