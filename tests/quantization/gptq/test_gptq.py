@@ -79,19 +79,21 @@ class GPTQConfigTest(unittest.TestCase):
 @require_optimum
 @require_gptq
 class GPTQTest(unittest.TestCase):
-    model_name = "Felladrin/Llama-160M-Chat-v1"
+    model_name = "bigscience/bloom-560m"
 
     input_text = "Hello my name is"
 
     EXPECTED_OUTPUTS = set()
     # flaky test: gptqmodel and auto-gptq are not output equivalent nor is string compare deterministic even between transformer/torch versions
-    EXPECTED_OUTPUTS.add("Hello my name is Katie, I am a 22 year")
-    EXPECTED_OUTPUTS.add("Hello my name is Katie. I am a 20 year")
-    EXPECTED_OUTPUTS.add("Hello my name is Kyle. I am a 22 year")
-    EXPECTED_OUTPUTS.add("Hello my name is Katie. I am a 22 year")
+    EXPECTED_OUTPUTS.add("Hello my name is John and I am a professional photographer. I")
+    EXPECTED_OUTPUTS.add("Hello my name is John, I am a professional photographer and I")
+    EXPECTED_OUTPUTS.add("Hello my name is John, I am a student in the University of")
+    EXPECTED_OUTPUTS.add("Hello my name is John and I am a very good looking man.")
+    EXPECTED_OUTPUTS.add("Hello my name is Alyson, I am a student in the")
+    EXPECTED_OUTPUTS.add("Hello my name is Alyson and I am a very sweet,")
 
     # this seems a little small considering that we are doing 4bit quant but we have a small model and ww don't quantize the embeddings
-    EXPECTED_RELATIVE_DIFFERENCE = 2.0618
+    EXPECTED_RELATIVE_DIFFERENCE = 1.664253062
 
     bits = 4
     sym = True
@@ -103,7 +105,7 @@ class GPTQTest(unittest.TestCase):
         "auto-gptq is an easy-to-use model quantization library with user-friendly apis, based on GPTQ algorithm."
     ]
 
-    device_map = "cpu"
+    device_map = "cpu" if is_gptqmodel_available() else None
 
     # called only once for all test in this class
     @classmethod
@@ -152,7 +154,7 @@ class GPTQTest(unittest.TestCase):
         Checks also if other models are casted correctly.
         """
         # This should work
-        if self.device_map == "cpu" and torch.cuda.is_available():
+        if self.device_map in (None, "cpu"):
             _ = self.quantized_model.to(0)
 
         with self.assertRaises(ValueError):
@@ -202,7 +204,7 @@ class GPTQTest(unittest.TestCase):
                 disable_exllama=not self.use_exllama,
                 disable_exllamav2=True,
             )
-        self.assertEqual(self.quantized_model.model.layers[0].mlp.gate_proj.__class__, QuantLinear)
+        self.assertTrue(self.quantized_model.transformer.h[0].mlp.dense_4h_to_h.__class__ == QuantLinear)
 
     def check_inference_correctness(self, model):
         r"""
@@ -220,7 +222,7 @@ class GPTQTest(unittest.TestCase):
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
     def check_quantized_layers_type(self, model, value):
-        self.assertEqual(model.model.layers[0].mlp.gate_proj.QUANT_TYPE, value)
+        self.assertTrue(model.transformer.h[0].mlp.dense_4h_to_h.QUANT_TYPE == value)
 
     def test_generate_quality(self):
         """
@@ -267,19 +269,14 @@ class GPTQTest(unittest.TestCase):
         """
         with tempfile.TemporaryDirectory() as tmpdirname:
             self.quantized_model.save_pretrained(tmpdirname)
-            quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.device_map)
+            device_map = self.device_map or "auto"
+            quantized_model_from_saved = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=device_map)
             self.check_inference_correctness(quantized_model_from_saved)
 
 
 @require_torch_gpu
 class GPTQTestCUDA(GPTQTest):
     device_map = {"": 0}
-
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        # flaky test: gptqmodel and auto-gptq are not output equivalent nor is string compare deterministic even between transformer/torch versions
-        cls.EXPECTED_OUTPUTS.add("Hello my name is Katie. I am a 20 year")
 
     def test_change_loading_attributes(self):
         """
@@ -361,7 +358,7 @@ class GPTQTestActOrderExllama(unittest.TestCase):
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
     def test_quantized_layers_type(self):
-        self.assertEqual(self.quantized_model.model.layers[0].self_attn.k_proj.QUANT_TYPE, "exllama")
+        self.assertTrue(self.quantized_model.model.layers[0].self_attn.k_proj.QUANT_TYPE == "exllama")
 
     def test_generate_quality(self):
         """
@@ -455,32 +452,32 @@ class GPTQTestExllamaV2(unittest.TestCase):
 @require_torch_multi_gpu
 class GPTQTestDeviceMapCPUOffload(GPTQTest):
     device_map = {
-        "model.embed_tokens": 0,
-        "model.norm": 0,
+        "transformer.word_embeddings": 0,
+        "transformer.word_embeddings_layernorm": 0,
         "lm_head": 0,
-        "model.layer.0": 0,
-        "model.layer.1": 0,
-        "model.layer.2": 0,
-        "model.layer.3": 0,
-        "model.layer.4": 0,
-        "model.layer.5": 0,
-        "model.layer.6": 0,
-        "model.layer.7": 0,
-        "model.layer.8": 0,
-        "model.layer.9": 0,
-        "model.layer.10": 1,
-        "model.layer.11": 1,
-        "model.layer.12": 1,
-        "model.layer.13": 1,
-        "model.layer.14": 1,
-        "model.layer.15": 1,
-        "model.layer.16": 1,
-        "model.layer.17": 0,
-        "model.layer.18": "cpu",
-        "model.layer.19": "cpu",
-        "model.layer.20": "cpu",
-        "model.layer.21": "cpu",
-        "model.layer.22": "cpu",
-        "model.layer.23": 1,
-        "model.rotary_emb": 0,
+        "transformer.h.0": 0,
+        "transformer.h.1": 0,
+        "transformer.h.2": 0,
+        "transformer.h.3": 0,
+        "transformer.h.4": 0,
+        "transformer.h.5": 0,
+        "transformer.h.6": 0,
+        "transformer.h.7": 0,
+        "transformer.h.8": 0,
+        "transformer.h.9": 0,
+        "transformer.h.10": 1,
+        "transformer.h.11": 1,
+        "transformer.h.12": 1,
+        "transformer.h.13": 1,
+        "transformer.h.14": 1,
+        "transformer.h.15": 1,
+        "transformer.h.16": 1,
+        "transformer.h.17": 0,
+        "transformer.h.18": "cpu",
+        "transformer.h.19": "cpu",
+        "transformer.h.20": "cpu",
+        "transformer.h.21": "cpu",
+        "transformer.h.22": "cpu",
+        "transformer.h.23": 1,
+        "transformer.ln_f": 0,
     }

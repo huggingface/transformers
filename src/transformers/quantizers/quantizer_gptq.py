@@ -52,9 +52,7 @@ class GptqHfQuantizer(HfQuantizer):
         if not is_optimum_available():
             raise ImportError("Loading a GPTQ quantized model requires optimum (`pip install optimum`)")
         if is_auto_gptq_available() and is_gptqmodel_available():
-            logger.warning(
-                "Detected gptqmodel and auto-gptq, will use gptqmodel"
-            )
+            logger.warning("Detected gptqmodel and auto-gptq, will use gptqmodel")
 
         gptq_supports_cpu = (
             is_auto_gptq_available()
@@ -86,6 +84,14 @@ class GptqHfQuantizer(HfQuantizer):
             logger.info("We suggest you to set `torch_dtype=torch.float16` for better efficiency with GPTQ.")
         return torch_dtype
 
+    def update_device_map(self, device_map):
+        if device_map is None:
+            device_map = {"": torch.device("cpu")}
+        # Only with auto-gptq do not support CPU, we should move the model to cuda if available.
+        if not is_gptqmodel_available() and device_map in ("cpu", {"": torch.device("cpu")}):
+            device_map == {"": 0}
+        return device_map
+
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
         if model.__class__.main_input_name != "input_ids":
             raise RuntimeError("We can only quantize pure text model.")
@@ -94,10 +100,6 @@ class GptqHfQuantizer(HfQuantizer):
             model = self.optimum_quantizer.convert_model(model, **kwargs)
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        # Only with auto-gptq do not support CPU, we should move the model to cuda if available.
-        if model.device.type == "cpu" and not is_gptqmodel_available() and torch.cuda.is_available():
-            model = model.to(0)
-            model.hf_device_map = {"": 0}
         if self.pre_quantized:
             model = self.optimum_quantizer.post_init_model(model)
         else:
