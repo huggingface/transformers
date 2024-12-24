@@ -862,9 +862,9 @@ class Dinov2WithRegistersBackbone(Dinov2WithRegistersPreTrainedModel, BackboneMi
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> processor = AutoImageProcessor.from_pretrained("facebook/dinov2_with_registers")
+        >>> processor = AutoImageProcessor.from_pretrained("facebook/dinov2-with-registers-base")
         >>> model = AutoBackbone.from_pretrained(
-        ...     "facebook/dinov2_with_registers", out_features=["stage2", "stage5", "stage8", "stage11"]
+        ...     "facebook/dinov2-with-registers-base", out_features=["stage2", "stage5", "stage8", "stage11"]
         ... )
 
         >>> inputs = processor(image, return_tensors="pt")

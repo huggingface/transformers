@@ -27,8 +27,8 @@ class Dinov2WithRegistersConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Dinov2WithRegistersModel`]. It is used to instantiate an
     Dinov2WithRegisters model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Dinov2WithRegisters
-    [google/dinov2-with-registers-base-patch16-224](https://huggingface.co/google/dinov2-with-registers-base-patch16-224) architecture.
+    with the defaults will yield a similar configuration to that of the Dinov2 With Registers
+    [facebook/dinov2-with-registers-base](https://huggingface.co/facebook/dinov2-with-registers-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -95,17 +95,17 @@ class Dinov2WithRegistersConfig(BackboneConfigMixin, PretrainedConfig):
     ```python
     >>> from transformers import Dinov2WithRegistersConfig, Dinov2WithRegistersModel
 
-    >>> # Initializing a Dinov2WithRegisters dinov2-with-registers-base-patch16-224 style configuration
+    >>> # Initializing a Dinov2WithRegisters base style configuration
     >>> configuration = Dinov2WithRegistersConfig()
 
-    >>> # Initializing a model (with random weights) from the dinov2-with-registers-base-patch16-224 style configuration
+    >>> # Initializing a model (with random weights) from the base style configuration
     >>> model = Dinov2WithRegistersModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
 
-    model_type = "dinov2_with_registers"
+    model_type = "dinov2-with-registers-base"
 
     def __init__(
         self,

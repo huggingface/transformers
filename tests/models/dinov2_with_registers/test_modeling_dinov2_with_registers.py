@@ -310,7 +310,7 @@ class Dinov2WithRegistersModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "nielsr/dinov2-with-registers-base"
+        model_name = "facebook/dinov2-with-registers-base"
         model = Dinov2WithRegistersModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -327,12 +327,14 @@ class Dinov2WithRegistersModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
         return (
-            AutoImageProcessor.from_pretrained("nielsr/dinov2-with-registers-base") if is_vision_available() else None
+            AutoImageProcessor.from_pretrained("facebook/dinov2-with-registers-base")
+            if is_vision_available()
+            else None
         )
 
     @slow
     def test_inference_no_head(self):
-        model = Dinov2WithRegistersModel.from_pretrained("nielsr/dinov2-with-registers-base").to(torch_device)
+        model = Dinov2WithRegistersModel.from_pretrained("facebook/dinov2-with-registers-base").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
