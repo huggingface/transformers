@@ -81,5 +81,5 @@ if __name__ == "__main__":
     parser.add_argument("fairseq_path", type=str, help="path to a model.pt on local filesystem.")
     parser.add_argument("pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model.")
     args = parser.parse_args()
-    model = convert_fairseq_m2m100_checkpoint_from_disk(args.fairseq_pathß)
+    model = convert_fairseq_m2m100_checkpoint_from_disk(args.fairseq_path)
     model.save_pretrained(args.pytorch_dump_folder_path)
