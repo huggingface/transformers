@@ -32,7 +32,7 @@ Both [GPTQModel](https://github.com/ModelCloud/GPTQModel) and [AutoGPTQ](https:/
 * Hardware support: Apple Silicon M1+, Intel/AMD CPU, and Intel Datacenter Max + Arc GPUs.
 * Asymmetric support: Asymmetric quantization can potentially introduce lower quantization errors compared to symmetric quantization. However, it is not backward compatible with AutoGPTQ, and not all kernels, such as Marlin, support asymmetric quantization.
 * IPEX kernel for Intel/AMD accelerated CPU and Intel GPU (Datacenter Max + ARc) support.
-* Updated Marlin kernel from Neural Magic that is higly optimized for A100
+* Updated Marlin kernel from Neural Magic that is optimized for A100 (Ampere)
 * Updated Kernels with auto-padding for legacy model support and models with non-uniform in/out-features. 
 * Faster quantization, lower memory usage, and more accurate default quantization via GPTQModel quantization apis.
 * User and developer friendly apis. 
