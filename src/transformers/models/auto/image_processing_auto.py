@@ -130,6 +130,7 @@ else:
             ("resnet", ("ConvNextImageProcessor",)),
             ("rt_detr", ("RTDetrImageProcessor", "RTDetrImageProcessorFast")),
             ("sam", ("SamImageProcessor",)),
+            ("sam_hq", ("SamImageProcessor",)),
             ("segformer", ("SegformerImageProcessor",)),
             ("seggpt", ("SegGptImageProcessor",)),
             ("siglip", ("SiglipImageProcessor",)),
