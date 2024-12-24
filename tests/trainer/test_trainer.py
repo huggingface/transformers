@@ -572,7 +572,8 @@ if is_torch_available():
 class TrainerIntegrationCommon:
     def check_saved_checkpoints(self, output_dir, freq, total, is_pretrained=True, safe_weights=True):
         weights_file = WEIGHTS_NAME if not safe_weights else SAFE_WEIGHTS_NAME
-        file_list = [weights_file, "training_args.bin", "optimizer.pt", "scheduler.pt", "trainer_state.json"]
+        file_list = [weights_file, "optimizer.pt", "scheduler.pt", "trainer_state.json"]
+        safe_serialized = ["training_args.bin", "training_args.json"]  # default to json in version 5.x.x
         if is_pretrained:
             file_list.append("config.json")
         for step in range(freq, total, freq):
@@ -580,6 +581,10 @@ class TrainerIntegrationCommon:
             self.assertTrue(os.path.isdir(checkpoint))
             for filename in file_list:
                 self.assertTrue(os.path.isfile(os.path.join(checkpoint, filename)))
+            self.assertTrue(
+                (os.path.isfile(os.path.join(checkpoint, safe_serialized[0])))
+                or (os.path.isfile(os.path.join(checkpoint, safe_serialized[1])))
+            )
 
     def check_best_model_has_been_loaded(
         self, output_dir, freq, total, trainer, metric, greater_is_better=False, is_pretrained=True, safe_weights=True
