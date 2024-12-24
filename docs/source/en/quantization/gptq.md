@@ -120,7 +120,7 @@ model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq", de
 
 ## Marlin
 
-[Marlin](https://github.com/IST-DASLab/marlin) is a CUDA gptq kernel, 4-bit only, that is highly optimized for the Nvidia A100 GPU (Ampere) architecture where the the loading, dequantization, and execution of post-dequantized weights are highly parallelized offering a substantial inference improvement versus the original CUDA gptq kernel. Marlin is only available for quantized inference and does support model quantization.
+[Marlin](https://github.com/IST-DASLab/marlin) is a CUDA gptq kernel, 4-bit only, that is highly optimized for the Nvidia A100 GPU (Ampere) architecture where the the loading, dequantization, and execution of post-dequantized weights are highly parallelized offering a substantial inference improvement versus the original CUDA gptq kernel. Marlin is only available for quantized inference and does not support model quantization.
 
 Marlin inference can be activated via the `backend` property in `GPTQConfig` for GPTQModel:
 
