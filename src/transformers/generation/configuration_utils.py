@@ -20,7 +20,7 @@ import os
 import warnings
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, is_dataclass
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Union
 
 from .. import __version__
 from ..configuration_utils import PretrainedConfig
@@ -72,7 +72,9 @@ if is_torch_available():
         "mamba": MambaCache,
     }
     QUANT_BACKEND_CLASSES_MAPPING = {"quanto": QuantoQuantizedCache, "HQQ": HQQQuantizedCache}
-    ALL_CACHE_IMPLEMENTATIONS = list(NEED_SETUP_CACHE_CLASSES_MAPPING.keys()) + list(NEEDS_CACHE_CONFIG.keys())
+    ALL_CACHE_IMPLEMENTATIONS = (
+        list(NEED_SETUP_CACHE_CLASSES_MAPPING.keys()) + list(NEEDS_CACHE_CONFIG.keys()) + ["offloaded"]
+    )
 
 
 class GenerationMode(ExplicitEnum):
@@ -193,12 +195,12 @@ class GenerationConfig(PushToHubMixin):
         > Parameters for manipulation of the model output logits
 
         temperature (`float`, *optional*, defaults to 1.0):
-            The value used to modulate the next token probabilities.
+            The value used to module the next token probabilities. This value is set in a model's `generation_config.json` file. If it isn't set, the default value is 1.0
         top_k (`int`, *optional*, defaults to 50):
-            The number of highest probability vocabulary tokens to keep for top-k-filtering.
+            The number of highest probability vocabulary tokens to keep for top-k-filtering. This value is set in a model's `generation_config.json` file. If it isn't set, the default value is 50.
         top_p (`float`, *optional*, defaults to 1.0):
             If set to float < 1, only the smallest set of most probable tokens with probabilities that add up to
-            `top_p` or higher are kept for generation.
+            `top_p` or higher are kept for generation. This value is set in a model's `generation_config.json` file. If it isn't set, the default value is 1.0
         min_p (`float`, *optional*):
             Minimum token probability, which will be scaled by the probability of the most likely token. It must be a
             value between 0 and 1. Typical values are in the 0.01-0.2 range, comparably selective as setting `top_p` in
@@ -351,7 +353,9 @@ class GenerationConfig(PushToHubMixin):
         assistant_confidence_threshold (`float`, *optional*, defaults to 0.4):
             The confidence threshold for the assistant model. If the assistant model's confidence in its prediction for the current token is lower
             than this threshold, the assistant model stops the current token generation iteration, even if the number of _speculative tokens_
-            (defined by `num_assistant_tokens`) is not yet reached. It is an unsupervised version of the dynamic speculation lookahead
+            (defined by `num_assistant_tokens`) is not yet reached. The assistant's confidence threshold is adjusted throughout the speculative iterations to reduce the number of unnecessary draft and target forward passes, biased towards avoiding false negatives.
+            `assistant_confidence_threshold` value is persistent over multiple generation calls with the same assistant model.
+            It is an unsupervised version of the dynamic speculation lookahead
             from Dynamic Speculation Lookahead Accelerates Speculative Decoding of Large Language Models <https://arxiv.org/abs/2405.04304>.
         prompt_lookup_num_tokens (`int`, *optional*):
             The number of tokens to be output as candidate tokens.
@@ -360,6 +364,20 @@ class GenerationConfig(PushToHubMixin):
         assistant_early_exit(`int`, *optional*):
             If set to a positive integer, early exit of the model will be used as an assistant. Can only be used with
             models that support early exit (i.e. models where logits from intermediate layers can be interpreted by the LM head).
+        assistant_lookbehind(`int`, *optional*, defaults to 10):
+            If set to a positive integer, the re-encodeing process will additionally consider the last `assistant_lookbehind` assistant tokens
+            to correctly align tokens. Can only be used with different tokenizers in speculative decoding.
+            See this [blog](https://huggingface.co/blog/universal_assisted_generation) for more details.
+        target_lookbehind(`int`, *optional*, defaults to 10):
+            If set to a positive integer, the re-encodeing process will additionally consider the last `target_lookbehind` target tokens
+            to correctly align tokens. Can only be used with different tokenizers in speculative decoding.
+            See this [blog](https://huggingface.co/blog/universal_assisted_generation) for more details.
+
+        > Parameters related to performances and compilation
+
+        compile_config (CompileConfig, *optional*):
+            If using a static cache, this controls how `generate` will `compile` the forward pass for performance
+            gains.
 
         > Wild card
 
@@ -460,6 +478,12 @@ class GenerationConfig(PushToHubMixin):
         self.prompt_lookup_num_tokens = kwargs.pop("prompt_lookup_num_tokens", None)
         self.max_matching_ngram_size = kwargs.pop("max_matching_ngram_size", None)
         self.assistant_early_exit = kwargs.pop("assistant_early_exit", None)
+        ## assistant generation for different tokenizers, the windows size for assistant/target model
+        self.assistant_lookbehind = kwargs.pop("assistant_lookbehind", 10)
+        self.target_lookbehind = kwargs.pop("target_lookbehind", 10)
+
+        # Performances
+        self.compile_config = kwargs.pop("compile_config", CompileConfig())
 
         # Wild card
         self.generation_kwargs = kwargs.pop("generation_kwargs", {})
@@ -781,7 +805,13 @@ class GenerationConfig(PushToHubMixin):
                 self.watermarking_config = WatermarkingConfig.from_dict(self.watermarking_config)
             self.watermarking_config.validate()
 
-        # 7. other incorrect combinations
+        # 7. performances arguments
+        if not isinstance(self.compile_config, CompileConfig):
+            raise ValueError(
+                f"You provided `compile_config` as an instance of {type(self.compile_config)}, but it must be an instance of `CompileConfig`."
+            )
+
+        # 8. other incorrect combinations
         if self.return_dict_in_generate is not True:
             for extra_output_flag in self.extra_output_flags:
                 if getattr(self, extra_output_flag) is True:
@@ -1162,6 +1192,8 @@ class GenerationConfig(PushToHubMixin):
             del output["_commit_hash"]
         if "_original_object_hash" in output:
             del output["_original_object_hash"]
+        if "compile_config" in output:
+            del output["compile_config"]
 
         # Transformers version when serializing this file
         output["transformers_version"] = __version__
@@ -1546,3 +1578,51 @@ class SynthIDTextWatermarkingConfig(BaseWatermarkingConfig):
             skip_first_ngram_calls=self.skip_first_ngram_calls,
             debug_mode=self.debug_mode,
         )
+
+
+@dataclass
+class CompileConfig(object):
+    """
+    Class that holds arguments relative to `torch.compile` behavior, when using automatic compilation in `generate`.
+    See [`torch.compile`](https://pytorch.org/docs/stable/generated/torch.compile.html) for more details on the arguments.
+
+    Args:
+        fullgraph (`bool`, *optional*, defaults to `True`):
+            If `True`, requires that the whole forward be capturable in a single graph.
+        dynamic (`bool` or `None`, *optional*):
+            Whether to try to use dynamic shape graphs.
+        backend (`str` or `Callable`, *optional*, defaults to `"inductor"`):
+            Backend to be used.
+        mode (`str`, *optional*, defaults to `"reduce-overhead"`):
+            Controls balance between performance and overhead.
+        options (`dict`, *optional*):
+            A dictionary of options to pass to the backend.
+
+    Examples:
+    ```python
+    >>> from transformers import AutoModelForCausalLM, AutoTokenizer, CompileConfig
+
+    >>> tokenizer = AutoTokenizer.from_pretrained('google/gemma-2-2b')
+    >>> model = AutoModelForCausalLM.from_pretrained('google/gemma-2-2b').cuda()
+
+    >>> # Automatic compile configuration, used with static cache
+    >>> compile_config = CompileConfig(dynamic=True)
+
+    >>> # Generation with static cache and compile config
+    >>> input = tokenizer.encode("Hello there, how", return_tensors="pt").cuda()
+    >>> output = model.generate(
+    ...     input, do_sample=False, max_new_tokens=300, cache_implementation="static", compile_config=compile_config
+    ... )
+    >>> output_text = tokenizer.batch_decode(output, skip_special_tokens=True)[0]
+    ```
+    """
+
+    fullgraph: bool = True
+    dynamic: Optional[bool] = None
+    backend: Union[str, Callable] = "inductor"
+    mode: str = "reduce-overhead"
+    options: Optional[dict] = None
+
+    def to_dict(self) -> Dict[str, Any]:
+        """Serializes this instance to a Python dictionary."""
+        return copy.deepcopy(self.__dict__)

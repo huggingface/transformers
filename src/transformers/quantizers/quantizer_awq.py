@@ -87,6 +87,7 @@ class AwqQuantizer(HfQuantizer):
     def update_torch_dtype(self, torch_dtype):
         if torch_dtype is None:
             torch_dtype = torch.float16
+            logger.info("Loading the model in `torch.float16`. To overwrite it, set `torch_dtype` manually.")
         elif torch_dtype != torch.float16:
             logger.warning("We suggest you to set `torch_dtype=torch.float16` for better efficiency with AWQ.")
         return torch_dtype
@@ -111,7 +112,7 @@ class AwqQuantizer(HfQuantizer):
                 " Please double check your model architecture, or submit an issue on github if you think this is a bug."
             )
 
-    def _process_model_after_weight_loading(self, model):
+    def _process_model_after_weight_loading(self, model, **kwargs):
         if self.quantization_config.do_fuse:
             from ..integrations import fuse_awq_modules
 
