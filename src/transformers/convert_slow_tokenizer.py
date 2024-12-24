@@ -1593,6 +1593,7 @@ SLOW_TO_FAST_CONVERTERS = {
     "SeamlessM4TTokenizer": SeamlessM4TConverter,
     "SqueezeBertTokenizer": BertConverter,
     "T5Tokenizer": T5Converter,
+    "TeleChat2Tokenizer": LlamaConverter,
     "UdopTokenizer": UdopConverter,
     "WhisperTokenizer": WhisperConverter,
     "XLMRobertaTokenizer": XLMRobertaConverter,

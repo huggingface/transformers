@@ -457,6 +457,7 @@ MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("switch_transformers", "SwitchTransformersForConditionalGeneration"),
         ("t5", "T5ForConditionalGeneration"),
         ("tapas", "TapasForMaskedLM"),
+        ("telechat2", "TeleChat2ForCausalLM"),
         ("transfo-xl", "TransfoXLLMHeadModel"),
         ("wav2vec2", "Wav2Vec2ForMaskedLM"),
         ("whisper", "WhisperForConditionalGeneration"),

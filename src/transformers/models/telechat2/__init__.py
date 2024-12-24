@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 from ...utils import (
     OptionalDependencyNotAvailable,
     _LazyModule,
+    is_torch_available,
 )
 
 
@@ -38,14 +39,6 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_telechat2 import TeleChat2Config
-
-    try:
-        if not is_tokenizers_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .tokenization_qwen2_fast import Qwen2TokenizerFast
 
     try:
         if not is_torch_available():
