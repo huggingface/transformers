@@ -720,7 +720,7 @@
       - local: model_doc/table-transformer
         title: Table Transformer
       - local: model_doc/textnet
-        title: Text Net
+        title: TextNet
       - local: model_doc/timm_wrapper
         title: Timm Wrapper
       - local: model_doc/upernet

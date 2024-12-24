@@ -43,7 +43,7 @@ logger = logging.get_logger(__name__)
 
 # General docstring
 _CONFIG_FOR_DOC = "TextNetConfig"
-_CHECKPOINT_FOR_DOC = "jadechoghari/textnet-base"
+_CHECKPOINT_FOR_DOC = "czczup/textnet-base"
 _EXPECTED_OUTPUT_SHAPE = [1, 512, 20, 27]
 
 
@@ -355,8 +355,8 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> processor = TextNetImageProcessor.from_pretrained("jadechoghari/textnet-base")
-        >>> model = TextNetForImageClassification.from_pretrained("jadechoghari/textnet-base")
+        >>> processor = TextNetImageProcessor.from_pretrained("czczup/textnet-base")
+        >>> model = TextNetForImageClassification.from_pretrained("czczup/textnet-base")
 
         >>> inputs = processor(images=image, return_tensors="pt", size={"height": 640, "width": 640})
         >>> with torch.no_grad():
@@ -435,8 +435,8 @@ class TextNetBackbone(TextNetPreTrainedModel, BackboneMixin):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> processor = AutoImageProcessor.from_pretrained("jadechoghari/textnet-base")
-        >>> model = AutoBackbone.from_pretrained("jadechoghari/textnet-base")
+        >>> processor = AutoImageProcessor.from_pretrained("czczup/textnet-base")
+        >>> model = AutoBackbone.from_pretrained("czczup/textnet-base")
 
         >>> inputs = processor(image, return_tensors="pt")
         >>> with torch.no_grad():

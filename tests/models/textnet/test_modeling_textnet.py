@@ -305,7 +305,7 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "jadechoghari/textnet-base"
+        model_name = "czczup/textnet-base"
         model = TextNetModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -315,8 +315,8 @@ class TextNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 class TextNetModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_no_head(self):
-        processor = TextNetImageProcessor.from_pretrained("jadechoghari/textnet-base")
-        model = TextNetModel.from_pretrained("jadechoghari/textnet-base").to(torch_device)
+        processor = TextNetImageProcessor.from_pretrained("czczup/textnet-base")
+        model = TextNetModel.from_pretrained("czczup/textnet-base").to(torch_device)
 
         # prepare image
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
