@@ -22,22 +22,39 @@ Try GPTQ quantization with PEFT in this [notebook](https://colab.research.google
 
 </Tip>
 
-The [AutoGPTQ](https://github.com/PanQiWei/AutoGPTQ) library implements the GPTQ algorithm, a post-training quantization technique where each row of the weight matrix is quantized independently to find a version of the weights that minimizes the error. These weights are quantized to int4, but they're restored to fp16 on the fly during inference. This can save your memory-usage by 4x because the int4 weights are dequantized in a fused kernel rather than a GPU's global memory, and you can also expect a speedup in inference because using a lower bitwidth takes less time to communicate.
+Both [GPTQModel](https://github.com/ModelCloud/GPTQModel) and [AutoGPTQ](https://github.com/PanQiWei/AutoGPTQ) libraries implements the GPTQ algorithm, a post-training quantization technique where each row of the weight matrix is quantized independently to find a version of the weights that minimizes error. These weights are quantized to int4, stored as int32 (int4 x 8) and dequantized (restored) to fp16 on the fly during inference. This can save  memory-usage by almost 4x because the int4 weights are often dequantized in a fused kernel. One can also expect a substantial speedup in inference due to lower bandwidth requirements for lower bitwidth.
 
-Now, we are going to replace [AutoGPTQ](https://github.com/PanQiWei/AutoGPTQ) with [GPTQModel](https://github.com/ModelCloud/GPTQModel), the auto_gptq will be deprecated in the future.
+[GPTQModel](https://github.com/ModelCloud/GPTQModel) has its origin as a maintained fork of AutoGPTQ but has since differentiated itself with the following major differences:
 
-Before you begin, make sure the following libraries are installed:
+* Model support: GPTQModel continues to support all of the latest released LLM models.
+* Multi-Modal support: GPTQModel supports accurate quantization of Qwen 2-VL and Ovis 1.6-VL image-to-text models. 
+* Platform support: Validated MacOS Apple Silicone and Windows 11 support.
+* Hardware support: Apple silicone M1+, Intel/AMD CPU, and Intel Datacetner Max + Arc GPUs.
+* IPEX kernel for Intel/AMD accelerated CPU and Intel GPU (Datacenter Max + ARc) support.
+* Updated Marlin kernel from Neural Magic that is higly optimized for A100
+* Updated Kernels with auto-padding for legacy model support and models with non-uniform in/out-features. 
+* Faster quantization, lower memory usage, and more accurate default quantization via GPTQModel quantization apis.
+* User and developer friendly apis. 
 
-```bash
-pip install auto-gptq
-```
-or
-```bash
-pip install gptqmodel
-```
+
+[AutoGPTQ](https://github.com/PanQiWei/AutoGPTQ) will likely be deprecated in the future due the lack of continued support for new models and features. 
+
+Before you begin, make sure the following libraries are installed and updated to the latest release:
 
 ```bash
 pip install --upgrade accelerate optimum transformers
+```
+
+Then install either GPTQModel or AutoGPTQ.
+
+```bash
+pip install gptqmodel --no-build-isolation
+```
+
+or
+
+```bash
+pip install auto-gptq --no-build-isolation
 ```
 
 To quantize a model (currently only supported for text models), you need to create a [`GPTQConfig`] class and set the number of bits to quantize to, a dataset to calibrate the weights for quantization, and a tokenizer to prepare the dataset.
@@ -101,9 +118,14 @@ from transformers import AutoModelForCausalLM
 model = AutoModelForCausalLM.from_pretrained("{your_username}/opt-125m-gptq", device_map="auto")
 ```
 
+## Marlin
+
+[Marlin](https://github.com/IST-DASLab/marlin) is a CUDA gptq kernel, 4-bit only, that is highly optimized for the Nvidia A100 GPU (Ampere) architecture where the the loading, dequantization, and execution of post-dequantized weights are highly parallelized offering a substantial inference improvement versus the original CUDA gptq kernel. Marlin is only available for quantized inference and does support model quantization.
+
+
 ## ExLlama
 
-[ExLlama](https://github.com/turboderp/exllama) is a Python/C++/CUDA implementation of the [Llama](model_doc/llama) model that is designed for faster inference with 4-bit GPTQ weights (check out these [benchmarks](https://github.com/huggingface/optimum/tree/main/tests/benchmark#gptq-benchmark)). The ExLlama kernel is activated by default when you create a [`GPTQConfig`] object. To boost inference speed even further, use the [ExLlamaV2](https://github.com/turboderp/exllamav2) kernels by configuring the `exllama_config` parameter:
+[ExLlama](https://github.com/turboderp/exllama) is a CUDA implementation of the [Llama](model_doc/llama) model that is designed for faster inference with 4-bit GPTQ weights (check out these [benchmarks](https://github.com/huggingface/optimum/tree/main/tests/benchmark#gptq-benchmark)). The ExLlama kernel is activated by default when you create a [`GPTQConfig`] object. To boost inference speed even further, use the [ExLlamaV2](https://github.com/turboderp/exllamav2) kernels by configuring the `exllama_config` parameter:
 
 ```py
 import torch
@@ -119,7 +141,7 @@ Only 4-bit models are supported, and we recommend deactivating the ExLlama kerne
 
 </Tip>
 
-The ExLlama kernels are only supported when the entire model is on the GPU. If you're doing inference on a CPU with AutoGPTQ (version > 0.4.2) or GPTQModel (version > 1.4.2), then you'll need to disable the ExLlama kernel. This overwrites the attributes related to the ExLlama kernels in the quantization config of the config.json file.
+The ExLlama kernels are only supported when the entire model is on the GPU. If you're doing inference on a CPU with AutoGPTQ or GPTQModel, then you'll need to disable the ExLlama kernel. This overwrites the attributes related to the ExLlama kernels in the quantization config of the config.json file.
 
 ```py
 import torch
