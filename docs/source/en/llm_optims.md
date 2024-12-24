@@ -57,7 +57,7 @@ import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"  # To prevent long warnings :)
 
 tokenizer = AutoTokenizer.from_pretrained("google/gemma-2b")
-model = AutoModelForCausalLM.from_pretrained("google/gemma-2b", device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("google/gemma-2b", torch_dtype="auto", device_map="auto")
 
 model.generation_config.cache_implementation = "static"
 
@@ -89,7 +89,7 @@ import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"  # To prevent long warnings :)
 
 tokenizer = AutoTokenizer.from_pretrained("google/gemma-2b")
-model = AutoModelForCausalLM.from_pretrained("google/gemma-2b", device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("google/gemma-2b", torch_dtype="auto", device_map="auto")
 
 model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
 input_text = "The theory of special relativity states "
@@ -202,7 +202,7 @@ import os
 os.environ["TOKENIZERS_PARALLELISM"] = "false"  # To prevent long warnings :)
 
 tokenizer = AutoTokenizer.from_pretrained("google/gemma-2b")
-model = AutoModelForCausalLM.from_pretrained("google/gemma-2b", device_map="auto")
+model = AutoModelForCausalLM.from_pretrained("google/gemma-2b", torch_dtype="auto", device_map="auto")
 
 model.generate = torch.compile(model.generate, mode="reduce-overhead", fullgraph=True)
 input_text = "The theory of special relativity states "
@@ -249,7 +249,7 @@ device, _, _ = get_backend() # automatically detects the underlying device type 
 tokenizer = AutoTokenizer.from_pretrained("facebook/opt-1.3b")
 inputs = tokenizer("Einstein's theory of relativity states", return_tensors="pt").to(device)
 
-model = AutoModelForCausalLM.from_pretrained("facebook/opt-1.3b").to(device)
+model = AutoModelForCausalLM.from_pretrained("facebook/opt-1.3b", torch_dtype="auto").to(device)
 assistant_model = AutoModelForCausalLM.from_pretrained("facebook/opt-125m").to(device)
 outputs = model.generate(**inputs, assistant_model=assistant_model)
 tokenizer.batch_decode(outputs, skip_special_tokens=True)
@@ -271,7 +271,7 @@ device, _, _ = get_backend() # automatically detects the underlying device type 
 tokenizer = AutoTokenizer.from_pretrained("facebook/opt-1.3b")
 inputs = tokenizer("Einstein's theory of relativity states", return_tensors="pt").to(device)
 
-model = AutoModelForCausalLM.from_pretrained("facebook/opt-1.3b").to(device)
+model = AutoModelForCausalLM.from_pretrained("facebook/opt-1.3b", torch_dtype="auto").to(device)
 assistant_model = AutoModelForCausalLM.from_pretrained("facebook/opt-125m").to(device)
 outputs = model.generate(**inputs, assistant_model=assistant_model, do_sample=True, temperature=0.7)
 print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
@@ -300,7 +300,7 @@ device, _, _ = get_backend() # automatically detects the underlying device type 
 tokenizer = AutoTokenizer.from_pretrained("facebook/opt-1.3b")
 inputs = tokenizer("The second law of thermodynamics states", return_tensors="pt").to(device)
 
-model = AutoModelForCausalLM.from_pretrained("facebook/opt-1.3b").to(device)
+model = AutoModelForCausalLM.from_pretrained("facebook/opt-1.3b", torch_dtype="auto").to(device)
 assistant_model = AutoModelForCausalLM.from_pretrained("facebook/opt-125m").to(device)
 outputs = model.generate(**inputs, prompt_lookup_num_tokens=3)
 print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
@@ -322,7 +322,7 @@ device, _, _ = get_backend() # automatically detects the underlying device type 
 tokenizer = AutoTokenizer.from_pretrained("facebook/opt-1.3b")
 inputs = tokenizer("The second law of thermodynamics states", return_tensors="pt").to(device)
 
-model = AutoModelForCausalLM.from_pretrained("facebook/opt-1.3b").to(device)
+model = AutoModelForCausalLM.from_pretrained("facebook/opt-1.3b", torch_dtype="auto").to(device)
 outputs = model.generate(**inputs, prompt_lookup_num_tokens=3, do_sample=True, temperature=0.7)
 print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
 ["The second law of thermodynamics states that energy cannot be created nor destroyed. It's not a"]
@@ -473,7 +473,7 @@ with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable
 Quantization reduces the size of the LLM weights by storing them in a lower precision. This translates to lower memory usage and makes loading LLMs for inference more accessible if you're constrained by your GPUs memory. If you aren't limited by your GPU, you don't necessarily need to quantize your model because it can incur a small latency cost (except for AWQ and fused AWQ modules) due to the extra step required to quantize and dequantize the weights.
 
 > [!TIP]
-> There are many quantization libraries (see the [Quantization](./quantization) guide for more details) available, such as Quanto, AQLM, AWQ, and AutoGPTQ. Feel free to try them out and see which one works best for your use case. We also recommend reading the [Overview of natively supported quantization schemes in 🤗 Transformers](https://hf.co/blog/overview-quantization-transformers) blog post which compares AutoGPTQ and bitsandbytes.
+> There are many quantization libraries (see the [Quantization](./quantization) guide for more details) available, such as Quanto, AQLM, VPTQ, AWQ, and AutoGPTQ. Feel free to try them out and see which one works best for your use case. We also recommend reading the [Overview of natively supported quantization schemes in 🤗 Transformers](https://hf.co/blog/overview-quantization-transformers) blog post which compares AutoGPTQ and bitsandbytes.
 
 Use the Model Memory Calculator below to estimate and compare how much memory is required to load a model. For example, try estimating how much memory it costs to load [Mistral-7B-v0.1](https://huggingface.co/mistralai/Mistral-7B-v0.1).
 
