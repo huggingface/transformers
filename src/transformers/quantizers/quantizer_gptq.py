@@ -70,7 +70,7 @@ class GptqHfQuantizer(HfQuantizer):
             "0.4.2"
         ):
             raise ImportError(
-                "You need a version of auto_gptq >= 0.4.2 to use GPTQ: `pip install --upgrade auto-gptq` or use gptqmodel by `pip install gptqmodel>=1.4.3`. Please notice that auto-gptq will be deprecated in the future."
+                "You need a version of auto_gptq >= 0.4.2 to use GPTQ: `pip install --upgrade auto-gptq` or use gptqmodel by `pip install gptqmodel>=1.4.3`."
             )
         elif is_gptqmodel_available() and (
             version.parse(importlib.metadata.version("gptqmodel")) < version.parse("1.4.3")
