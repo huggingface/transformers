@@ -13,9 +13,9 @@ specific language governing permissions and limitations under the License.
 
 The Dinov2 With Registers model was proposed in [Vision Transformers Need Registers](https://arxiv.org/abs/2309.16588) by Timothée Darcet, Maxime Oquab, Julien Mairal, Piotr Bojanowski.
 
-The Vision Transformer (ViT) is a transformer encoder model (BERT-like) [originally introduced](https://arxiv.org/abs/2010.11929) to do supervised image classification on ImageNet.
+The [Vision Transformer](vit) (ViT) is a transformer encoder model (BERT-like) originally introduced to do supervised image classification on ImageNet.
 
-Next, people figured out ways to make ViT work really well on self-supervised image feature extraction (i.e. learning meaningful features, also called embeddings) on images without requiring any labels. Some example papers here include [DINOv2](https://huggingface.co/papers/2304.07193) and [MAE](https://arxiv.org/abs/2111.06377).
+Next, people figured out ways to make ViT work really well on self-supervised image feature extraction (i.e. learning meaningful features, also called embeddings) on images without requiring any labels. Some example papers here include [DINOv2](dinov2) and [MAE](vit_mae).
 
 The authors of DINOv2 noticed that ViTs have artifacts in attention maps. It’s due to the model using some image patches as “registers”. The authors propose a fix: just add some new tokens (called "register" tokens), which you only use during pre-training (and throw away afterwards). This results in:
 - no artifacts
