@@ -366,15 +366,10 @@ class DepthProModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
 
-        predicted_depth = outputs.predicted_depth
-        fov = outputs.fov
-        target_size = [[image.height, image.width]] * len(predicted_depth)
-
         outputs = image_processor.post_process_depth_estimation(
-            predicted_depths=predicted_depth,
-            fovs=fov,
-            target_sizes=target_size,
+            outputs,
+            target_sizes=[[image.height, image.width]],
         )
-        predicted_depth = outputs["predicted_depth"][0]
+        predicted_depth = outputs[0]["predicted_depth"]
         expected_shape = torch.Size((image.height, image.width))
         self.assertTrue(predicted_depth.shape == expected_shape)

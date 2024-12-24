@@ -53,11 +53,6 @@ class DepthProConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
-        image_size (`int`, *optional*, defaults to 1536):
-            The size (resolution) of each image,
-            To generate depth of same size as image,
-            image_size / 2**(n_fusion_blocks+1) == patch_size / patch_embeddings_size
-            where n_fusion_blocks = len(intermediate_hook_ids) + len(scaled_images_ratios)
         patch_size (`int`, *optional*, defaults to 384):
             The size (resolution) of each patch.
         num_channels (`int`, *optional*, defaults to 3):
@@ -120,7 +115,6 @@ class DepthProConfig(PretrainedConfig):
         attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
         layer_norm_eps=1e-6,
-        image_size=1536,
         patch_size=384,
         num_channels=3,
         patch_embeddings_size=16,
@@ -141,6 +135,43 @@ class DepthProConfig(PretrainedConfig):
     ):
         super().__init__(**kwargs)
 
+        # scaled_images_ratios is sorted
+        if scaled_images_ratios != sorted(scaled_images_ratios):
+            raise ValueError(
+                f"Values in scaled_images_ratios={scaled_images_ratios} " "should be sorted from low to high"
+            )
+
+        # patch_size should be a divisible by patch_embeddings_size
+        # else it raises an exception in DepthProViTPatchEmbeddings
+        if patch_size % patch_embeddings_size != 0:
+            raise ValueError(
+                f"patch_size={patch_size} should be divisible " f"by patch_embeddings_size={patch_embeddings_size}."
+            )
+
+        # scaled_images_ratios, scaled_images_overlap_ratios, scaled_images_feature_dims should be consistent
+        if not (len(scaled_images_ratios) == len(scaled_images_overlap_ratios) == len(scaled_images_feature_dims)):
+            raise ValueError(
+                f"len(scaled_images_ratios)={len(scaled_images_ratios)} and "
+                f"len(scaled_images_overlap_ratios)={len(scaled_images_overlap_ratios)} and "
+                f"len(scaled_images_feature_dims)={len(scaled_images_feature_dims)}, "
+                f"should match in config."
+            )
+
+        # intermediate_hook_ids, intermediate_feature_dims should be consistent
+        if not (len(intermediate_hook_ids) == len(intermediate_feature_dims)):
+            raise ValueError(
+                f"len(intermediate_hook_ids)={len(intermediate_hook_ids)} and "
+                f"len(intermediate_feature_dims)={len(intermediate_feature_dims)}, "
+                f"should match in config."
+            )
+
+        # fusion_hidden_size should be consistent with num_fov_head_layers
+        if fusion_hidden_size // 2**num_fov_head_layers == 0:
+            raise ValueError(
+                f"fusion_hidden_size={fusion_hidden_size} should be consistent with num_fov_head_layers={num_fov_head_layers} "
+                "i.e fusion_hidden_size // 2**num_fov_head_layers > 0"
+            )
+
         self.hidden_size = hidden_size
         self.fusion_hidden_size = fusion_hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -151,7 +182,6 @@ class DepthProConfig(PretrainedConfig):
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-        self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.patch_embeddings_size = patch_embeddings_size
