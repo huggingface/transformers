@@ -41,7 +41,7 @@ class Dinov2WithRegistersConfig(BackboneConfigMixin, PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Dinov2WithRegistersModel`]. It is used to instantiate an
     Dinov2WithRegisters model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the Dinov2 With Registers
+    with the defaults will yield a similar configuration to that of the DINOv2 with Registers
     [facebook/dinov2-with-registers-base](https://huggingface.co/facebook/dinov2-with-registers-base) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the

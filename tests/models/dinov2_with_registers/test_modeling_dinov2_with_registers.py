@@ -90,7 +90,7 @@ class Dinov2WithRegistersModelTester:
         self.num_register_tokens = num_register_tokens
         self.scope = scope
 
-        # in Dinov2 With Registers, the seq length equals the number of patches + 1 + num_register_tokens (we add 1 for the [CLS] token)
+        # in DINOv2 with Registers, the seq length equals the number of patches + 1 + num_register_tokens (we add 1 for the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
         self.seq_length = num_patches + 1 + self.num_register_tokens
         self.mask_ratio = mask_ratio
@@ -345,7 +345,7 @@ class Dinov2WithRegistersModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         # verify the last hidden states
-        # in Dinov2 With Registers, the seq length equals the number of patches + 1 + num_register_tokens (we add 1 for the [CLS] token)
+        # in DINOv2 with Registers, the seq length equals the number of patches + 1 + num_register_tokens (we add 1 for the [CLS] token)
         num_patches = (image_processor.crop_size["height"] // model.config.patch_size) ** 2
         expected_seq_length = num_patches + 1 + model.config.num_register_tokens
         expected_shape = torch.Size((1, expected_seq_length, model.config.hidden_size))

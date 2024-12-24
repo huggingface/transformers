@@ -7,11 +7,11 @@ an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express o
 specific language governing permissions and limitations under the License.
 -->
 
-# Dinov2 with Registers
+# DINOv2 with Registers
 
 ## Overview
 
-The Dinov2 with Registers model was proposed in [Vision Transformers Need Registers](https://arxiv.org/abs/2309.16588) by Timothée Darcet, Maxime Oquab, Julien Mairal, Piotr Bojanowski.
+The DINOv2 with Registers model was proposed in [Vision Transformers Need Registers](https://arxiv.org/abs/2309.16588) by Timothée Darcet, Maxime Oquab, Julien Mairal, Piotr Bojanowski.
 
 The [Vision Transformer](vit) (ViT) is a transformer encoder model (BERT-like) originally introduced to do supervised image classification on ImageNet.
 
@@ -33,7 +33,7 @@ alt="drawing" width="600"/>
 
 Tips:
 
-- Usage of Dinov2 with registers is identical to Dinov2 without, you'll just get better performance.
+- Usage of DINOv2 with Registers is identical to DINOv2 without, you'll just get better performance.
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr).
 The original code can be found [here](https://github.com/facebookresearch/dinov2).

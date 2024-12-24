@@ -656,7 +656,7 @@
       - local: model_doc/dinov2
         title: DINOV2
       - local: model_doc/dinov2_with_registers
-        title: Dinov2 with Registers
+        title: DINOv2 with Registers
       - local: model_doc/dit
         title: DiT
       - local: model_doc/dpt

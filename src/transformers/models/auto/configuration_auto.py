@@ -405,7 +405,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("dialogpt", "DialoGPT"),
         ("dinat", "DiNAT"),
         ("dinov2", "DINOv2"),
-        ("dinov2_with_registers", "Dinov2 with Registers"),
+        ("dinov2_with_registers", "DINOv2 with Registers"),
         ("distilbert", "DistilBERT"),
         ("dit", "DiT"),
         ("donut-swin", "DonutSwin"),
