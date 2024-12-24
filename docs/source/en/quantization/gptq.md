@@ -29,7 +29,8 @@ Both [GPTQModel](https://github.com/ModelCloud/GPTQModel) and [AutoGPTQ](https:/
 * Model support: GPTQModel continues to support all of the latest released LLM models.
 * Multi-Modal support: GPTQModel supports accurate quantization of Qwen 2-VL and Ovis 1.6-VL image-to-text models. 
 * Platform support: Validated MacOS Apple Silicone and Windows 11 support.
-* Hardware support: Apple silicone M1+, Intel/AMD CPU, and Intel Datacetner Max + Arc GPUs.
+* Hardware support: Apple silicone M1+, Intel/AMD CPU, and Intel Datacenter Max + Arc GPUs.
+* Asymmetric support: Asymmetric quantization can potentially introduce lower quantization errors compared to symmetric quantization. However, it is not backward compatible with AutoGPTQ, and not all kernels, such as Marlin, support asymmetric quantization.
 * IPEX kernel for Intel/AMD accelerated CPU and Intel GPU (Datacenter Max + ARc) support.
 * Updated Marlin kernel from Neural Magic that is higly optimized for A100
 * Updated Kernels with auto-padding for legacy model support and models with non-uniform in/out-features. 
