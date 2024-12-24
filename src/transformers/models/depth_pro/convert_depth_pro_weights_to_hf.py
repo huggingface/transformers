@@ -153,7 +153,6 @@ def write_model(
         attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
         layer_norm_eps=1e-6,
-        image_size=1536,
         patch_size=384,
         num_channels=3,
         patch_embeddings_size=16,
