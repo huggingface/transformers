@@ -53,7 +53,7 @@ class GptqHfQuantizer(HfQuantizer):
             raise ImportError("Loading a GPTQ quantized model requires optimum (`pip install optimum`)")
         if is_auto_gptq_available() and is_gptqmodel_available():
             logger.warning(
-                "Detected gptqmodel and auto-gptq, will use gptqmodel, auto-gptq will be deprecated in the future."
+                "Detected gptqmodel and auto-gptq, will use gptqmodel"
             )
 
         gptq_supports_cpu = (
