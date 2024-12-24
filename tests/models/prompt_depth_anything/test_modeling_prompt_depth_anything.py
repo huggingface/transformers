@@ -222,13 +222,6 @@ class PromptDepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        # config.backbone = "resnet18"
-        # config.use_pretrained_backbone = True
-        # config.use_timm_backbone = True
-        # config.backbone_config = None
-        # config.backbone_kwargs = {"out_indices": (-2, -1)}
-        # _validate_backbone_init()
-
         config.backbone = "facebook/dinov2-small"
         config.use_pretrained_backbone = True
         config.use_timm_backbone = False
