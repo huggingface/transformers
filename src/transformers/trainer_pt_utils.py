@@ -443,7 +443,7 @@ class DistributedTensorGatherer:
         - P1: `[6, 7, 8, 9, 10, 11]`
         - P2: `[12, 13, 14, 15, 0, 1]`
 
-    The first batch treated on each process will be
+    The first batch treated on each process will be:
 
         - P0: `[0, 1]`
         - P1: `[6, 7]`
@@ -977,7 +977,7 @@ def log_metrics(self, split, metrics):
 
     In order to get memory usage report you need to install `psutil`. You can do that with `pip install psutil`.
 
-    Now when this method is run, you will see a report that will include: :
+    Now when this method is run, you will see a report that will include:
 
     ```
     init_mem_cpu_alloc_delta   =     1301MB
