@@ -64,6 +64,7 @@ class GptqHfQuantizer(HfQuantizer):
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
             torch_dtype = torch.float16
+            logger.info("Loading the model in `torch.float16`. To overwrite it, set `torch_dtype` manually.")
         elif torch_dtype != torch.float16:
             logger.info("We suggest you to set `torch_dtype=torch.float16` for better efficiency with GPTQ.")
         return torch_dtype
