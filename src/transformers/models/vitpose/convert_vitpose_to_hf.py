@@ -336,11 +336,19 @@ def main():
         "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
     )
     parser.add_argument(
-        "--push_to_hub", default=True, type=bool,  help="Whether to check the logits of public converted model to the 🤗 hub. You can disable when using custom model."
+        "--push_to_hub",
+        default=True,
+        type=bool,
+        help="Whether to check the logits of public converted model to the 🤗 hub. You can disable when using custom model.",
     )
 
     args = parser.parse_args()
-    write_model(model_path=args.pytorch_dump_folder_path, model_name=args.model_name, push_to_hub=args.push_to_hub, check_logits=args.check_logits)
+    write_model(
+        model_path=args.pytorch_dump_folder_path,
+        model_name=args.model_name,
+        push_to_hub=args.push_to_hub,
+        check_logits=args.check_logits,
+    )
 
 
 if __name__ == "__main__":

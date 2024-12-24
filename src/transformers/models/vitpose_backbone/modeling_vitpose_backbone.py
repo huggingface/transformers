@@ -260,7 +260,7 @@ class VitPoseBackboneMoeMLP(nn.Module):
 
         for idx, expert in enumerate(active_experts):
             mask = router_mask[idx, :]
-            current_hidden_state = self.experts[i](hidden_state[mask])
+            current_hidden_state = self.experts[expert](hidden_state[mask])
             expert_hidden_state[mask] = current_hidden_state
 
         hidden_state = torch.cat([shared_hidden_state, expert_hidden_state], dim=-1)
