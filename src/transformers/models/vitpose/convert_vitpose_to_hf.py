@@ -155,7 +155,7 @@ def prepare_img():
 
 
 @torch.no_grad()
-def write_model(model_path, model_name, push_to_hub):
+def write_model(model_path, model_name, push_to_hub, check_logits=True):
     os.makedirs(model_path, exist_ok=True)
 
     # ------------------------------------------------------------
@@ -260,52 +260,53 @@ def write_model(model_path, model_name, push_to_hub):
     # Verify pose_results
     pose_results = image_processor.post_process_pose_estimation(outputs, boxes=boxes)[0]
 
-    if model_name == "vitpose-base-simple":
-        assert torch.allclose(
-            pose_results[1]["keypoints"][0],
-            torch.tensor([3.98180511e02, 1.81808380e02]),
-            atol=5e-2,
-        )
-        assert torch.allclose(
-            pose_results[1]["scores"][0],
-            torch.tensor([8.66642594e-01]),
-            atol=5e-2,
-        )
-    elif model_name == "vitpose-base":
-        assert torch.allclose(
-            pose_results[1]["keypoints"][0],
-            torch.tensor([3.9807913e02, 1.8182812e02]),
-            atol=5e-2,
-        )
-        assert torch.allclose(
-            pose_results[1]["scores"][0],
-            torch.tensor([8.8235235e-01]),
-            atol=5e-2,
-        )
-    elif model_name == "vitpose-base-coco-aic-mpii":
-        assert torch.allclose(
-            pose_results[1]["keypoints"][0],
-            torch.tensor([3.98305542e02, 1.81741592e02]),
-            atol=5e-2,
-        )
-        assert torch.allclose(
-            pose_results[1]["scores"][0],
-            torch.tensor([8.69966745e-01]),
-            atol=5e-2,
-        )
-    elif model_name == "vitpose-plus-base":
-        assert torch.allclose(
-            pose_results[1]["keypoints"][0],
-            torch.tensor([3.98201294e02, 1.81728302e02]),
-            atol=5e-2,
-        )
-        assert torch.allclose(
-            pose_results[1]["scores"][0],
-            torch.tensor([8.75046968e-01]),
-            atol=5e-2,
-        )
-    else:
-        raise ValueError("Model not supported")
+    if check_logits:
+        if model_name == "vitpose-base-simple":
+            assert torch.allclose(
+                pose_results[1]["keypoints"][0],
+                torch.tensor([3.98180511e02, 1.81808380e02]),
+                atol=5e-2,
+            )
+            assert torch.allclose(
+                pose_results[1]["scores"][0],
+                torch.tensor([8.66642594e-01]),
+                atol=5e-2,
+            )
+        elif model_name == "vitpose-base":
+            assert torch.allclose(
+                pose_results[1]["keypoints"][0],
+                torch.tensor([3.9807913e02, 1.8182812e02]),
+                atol=5e-2,
+            )
+            assert torch.allclose(
+                pose_results[1]["scores"][0],
+                torch.tensor([8.8235235e-01]),
+                atol=5e-2,
+            )
+        elif model_name == "vitpose-base-coco-aic-mpii":
+            assert torch.allclose(
+                pose_results[1]["keypoints"][0],
+                torch.tensor([3.98305542e02, 1.81741592e02]),
+                atol=5e-2,
+            )
+            assert torch.allclose(
+                pose_results[1]["scores"][0],
+                torch.tensor([8.69966745e-01]),
+                atol=5e-2,
+            )
+        elif model_name == "vitpose-plus-base":
+            assert torch.allclose(
+                pose_results[1]["keypoints"][0],
+                torch.tensor([3.98201294e02, 1.81728302e02]),
+                atol=5e-2,
+            )
+            assert torch.allclose(
+                pose_results[1]["scores"][0],
+                torch.tensor([8.75046968e-01]),
+                atol=5e-2,
+            )
+        else:
+            raise ValueError("Model not supported")
     print("Conversion successfully done.")
 
     # save the model to a local directory
@@ -334,9 +335,12 @@ def main():
     parser.add_argument(
         "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
     )
+    parser.add_argument(
+        "--push_to_hub", default=True, type=bool,  help="Whether to check the logits of public converted model to the 🤗 hub. You can disable when using custom model."
+    )
 
     args = parser.parse_args()
-    write_model(model_path=args.pytorch_dump_folder_path, model_name=args.model_name, push_to_hub=args.push_to_hub)
+    write_model(model_path=args.pytorch_dump_folder_path, model_name=args.model_name, push_to_hub=args.push_to_hub, check_logits=args.check_logits)
 
 
 if __name__ == "__main__":
