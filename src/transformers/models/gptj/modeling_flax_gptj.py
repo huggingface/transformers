@@ -125,11 +125,10 @@ def rotate_every_two(tensor):
     return rotate_half_tensor
 
 
-def apply_rotary_pos_emb(tensor, sincos):
-    sin_pos, cos_pos = sincos
-    sin_pos = sin_pos[:, :, None, :].repeat(2, 3)
-    cos_pos = cos_pos[:, :, None, :].repeat(2, 3)
-    return (tensor * cos_pos) + (rotate_every_two(tensor) * sin_pos)
+def apply_rotary_pos_emb(tensor, sin, cos):
+    sin = sin.repeat(2, 3)
+    cos = cos.repeat(2, 3)
+    return (tensor * cos) + (rotate_every_two(tensor) * sin)
 
 
 class FlaxGPTJAttention(nn.Module):
@@ -212,16 +211,19 @@ class FlaxGPTJAttention(nn.Module):
         init_cache: bool = False,
         output_attentions: bool = False,
     ):
-        query = self.q_proj(hidden_states)
-        key = self.k_proj(hidden_states)
-        value = self.v_proj(hidden_states)
-
-        query = self._split_heads(query)
-        key = self._split_heads(key)
-        value = self._split_heads(value)
+        if position_ids is None:
+            raise ValueError("position_ids must be given")
+        query = self._split_heads(self.q_proj(hidden_states))
+        key = self._split_heads(self.k_proj(hidden_states))
+        value = self._split_heads(self.v_proj(hidden_states))
+        # query, key, value: (B, T, n_head, head_dim)
 
         sincos = jnp.take(self.embed_positions, position_ids, axis=0)
-        sincos = jnp.split(sincos, 2, axis=-1)
+        sin, cos = jnp.split(sincos, 2, axis=-1)
+        sin = sin[:, :, None, :]
+        cos = cos[:, :, None, :]
+        # cos, sin: (B, T, 1, rotary_dim // 2)
+
         if self.rotary_dim is not None:
             k_rot = key[:, :, :, : self.rotary_dim]
             k_pass = key[:, :, :, self.rotary_dim :]
@@ -229,14 +231,14 @@ class FlaxGPTJAttention(nn.Module):
             q_rot = query[:, :, :, : self.rotary_dim]
             q_pass = query[:, :, :, self.rotary_dim :]
 
-            k_rot = apply_rotary_pos_emb(k_rot, sincos)
-            q_rot = apply_rotary_pos_emb(q_rot, sincos)
+            k_rot = apply_rotary_pos_emb(k_rot, sin, cos)
+            q_rot = apply_rotary_pos_emb(q_rot, sin, cos)
 
             key = jnp.concatenate([k_rot, k_pass], axis=-1)
             query = jnp.concatenate([q_rot, q_pass], axis=-1)
         else:
-            key = apply_rotary_pos_emb(key, sincos)
-            query = apply_rotary_pos_emb(query, sincos)
+            key = apply_rotary_pos_emb(key, sin, cos)
+            query = apply_rotary_pos_emb(query, sin, cos)
 
         query_length, key_length = query.shape[1], key.shape[1]
 
