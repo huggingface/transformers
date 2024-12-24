@@ -528,19 +528,17 @@ class VitPoseImageProcessor(BaseImageProcessor):
         # When using a list input, the number of boxes can vary dynamically per image.
         # The image processor creates pixel_values of shape (batch_size*num_persons, num_channels, height, width)
 
-        if self.do_rescale:
-            images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
-                for image in images
-            ]
-        if self.do_normalize:
-            images = [
-                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
-                for image in images
-            ]
+        all_images = []
+        for image in images:
+            if do_rescale:
+                image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
 
+            if do_normalize:
+                image = self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+            
+            all_images.append(image)
         images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
+            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in all_images
         ]
 
         data = {"pixel_values": images}
