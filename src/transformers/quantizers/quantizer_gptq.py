@@ -64,7 +64,7 @@ class GptqHfQuantizer(HfQuantizer):
             raise RuntimeError("GPU is required to quantize or run quantize model.")
         elif not (is_auto_gptq_available() or is_gptqmodel_available()):
             raise ImportError(
-                "Loading a GPTQ quantized model requires gptqmodel (`pip install gptqmodel`) or auto-gptq (`pip install auto-gptq`) library. Please notice that auto-gptq will be deprecated in the future."
+                "Loading a GPTQ quantized model requires gptqmodel (`pip install gptqmodel`) or auto-gptq (`pip install auto-gptq`) library. "
             )
         elif is_auto_gptq_available() and version.parse(importlib.metadata.version("auto_gptq")) < version.parse(
             "0.4.2"
