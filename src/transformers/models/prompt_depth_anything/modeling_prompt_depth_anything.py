@@ -179,6 +179,31 @@ class PromptDepthAnythingFeatureFusionStage(nn.Module):
         return fused_hidden_states
 
 
+# Copied from transformers.models.dpt.modeling_dpt.DPTPreTrainedModel with DPT->PromptDepthAnything,dpt->prompt_depth_anything
+class PromptDepthAnythingPreTrainedModel(PreTrainedModel):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = PromptDepthAnythingConfig
+    base_model_prefix = "prompt_depth_anything"
+    main_input_name = "pixel_values"
+    supports_gradient_checkpointing = True
+
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
+            # Slightly different from the TF version which uses truncated_normal for initialization
+            # cf https://github.com/pytorch/pytorch/pull/5617
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.LayerNorm):
+            module.bias.data.zero_()
+            module.weight.data.fill_(1.0)
+
+
 class PromptDepthAnythingReassembleLayer(nn.Module):
     def __init__(self, config, channels, factor):
         super().__init__()
@@ -289,30 +314,6 @@ class PromptDepthAnythingNeck(nn.Module):
         output = self.fusion_stage(features, prompt_depth=prompt_depth)
 
         return output
-
-
-class PromptDepthAnythingPreTrainedModel(PreTrainedModel):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = PromptDepthAnythingConfig
-    base_model_prefix = "prompt_depth_anything"
-    main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
 
 
 class PromptDepthAnythingDepthEstimationHead(nn.Module):
@@ -488,26 +489,28 @@ class PromptDepthAnythingForDepthEstimation(PromptDepthAnythingPreTrainedModel):
         patch_height = height // patch_size
         patch_width = width // patch_size
 
-        # normalize prompt depth
-        B = len(prompt_depth)
-        depth_min, depth_max = (
-            torch.min(prompt_depth.reshape(B, -1), dim=1).values,
-            torch.max(prompt_depth.reshape(B, -1), dim=1).values,
-        )
-        invalid_mask = (depth_max - depth_min) <= 0
-        if invalid_mask.any():
-            depth_max[invalid_mask] = depth_min[invalid_mask] + 1e-6
-        depth_min, depth_max = depth_min.view(B, 1, 1, 1), depth_max.view(B, 1, 1, 1)
-        prompt_depth = (prompt_depth - depth_min) / (depth_max - depth_min)
-        # normalize done
+        if prompt_depth is not None:
+            # normalize prompt depth
+            B = len(prompt_depth)
+            depth_min, depth_max = (
+                torch.min(prompt_depth.reshape(B, -1), dim=1).values,
+                torch.max(prompt_depth.reshape(B, -1), dim=1).values,
+            )
+            invalid_mask = (depth_max - depth_min) <= 0
+            if invalid_mask.any():
+                depth_max[invalid_mask] = depth_min[invalid_mask] + 1e-6
+            depth_min, depth_max = depth_min.view(B, 1, 1, 1), depth_max.view(B, 1, 1, 1)
+            prompt_depth = (prompt_depth - depth_min) / (depth_max - depth_min)
+            # normalize done
 
         hidden_states = self.neck(hidden_states, patch_height, patch_width, prompt_depth=prompt_depth)
 
         predicted_depth = self.head(hidden_states, patch_height, patch_width)
-        # denormalize predicted depth
-        depth_min, depth_max = depth_min.squeeze(1), depth_max.squeeze(1)
-        predicted_depth = predicted_depth * (depth_max - depth_min) + depth_min
-        # denormalize done
+        if prompt_depth is not None:
+            # denormalize predicted depth
+            depth_min, depth_max = depth_min.squeeze(1), depth_max.squeeze(1)
+            predicted_depth = predicted_depth * (depth_max - depth_min) + depth_min
+            # denormalize done
 
         if not return_dict:
             if output_hidden_states:
@@ -522,3 +525,6 @@ class PromptDepthAnythingForDepthEstimation(PromptDepthAnythingPreTrainedModel):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )
+
+
+__all__ = ["PromptDepthAnythingForDepthEstimation", "PromptDepthAnythingPreTrainedModel"]
