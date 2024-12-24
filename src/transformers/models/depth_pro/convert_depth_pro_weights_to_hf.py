@@ -252,8 +252,7 @@ def main():
     )
     parser.add_argument(
         "--push_to_hub",
-        default=True,
-        type=bool,
+        action=argparse.BooleanOptionalAction,
         help="Whether or not to push the converted model to the huggingface hub.",
     )
     parser.add_argument(
