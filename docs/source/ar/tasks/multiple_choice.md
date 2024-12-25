@@ -334,7 +334,7 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 >>> model.compile(optimizer=optimizer)  # لا توجد وسيطة خسارة!
 ```
 
-الشيئان الأخيران اللذان يجب إعدادهما قبل بدء التدريب هما حساب الدقة من التنبؤات، وتوفير طريقة لدفع نموذجك إلى Hub. يتم كلاهما باستخدام [استدعاءات Keras](../main_classes/keras_callbacks).
+الخطوتان الأخيرتان قبل بدء التدريب هما: حساب دقة التنبؤات، وتوفير طريقة لرفع النموذج إلى Hub. ويمكن تحقيق ذلك باستخدام [استدعاءات Keras](../main_classes/keras_callbacks)
 
 مرر دالتك `compute_metrics` إلى [`~transformers.KerasMetricCallback`]:
 
