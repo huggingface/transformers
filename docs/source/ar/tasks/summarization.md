@@ -60,7 +60,7 @@ pip install transformers datasets evaluate rouge_score
 >>> billsum = load_dataset("billsum", split="ca_test")
 ```
 
-قسّم مجموعة البيانات إلى مجموعة تدريب ومجموعة اختبار باستخدام طريقة [`~datasets.Dataset.train_test_split`]:
+قسّم مجموعة البيانات إلى مجموعتي تدريب واختبار باستخدام الدالة [`~datasets.Dataset.train_test_split`]:
 
 ```py
 >>> billsum = billsum.train_test_split(test_size=0.2)
