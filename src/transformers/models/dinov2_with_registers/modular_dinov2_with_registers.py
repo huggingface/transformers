@@ -13,7 +13,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import math
+
 from typing import Optional
 
 import torch
@@ -30,7 +30,7 @@ from ....transformers.models.dinov2.modeling_dinov2 import (
 )
 from ...configuration_utils import PretrainedConfig
 from ...modeling_outputs import BackboneOutput
-from ...utils import logging
+from ...utils import logging, torch_int
 from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
@@ -83,10 +83,6 @@ class Dinov2WithRegistersConfig(BackboneConfigMixin, PretrainedConfig):
             Whether to use the SwiGLU feedforward neural network.
         num_register_tokens (`int`, *optional*, defaults to 4):
             Number of register tokens to use.
-        interpolate_antialias (`bool`, *optional*, defaults to `True`):
-            Whether to use antialiasing when interpolating the image patches.
-        interpolate_offset (`float`, *optional*, defaults to 0.0):
-            Offset to use when interpolating the image patches.
         out_features (`List[str]`, *optional*):
             If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
             (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
@@ -119,7 +115,7 @@ class Dinov2WithRegistersConfig(BackboneConfigMixin, PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "dinov2-with-registers-base"
+    model_type = "dinov2_with_registers"
 
     def __init__(
         self,
@@ -140,8 +136,6 @@ class Dinov2WithRegistersConfig(BackboneConfigMixin, PretrainedConfig):
         drop_path_rate=0.0,
         use_swiglu_ffn=False,
         num_register_tokens=4,
-        interpolate_antialias=True,
-        interpolate_offset=0.0,
         out_features=None,
         out_indices=None,
         apply_layernorm=True,
@@ -167,8 +161,6 @@ class Dinov2WithRegistersConfig(BackboneConfigMixin, PretrainedConfig):
         self.drop_path_rate = drop_path_rate
         self.use_swiglu_ffn = use_swiglu_ffn
         self.num_register_tokens = num_register_tokens
-        self.interpolate_antialias = interpolate_antialias
-        self.interpolate_offset = interpolate_offset
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, num_hidden_layers + 1)]
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(
             out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
@@ -196,44 +188,48 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.patch_size = config.patch_size
         self.config = config
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
-        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
-        resolution images.
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
+        images. This method is also adapted to support torch.jit tracing and interpolation at torch.float32 precision.
 
-        Source:
-        https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
+        Adapted from:
+        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
+        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
         """
 
         num_patches = embeddings.shape[1] - 1
         num_positions = self.position_embeddings.shape[1] - 1
-        if num_patches == num_positions and height == width:
+
+        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
+        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
             return self.position_embeddings
-        class_pos_embed = self.position_embeddings[:, 0]
+
+        class_pos_embed = self.position_embeddings[:, :1]
         patch_pos_embed = self.position_embeddings[:, 1:]
+
         dim = embeddings.shape[-1]
-        height = height // self.config.patch_size
-        width = width // self.config.patch_size
-        # we add a small number to avoid floating point error in the interpolation
-        # see discussion at https://github.com/facebookresearch/dino/issues/8
-        height, width = height + self.config.interpolate_offset, width + self.config.interpolate_offset
-        patch_pos_embed = patch_pos_embed.reshape(1, int(math.sqrt(num_positions)), int(math.sqrt(num_positions)), dim)
+
+        new_height = height // self.patch_size
+        new_width = width // self.patch_size
+
+        sqrt_num_positions = torch_int(num_positions**0.5)
+        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
         target_dtype = patch_pos_embed.dtype
         patch_pos_embed = nn.functional.interpolate(
-            patch_pos_embed.to(dtype=torch.float32),
-            scale_factor=(float(height / math.sqrt(num_positions)), float(width / math.sqrt(num_positions))),
+            patch_pos_embed.to(torch.float32),
+            size=(new_height, new_width),
             mode="bicubic",
             align_corners=False,
-            antialias=self.config.interpolate_antialias,
-        )
-        patch_pos_embed = patch_pos_embed.to(dtype=target_dtype)
-        if int(height) != patch_pos_embed.shape[-2] or int(width) != patch_pos_embed.shape[-1]:
-            raise ValueError("Width or height does not match with the interpolated position embeddings")
+        ).to(dtype=target_dtype)
+
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
-        return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
+
+        return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
 
     def forward(self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.Tensor] = None) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape

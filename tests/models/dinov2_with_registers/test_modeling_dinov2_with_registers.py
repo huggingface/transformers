@@ -351,6 +351,8 @@ class Dinov2WithRegistersModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, expected_seq_length, model.config.hidden_size))
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
+        print("First logits:", outputs.last_hidden_state[0, 0, :3])
+
         expected_slice = torch.tensor(
             [[-0.4636, -1.4582, -0.0274], [-1.4738, -0.8858, 0.3002], [0.0714, -0.2407, -1.5940]],
             device=torch_device,
