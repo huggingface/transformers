@@ -116,7 +116,7 @@ pip install transformers datasets evaluate rouge_score
 >>> tokenized_billsum = billsum.map(preprocess_function, batched=True)
 ```
 
-الآن قم بإنشاء دفعة من الأمثلة باستخدام [`DataCollatorForSeq2Seq`].  الأكثر كفاءة *الحشو الديناميكي* للجمل إلى أطول طول في دفعة أثناء التجميع، بدلاً من حشو مجموعة البيانات بأكملها إلى الحد الأقصى للطول.
+الآن قم بإنشاء دفعة من الأمثلة باستخدام [`DataCollatorForSeq2Seq`].  الأكثر كفاءة *الحشو الديناميكي* للجمل إلى أطول طول في دفعة أثناء عملية التجميع، بدلاً من حشو مجموعة البيانات بأكملها إلى الحد الأقصى للطول.
 
 <frameworkcontent>
 <pt>
