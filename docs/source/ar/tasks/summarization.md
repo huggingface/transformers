@@ -28,7 +28,7 @@ rendered properly in your Markdown viewer.
 سيوضح لك هذا الدليل كيفية:
 
 1. ضبط دقيق [T5](https://huggingface.co/google-t5/t5-small) على مجموعة فرعية من مشاريع قوانين ولاية كاليفورنيا من مجموعة بيانات [BillSum](https://huggingface.co/datasets/billsum) للتلخيص التجريدي.
-2. استخدام النموذج المضبوط بدقة للاستدلال.
+2. استخدام النموذج المضبوط بدقة للتنبؤ.
 
 <Tip>
 
