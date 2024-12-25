@@ -491,7 +491,7 @@ class PromptDepthAnythingForDepthEstimation(PromptDepthAnythingPreTrainedModel):
 
         if prompt_depth is not None:
             # normalize prompt depth
-            B = len(prompt_depth)
+            B = prompt_depth.shape[0]
             depth_min, depth_max = (
                 torch.min(prompt_depth.reshape(B, -1), dim=1).values,
                 torch.max(prompt_depth.reshape(B, -1), dim=1).values,
