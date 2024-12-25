@@ -402,7 +402,7 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 >>> labels = torch.tensor(0).unsqueeze(0)
 ```
 
-مرر مدخلاتك وتسمياتك إلى النموذج وأرجع`logits`:
+مرر مدخلاتك والعلامات إلى النموذج وأرجع`logits`:
 
 ```py
 >>> from transformers import AutoModelForMultipleChoice
