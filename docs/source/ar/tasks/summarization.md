@@ -323,7 +323,7 @@ pip install transformers datasets evaluate rouge_score
 
 رائع، الآن بعد أن قمت بضبط نموذج، يمكنك استخدامه للاستدلال!
 
-ابتكر بعض النص الذي ترغب في تلخيصه. بالنسبة لـ T5، تحتاج إلى إضافة بادئة إلى مُدخلاتك اعتمادًا على المهمة التي تعمل عليها. بالنسبة للتجميع، يجب عليك إضافة بادئة إلى مُدخلاتك كما هو موضح أدناه:
+خدد بعض النصوص الذي ترغب في تلخيصها. بالنسبة لـ T5، تحتاج إلى إضافة بادئة إلى مُدخلاتك اعتمادًا على المهمة التي تعمل عليها. بالنسبة التلخيص، يجب عليك إضافة بادئة إلى مُدخلاتك كما هو موضح أدناه:
 
 ```py
 >>> text = "summarize: The Inflation Reduction Act lowers prescription drug costs, health care costs, and energy costs. It's the most aggressive action on tackling the climate crisis in American history, which will lift up American workers and create good-paying, union jobs across the country. It'll lower the deficit and ask the ultra-wealthy and corporations to pay their fair share. And no one making under $400,000 per year will pay a penny more in taxes."
