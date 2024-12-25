@@ -387,7 +387,7 @@ pip install transformers datasets evaluate
 >>> answer_end_index = outputs.end_logits.argmax()
 ```
 
-فك تشفير الرموز المتوقعة للحصول على الإجابة:
+استخلاص الإجابة من الرموز المتوقعة:
 
 ```py
 >>> predict_answer_tokens = inputs.input_ids[0, answer_start_index : answer_end_index + 1]
