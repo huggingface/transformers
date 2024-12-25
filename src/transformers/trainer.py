@@ -1630,17 +1630,24 @@ class Trainer:
         ]:
             if not is_schedulefree_available():
                 raise ImportError(
-                    "You need to install `schedulefree` in order to use schedulefree optimizers"
-                    " install it with `pip install schedulefree`"
+                    "You need to install `schedulefree` in order to use schedulefree optimizers. "
+                    "Install it with `pip install schedulefree.`"
                 )
             if not is_accelerate_available("0.30.0"):
                 raise ImportError("You need to have `accelerate>=0.30.0` to be able to use schedulefree optimizers")
-            from schedulefree import AdamWScheduleFree, RAdamScheduleFree, SGDScheduleFree
+            from schedulefree import AdamWScheduleFree, SGDScheduleFree
 
             additional_optim_kwargs = {}
             require_warmup = True
 
             if args.optim == OptimizerNames.SCHEDULE_FREE_RADAM:
+                if not is_schedulefree_available("1.4.0"):
+                    raise ImportError(
+                        "You need to install `schedulefree>=1.4.0` in order to use RAdamScheduleFree optimizer. "
+                        "Install it with `pip install schedulefree.`"
+                    )
+                from schedulefree import RAdamScheduleFree
+
                 optimizer_cls = RAdamScheduleFree
                 additional_optim_kwargs = adam_kwargs
                 require_warmup = False
