@@ -392,7 +392,7 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 
 <frameworkcontent>
 <pt>
-قم بتحليل كل مطالبة وزوج إجابة مرشح وأعد تنسورات PyTorch. يجب عليك أيضًا إنشاء بعض `التسميات`:
+قم بتحليل كل مطالبة وزوج إجابة مرشح وأعد تنسورات PyTorch. يجب عليك أيضًا إنشاء بعض `العلامات`:
 
 ```py
 >>> from transformers import AutoTokenizer
