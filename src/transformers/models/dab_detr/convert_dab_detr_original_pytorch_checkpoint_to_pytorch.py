@@ -23,7 +23,7 @@ from pathlib import Path
 import torch
 from huggingface_hub import hf_hub_download
 
-from transformers import DabDetrConfig, DabDetrForObjectDetection, ConditionalDetrImageProcessor
+from transformers import ConditionalDetrImageProcessor, DabDetrConfig, DabDetrForObjectDetection
 from transformers.utils import logging
 
 
