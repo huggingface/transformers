@@ -38,6 +38,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
+    torch_int,
 )
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_dinov2_with_registers import Dinov2WithRegistersConfig
@@ -145,7 +146,7 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
         # Interpolate at float32 precision
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed.to(dtype=torch.float32),
-            size=(int(height), int(width)),  # Explicit size instead of scale_factor
+            size=(torch_int(height), torch_int(width)),  # Explicit size instead of scale_factor
             mode="bicubic",
             align_corners=False,
             # Maintain backward compatibility with antialias if configured

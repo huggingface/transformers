@@ -31,7 +31,7 @@ from ....transformers.models.dinov2.modeling_dinov2 import (
 )
 from ...configuration_utils import PretrainedConfig
 from ...modeling_outputs import BackboneOutput
-from ...utils import logging
+from ...utils import logging, torch_int
 from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
@@ -234,7 +234,7 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
         # Interpolate at float32 precision
         patch_pos_embed = nn.functional.interpolate(
             patch_pos_embed.to(dtype=torch.float32),
-            size=(int(height), int(width)),  # Explicit size instead of scale_factor
+            size=(torch_int(height), torch_int(width)),  # Explicit size instead of scale_factor
             mode="bicubic",
             align_corners=False,
             # Maintain backward compatibility with antialias if configured
