@@ -342,7 +342,7 @@ pip install transformers datasets evaluate
 >>> context = "BLOOM has 176 billion parameters and can generate text in 46 languages natural languages and 13 programming languages."
 ```
 
-أبسط طريقة لتجربة نموذجك المضبوط للاستدلال هي استخدامه في [`pipeline`]. قم بإنشاء مثيل لـ `pipeline` للإجابة على الأسئلة باستخدام نموذجك، ومرر النص إليه:
+أبسط طريقة لتجربة نموذجك المُدرَّب للاستدلال هي استخدامه في [`pipeline`]. قم بإنشاء كائن لـ `pipeline` للإجابة على الأسئلة باستخدام نموذجك، ومرِّر النص إليه:
 
 ```py
 >>> from transformers import pipeline
