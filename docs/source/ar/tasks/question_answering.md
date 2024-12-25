@@ -25,7 +25,7 @@ rendered properly in your Markdown viewer.
 - الاستخراجية: استخراج الإجابة من السياق المحدد.
 - التلخيصية: إنشاء إجابة من السياق تجيب على السؤال بشكل صحيح.
 
-سيريك هذا الدليل كيفية:
+سيوضح لك هذا الدليل كيفية:
 
 1. ضبط [DistilBERT](https://huggingface.co/distilbert/distilbert-base-uncased) على مجموعة بيانات [SQuAD](https://huggingface.co/datasets/squad) للإجابة على الأسئلة الاستخراجية.
 2. استخدام النموذج المضبوط للاستدلال.
