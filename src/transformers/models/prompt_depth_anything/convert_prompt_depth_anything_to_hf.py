@@ -18,7 +18,6 @@ https://github.com/DepthAnything/PromptDA"""
 import argparse
 from pathlib import Path
 
-import numpy as np
 import requests
 import torch
 from huggingface_hub import hf_hub_download
@@ -26,9 +25,9 @@ from PIL import Image
 
 from transformers import (
     Dinov2Config,
-    DPTImageProcessor,
     PromptDepthAnythingConfig,
     PromptDepthAnythingForDepthEstimation,
+    PromptDepthAnythingImageProcessor,
 )
 from transformers.utils import logging
 
@@ -181,15 +180,7 @@ def rename_key(dct, old, new):
     dct[new] = val
 
 
-# We will verify our results on an image of cute cats
-def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
-
-
 name_to_checkpoint = {
-    # v2-giant pending
     "promptda_vits": "model.ckpt",
     "promptda_vits_transparent": "model.ckpt",
     "promptda_vitl": "model.ckpt",
@@ -233,7 +224,7 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
     model.load_state_dict(state_dict, strict=False)
     model.eval()
 
-    processor = DPTImageProcessor(
+    processor = PromptDepthAnythingImageProcessor(
         do_resize=True,
         size=756,
         ensure_multiple_of=14,
@@ -246,18 +237,16 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
     url = "https://github.com/DepthAnything/PromptDA/blob/main/assets/example_images/image.jpg?raw=true"
     image = Image.open(requests.get(url, stream=True).raw)
 
-    pixel_values = processor(image, return_tensors="pt").pixel_values
-
     prompt_depth_url = (
         "https://github.com/DepthAnything/PromptDA/blob/main/assets/example_images/arkit_depth.png?raw=true"
     )
     prompt_depth = Image.open(requests.get(prompt_depth_url, stream=True).raw)
-    prompt_depth = torch.tensor((np.asarray(prompt_depth) / 1000.0).astype(np.float32))
-    prompt_depth = prompt_depth.unsqueeze(0).unsqueeze(0)
+
+    inputs = processor(image, return_tensors="pt", prompt_depth=prompt_depth)
 
     # Verify forward pass
     with torch.no_grad():
-        outputs = model(pixel_values, prompt_depth=prompt_depth)
+        outputs = model(**inputs)
         predicted_depth = outputs.predicted_depth
 
     print("Shape of predicted depth:", predicted_depth.shape)

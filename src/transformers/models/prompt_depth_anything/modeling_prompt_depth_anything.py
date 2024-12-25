@@ -458,14 +458,12 @@ class PromptDepthAnythingForDepthEstimation(PromptDepthAnythingPreTrainedModel):
 
         >>> prompt_depth_url = "https://github.com/DepthAnything/PromptDA/blob/main/assets/example_images/arkit_depth.png?raw=true"
         >>> prompt_depth = Image.open(requests.get(prompt_depth_url, stream=True).raw)
-        >>> prompt_depth = torch.tensor((np.asarray(prompt_depth) / 1000.0).astype(np.float32))
-        >>> prompt_depth = prompt_depth.unsqueeze(0).unsqueeze(0)
 
         >>> # prepare image for the model
-        >>> inputs = image_processor(images=image, return_tensors="pt")
+        >>> inputs = image_processor(images=image, return_tensors="pt", prompt_depth=prompt_depth)
 
         >>> with torch.no_grad():
-        ...     outputs = model(pixel_values=inputs.pixel_values, prompt_depth=prompt_depth)
+        ...     outputs = model(**inputs)
 
         >>> # interpolate to original size
         >>> post_processed_output = image_processor.post_process_depth_estimation(
