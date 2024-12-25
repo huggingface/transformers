@@ -355,7 +355,7 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 ... )
 ```
 
-ثم قم بتجميع استدعاءاتك معًا:
+ثم قم بتضمين الاستدعاءات معًا:
 
 ```py
 >>> callbacks = [metric_callback, push_to_hub_callback]
