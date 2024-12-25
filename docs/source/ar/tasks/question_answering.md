@@ -88,7 +88,7 @@ pip install transformers datasets evaluate
 
 <Youtube id="qgaM0weJHpA"/>
 
-الخطوة التالية هي تحميل محلل DistilBERT لمعالجة حقلي `question` و `context`:
+الخطوة التالية هي تحميل المحلل اللغوى DistilBERT لمعالجة حقلي `question` و `context`:
 
 ```py
 >>> from transformers import AutoTokenizer
