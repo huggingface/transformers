@@ -38,7 +38,6 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
-    torch_int,
 )
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_dinov2_with_registers import Dinov2WithRegistersConfig
@@ -106,43 +105,63 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
-        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
-        images. This method is also adapted to support torch.jit tracing and interpolation at torch.float32 precision.
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
+        resolution images. This implementation supports torch.jit tracing while maintaining backwards compatibility
+        with the original implementation.
 
         Adapted from:
-        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
-        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
+        - https://github.com/facebookresearch/dino/blob/main/vision_transformer.py
+        - https://github.com/facebookresearch/dinov2/blob/main/dinov2/models/vision_transformer.py
         """
-
         num_patches = embeddings.shape[1] - 1
         num_positions = self.position_embeddings.shape[1] - 1
 
-        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
+        # Skip interpolation for matching dimensions (unless tracing)
         if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
             return self.position_embeddings
 
-        class_pos_embed = self.position_embeddings[:, :1]
+        # Handle class token and patch embeddings separately
+        class_pos_embed = self.position_embeddings[:, 0]
         patch_pos_embed = self.position_embeddings[:, 1:]
-
         dim = embeddings.shape[-1]
 
-        new_height = height // self.patch_size
-        new_width = width // self.patch_size
+        # Calculate new dimensions
+        height = height // self.config.patch_size
+        width = width // self.config.patch_size
 
-        sqrt_num_positions = torch_int(num_positions**0.5)
+        # Maintain backward compatibility with offset if configured
+        if hasattr(self.config, "interpolate_offset"):
+            height = height + self.config.interpolate_offset
+            width = width + self.config.interpolate_offset
+
+        # Reshape for interpolation
+        sqrt_num_positions = int(math.sqrt(num_positions))
         patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+
+        # Store original dtype for restoration after interpolation
         target_dtype = patch_pos_embed.dtype
+
+        # Interpolate at float32 precision
         patch_pos_embed = nn.functional.interpolate(
-            patch_pos_embed.to(torch.float32),
-            size=(new_height, new_width),
+            patch_pos_embed.to(dtype=torch.float32),
+            size=(int(height), int(width)),  # Explicit size instead of scale_factor
             mode="bicubic",
             align_corners=False,
+            # Maintain backward compatibility with antialias if configured
+            antialias=getattr(self.config, "interpolate_antialias", False),
         ).to(dtype=target_dtype)
 
+        # Validate output dimensions if not tracing
+        if not torch.jit.is_tracing():
+            if int(height) != patch_pos_embed.shape[-2] or int(width) != patch_pos_embed.shape[-1]:
+                raise ValueError("Width or height does not match with the interpolated position embeddings")
+
+        # Reshape back to original format
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
 
-        return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
+        # Combine class and patch embeddings
+        return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
 
     def forward(self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.Tensor] = None) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
