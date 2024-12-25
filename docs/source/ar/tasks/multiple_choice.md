@@ -441,7 +441,7 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 >>> logits = outputs.logits
 ```
 
-احصل على الفئة ذات الاحتمالية الأعلى:
+استخرج الفئة ذات الاحتمالية الأكبر:
 
 ```py
 >>> predicted_class = int(tf.math.argmax(logits, axis=-1)[0])
