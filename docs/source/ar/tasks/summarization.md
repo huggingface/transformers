@@ -75,7 +75,7 @@ pip install transformers datasets evaluate rouge_score
  'title': 'An act to add Section 10295.35 to the Public Contract Code, relating to public contracts.'}
 ```
 
-هناك حقلان سترغب في استخدامهما:
+هناك مُدخلان سترغب في استخدامهما:
 
 - `text`: نص القانون الذي سيكون مُدخلًا للنموذج.
 - `summary`: نسخة مُختصرة من `text` والتي ستكون هدف النموذج.
