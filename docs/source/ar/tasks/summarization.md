@@ -82,7 +82,7 @@ pip install transformers datasets evaluate rouge_score
 
 ## المعالجة المسبقة (Preprocess)
 
-الخطوة التالية هي تحميل مجزء النص T5 لمعالجة `text` و `summary`:
+الخطوة التالية هي تحميل مجزء النصوص T5 لمعالجة `text` و `summary`:
 
 ```py
 >>> from transformers import AutoTokenizer
