@@ -22,7 +22,7 @@ rendered properly in your Markdown viewer.
 
 سيوضح لك هذا الدليل كيفية:
 
-1. ضبط [BERT](https://huggingface.co/google-bert/bert-base-uncased) على تهيئة `regular` لمجموعة بيانات [SWAG](https://huggingface.co/datasets/swag) لاختيار أفضل إجابة بالنظر إلى خيارات متعددة وبعض السياق.
+1. ضبط نموذج [BERT](https://huggingface.co/google-bert/bert-base-uncased)  باستخدام الإعداد `regular` لمجموعة بيانات [SWAG](https://huggingface.co/datasets/swag) لاختيار الإجابة الأفضل من بين الخيارات المتعددة المتاحة مع السياق.
 2. استخدام النموذج المضبوط للاستدلال.
 
 قبل البدء، تأكد من تثبيت جميع المكتبات الضرورية:
