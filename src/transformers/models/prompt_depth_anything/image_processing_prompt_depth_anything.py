@@ -137,7 +137,7 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
         size_divisor (`int`, *optional*):
             If `do_pad` is `True`, pads the image dimensions to be divisible by this value. This was introduced in the
             DINOv2 paper, which uses the model in combination with DPT.
-        prompt_scale_to_meter (`float`, *optional*, defaults to `0.001`):
+        prompt_scale_to_meter (`float`, *optional*, defaults to 0.001):
             Scale factor to convert the prompt depth to meters.
     """
 
