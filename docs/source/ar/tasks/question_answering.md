@@ -165,7 +165,7 @@ pip install transformers datasets evaluate
 >>> tokenized_squad = squad.map(preprocess_function, batched=True, remove_columns=squad["train"].column_names)
 ```
 
-الآن قم بإنشاء دفعة من الأمثلة باستخدام [`DefaultDataCollator`]. على عكس أدوات تجميع البيانات الأخرى في 🤗 Transformers، لا يطبق [`DefaultDataCollator`] أي معالجة مسبقة إضافية مثل الحشو.
+الآن قم بإنشاء دفعة من الأمثلة باستخدام [`DefaultDataCollator`]. بخلاف مجمّعات البيانات الأخرى في 🤗 Transformers، لا يطبق [`DefaultDataCollator`] أي معالجة مسبقة إضافية مثل الحشو.
 
 <frameworkcontent>
 <pt>
