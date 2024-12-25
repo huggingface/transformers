@@ -237,7 +237,7 @@ class PromptDepthAnythingReassembleStage(DepthAnythingReassembleStage):
     3. Resizing the spatial dimensions (height, width).
 
     Args:
-        config (`[DepthAnythingConfig]`):
+        config (`[PromptDepthAnythingConfig]`):
             Model configuration class defining the model architecture.
     """
 
