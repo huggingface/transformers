@@ -352,7 +352,7 @@ pip install transformers datasets evaluate rouge_score
 >>> inputs = tokenizer(text, return_tensors="pt").input_ids
 ```
 
-استخدم طريقة [`~generation.GenerationMixin.generate`] لإنشاء التجميع. لمزيد من التفاصيل حول استراتيجيات توليد النص المختلفة والمعلمات للتحكم في التوليد، راجع واجهة برمجة تطبيقات [توليد النص](../main_classes/text_generation).
+استخدم طريقة [`~generation.GenerationMixin.generate`] لإنشاء التلخيص. لمزيد من التفاصيل حول استراتيجيات توليد النص المختلفة والمعلمات للتحكم في التوليد، راجع واجهة برمجة تطبيقات [توليد النص](../main_classes/text_generation).
 
 ```py
 >>> from transformers import AutoModelForSeq2SeqLM
