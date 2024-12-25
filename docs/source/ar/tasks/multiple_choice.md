@@ -74,7 +74,7 @@ pip install transformers datasets evaluate
 
 ## المعالجة المسبقة (Preprocess)
 
-الخطوة التالية هي تحميل مُجزئ BERT لمعالجة بدايات الجمل والنهايات الأربع المحتملة:
+الخطوة التالية هي استدعاء مُجزئ BERT لمعالجة بدايات الجمل والنهايات الأربع المحتملة:
 
 ```py
 >>> from transformers import AutoTokenizer
