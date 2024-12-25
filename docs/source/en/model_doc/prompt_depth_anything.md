@@ -20,12 +20,6 @@ rendered properly in your Markdown viewer.
 
 The Prompt Depth Anything model was introduced in [Prompting Depth Anything for 4K Resolution Accurate Metric Depth Estimation](https://promptda.github.io/) by Haotong Lin, Sida Peng, Jingxiao Chen, Songyou Peng, Jiaming Sun, Minghuan Liu, Hujun Bao, Jiashi Feng, Xiaowei Zhou, Bingyi Kang. 
 
-<!-- 
-<Tip>
-
-[Prompt Depth Anything V2](prompt_depth_anything_v2) was released in June 2024. It retains the same architecture as the original Prompt Depth Anything, ensuring compatibility with all existing code examples and workflows. However, it utilizes synthetic data and a larger capacity teacher model to deliver more precise and robust depth predictions.
-
-</Tip> -->
 
 The abstract from the paper is as follows:
 

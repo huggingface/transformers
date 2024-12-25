@@ -9,6 +9,8 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.nn as nn
 
+from transformers.utils.generic import torch_int
+
 from ...file_utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...modeling_outputs import DepthEstimatorOutput
 from ...modeling_utils import PreTrainedModel
@@ -179,6 +181,52 @@ class PromptDepthAnythingFeatureFusionStage(nn.Module):
         return fused_hidden_states
 
 
+class PromptDepthAnythingDepthEstimationHead(nn.Module):
+    """
+    Output head consisting of 3 convolutional layers. It progressively halves the feature dimension and upsamples
+    the predictions to the input resolution after the first convolutional layer (details can be found in the DPT paper's
+    supplementary material). The final activation function is either ReLU or Sigmoid, depending on the depth estimation
+    type (relative or metric). For metric depth estimation, the output is scaled by the maximum depth used during pretraining.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+
+        self.head_in_index = config.head_in_index
+        self.patch_size = config.patch_size
+
+        features = config.fusion_hidden_size
+        self.conv1 = nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1)
+        self.conv2 = nn.Conv2d(features // 2, config.head_hidden_size, kernel_size=3, stride=1, padding=1)
+        self.activation1 = nn.ReLU()
+        self.conv3 = nn.Conv2d(config.head_hidden_size, 1, kernel_size=1, stride=1, padding=0)
+        if config.depth_estimation_type == "relative":
+            self.activation2 = nn.ReLU()
+        elif config.depth_estimation_type == "metric":
+            self.activation2 = nn.Sigmoid()
+        else:
+            raise ValueError(f"Unknown depth estimation type: {config.depth_estimation_type}")
+        self.max_depth = config.max_depth
+
+    def forward(self, hidden_states: List[torch.Tensor], patch_height, patch_width) -> torch.Tensor:
+        hidden_states = hidden_states[self.head_in_index]
+
+        predicted_depth = self.conv1(hidden_states)
+        predicted_depth = nn.functional.interpolate(
+            predicted_depth,
+            (torch_int(patch_height * self.patch_size), torch_int(patch_width * self.patch_size)),
+            mode="bilinear",
+            align_corners=True,
+        )
+        predicted_depth = self.conv2(predicted_depth)
+        predicted_depth = self.activation1(predicted_depth)
+        predicted_depth = self.conv3(predicted_depth)
+        predicted_depth = self.activation2(predicted_depth) * self.max_depth
+        predicted_depth = predicted_depth.squeeze(dim=1)  # shape (batch_size, height, width)
+
+        return predicted_depth
+
+
 # Copied from transformers.models.dpt.modeling_dpt.DPTPreTrainedModel with DPT->PromptDepthAnything,dpt->prompt_depth_anything
 class PromptDepthAnythingPreTrainedModel(PreTrainedModel):
     """
@@ -218,6 +266,15 @@ class PromptDepthAnythingReassembleLayer(nn.Module):
             # so should downsample
             self.resize = nn.Conv2d(channels, channels, kernel_size=3, stride=int(1 / factor), padding=1)
 
+        # up/down sampling depending on factor
+        if factor > 1:
+            self.resize = nn.ConvTranspose2d(channels, channels, kernel_size=factor, stride=factor, padding=0)
+        elif factor == 1:
+            self.resize = nn.Identity()
+        elif factor < 1:
+            # so should downsample
+            self.resize = nn.Conv2d(channels, channels, kernel_size=3, stride=torch_int(1 / factor), padding=1)
+
     def forward(self, hidden_state):
         hidden_state = self.projection(hidden_state)
         hidden_state = self.resize(hidden_state)
@@ -236,7 +293,7 @@ class PromptDepthAnythingReassembleStage(nn.Module):
     3. Resizing the spatial dimensions (height, width).
 
     Args:
-        config (`[PromptDepthAnythingConfig]`):
+        config (`[DepthAnythingConfig]`):
             Model configuration class defining the model architecture.
     """
 
@@ -283,7 +340,6 @@ class PromptDepthAnythingNeck(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-
         self.reassemble_stage = PromptDepthAnythingReassembleStage(config)
 
         self.convs = nn.ModuleList()
@@ -314,52 +370,6 @@ class PromptDepthAnythingNeck(nn.Module):
         output = self.fusion_stage(features, prompt_depth=prompt_depth)
 
         return output
-
-
-class PromptDepthAnythingDepthEstimationHead(nn.Module):
-    """
-    Output head consisting of 3 convolutional layers. It progressively halves the feature dimension and upsamples
-    the predictions to the input resolution after the first convolutional layer (details can be found in the DPT paper's
-    supplementary material). The final activation function is either ReLU or Sigmoid, depending on the depth estimation
-    type (relative or metric). For metric depth estimation, the output is scaled by the maximum depth used during pretraining.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-
-        self.head_in_index = config.head_in_index
-        self.patch_size = config.patch_size
-
-        features = config.fusion_hidden_size
-        self.conv1 = nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1)
-        self.conv2 = nn.Conv2d(features // 2, config.head_hidden_size, kernel_size=3, stride=1, padding=1)
-        self.activation1 = nn.ReLU()
-        self.conv3 = nn.Conv2d(config.head_hidden_size, 1, kernel_size=1, stride=1, padding=0)
-        if config.depth_estimation_type == "relative":
-            self.activation2 = nn.ReLU()
-        elif config.depth_estimation_type == "metric":
-            self.activation2 = nn.Sigmoid()
-        else:
-            raise ValueError(f"Unknown depth estimation type: {config.depth_estimation_type}")
-        self.max_depth = config.max_depth
-
-    def forward(self, hidden_states: List[torch.Tensor], patch_height, patch_width) -> torch.Tensor:
-        hidden_states = hidden_states[self.head_in_index]
-
-        predicted_depth = self.conv1(hidden_states)
-        predicted_depth = nn.functional.interpolate(
-            predicted_depth,
-            (int(patch_height * self.patch_size), int(patch_width * self.patch_size)),
-            mode="bilinear",
-            align_corners=True,
-        )
-        predicted_depth = self.conv2(predicted_depth)
-        predicted_depth = self.activation1(predicted_depth)
-        predicted_depth = self.conv3(predicted_depth)
-        predicted_depth = self.activation2(predicted_depth) * self.max_depth
-        predicted_depth = predicted_depth.squeeze(dim=1)  # shape (batch_size, height, width)
-
-        return predicted_depth
 
 
 PROMPT_DEPTH_ANYTHING_START_DOCSTRING = r"""

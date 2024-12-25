@@ -5,10 +5,14 @@ import torch.nn as nn
 
 from transformers.models.depth_anything.configuration_depth_anything import DepthAnythingConfig
 from transformers.models.depth_anything.modeling_depth_anything import (
+    DepthAnythingDepthEstimationHead,
     DepthAnythingFeatureFusionLayer,
     DepthAnythingForDepthEstimation,
     DepthAnythingNeck,
+    DepthAnythingReassembleLayer,
+    DepthAnythingReassembleStage,
 )
+from transformers.utils.generic import torch_int
 
 from ...file_utils import (
     add_start_docstrings,
@@ -159,6 +163,29 @@ class PromptDepthAnythingFeatureFusionStage(nn.Module):
         return fused_hidden_states
 
 
+class PromptDepthAnythingDepthEstimationHead(DepthAnythingDepthEstimationHead):
+    def __init__(self, config):
+        super().__init__(config)
+
+    def forward(self, hidden_states: List[torch.Tensor], patch_height, patch_width) -> torch.Tensor:
+        hidden_states = hidden_states[self.head_in_index]
+
+        predicted_depth = self.conv1(hidden_states)
+        predicted_depth = nn.functional.interpolate(
+            predicted_depth,
+            (torch_int(patch_height * self.patch_size), torch_int(patch_width * self.patch_size)),
+            mode="bilinear",
+            align_corners=True,
+        )
+        predicted_depth = self.conv2(predicted_depth)
+        predicted_depth = self.activation1(predicted_depth)
+        predicted_depth = self.conv3(predicted_depth)
+        predicted_depth = self.activation2(predicted_depth) * self.max_depth
+        predicted_depth = predicted_depth.squeeze(dim=1)  # shape (batch_size, height, width)
+
+        return predicted_depth
+
+
 # Copied from transformers.models.dpt.modeling_dpt.DPTPreTrainedModel with DPT->PromptDepthAnything,dpt->prompt_depth_anything
 class PromptDepthAnythingPreTrainedModel(PreTrainedModel):
     """
@@ -184,9 +211,49 @@ class PromptDepthAnythingPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
+class PromptDepthAnythingReassembleLayer(DepthAnythingReassembleLayer):
+    def __init__(self, config, channels, factor):
+        super().__init__(config, channels, factor)
+        self.projection = nn.Conv2d(in_channels=config.reassemble_hidden_size, out_channels=channels, kernel_size=1)
+
+        # up/down sampling depending on factor
+        if factor > 1:
+            self.resize = nn.ConvTranspose2d(channels, channels, kernel_size=factor, stride=factor, padding=0)
+        elif factor == 1:
+            self.resize = nn.Identity()
+        elif factor < 1:
+            # so should downsample
+            self.resize = nn.Conv2d(channels, channels, kernel_size=3, stride=torch_int(1 / factor), padding=1)
+
+
+class PromptDepthAnythingReassembleStage(DepthAnythingReassembleStage):
+    """
+    This class reassembles the hidden states of the backbone into image-like feature representations at various
+    resolutions.
+
+    This happens in 3 stages:
+    1. Take the patch embeddings and reshape them to image-like feature representations.
+    2. Project the channel dimension of the hidden states according to `config.neck_hidden_sizes`.
+    3. Resizing the spatial dimensions (height, width).
+
+    Args:
+        config (`[DepthAnythingConfig]`):
+            Model configuration class defining the model architecture.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+
+        self.config = config
+        self.layers = nn.ModuleList()
+        for channels, factor in zip(config.neck_hidden_sizes, config.reassemble_factors):
+            self.layers.append(PromptDepthAnythingReassembleLayer(config, channels=channels, factor=factor))
+
+
 class PromptDepthAnythingNeck(DepthAnythingNeck):
     def __init__(self, config):
         super().__init__(config)
+        self.reassemble_stage = PromptDepthAnythingReassembleStage(config)
         self.fusion_stage = PromptDepthAnythingFeatureFusionStage(config)
 
     def forward(
@@ -224,6 +291,7 @@ class PromptDepthAnythingForDepthEstimation(DepthAnythingForDepthEstimation):
     def __init__(self, config):
         super().__init__(config)
         self.neck = PromptDepthAnythingNeck(config)
+        self.head = PromptDepthAnythingDepthEstimationHead(config)
         self.post_init()
 
     @add_start_docstrings_to_model_forward(PROMPT_DEPTH_ANYTHING_INPUTS_DOCSTRING)
@@ -302,7 +370,7 @@ class PromptDepthAnythingForDepthEstimation(DepthAnythingForDepthEstimation):
 
         if prompt_depth is not None:
             # normalize prompt depth
-            B = len(prompt_depth)
+            B = prompt_depth.shape[0]
             depth_min, depth_max = (
                 torch.min(prompt_depth.reshape(B, -1), dim=1).values,
                 torch.max(prompt_depth.reshape(B, -1), dim=1).values,

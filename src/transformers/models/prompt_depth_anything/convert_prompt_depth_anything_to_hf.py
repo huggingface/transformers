@@ -261,7 +261,7 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
         predicted_depth = outputs.predicted_depth
 
     print("Shape of predicted depth:", predicted_depth.shape)
-    print("First values:", predicted_depth[0, 0, :3, :3])
+    print("First values:", predicted_depth[0, :3, :3])
 
     # assert logits
     if verify_logits:
