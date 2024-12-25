@@ -361,7 +361,7 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 >>> callbacks = [metric_callback, push_to_hub_callback]
 ```
 
-أخيرًا، أنت جاهز لبدء تدريب نموذجك! اتصل بـ [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) مع مجموعات بيانات التدريب والتحقق من الصحة وعدد الحقب واستدعاءاتك لضبط النموذج:
+أخيرًا، أنت جاهز لبدء تدريب نموذجك! استدعِ[`fit`](https://keras.io/api/models/model_training_apis/#fit-method) مع مجموعات بيانات التدريب والتحقق من الصحة وعدد الحقب والاستدعاءات لضبط النموذج:
 
 ```py
 >>> model.fit(x=tf_train_set, validation_data=tf_validation_set, epochs=2, callbacks=callbacks)
