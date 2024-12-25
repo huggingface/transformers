@@ -382,7 +382,7 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 
 رائع، الآن بعد أن قمت بضبط نموذج، يمكنك استخدامه للاستدلال!
 
-ابتكر بعض النص وإجابتين مرشحتين:
+قم بإنشاء نص واقتراح إجابتين محتملتين:
 
 ```py
 >>> prompt = "France has a bread law, Le Décret Pain, with strict rules on what is allowed in a traditional baguette."
