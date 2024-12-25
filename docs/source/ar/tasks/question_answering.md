@@ -335,7 +335,7 @@ pip install transformers datasets evaluate
 
 رائع، الآن بعد أن قمت بضبط نموذج، يمكنك استخدامه للاستدلال!
 
-ابتكر سؤالًا وسياقًا ترغب في أن يتنبأ به النموذج:
+حدد سؤالًا وسياقًا ليقوم النموذج بالتنبؤ بالإجابة عليه:
 
 ```py
 >>> question = "How many programming languages does BLOOM support?"
