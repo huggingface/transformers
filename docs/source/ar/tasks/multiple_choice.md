@@ -213,7 +213,7 @@ tokenized_swag = swag.map(preprocess_function, batched=True)
 >>> accuracy = evaluate.load("accuracy")
 ```
 
-ثم قم بإنشاء دالة تمرر تنبؤاتك وتسمياتك إلى [`~evaluate.EvaluationModule.compute`] لحساب الدقة:
+ثم أنشئ دالة لتمرير التنبؤات والتسميات إلى [`~evaluate.EvaluationModule.compute`] لحساب الدقة:
 
 ```py
 >>> import numpy as np
