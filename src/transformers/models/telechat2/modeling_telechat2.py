@@ -16,33 +16,32 @@ import math
 from typing import List, Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import nn
-from transformers.modeling_outputs import (
+import torch.nn.functional as F
+
+from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...generation import GenerationMixin
+from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
 )
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...cache_utils import Cache, DynamicCache, StaticCache
-from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...generation import GenerationMixin
-from .configuration_telechat2 import TeleChat2Config
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import (
+    LossKwargs,
+    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
 )
-try:
-    from einops import rearrange
-except ImportError:
-    rearrange = None
+from .configuration_telechat2 import TeleChat2Config
 
 
 logger = logging.get_logger(__name__)
-
 
 _CHECKPOINT_FOR_DOC = "TeleAI/TeleChat2-3B"
 _CONFIG_FOR_DOC = "TeleChat2Config"
@@ -69,6 +68,7 @@ class TeleChat2RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
+# copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with llama->telechat2
 class TeleChat2RotaryEmbedding(nn.Module):
     def __init__(
         self,
@@ -142,28 +142,31 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-def apply_rotary_pos_emb_torch(
-    q: torch.Tensor,
-    k: torch.Tensor,
-    cos: torch.Tensor,
-    sin: torch.Tensor,
-    offset: int = 0,
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Apply rotary position embeddings to query and key tensors.
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
-        q (`torch.Tensor`): Query tensor of shape `[seq_len, batch * num_heads, head_dim]`.
-        k (`torch.Tensor`): Key tensor of the same shape as `q`.
-        cos (`torch.Tensor`): Cosine embedding tensor.
-        sin (`torch.Tensor`): Sine embedding tensor.
-        offset (`int`, optional): Positional offset. Defaults to 0.
-
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        position_ids (`torch.Tensor`, *optional*):
+            Deprecated and unused.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
     Returns:
-        (`torch.Tensor`, `torch.Tensor`): Rotated query and key.
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
-    cos, sin = cos[offset : q.shape[0] + offset, ...], sin[offset : q.shape[0] + offset, ...]
-    return (q * cos) + (rotate_half(q) * sin), (k * cos) + (rotate_half(k) * sin)
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
 
 
 def dropout_add(x: torch.Tensor, residual: torch.Tensor, prob: float, training: bool) -> torch.Tensor:
@@ -203,6 +206,7 @@ class TeleChat2MLP(nn.Module):
         return output
 
 
+# Copied from transformers.models.llama.modeling_llama.repeat_kv with llama->telechat2
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     Repeat key/value if fewer KV heads than heads.
@@ -286,28 +290,22 @@ class TeleChat2Attention(nn.Module):
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
-        **kwargs,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor, torch.Tensor]], Optional[torch.Tensor]]:
         bsz, seq_len, _ = hidden_states.size()
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, self.num_heads, self.head_dim)
 
         query_states = self.query(hidden_states)
-        # [B,S, num_heads*head_dim] => [B,S,num_heads,head_dim] => [B,num_heads,S,head_dim]
         query_states = query_states.view(hidden_shape).transpose(1, 2)
 
-        # key_value  [B,S, 2*(kv_heads*head_dim)]
         mixed_kv = self.key_value(hidden_states)
-        # reshape => [B,S,kv_heads, 2*head_dim]
         mixed_kv = mixed_kv.view(bsz, seq_len, self.num_key_value_heads, 2 * self.head_dim)
-        # transpose => [B,kv_heads,S,2*head_dim]
         mixed_kv = mixed_kv.transpose(1, 2)
-        # key: [B,kv_heads,S,head_dim], value: [B,kv_heads,S,head_dim]
         key_states, value_states = torch.split(mixed_kv, self.head_dim, dim=-1)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb_torch(query_states, key_states, cos, sin)
-
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
         if past_key_value is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
@@ -381,10 +379,9 @@ class TeleChat2DecoderLayer(nn.Module):
         output_attentions: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None, 
-        **kwargs,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
-
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
@@ -399,9 +396,7 @@ class TeleChat2DecoderLayer(nn.Module):
             position_embeddings=position_embeddings,
             **kwargs,
         )
-
         hidden_states = residual + hidden_states
-
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
@@ -412,6 +407,7 @@ class TeleChat2DecoderLayer(nn.Module):
             outputs += (self_attn_weights,)
 
         return outputs
+
 
 
 TELECHAT2_START_DOCSTRING = r"""
@@ -540,10 +536,10 @@ TELECHAT2_INPUTS_DOCSTRING = r"""
 """
 
 
-# @add_start_docstrings(
-#     "The bare TeleChat2 Model outputting raw hidden-states without any specific head on top.",
-#     TELECHAT2_START_DOCSTRING,
-# )
+@add_start_docstrings(
+    "The bare TeleChat2 Model outputting raw hidden-states without any specific head on top.",
+    TELECHAT2_START_DOCSTRING,
+)
 class TeleChat2Model(TeleChat2PreTrainedModel):
     """
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`TeleChat2DecoderLayer`]
@@ -561,6 +557,7 @@ class TeleChat2Model(TeleChat2PreTrainedModel):
             self.word_embeddings_layernorm = TeleChat2RMSNorm(
                 config.hidden_size, eps=config.layer_norm_epsilon
             )
+        
         self.h = nn.ModuleList([TeleChat2DecoderLayer(config, i) for i in range(config.num_hidden_layers)])
         self.ln_f = TeleChat2RMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         self.rotary_emb = TeleChat2RotaryEmbedding(config=config)
@@ -575,7 +572,7 @@ class TeleChat2Model(TeleChat2PreTrainedModel):
     def set_input_embeddings(self, new_embeddings: nn.Embedding):
         self.word_embeddings = new_embeddings
 
-    # @add_start_docstrings_to_model_forward(TELECHAT2_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(TELECHAT2_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -588,6 +585,7 @@ class TeleChat2Model(TeleChat2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -632,6 +630,7 @@ class TeleChat2Model(TeleChat2PreTrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
+
 
         for decoder_layer in self.h:
             if output_hidden_states:
@@ -747,6 +746,9 @@ class TeleChat2Model(TeleChat2PreTrainedModel):
         return causal_mask
 
 
+class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
+
+
 class TeleChat2ForCausalLM(TeleChat2PreTrainedModel, GenerationMixin):
     _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
 
@@ -824,7 +826,6 @@ class TeleChat2ForCausalLM(TeleChat2PreTrainedModel, GenerationMixin):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
-
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
