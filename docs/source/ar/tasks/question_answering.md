@@ -32,7 +32,7 @@ rendered properly in your Markdown viewer.
 
 <Tip>
 
-لمشاهدة جميع البنى ونقاط التفتيش المتوافقة مع هذه المهمة، نوصي بالتحقق من [صفحة المهمة](https://huggingface.co/tasks/question-answering)
+لمشاهدة جميع الهياكل والنسخ المتوافقة مع هذه المهمة، نوصي بالرجوع إلى [صفحة المهمة](https://huggingface.co/tasks/question-answering)
 
 </Tip>
 
