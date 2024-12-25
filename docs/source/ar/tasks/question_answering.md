@@ -235,7 +235,7 @@ pip install transformers datasets evaluate
 >>> trainer.train()
 ```
 
-بمجرد اكتمال التدريب، شارك نموذجك في Hub باستخدام طريقة [`~transformers.Trainer.push_to_hub`] حتى يتمكن الجميع من استخدام نموذجك:
+بمجرد اكتمال التدريب، شارك نموذجك في Hub باستخدام الدالة [`~transformers.Trainer.push_to_hub`] حتى يتمكن الجميع من استخدام نموذجك:
 
 ```py
 >>> trainer.push_to_hub()
