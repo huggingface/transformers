@@ -14,7 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 from typing import Optional
 
 import torch
@@ -218,13 +217,8 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
         height = height // self.config.patch_size
         width = width // self.config.patch_size
 
-        # Maintain backward compatibility with offset if configured
-        if hasattr(self.config, "interpolate_offset"):
-            height = height + self.config.interpolate_offset
-            width = width + self.config.interpolate_offset
-
         # Reshape for interpolation
-        sqrt_num_positions = int(math.sqrt(num_positions))
+        sqrt_num_positions = torch_int(num_positions**0.5)
         patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
         patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
 
