@@ -21,7 +21,7 @@ import os
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Literal, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
@@ -499,24 +499,38 @@ def replace_batch_norm(model):
 class RelationDetrConvEncoderPostLayerNorm(nn.Module):
     """Post process for the ConvEncoder. This is used to be compatible with the FocalNet backbone in official repo."""
 
-    def __init__(self, in_channels: int, post_layer_norm: bool = False):
+    def __init__(
+        self,
+        in_channels: int,
+        post_layer_norm: bool = False,
+        backbone_features_format: Literal["channels_first", "channels_last"] = "channels_first",
+    ):
         super().__init__()
         self.in_channels = in_channels
         self.post_layer_norm = post_layer_norm
+        self.backbone_features_format = backbone_features_format
+        if self.backbone_features_format not in ["channels_first", "channels_last"]:
+            raise ValueError("`backbone_features_format` should be either 'channels_first' or 'channels_last'")
         if self.post_layer_norm:
             self.norms = nn.ModuleList([nn.LayerNorm(channel) for channel in in_channels])
 
     def forward(self, multi_level_feats: List[Tensor]):
         if self.post_layer_norm:
-            # convert (batch_size, channels, height, width) -> (batch_size, height, width, channels)
-            if all(feat.shape[1] == channel for feat, channel in zip(multi_level_feats, self.in_channels)):
+            if self.backbone_features_format == "channels_first":
+                # convert (batch_size, channels, height, width) -> (batch_size, height, width, channels)
                 multi_level_feats = [feat.permute(0, 2, 3, 1) for feat in multi_level_feats]
 
-            for idx, feat in enumerate(multi_level_feats):
-                multi_level_feats[idx] = self.norms[idx](feat)
+                for idx, feat in enumerate(multi_level_feats):
+                    multi_level_feats[idx] = self.norms[idx](feat)
+
+                # convert (batch_size, height, width, channels) -> (batch_size, channels, height, width)
+                multi_level_feats = [feat.permute(0, 3, 1, 2) for feat in multi_level_feats]
+            else:
+                for idx, feat in enumerate(multi_level_feats):
+                    multi_level_feats[idx] = self.norms[idx](feat)
 
         # convert (batch_size, height, width, channels) -> (batch_size, channels, height, width)
-        if all(feat.shape[-1] == channel for feat, channel in zip(multi_level_feats, self.in_channels)):
+        if self.backbone_features_format == "channels_last":
             multi_level_feats = [feat.permute(0, 3, 1, 2) for feat in multi_level_feats]
 
         return multi_level_feats
