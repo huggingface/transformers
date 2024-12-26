@@ -722,7 +722,7 @@ class ModernBertAttention(nn.Module):
                 rope_theta = config.local_rope_theta
             max_position_embeddings = config.local_attention
 
-        if config._attn_implementation in ["flash_attention_2"]:
+        if config._attn_implementation == "flash_attention_2":
             self.rotary_emb = ModernBertUnpaddedRotaryEmbedding(
                 dim=self.head_dim, max_seqlen=max_position_embeddings, base=rope_theta
             )
