@@ -744,15 +744,15 @@ class RelationDetrMultiscaleDeformableAttention(nn.Module):
 
     def forward(
         self,
-        hidden_states: torch.Tensor,
+        hidden_states: torch.FloatTensor,
         attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states=None,
-        encoder_attention_mask=None,
-        position_embeddings: Optional[torch.Tensor] = None,
-        reference_points=None,
-        spatial_shapes=None,
-        spatial_shapes_list=None,
-        level_start_index=None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
+        position_embeddings: Optional[torch.FloatTensor] = None,
+        reference_points: Optional[torch.FloatTensor] = None,
+        spatial_shapes: Optional[torch.LongTensor] = None,
+        spatial_shapes_list: Optional[List[Tuple]] = None,
+        level_start_index: Optional[torch.LongTensor] = None,
         output_attentions: bool = False,
     ):
         # add position embeddings to the hidden states before projecting to queries and keys
@@ -960,7 +960,7 @@ class RelationDetrMultiheadAttention(nn.Module):
         return attn_output, attn_weights_reshaped
 
 
-# Copied from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrEncoderLayer with DeformableDetr->RelationDetr
+# Modified from transformers.models.deformable_detr.modeling_deformable_detr.DeformableDetrEncoderLayer with DeformableDetr->RelationDetr
 class RelationDetrEncoderLayer(nn.Module):
     def __init__(self, config: RelationDetrConfig):
         super().__init__()
@@ -978,13 +978,13 @@ class RelationDetrEncoderLayer(nn.Module):
 
     def forward(
         self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
-        position_embeddings: torch.Tensor = None,
-        reference_points=None,
-        spatial_shapes=None,
-        spatial_shapes_list=None,
-        level_start_index=None,
+        hidden_states: torch.FloatTensor,
+        attention_mask: torch.FloatTensor,
+        position_embeddings: torch.FloatTensor = None,
+        reference_points: Optional[torch.FloatTensor] = None,
+        spatial_shapes: Optional[torch.LongTensor] = None,
+        spatial_shapes_list: Optional[List[Tuple]] = None,
+        level_start_index: Optional[torch.LongTensor] = None,
         output_attentions: bool = False,
     ):
         """
@@ -999,6 +999,8 @@ class RelationDetrEncoderLayer(nn.Module):
                 Reference points.
             spatial_shapes (`torch.LongTensor`, *optional*):
                 Spatial shapes of the backbone feature maps.
+            spatial_shapes_list (`List[Tuple]`, *optional*):
+                List of spatial shapes of the backbone feature maps.
             level_start_index (`torch.LongTensor`, *optional*):
                 Level start index.
             output_attentions (`bool`, *optional*):
@@ -1079,16 +1081,16 @@ class RelationDetrDecoderLayer(nn.Module):
 
     def forward(
         self,
-        hidden_states: torch.Tensor,
-        position_embeddings: Optional[torch.Tensor] = None,
-        reference_points=None,
-        spatial_shapes=None,
-        spatial_shapes_list=None,
-        level_start_index=None,
-        self_attention_mask=None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
+        hidden_states: torch.FloatTensor,
+        position_embeddings: Optional[torch.FloatTensor] = None,
+        reference_points: Optional[torch.FloatTensor] = None,
+        spatial_shapes: Optional[torch.LongTensor] = None,
+        spatial_shapes_list: Optional[List[Tuple]] = None,
+        level_start_index: Optional[torch.LongTensor] = None,
+        self_attention_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        output_attentions: bool = False,
     ):
         """
         Args:
