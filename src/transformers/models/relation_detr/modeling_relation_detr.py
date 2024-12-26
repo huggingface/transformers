@@ -608,7 +608,7 @@ class RelationDetrSinePositionEmbedding(nn.Module):
             return dim_t, dim_t
         return (get_dim_t(self.embedding_dim, t, device) for t in self.temperature)
 
-    def forward(self, pixel_mask):
+    def forward(self, pixel_mask: torch.Tensor) -> torch.Tensor:
         y_embed = pixel_mask.cumsum(1)
         x_embed = pixel_mask.cumsum(2)
         if self.normalize:
