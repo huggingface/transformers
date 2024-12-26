@@ -29,7 +29,7 @@ from packaging import version
 
 from .debug_utils import DebugOption
 from .integrations.deepspeed import (
-    is_deepspeed_sp_enabled,
+    is_deepspeed_ulysses_enabled,
 )
 from .trainer_utils import (
     EvaluationStrategy,
@@ -2358,7 +2358,7 @@ class TrainingArguments:
         """
         requires_backends(self, ["torch"])
         if self.distributed_state is not None:
-            if is_deepspeed_sp_enabled():
+            if is_deepspeed_ulysses_enabled():
                 return self.deepspeed_plugin.get_value("data_parallel_size")
             return self.distributed_state.num_processes
         elif is_sagemaker_mp_enabled():

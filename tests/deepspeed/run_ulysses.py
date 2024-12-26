@@ -19,7 +19,7 @@ import torch
 from deepspeed import initialize
 
 from transformers import AutoModel
-from transformers.integrations.deepspeed import is_deepspeed_sp_enabled  # noqa
+from transformers.integrations.deepspeed import is_deepspeed_ulysses_enabled  # noqa
 from transformers.modeling_flash_attention_utils import _flash_attention_forward
 
 
@@ -40,7 +40,7 @@ def run_ulysses_flash_attention(seq_len=2) -> None:
         },
     )
 
-    assert is_deepspeed_sp_enabled()
+    assert is_deepspeed_ulysses_enabled()
 
     seq_len = seq_len
     hidden_dim = 16
@@ -67,7 +67,7 @@ def run_ulysses_flash_attention(seq_len=2) -> None:
             "sequence_parallel_size": sp_size,
         },
     )
-    assert not is_deepspeed_sp_enabled()
+    assert not is_deepspeed_ulysses_enabled()
 
     output_tensor_no_sp = _flash_attention_forward(q, k, v, attention_mask, query_length=seq_len, is_causal=False)
     assert output_tensor_no_sp is not None

@@ -48,7 +48,7 @@ from .integrations import (
     PeftAdapterMixin,
     deepspeed_config,
     is_deepspeed_available,
-    is_deepspeed_sp_enabled,
+    is_deepspeed_ulysses_enabled,
     is_deepspeed_zero3_enabled,
 )
 from .loss.loss_utils import LOSS_MAPPING
@@ -4052,7 +4052,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if is_deepspeed_zero3_enabled() and not is_quantized and not _is_ds_init_called:
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
             sequence_data_parallel_group = None
-            if is_deepspeed_sp_enabled() and deepspeed_groups._zero_param_parallel_is_initialized():
+            if is_deepspeed_ulysses_enabled() and deepspeed_groups._zero_param_parallel_is_initialized():
                 sequence_data_parallel_group = deepspeed_groups._get_sequence_data_parallel_group()
 
             init_contexts = [
@@ -4277,7 +4277,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
                 pass
 
-        if is_deepspeed_sp_enabled():
+        if is_deepspeed_ulysses_enabled():
             if not getattr(model, "_supports_sequence_parallel", False):
                 raise ValueError(f"{model.__class__} does not support sequence parallelism.")
 

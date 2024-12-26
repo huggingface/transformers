@@ -71,7 +71,7 @@ from .integrations.deepspeed import (
     deepspeed_init,
     deepspeed_load_checkpoint,
     is_deepspeed_available,
-    is_deepspeed_sp_enabled,
+    is_deepspeed_ulysses_enabled,
 )
 from .integrations.tpu import tpu_spmd_dataloader
 from .modelcard import TrainingSummary
@@ -962,7 +962,7 @@ class Trainer:
         if self.train_dataset is None or not has_length(self.train_dataset):
             return None
 
-        if self.is_deepspeed_enabled and is_deepspeed_sp_enabled():
+        if self.is_deepspeed_enabled and is_deepspeed_ulysses_enabled():
             assert self.args.group_by_length is False, "Group by length is not supported with sequence parallelism."
             ds_plugin = self.accelerator.state.deepspeed_plugin
             return DistributedSampler(
@@ -1033,7 +1033,7 @@ class Trainer:
         if eval_dataset is None or not has_length(eval_dataset):
             return None
         # Build the sampler.
-        if self.is_deepspeed_enabled and is_deepspeed_sp_enabled():
+        if self.is_deepspeed_enabled and is_deepspeed_ulysses_enabled():
             ds_plugin = self.accelerator.state.deepspeed_plugin
             return SequentialDistributedSampler(
                 self.train_dataset,
@@ -3645,7 +3645,7 @@ class Trainer:
         return inputs
 
     def _finalize_inputs(self, **inputs):
-        if is_deepspeed_sp_enabled():
+        if is_deepspeed_ulysses_enabled():
             ds_plugin = self.accelerator.state.deepspeed_plugin
             num_shards = ds_plugin.sequence_parallel_size
             rank = ds_plugin.sequence_parallel_rank

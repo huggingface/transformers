@@ -308,7 +308,7 @@ def is_deepspeed_zero3_enabled():
         return False
 
 
-def is_deepspeed_sp_enabled():
+def is_deepspeed_ulysses_enabled():
     if _hf_deepspeed_config_weak_ref is not None and _hf_deepspeed_config_weak_ref() is not None:
         return _hf_deepspeed_config_weak_ref().is_sequence_parallel()
     else:
@@ -466,7 +466,7 @@ def deepspeed_load_checkpoint(deepspeed_engine, checkpoint_path, load_module_str
 
 def deepspeed_ulysses_attention(attn_func, seq_dim=1, head_dim=2):
     def wrapped(*args, **kwargs):
-        if is_deepspeed_sp_enabled():
+        if is_deepspeed_ulysses_enabled():
             sp_group = deepspeed_groups._get_sequence_parallel_group()
             scatter_idx = head_dim  # Scatter on num_heads dimension
             gather_idx = seq_dim  # Gather on seq_len dimension
@@ -479,7 +479,7 @@ def deepspeed_ulysses_attention(attn_func, seq_dim=1, head_dim=2):
 
         attn_output = attn_func(*args, **kwargs)
 
-        if is_deepspeed_sp_enabled():
+        if is_deepspeed_ulysses_enabled():
             scatter_idx = seq_dim  # Scatter back on seq_len dimension
             gather_idx = head_dim  # Gather on num_heads dimension
             batch_dim_idx = 0
@@ -491,17 +491,17 @@ def deepspeed_ulysses_attention(attn_func, seq_dim=1, head_dim=2):
 
 
 def support_deepspeed_ulysses(module):
-    module._sp_group_size = None
+    module._sp_size = None
 
     @property
-    def sp_group_size(self):
-        if self._sp_group_size is None:
-            self._sp_group_size = 1
-            if is_deepspeed_sp_enabled():
-                self._sp_group_size = deepspeed_groups._get_sequence_parallel_group().size()
-        return self._sp_group_size
+    def sp_size(self):
+        if self._sp_size is None:
+            self._sp_size = 1
+            if is_deepspeed_ulysses_enabled():
+                self._sp_size = deepspeed_groups._get_sequence_parallel_group().size()
+        return self._sp_size
 
-    module.sp_group_size = sp_group_size
+    module.sp_size = sp_size
 
     return module
 

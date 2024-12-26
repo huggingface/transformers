@@ -16,7 +16,7 @@ import torch
 import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, MSELoss
 
-from transformers.integrations import is_deepspeed_available, is_deepspeed_sp_enabled
+from transformers.integrations import is_deepspeed_available, is_deepspeed_ulysses_enabled
 
 from .loss_deformable_detr import DeformableDetrForObjectDetectionLoss, DeformableDetrForSegmentationLoss
 from .loss_for_object_detection import ForObjectDetectionLoss, ForSegmentationLoss
@@ -29,7 +29,7 @@ if is_deepspeed_available():
 
 def fixed_cross_entropy(source, target, num_items_in_batch: int = None, ignore_index: int = -100, **kwargs):
     reduction = "sum" if num_items_in_batch is not None else "mean"
-    if is_deepspeed_sp_enabled():
+    if is_deepspeed_ulysses_enabled():
         loss = deepspeed_ulysses_cross_entropy(
             source,
             target,

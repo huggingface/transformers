@@ -125,7 +125,7 @@ if is_deepspeed_available():
     from transformers.integrations.deepspeed import (
         deepspeed_config,
         is_deepspeed_zero3_enabled,
-        is_deepspeed_sp_enabled,
+        is_deepspeed_ulysses_enabled,
     )  # noqa
 
 
@@ -1367,10 +1367,10 @@ class TestDeepSpeedWithLauncher(TestCasePlus):
     @parameterized.expand([2, 4, 8, 16])
     @require_torch_accelerator
     @require_torch_multi_accelerator
-    def test_deepspeed_sp(self, sp_size):
-        # Check if deepspeed_sp is enabled
+    def test_deepspeed_ulysses(self, sp_size):
+        # Check if deepspeed ulysses is enabled
         # Run deepspeed sp with 2 GPUs and different sp_size
-        self.assertFalse(is_deepspeed_sp_enabled())
+        self.assertFalse(is_deepspeed_ulysses_enabled())
         ds_args = [f"--sequence-length={sp_size}"]
         script = [f"{self.test_file_dir_str}/run_ulysses.py"]
         distributed = True
