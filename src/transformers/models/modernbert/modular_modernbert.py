@@ -1051,8 +1051,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
             kv_pos = kv_idx - cu_seqlens[sequence_ids[kv_idx]]
 
             # sliding window within each sequence
-            # in_window = (q_pos - kv_pos).abs() <= window_size
-            in_window = (q_pos - kv_pos <= window_size) & (kv_pos - q_pos <= window_size)
+            in_window = (q_pos - kv_pos).abs() <= window_size
 
             return same_seq & in_window
 
