@@ -515,7 +515,7 @@ class RelationDetrConvEncoderPostLayerNorm(nn.Module):
             for idx, feat in enumerate(multi_level_feats):
                 multi_level_feats[idx] = self.norms[idx](feat)
 
-        # convert N H W C to N C H W
+        # convert (batch_size, height, width, channels) -> (batch_size, channels, height, width)
         if all(feat.shape[-1] == channel for feat, channel in zip(multi_level_feats, self.in_channels)):
             multi_level_feats = [feat.permute(0, 3, 1, 2) for feat in multi_level_feats]
 
