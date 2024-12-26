@@ -2834,14 +2834,10 @@ class RelationDetrForObjectDetection(RelationDetrPreTrainedModel):
                 loss_dict.update({k + "_hybrid": v for k, v in hybrid_loss_dict.items()})
 
         if not return_dict:
-            if auxiliary_outputs is not None:
-                output = (logits, pred_boxes, auxiliary_outputs) + outputs
-            else:
-                output = (logits, pred_boxes) + outputs
+            outputs = (loss, loss_dict, logits, pred_boxes, auxiliary_outputs) + outputs
+            outputs = tuple(output for output in outputs if output is not None)
 
-            tuple_outputs = ((loss, loss_dict) + output) if loss is not None else output
-
-            return tuple_outputs
+            return outputs
 
         dict_outputs = RelationDetrObjectDetectionOutput(
             loss=loss,
