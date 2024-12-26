@@ -508,7 +508,7 @@ class RelationDetrConvEncoderPostLayerNorm(nn.Module):
 
     def forward(self, multi_level_feats: List[Tensor]):
         if self.post_layer_norm:
-            # convert N C H W to N H W C
+            # convert (batch_size, channels, height, width) -> (batch_size, height, width, channels)
             if all(feat.shape[1] == channel for feat, channel in zip(multi_level_feats, self.in_channels)):
                 multi_level_feats = [feat.permute(0, 2, 3, 1) for feat in multi_level_feats]
 
