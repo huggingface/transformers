@@ -573,7 +573,9 @@ class RelationDetrConvEncoder(nn.Module):
                         parameter.requires_grad_(False)
 
         self.features_layer_norm = RelationDetrConvEncoderPostLayerNorm(
-            self.intermediate_channel_sizes, config.backbone_post_layer_norm
+            in_channels=self.intermediate_channel_sizes,
+            backbone_features_format=config.backbone_features_format,
+            post_layer_norm=config.backbone_post_layer_norm,
         )
 
     def forward(self, pixel_values: torch.Tensor):
