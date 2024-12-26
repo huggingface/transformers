@@ -964,17 +964,17 @@ class RelationDetrMultiheadAttention(nn.Module):
 class RelationDetrEncoderLayer(nn.Module):
     def __init__(self, config: RelationDetrConfig):
         super().__init__()
-        self.embed_dim = config.d_model
+        self.d_model = config.d_model
         self.self_attn = RelationDetrMultiscaleDeformableAttention(
             config, num_heads=config.encoder_attention_heads, n_points=config.encoder_n_points
         )
-        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.self_attn_layer_norm = nn.LayerNorm(self.d_model)
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
-        self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
-        self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.fc1 = nn.Linear(self.d_model, config.encoder_ffn_dim)
+        self.fc2 = nn.Linear(config.encoder_ffn_dim, self.d_model)
+        self.final_layer_norm = nn.LayerNorm(self.d_model)
 
     def forward(
         self,
@@ -1052,11 +1052,11 @@ class RelationDetrEncoderLayer(nn.Module):
 class RelationDetrDecoderLayer(nn.Module):
     def __init__(self, config: RelationDetrConfig):
         super().__init__()
-        self.embed_dim = config.d_model
+        self.d_model = config.d_model
 
         # self-attention
         self.self_attn = RelationDetrMultiheadAttention(
-            embed_dim=self.embed_dim,
+            embed_dim=self.d_model,
             num_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
         )
@@ -1064,18 +1064,18 @@ class RelationDetrDecoderLayer(nn.Module):
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
 
-        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.self_attn_layer_norm = nn.LayerNorm(self.d_model, eps=config.layer_norm_eps)
         # cross-attention
         self.encoder_attn = RelationDetrMultiscaleDeformableAttention(
             config,
             num_heads=config.decoder_attention_heads,
             n_points=config.decoder_n_points,
         )
-        self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.encoder_attn_layer_norm = nn.LayerNorm(self.d_model, eps=config.layer_norm_eps)
         # feedforward neural networks
-        self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
-        self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.fc1 = nn.Linear(self.d_model, config.decoder_ffn_dim)
+        self.fc2 = nn.Linear(config.decoder_ffn_dim, self.d_model)
+        self.final_layer_norm = nn.LayerNorm(self.d_model, eps=config.layer_norm_eps)
 
     def forward(
         self,
