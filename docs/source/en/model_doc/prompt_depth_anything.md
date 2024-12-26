@@ -30,9 +30,6 @@ alt="drawing" width="600"/>
 
 <small> Prompt Depth Anything overview. Taken from the <a href="https://promptda.github.io/">original paper</a>.</small>
 
-<!-- This model was contributed by [nielsr](https://huggingface.co/nielsr).
-The original code can be found [here](https://github.com/LiheYoung/Depth-Anything). -->
-
 ## Usage example
 
 The transformers library allows you to use the model with just a few lines of code:
