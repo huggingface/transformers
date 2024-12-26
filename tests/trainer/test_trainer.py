@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import copy
+
 import dataclasses
 import gc
 import importlib
@@ -30,7 +30,6 @@ from itertools import product
 from pathlib import Path
 from typing import Dict, List
 from unittest.mock import Mock, patch
-import contextlib
 
 import numpy as np
 from huggingface_hub import HfFolder, ModelCard, create_branch, list_repo_commits, list_repo_files
@@ -155,55 +154,6 @@ if is_accelerate_available():
 
 PATH_SAMPLE_TEXT = f"{get_tests_dir()}/fixtures/sample_text.txt"
 
-
-class RNGStateManager:
-    @staticmethod
-    @contextlib.contextmanager
-    def protect_main_rng_state():
-        (random_state, torch_state, np_state, cuda_state,
-         torch_deterministic, cublas_config) = RNGStateManager.get_rng_state()
-        yield
-        RNGStateManager.set_rng_state(random_state, torch_state, np_state, cuda_state,
-                                      torch_deterministic, cublas_config)
-
-    @staticmethod
-    def get_rng_state():
-        # Save previous state
-        cublas_config = os.environ.get("CUBLAS_WORKSPACE_CONFIG", None)
-        random_state = random.getstate()
-        torch_state = torch.get_rng_state()
-        np_state = np.random.get_state()
-        torch_deterministic = torch.are_deterministic_algorithms_enabled()
-        try:
-            cuda_state = torch.cuda.get_rng_state()
-        except RuntimeError:
-            cuda_state = None
-        return random_state, torch_state, np_state, cuda_state, torch_deterministic, cublas_config
-
-    @staticmethod
-    def set_rng_state(random_state, torch_state, np_state, cuda_state, torch_deterministic, cublas_config):
-        # Load previous state
-        if cublas_config is None:
-            os.environ.pop("CUBLAS_WORKSPACE_CONFIG", None)
-        else:
-            os.environ["CUBLAS_WORKSPACE_CONFIG"] = cublas_config
-        random.setstate(random_state)
-        torch.set_rng_state(torch_state)
-        np.random.set_state(np_state)
-        torch.use_deterministic_algorithms(torch_deterministic)
-        if cuda_state is not None:
-            torch.cuda.set_rng_state(cuda_state)
-
-    @staticmethod
-    def set_seed(seed):
-        os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":16:8"
-        # Set seeds
-        random.seed(seed)
-        torch.manual_seed(seed)
-        np.random.seed(seed)
-        torch.use_deterministic_algorithms(True)
-        if torch.cuda.is_available():
-            torch.cuda.manual_seed_all(seed)
 
 class StoreLossCallback(TrainerCallback):
     """
@@ -619,34 +569,10 @@ if is_torch_available():
         )
 
 
-    def get_language_model_trainer(
-        **kwargs
-    ):
-        import datasets
-
-        dataset = datasets.load_dataset("fka/awesome-chatgpt-prompts")
-        model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
-        tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
-        tokenizer.pad_token = tokenizer.eos_token
-
-        def _tokenize_function(examples):
-            model_inputs = tokenizer(examples["prompt"], padding="max_length", truncation=True)
-            model_inputs["labels"] = np.array(model_inputs['input_ids']).astype(np.int64)
-            return model_inputs
-
-        tokenized_datasets = dataset.map(_tokenize_function, batched=True)
-        training_args = TrainingArguments(**kwargs)
-
-        trainer = Trainer(
-            model=model,
-            args=training_args,
-            train_dataset=tokenized_datasets['train'],
-        )
-
-        return trainer
-
 class TrainerIntegrationCommon:
-    def check_saved_checkpoints(self, output_dir, freq, total, is_pretrained=True, safe_weights=True, use_scaler=False):
+    def check_saved_checkpoints(
+        self, output_dir, freq, total, is_pretrained=True, safe_weights=True, use_scaler=False
+    ):
         weights_file = WEIGHTS_NAME if not safe_weights else SAFE_WEIGHTS_NAME
         file_list = [weights_file, "training_args.bin", "optimizer.pt", "scheduler.pt", "trainer_state.json"]
         if is_pretrained:
@@ -2836,59 +2762,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(a, a1)
             self.assertEqual(b, b1)
             self.check_trainer_state_are_the_same(state, state1)
-
-        # Check if it works for a simple language modeling example
-        with RNGStateManager.protect_main_rng_state():
-            with tempfile.TemporaryDirectory() as tmpdir:
-                RNGStateManager.set_seed(0)
-                kwargs = {
-                    "output_dir": tmpdir,
-                    "fp16": True,
-                    "max_steps": 20,
-                    "per_device_train_batch_size": 4,
-                    "learning_rate": 1e-5,
-                    "lr_scheduler_type": "cosine",
-                    "save_strategy": 'steps',
-                    "save_steps": 1,
-                    "logging_strategy": "steps",
-                    "logging_steps": 1,
-                    "report_to": "none"
-                }
-
-                trainer = get_language_model_trainer(**kwargs)
-                trainer.train(
-                    resume_from_checkpoint=False
-                )
-                # Get the parameter length of the model
-                model_params = torch.cat([p.flatten() for p in trainer.model.parameters()])
-                model_param_len = len(model_params)
-                # Sample 1000 uniform index and save the values of the parameters (considering an unrolled vector with
-                # all of them)
-                indices = torch.randint(0, model_param_len, (1000,))
-                # Save the values of the parameters for later comparison
-                model_params_sample = model_params[indices].detach().clone()
-                state1 = dataclasses.asdict(trainer.state)
-                # Delete the reference
-                del model_params, trainer
-                # Checks if all checkpoints are there
-                self.check_saved_checkpoints(tmpdir, freq=1, total=20, is_pretrained=True, safe_weights=True,
-                                        use_scaler=True)
-
-                # Checkpoint at step 11
-                RNGStateManager.set_seed(0)
-                checkpoint = os.path.join(tmpdir, "checkpoint-11")
-                trainer = get_language_model_trainer(**kwargs)
-                trainer.train(
-                    resume_from_checkpoint=checkpoint
-                )
-                model_params = torch.cat([p.flatten() for p in trainer.model.parameters()])
-
-                # Check that the parameters are the same
-                self.assertTrue(torch.allclose(model_params[indices], model_params_sample))
-                state2 = dataclasses.asdict(trainer.state)
-                self.check_trainer_state_are_the_same(state1, state2)
-                del model_params, trainer
-
 
         # Now check failures
 

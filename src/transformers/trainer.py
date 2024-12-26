@@ -3462,10 +3462,7 @@ class Trainer:
                 reissue_pt_warnings(caught_warnings)
 
         # Save SCALER
-        if (
-            self.args.should_save
-            and not is_torch_xla_available()
-        ):
+        if self.args.should_save and not is_torch_xla_available():
             with warnings.catch_warnings(record=True) as caught_warnings:
                 torch.save(self.accelerator.scaler.state_dict(), os.path.join(output_dir, SCALER_NAME))
             reissue_pt_warnings(caught_warnings)
@@ -3475,7 +3472,7 @@ class Trainer:
         if checkpoint is None:
             return
 
-        checkpoint_file_exists =  os.path.isfile(os.path.join(checkpoint, SCALER_NAME))
+        checkpoint_file_exists = os.path.isfile(os.path.join(checkpoint, SCALER_NAME))
 
         if checkpoint_file_exists:
             # On TPU we have to take some extra precautions to properly load the states on the right device.
