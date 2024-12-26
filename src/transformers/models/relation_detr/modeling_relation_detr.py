@@ -2067,8 +2067,8 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("SenseTime/deformable-detr")
-        >>> model = RelationDetrModel.from_pretrained("SenseTime/deformable-detr")
+        >>> image_processor = AutoImageProcessor.from_pretrained("xiuqhou/relation-detr-resnet50")
+        >>> model = RelationDetrModel.from_pretrained("xiuqhou/relation-detr-resnet50")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
 
@@ -2726,15 +2726,15 @@ class RelationDetrForObjectDetection(RelationDetrPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("SenseTime/deformable-detr")
-        >>> model = RelationDetrForObjectDetection.from_pretrained("SenseTime/deformable-detr")
+        >>> image_processor = AutoImageProcessor.from_pretrained("xiuqhou/relation-detr-resnet50")
+        >>> model = RelationDetrForObjectDetection.from_pretrained("xiuqhou/relation-detr-resnet50")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
 
         >>> # convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
         >>> target_sizes = torch.tensor([image.size[::-1]])
-        >>> results = image_processor.post_process_object_detection(outputs, threshold=0.5, target_sizes=target_sizes)[
+        >>> results = image_processor.post_process_object_detection(outputs, threshold=0.5, target_sizes=target_sizes)
         >>> result = results[0]
         >>> for score, label, box in zip(result["scores"], result["labels"], result["boxes"]):
         ...     box = [round(i, 2) for i in box.tolist()]
@@ -2742,9 +2742,11 @@ class RelationDetrForObjectDetection(RelationDetrPreTrainedModel):
         ...         f"Detected {model.config.id2label[label.item()]} with confidence "
         ...         f"{round(score.item(), 3)} at location {box}"
         ...     )
-        Detected cat with confidence 0.8 at location [16.5, 52.84, 318.25, 470.78]
-        Detected cat with confidence 0.789 at location [342.19, 24.3, 640.02, 372.25]
-        Detected remote with confidence 0.633 at location [40.79, 72.78, 176.76, 117.25]
+        Detected cat with confidence 0.956 at location [343.8, 24.9, 639.52, 371.71]
+        Detected cat with confidence 0.953 at location [12.6, 54.34, 316.37, 471.86]
+        Detected remote with confidence 0.946 at location [40.09, 73.49, 175.52, 118.06]
+        Detected remote with confidence 0.897 at location [333.09, 76.71, 369.77, 187.4]
+        Detected couch with confidence 0.896 at location [0.44, 0.53, 640.44, 475.54]
         ```"""
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
