@@ -1305,52 +1305,6 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
-    def _set_paged_attention_mod(self, past_key_value, bsz, q_len, device):
-        from torch.nn.attention.flex_attention import create_block_mask, noop_mask
-        block_mask = create_block_mask(noop_mask, bsz, 1, q_len, q_len, device=device, BLOCK_SIZE=past_key_value.paged_attentions[0].page_size)
-        block_mask = past_key_value.paged_attentions[0].convert_logical_block_mask(block_mask)
-        # from torch.nn.attention.flex_attention import create_block_mask
-        # def noop(score, b, h, q_idx, kv_idx):
-        #     return score
-        # def causal_mask(score, b, h, q_idx, kv_idx):
-        #     return torch.where(q_idx >= kv_idx, score, -float("inf"))
-
-        # def generate_causal_offset(offset: torch.Tensor):
-        #     def causal_offset_mask(b, h, q_idx, kv_idx):
-        #         return (offset + q_idx) >= kv_idx
-
-        #     return causal_offset_mask
-        # if past_key_value.get_seq_length() == 0:
-        #     mod = generate_causal_offset(
-        #         torch.tensor(q_len, device=device, dtype=torch.int32)
-        #     )
-        # else:
-        #     mod = generate_causal_offset(
-        #         torch.tensor(past_key_value.get_seq_length(), device=device, dtype=torch.int32)
-        #     )
-        # idx = 0
-        # if q_len == 1:
-        #     idx = 1
-        # block_mask = create_block_mask(mod, bsz, 1, q_len, q_len, device=device, BLOCK_SIZE=past_key_value.paged_attentions[0].page_size)
-        # block_mask = past_key_value.paged_attentions[0].convert_logical_block_mask(block_mask)
-        # past_key_value.block_mask = block_mask
-        # copy attritubes to avoid re-compile
-        past_key_value.block_mask.kv_num_blocks = block_mask.kv_num_blocks
-        past_key_value.block_mask.kv_indices = block_mask.kv_indices
-        past_key_value.block_mask.full_kv_num_blocks = block_mask.full_kv_num_blocks
-        past_key_value.block_mask.full_kv_indices = block_mask.full_kv_indices
-        past_key_value.block_mask.q_num_blocks = block_mask.q_num_blocks
-        past_key_value.block_mask.q_indices = block_mask.q_indices
-        past_key_value.block_mask.full_q_num_blocks = block_mask.full_q_num_blocks
-        past_key_value.block_mask.full_q_indices = block_mask.full_q_indices
-        past_key_value.block_mask.BLOCK_SIZE = block_mask.BLOCK_SIZE
-        past_key_value.block_mask.sparsity = block_mask.sparsity
-        past_key_value.block_mask.mask_mod = block_mask.mask_mod
-
-        # score_mod = past_key_value.paged_attentions[0].get_score_mod(causal_mask if q_len > 1 else noop)
-        # if past_key_value.score_mods[idx] is None:
-        #     past_key_value.score_mods[idx] = score_mod
-
     @add_start_docstrings_to_model_forward(LLAMA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(

@@ -3225,26 +3225,7 @@ class GenerationMixin:
             # prepare variable output controls (note: some models won't accept all output controls)
             model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
             model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
-            # if self.config._attn_implementation == "paged_attention" and model_inputs["input_ids"].shape[1] == 1:
-            #     self._set_paged_attention_mod(model_inputs['past_key_values'], model_inputs['input_ids'].shape[0], model_inputs['input_ids'].shape[1], input_ids.device)
-            # forward pass to get next token
-            # if model_inputs['input_ids'].shape[1]>1:
-            #     outputs = self(**model_inputs, return_dict=True)
-            #     outputs = self(**model_inputs, return_dict=True)
-            # def trace_handler(prof):
-            #     print(prof.key_averages().table(
-            #         sort_by="self_cpu_time_total", row_limit=-1))
-            # with torch.profiler.profile(
-            #         activities=[
-            #             torch.profiler.ProfilerActivity.CPU],
-            #         schedule=torch.profiler.schedule(
-            #             wait=0,
-            #             warmup=0,
-            #             active=1),
-            #         on_trace_ready=trace_handler
-            #         ) as prof:
             outputs = self(**model_inputs, return_dict=True)
-            #   prof.step()
             # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs,
