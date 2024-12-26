@@ -15,10 +15,11 @@
 # limitations under the License.
 import copy
 import inspect
+import time
 import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union
-import time
+
 import numpy as np
 import torch
 import torch.distributed as dist
@@ -32,7 +33,6 @@ from ..cache_utils import (
     OffloadedCache,
     QuantizedCacheConfig,
     StaticCache,
-    PagedAttentionCache,
 )
 from ..configuration_utils import PretrainedConfig
 from ..integrations.deepspeed import is_deepspeed_zero3_enabled

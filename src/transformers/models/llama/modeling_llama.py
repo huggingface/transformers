@@ -619,6 +619,7 @@ class LlamaSdpaAttention(LlamaAttention):
 
         return attn_output, None, past_key_value
 
+
 class LlamaFlexAttention(LlamaAttention):
     """
     Llama attention module using torch.nn.attention.flex_attention.flex_attention. This module inherits from
@@ -639,7 +640,6 @@ class LlamaFlexAttention(LlamaAttention):
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.46
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-
         bsz, q_len, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states)
@@ -670,18 +670,26 @@ class LlamaFlexAttention(LlamaAttention):
         key_states = repeat_kv(key_states, self.num_key_value_groups)
         value_states = repeat_kv(value_states, self.num_key_value_groups)
 
-        if query_states.device.type == "cuda" and causal_mask is not None:
+        if query_states.device.type == "cuda":
             query_states = query_states.contiguous()
             key_states = key_states.contiguous()
             value_states = value_states.contiguous()
 
-        from torch.nn.attention.flex_attention import flex_attention, create_block_mask
+        from torch.nn.attention.flex_attention import flex_attention
+
         def noop(score, b, h, q_idx, kv_idx):
             return score
+
         def causal_mask(score, b, h, q_idx, kv_idx):
             return torch.where(q_idx >= kv_idx, score, -float("inf"))
 
-        attn_output = flex_attention(query_states, key_states, value_states, score_mod=causal_mask if q_len > 1 else noop, return_lse=output_attentions)
+        attn_output = flex_attention(
+            query_states,
+            key_states,
+            value_states,
+            score_mod=causal_mask if q_len > 1 else noop,
+            return_lse=output_attentions,
+        )
         attn_weights = None
         if output_attentions:
             attn_output = attn_output[0]
@@ -715,7 +723,6 @@ class LlamaPagedAttention(LlamaAttention):
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.46
         **kwargs,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-
         bsz, q_len, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states)
@@ -762,11 +769,21 @@ class LlamaPagedAttention(LlamaAttention):
             if past_key_value is not None:
                 # sin and cos are specific to RoPE models; cache_position needed for the static cache
                 cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-                key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+                key_states, value_states = past_key_value.update(
+                    key_states, value_states, self.layer_idx, cache_kwargs
+                )
             key_states = repeat_kv(key_states, self.num_key_value_groups)
             value_states = repeat_kv(value_states, self.num_key_value_groups)
             from torch.nn.attention.flex_attention import flex_attention
-            attn_output = flex_attention(query_states, key_states, value_states, block_mask=past_key_value.block_mask,  return_lse=output_attentions, kernel_options={"SKIP_MASK_SCORE": True})
+
+            attn_output = flex_attention(
+                query_states,
+                key_states,
+                value_states,
+                block_mask=past_key_value.block_mask,
+                return_lse=output_attentions,
+                kernel_options={"SKIP_MASK_SCORE": True},
+            )
         attn_weights = None
         if output_attentions:
             attn_output = attn_output[0]

@@ -258,6 +258,7 @@ class GPTJAttention(nn.Module):
 
         return outputs  # a, present, (attentions)
 
+
 class GPTJPagedAttention(nn.Module):
     def __init__(self, config, layer_idx=None):
         super().__init__()
@@ -415,7 +416,15 @@ class GPTJPagedAttention(nn.Module):
                 key, value = layer_past.update(key, value, self.layer_idx, cache_kwargs)
 
             from torch.nn.attention.flex_attention import flex_attention
-            attn_output = flex_attention(query.to(key.dtype), key, value, block_mask=layer_past.block_mask,  return_lse=False, kernel_options={"SKIP_MASK_SCORE": True})
+
+            attn_output = flex_attention(
+                query.to(key.dtype),
+                key,
+                value,
+                block_mask=layer_past.block_mask,
+                return_lse=False,
+                kernel_options={"SKIP_MASK_SCORE": True},
+            )
 
         attn_weights = None
 
@@ -428,6 +437,7 @@ class GPTJPagedAttention(nn.Module):
             outputs += (attn_weights,)
 
         return outputs  # a, present, (attentions)
+
 
 class GPTJFlashAttention2(GPTJAttention):
     """

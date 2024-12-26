@@ -2123,7 +2123,9 @@ class OffloadedStaticCache(StaticCache):
 
 
 class PagedAttentionCache(Cache):
-    def __init__(self, config, batch_size, max_cache_len, device, dtype, layer_device_map, n_pages=None, page_size=128):
+    def __init__(
+        self, config, batch_size, max_cache_len, device, dtype, layer_device_map, n_pages=None, page_size=128
+    ):
         super().__init__()
         self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
         self.paged_attentions = []
@@ -2180,7 +2182,14 @@ class PagedAttentionCache(Cache):
         KV_B, KV_H, KV_S, QK_D = key_states.shape
         device = key_states.device
         batch_idx = torch.arange(KV_B, device=device, dtype=torch.int32)
-        self.paged_attentions[layer_idx].assign(batch_idx, cache_kwargs['cache_position'], key_states, value_states, self.key_cache[layer_idx], self.value_cache[layer_idx])
+        self.paged_attentions[layer_idx].assign(
+            batch_idx,
+            cache_kwargs["cache_position"],
+            key_states,
+            value_states,
+            self.key_cache[layer_idx],
+            self.value_cache[layer_idx],
+        )
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:

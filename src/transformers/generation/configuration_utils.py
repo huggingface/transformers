@@ -54,12 +54,12 @@ if is_torch_available():
         HybridCache,
         MambaCache,
         OffloadedStaticCache,
+        PagedAttentionCache,
         QuantizedCacheConfig,
         QuantoQuantizedCache,
         SlidingWindowCache,
         StaticCache,
         StaticCacheConfig,
-        PagedAttentionCache,
     )
     from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
 
