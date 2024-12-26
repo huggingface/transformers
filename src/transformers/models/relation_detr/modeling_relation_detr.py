@@ -502,8 +502,8 @@ class RelationDetrConvEncoderPostLayerNorm(nn.Module):
     def __init__(
         self,
         in_channels: int,
-        post_layer_norm: bool = False,
         backbone_features_format: Literal["channels_first", "channels_last"] = "channels_first",
+        post_layer_norm: bool = False,
     ):
         super().__init__()
         self.in_channels = in_channels
