@@ -27,9 +27,6 @@ import torch.nn.functional as F
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
-# if is_torch_greater_or_equal("2.6"):
-from torch.nn.attention.flex_attention import BlockMask, create_block_mask, flex_attention
-
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, MaskedLMOutput, SequenceClassifierOutput, TokenClassifierOutput
@@ -41,7 +38,7 @@ from ...utils import (
     is_flash_attn_2_available,
     logging,
 )
-from ...utils.import_utils import is_triton_available
+from ...utils.import_utils import is_torch_flex_attn_available, is_triton_available
 from .configuration_modernbert import ModernBertConfig
 
 
@@ -51,6 +48,12 @@ if is_flash_attn_2_available():
     from flash_attn.ops.triton.rotary import apply_rotary
 else:
     RotaryEmbedding = object
+
+# NOTE : the ModernBERT flexattention implementation is not compatible with torch < 2.6
+if is_torch_flex_attn_available():
+    from torch.nn.attention.flex_attention import BlockMask, create_block_mask, flex_attention
+else:
+    BlockMask, create_block_mask, flex_attention = object, object, object
 
 logger = logging.get_logger(__name__)
 
@@ -418,19 +421,19 @@ def flex_attention_forward(
     module: "ModernBertAttention",
     qkv: torch.Tensor,
     rotary_emb: ModernBertUnpaddedRotaryEmbedding,
-    cu_seqlens: torch.Tensor,
+    position_ids: Optional[torch.LongTensor],
     block_mask: "BlockMask",
     max_seqlen: int,
     bs: int,
     dim: int,
     **_kwargs,
 ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-    qkv = rotary_emb(qkv, cu_seqlens=cu_seqlens, max_seqlen=max_seqlen)
-    query, key, value = qkv.unbind(dim=1)
-
-    query = query.transpose(0, 1).unsqueeze(0)
-    key = key.transpose(0, 1).unsqueeze(0)
-    value = value.transpose(0, 1).unsqueeze(0)
+    # add dummy batch dimension -> [batch_size=1, total_nnz, 3, nheads, headdim]
+    qkv = qkv.unsqueeze(0)
+    cos, sin = rotary_emb(qkv, position_ids=position_ids)
+    query, key, value = qkv.transpose(3, 1).unbind(dim=2)
+    # query, key, value: [batch_size, nheads, total_nnz, head_dim]
+    query, key = apply_rotary_pos_emb(query, key, cos, sin)
 
     attn_output = flex_attention(
         query,
@@ -494,7 +497,7 @@ class ModernBertAttention(nn.Module):
                 rope_theta = config.local_rope_theta
             max_position_embeddings = config.local_attention
 
-        if config._attn_implementation in ["flash_attention_2", "flex_attention"]:
+        if config._attn_implementation in ["flash_attention_2"]:
             self.rotary_emb = ModernBertUnpaddedRotaryEmbedding(
                 dim=self.head_dim, max_seqlen=max_position_embeddings, base=rope_theta
             )
@@ -907,7 +910,6 @@ class ModernBertModel(ModernBertPreTrainedModel):
             H=None,
             Q_LEN=total_nnz,
             KV_LEN=total_nnz,
-            # BLOCK_SIZE=block_size,
             device=sequence_ids.device,
         )
         return block_mask
@@ -959,6 +961,8 @@ class ModernBertModel(ModernBertPreTrainedModel):
                     input_ids, indices, cu_seqlens, max_seqlen, *_ = _unpad_modernbert_input(
                         inputs=input_ids, attention_mask=attention_mask
                     )
+            if self.config._attn_implementation == "flex_attention":
+                position_ids = torch.arange(cu_seqlens[-1], device=cu_seqlens.device).unsqueeze(0)
         else:
             if position_ids is None:
                 position_ids = torch.arange(seq_len, device=input_ids.device).unsqueeze(0)
@@ -972,13 +976,10 @@ class ModernBertModel(ModernBertPreTrainedModel):
         # create block mask
         if self.config._attn_implementation == "flex_attention":
             sequence_ids = self.offsets_to_sequence_ids_tensor(cu_seqlens)
-            assert self.config.local_attention == 128
             local_window_size = self.config.local_attention // 2
             _cached_local_mask = self.create_attention_mask(sequence_ids, cu_seqlens, local_window_size)
             global_window_size = max_seqlen
             _cached_global_mask = self.create_attention_mask(sequence_ids, cu_seqlens, global_window_size)
-
-            # block_mask = self.create_attention_mask(sequence_ids, cu_seqlens, window_size)
         else:
             block_mask = None
 
