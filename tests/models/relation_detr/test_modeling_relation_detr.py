@@ -116,7 +116,6 @@ class RelationDetrModelTester:
                     high=self.num_labels, size=(self.n_targets,), device=torch_device
                 )
                 target["boxes"] = torch.rand(self.n_targets, 4, device=torch_device)
-                target["masks"] = torch.rand(self.n_targets, self.image_size, self.image_size, device=torch_device)
                 labels.append(target)
 
         config = self.get_config()
@@ -215,13 +214,6 @@ class RelationDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
                     )
                     target["boxes"] = torch.ones(
                         self.model_tester.n_targets, 4, device=torch_device, dtype=torch.float
-                    )
-                    target["masks"] = torch.ones(
-                        self.model_tester.n_targets,
-                        self.model_tester.image_size,
-                        self.model_tester.image_size,
-                        device=torch_device,
-                        dtype=torch.float,
                     )
                     labels.append(target)
                 inputs_dict["labels"] = labels
