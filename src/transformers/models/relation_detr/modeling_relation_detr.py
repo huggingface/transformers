@@ -516,6 +516,14 @@ class RelationDetrConvEncoderPostLayerNorm(nn.Module):
             self.norms = nn.ModuleList([nn.LayerNorm(channel, eps=layer_norm_eps) for channel in in_channels])
 
     def forward(self, multi_level_feats: List[Tensor]):
+        # do some check on the input according to backbone_features_format
+        channel_dim = 1 if self.backbone_features_format == "channels_first" else -1
+        for prev_feat, feat in zip(multi_level_feats[:-1], multi_level_feats[1:]):
+            if not (prev_feat.shape[channel_dim] < feat.shape[channel_dim]):
+                raise ValueError(
+                    "Feature maps should be in increasing order of channels, make sure `backbone_features_format` is right"
+                )
+
         if self.post_layer_norm:
             if self.backbone_features_format == "channels_first":
                 # convert (batch_size, channels, height, width) -> (batch_size, height, width, channels)

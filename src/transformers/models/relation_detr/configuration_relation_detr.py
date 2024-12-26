@@ -229,6 +229,11 @@ class RelationDetrConfig(PretrainedConfig):
             backbone_kwargs=backbone_kwargs,
         )
 
+        assert backbone_features_format in ["channels_first", "channels_last"], (
+            f"`backbone_features_format` should be either 'channels_first' or 'channels_last', "
+            f"but got {backbone_features_format}."
+        )
+
         self.use_timm_backbone = use_timm_backbone
         self.backbone_config = backbone_config
         self.backbone_features_format = backbone_features_format
