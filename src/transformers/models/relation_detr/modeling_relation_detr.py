@@ -504,6 +504,7 @@ class RelationDetrConvEncoderPostLayerNorm(nn.Module):
         in_channels: int,
         backbone_features_format: Literal["channels_first", "channels_last"] = "channels_first",
         post_layer_norm: bool = False,
+        layer_norm_eps: float = 1e-5,
     ):
         super().__init__()
         self.in_channels = in_channels
@@ -512,7 +513,7 @@ class RelationDetrConvEncoderPostLayerNorm(nn.Module):
         if self.backbone_features_format not in ["channels_first", "channels_last"]:
             raise ValueError("`backbone_features_format` should be either 'channels_first' or 'channels_last'")
         if self.post_layer_norm:
-            self.norms = nn.ModuleList([nn.LayerNorm(channel) for channel in in_channels])
+            self.norms = nn.ModuleList([nn.LayerNorm(channel, eps=layer_norm_eps) for channel in in_channels])
 
     def forward(self, multi_level_feats: List[Tensor]):
         if self.post_layer_norm:
@@ -576,6 +577,7 @@ class RelationDetrConvEncoder(nn.Module):
             in_channels=self.intermediate_channel_sizes,
             backbone_features_format=config.backbone_features_format,
             post_layer_norm=config.backbone_post_layer_norm,
+            layer_norm_eps=config.layer_norm_eps,
         )
 
     def forward(self, pixel_values: torch.Tensor):
@@ -1062,18 +1064,18 @@ class RelationDetrDecoderLayer(nn.Module):
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
 
-        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         # cross-attention
         self.encoder_attn = RelationDetrMultiscaleDeformableAttention(
             config,
             num_heads=config.decoder_attention_heads,
             n_points=config.decoder_n_points,
         )
-        self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
         # feedforward neural networks
         self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
         self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.final_layer_norm = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
 
     def forward(
         self,
@@ -1293,7 +1295,7 @@ class RelationDetrEncoder(RelationDetrPreTrainedModel):
             nn.Linear(config.d_model * (config.encoder_layers + 1), config.d_model),
             nn.ReLU(inplace=True),
             nn.Linear(config.d_model, config.d_model),
-            nn.LayerNorm(config.d_model),
+            nn.LayerNorm(config.d_model, eps=config.layer_norm_eps),
         )
 
         # Initialize weights and apply final processing
@@ -1601,7 +1603,7 @@ class RelationDetrDecoder(RelationDetrPreTrainedModel):
                 for _ in range(config.decoder_layers)
             ]
         )
-        self.norm = nn.LayerNorm(config.d_model)
+        self.norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
         self.position_relation_embedding = PositionRelationEmbedding(
             embedding_dim=config.d_relation,
             num_heads=config.num_attention_heads,
@@ -1905,7 +1907,7 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
         self.hybrid_target_embed = nn.Embedding(config.hybrid_queries, config.d_model)
 
         self.enc_output = nn.Linear(config.d_model, config.d_model)
-        self.enc_output_norm = nn.LayerNorm(config.d_model)
+        self.enc_output_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
 
         self.encoder_class_head = nn.Linear(config.d_model, config.num_labels)
         self.hybrid_class_head = nn.Linear(config.d_model, config.num_labels)

@@ -86,6 +86,8 @@ class RelationDetrConfig(PretrainedConfig):
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
         d_model (`int`, *optional*, defaults to 256):
             Dimension of the layers.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-05):
+            The epsilon used by the layer normalization layers.
         d_relation (`int`, *optional*, defaults to 16):
             Dimension of the sin-cos embedding of position relation.
         rel_temperature (`float`, *optional*, defaults to 10000):
@@ -186,6 +188,7 @@ class RelationDetrConfig(PretrainedConfig):
         decoder_attention_heads=8,
         activation_function="relu",
         d_model=256,
+        layer_norm_eps=1e-5,
         d_relation=16,
         rel_temperature=10000,
         rel_scale=100,
@@ -248,6 +251,7 @@ class RelationDetrConfig(PretrainedConfig):
         self.decoder_attention_heads = decoder_attention_heads
         self.activation_function = activation_function
         self.d_model = d_model
+        self.layer_norm_eps = layer_norm_eps
         self.d_relation = d_relation
         self.rel_temperature = rel_temperature
         self.rel_scale = rel_scale
