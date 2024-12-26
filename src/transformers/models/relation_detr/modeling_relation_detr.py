@@ -2297,7 +2297,7 @@ class GenerateDNQueries(nn.Module):
             The probability of the label being noised.
         box_noise_scale (`float`, *optional*, defaults to 0.4):
             Scaling factor for box noising.
-        with_indicator (`bool`, *optional*, defaults to False):
+        with_indicator (`bool`, *optional*, defaults to `False`):
             Whether to add indicator in noised label/box queries.
     """
 
