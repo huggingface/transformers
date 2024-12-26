@@ -57,6 +57,7 @@ else:
 
 
 if is_deepspeed_available():
+    import deepspeed.comm as deepspeed_comm
     from deepspeed.sequence.layer import _SeqAllToAll
     from deepspeed.utils import groups as deepspeed_groups
 
@@ -466,14 +467,14 @@ def deepspeed_load_checkpoint(deepspeed_engine, checkpoint_path, load_module_str
 def deepspeed_ulysses_attention(attn_func, seq_dim=1, head_dim=2):
     def wrapped(*args, **kwargs):
         if is_deepspeed_sp_enabled():
-            spg = deepspeed_groups._get_sequence_parallel_group()
+            sp_group = deepspeed_groups._get_sequence_parallel_group()
             scatter_idx = head_dim  # Scatter on num_heads dimension
             gather_idx = seq_dim  # Gather on seq_len dimension
             batch_dim_idx = 0  # Synonymous with the batch_first==true
             args = list(args)
-            args[0] = _SeqAllToAll.apply(spg, args[0], scatter_idx, gather_idx, batch_dim_idx)
-            args[1] = _SeqAllToAll.apply(spg, args[1], scatter_idx, gather_idx, batch_dim_idx)
-            args[2] = _SeqAllToAll.apply(spg, args[2], scatter_idx, gather_idx, batch_dim_idx)
+            args[0] = _SeqAllToAll.apply(sp_group, args[0], scatter_idx, gather_idx, batch_dim_idx)
+            args[1] = _SeqAllToAll.apply(sp_group, args[1], scatter_idx, gather_idx, batch_dim_idx)
+            args[2] = _SeqAllToAll.apply(sp_group, args[2], scatter_idx, gather_idx, batch_dim_idx)
             args = tuple(args)
 
         attn_output = attn_func(*args, **kwargs)
@@ -482,7 +483,7 @@ def deepspeed_ulysses_attention(attn_func, seq_dim=1, head_dim=2):
             scatter_idx = seq_dim  # Scatter back on seq_len dimension
             gather_idx = head_dim  # Gather on num_heads dimension
             batch_dim_idx = 0
-            attn_output = _SeqAllToAll.apply(spg, attn_output, scatter_idx, gather_idx, batch_dim_idx)
+            attn_output = _SeqAllToAll.apply(sp_group, attn_output, scatter_idx, gather_idx, batch_dim_idx)
 
         return attn_output
 
@@ -503,3 +504,40 @@ def support_deepspeed_ulysses(module):
     module.sp_group_size = sp_group_size
 
     return module
+
+
+def deepspeed_ulysses_cross_entropy(
+    input,
+    target,
+    ignore_index=-100,
+    reduction="mean",
+):
+    # vocab_seq_parallel_logits: [S/P, V]
+    # target: [S/P, B]
+    # return: [S, B]
+
+    # Need softmax for backward
+    loss = torch.nn.functional.cross_entropy(
+        input,
+        target,
+        ignore_index=ignore_index,
+        reduction=reduction,
+    )
+
+    sp_group = deepspeed_groups._get_sequence_parallel_group()
+    sp_size = deepspeed_groups._get_sequence_parallel_world_size()
+
+    if reduction == "none":
+        seqlen = input.size(0) * sp_size
+    else:
+        seqlen = sp_size
+
+    loss_all = torch.empty(
+        seqlen,
+        dtype=input.dtype,
+        device=input.device,
+    )
+
+    deepspeed_comm.all_gather_into_tensor(loss_all, loss, group=sp_group)
+
+    return loss_all

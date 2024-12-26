@@ -53,7 +53,7 @@ import torch.distributed as dist
 from huggingface_hub import ModelCard, create_repo, upload_folder
 from packaging import version
 from torch import nn
-from torch.utils.data import DataLoader, Dataset, IterableDataset, RandomSampler, SequentialSampler
+from torch.utils.data import DataLoader, Dataset, DistributedSampler, IterableDataset, RandomSampler, SequentialSampler
 
 from . import __version__
 from .configuration_utils import PretrainedConfig
@@ -964,7 +964,13 @@ class Trainer:
 
         if self.is_deepspeed_enabled and is_deepspeed_sp_enabled():
             assert self.args.group_by_length is False, "Group by length is not supported with sequence parallelism."
-            return SequentialSampler(self.train_dataset)
+            ds_plugin = self.accelerator.state.deepspeed_plugin
+            return DistributedSampler(
+                self.train_dataset,
+                num_replicas=ds_plugin.data_parallel_size,
+                rank=self.args.process_index // ds_plugin.sequence_parallel_size,
+                shuffle=True,
+            )
 
         elif self.args.group_by_length:
             if is_datasets_available() and isinstance(self.train_dataset, datasets.Dataset):
@@ -1028,7 +1034,12 @@ class Trainer:
             return None
         # Build the sampler.
         if self.is_deepspeed_enabled and is_deepspeed_sp_enabled():
-            return SequentialSampler(self.eval_dataset)
+            ds_plugin = self.accelerator.state.deepspeed_plugin
+            return SequentialDistributedSampler(
+                self.train_dataset,
+                num_replicas=ds_plugin.data_parallel_size,
+                rank=self.args.process_index // ds_plugin.sequence_parallel_size,
+            )
 
         # Deprecated code
         if self.args.use_legacy_prediction_loop:
