@@ -2735,9 +2735,9 @@ class RelationDetrForObjectDetection(RelationDetrPreTrainedModel):
         >>> # convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
         >>> target_sizes = torch.tensor([image.size[::-1]])
         >>> results = image_processor.post_process_object_detection(outputs, threshold=0.5, target_sizes=target_sizes)[
-        ...     0
-        ... ]
-        >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
+        >>> result = results[0]
+        
+        >>> for score, label, box in zip(result["scores"], result["labels"], result["boxes"]):
         ...     box = [round(i, 2) for i in box.tolist()]
         ...     print(
         ...         f"Detected {model.config.id2label[label.item()]} with confidence "
