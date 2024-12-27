@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Convert RT Detrv2 checkpoints with Timm backbone"""
+"""Convert RT Detr checkpoints with Timm backbone"""
 
 import argparse
 import json
@@ -24,8 +24,8 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision import transforms
 
-from transformers.models.rt_detr.image_processing_rt_detr import RTDetrImageProcessor
-from transformers.models.rt_detr_v2.modular_rtdetrv2 import RtDetrV2Config, RtDetrV2ForObjectDetection
+from transformers import RTDetrConfig, RTDetrForObjectDetection, RTDetrImageProcessor
+from transformers.models.rt_detr_v2.modular_rt_detr_v2 import RtDetrV2Config, RtDetrV2ForObjectDetection
 from transformers.utils import logging
 
 
@@ -33,7 +33,7 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
-def get_rt_detr_v2_config(model_name: str) -> RtDetrV2Config:
+def get_rt_detr_config(model_name: str) -> RtDetrV2Config:
     config = RtDetrV2Config()
 
     config.num_labels = 80
@@ -224,7 +224,7 @@ def create_rename_keys(config):
         for last in last_key:
             rename_keys.append((f"encoder.input_proj.{j}.norm.{last}", f"model.encoder_input_proj.{j}.1.{last}"))
 
-    block_levels = 4
+    block_levels = 3 if config.backbone_config.layer_type != "basic" else 4
 
     for i in range(len(config.encoder_in_channels) - 1):
         # encoder layers: hybridencoder parts
@@ -372,12 +372,6 @@ def create_rename_keys(config):
         rename_keys.append(
             (f"decoder.decoder.layers.{i}.norm2.bias", f"model.decoder.layers.{i}.encoder_attn_layer_norm.bias")
         )
-        rename_keys.append(
-            (
-                f"decoder.decoder.layers.{i}.cross_attn.num_points_scale",
-                f"model.decoder.layers.{i}.encoder_attn.n_points_scale",
-            )
-        )
         rename_keys.append((f"decoder.decoder.layers.{i}.linear1.weight", f"model.decoder.layers.{i}.fc1.weight"))
         rename_keys.append((f"decoder.decoder.layers.{i}.linear1.bias", f"model.decoder.layers.{i}.fc1.bias"))
         rename_keys.append((f"decoder.decoder.layers.{i}.linear2.weight", f"model.decoder.layers.{i}.fc2.weight"))
@@ -387,6 +381,12 @@ def create_rename_keys(config):
         )
         rename_keys.append(
             (f"decoder.decoder.layers.{i}.norm3.bias", f"model.decoder.layers.{i}.final_layer_norm.bias")
+        )
+        rename_keys.append(
+            (
+                f"decoder.decoder.layers.{i}.cross_attn.num_points_scale",
+                f"model.decoder.layers.{i}.encoder_attn.n_points_scale",
+            )
         )
 
     for i in range(config.decoder_layers):
@@ -464,18 +464,18 @@ def create_rename_keys(config):
             ("decoder.query_pos_head.layers.0.bias", "model.decoder.query_pos_head.layers.0.bias"),
             ("decoder.query_pos_head.layers.1.weight", "model.decoder.query_pos_head.layers.1.weight"),
             ("decoder.query_pos_head.layers.1.bias", "model.decoder.query_pos_head.layers.1.bias"),
-            ("decoder.enc_output.proj.weight", "model.encoder_output.0.weight"),
-            ("decoder.enc_output.proj.bias", "model.encoder_output.0.bias"),
-            ("decoder.enc_output.norm.weight", "model.encoder_output.1.weight"),
-            ("decoder.enc_output.norm.bias", "model.encoder_output.1.bias"),
-            ("decoder.enc_score_head.weight", "model.encoder_score_head.weight"),
-            ("decoder.enc_score_head.bias", "model.encoder_score_head.bias"),
-            ("decoder.enc_bbox_head.layers.0.weight", "model.encoder_bbox_head.layers.0.weight"),
-            ("decoder.enc_bbox_head.layers.0.bias", "model.encoder_bbox_head.layers.0.bias"),
-            ("decoder.enc_bbox_head.layers.1.weight", "model.encoder_bbox_head.layers.1.weight"),
-            ("decoder.enc_bbox_head.layers.1.bias", "model.encoder_bbox_head.layers.1.bias"),
-            ("decoder.enc_bbox_head.layers.2.weight", "model.encoder_bbox_head.layers.2.weight"),
-            ("decoder.enc_bbox_head.layers.2.bias", "model.encoder_bbox_head.layers.2.bias"),
+            ("decoder.enc_output.proj.weight", "model.enc_output.0.weight"),
+            ("decoder.enc_output.proj.bias", "model.enc_output.0.bias"),
+            ("decoder.enc_output.norm.weight", "model.enc_output.1.weight"),
+            ("decoder.enc_output.norm.bias", "model.enc_output.1.bias"),
+            ("decoder.enc_score_head.weight", "model.enc_score_head.weight"),
+            ("decoder.enc_score_head.bias", "model.enc_score_head.bias"),
+            ("decoder.enc_bbox_head.layers.0.weight", "model.enc_bbox_head.layers.0.weight"),
+            ("decoder.enc_bbox_head.layers.0.bias", "model.enc_bbox_head.layers.0.bias"),
+            ("decoder.enc_bbox_head.layers.1.weight", "model.enc_bbox_head.layers.1.weight"),
+            ("decoder.enc_bbox_head.layers.1.bias", "model.enc_bbox_head.layers.1.bias"),
+            ("decoder.enc_bbox_head.layers.2.weight", "model.enc_bbox_head.layers.2.weight"),
+            ("decoder.enc_bbox_head.layers.2.bias", "model.enc_bbox_head.layers.2.bias"),
         ]
     )
 
@@ -537,13 +537,13 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_rt_detr_v2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, repo_id):
+def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, repo_id):
     """
     Copy/paste/tweak model's weights to our RTDETR structure.
     """
 
     # load default config
-    config = get_rt_detr_v2_config(model_name)
+    config = get_rt_detr_config(model_name)
 
     # load original model from torch hub
     model_name_to_checkpoint_url = {
@@ -558,6 +558,7 @@ def convert_rt_detr_v2_checkpoint(model_name, pytorch_dump_folder_path, push_to_
         "ema"
     ]["module"]
 
+
     # rename keys
     for src, dest in create_rename_keys(config):
         rename_key(state_dict, src, dest)
@@ -571,14 +572,16 @@ def convert_rt_detr_v2_checkpoint(model_name, pytorch_dump_folder_path, push_to_
         if "bbox_embed" in key or ("class_embed" in key and "denoising_" not in key):
             state_dict[key.split("model.decoder.")[-1]] = state_dict[key]
 
-    # This layer is not required since it is static layer
+    # no need in ckpt
     del state_dict["decoder.anchors"]
     del state_dict["decoder.valid_mask"]
 
     # finally, create HuggingFace model and load state dict
     model = RtDetrV2ForObjectDetection(config)
+    breakpoint()
     model.load_state_dict(state_dict)
     model.eval()
+
 
     # load image processor
     image_processor = RTDetrImageProcessor()
@@ -607,6 +610,7 @@ def convert_rt_detr_v2_checkpoint(model_name, pytorch_dump_folder_path, push_to_
     # Pass image by the model
     outputs = model(pixel_values)
 
+    breakpoint()
     if model_name == "rtdetr_v2_r18vd":
         expected_slice_logits = torch.tensor(
             [[-3.7045, -5.1913, -6.1787], [-4.0106, -9.3450, -5.2043], [-4.1287, -4.7463, -5.8634]]
@@ -645,7 +649,7 @@ def convert_rt_detr_v2_checkpoint(model_name, pytorch_dump_folder_path, push_to_
     else:
         raise ValueError(f"Unknown rt_detr_v2_name: {model_name}")
 
-    assert torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits.to(outputs.logits.device), atol=1e-3)
+    assert torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits.to(outputs.logits.device), atol=1e-4)
     assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes.to(outputs.pred_boxes.device), atol=1e-3)
 
     if pytorch_dump_folder_path is not None:
@@ -659,16 +663,14 @@ def convert_rt_detr_v2_checkpoint(model_name, pytorch_dump_folder_path, push_to_
         # Upload model, image processor and config to the hub
         logger.info("Uploading PyTorch model and image processor to the hub...")
         config.push_to_hub(
-            repo_id=repo_id,
-            commit_message="Add config from convert_rt_detr_v2_original_pytorch_checkpoint_to_pytorch.py",
+            repo_id=repo_id, commit_message="Add config from convert_rt_detr_original_pytorch_checkpoint_to_pytorch.py"
         )
         model.push_to_hub(
-            repo_id=repo_id,
-            commit_message="Add model from convert_rt_detr_v2_original_pytorch_checkpoint_to_pytorch.py",
+            repo_id=repo_id, commit_message="Add model from convert_rt_detr_original_pytorch_checkpoint_to_pytorch.py"
         )
         image_processor.push_to_hub(
             repo_id=repo_id,
-            commit_message="Add image processor from convert_rt_detr_v2_original_pytorch_checkpoint_to_pytorch.py",
+            commit_message="Add image processor from convert_rt_detr_original_pytorch_checkpoint_to_pytorch.py",
         )
 
 
@@ -690,4 +692,4 @@ if __name__ == "__main__":
         help="repo_id where the model will be pushed to.",
     )
     args = parser.parse_args()
-    convert_rt_detr_v2_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub, args.repo_id)
+    convert_rt_detr_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub, args.repo_id)
