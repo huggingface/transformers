@@ -3939,11 +3939,11 @@ class Trainer:
 
         # Good practice: save your training arguments together with the trained model
         if not binary_serializiation:
-                self.args.to_json_file(os.path.join(output_dir, TRAINING_ARGS_NAME))
-                logger.info(
-                    "safe serialization has been enabled by default and the training args will be stored in a {TRAINING_ARGS_NAME} \n"
-                    "to fall back to the {DEPRECATED_ARGS_NAME} you can set os.environ['binary_serializiation']= '1' "
-                )
+            self.args.to_json_file(os.path.join(output_dir, TRAINING_ARGS_NAME))
+            logger.info(
+                "safe serialization has been enabled by default and the training args will be stored in a {TRAINING_ARGS_NAME} \n"
+                "to fall back to the {DEPRECATED_ARGS_NAME} you can set os.environ['binary_serializiation']= '1' "
+            )
         else:
             torch.save(self.args, os.path.join(output_dir, "training_args.bin"))
 
@@ -4656,11 +4656,11 @@ class Trainer:
             self.processing_class.save_pretrained(output_dir)
         # Same for the training arguments
         if not binary_serializiation:
-                self.args.to_json_file(os.path.join(output_dir, TRAINING_ARGS_NAME))
-                logger.info(
-                    "safe serialization has been enabled by default and the training args will be stored in a {TRAINING_ARGS_NAME} \n"
-                    "to fall back to the {DEPRECATED_ARGS_NAME} you can set os.environ['binary_serializiation']= '1' "
-                )
+            self.args.to_json_file(os.path.join(output_dir, TRAINING_ARGS_NAME))
+            logger.info(
+                "safe serialization has been enabled by default and the training args will be stored in a {TRAINING_ARGS_NAME} \n"
+                "to fall back to the {DEPRECATED_ARGS_NAME} you can set os.environ['binary_serializiation']= '1' "
+            )
         else:
             torch.save(self.args, os.path.join(output_dir, "training_args.bin"))
 
