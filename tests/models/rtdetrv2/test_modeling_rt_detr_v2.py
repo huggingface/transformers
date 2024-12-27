@@ -22,8 +22,8 @@ import unittest
 from parameterized import parameterized
 
 from transformers import (
-    RtDetrV2Config,
     RTDetrImageProcessor,
+    RtDetrV2Config,
     is_torch_available,
     is_vision_available,
 )

@@ -1,39 +1,32 @@
-from ..rt_detr.modeling_rt_detr import (
-    RTDetrDecoderLayer, RTDetrModelOutput, RTDetrObjectDetectionOutput, RTDetrHybridEncoder,
-    RTDetrEncoderLayer, RTDetrConvEncoder, RTDetrMLPPredictionHead, RTDetrDecoderOutput, 
-    RTDetrMultiscaleDeformableAttention, MultiScaleDeformableAttentionFunction, get_contrastive_denoising_training_group,
-    inverse_sigmoid, RTDetrDecoder, RTDetrModel, RTDetrForObjectDetection
-)
-from ...modeling_utils import PreTrainedModel
-from ..rt_detr.configuration_rt_detr import RTDetrConfig
-from ...activations import ACT2FN
 import math
-import os
-import warnings
-from dataclasses import dataclass
-from functools import lru_cache, partial, wraps
-from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import List, Optional
 
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
-from torch.autograd import Function
-from torch.autograd.function import once_differentiable
 
-from ...utils import is_torch_cuda_available
-import torch.nn as nn
+from ...modeling_utils import PreTrainedModel
+from ..rt_detr.configuration_rt_detr import RTDetrConfig
+from ..rt_detr.modeling_rt_detr import (
+    MultiScaleDeformableAttentionFunction,
+    RTDetrDecoder,
+    RTDetrDecoderLayer,
+    RTDetrForObjectDetection,
+    RTDetrModel,
+    RTDetrMultiscaleDeformableAttention,
+)
+
 
 class RtDetrV2Config(RTDetrConfig):
     model_type = "rt_detr_v2"
 
-    def __init__(self, 
+    def __init__(self,
                  decoder_n_levels=3,  # default value
                  decoder_offset_scale=0.5,  # default value
                  **super_kwargs):
         # init the base RTDetrConfig class with additional parameters
         super().__init__(**super_kwargs)
-        
+
         # add the new attributes with the given values or defaults
         self.decoder_n_levels = decoder_n_levels
         self.decoder_offset_scale = decoder_offset_scale
@@ -129,7 +122,7 @@ class RtDetrV2MultiscaleDeformableAttention(RTDetrMultiscaleDeformableAttention)
             num_heads=config.decoder_attention_heads,
             n_points=config.decoder_n_points
         )
-        
+
         # V2-specific attributes
         self.offset_scale = config.decoder_offset_scale
         # Initialize n_points list and scale
@@ -152,10 +145,10 @@ class RtDetrV2MultiscaleDeformableAttention(RTDetrMultiscaleDeformableAttention)
         )
         for i in range(self.n_points):
             grid_init[:, :, i, :] *= i + 1
-            
+
         with torch.no_grad():
             self.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
-            
+
         nn.init.constant_(self.attention_weights.weight.data, 0.0)
         nn.init.constant_(self.attention_weights.bias.data, 0.0)
         nn.init.xavier_uniform_(self.value_proj.weight.data)
@@ -191,12 +184,12 @@ class RtDetrV2MultiscaleDeformableAttention(RTDetrMultiscaleDeformableAttention)
         if attention_mask is not None:
             value = value.masked_fill(~attention_mask[..., None], float(0))
         value = value.view(batch_size, sequence_length, self.n_heads, self.d_model // self.n_heads)
-        
+
         # V2-specific sampling offsets shape
         sampling_offsets = self.sampling_offsets(hidden_states).view(
             batch_size, num_queries, self.n_heads, self.n_levels * self.n_points, 2
         )
-        
+
         attention_weights = self.attention_weights(hidden_states).view(
             batch_size, num_queries, self.n_heads, self.n_levels * self.n_points
         )
@@ -253,7 +246,6 @@ class RtDetrV2Decoder(RTDetrDecoder):
         self.layers = nn.ModuleList([RtDetrV2DecoderLayer(config) for _ in range(config.decoder_layers)])
 
 
-# could make better use of inheritence
 class RtDetrV2Model(RTDetrModel):
     def __init__(self, config: RtDetrV2Config):
         super().__init__(config)
@@ -277,7 +269,7 @@ class RtDetrV2PreTrainedModel(PreTrainedModel):
     def __init__(self, RTDetrV2Config):
         super().__init__(config)
         self.model = RTDetrV2Model(config)
-    
+
     def _init_weights(self, module):
         # this could be simplified like calling the base class function first then adding new stuff
         """Initalize the weights"""
@@ -292,10 +284,10 @@ class RtDetrV2PreTrainedModel(PreTrainedModel):
         )
         for i in range(self.n_points):
             grid_init[:, :, i, :] *= i + 1
-            
+
         with torch.no_grad():
             self.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
-            
+
         nn.init.constant_(self.attention_weights.weight.data, 0.0)
         nn.init.constant_(self.attention_weights.bias.data, 0.0)
         nn.init.xavier_uniform_(self.value_proj.weight.data)

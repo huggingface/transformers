@@ -5624,9 +5624,7 @@ if TYPE_CHECKING:
         RTDetrConfig,
         RTDetrResNetConfig,
     )
-    from .models.rt_detr_v2 import (
-        RtDetrV2Config
-    )
+    from .models.rt_detr_v2 import RtDetrV2Config
     from .models.rwkv import RwkvConfig
     from .models.sam import (
         SamConfig,
@@ -7809,11 +7807,7 @@ if TYPE_CHECKING:
             RTDetrResNetBackbone,
             RTDetrResNetPreTrainedModel,
         )
-        from .models.rt_detr_v2 import (
-            RtDetrV2ForObjectDetection,
-            RtDetrV2Model,
-            RtDetrV2PreTrainedModel
-        )
+        from .models.rt_detr_v2 import RtDetrV2ForObjectDetection, RtDetrV2Model, RtDetrV2PreTrainedModel
         from .models.rwkv import (
             RwkvForCausalLM,
             RwkvModel,

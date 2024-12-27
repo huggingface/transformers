@@ -24,7 +24,7 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision import transforms
 
-from transformers import RTDetrConfig, RTDetrForObjectDetection, RTDetrImageProcessor
+from transformers import RTDetrImageProcessor
 from transformers.models.rt_detr_v2.modular_rt_detr_v2 import RtDetrV2Config, RtDetrV2ForObjectDetection
 from transformers.utils import logging
 
@@ -578,7 +578,6 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
 
     # finally, create HuggingFace model and load state dict
     model = RtDetrV2ForObjectDetection(config)
-    breakpoint()
     model.load_state_dict(state_dict)
     model.eval()
 
@@ -610,7 +609,6 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     # Pass image by the model
     outputs = model(pixel_values)
 
-    breakpoint()
     if model_name == "rtdetr_v2_r18vd":
         expected_slice_logits = torch.tensor(
             [[-3.7045, -5.1913, -6.1787], [-4.0106, -9.3450, -5.2043], [-4.1287, -4.7463, -5.8634]]
