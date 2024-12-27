@@ -16,8 +16,6 @@ import asyncio
 from queue import Queue
 from typing import TYPE_CHECKING, Callable, Dict, List, Optional
 
-import torch
-
 
 if TYPE_CHECKING:
     from ..models.auto import AutoTokenizer
@@ -404,20 +402,32 @@ class MultiBeamTextStreamer(MultiBeamBaseStreamer):
         """
         Handle new tokens for all beams at once.
         Args:
-            values: Tensor of shape (num_beams, 1) containing the next token for each beam
-            beam_indices: Optional tensor containing the previous beam indices for each current beam
+            values: List or array-like of shape (num_beams, 1) containing the next token for each beam
+            beam_indices: Optional list/array/tensor containing the previous beam indices for each current beam
         """
-        if len(values.shape) != 2:
-            raise ValueError("Expected values to have shape (num_beams, 1)")
+        # Convert values to list if it's a tensor or array
+        if hasattr(values, 'tolist'):
+            values = values.tolist()
 
-        if values.shape[0] > self.num_beams:
+        # Validate input shape
+        if not isinstance(values, list) or not all(isinstance(row, list) and len(row) == 1 for row in values):
+            raise ValueError("Expected values to be a list of lists, each inner list having length 1")
+
+        if len(values) > self.num_beams:
             raise ValueError(
-                f"Number of beams in values ({values.shape[0]}) exceeds initialized num_beams ({self.num_beams})"
+                f"Number of beams in values ({len(values)}) exceeds initialized num_beams ({self.num_beams})"
             )
 
+        # Handle beam_indices
         if beam_indices is None:
-            # Create a tensor of indices from 0 to num_beams-1 on the same device as values
-            beam_indices = torch.arange(values.shape[0], device=values.device)
+            # Create a simple list of indices from 0 to num_beams-1
+            beam_indices = list(range(len(values)))
+        else:
+            # Convert beam_indices to list if it's a tensor or array
+            if hasattr(beam_indices, 'tolist'):
+                beam_indices = beam_indices.tolist()
+            elif not isinstance(beam_indices, list):
+                beam_indices = list(beam_indices)
 
         if self.skip_prompt and self.next_tokens_are_prompt:
             self.next_tokens_are_prompt = False
@@ -429,15 +439,15 @@ class MultiBeamTextStreamer(MultiBeamBaseStreamer):
 
         # Handle beam switching
         for i in range(len(beam_indices)):
-            self._switch_beam_content(self.current_position, beam_indices[i].item(), i)
+            self._switch_beam_content(self.current_position, beam_indices[i], i)
 
         # Iterate through each beam
-        for beam_idx in range(values.shape[0]):
+        for beam_idx in range(len(values)):
             # Get token for current beam
             value = values[beam_idx]
 
             # Add new tokens to current beam
-            self.beam_tokens[beam_idx].extend(value.tolist())
+            self.beam_tokens[beam_idx].extend(value)
 
             # Decode the entire sequence for current beam
             text = self.tokenizer.decode(self.beam_tokens[beam_idx], **self.decode_kwargs)
