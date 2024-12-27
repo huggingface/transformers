@@ -58,6 +58,7 @@ else:
 
 if is_deepspeed_available():
     import deepspeed.comm as deepspeed_comm
+    from deepspeed.sequence.cross_entropy import vocab_sequence_parallel_cross_entropy
     from deepspeed.sequence.layer import _SeqAllToAll
     from deepspeed.utils import groups as deepspeed_groups
 
@@ -512,32 +513,23 @@ def deepspeed_ulysses_cross_entropy(
     ignore_index=-100,
     reduction="mean",
 ):
-    # vocab_seq_parallel_logits: [S/P, V]
-    # target: [S/P, B]
-    # return: [S, B]
-
-    # Need softmax for backward
-    loss = torch.nn.functional.cross_entropy(
-        input,
-        target,
-        ignore_index=ignore_index,
-        reduction=reduction,
-    )
-
     sp_group = deepspeed_groups._get_sequence_parallel_group()
-    sp_size = deepspeed_groups._get_sequence_parallel_world_size()
 
-    if reduction == "none":
-        seqlen = input.size(0) * sp_size
-    else:
-        seqlen = sp_size
+    if ignore_index != -100:
+        raise ValueError("ignore_index not supported with DeepSpeed Ulysses")
 
-    loss_all = torch.empty(
-        seqlen,
-        dtype=input.dtype,
-        device=input.device,
-    )
+    loss = vocab_sequence_parallel_cross_entropy(input, target, sp_group=sp_group)
 
-    deepspeed_comm.all_gather_into_tensor(loss_all, loss, group=sp_group)
+    if reduction == "mean":
+        # Unfortunately we need to recover the ignored indices to compute the mean as they get converted to zeros.
+        # This adds unnecessary communication when we could just pass it in before sharding the inputs.
+        # Maybe we should also pass in something like `ignore_mask` to the model to better deal with this.
+        ignore_mask = torch.zeros_like(loss, dtype=torch.bool)
+        deepspeed_comm.all_gather_into_tensor(ignore_mask, target != ignore_index, group=sp_group)
+        ignore_mask = ignore_mask.view(-1)
+        loss = loss[ignore_mask].mean()
 
-    return loss_all
+    if reduction == "sum":
+        loss = loss.sum()
+
+    return loss

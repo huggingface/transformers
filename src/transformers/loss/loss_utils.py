@@ -36,7 +36,6 @@ def fixed_cross_entropy(source, target, num_items_in_batch: int = None, ignore_i
             ignore_index=ignore_index,
             reduction=reduction,
         )
-        loss = loss.sum() if reduction == "sum" else loss.nanmean()
     else:
         loss = nn.functional.cross_entropy(source, target, ignore_index=ignore_index, reduction=reduction)
     if reduction == "sum":
