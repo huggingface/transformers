@@ -1278,6 +1278,12 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_input_embeddings(self):
+        return self.embeddings.tok_embeddings
+
+    def set_input_embeddings(self, value):
+        self.embeddings.tok_embeddings = value
+
     @add_start_docstrings_to_model_forward(MODERNBERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -1388,6 +1394,12 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def get_input_embeddings(self):
+        return self.embeddings.tok_embeddings
+
+    def set_input_embeddings(self, value):
+        self.embeddings.tok_embeddings = value
 
     @add_start_docstrings_to_model_forward(MODERNBERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
