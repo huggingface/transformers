@@ -48,6 +48,8 @@ class QuantizationMethod(str, Enum):
     FBGEMM_FP8 = "fbgemm_fp8"
     TORCHAO = "torchao"
     BITNET = "bitnet"
+    SPQR = "spqr"
+
 
 
 class AWQLinearVersion(str, Enum):
@@ -1507,3 +1509,40 @@ class BitNetConfig(QuantizationConfigMixin):
         Safety checker that arguments are correct
         """
         pass
+
+
+@dataclass
+class SpQRConfig(QuantizationConfigMixin):
+    def __init__(
+            self,
+            bits: int = 3,
+            beta1: int = 16,
+            beta2: int = 16,
+            linear_weights_not_to_quantize: Optional[List[str]] = None,
+            **kwargs,
+    ):
+        self.bits = bits
+        self.beta1 = beta1
+        self.beta2 = beta2
+        self.linear_weights_not_to_quantize = linear_weights_not_to_quantize
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
+        """
+        if not isinstance(self.bits, int):
+            raise TypeError("bits must be an int")
+        if not isinstance(self.beta1, int):
+            raise TypeError("beta1 must be an int")
+        if not isinstance(self.beta2, int):
+            raise TypeError("beta2 must be an int")
+
+
+        if self.linear_weights_not_to_quantize is not None and not isinstance(
+            self.linear_weights_not_to_quantize, list
+        ):
+            raise ValueError("linear_weights_not_to_quantize must be a list of strings")
+
+        if self.linear_weights_not_to_quantize is None:
+            self.linear_weights_not_to_quantize = []
