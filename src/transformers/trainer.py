@@ -310,11 +310,8 @@ SCHEDULER_NAME = "scheduler.pt"
 SCALER_NAME = "scaler.pt"
 FSDP_MODEL_NAME = "pytorch_model_fsdp"
 
-# Safe serialization check
-safe_serialize = os.environ.get("TRAINER_SAFE_SERIALIZE")
-
-if safe_serialize or int(__version__.split(".")[0]) >= 5:
-    safe_serialize = True
+# binary serialization check
+binary_serializiation = os.environ.get("TRAINER_BINARY_SERIALIZATION", "0") == "1"
 
 
 class Trainer:
@@ -3837,13 +3834,13 @@ class Trainer:
 
         if xm.is_master_ordinal(local=False):
             os.makedirs(output_dir, exist_ok=True)
-            if safe_serialize:
+            if not binary_serializiation:
                 self.args.to_json_file(os.path.join(output_dir, TRAINING_ARGS_NAME))
-            else:
                 logger.info(
-                    f"trainer API will deprecate the {DEPRECATED_ARGS_NAME} in 5.0.0, to switch to a safe serialization method, "
-                    "you can set os.environ['TRAINER_SAFE_SERIALIZE']= 'true' "
+                    "safe serialization has been enabled by default and the training args will be stored in a {TRAINING_ARGS_NAME} \n"
+                    "to fall back to the {DEPRECATED_ARGS_NAME} you can set os.environ['binary_serializiation']= '1' "
                 )
+            else:
                 torch.save(self.args, os.path.join(output_dir, "training_args.bin"))
 
         # Save a trained model and configuration using `save_pretrained()`.
@@ -3941,13 +3938,13 @@ class Trainer:
             self.processing_class.save_pretrained(output_dir)
 
         # Good practice: save your training arguments together with the trained model
-        if safe_serialize:
-            self.args.to_json_file(os.path.join(output_dir, TRAINING_ARGS_NAME))
+        if not binary_serializiation:
+                self.args.to_json_file(os.path.join(output_dir, TRAINING_ARGS_NAME))
+                logger.info(
+                    "safe serialization has been enabled by default and the training args will be stored in a {TRAINING_ARGS_NAME} \n"
+                    "to fall back to the {DEPRECATED_ARGS_NAME} you can set os.environ['binary_serializiation']= '1' "
+                )
         else:
-            logger.info(
-                f"trainer API will deprecate the {DEPRECATED_ARGS_NAME} in 5.0.0, to switch to a safe serialization method, "
-                "you can set os.environ['TRAINER_SAFE_SERIALIZE']= 'true'"
-            )
             torch.save(self.args, os.path.join(output_dir, "training_args.bin"))
 
     def store_flos(self):
@@ -4658,13 +4655,13 @@ class Trainer:
         if self.processing_class is not None:
             self.processing_class.save_pretrained(output_dir)
         # Same for the training arguments
-        if safe_serialize:
-            self.args.to_json_file(os.path.join(output_dir, TRAINING_ARGS_NAME))
+        if not binary_serializiation:
+                self.args.to_json_file(os.path.join(output_dir, TRAINING_ARGS_NAME))
+                logger.info(
+                    "safe serialization has been enabled by default and the training args will be stored in a {TRAINING_ARGS_NAME} \n"
+                    "to fall back to the {DEPRECATED_ARGS_NAME} you can set os.environ['binary_serializiation']= '1' "
+                )
         else:
-            logger.info(
-                f"trainer API will deprecate the {DEPRECATED_ARGS_NAME} in 5.0.0, to switch to a safe serialization method, "
-                "you can set os.environ['TRAINER_SAFE_SERIALIZE']= 'true'"
-            )
             torch.save(self.args, os.path.join(output_dir, "training_args.bin"))
 
         if self.args.save_strategy == SaveStrategy.STEPS:

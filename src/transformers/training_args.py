@@ -2530,8 +2530,9 @@ class TrainingArguments:
         d = {field.name: getattr(self, field.name) for field in fields(self) if field.init}
 
         for k, v in d.items():
+            # serialize parameters in json compatible format, example :
+            # converted torch.dtype to string (e.g. torch.float32 -> "float32")
             d[k] = serialize_parameter(k, v)
-        self._dict_torch_dtype_to_str(d)
 
         return d
 
