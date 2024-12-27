@@ -1004,6 +1004,7 @@ _import_structure = {
         "QuantoConfig",
         "TorchAoConfig",
         "VptqConfig",
+        "SpQRConfig",
     ],
 }
 
@@ -6039,6 +6040,7 @@ if TYPE_CHECKING:
         QuantoConfig,
         TorchAoConfig,
         VptqConfig,
+        SpQRConfig,
     )
 
     try:
