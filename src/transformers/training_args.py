@@ -13,6 +13,7 @@
 # limitations under the License.
 
 import contextlib
+import inspect
 import io
 import json
 import math
@@ -21,6 +22,7 @@ import warnings
 from dataclasses import asdict, dataclass, field, fields
 from datetime import timedelta
 from enum import Enum
+from functools import wraps
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Type, TypeVar, Union
 
@@ -68,6 +70,28 @@ log_levels = logging.get_log_levels_dict().copy()
 trainer_log_levels = dict(**log_levels, passive=-1)
 
 T = TypeVar("T", bound="TrainingArguments")
+
+
+def serialize(func):
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        bound_args = inspect.signature(func).bind(self, *args, **kwargs)
+        bound_args.apply_defaults()
+
+        for name, value in bound_args.arguments.items():
+            if name not in ["self", "args"] and value is not None:
+                self.__training_args_params__[name] = serialize_parameter(name, value)
+        # Handle extra positional arguments
+        # extra_args = bound_args.arguments.get("args", [])
+        # if extra_args and extra_args != []:
+        #     print("Extra args: ", extra_args)
+        #     print("Extra args type: ", type(extra_args))
+        #     self.__training_args_params__["args"] = list(extra_args)
+
+        return func(self, *args, **kwargs)
+
+    return wrapper
+
 
 if is_torch_available():
     import torch
@@ -1545,6 +1569,19 @@ class TrainingArguments:
         },
     )
 
+    def __new__(self, *args, **kwargs):
+        # catch and save only the parameters that the user passed
+        self.__training_args_params__ = {}
+        param_names = list(self.__dataclass_fields__.keys())
+
+        for i in range(len(args)):
+            self.__training_args_params__[param_names[i]] = serialize_parameter(param_names[i], args[i])
+
+        for k, v in kwargs.items():
+            self.__training_args_params__[k] = serialize_parameter(k, v)
+
+        return super().__new__(self)
+
     def __post_init__(self):
         # Parse in args that could be `dict` sent in from the CLI as a string
         for field in _VALID_DICT_FIELDS:
@@ -2526,7 +2563,7 @@ class TrainingArguments:
         """
         Serializes the TrainingArguments into a JSON string.
         """
-        return json.dumps(self.to_dict(), indent=2)
+        return json.dumps(self.__training_args_params__, indent=2)
 
     def to_json_file(self, json_file_path: str):
         """
@@ -2558,6 +2595,7 @@ class TrainingArguments:
         return {k: v if type(v) in valid_types else str(v) for k, v in d.items()}
 
     # The following methods are there to simplify the instantiation of `TrainingArguments`
+    @serialize
     def set_training(
         self,
         learning_rate: float = 5e-5,
@@ -2633,6 +2671,7 @@ class TrainingArguments:
         self.gradient_checkpointing = gradient_checkpointing
         return self
 
+    @serialize
     def set_evaluate(
         self,
         strategy: Union[str, IntervalStrategy] = "no",
@@ -2694,6 +2733,7 @@ class TrainingArguments:
         self.jit_mode_eval = jit_mode
         return self
 
+    @serialize
     def set_testing(
         self,
         batch_size: int = 8,
@@ -2734,6 +2774,7 @@ class TrainingArguments:
         self.jit_mode_eval = jit_mode
         return self
 
+    @serialize
     def set_save(
         self,
         strategy: Union[str, IntervalStrategy] = "steps",
@@ -2783,6 +2824,7 @@ class TrainingArguments:
         self.save_on_each_node = on_each_node
         return self
 
+    @serialize
     def set_logging(
         self,
         strategy: Union[str, IntervalStrategy] = "steps",
@@ -2858,6 +2900,7 @@ class TrainingArguments:
         self.log_level_replica = replica_level
         return self
 
+    @serialize
     def set_push_to_hub(
         self,
         model_id: str,
@@ -2928,6 +2971,7 @@ class TrainingArguments:
         self.hub_always_push = always_push
         return self
 
+    @serialize
     def set_optimizer(
         self,
         name: Union[str, OptimizerNames] = "adamw_torch",
@@ -2979,6 +3023,7 @@ class TrainingArguments:
         self.optim_args = args
         return self
 
+    @serialize
     def set_lr_scheduler(
         self,
         name: Union[str, SchedulerType] = "linear",
@@ -3024,6 +3069,7 @@ class TrainingArguments:
         self.warmup_steps = warmup_steps
         return self
 
+    @serialize
     def set_dataloader(
         self,
         train_batch_size: int = 8,
