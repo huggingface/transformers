@@ -6038,9 +6038,9 @@ if TYPE_CHECKING:
         HiggsConfig,
         HqqConfig,
         QuantoConfig,
+        SpQRConfig,
         TorchAoConfig,
         VptqConfig,
-        SpQRConfig,
     )
 
     try:
