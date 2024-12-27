@@ -247,3 +247,14 @@ class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         # Image processor should return same pixel values, independently of ipnut format
         self.assertTrue((encoded_images_nested == encoded_images).all())
         self.assertTrue((image_grid_thws_nested == expected_image_grid_thws).all())
+
+    def test_odd_number_of_frames(self):
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        expected_dims_by_frames = {3: 648, 5: 972, 7: 1296, 9: 1620}
+
+        for num_frames, expected_dims in expected_dims_by_frames.items():
+            image_inputs = np.random.randint(0, 255, size=(num_frames, 256, 256, 3))
+            prcocess_out = image_processing(image_inputs, return_tensors="pt")
+            encoded_images = prcocess_out.pixel_values
+            expected_output_image_shape = (expected_dims, 1176)
+            self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
