@@ -143,7 +143,7 @@ def convert_llava_llama_to_hf(text_model_id, vision_model_id, output_hub_path, o
     # Some llava variants like microsoft/llava-med-v1.5-mistral-7b use safetensors to store weights
     if file_exists(old_state_dict_id, "model_state_dict.bin"):
         state_dict_path = hf_hub_download(old_state_dict_id, "model_state_dict.bin")
-        state_dict = torch.load(state_dict_path, map_location="cpu")
+        state_dict = torch.load(state_dict_path, map_location="cpu", weights_only=True)
     else:
         state_dict = load_original_state_dict(old_state_dict_id)
 
