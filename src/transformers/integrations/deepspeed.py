@@ -505,31 +505,3 @@ def support_deepspeed_ulysses(module):
     module.sp_size = sp_size
 
     return module
-
-
-def deepspeed_ulysses_cross_entropy(
-    input,
-    target,
-    ignore_index=-100,
-    reduction="mean",
-):
-    sp_group = deepspeed_groups._get_sequence_parallel_group()
-
-    if ignore_index != -100:
-        raise ValueError("ignore_index not supported with DeepSpeed Ulysses")
-
-    loss = vocab_sequence_parallel_cross_entropy(input, target, sp_group=sp_group)
-
-    if reduction == "mean":
-        # Unfortunately we need to recover the ignored indices to compute the mean as they get converted to zeros.
-        # This adds unnecessary communication when we could just pass it in before sharding the inputs.
-        # Maybe we should also pass in something like `ignore_mask` to the model to better deal with this.
-        ignore_mask = torch.zeros_like(loss, dtype=torch.bool)
-        deepspeed_comm.all_gather_into_tensor(ignore_mask, target != ignore_index, group=sp_group)
-        ignore_mask = ignore_mask.view(-1)
-        loss = loss[ignore_mask].mean()
-
-    if reduction == "sum":
-        loss = loss.sum()
-
-    return loss

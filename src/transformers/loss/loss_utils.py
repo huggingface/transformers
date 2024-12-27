@@ -16,28 +16,13 @@ import torch
 import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, MSELoss
 
-from transformers.integrations import is_deepspeed_available, is_deepspeed_ulysses_enabled
-
-from .loss_deformable_detr import DeformableDetrForObjectDetectionLoss, DeformableDetrForSegmentationLoss
 from .loss_for_object_detection import ForObjectDetectionLoss, ForSegmentationLoss
 from .loss_rt_detr import RTDetrForObjectDetectionLoss
 
 
-if is_deepspeed_available():
-    from ..integrations.deepspeed import deepspeed_ulysses_cross_entropy
-
-
 def fixed_cross_entropy(source, target, num_items_in_batch: int = None, ignore_index: int = -100, **kwargs):
     reduction = "sum" if num_items_in_batch is not None else "mean"
-    if is_deepspeed_ulysses_enabled():
-        loss = deepspeed_ulysses_cross_entropy(
-            source,
-            target,
-            ignore_index=ignore_index,
-            reduction=reduction,
-        )
-    else:
-        loss = nn.functional.cross_entropy(source, target, ignore_index=ignore_index, reduction=reduction)
+    loss = nn.functional.cross_entropy(source, target, ignore_index=ignore_index, reduction=reduction)
     if reduction == "sum":
         loss = loss / num_items_in_batch
     return loss
