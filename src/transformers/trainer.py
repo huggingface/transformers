@@ -1036,7 +1036,7 @@ class Trainer:
         if self.is_deepspeed_enabled and is_deepspeed_ulysses_enabled():
             ds_plugin = self.accelerator.state.deepspeed_plugin
             return SequentialDistributedSampler(
-                self.train_dataset,
+                self.eval_dataset,
                 num_replicas=ds_plugin.data_parallel_size,
                 rank=self.args.process_index // ds_plugin.sequence_parallel_size,
             )
