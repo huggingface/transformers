@@ -22,6 +22,7 @@ import pytest
 from transformers import (
     AsyncTextIteratorStreamer,
     AutoTokenizer,
+    MultiBeamTextStreamer,
     TextIteratorStreamer,
     TextStreamer,
     is_torch_available,
@@ -128,6 +129,107 @@ class StreamerTester(unittest.TestCase):
             streamer_text = ""
             for new_text in streamer:
                 streamer_text += new_text
+
+    def test_multibeam_text_streamer_matches_non_streaming(self):
+        """Test that the MultiBeamTextStreamer produces the same output as non-streaming beam search."""
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        model.config.eos_token_id = -1
+
+        # Generate input and get baseline output
+        input_ids = ids_tensor((1, 5), vocab_size=model.config.vocab_size).to(torch_device)
+        beam_outputs = model.generate(
+            input_ids,
+            max_new_tokens=10,
+            num_beams=2,
+            do_sample=False,
+            return_dict_in_generate=True,
+            output_scores=True,
+            num_return_sequences=2,
+        )
+        beam_texts = [tokenizer.decode(output) for output in beam_outputs.sequences]
+
+        # Store for comparing streaming output
+        beam_texts_from_streamer = {i: "" for i in range(2)}
+
+        def on_beam_update(beam_idx: int, new_text: str):
+            """Handler for beam updates"""
+            beam_texts_from_streamer[beam_idx] = new_text
+
+        # Create streamer with handlers
+        streamer = MultiBeamTextStreamer(
+            tokenizer=tokenizer, num_beams=2, on_beam_update=on_beam_update, skip_prompt=False
+        )
+
+        # Generate with streamer
+        model.generate(input_ids, max_new_tokens=10, num_beams=2, do_sample=False, streamer=streamer)
+
+        # Compare streamed outputs
+        for beam_text in beam_texts:
+            self.assertTrue(beam_text in beam_texts_from_streamer.values())
+
+    def test_multibeam_text_streamer_beam_history(self):
+        """Test that the MultiBeamTextStreamer correctly maintains beam history and handles beam switching."""
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
+        model.config.eos_token_id = -1
+
+        input_ids = ids_tensor((1, 5), vocab_size=model.config.vocab_size).to(torch_device)
+
+        # Track beam history
+        beam_histories = {i: [] for i in range(2)}
+        beam_switch_count = 0
+
+        def on_beam_update(beam_idx: int, new_text: str):
+            beam_histories[beam_idx].append(new_text)
+
+        def on_beam_finished(text: str):
+            nonlocal beam_switch_count
+            beam_switch_count += 1
+
+        streamer = MultiBeamTextStreamer(
+            tokenizer=tokenizer,
+            num_beams=2,
+            on_beam_update=on_beam_update,
+            on_beam_finished=on_beam_finished,
+            skip_prompt=False,
+        )
+
+        # Generate with beam search
+        model.generate(input_ids, max_new_tokens=10, num_beams=2, do_sample=False, streamer=streamer)
+
+        # Verify that both beams received updates
+        self.assertTrue(len(beam_histories[0]) > 0)
+        self.assertTrue(len(beam_histories[1]) > 0)
+
+        # Verify that beam histories are different
+        self.assertNotEqual(beam_histories[0], beam_histories[1])
+
+    def test_multibeam_text_streamer_error_handling(self):
+        """Test that the MultiBeamTextStreamer properly handles error conditions."""
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
+
+        # Test invalid num_beams
+        with self.assertRaises(ValueError):
+            MultiBeamTextStreamer(tokenizer, num_beams=0, on_beam_update=lambda x, y: None)
+
+        with self.assertRaises(ValueError):
+            MultiBeamTextStreamer(tokenizer, num_beams=-1, on_beam_update=lambda x, y: None)
+
+        # Initialize valid streamer for further tests
+        streamer = MultiBeamTextStreamer(tokenizer=tokenizer, num_beams=2, on_beam_update=lambda x, y: None)
+
+        # Test putting values with wrong shape
+        with self.assertRaises(ValueError):
+            streamer.put(torch.tensor([1, 2, 3]))  # Wrong shape (1D instead of 2D)
+
+        # Test putting values with too many beams
+        with self.assertRaises(ValueError):
+            streamer.put(torch.tensor([[1], [2], [3]]))  # 3 beams when initialized with 2
+
+        # Test invalid beam switching
+        with self.assertRaises(ValueError):
+            streamer._switch_beam_content(0, 0, 5)  # Invalid new beam index
 
 
 @require_torch
