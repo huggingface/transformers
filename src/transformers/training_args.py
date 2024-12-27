@@ -1598,6 +1598,8 @@ class TrainingArguments:
             self.logging_dir = os.path.join(self.output_dir, default_logdir())
         if self.logging_dir is not None:
             self.logging_dir = os.path.expanduser(self.logging_dir)
+        # set logging_dir in __training_args_params__
+        self.__training_args_params__["logging_dir"] = self.logging_dir
 
         if self.disable_tqdm is None:
             self.disable_tqdm = logger.getEffectiveLevel() > logging.WARN
