@@ -3700,7 +3700,7 @@ class Trainer:
         else:
             # Finally we need to normalize the loss for reporting
             if num_items_in_batch is None:
-                loss /= self.args.gradient_accumulation_steps
+                loss = loss / self.args.gradient_accumulation_steps
 
             self.accelerator.backward(loss, **kwargs)
 
