@@ -80,13 +80,8 @@ def serialize(func):
 
         for name, value in bound_args.arguments.items():
             if name not in ["self", "args"] and value is not None:
-                self.__training_args_params__[name] = serialize_parameter(name, value)
-        # Handle extra positional arguments
-        # extra_args = bound_args.arguments.get("args", [])
-        # if extra_args and extra_args != []:
-        #     print("Extra args: ", extra_args)
-        #     print("Extra args type: ", type(extra_args))
-        #     self.__training_args_params__["args"] = list(extra_args)
+                if name in self.__dataclass_fields__.keys():
+                    self.__training_args_params__[name] = serialize_parameter(name, value)
 
         return func(self, *args, **kwargs)
 
