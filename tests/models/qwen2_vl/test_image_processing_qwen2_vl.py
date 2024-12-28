@@ -250,7 +250,7 @@ class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
     def test_odd_number_of_frames(self):
         image_processing = self.image_processing_class(**self.image_processor_dict)
-        expected_dims_by_frames = {3: 648, 5: 972, 7: 1296, 9: 1620}
+        expected_dims_by_frames = {1: 324, 3: 648, 5: 972, 7: 1296, 9: 1620}
 
         for num_frames, expected_dims in expected_dims_by_frames.items():
             image_inputs = np.random.randint(0, 255, size=(num_frames, 256, 256, 3))
