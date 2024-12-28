@@ -34,18 +34,27 @@ from transformers.testing_utils import (
 if is_torch_available():
     import torch
 
+    import transformers.cache_utils as cache_utils
     from transformers import (
         AutoModelForCausalLM,
         AutoTokenizer,
+        Cache,
         DynamicCache,
         GenerationConfig,
         GPT2LMHeadModel,
         LlamaConfig,
+        QuantizedCache,
+        QuantizedCacheConfig,
         SinkCache,
         StaticCache,
         convert_and_export_with_cache,
     )
     from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_3
+
+    # Programatically fetch all generic cache classes (so we don't forget to update tests when adding new classes)
+    ALL_CACHE_CLASSES = {
+        name: cls for name, cls in cache_utils.__dict__.items() if isinstance(cls, type) and issubclass(cls, Cache)
+    }
 
 
 @require_torch
@@ -224,6 +233,74 @@ class CacheTest(unittest.TestCase):
                 n_static_value_caches = n_static_value_caches + 1
         self.assertEqual(n_static_key_caches, model.config.num_hidden_layers)
         self.assertEqual(n_static_value_caches, model.config.num_hidden_layers)
+
+    @parameterized.expand(ALL_CACHE_CLASSES.items())
+    def test_cache_deepcopy_reuse(self, cache_name, cache_cls):
+        """Tests that we can deepcopy a cache to reuse the same prompt multiple times"""
+
+        if cache_cls is Cache or cache_cls is QuantizedCache:
+            self.skipTest("We can't instantiate a base class")
+        if "encoderdecoder" in cache_name.lower():
+            # TODO (joao): open follow-up PR to test EncoderDecoderCache
+            self.skipTest("EncoderDecoder not yet tested")
+
+        # Using Mistral to test sliding cache implementations as well
+        config = AutoConfig.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+
+        # Instantiate the cache class
+        if "quantized" in cache_name.lower():
+            cache_config = QuantizedCacheConfig()
+            cache = cache_cls(cache_config=cache_config)
+        elif issubclass(cache_cls, DynamicCache):
+            cache = cache_cls()
+        else:
+            # all possible init arguments for all static caches
+            test_init_inputs = {
+                "config": config,
+                "batch_size": 1,
+                "max_cache_len": 64,
+                "device": torch_device,
+                "num_sink_tokens": 3,
+                "window_length": 64,  # the test assumes no cache information is lost
+            }
+            # pulls relevant args for `cache_cls` from `test_init_inputs`
+            cache_kwargs = {
+                arg: test_init_inputs[arg]
+                for arg in cache_cls.__init__.__code__.co_varnames
+                if arg != "self" and arg in test_init_inputs
+            }
+            cache = cache_cls(**cache_kwargs)
+
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM")
+        model = model.to(torch_device)
+
+        # Test 1: we can deepcopy the cache
+        empty_cache = copy.deepcopy(cache)
+
+        # Test 2: prompt reuse, using a fresh cache, or using no cache at all should result in the same output
+
+        # # Retrieve the cache filled up with a prompt
+        # prompt = "This is a prompt to be reused multiple times."
+        # prompt_inputs = tokenizer(prompt, return_tensors="pt").to(torch_device)
+        # cache = model(**prompt_inputs, past_key_values=cache).past_key_values
+        # has_cache = cache.key_cache[0].abs().sum().item() > 0
+        # has_quantized_cache = hasattr(cache, "_quantized_key_cache") and cache._quantized_key_cache[0] is not None
+        # self.assertTrue(has_cache or has_quantized_cache, "The cache should have been filled with the prompt")
+
+        # # Test: we can deepcopy the cache and reuse it. The result should be equivalent to not using a cache.
+        # generate_kwargs = {"max_new_tokens": 3, "min_new_tokens": 3, "return_dict_in_generate": True}
+        # copied_cache = copy.deepcopy(cache)
+        # input_text = prompt + " This is new text"
+        # model_input = tokenizer(input_text, return_tensors="pt").to(torch_device)
+        # generate_output_with_cache_reuse = model.generate(**model_input_1, **generate_kwargs, past_key_values=copied_cache)
+
+        # copied_cache_2 = copy.deepcopy(cache)
+        # input_text_2 = prompt + " This is another text"
+        # model_input_2 = tokenizer(input_text_2, return_tensors="pt").to(torch_device)
+        # generate_output_2 = model.generate(**model_input_2, **generate_kwargs, past_key_values=copied_cache_2)
+
+        # Confirm that the new caches are longer than the original cache
 
 
 @require_torch_gpu
