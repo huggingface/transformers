@@ -40,6 +40,7 @@ from .utils import (
     is_torch_available,
     logging,
 )
+from .utils.generic import is_timm_config_dict
 
 
 logger = logging.get_logger(__name__)
@@ -71,6 +72,8 @@ class PretrainedConfig(PushToHubMixin):
       outputs of the model during inference.
     - **attribute_map** (`Dict[str, str]`) -- A dict that maps model specific attribute names to the standardized
       naming of attributes.
+    - **base_model_tp_plan** (`Dict[str, Any]`) -- A dict that maps sub-modules FQNs of a base model to a tensor
+      parallel plan applied to the sub-module when `model.tensor_parallel` is called.
 
     Common attributes (present in all subclasses):
 
@@ -194,6 +197,7 @@ class PretrainedConfig(PushToHubMixin):
     sub_configs: Dict[str, "PretrainedConfig"] = {}
     is_composition: bool = False
     attribute_map: Dict[str, str] = {}
+    base_model_tp_plan: Optional[Dict[str, Any]] = None
     _auto_class: Optional[str] = None
 
     def __setattr__(self, key, value):
@@ -699,6 +703,11 @@ class PretrainedConfig(PushToHubMixin):
             config_dict["custom_pipelines"] = add_model_info_to_custom_pipelines(
                 config_dict["custom_pipelines"], pretrained_model_name_or_path
             )
+
+        # timm models are not saved with the model_type in the config file
+        if "model_type" not in config_dict and is_timm_config_dict(config_dict):
+            config_dict["model_type"] = "timm_wrapper"
+
         return config_dict, kwargs
 
     @classmethod
@@ -848,6 +857,9 @@ class PretrainedConfig(PushToHubMixin):
 
         if "_attn_implementation_internal" in serializable_config_dict:
             del serializable_config_dict["_attn_implementation_internal"]
+        # Do not serialize `base_model_tp_plan` for now
+        if "base_model_tp_plan" in serializable_config_dict:
+            del serializable_config_dict["base_model_tp_plan"]
 
         return serializable_config_dict
 
@@ -867,6 +879,9 @@ class PretrainedConfig(PushToHubMixin):
             del output["_commit_hash"]
         if "_attn_implementation_internal" in output:
             del output["_attn_implementation_internal"]
+        # Do not serialize `base_model_tp_plan` for now
+        if "base_model_tp_plan" in output:
+            del output["base_model_tp_plan"]
 
         # Transformers version when serializing the model
         output["transformers_version"] = __version__
