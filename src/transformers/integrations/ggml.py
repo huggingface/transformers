@@ -24,7 +24,7 @@ from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, process
 from tokenizers.models import BPE, Unigram
 
 from .. import AddedToken
-from ..convert_slow_tokenizer import GPT2Converter, LlamaConverter, Qwen2Converter, T5Converter
+from ..convert_slow_tokenizer import GPT2Converter, LlamaConverter, Qwen2Converter, T5Converter, GemmaConverter
 from ..utils import logging
 from ..utils.logging import tqdm
 
@@ -261,6 +261,22 @@ GGUF_TENSOR_MAPPING = {
         "output.weight": "lm_head.weight",
         "output_norm": "model.norm",
     },
+    "gemma2": {
+        "token_embd": "model.embed_tokens",
+        "blk": "model.layers",
+        "ffn_up": "mlp.up_proj",
+        "ffn_down": "mlp.down_proj",
+        "ffn_gate": "mlp.gate_proj",
+        "ffn_norm": "pre_feedforward_layernorm",
+        "post_attention_norm": "post_attention_layernorm",
+        "post_ffw_norm": "post_feedforward_layernorm",
+        "attn_norm": "input_layernorm",
+        "attn_q": "self_attn.q_proj",
+        "attn_v": "self_attn.v_proj",
+        "attn_k": "self_attn.k_proj",
+        "attn_output": "self_attn.o_proj",
+        "output_norm": "model.norm", 
+    }
 }
 
 
@@ -816,126 +832,8 @@ class GGUFT5Converter(T5Converter):
 
         return tokenizer
 
-class GGUFGemma2Converter(LlamaConverter):
-    def __init__(self, tokenizer_dict):
-        self.proto = GGUFTokenizerSkeleton(tokenizer_dict)
-        self.original_tokenizer = self.proto
-        self.additional_kwargs = {}
-        self.is_llama_3_tokenizer = getattr(self.proto, "tokenizer_type", "gemma2") != "gemma2"
-
-    def vocab(self, proto):
-        return list(zip(proto.tokens, proto.scores))
-
-    def merges(self, proto):
-        return proto.merges
-
-    def tokenizer(self, proto):
-        vocab_scores = self.vocab(self.proto)
-        merges = self.merges(self.proto)
-        bpe_vocab = {word: i for i, (word, _score) in enumerate(vocab_scores)}
-
-        unk_token = proto.tokens[proto.unk_token_id] if proto.unk_token_id is not None else None
-        bos_token = proto.tokens[proto.bos_token_id] if getattr(proto, "bos_token_id", None) is not None else None
-        eos_token = proto.tokens[proto.bos_token_id] if getattr(proto, "eos_token_id", None) is not None else None
-
-        tokenizer = Tokenizer(
-            BPE(
-                bpe_vocab,
-                merges,
-                unk_token=unk_token,
-                fuse_unk=True,
-                byte_fallback=True,
-            )
-        )
-
-        special_tokens = []
-
-        if not hasattr(self.proto, "token_type"):
-            if unk_token is not None:
-                special_tokens.append(AddedToken(unk_token, normalized=False, special=True))
-
-            if bos_token is not None:
-                special_tokens.append(AddedToken(bos_token, normalized=False, special=True))
-
-            if eos_token is not None:
-                special_tokens.append(AddedToken(eos_token, normalized=False, special=True))
-        else:
-            # 3 stands for special tokens
-            special_tokens_idx = np.where(np.array(self.proto.token_type) == 3)[0]
-
-            for idx in special_tokens_idx:
-                special_tokens.append(AddedToken(self.proto.tokens[idx], normalized=False, special=True))
-
-        if len(special_tokens) != 0:
-            tokenizer.add_special_tokens(special_tokens)
-
-        if len(self.proto.added_tokens) != 0:
-            tokenizer.add_tokens(
-                [AddedToken(added_token, normalized=False, special=False) for added_token in self.proto.added_tokens]
-            )
-
-        self.additional_kwargs["unk_token"] = unk_token
-        self.additional_kwargs["eos_token"] = bos_token
-        self.additional_kwargs["bos_token"] = eos_token
-
-        if self.is_llama_3_tokenizer:
-            self.additional_kwargs["add_prefix_space"] = None
-            self.additional_kwargs["clean_up_tokenization_spaces"] = True
-
-            self.additional_kwargs["legacy"] = False
-            self.original_tokenizer.legacy = False
-
-        return tokenizer
-
-    def decoder(self, replacement, add_prefix_space):
-        sequence = [
-            decoders.ByteFallback(),
-            decoders.Fuse(),
-            decoders.Replace("▁", " "),
-        ]
-
-        if self.is_llama_3_tokenizer:
-            sequence += [decoders.ByteLevel(add_prefix_space=False, trim_offsets=False, use_regex=True)]
-
-        if add_prefix_space:
-            sequence += [decoders.Strip(content=" ", left=1)]
-        return decoders.Sequence(sequence)
-
-    def converted(self):
-        # Copied partly from converted method in SpmConverter class
-        tokenizer = self.tokenizer(self.proto)
-
-        # Tokenizer assemble
-        normalizer = self.normalizer(self.proto)
-        if normalizer is not None:
-            tokenizer.normalizer = normalizer
-
-        replacement = "▁"
-        add_prefix_space = True
-        if hasattr(self.original_tokenizer, "add_prefix_space"):
-            add_prefix_space = self.original_tokenizer.add_prefix_space
-
-        pre_tokenizer = self.pre_tokenizer(replacement, add_prefix_space)
-        if pre_tokenizer is not None:
-            tokenizer.pre_tokenizer = pre_tokenizer
-
-        tokenizer.decoder = self.decoder(replacement, add_prefix_space)
-        post_processor = self.post_processor()
-        if post_processor:
-            tokenizer.post_processor = post_processor
-
-        # HACK: patch the llama-3 tokenizer to use the correspinding pre-tokenizer
-        # and normalizer
-        if self.is_llama_3_tokenizer:
-            tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(
-                add_prefix_space=False, trim_offsets=False, use_regex=True
-            )
-            # This is tricky as the additional kwargs are passed after legacy is force-set in LlamaTokenizer's
-            # init.
-            tokenizer.normalizer = normalizers.Sequence([])
-
-        return tokenizer
-
+class GGUFGemma2Converter(GemmaConverter):
+### WILL BE IMPLEMENTED LATER
 
 GGUF_TO_FAST_CONVERTERS = {
     "llama": GGUFLlamaConverter,
