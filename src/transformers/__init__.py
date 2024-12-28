@@ -828,6 +828,7 @@ _import_structure = {
     ],
     "models.visual_bert": ["VisualBertConfig"],
     "models.vit": ["ViTConfig"],
+    "models.aimv2": ["AIMv2Config"],
     "models.vit_mae": ["ViTMAEConfig"],
     "models.vit_msn": ["ViTMSNConfig"],
     "models.vitdet": ["VitDetConfig"],
@@ -3707,6 +3708,13 @@ else:
             "ViTPreTrainedModel",
         ]
     )
+    _import_structure["models.aimv2"].extend(
+        [
+            "AIMv2ForImageClassification",
+            "AIMv2Model",
+            "AIMv2PreTrainedModel",
+        ]
+    )
     _import_structure["models.vit_mae"].extend(
         [
             "ViTMAEForPreTraining",
@@ -5850,6 +5858,7 @@ if TYPE_CHECKING:
         VisualBertConfig,
     )
     from .models.vit import ViTConfig
+    from .models.aimv2 import AIMv2Config
     from .models.vit_mae import ViTMAEConfig
     from .models.vit_msn import ViTMSNConfig
     from .models.vitdet import VitDetConfig
@@ -8237,6 +8246,11 @@ if TYPE_CHECKING:
             ViTModel,
             ViTPreTrainedModel,
         )
+        from .models.aimv2 import (
+            AIMv2ForImageClassification,
+            AIMv2Model,
+            AIMv2PreTrainedModel,
+        )
         from .models.vit_mae import (
             ViTMAEForPreTraining,
             ViTMAEModel,
@@ -8932,6 +8946,7 @@ if TYPE_CHECKING:
             TFViTModel,
             TFViTPreTrainedModel,
         )
+   
         from .models.vit_mae import (
             TFViTMAEForPreTraining,
             TFViTMAEModel,
@@ -9282,6 +9297,7 @@ if TYPE_CHECKING:
             FlaxViTModel,
             FlaxViTPreTrainedModel,
         )
+      
         from .models.wav2vec2 import (
             FlaxWav2Vec2ForCTC,
             FlaxWav2Vec2ForPreTraining,

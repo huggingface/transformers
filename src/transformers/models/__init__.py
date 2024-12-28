@@ -271,6 +271,7 @@ from . import (
     vision_text_dual_encoder,
     visual_bert,
     vit,
+    aimv2,
     vit_mae,
     vit_msn,
     vitdet,

@@ -275,6 +275,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("vision-text-dual-encoder", "VisionTextDualEncoderModel"),
         ("visual_bert", "VisualBertModel"),
         ("vit", "ViTModel"),
+        ("aimv2", "AIMv2Model"),
         ("vit_hybrid", "ViTHybridModel"),
         ("vit_mae", "ViTMAEModel"),
         ("vit_msn", "ViTMSNModel"),
@@ -618,6 +619,7 @@ MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
         ("van", "VanModel"),
         ("videomae", "VideoMAEModel"),
         ("vit", "ViTModel"),
+        ("aimv2", "AIMv2Model"),
         ("vit_hybrid", "ViTHybridModel"),
         ("vit_mae", "ViTMAEModel"),
         ("vit_msn", "ViTMSNModel"),
@@ -634,6 +636,7 @@ MODEL_FOR_MASKED_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
         ("swin", "SwinForMaskedImageModeling"),
         ("swinv2", "Swinv2ForMaskedImageModeling"),
         ("vit", "ViTForMaskedImageModeling"),
+        ("aimv2", "AIMv2ForMaskedImageModeling"),
     ]
 )
 
@@ -704,6 +707,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("timm_wrapper", "TimmWrapperForImageClassification"),
         ("van", "VanForImageClassification"),
         ("vit", "ViTForImageClassification"),
+        ("aimv2", "AIMv2ForImageClassification"),
         ("vit_hybrid", "ViTHybridForImageClassification"),
         ("vit_msn", "ViTMSNForImageClassification"),
     ]
