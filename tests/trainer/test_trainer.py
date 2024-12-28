@@ -4220,7 +4220,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                     total=total,
                 )
 
-        # Case 3: Metric name not provided; throw error.
+    def test_metric_for_best_model_behavior(self):
+        # Case 1: Metric name not provided when `save_strategy == "best"`.
+        # Should raise ValueError.
         with tempfile.TemporaryDirectory() as tmpdir:
             with self.assertRaises(ValueError) as context:
                 trainer = get_regression_trainer(
@@ -4234,7 +4236,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 )
             self.assertIn("`args.metric_for_best_model` must be provided", str(context.exception))
 
-        # Case 4: Metric name not provided and save_best_strategy is "steps" (i.e., not "best").
+        # Case 2: Metric name not provided when `load_best_model_at_end == True`.
+        # `metric_for_best_model` should be set to `"loss"` by default.
         with tempfile.TemporaryDirectory() as tmpdir:
             trainer = get_regression_trainer(
                 a=1.5,
