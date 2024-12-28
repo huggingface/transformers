@@ -4401,7 +4401,7 @@ class Trainer:
         if isinstance(all_losses, list) and all_losses:
             metrics[f"{metric_key_prefix}_loss"] = np.nanmean(np.concatenate(all_losses)).item()
         elif isinstance(all_losses, np.ndarray):
-            metrics[f"{metric_key_prefix}_loss"] = np.nanmean(np.all_losses).item()
+            metrics[f"{metric_key_prefix}_loss"] = np.nanmean(all_losses).item()
         if hasattr(self, "jit_compilation_time"):
             metrics[f"{metric_key_prefix}_jit_compilation_time"] = self.jit_compilation_time
         if hasattr(self, "model_preparation_time"):
