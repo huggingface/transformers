@@ -57,7 +57,6 @@ else:
 
 
 if is_deepspeed_available():
-    import deepspeed.comm as deepspeed_comm
     from deepspeed.sequence.cross_entropy import vocab_sequence_parallel_cross_entropy
     from deepspeed.sequence.layer import _SeqAllToAll
     from deepspeed.utils import groups as deepspeed_groups
@@ -505,3 +504,29 @@ def support_deepspeed_ulysses(module):
     module.sp_size = sp_size
 
     return module
+
+
+def deepspeed_ulysses_cross_entropy(
+    input,
+    target,
+    ignore_index=-100,
+    reduction="mean",
+):
+    sp_group = deepspeed_groups._get_sequence_parallel_group()
+
+    if ignore_index != -100:
+        raise ValueError("ignore_index not currently supported with DeepSpeed Ulysses")
+
+    loss = vocab_sequence_parallel_cross_entropy(
+        input.unsqueeze(1),
+        target.unsqueeze(1),
+        sp_group=sp_group,
+    ).squeeze(1)
+
+    if reduction == "mean":
+        loss = loss.nanmean()
+
+    if reduction == "sum":
+        loss = loss.sum()
+
+    return loss
