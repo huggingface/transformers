@@ -241,8 +241,6 @@ class RtDetrV2Config(PretrainedConfig):
             Relative weight of the generalized IoU loss in the object detection loss.
         eos_coefficient (`float`, *optional*, defaults to 0.0001):
             Relative classification weight of the 'no-object' class in the object detection loss.
-        decoder_n_levels (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
-        decoder_offset_scale (`<fill_type>`, *optional*, defaults to 0.5): <fill_docstring>
 
     Examples:
 
@@ -257,7 +255,10 @@ class RtDetrV2Config(PretrainedConfig):
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    decoder_n_levels (`int`, *optional*, defaults to 3): The number of feature levels used by the decoder.
+    decoder_offset_scale (`float`, *optional*, defaults to 0.5): Scaling factor applied to the attention offsets in the decoder.
+    """
 
     model_type = "rt_detr_v2"
     layer_types = ["basic", "bottleneck"]
