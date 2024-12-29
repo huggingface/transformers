@@ -458,9 +458,9 @@ def _get_constant_with_cooldown_schedule_with_warmup_lr_lambda(
     current_step: int,
     *,
     num_warmup_steps: int,
-    num_training_steps: int, 
-    num_cooldown_steps: int, 
-    cooldown_type: str, 
+    num_training_steps: int,
+    num_cooldown_steps: int,
+    cooldown_type: str,
     num_cycles: float,
 ):
     if current_step < num_warmup_steps:
@@ -512,7 +512,7 @@ def get_constant_with_cooldown_schedule_with_warmup(
             following a half-cosine). This is only used if `cooldown_type` is 'cosine'.
         last_epoch (`int`, *optional*, defaults to -1):
             The index of the last epoch when resuming training.
-    
+
     Return:
         `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
     """
@@ -529,13 +529,13 @@ def get_constant_with_cooldown_schedule_with_warmup(
 
 
 def _get_constant_with_cooldown_with_min_lr_schedule_with_warmup_lr_lambda(
-    current_step: int, 
-    *, 
-    num_warmup_steps: int, 
-    num_training_steps: int, 
-    num_cooldown_steps: int, 
-    cooldown_type: str, 
-    num_cycles: float, 
+    current_step: int,
+    *,
+    num_warmup_steps: int,
+    num_training_steps: int,
+    num_cooldown_steps: int,
+    cooldown_type: str,
+    num_cycles: float,
     min_lr_rate: float = 0.0,
 ):
     if current_step < num_warmup_steps:

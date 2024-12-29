@@ -31,6 +31,8 @@ if is_torch_available():
         AdamW,
         get_constant_schedule,
         get_constant_schedule_with_warmup,
+        get_constant_with_cooldown_schedule_with_warmup,
+        get_constant_with_cooldown_with_min_lr_schedule_with_warmup,
         get_cosine_schedule_with_warmup,
         get_cosine_with_hard_restarts_schedule_with_warmup,
         get_inverse_sqrt_schedule,
@@ -38,8 +40,6 @@ if is_torch_available():
         get_polynomial_decay_schedule_with_warmup,
         get_scheduler,
         get_wsd_schedule,
-        get_constant_with_cooldown_schedule_with_warmup,
-        get_constant_with_cooldown_with_min_lr_schedule_with_warmup,
     )
 
 
@@ -216,7 +216,7 @@ class ScheduleInitTest(unittest.TestCase):
                 "num_warmup_steps": 2,
                 "num_training_steps": 10,
                 "scheduler_specific_kwargs": {"num_cooldown_steps": 2, "cooldown_type": "cosine", "min_lr_rate": 0.01},
-            }
+            },
         ]
 
         for param in test_params:
