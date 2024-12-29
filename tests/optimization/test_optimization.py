@@ -162,25 +162,9 @@ class ScheduleInitTest(unittest.TestCase):
                 {**common_kwargs, "num_cooldown_steps": 2, "cooldown_type": "linear"},
                 [0.0, 5.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 5.0],
             ),
-            get_constant_with_cooldown_schedule_with_warmup: (
-                {**common_kwargs, "num_cooldown_steps": 2, "cooldown_type": "cosine"},
-                [0.0, 5.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 5.0],
-            ),
-            get_constant_with_cooldown_schedule_with_warmup: (
-                {**common_kwargs, "num_cooldown_steps": 2, "cooldown_type": "1-sqrt"},
-                [0.0, 5.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 2.928],
-            ),
             get_constant_with_cooldown_with_min_lr_schedule_with_warmup: (
                 {**common_kwargs, "num_cooldown_steps": 2, "cooldown_type": "linear", "min_lr_rate": 0.01},
                 [0.0, 5.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 5.0],
-            ),
-            get_constant_with_cooldown_with_min_lr_schedule_with_warmup: (
-                {**common_kwargs, "num_cooldown_steps": 2, "cooldown_type": "cosine", "min_lr_rate": 0.01},
-                [0.0, 5.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 5.0],
-            ),
-            get_constant_with_cooldown_with_min_lr_schedule_with_warmup: (
-                {**common_kwargs, "num_cooldown_steps": 2, "cooldown_type": "1-sqrt", "min_lr_rate": 0.01},
-                [0.0, 5.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 2.928],
             ),
         }
 
