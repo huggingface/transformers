@@ -289,7 +289,10 @@ class BeamSearchScorer(BeamScorer):
                         beam_indices=beam_index,
                         generated_len=cur_len - decoder_prompt_len,
                     )
-                    streamer.beam_finished(batch_beam_idx.item())
+
+                    if streamer is not None:
+                        streamer.beam_finished(batch_beam_idx.item())
+
                 else:
                     # add next predicted token since it is not eos_token
                     next_beam_scores[batch_idx, beam_idx] = next_score
