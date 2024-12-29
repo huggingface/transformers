@@ -430,6 +430,8 @@ class SchedulerType(ExplicitEnum):
        - "reduce_lr_on_plateau" = get_reduce_on_plateau_schedule
        - "cosine_with_min_lr" = get_cosine_with_min_lr_schedule_with_warmup
        - "warmup_stable_decay" = get_wsd_schedule
+       - "constant_with_cooldown" = get_constant_with_cooldown_schedule_with_warmup
+       - "constant_with_cooldown_with_min_lr" = get_constant_with_cooldown_with_min_lr_schedule_with_warmup
     """
 
     LINEAR = "linear"
@@ -442,6 +444,8 @@ class SchedulerType(ExplicitEnum):
     REDUCE_ON_PLATEAU = "reduce_lr_on_plateau"
     COSINE_WITH_MIN_LR = "cosine_with_min_lr"
     WARMUP_STABLE_DECAY = "warmup_stable_decay"
+    WARMUP_STABLE_COOLDOWN = "warmup_stable_cooldown"
+    WARMUP_STABLE_COOLDOWN_WITH_MIN_LR = "constant_with_cooldown_with_min_lr"
 
 
 class TrainerMemoryTracker:
