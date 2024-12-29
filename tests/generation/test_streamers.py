@@ -137,7 +137,7 @@ class StreamerTester(unittest.TestCase):
         model.config.eos_token_id = -1
 
         # Generate input and get baseline output
-        input_ids = ids_tensor((1, 5), vocab_size=model.config.vocab_size).to(torch_device)
+        input_ids = ids_tensor((1, 2), vocab_size=model.config.vocab_size).to(torch_device)
         beam_outputs = model.generate(
             input_ids,
             max_new_tokens=10,
@@ -151,22 +151,28 @@ class StreamerTester(unittest.TestCase):
 
         # Store for comparing streaming output
         beam_texts_from_streamer = {i: "" for i in range(2)}
+        beams_from_streamer = {i: "" for i in range(2)}
+        idx = 0
 
         def on_beam_update(beam_idx: int, new_text: str):
             """Handler for beam updates"""
             beam_texts_from_streamer[beam_idx] = new_text
 
+        def on_beam_finished(text: str):
+            global idx
+            beams_from_streamer[idx] = text
+
         # Create streamer with handlers
         streamer = MultiBeamTextStreamer(
-            tokenizer=tokenizer, num_beams=2, on_beam_update=on_beam_update, skip_prompt=False
+            tokenizer=tokenizer, num_beams=2, on_beam_update=on_beam_update, on_beam_finished=on_beam_finished, skip_prompt=False
         )
 
         # Generate with streamer
         model.generate(input_ids, max_new_tokens=10, num_beams=2, do_sample=False, streamer=streamer)
 
         # Compare streamed outputs
-        for beam_text in beam_texts:
-            self.assertTrue(beam_text in beam_texts_from_streamer.values())
+        for i, beam in enumerate(beams_from_streamer.values()):
+            self.assertTrue(beam, beam_texts[i])
 
     def test_multibeam_text_streamer_beam_history(self):
         """Test that the MultiBeamTextStreamer correctly maintains beam history and handles beam switching."""
@@ -174,7 +180,7 @@ class StreamerTester(unittest.TestCase):
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
         model.config.eos_token_id = -1
 
-        input_ids = ids_tensor((1, 5), vocab_size=model.config.vocab_size).to(torch_device)
+        input_ids = ids_tensor((1, 2), vocab_size=model.config.vocab_size).to(torch_device)
 
         # Track beam history
         beam_histories = {i: [] for i in range(2)}

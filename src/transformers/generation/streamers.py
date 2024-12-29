@@ -410,8 +410,11 @@ class MultiBeamTextStreamer(MultiBeamBaseStreamer):
             values = values.tolist()
 
         # Validate input shape
-        if not isinstance(values, list) or not all(isinstance(row, list) and len(row) == 1 for row in values):
-            raise ValueError("Expected values to be a list of lists, each inner list having length 1")
+        if len(values) == 1 and isinstance(values[0], list) and len(values[0]) > 1:
+            values = [[token] for token in values[0]]
+        else:
+            if not isinstance(values, list) or not all(isinstance(row, list) and len(row) == 1 for row in values):
+                raise ValueError("Expected values to be a list of lists, each inner list having length 1")
 
         if len(values) > self.num_beams:
             raise ValueError(
