@@ -241,6 +241,8 @@ class RtDetrV2Config(PretrainedConfig):
             Relative weight of the generalized IoU loss in the object detection loss.
         eos_coefficient (`float`, *optional*, defaults to 0.0001):
             Relative classification weight of the 'no-object' class in the object detection loss.
+        decoder_n_levels (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
+        decoder_offset_scale (`<fill_type>`, *optional*, defaults to 0.5): <fill_docstring>
 
     Examples:
 
@@ -448,3 +450,6 @@ class RtDetrV2Config(PretrainedConfig):
             backbone_config=backbone_config,
             **kwargs,
         )
+
+
+__all__ = ["RtDetrV2ResNetConfig", "RtDetrV2Config"]

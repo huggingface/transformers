@@ -310,3 +310,12 @@ class RtDetrV2ForObjectDetection(RTDetrForObjectDetection):
         # fix bug
         self.model.decoder.class_embed = self.class_embed
         self.model.decoder.bbox_embed = self.bbox_embed
+
+
+__all__ = [
+    "RtDetrV2ResNetConfig",
+    "RtDetrV2Config",
+    "RtDetrV2Model",
+    "RtDetrV2PreTrainedModel",
+    "RtDetrV2ForObjectDetection",
+]
