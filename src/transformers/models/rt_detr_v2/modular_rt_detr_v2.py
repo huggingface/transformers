@@ -31,6 +31,7 @@ class RtDetrV2Config(RTDetrConfig):
     decoder_n_levels (`int`, *optional*, defaults to 3): The number of feature levels used by the decoder.
     decoder_offset_scale (`float`, *optional*, defaults to 0.5): Scaling factor applied to the attention offsets in the decoder.
     """
+
     model_type = "rt_detr_v2"
 
     def __init__(
