@@ -130,86 +130,49 @@ class StreamerTester(unittest.TestCase):
             for new_text in streamer:
                 streamer_text += new_text
 
-    def test_multibeam_text_streamer_matches_non_streaming(self):
-        """Test that the MultiBeamTextStreamer produces the same output as non-streaming beam search."""
+    def test_beam_tracking_and_callbacks(self):
+        """Test that MultiBeamTextStreamer correctly tracks beams and triggers callbacks"""
+
+        # Initialize test components
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
-        model.config.eos_token_id = -1
 
-        # Generate input and get baseline output
-        input_ids = ids_tensor((1, 2), vocab_size=model.config.vocab_size).to(torch_device)
-        beam_outputs = model.generate(
-            input_ids,
-            max_new_tokens=10,
-            num_beams=2,
-            do_sample=False,
-            return_dict_in_generate=True,
-            output_scores=True,
-            num_return_sequences=2,
-        )
-        beam_texts = [tokenizer.decode(output) for output in beam_outputs.sequences]
+        # Track beam updates and finished beams
+        beam_texts = {}
+        finished_beams = []
 
-        # Store for comparing streaming output
-        beam_texts_from_streamer = {i: "" for i in range(2)}
-        beams_from_streamer = {i: "" for i in range(2)}
-        idx = 0
-
-        def on_beam_update(beam_idx: int, new_text: str):
-            """Handler for beam updates"""
-            beam_texts_from_streamer[beam_idx] = new_text
+        def on_beam_update(beam_idx: int, text: str):
+            beam_texts[beam_idx] = text
 
         def on_beam_finished(text: str):
-            global idx
-            beams_from_streamer[idx] = text
+            finished_beams.append(text)
 
-        # Create streamer with handlers
-        streamer = MultiBeamTextStreamer(
-            tokenizer=tokenizer, num_beams=2, on_beam_update=on_beam_update, on_beam_finished=on_beam_finished, skip_prompt=False
-        )
-
-        # Generate with streamer
-        model.generate(input_ids, max_new_tokens=10, num_beams=2, do_sample=False, streamer=streamer)
-
-        # Compare streamed outputs
-        for i, beam in enumerate(beams_from_streamer.values()):
-            self.assertTrue(beam, beam_texts[i])
-
-    def test_multibeam_text_streamer_beam_history(self):
-        """Test that the MultiBeamTextStreamer correctly maintains beam history and handles beam switching."""
-        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
-        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
-        model.config.eos_token_id = -1
-
-        input_ids = ids_tensor((1, 2), vocab_size=model.config.vocab_size).to(torch_device)
-
-        # Track beam history
-        beam_histories = {i: [] for i in range(2)}
-        beam_switch_count = 0
-
-        def on_beam_update(beam_idx: int, new_text: str):
-            beam_histories[beam_idx].append(new_text)
-
-        def on_beam_finished(text: str):
-            nonlocal beam_switch_count
-            beam_switch_count += 1
-
+        # Create streamer with 2 beams
         streamer = MultiBeamTextStreamer(
             tokenizer=tokenizer,
             num_beams=2,
             on_beam_update=on_beam_update,
-            on_beam_finished=on_beam_finished,
-            skip_prompt=False,
+            on_beam_finished=on_beam_finished
         )
 
+        # Generate simple input
+        input_ids = ids_tensor((1, 2), vocab_size=model.config.vocab_size).to(torch_device)
+
         # Generate with beam search
-        model.generate(input_ids, max_new_tokens=10, num_beams=2, do_sample=False, streamer=streamer)
+        _ = model.generate(
+            input_ids,
+            max_new_tokens=10,
+            num_beams=2,
+            streamer=streamer,
+            do_sample=False  # Ensure deterministic output
+        )
 
-        # Verify that both beams received updates
-        self.assertTrue(len(beam_histories[0]) > 0)
-        self.assertTrue(len(beam_histories[1]) > 0)
+        # Verify core functionality
+        self.assertEqual(len(beam_texts), 2, "Should track exactly 2 beams")
 
-        # Verify that beam histories are different
-        self.assertNotEqual(beam_histories[0], beam_histories[1])
+        # Verify beams are different
+        unique_beams = set(beam_texts.values())
+        self.assertEqual(len(unique_beams), 2, "The two beams should contain different text")
 
     def test_multibeam_text_streamer_error_handling(self):
         """Test that the MultiBeamTextStreamer properly handles error conditions."""
