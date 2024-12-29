@@ -445,7 +445,7 @@ class SchedulerType(ExplicitEnum):
     COSINE_WITH_MIN_LR = "cosine_with_min_lr"
     WARMUP_STABLE_DECAY = "warmup_stable_decay"
     WARMUP_STABLE_COOLDOWN = "warmup_stable_cooldown"
-    WARMUP_STABLE_COOLDOWN_WITH_MIN_LR = "constant_with_cooldown_with_min_lr"
+    WARMUP_STABLE_COOLDOWN_WITH_MIN_LR = "warmup_stable_cooldown_with_min_lr"
 
 
 class TrainerMemoryTracker:

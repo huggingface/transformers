@@ -38,6 +38,8 @@ if is_torch_available():
         get_polynomial_decay_schedule_with_warmup,
         get_scheduler,
         get_wsd_schedule,
+        get_constant_with_cooldown_schedule_with_warmup,
+        get_constant_with_cooldown_with_min_lr_schedule_with_warmup,
     )
 
 
@@ -156,6 +158,30 @@ class ScheduleInitTest(unittest.TestCase):
                 {"num_warmup_steps": 2, "num_stable_steps": 2, "num_decay_steps": 3, "min_lr_ratio": 0.1},
                 [0.0, 5.0, 10.0, 10.0, 10.0, 7.75, 3.25, 1.0, 1.0, 1.0],
             ),
+            get_constant_with_cooldown_schedule_with_warmup: (
+                {**common_kwargs, "num_cooldown_steps": 2, "cooldown_type": "linear"},
+                [0.0, 5.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 5.0],
+            ),
+            get_constant_with_cooldown_schedule_with_warmup: (
+                {**common_kwargs, "num_cooldown_steps": 2, "cooldown_type": "cosine"},
+                [0.0, 5.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 5.0],
+            ),
+            get_constant_with_cooldown_schedule_with_warmup: (
+                {**common_kwargs, "num_cooldown_steps": 2, "cooldown_type": "1-sqrt"},
+                [0.0, 5.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 2.928],
+            ),
+            get_constant_with_cooldown_with_min_lr_schedule_with_warmup: (
+                {**common_kwargs, "num_cooldown_steps": 2, "cooldown_type": "linear", "min_lr_rate": 0.01},
+                [0.0, 5.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 5.0],
+            ),
+            get_constant_with_cooldown_with_min_lr_schedule_with_warmup: (
+                {**common_kwargs, "num_cooldown_steps": 2, "cooldown_type": "cosine", "min_lr_rate": 0.01},
+                [0.0, 5.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 5.0],
+            ),
+            get_constant_with_cooldown_with_min_lr_schedule_with_warmup: (
+                {**common_kwargs, "num_cooldown_steps": 2, "cooldown_type": "1-sqrt", "min_lr_rate": 0.01},
+                [0.0, 5.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 2.928],
+            ),
         }
 
         for scheduler_func, data in scheds.items():
@@ -193,6 +219,20 @@ class ScheduleInitTest(unittest.TestCase):
                 "scheduler_specific_kwargs": {"num_stable_steps": 1, "num_decay_steps": 3},
             },
             {"name": "cosine", "optimizer": self.optimizer, "num_warmup_steps": 2, "num_training_steps": 10},
+            {
+                "name": "warmup_stable_cooldown",
+                "optimizer": self.optimizer,
+                "num_warmup_steps": 2,
+                "num_training_steps": 10,
+                "scheduler_specific_kwargs": {"num_cooldown_steps": 2, "cooldown_type": "cosine"},
+            },
+            {
+                "name": "warmup_stable_cooldown_with_min_lr",
+                "optimizer": self.optimizer,
+                "num_warmup_steps": 2,
+                "num_training_steps": 10,
+                "scheduler_specific_kwargs": {"num_cooldown_steps": 2, "cooldown_type": "cosine", "min_lr_rate": 0.01},
+            }
         ]
 
         for param in test_params:

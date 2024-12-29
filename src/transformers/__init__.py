@@ -3919,6 +3919,8 @@ else:
         "get_polynomial_decay_schedule_with_warmup",
         "get_scheduler",
         "get_wsd_schedule",
+        "get_constant_with_cooldown_schedule_with_warmup",
+        "get_constant_with_cooldown_with_min_lr_schedule_with_warmup"
     ]
     _import_structure["pytorch_utils"] = [
         "Conv1D",
@@ -8407,6 +8409,8 @@ if TYPE_CHECKING:
             get_polynomial_decay_schedule_with_warmup,
             get_scheduler,
             get_wsd_schedule,
+            get_constant_with_cooldown_schedule_with_warmup,
+            get_constant_with_cooldown_with_min_lr_schedule_with_warmup
         )
         from .pytorch_utils import Conv1D, apply_chunking_to_forward, prune_layer
 

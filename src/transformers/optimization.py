@@ -455,7 +455,13 @@ def get_wsd_schedule(
 
 
 def _get_constant_with_cooldown_schedule_with_warmup_lr_lambda(
-    current_step: int, *, num_warmup_steps: int, num_training_steps: int, num_cooldown_steps: int, cooldown_type: str, num_cycles: float
+    current_step: int,
+    *,
+    num_warmup_steps: int,
+    num_training_steps: int, 
+    num_cooldown_steps: int, 
+    cooldown_type: str, 
+    num_cycles: float,
 ):
     if current_step < num_warmup_steps:
         return float(current_step) / float(max(1, num_warmup_steps))
@@ -472,6 +478,7 @@ def _get_constant_with_cooldown_schedule_with_warmup_lr_lambda(
         else:
             raise ValueError(f"Unknown cooldown type: {cooldown_type}, expected 'linear', 'cosine' or '1-sqrt'")
         return max(0.0, factor)
+    return 0.0
 
 
 def get_constant_with_cooldown_schedule_with_warmup(
@@ -522,7 +529,14 @@ def get_constant_with_cooldown_schedule_with_warmup(
 
 
 def _get_constant_with_cooldown_with_min_lr_schedule_with_warmup_lr_lambda(
-    current_step: int, *, num_warmup_steps: int, num_training_steps: int, num_cooldown_steps: int, cooldown_type: str, num_cycles: float, min_lr_rate: float = 0.0
+    current_step: int, 
+    *, 
+    num_warmup_steps: int, 
+    num_training_steps: int, 
+    num_cooldown_steps: int, 
+    cooldown_type: str, 
+    num_cycles: float, 
+    min_lr_rate: float = 0.0,
 ):
     if current_step < num_warmup_steps:
         return float(current_step) / float(max(1, num_warmup_steps))
@@ -540,6 +554,7 @@ def _get_constant_with_cooldown_with_min_lr_schedule_with_warmup_lr_lambda(
             raise ValueError(f"Unknown cooldown type: {cooldown_type}, expected 'linear', 'cosine' or '1-sqrt'")
         factor = factor * (1.0 - min_lr_rate) + min_lr_rate
         return max(0.0, factor)
+    return min_lr_rate
 
 
 def get_constant_with_cooldown_with_min_lr_schedule_with_warmup(
