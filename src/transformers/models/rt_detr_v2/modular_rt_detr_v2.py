@@ -5,8 +5,8 @@ import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
-from ...modeling_utils import PreTrainedModel
 from ..rt_detr.configuration_rt_detr import RTDetrConfig
+from ..rt_detr.configuration_rt_detr_resnet import RTDetrResNetConfig
 from ..rt_detr.modeling_rt_detr import (
     MultiScaleDeformableAttentionFunction,
     RTDetrDecoder,
@@ -14,16 +14,27 @@ from ..rt_detr.modeling_rt_detr import (
     RTDetrForObjectDetection,
     RTDetrModel,
     RTDetrMultiscaleDeformableAttention,
+    RTDetrPreTrainedModel,
 )
+
+
+class RtDetrV2ResNetConfig(RTDetrResNetConfig):
+    def __init__(
+        self,
+        **super_kwargs,
+    ):
+        super().__init__(**super_kwargs)
 
 
 class RtDetrV2Config(RTDetrConfig):
     model_type = "rt_detr_v2"
 
-    def __init__(self,
-                 decoder_n_levels=3,  # default value
-                 decoder_offset_scale=0.5,  # default value
-                 **super_kwargs):
+    def __init__(
+        self,
+        decoder_n_levels=3,  # default value
+        decoder_offset_scale=0.5,  # default value
+        **super_kwargs,
+    ):
         # init the base RTDetrConfig class with additional parameters
         super().__init__(**super_kwargs)
 
@@ -105,8 +116,10 @@ def multi_scale_deformable_attention_v2(
     )
     return output.transpose(1, 2).contiguous()
 
+
 class MultiScaleDeformableAttentionFunctionV2(MultiScaleDeformableAttentionFunction):
     pass
+
 
 # the main change
 class RtDetrV2MultiscaleDeformableAttention(RTDetrMultiscaleDeformableAttention):
@@ -115,13 +128,11 @@ class RtDetrV2MultiscaleDeformableAttention(RTDetrMultiscaleDeformableAttention)
     with improved offset handling and initialization.
     """
 
-    def __init__(self, config: RtDetrV2Config):
+    def __init__(self, config: RtDetrV2Config, num_heads: int = None, n_points: int = None):
+        num_heads = num_heads if num_heads is not None else config.decoder_attention_heads
+        n_points = n_points if n_points is not None else config.decoder_n_points
         # Initialize parent class with config parameters
-        super().__init__(
-            config=config,
-            num_heads=config.decoder_attention_heads,
-            n_points=config.decoder_n_points
-        )
+        super().__init__(config=config, num_heads=num_heads, n_points=n_points)
 
         # V2-specific attributes
         self.offset_scale = config.decoder_offset_scale
@@ -130,31 +141,6 @@ class RtDetrV2MultiscaleDeformableAttention(RTDetrMultiscaleDeformableAttention)
         self.n_points_list = n_points_list
         n_points_scale = [1 / n for n in n_points_list for _ in range(n)]
         self.register_buffer("n_points_scale", torch.tensor(n_points_scale, dtype=torch.float32))
-        # Initialize weights with v2-specific pattern
-        self._reset_parameters()
-    def _reset_parameters(self):
-        """V2-specific initialization of parameters"""
-        nn.init.constant_(self.sampling_offsets.weight.data, 0.0)
-        default_dtype = torch.get_default_dtype()
-        thetas = torch.arange(self.n_heads, dtype=torch.int64).to(default_dtype) * (2.0 * math.pi / self.n_heads)
-        grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
-        grid_init = (
-            (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
-            .view(self.n_heads, 1, 1, 2)
-            .repeat(1, self.n_levels, self.n_points, 1)
-        )
-        for i in range(self.n_points):
-            grid_init[:, :, i, :] *= i + 1
-
-        with torch.no_grad():
-            self.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
-
-        nn.init.constant_(self.attention_weights.weight.data, 0.0)
-        nn.init.constant_(self.attention_weights.bias.data, 0.0)
-        nn.init.xavier_uniform_(self.value_proj.weight.data)
-        nn.init.constant_(self.value_proj.bias.data, 0.0)
-        nn.init.xavier_uniform_(self.output_proj.weight.data)
-        nn.init.constant_(self.output_proj.bias.data, 0.0)
 
     def forward(
         self,
@@ -240,63 +226,12 @@ class RtDetrV2DecoderLayer(RTDetrDecoderLayer):
         # override only the encoder attention module with v2 version
         self.encoder_attn = RtDetrV2MultiscaleDeformableAttention(config)
 
-class RtDetrV2Decoder(RTDetrDecoder):
-    def __init__(self, config: RtDetrV2Config):
-        super().__init__(config)
-        self.layers = nn.ModuleList([RtDetrV2DecoderLayer(config) for _ in range(config.decoder_layers)])
 
-
-class RtDetrV2Model(RTDetrModel):
-    def __init__(self, config: RtDetrV2Config):
-        super().__init__(config)
-        # decoder
-        self.decoder = RtDetrV2Decoder(config)
-
-def _get_clones(partial_module, N):
-    return nn.ModuleList([partial_module() for i in range(N)])
-
-class RtDetrV2ForObjectDetection(RTDetrForObjectDetection):
-    def __init__(self, config: RtDetrV2Config):
-        super().__init__(config)
-        # RTDETR encoder-decoder model
-        self.model = RtDetrV2Model(config)
-        # here self.model.decoder.bbox_embed is null, but not self.bbox_embed
-        # fix bug
-        self.model.decoder.class_embed = self.class_embed
-        self.model.decoder.bbox_embed = self.bbox_embed
-
-class RtDetrV2PreTrainedModel(PreTrainedModel):
-    def __init__(self, RTDetrV2Config):
-        super().__init__(config)
-        self.model = RTDetrV2Model(config)
-
+class RtDetrV2PreTrainedModel(RTDetrPreTrainedModel):
     def _init_weights(self, module):
         # this could be simplified like calling the base class function first then adding new stuff
-        """Initalize the weights"""
-        nn.init.constant_(self.sampling_offsets.weight.data, 0.0)
-        default_dtype = torch.get_default_dtype()
-        thetas = torch.arange(self.n_heads, dtype=torch.int64).to(default_dtype) * (2.0 * math.pi / self.n_heads)
-        grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
-        grid_init = (
-            (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
-            .view(self.n_heads, 1, 1, 2)
-            .repeat(1, self.n_levels, self.n_points, 1)
-        )
-        for i in range(self.n_points):
-            grid_init[:, :, i, :] *= i + 1
-
-        with torch.no_grad():
-            self.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
-
-        nn.init.constant_(self.attention_weights.weight.data, 0.0)
-        nn.init.constant_(self.attention_weights.bias.data, 0.0)
-        nn.init.xavier_uniform_(self.value_proj.weight.data)
-        nn.init.constant_(self.value_proj.bias.data, 0.0)
-        nn.init.xavier_uniform_(self.output_proj.weight.data)
-        nn.init.constant_(self.output_proj.bias.data, 0.0)
-
         """initialize linear layer biasreturn value according to a given probability value."""
-        if isinstance(module, (RTDetrForObjectDetection, RTDetrDecoder)):
+        if isinstance(module, (RtDetrV2ForObjectDetection, RtDetrV2Decoder)):
             if module.class_embed is not None:
                 for layer in module.class_embed:
                     prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
@@ -309,7 +244,7 @@ class RtDetrV2PreTrainedModel(PreTrainedModel):
                     nn.init.constant_(layer.layers[-1].weight, 0)
                     nn.init.constant_(layer.layers[-1].bias, 0)
 
-        if isinstance(module, RTDetrV2MultiscaleDeformableAttention):
+        if isinstance(module, RtDetrV2MultiscaleDeformableAttention):
             nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
             default_dtype = torch.get_default_dtype()
             thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
@@ -332,7 +267,7 @@ class RtDetrV2PreTrainedModel(PreTrainedModel):
             nn.init.xavier_uniform_(module.output_proj.weight.data)
             nn.init.constant_(module.output_proj.bias.data, 0.0)
 
-        if isinstance(module, RTDetrV2Model):
+        if isinstance(module, RtDetrV2Model):
             prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
             bias = float(-math.log((1 - prior_prob) / prior_prob))
             nn.init.xavier_uniform_(module.enc_score_head.weight)
@@ -347,3 +282,31 @@ class RtDetrV2PreTrainedModel(PreTrainedModel):
             nn.init.xavier_uniform_(module.weight_embedding.weight)
         if hasattr(module, "denoising_class_embed") and self.config.num_denoising > 0:
             nn.init.xavier_uniform_(module.denoising_class_embed.weight)
+
+
+class RtDetrV2Decoder(RTDetrDecoder):
+    def __init__(self, config: RtDetrV2Config):
+        super().__init__(config)
+        self.layers = nn.ModuleList([RtDetrV2DecoderLayer(config) for _ in range(config.decoder_layers)])
+
+
+class RtDetrV2Model(RTDetrModel):
+    def __init__(self, config: RtDetrV2Config):
+        super().__init__(config)
+        # decoder
+        self.decoder = RtDetrV2Decoder(config)
+
+
+def _get_clones(partial_module, N):
+    return nn.ModuleList([partial_module() for i in range(N)])
+
+
+class RtDetrV2ForObjectDetection(RTDetrForObjectDetection):
+    def __init__(self, config: RtDetrV2Config):
+        super().__init__(config)
+        # RTDETR encoder-decoder model
+        self.model = RtDetrV2Model(config)
+        # here self.model.decoder.bbox_embed is null, but not self.bbox_embed
+        # fix bug
+        self.model.decoder.class_embed = self.class_embed
+        self.model.decoder.bbox_embed = self.bbox_embed

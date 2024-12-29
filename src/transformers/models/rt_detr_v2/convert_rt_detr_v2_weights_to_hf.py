@@ -24,8 +24,7 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision import transforms
 
-from transformers import RTDetrImageProcessor
-from transformers.models.rt_detr_v2.modular_rt_detr_v2 import RtDetrV2Config, RtDetrV2ForObjectDetection
+from transformers import RTDetrImageProcessor, RtDetrV2Config, RtDetrV2ForObjectDetection
 from transformers.utils import logging
 
 
@@ -558,7 +557,6 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
         "ema"
     ]["module"]
 
-
     # rename keys
     for src, dest in create_rename_keys(config):
         rename_key(state_dict, src, dest)
@@ -580,7 +578,6 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     model = RtDetrV2ForObjectDetection(config)
     model.load_state_dict(state_dict)
     model.eval()
-
 
     # load image processor
     image_processor = RTDetrImageProcessor()

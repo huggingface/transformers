@@ -15,10 +15,12 @@
 """Testing suite for the PyTorch RT_DETR model."""
 
 import inspect
+import json
 import math
 import tempfile
 import unittest
 
+from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
 from transformers import (
@@ -162,7 +164,6 @@ class RtDetrV2ModelTester:
         config = self.get_rt_detr_v2_config()
         config.num_labels = self.num_labels
         return config, pixel_values, pixel_mask, labels
-
 
     def get_rt_detr_v2_config(model_name: str) -> RtDetrV2Config:
         config = RtDetrV2Config()
