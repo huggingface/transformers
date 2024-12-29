@@ -406,7 +406,7 @@ class MultiBeamTextStreamer(MultiBeamBaseStreamer):
             beam_indices: Optional list/array/tensor containing the previous beam indices for each current beam
         """
         # Convert values to list if it's a tensor or array
-        if hasattr(values, 'tolist'):
+        if hasattr(values, "tolist"):
             values = values.tolist()
 
         # Validate input shape
@@ -424,7 +424,7 @@ class MultiBeamTextStreamer(MultiBeamBaseStreamer):
             beam_indices = list(range(len(values)))
         else:
             # Convert beam_indices to list if it's a tensor or array
-            if hasattr(beam_indices, 'tolist'):
+            if hasattr(beam_indices, "tolist"):
                 beam_indices = beam_indices.tolist()
             elif not isinstance(beam_indices, list):
                 beam_indices = list(beam_indices)
