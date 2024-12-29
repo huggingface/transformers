@@ -3912,6 +3912,8 @@ else:
         "AdamW",
         "get_constant_schedule",
         "get_constant_schedule_with_warmup",
+        "get_constant_with_cooldown_schedule_with_warmup",
+        "get_constant_with_cooldown_with_min_lr_schedule_with_warmup",
         "get_cosine_schedule_with_warmup",
         "get_cosine_with_hard_restarts_schedule_with_warmup",
         "get_inverse_sqrt_schedule",
@@ -3919,8 +3921,6 @@ else:
         "get_polynomial_decay_schedule_with_warmup",
         "get_scheduler",
         "get_wsd_schedule",
-        "get_constant_with_cooldown_schedule_with_warmup",
-        "get_constant_with_cooldown_with_min_lr_schedule_with_warmup",
     ]
     _import_structure["pytorch_utils"] = [
         "Conv1D",

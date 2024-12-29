@@ -516,7 +516,6 @@ def get_constant_with_cooldown_schedule_with_warmup(
     Return:
         `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
     """
-
     lr_lambda = partial(
         _get_constant_with_cooldown_schedule_with_warmup_lr_lambda,
         num_warmup_steps=num_warmup_steps,
