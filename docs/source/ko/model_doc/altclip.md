@@ -19,7 +19,23 @@ AltCLIP은 멀티모달 비전 및 언어 모델입니다. 이미지와 텍스�
 이미지를 트랜스포머 인코더에 입력하기 위해, 각 이미지를 일정한 크기의 겹치지 않는 패치 시퀀스로 분할한 뒤, 이를 선형 임베딩합니다. 전체 이미지를 나타내기 위해 [CLS] 토큰이 추가됩니다. 저자들은 절대 위치 임베딩도 추가하여 결과 벡터 시퀀스를 표준 트랜스포머 인코더에 입력합니다. [`CLIPImageProcessor`]는 모델을 위해 이미지를 크기 조정하고 정규화하는 데 사용할 수 있습니다.
 
 [`AltCLIPProcessor`]는 [`CLIPImageProcessor`]와 [`XLMRobertaTokenizer`]를 하나의 인스턴스로 묶어 텍스트를 인코딩하고 이미지를 준비합니다. 다음 예제는 [`AltCLIPProcessor`]와 [`AltCLIPModel`]을 사용하여 이미지와 텍스트 간의 유사성 점수를 얻는 방법을 보여줍니다.
+```python
+>>> from PIL import Image
+>>> import requests
 
+>>> from transformers import AltCLIPModel, AltCLIPProcessor
+
+>>> model = AltCLIPModel.from_pretrained("BAAI/AltCLIP")
+>>> processor = AltCLIPProcessor.from_pretrained("BAAI/AltCLIP")
+
+>>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+>>> image = Image.open(requests.get(url, stream=True).raw)
+
+>>> inputs = processor(text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True)
+
+>>> outputs = model(**inputs)
+>>> logits_per_image = outputs.logits_per_image  # 이미지-텍스트 유사도 점수
+>>> probs = logits_per_image.softmax(dim=1)  # 라벨 마다 확률을 얻기 위해 softmax 적용
 <Tip>
 
 이 모델은 `CLIPModel`을 기반으로 하므로, 원래 CLIP처럼 사용할 수 있습니다.
