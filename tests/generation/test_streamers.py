@@ -149,10 +149,7 @@ class StreamerTester(unittest.TestCase):
 
         # Create streamer with 2 beams
         streamer = MultiBeamTextStreamer(
-            tokenizer=tokenizer,
-            num_beams=2,
-            on_beam_update=on_beam_update,
-            on_beam_finished=on_beam_finished
+            tokenizer=tokenizer, num_beams=2, on_beam_update=on_beam_update, on_beam_finished=on_beam_finished
         )
 
         # Generate simple input
@@ -164,7 +161,7 @@ class StreamerTester(unittest.TestCase):
             max_new_tokens=10,
             num_beams=2,
             streamer=streamer,
-            do_sample=False  # Ensure deterministic output
+            do_sample=False,  # Ensure deterministic output
         )
 
         # Verify core functionality
