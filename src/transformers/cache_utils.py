@@ -1198,7 +1198,7 @@ class StaticCache(Cache):
         key_states = key_states.to(k_out.dtype)
         value_states = value_states.to(v_out.dtype)
 
-        bz = key_states.shape[0] 
+        bz = key_states.shape[0]
 
         if cache_position is None:
             k_out.copy_(key_states)
