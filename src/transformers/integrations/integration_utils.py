@@ -226,9 +226,8 @@ def hp_params(trial):
 
 
 def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
-    import gc
-
     import optuna
+    from accelerate.utils.memory import release_memory
 
     if trainer.args.process_index == 0:
 
@@ -255,11 +254,8 @@ def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> Be
                 trainer.objective = trainer.compute_objective(metrics)
 
             # Free GPU memory
-            del trainer.model_wrapped
-            del trainer.model
-            gc.collect()
+            trainer.model_wrapped, trainer.model = release_memory(trainer.model_wrapped, trainer.model)
             trainer.accelerator.clear()
-            torch.cuda.empty_cache()
 
             return trainer.objective
 
