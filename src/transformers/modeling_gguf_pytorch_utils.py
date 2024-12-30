@@ -336,7 +336,6 @@ def load_gguf_checkpoint(gguf_checkpoint_path, return_tensors=False):
         model_size = m.group().strip("-")  # only keeps `7b`
 
     if architecture + model_size not in GGUF_SUPPORTED_ARCHITECTURES:
-        print(GGUF_SUPPORTED_ARCHITECTURES)
         raise ValueError(f"Architecture {architecture + model_size} not supported")
 
     # Handle tie_word_embeddings, if lm_head.weight is not present in tensors,
