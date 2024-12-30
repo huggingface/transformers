@@ -541,7 +541,6 @@ _import_structure = {
     "models.levit": ["LevitConfig"],
     "models.lilt": ["LiltConfig"],
     "models.llama": ["LlamaConfig"],
-    "models.telechat2": ["TeleChat2Config"],
     "models.llava": [
         "LlavaConfig",
         "LlavaProcessor",
@@ -788,6 +787,7 @@ _import_structure = {
         "TapasConfig",
         "TapasTokenizer",
     ],
+    "models.telechat2": ["TeleChat2Config"],
     "models.time_series_transformer": ["TimeSeriesTransformerConfig"],
     "models.timesformer": ["TimesformerConfig"],
     "models.timm_backbone": ["TimmBackboneConfig"],
@@ -2644,13 +2644,6 @@ else:
             "LlamaPreTrainedModel",
         ]
     )
-    _import_structure["models.telechat2"].extend(
-        [
-            "TeleChat2ForCausalLM",
-            "TeleChat2Model",
-            "TeleChat2PreTrainedModel",
-        ]
-    )
     _import_structure["models.llava"].extend(
         [
             "LlavaForConditionalGeneration",
@@ -3569,6 +3562,13 @@ else:
             "TapasModel",
             "TapasPreTrainedModel",
             "load_tf_weights_in_tapas",
+        ]
+    )
+    _import_structure["models.telechat2"].extend(
+        [
+            "TeleChat2ForCausalLM",
+            "TeleChat2Model",
+            "TeleChat2PreTrainedModel",
         ]
     )
     _import_structure["models.time_series_transformer"].extend(
