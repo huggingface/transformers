@@ -435,7 +435,9 @@ class TeleChat2IntegrationTest(unittest.TestCase):
         EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
         # An input with 4097 tokens that is above the size of the sliding window
         input_ids = [1] + [306, 338] * 2048
-        model = TeleChat2ForCausalLM.from_pretrained("TeleAI/TeleChat2-3B", device_map="auto", attn_implementation="sdpa")
+        model = TeleChat2ForCausalLM.from_pretrained(
+            "TeleAI/TeleChat2-3B", device_map="auto", attn_implementation="sdpa"
+        )
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
@@ -472,7 +474,9 @@ class TeleChat2IntegrationTest(unittest.TestCase):
         )
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("TeleAIt/TeleChat2-7B", use_fast=False)
-        model = TeleChat2ForCausalLM.from_pretrained("TeleAI/TeleChat2-3B", device_map="auto", torch_dtype=torch.float16)
+        model = TeleChat2ForCausalLM.from_pretrained(
+            "TeleAI/TeleChat2-3B", device_map="auto", torch_dtype=torch.float16
+        )
         assistant_model = TeleChat2ForCausalLM.from_pretrained(
             "TeleChat/TeleChat2-3B", device_map="auto", torch_dtype=torch.float16
         )
@@ -544,4 +548,3 @@ class TeleChat2IntegrationTest(unittest.TestCase):
         )
         ep_generated_text = tokenizer.batch_decode(ep_generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)
-

@@ -177,7 +177,7 @@ class TeleChat2Config(PretrainedConfig):
         mlp_bias=False,
         head_dim=None,
         sliding_window=None,
-        embed_layernorm = False,
+        embed_layernorm=False,
         use_sliding_window=False,
         max_window_layers=28,
         **kwargs,

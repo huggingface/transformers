@@ -261,12 +261,8 @@ class TeleChat2Attention(nn.Module):
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
 
-        self.query = nn.Linear(
-                config.hidden_size, config.num_attention_heads * self.head_dim, bias=False
-        )
-        self.key_value = nn.Linear(
-                config.hidden_size, self.head_dim * config.num_key_value_heads * 2, bias=False
-        )
+        self.query = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
+        self.key_value = nn.Linear(config.hidden_size, self.head_dim * config.num_key_value_heads * 2, bias=False)
         self.dense = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size)
 
     def forward(
@@ -376,7 +372,6 @@ class TeleChat2DecoderLayer(nn.Module):
             outputs += (self_attn_weights,)
 
         return outputs
-
 
 
 TELECHAT2_START_DOCSTRING = r"""
@@ -518,9 +513,7 @@ class TeleChat2Model(TeleChat2PreTrainedModel):
 
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
 
-        self.h = nn.ModuleList(
-                [TeleChat2DecoderLayer(config, i) for i in range(config.num_hidden_layers)]
-        )
+        self.h = nn.ModuleList([TeleChat2DecoderLayer(config, i) for i in range(config.num_hidden_layers)])
         self.ln_f = TeleChat2RMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         self.rotary_emb = TeleChat2RotaryEmbedding(config=config)
         self.gradient_checkpointing = False
