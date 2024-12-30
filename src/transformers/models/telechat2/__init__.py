@@ -13,8 +13,12 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import (OptionalDependencyNotAvailable, _LazyModule,
-                      is_torch_available)
+from ...utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_torch_available,
+)
+
 
 _import_structure = {
     "configuration_telechat2": ["TeleChat2Config"],
@@ -42,8 +46,11 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_telechat2 import (TeleChat2ForCausalLM, TeleChat2Model,
-                                         TeleChat2PreTrainedModel)
+        from .modeling_telechat2 import (
+            TeleChat2ForCausalLM,
+            TeleChat2Model,
+            TeleChat2PreTrainedModel
+        )
 
 
 else:
