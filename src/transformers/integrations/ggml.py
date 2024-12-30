@@ -842,16 +842,23 @@ class GGUFGemmaConverter(GemmaConverter):
         self.additional_kwargs = {}
 
     def vocab(self, proto):
-        return list(zip(proto.tokens, proto.scores))
+        original_vocab = list(zip(proto.tokens, proto.scores))
+        updated_vocab = []
+        
+        for token, score in original_vocab:
+            if token == "<0x09>":
+                updated_vocab.append(("\t", score))
+            elif " " in token and len(token.strip()) == 0:
+                underscores = "▁" * len(token)
+                updated_vocab.append((underscores, score))
+            else:
+                updated_vocab.append((token, score))
+
+        return updated_vocab
 
     def normalizer(self, proto):
-        if getattr(self.original_tokenizer, "legacy", True):
-            sequence = []
-            if getattr(self.original_tokenizer, "add_prefix_space", True):
-                sequence += [normalizers.Prepend(prepend="▁")]
-            sequence += [normalizers.Replace(pattern=" ", content="▁")]
-            return normalizers.Sequence(sequence)
-        return None  # non-legacy, no normalizer
+        return normalizers.Replace(" ", "▁")
+
     def decoder(self, replacement, add_prefix_space):
         sequence = [
             decoders.Replace("▁", " "),
@@ -869,7 +876,7 @@ class GGUFGemmaConverter(GemmaConverter):
             Unigram(
                 vocab_scores,
                 unk_id=self.proto.unk_token_id,
-                byte_fallback=False,
+                byte_fallback=self.handle_byte_fallback,
             )
         )
 
