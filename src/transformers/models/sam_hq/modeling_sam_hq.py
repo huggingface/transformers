@@ -62,10 +62,10 @@ class SamHQVisionEncoderOutput(ModelOutput):
     """
 
     image_embeds: Optional[torch.FloatTensor] = None
+    intermediate_embeddings: Optional[List[torch.FloatTensor]] = None
     last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-    intermediate_embeddings: Optional[List[torch.FloatTensor]] = None
 
 
 @dataclass
@@ -523,8 +523,10 @@ class SamHQVisionEncoder(nn.Module):
 
         hidden_states = self.neck(hidden_states)
 
+        image_embeddings = hidden_states
+
         if not return_dict:
-            outputs = (hidden_states, intermediate_embeddings)
+            outputs = (image_embeddings, intermediate_embeddings)
             if output_hidden_states:
                 outputs = outputs + (all_hidden_states,)
             if output_attentions:
@@ -532,6 +534,7 @@ class SamHQVisionEncoder(nn.Module):
             return outputs
 
         return SamHQVisionEncoderOutput(
+            image_embeds=image_embeddings,
             last_hidden_state=hidden_states,
             intermediate_embeddings=intermediate_embeddings,
             hidden_states=all_hidden_states,
@@ -1317,13 +1320,8 @@ class SamHQModel(SamHQPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
-
-        if return_dict:
-            image_embeddings = vision_output.last_hidden_state
-            intermediate_embeddings = vision_output.intermediate_embeddings
-        else:
-            image_embeddings = vision_output[0]
-            intermediate_embeddings = vision_output[1]
+        image_embeddings = vision_output[0]
+        intermediate_embeddings = vision_output[1]
 
         return image_embeddings, intermediate_embeddings
 

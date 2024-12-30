@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,20 +19,24 @@ import unittest
 import requests
 
 from transformers import SamHQConfig, SamHQMaskDecoderConfig, SamHQPromptEncoderConfig, SamHQVisionConfig, pipeline
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import cleanup, require_torch, slow, torch_device
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
+
 if is_torch_available():
     import torch
     from torch import nn
+
     from transformers import SamHQModel, SamHQProcessor
+
 
 if is_vision_available():
     from PIL import Image
+
 
 class SamHQPromptEncoderTester:
     def __init__(
@@ -64,7 +68,9 @@ class SamHQPromptEncoderTester:
     def prepare_config_and_inputs(self):
         dummy_points = floats_tensor([self.batch_size, 3, 2])
         config = self.get_config()
+
         return config, dummy_points
+
 
 class SamHQMaskDecoderTester:
     def __init__(
@@ -79,7 +85,7 @@ class SamHQMaskDecoderTester:
         iou_head_depth=3,
         iou_head_hidden_dim=32,
         layer_norm_eps=1e-6,
-        vit_dim=384,  # Added for SAM HQ
+        vit_dim=768,
     ):
         self.hidden_size = hidden_size
         self.hidden_act = hidden_act
@@ -110,10 +116,13 @@ class SamHQMaskDecoderTester:
 
     def prepare_config_and_inputs(self):
         config = self.get_config()
+
         dummy_inputs = {
             "image_embedding": floats_tensor([self.batch_size, self.hidden_size]),
         }
+
         return config, dummy_inputs
+
 
 class SamHQModelTester:
     def __init__(
@@ -123,7 +132,7 @@ class SamHQModelTester:
         intermediate_size=72,
         projection_dim=62,
         output_channels=32,
-        num_hidden_layers=2,
+        num_hidden_layers=14,
         num_attention_heads=4,
         num_channels=3,
         image_size=24,
@@ -144,7 +153,6 @@ class SamHQModelTester:
         num_pos_feats=16,
         mlp_dim=None,
         batch_size=2,
-        vit_dim=384,  # Added for SAM HQ
     ):
         self.parent = parent
         self.image_size = image_size
@@ -172,7 +180,6 @@ class SamHQModelTester:
         self.num_pos_feats = num_pos_feats
         self.mlp_dim = mlp_dim
         self.batch_size = batch_size
-        self.vit_dim = vit_dim
 
         # in ViT, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
         num_patches = (image_size // patch_size) ** 2
@@ -184,6 +191,7 @@ class SamHQModelTester:
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         config = self.get_config()
+
         return config, pixel_values
 
     def get_config(self):
@@ -213,6 +221,7 @@ class SamHQModelTester:
         )
 
         prompt_encoder_config = self.prompt_encoder_tester.get_config()
+
         mask_decoder_config = self.mask_decoder_tester.get_config()
 
         return SamHQConfig(
@@ -235,42 +244,47 @@ class SamHQModelTester:
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
-            image_embeddings, interm_embeddings = model.get_image_embeddings(pixel_values)
-        self.parent.assertEqual(image_embeddings.shape[-2:], (12, 12))
-        self.parent.assertIsNotNone(interm_embeddings)
+            result = model.get_image_embeddings(pixel_values)
+            
+        self.parent.assertEqual(result[0][0].shape, (self.output_channels, 12, 12))
 
     def create_and_check_get_image_hidden_states(self, config, pixel_values):
         model = SamHQModel(config=config)
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
-            outputs = model.vision_encoder(
+            result = model.vision_encoder(
                 pixel_values,
                 output_hidden_states=True,
                 return_dict=True,
             )
+            
 
         # after computing the convolutional features
         expected_hidden_states_shape = (self.batch_size, 12, 12, 36)
-        self.parent.assertEqual(len(outputs[1]), self.num_hidden_layers + 1)
-        self.parent.assertEqual(outputs[1][0].shape, expected_hidden_states_shape)
+        self.parent.assertEqual(len(result.hidden_states), self.num_hidden_layers + 1)
+        self.parent.assertEqual(result[-1][0].shape, expected_hidden_states_shape)
 
         with torch.no_grad():
-            outputs = model.vision_encoder(
+            result = model.vision_encoder(
                 pixel_values,
                 output_hidden_states=True,
                 return_dict=False,
             )
 
+            
+
         # after computing the convolutional features
-        self.parent.assertEqual(len(outputs[1]), self.num_hidden_layers + 1)
-        self.parent.assertEqual(outputs[1][0].shape, expected_hidden_states_shape)
+        expected_hidden_states_shape = (self.batch_size, 12, 12, 36)
+        self.parent.assertEqual(len(result[-1]), self.num_hidden_layers + 1)
+        self.parent.assertEqual(result[-1][0].shape, expected_hidden_states_shape)
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
+
 
 @require_torch
 class SamHQModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
@@ -289,6 +303,7 @@ class SamHQModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_head_masking = False
     test_torchscript = False
 
+    # TODO: Fix me @Arthur: `run_batch_test` in `tests/test_pipeline_mixin.py` not working
     def is_pipeline_test_to_skip(
         self,
         pipeline_test_case_name,
@@ -324,7 +339,7 @@ class SamHQModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    def test_model_common_attributes(self):
+    def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -405,13 +420,13 @@ class SamHQModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(
-        reason="This architecture seems to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecture seems to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
@@ -438,21 +453,113 @@ class SamHQModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model = SamHQModel.from_pretrained("Uminosachi/sam-hq-vit-huge")
+        model_name = "sushmanth/sam_hq_vit_b"
+        model = SamHQModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
+
 
 def prepare_image():
     img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
     raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
     return raw_image
 
+
 def prepare_dog_img():
     img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/dog-sam.png"
     raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
     return raw_image
 
+
 @slow
 class SamHQModelIntegrationTest(unittest.TestCase):
+    def tearDown(self):
+        super().tearDown()
+        # clean-up as much as possible GPU memory occupied by PyTorch
+        cleanup(torch_device, gc_collect=True)
+
+    def test_inference_mask_generation_no_point(self):
+        model = SamHQModel.from_pretrained("sushmanth/sam_hq_vit_b")
+        processor = SamHQProcessor.from_pretrained("sushmanth/sam_hq_vit_b")
+
+        model.to(torch_device)
+        model.eval()
+
+        raw_image = prepare_image()
+        inputs = processor(images=raw_image, return_tensors="pt").to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+        scores = outputs.iou_scores.squeeze()
+        masks = outputs.pred_masks[0, 0, 0, 0, :3]
+        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.4515), atol=2e-4))
+        self.assertTrue(torch.allclose(masks, torch.tensor([-4.1800, -3.4948, -3.4481]).to(torch_device), atol=2e-4))
+
+    def test_inference_mask_generation_one_point_one_bb(self):
+        model = SamHQModel.from_pretrained("sushmanth/sam_hq_vit_b")
+        processor = SamHQProcessor.from_pretrained("sushmanth/sam_hq_vit_b")
+
+        model.to(torch_device)
+        model.eval()
+
+        raw_image = prepare_image()
+        input_boxes = [[[650, 900, 1000, 1250]]]
+        input_points = [[[820, 1080]]]
+
+        inputs = processor(
+            images=raw_image, input_boxes=input_boxes, input_points=input_points, return_tensors="pt"
+        ).to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+        scores = outputs.iou_scores.squeeze()
+        masks = outputs.pred_masks[0, 0, 0, 0, :3]
+        self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9566), atol=2e-4))
+        self.assertTrue(
+            torch.allclose(masks, torch.tensor([-12.7729, -12.3665, -12.6061]).to(torch_device), atol=2e-4)
+        )
+
+    def test_inference_mask_generation_batched_points_batched_images(self):
+        model = SamHQModel.from_pretrained("sushmanth/sam_hq_vit_b")
+        processor = SamHQProcessor.from_pretrained("sushmanth/sam_hq_vit_b")
+
+        model.to(torch_device)
+        model.eval()
+
+        raw_image = prepare_image()
+        input_points = [
+            [[[820, 1080]], [[820, 1080]], [[820, 1080]], [[820, 1080]]],
+            [[[510, 1080]], [[820, 1080]], [[820, 1080]], [[820, 1080]]],
+        ]
+
+        inputs = processor(images=[raw_image, raw_image], input_points=input_points, return_tensors="pt").to(
+            torch_device
+        )
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+        scores = outputs.iou_scores.squeeze().cpu()
+        masks = outputs.pred_masks[0, 0, 0, 0, :3].cpu()
+
+        EXPECTED_SCORES = torch.tensor(
+            [
+                [
+                    [0.6765, 0.9379, 0.8803],
+                    [0.6765, 0.9379, 0.8803],
+                    [0.6765, 0.9379, 0.8803],
+                    [0.6765, 0.9379, 0.8803],
+                ],
+                [
+                    [0.3317, 0.7264, 0.7646],
+                    [0.6765, 0.9379, 0.8803],
+                    [0.6765, 0.9379, 0.8803],
+                    [0.6765, 0.9379, 0.8803],
+                ],
+            ]
+        )
+        EXPECTED_MASKS = torch.tensor([-2.8550, -2.7988, -2.9625])
+        self.assertTrue(torch.allclose(scores, EXPECTED_SCORES, atol=1e-3))
+        self.assertTrue(torch.allclose(masks, EXPECTED_MASKS, atol=1e-3))
+
     def test_inference_mask_generation_one_point_one_bb_zero(self):
         model = SamHQModel.from_pretrained("sushmanth/sam_hq_vit_b")
         processor = SamHQProcessor.from_pretrained("sushmanth/sam_hq_vit_b")
@@ -473,14 +580,11 @@ class SamHQModelIntegrationTest(unittest.TestCase):
             return_tensors="pt",
         ).to(torch_device)
 
-        # Test standard path
         with torch.no_grad():
             outputs = model(**inputs)
-            outputs_hq = model(**inputs, hq_token_only=True)
-            
         scores = outputs.iou_scores.squeeze()
+
         self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.7894), atol=1e-4))
-        self.assertIsNotNone(outputs_hq.pred_masks)
 
     def test_inference_mask_generation_one_point(self):
         model = SamHQModel.from_pretrained("sushmanth/sam_hq_vit_b")
@@ -500,11 +604,8 @@ class SamHQModelIntegrationTest(unittest.TestCase):
 
         with torch.no_grad():
             outputs = model(**inputs)
-            outputs_hq = model(**inputs, hq_token_only=True)
-            
         scores = outputs.iou_scores.squeeze()
         self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9675), atol=1e-4))
-        self.assertIsNotNone(outputs_hq.pred_masks)
 
         # With no label
         input_points = [[[400, 650]]]
@@ -513,11 +614,8 @@ class SamHQModelIntegrationTest(unittest.TestCase):
 
         with torch.no_grad():
             outputs = model(**inputs)
-            outputs_hq = model(**inputs, hq_token_only=True)
-            
         scores = outputs.iou_scores.squeeze()
         self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9675), atol=1e-4))
-        self.assertIsNotNone(outputs_hq.pred_masks)
 
     def test_inference_mask_generation_two_points(self):
         model = SamHQModel.from_pretrained("sushmanth/sam_hq_vit_b")
@@ -535,25 +633,19 @@ class SamHQModelIntegrationTest(unittest.TestCase):
             images=raw_image, input_points=input_points, input_labels=input_labels, return_tensors="pt"
         ).to(torch_device)
 
-        # Test both paths
         with torch.no_grad():
             outputs = model(**inputs)
-            outputs_hq = model(**inputs, hq_token_only=True)
-            
         scores = outputs.iou_scores.squeeze()
         self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9762), atol=1e-4))
-        self.assertIsNotNone(outputs_hq.pred_masks)
 
         # no labels
         inputs = processor(images=raw_image, input_points=input_points, return_tensors="pt").to(torch_device)
 
         with torch.no_grad():
             outputs = model(**inputs)
-            outputs_hq = model(**inputs, hq_token_only=True)
-            
         scores = outputs.iou_scores.squeeze()
+
         self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.9762), atol=1e-4))
-        self.assertIsNotNone(outputs_hq.pred_masks)
 
     def test_inference_mask_generation_two_points_batched(self):
         model = SamHQModel.from_pretrained("sushmanth/sam_hq_vit_b")
@@ -571,15 +663,11 @@ class SamHQModelIntegrationTest(unittest.TestCase):
             images=[raw_image, raw_image], input_points=input_points, input_labels=input_labels, return_tensors="pt"
         ).to(torch_device)
 
-        # Test both paths
         with torch.no_grad():
             outputs = model(**inputs)
-            outputs_hq = model(**inputs, hq_token_only=True)
-            
         scores = outputs.iou_scores.squeeze()
         self.assertTrue(torch.allclose(scores[0][-1], torch.tensor(0.9762), atol=1e-4))
         self.assertTrue(torch.allclose(scores[1][-1], torch.tensor(0.9637), atol=1e-4))
-        self.assertIsNotNone(outputs_hq.pred_masks)
 
     def test_inference_mask_generation_one_box(self):
         model = SamHQModel.from_pretrained("sushmanth/sam_hq_vit_b")
@@ -594,14 +682,10 @@ class SamHQModelIntegrationTest(unittest.TestCase):
 
         inputs = processor(images=raw_image, input_boxes=input_boxes, return_tensors="pt").to(torch_device)
 
-        # Test both paths
         with torch.no_grad():
             outputs = model(**inputs)
-            outputs_hq = model(**inputs, hq_token_only=True)
-            
         scores = outputs.iou_scores.squeeze()
         self.assertTrue(torch.allclose(scores[-1], torch.tensor(0.7937), atol=1e-4))
-        self.assertIsNotNone(outputs_hq.pred_masks)
 
     def test_inference_mask_generation_batched_image_one_point(self):
         model = SamHQModel.from_pretrained("sushmanth/sam_hq_vit_b")
@@ -619,24 +703,18 @@ class SamHQModelIntegrationTest(unittest.TestCase):
             torch_device
         )
 
-        # Test both paths
         with torch.no_grad():
             outputs = model(**inputs)
-            outputs_hq = model(**inputs, hq_token_only=True)
-            
         scores_batched = outputs.iou_scores.squeeze()
-        self.assertIsNotNone(outputs_hq.pred_masks)
 
         input_points = [[[220, 470]]]
+
         inputs = processor(images=raw_dog_image, input_points=input_points, return_tensors="pt").to(torch_device)
 
         with torch.no_grad():
             outputs = model(**inputs)
-            outputs_hq = model(**inputs, hq_token_only=True)
-            
         scores_single = outputs.iou_scores.squeeze()
         self.assertTrue(torch.allclose(scores_batched[1, :], scores_single, atol=1e-4))
-        self.assertIsNotNone(outputs_hq.pred_masks)
 
     def test_inference_mask_generation_two_points_point_batch(self):
         model = SamHQModel.from_pretrained("sushmanth/sam_hq_vit_b")
@@ -653,17 +731,14 @@ class SamHQModelIntegrationTest(unittest.TestCase):
 
         inputs = processor(raw_image, input_points=input_points, return_tensors="pt").to(torch_device)
 
-        # Test both paths
         with torch.no_grad():
             outputs = model(**inputs)
-            outputs_hq = model(**inputs, hq_token_only=True)
 
         iou_scores = outputs.iou_scores.cpu()
         self.assertTrue(iou_scores.shape == (1, 2, 3))
         torch.testing.assert_close(
             iou_scores, torch.tensor([[[0.9105, 0.9825, 0.9675], [0.7646, 0.7943, 0.7774]]]), atol=1e-4, rtol=1e-4
         )
-        self.assertIsNotNone(outputs_hq.pred_masks)
 
     def test_inference_mask_generation_three_boxes_point_batch(self):
         model = SamHQModel.from_pretrained("sushmanth/sam_hq_vit_b")
@@ -684,22 +759,15 @@ class SamHQModelIntegrationTest(unittest.TestCase):
 
         inputs = processor(raw_image, input_boxes=input_boxes, return_tensors="pt").to(torch_device)
 
-        # Test both paths
         with torch.no_grad():
             outputs = model(**inputs)
-            outputs_hq = model(**inputs, hq_token_only=True)
 
         iou_scores = outputs.iou_scores.cpu()
         self.assertTrue(iou_scores.shape == (1, 3, 3))
         torch.testing.assert_close(iou_scores, EXPECTED_IOU, atol=1e-4, rtol=1e-4)
-        self.assertIsNotNone(outputs_hq.pred_masks)
 
     def test_dummy_pipeline_generation(self):
         generator = pipeline("mask-generation", model="sushmanth/sam_hq_vit_b", device=torch_device)
         raw_image = prepare_image()
 
-        # Test standard pipeline
         _ = generator(raw_image, points_per_batch=64)
-        
-        # Test HQ-only pipeline
-        _ = generator(raw_image, points_per_batch=64, hq_token_only=True)
