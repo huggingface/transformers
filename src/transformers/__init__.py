@@ -5512,7 +5512,6 @@ if TYPE_CHECKING:
     from .models.levit import LevitConfig
     from .models.lilt import LiltConfig
     from .models.llama import LlamaConfig
-    from .models.telechat2 import TeleChat2Config
     from .models.llava import (
         LlavaConfig,
         LlavaProcessor,
@@ -5799,6 +5798,7 @@ if TYPE_CHECKING:
         TapasConfig,
         TapasTokenizer,
     )
+    from .models.telechat2 import TeleChat2Config
     from .models.time_series_transformer import (
         TimeSeriesTransformerConfig,
     )
@@ -7411,11 +7411,6 @@ if TYPE_CHECKING:
             LlamaModel,
             LlamaPreTrainedModel,
         )
-        from .models.telechat2 import (
-            TeleChat2ForCausalLM,
-            TeleChat2Model,
-            TeleChat2PreTrainedModel,
-        )
         from .models.llava import (
             LlavaForConditionalGeneration,
             LlavaPreTrainedModel,
@@ -8130,6 +8125,11 @@ if TYPE_CHECKING:
             TapasModel,
             TapasPreTrainedModel,
             load_tf_weights_in_tapas,
+        )
+        from .models.telechat2 import (
+            TeleChat2ForCausalLM,
+            TeleChat2Model,
+            TeleChat2PreTrainedModel,
         )
         from .models.time_series_transformer import (
             TimeSeriesTransformerForPrediction,
@@ -9191,11 +9191,6 @@ if TYPE_CHECKING:
             FlaxLlamaForCausalLM,
             FlaxLlamaModel,
             FlaxLlamaPreTrainedModel,
-        )
-        from .models.telechat2 import (
-            FlaxTeleChat2ForCausalLM,
-            FlaxTeleChat2Model,
-            FlaxTeleChat2PreTrainedModel,
         )
         from .models.longt5 import (
             FlaxLongT5ForConditionalGeneration,
