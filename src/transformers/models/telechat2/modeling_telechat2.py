@@ -12,14 +12,13 @@
 
 """PyTorch TeleChat2 model implementation, refactored with Transformers-style conventions."""
 
-import math
-from typing import List, Optional, Tuple, Union
+from typing import Callable, List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 
-from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
+from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -34,7 +33,6 @@ from ...processing_utils import Unpack
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     LossKwargs,
-    add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
@@ -42,7 +40,7 @@ from ...utils import (
 )
 from .configuration_telechat2 import TeleChat2Config
 
-import pdb
+
 logger = logging.get_logger(__name__)
 
 
@@ -263,7 +261,7 @@ class TeleChat2Attention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
-        
+
         self.query = nn.Linear(
                 config.hidden_size, config.num_attention_heads * self.head_dim, bias=False
         )
@@ -311,7 +309,7 @@ class TeleChat2Attention(nn.Module):
                 )
             else:
                 attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-        
+
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -334,7 +332,7 @@ class TeleChat2DecoderLayer(nn.Module):
         self.hidden_size = config.hidden_size
 
         self.self_attention = TeleChat2Attention(config=config, layer_idx=layer_idx)
-        
+
         self.mlp = TeleChat2MLP(config)
         self.input_layernorm = TeleChat2RMSNorm(self.hidden_size, eps=config.layer_norm_epsilon)
         self.post_attention_layernorm = TeleChat2RMSNorm(self.hidden_size, eps=config.layer_norm_epsilon)
@@ -368,7 +366,7 @@ class TeleChat2DecoderLayer(nn.Module):
             **kwargs,
         )
         hidden_states = residual + hidden_states
-        
+
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
@@ -518,9 +516,9 @@ class TeleChat2Model(TeleChat2PreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
-        
+
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        
+
         self.h = nn.ModuleList(
                 [TeleChat2DecoderLayer(config, i) for i in range(config.num_hidden_layers)]
         )
