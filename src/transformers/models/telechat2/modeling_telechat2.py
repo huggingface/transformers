@@ -16,20 +16,22 @@ import math
 from typing import List, Optional, Tuple, Union
 
 import torch
-from torch import nn
 import torch.nn.functional as F
+import torch.utils.checkpoint
 
-from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import (
+from torch import nn
+from transformers.modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
+from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     LossKwargs,
     add_code_sample_docstrings,
@@ -40,8 +42,9 @@ from ...utils import (
 )
 from .configuration_telechat2 import TeleChat2Config
 
-
+import pdb
 logger = logging.get_logger(__name__)
+
 
 _CHECKPOINT_FOR_DOC = "TeleAI/TeleChat2-3B"
 _CONFIG_FOR_DOC = "TeleChat2Config"
@@ -68,7 +71,9 @@ class TeleChat2RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-# copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with llama->telechat2
+ALL_LAYERNORM_LAYERS.append(TeleChat2RMSNorm)
+
+
 class TeleChat2RotaryEmbedding(nn.Module):
     def __init__(
         self,
@@ -206,25 +211,16 @@ class TeleChat2MLP(nn.Module):
         return output
 
 
-# Copied from transformers.models.llama.modeling_llama.repeat_kv with llama->telechat2
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
-    Repeat key/value if fewer KV heads than heads.
-
-    Args:
-        hidden_states (`torch.Tensor`): `[S, B, KV_heads, D]`
-        n_rep (`int`): Repeat times
-
-    Returns:
-        `torch.Tensor`: `[S, B, num_heads, D]`
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
     """
-    slen, batch, num_kv_heads_per_partition, head_dim = hidden_states.shape
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
     if n_rep == 1:
         return hidden_states
-    hidden_states = hidden_states[:, :, :, None, :].expand(
-        slen, batch, num_kv_heads_per_partition, n_rep, head_dim
-    )
-    return hidden_states.reshape(slen, batch, num_kv_heads_per_partition * n_rep, head_dim)
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
 def eager_attention_forward(
@@ -263,22 +259,18 @@ class TeleChat2Attention(nn.Module):
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
-
-        self.kv_cache = None
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_attention_heads
-
-        self.num_key_value_heads = config.num_key_value_heads if config.num_key_value_heads else self.num_heads
-        self.kv_projection_size = self.head_dim * self.num_key_value_heads
-        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.scaling = self.head_dim**-0.5
-        self.query = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
-        self.key_value = nn.Linear(self.hidden_size, self.kv_projection_size * 2, bias=False)
-        self.dense = nn.Linear(self.hidden_size, self.hidden_size)
-        self.attention_dropout = nn.Dropout(config.attention_dropout)
-        self.inv_norm_factor = 1.0 / math.sqrt(self.head_dim)
-
+        self.attention_dropout = config.attention_dropout
+        self.is_causal = True
+        
+        self.query = nn.Linear(
+                config.hidden_size, config.num_attention_heads * self.head_dim, bias=False
+        )
+        self.key_value = nn.Linear(
+                config.hidden_size, self.head_dim * config.num_key_value_heads * 2, bias=False
+        )
+        self.dense = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size)
 
     def forward(
         self,
@@ -286,37 +278,29 @@ class TeleChat2Attention(nn.Module):
         attention_mask: torch.Tensor,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
-        output_attentions: bool = False,
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
-        **kwargs: Unpack[FlashAttentionKwargs],
+        **kwargs,
     ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor, torch.Tensor]], Optional[torch.Tensor]]:
-        bsz, seq_len, _ = hidden_states.size()
         input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, self.num_heads, self.head_dim)
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.query(hidden_states)
-        query_states = query_states.view(hidden_shape).transpose(1, 2)
+        query_states = self.query(hidden_states).view(hidden_shape).transpose(1, 2)
 
         mixed_kv = self.key_value(hidden_states)
-        mixed_kv = mixed_kv.view(bsz, seq_len, self.num_key_value_heads, 2 * self.head_dim)
-        mixed_kv = mixed_kv.transpose(1, 2)
+        mixed_kv = mixed_kv.view(*input_shape, -1, 2 * self.head_dim)
         key_states, value_states = torch.split(mixed_kv, self.head_dim, dim=-1)
+        key_states = key_states.transpose(1, 2)
+        value_states = value_states.transpose(1, 2)
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-        if past_key_value is not None:
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        sliding_window = None
-        if (
-            self.config.use_sliding_window
-            and getattr(self.config, "sliding_window", None) is not None
-            and self.layer_idx >= self.config.max_window_layers
-        ):
-            sliding_window = self.config.sliding_window
+        if past_key_value is not None:
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -327,7 +311,7 @@ class TeleChat2Attention(nn.Module):
                 )
             else:
                 attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
+        
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
@@ -336,7 +320,6 @@ class TeleChat2Attention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
-            sliding_window=sliding_window,  # main diff with Llama
             **kwargs,
         )
 
@@ -349,39 +332,27 @@ class TeleChat2DecoderLayer(nn.Module):
     def __init__(self, config: TeleChat2Config, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.num_heads = config.num_attention_heads
 
-        if config.sliding_window and config._attn_implementation != "flash_attention_2":
-            logger.warning_once(
-                f"Sliding Window Attention is enabled but not implemented for `{config._attn_implementation}`; "
-                "unexpected results may be encountered."
-            )
         self.self_attention = TeleChat2Attention(config=config, layer_idx=layer_idx)
+        
         self.mlp = TeleChat2MLP(config)
         self.input_layernorm = TeleChat2RMSNorm(self.hidden_size, eps=config.layer_norm_epsilon)
         self.post_attention_layernorm = TeleChat2RMSNorm(self.hidden_size, eps=config.layer_norm_epsilon)
-        self.apply_residual_connection_post_layernorm = config.apply_residual_connection_post_layernorm
-        self.hidden_dropout = config.hidden_dropout
-        if config.sliding_window and config._attn_implementation != "flash_attention_2":
-            logger.warning_once(
-                f"Sliding Window Attention is enabled but not implemented for `{config._attn_implementation}`; "
-                "unexpected results may be encountered."
-            )
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Tuple[torch.Tensor]] = None,
-        layer_past: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
-        use_cache: bool = False,
-        output_attentions: bool = False,
+        past_key_value: Optional[Cache] = None,
+        output_attentions: Optional[bool] = False,
+        use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None, 
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         residual = hidden_states
+
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
@@ -397,6 +368,7 @@ class TeleChat2DecoderLayer(nn.Module):
             **kwargs,
         )
         hidden_states = residual + hidden_states
+        
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
@@ -420,7 +392,7 @@ TELECHAT2_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`TELECHAT2Config`]):
+        config ([`TeleChat2Config`]):
             Model configuration class with all the parameters of the model. Initializing with a config file does not
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
@@ -436,29 +408,23 @@ class TeleChat2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "transformer"
     supports_gradient_checkpointing = True
     _no_split_modules = ["TeleChat2DecoderLayer"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
     _supports_cache_class = True
     _supports_quantized_cache = True
     _supports_static_cache = True
 
-    def _init_weights(self, module: nn.Module):
-        """Initialize the weights."""
+    def _init_weights(self, module):
+        std = self.config.initializer_range
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, TeleChat2RMSNorm):
-            module.weight.data.fill_(1.0)
-
-    def _set_gradient_checkpointing(self, module: nn.Module, value: bool = False):
-        if isinstance(module, TeleChat2Model):
-            module.gradient_checkpointing = value
 
 
 TELECHAT2_INPUTS_DOCSTRING = r"""
@@ -550,27 +516,26 @@ class TeleChat2Model(TeleChat2PreTrainedModel):
 
     def __init__(self, config: TeleChat2Config):
         super().__init__(config)
-        self.num_heads = config.num_attention_heads
-        self.config = config
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
-        if self.config.embed_layernorm:
-            self.word_embeddings_layernorm = TeleChat2RMSNorm(
-                config.hidden_size, eps=config.layer_norm_epsilon
-            )
+        self.padding_idx = config.pad_token_id
+        self.vocab_size = config.vocab_size
         
-        self.h = nn.ModuleList([TeleChat2DecoderLayer(config, i) for i in range(config.num_hidden_layers)])
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        
+        self.h = nn.ModuleList(
+                [TeleChat2DecoderLayer(config, i) for i in range(config.num_hidden_layers)]
+        )
         self.ln_f = TeleChat2RMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         self.rotary_emb = TeleChat2RotaryEmbedding(config=config)
-
         self.gradient_checkpointing = False
+
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self) -> nn.Embedding:
+    def get_input_embeddings(self):
         return self.word_embeddings
 
-    def set_input_embeddings(self, new_embeddings: nn.Embedding):
-        self.word_embeddings = new_embeddings
+    def set_input_embeddings(self, value):
+        self.word_embeddings = value
 
     @add_start_docstrings_to_model_forward(TELECHAT2_INPUTS_DOCSTRING)
     def forward(
@@ -578,8 +543,8 @@ class TeleChat2Model(TeleChat2PreTrainedModel):
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Tuple[Tuple[torch.Tensor, torch.Tensor], ...]] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
+        past_key_values: Optional[Cache] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -631,8 +596,7 @@ class TeleChat2Model(TeleChat2PreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
 
-
-        for decoder_layer in self.h:
+        for decoder_layer in self.h[: self.config.num_hidden_layers]:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -658,6 +622,7 @@ class TeleChat2Model(TeleChat2PreTrainedModel):
                     use_cache=use_cache,
                     cache_position=cache_position,
                     position_embeddings=position_embeddings,
+                    **flash_attn_kwargs,
                 )
 
             hidden_states = layer_outputs[0]
@@ -678,7 +643,6 @@ class TeleChat2Model(TeleChat2PreTrainedModel):
             attentions=all_self_attns,
         )
         return output if return_dict else output.to_tuple()
-
 
     def _update_causal_mask(
         self,
@@ -745,31 +709,89 @@ class TeleChat2Model(TeleChat2PreTrainedModel):
 
         return causal_mask
 
+    @staticmethod
+    def _prepare_4d_causal_attention_mask_with_cache_position(
+        attention_mask: torch.Tensor,
+        sequence_length: int,
+        target_length: int,
+        dtype: torch.dtype,
+        device: torch.device,
+        cache_position: torch.Tensor,
+        batch_size: int,
+        **kwargs,
+    ):
+        """
+        Creates a causal 4D mask of shape `(batch_size, 1, query_length, key_value_length)` from a 2D mask of shape
+        `(batch_size, key_value_length)`, or if the input `attention_mask` is already 4D, do nothing.
+
+        Args:
+            attention_mask (`torch.Tensor`):
+                A 2D attention mask of shape `(batch_size, key_value_length)` or a 4D attention mask of shape
+                `(batch_size, 1, query_length, key_value_length)`.
+            sequence_length (`int`):
+                The sequence length being processed.
+            target_length (`int`):
+                The target length: when generating with static cache, the mask should be as long as the static cache,
+                to account for the 0 padding, the part of the cache that is not filled yet.
+            dtype (`torch.dtype`):
+                The dtype to use for the 4D attention mask.
+            device (`torch.device`):
+                The device to plcae the 4D attention mask on.
+            cache_position (`torch.Tensor`):
+                Indices depicting the position of the input sequence tokens in the sequence.
+            batch_size (`torch.Tensor`):
+                Batch size.
+        """
+        if attention_mask is not None and attention_mask.dim() == 4:
+            # In this case we assume that the mask comes already in inverted form and requires no inversion or slicing.
+            causal_mask = attention_mask
+        else:
+            min_dtype = torch.finfo(dtype).min
+            causal_mask = torch.full(
+                (sequence_length, target_length), fill_value=min_dtype, dtype=dtype, device=device
+            )
+            if sequence_length != 1:
+                causal_mask = torch.triu(causal_mask, diagonal=1)
+            causal_mask *= torch.arange(target_length, device=device) > cache_position.reshape(-1, 1)
+            causal_mask = causal_mask[None, None, :, :].expand(batch_size, 1, -1, -1)
+            if attention_mask is not None:
+                causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+                mask_length = attention_mask.shape[-1]
+                padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :]
+                padding_mask = padding_mask == 0
+                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
+                    padding_mask, min_dtype
+                )
+
+        return causal_mask
+
 
 class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
 class TeleChat2ForCausalLM(TeleChat2PreTrainedModel, GenerationMixin):
-    _keys_to_ignore_on_load_missing = [r"lm_head.weight"]
+    _tied_weights_keys = ["lm_head.weight"]
+    _tp_plan = {"lm_head": "colwise_rep"}
 
     def __init__(self, config: TeleChat2Config):
         super().__init__(config)
         self.transformer = TeleChat2Model(config)
+        self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.transformer.embed_tokens
+        return self.transformer.word_embeddings
 
     def set_input_embeddings(self, value):
-        self.transformer.embed_tokens = value
+        self.transformer.word_embeddings = value
 
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
-    def set_output_embeddings(self, new_embeddings: nn.Module):
+    def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
@@ -794,7 +816,7 @@ class TeleChat2ForCausalLM(TeleChat2PreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         num_logits_to_keep: int = 0,
-        **loss_kwargs,
+        **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
         Args:
@@ -844,6 +866,7 @@ class TeleChat2ForCausalLM(TeleChat2PreTrainedModel, GenerationMixin):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
+            **kwargs,
         )
 
         hidden_states = outputs[0]
@@ -852,7 +875,7 @@ class TeleChat2ForCausalLM(TeleChat2PreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits, labels, self.vocab_size, **loss_kwargs)
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         if not return_dict:
             output = (logits,) + outputs[1:]

@@ -44,9 +44,6 @@ if is_torch_available():
 
     from transformers import (
         TeleChat2ForCausalLM,
-        TeleChat2ForQuestionAnswering,
-        TeleChat2ForSequenceClassification,
-        TeleChat2ForTokenClassification,
         TeleChat2Model,
     )
 
@@ -140,13 +137,13 @@ class TeleChat2ModelTester:
         return TeleChat2Config(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
+            n_layer=self.num_hidden_layers,
             max_window_layers=self.max_window_layers,
             use_sliding_window=self.use_sliding_window,
             sliding_window=self.sliding_window,
-            num_attention_heads=self.num_attention_heads,
+            n_head=self.num_attention_heads,
             num_key_value_heads=self.num_key_value_heads,
-            intermediate_size=self.intermediate_size,
+            ffn_hidden_size=self.intermediate_size,
             hidden_act=self.hidden_act,
             hidden_dropout_prob=self.hidden_dropout_prob,
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
@@ -320,7 +317,6 @@ class TeleChat2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     )
     test_headmasking = False
     test_pruning = False
-    fx_compatible = True
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
@@ -352,15 +348,8 @@ class TeleChat2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_torch_fx_output_loss(self):
-        super().test_torch_fx_output_loss()
-
     @unittest.skip(reason="TeleChat2 buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
-        pass
-
-    @unittest.skip(reason="TeleChat2 uses GQA on all models so the KV cache is a non standard format")
-    def test_past_key_values_format(self):
         pass
 
     @require_flash_attn
@@ -512,9 +501,9 @@ class TeleChat2IntegrationTest(unittest.TestCase):
             convert_and_export_with_cache,
         )
 
-        qwen_model = "TeleAI/TeleChat2-3B"
+        telechat_model = "TeleAI/TeleChat2-3B"
 
-        tokenizer = AutoTokenizer.from_pretrained(qwen_model, pad_token="</s>", padding_side="right")
+        tokenizer = AutoTokenizer.from_pretrained(telechat_model, pad_token="<_pad>", padding_side="right")
         EXPECTED_TEXT_COMPLETION = [
             "My favourite condiment is 100% natural, organic, gluten free, vegan, and free from preservatives. I"
         ]
@@ -529,7 +518,7 @@ class TeleChat2IntegrationTest(unittest.TestCase):
         attn_implementation = "sdpa"
         batch_size = 1
         model = TeleChat2ForCausalLM.from_pretrained(
-            qwen_model,
+            telechat_model,
             device_map=device,
             torch_dtype=dtype,
             attn_implementation=attn_implementation,
@@ -556,3 +545,4 @@ class TeleChat2IntegrationTest(unittest.TestCase):
         )
         ep_generated_text = tokenizer.batch_decode(ep_generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)
+
