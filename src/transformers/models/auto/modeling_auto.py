@@ -255,6 +255,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("t5", "T5Model"),
         ("table-transformer", "TableTransformerModel"),
         ("tapas", "TapasModel"),
+        ("telechat2", "TeleChat2Model"),
         ("time_series_transformer", "TimeSeriesTransformerModel"),
         ("timesformer", "TimesformerModel"),
         ("timm_backbone", "TimmBackbone"),
