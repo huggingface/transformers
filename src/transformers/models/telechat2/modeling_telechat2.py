@@ -16,14 +16,13 @@ from typing import Callable, List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
+from torch import nn
 
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from torch import nn
-from transformers.modeling_outputs import (
+from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
 )

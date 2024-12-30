@@ -49,7 +49,7 @@ if TYPE_CHECKING:
         from .modeling_telechat2 import (
             TeleChat2ForCausalLM,
             TeleChat2Model,
-            TeleChat2PreTrainedModel
+            TeleChat2PreTrainedModel,
         )
 
 
