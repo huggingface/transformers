@@ -17,6 +17,7 @@
 Integration with GGML / The file is copied and adapted from https://github.com/99991/pygguf
 with extra methods beings exposed
 """
+
 from array import array
 
 import numpy as np
@@ -147,7 +148,7 @@ GGUF_TENSOR_MAPPING = {
         ".output.": ".lm_head.",
         "output_norm": "ln_f",
     },
-        "t5": {
+    "t5": {
         "token_embd": "shared",
         "dec.blk.{bid}.attn_q": "decoder.block.{bid}.layer.0.SelfAttention.q",
         "dec.blk.{bid}.attn_k": "decoder.block.{bid}.layer.0.SelfAttention.k",
@@ -276,7 +277,7 @@ GGUF_TENSOR_MAPPING = {
         "attn_k": "self_attn.k_proj",
         "attn_output": "self_attn.o_proj",
         "output_norm": "model.norm",
-    }
+    },
 }
 
 
@@ -374,7 +375,7 @@ GGUF_CONFIG_MAPPING = {
         "vocab_size": "vocab_size",
         "attention.layer_norm_epsilon": "layer_norm_epsilon",
     },
-        "t5": {
+    "t5": {
         "context_length": "n_positions",
         "block_count": "num_layers",
         "feed_forward_length": "d_ff",
@@ -770,6 +771,7 @@ class GGUFGPTConverter(GPT2Converter):
         tokenizer = super().converted(vocab, merges)
         return tokenizer
 
+
 class GGUFT5Converter(T5Converter):
     def __init__(self, tokenizer_dict):
         # set dummy data to avoid unnecessary merges calculation
@@ -831,6 +833,7 @@ class GGUFT5Converter(T5Converter):
             tokenizer.post_processor = post_processor
 
         return tokenizer
+
 
 class GGUFGemmaConverter(GemmaConverter):
     def __init__(self, tokenizer_dict):
@@ -895,6 +898,7 @@ class GGUFGemmaConverter(GemmaConverter):
             tokenizer.pre_tokenizer = pre_tokenizer
 
         return tokenizer
+
 
 GGUF_TO_FAST_CONVERTERS = {
     "llama": GGUFLlamaConverter,
