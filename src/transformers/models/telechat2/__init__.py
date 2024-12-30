@@ -46,7 +46,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_qwen2 import (
+        from .modeling_telechat2 import (
             TeleChat2PreTrainedModel,
             TeleChat2Model,
             TeleChat2ForCausalLM,
