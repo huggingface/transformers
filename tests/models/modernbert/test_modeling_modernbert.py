@@ -146,7 +146,11 @@ class ModernBertModelTester:
             # If we're testing `test_retain_grad_hidden_states_attentions`, we normally get an error
             # that compilation doesn't work. Users can then set compile=False when loading the model,
             # much like here. We're testing whether it works once they've done that.
-            if test_name == "test_retain_grad_hidden_states_attentions":
+            
+            # If we're testing `test_inputs_embeds_matches_input_ids`, then we'd like to test with `reference_compile`
+            # set to False, otherwise the input_ids with compiled input embeddings will not match the inputs_embeds
+            # with atol=1e-8 and rtol=1e-5
+            if test_name in ("test_retain_grad_hidden_states_attentions", "test_inputs_embeds_matches_input_ids"):
                 config.reference_compile = False
             # Some tests require attentions to be outputted, in that case we'll set the attention implementation to eager
             # as the others don't support outputted attentions

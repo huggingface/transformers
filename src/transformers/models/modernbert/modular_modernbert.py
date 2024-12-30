@@ -464,12 +464,15 @@ class ModernBertEmbeddings(nn.Module):
     def compiled_embeddings(self, input_ids: torch.LongTensor) -> torch.Tensor:
         return self.drop(self.norm(self.tok_embeddings(input_ids)))
 
-    def forward(self, input_ids: torch.LongTensor, position_ids: Optional[torch.LongTensor] = None) -> torch.Tensor:
-        hidden_states = (
-            self.compiled_embeddings(input_ids)
-            if self.config.reference_compile
-            else self.drop(self.norm(self.tok_embeddings(input_ids)))
-        )
+    def forward(self, input_ids: torch.LongTensor = None, inputs_embeds: Optional[torch.Tensor] = None) -> torch.Tensor:
+        if inputs_embeds is not None:
+            hidden_states = self.drop(self.norm(inputs_embeds))
+        else:
+            hidden_states = (
+                self.compiled_embeddings(input_ids)
+                if self.config.reference_compile
+                else self.drop(self.norm(self.tok_embeddings(input_ids)))
+            )
         return hidden_states
 
 
@@ -947,6 +950,10 @@ MODERNBERT_INPUTS_DOCSTRING = r"""
             config.n_positions - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
         indices (`torch.Tensor` of shape `(total_unpadded_tokens,)`, *optional*):
             Indices of the non-padding tokens in the input sequence. Used for unpadding the output.
         cu_seqlens (`torch.Tensor` of shape `(batch + 1,)`, *optional*):
@@ -998,10 +1005,11 @@ class ModernBertModel(ModernBertPreTrainedModel):
     )
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         sliding_window_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         indices: Optional[torch.Tensor] = None,
         cu_seqlens: Optional[torch.Tensor] = None,
         max_seqlen: Optional[int] = None,
@@ -1010,7 +1018,6 @@ class ModernBertModel(ModernBertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        inputs_embeds: torch.Tensor = None,
     ) -> Union[Tuple[torch.Tensor, ...], BaseModelOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1018,22 +1025,26 @@ class ModernBertModel(ModernBertPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
         self._maybe_set_compile()
-        self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
+
+        if input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
 
         if batch_size is None and seq_len is None:
             if inputs_embeds is not None: 
-                device = inputs_embeds.device
                 batch_size, seq_len = inputs_embeds.shape[:2]
             else:
-                device = input_ids.device
                 batch_size, seq_len = input_ids.shape[:2]
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         if attention_mask is None:
-            attention_mask = torch.ones((batch_size, seq_len), device=input_ids.device, dtype=torch.bool)
+            attention_mask = torch.ones((batch_size, seq_len), device=device, dtype=torch.bool)
 
         repad = False
         if self.config._attn_implementation == "flash_attention_2":
@@ -1056,10 +1067,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
                 attention_mask, output_attentions=output_attentions
             )
         
-        if inputs_embeds is not None: 
-            hidden_states = inputs_embeds
-        else: 
-            hidden_states = self.embeddings(input_ids)
+        hidden_states = self.embeddings(input_ids=input_ids, inputs_embeds=inputs_embeds)
 
         for encoder_layer in self.layers:
             if output_hidden_states:
@@ -1195,10 +1203,11 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
     )
     def forward(
         self,
-        input_ids: Optional[torch.Tensor],
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         sliding_window_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         indices: Optional[torch.Tensor] = None,
         cu_seqlens: Optional[torch.Tensor] = None,
@@ -1218,16 +1227,22 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
                 batch_size, seq_len = input_ids.shape[:2]
                 if attention_mask is None:
                     attention_mask = torch.ones((batch_size, seq_len), device=input_ids.device, dtype=torch.bool)
-                with torch.no_grad():
-                    input_ids, indices, cu_seqlens, max_seqlen, position_ids, labels = _unpad_modernbert_input(
-                        inputs=input_ids, attention_mask=attention_mask, position_ids=position_ids, labels=labels
+                if inputs_embeds is None:
+                    with torch.no_grad():
+                        input_ids, indices, cu_seqlens, max_seqlen, position_ids, labels = _unpad_modernbert_input(
+                            inputs=input_ids, attention_mask=attention_mask, position_ids=position_ids, labels=labels
+                        )
+                else:
+                    inputs_embeds, indices, cu_seqlens, max_seqlen, position_ids, labels = _unpad_modernbert_input(
+                        inputs=inputs_embeds, attention_mask=attention_mask, position_ids=position_ids, labels=labels
                     )
 
         outputs = self.model(
-            input_ids,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             sliding_window_mask=sliding_window_mask,
             position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
             indices=indices,
             cu_seqlens=cu_seqlens,
             max_seqlen=max_seqlen,
@@ -1300,10 +1315,11 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
     )
     def forward(
         self,
-        input_ids: Optional[torch.Tensor],
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         sliding_window_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         indices: Optional[torch.Tensor] = None,
         cu_seqlens: Optional[torch.Tensor] = None,
@@ -1325,10 +1341,11 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
         self._maybe_set_compile()
 
         outputs = self.model(
-            input_ids,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             sliding_window_mask=sliding_window_mask,
             position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
             indices=indices,
             cu_seqlens=cu_seqlens,
             max_seqlen=max_seqlen,
@@ -1411,10 +1428,11 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
     )
     def forward(
         self,
-        input_ids: Optional[torch.Tensor],
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         sliding_window_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         indices: Optional[torch.Tensor] = None,
         cu_seqlens: Optional[torch.Tensor] = None,
@@ -1433,10 +1451,11 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
         self._maybe_set_compile()
 
         outputs = self.model(
-            input_ids,
+            input_ids=input_ids,
             attention_mask=attention_mask,
             sliding_window_mask=sliding_window_mask,
             position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
             indices=indices,
             cu_seqlens=cu_seqlens,
             max_seqlen=max_seqlen,
