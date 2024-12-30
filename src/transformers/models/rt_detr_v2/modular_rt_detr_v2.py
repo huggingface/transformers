@@ -28,8 +28,10 @@ class RtDetrV2ResNetConfig(RTDetrResNetConfig):
 
 class RtDetrV2Config(RTDetrConfig):
     r"""
-    decoder_n_levels (`int`, *optional*, defaults to 3): The number of feature levels used by the decoder.
-    decoder_offset_scale (`float`, *optional*, defaults to 0.5): Scaling factor applied to the attention offsets in the decoder.
+    decoder_n_levels (`int`, *optional*, defaults to 3):
+        The number of feature levels used by the decoder.
+    decoder_offset_scale (`float`, *optional*, defaults to 0.5):
+        Scaling factor applied to the attention offsets in the decoder.
     """
 
     model_type = "rt_detr_v2"
