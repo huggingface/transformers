@@ -24,7 +24,7 @@ from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, process
 from tokenizers.models import BPE, Unigram
 
 from .. import AddedToken
-from ..convert_slow_tokenizer import GPT2Converter, LlamaConverter, Qwen2Converter, T5Converter, GemmaConverter
+from ..convert_slow_tokenizer import GemmaConverter, GPT2Converter, LlamaConverter, Qwen2Converter, T5Converter
 from ..utils import logging
 from ..utils.logging import tqdm
 
@@ -275,7 +275,7 @@ GGUF_TENSOR_MAPPING = {
         "attn_v": "self_attn.v_proj",
         "attn_k": "self_attn.k_proj",
         "attn_output": "self_attn.o_proj",
-        "output_norm": "model.norm", 
+        "output_norm": "model.norm",
     }
 }
 
@@ -844,7 +844,7 @@ class GGUFGemmaConverter(GemmaConverter):
     def vocab(self, proto):
         original_vocab = list(zip(proto.tokens, proto.scores))
         updated_vocab = []
-        
+
         for token, score in original_vocab:
             if token == "<0x09>":
                 updated_vocab.append(("\t", score))
@@ -888,7 +888,7 @@ class GGUFGemmaConverter(GemmaConverter):
         add_prefix_space = True
         if hasattr(self.original_tokenizer, "add_prefix_space"):
             add_prefix_space = self.original_tokenizer.add_prefix_space
-        
+
         tokenizer.decoder = self.decoder(replacement, add_prefix_space)
         pre_tokenizer = self.pre_tokenizer(replacement, add_prefix_space)
         if pre_tokenizer is not None:

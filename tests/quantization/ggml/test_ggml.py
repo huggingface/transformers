@@ -851,7 +851,7 @@ class GgufIntegrationTests(unittest.TestCase):
 
         EXPECTED_TEXT = "Hello! 👋\n\nI'm trying to create a"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
-    
+
     def test_gemma2_q8_0(self):
         model = AutoModelForCausalLM.from_pretrained(
             self.gemma2_model_id,
