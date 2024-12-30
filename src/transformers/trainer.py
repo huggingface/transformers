@@ -622,7 +622,15 @@ class Trainer:
             else unwrapped_model.get_base_model().forward
         )
         forward_params = inspect.signature(model_forward).parameters
-        self.model_accepts_loss_kwargs = any(k.kind == inspect.Parameter.VAR_KEYWORD for k in forward_params.values())
+
+        # Check if the model has explicit setup for loss kwargs,
+        # if not, check if `**kwargs` are in model.forward
+        if hasattr(model, "accepts_loss_kwargs"):
+            self.model_accepts_loss_kwargs = model.accepts_loss_kwargs
+        else:
+            self.model_accepts_loss_kwargs = any(
+                k.kind == inspect.Parameter.VAR_KEYWORD for k in forward_params.values()
+            )
 
         self.neftune_noise_alpha = args.neftune_noise_alpha
 
@@ -3700,7 +3708,7 @@ class Trainer:
         else:
             # Finally we need to normalize the loss for reporting
             if num_items_in_batch is None:
-                loss /= self.args.gradient_accumulation_steps
+                loss = loss / self.args.gradient_accumulation_steps
 
             self.accelerator.backward(loss, **kwargs)
 
