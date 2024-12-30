@@ -462,7 +462,7 @@ generated_ids = model.generate(**inputs)
 outputs = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
 ```
 
-To load a model in 4-bit for inference with multiple GPUs, you can control how much GPU RAM you want to allocate to each GPU. For example, to distribute 1GB of memory to the first GPU and 2GB of memory to the second GPU:
+To load a model in 8-bit for inference with multiple GPUs, you can control how much GPU RAM you want to allocate to each GPU. For example, to distribute 1GB of memory to the first GPU and 2GB of memory to the second GPU:
 
 ```py
 max_memory_mapping = {0: "1GB", 1: "2GB"}
