@@ -17,6 +17,7 @@
 import copy
 import unittest
 
+from transformers import AutoTokenizer
 from transformers.models.auto import get_values
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
@@ -377,6 +378,28 @@ class LayoutLMv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         model_name = "microsoft/layoutlmv3-base"
         model = LayoutLMv3Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
+
+    def test_sdpa(self):
+        model = LayoutLMv3Model.from_pretrained(
+            "hf-tiny-model-private/tiny-random-LayoutLMv3Model", attn_implementation="eager"
+        )
+        model_sdpa = LayoutLMv3Model.from_pretrained(
+            "hf-tiny-model-private/tiny-random-LayoutLMv3Model", attn_implementation="sdpa"
+        )
+
+        model = model.eval()
+        model_sdpa = model_sdpa.eval()
+
+        tokenizer = AutoTokenizer.from_pretrained("hf-tiny-model-private/tiny-random-LayoutLMv3Model")
+        words = "I am in Paris and".split()
+        inputs = tokenizer(text=[words], boxes=[[(0, 0, 1, 1)] * len(words)], return_tensors="pt")
+
+        with torch.no_grad():
+            res_eager = model(**inputs)
+            res_sdpa = model_sdpa(**inputs)
+            self.assertTrue(
+                torch.allclose(res_eager.last_hidden_state, res_sdpa.last_hidden_state, atol=1e-5, rtol=1e-4)
+            )
 
 
 # We will verify our results on an image of cute cats
