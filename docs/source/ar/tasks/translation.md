@@ -39,7 +39,7 @@ rendered properly in your Markdown viewer.
 pip install transformers datasets evaluate sacrebleu
 ```
 
-نشجعك على تسجيل الدخول إلى حساب Hugging Face الخاص بك حتى تتمكن من تحميل نموذجك ومشاركته مع المجتمع. عند المطالبة، أدخل الرمز المميز الخاص بك لتسجيل الدخول:
+نشجعك على تسجيل الدخول إلى حساب Hugging Face الخاص بك حتى تتمكن من تحميل نموذجك ومشاركته مع المجتمع. عند الطلب، أدخل الرمز المميز الخاص بك لتسجيل الدخول:
 
 ```py
 >>> from huggingface_hub import notebook_login
