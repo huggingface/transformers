@@ -54,8 +54,6 @@ class TeleChat2Config(PretrainedConfig):
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
             `num_attention_heads`.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with. TeleChat2 1 supports up to 2048 tokens,
             TeleChat2 2 up to 4096, CodeTeleChat2 up to 16384.
@@ -118,18 +116,12 @@ class TeleChat2Config(PretrainedConfig):
                     Only used with 'telechat23'. Scaling factor applied to low frequency components of the RoPE
                 `high_freq_factor` (`float`, *optional*):
                     Only used with 'telechat23'. Scaling factor applied to high frequency components of the RoPE
-        attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
         head_dim (`int`, *optional*):
             The attention head dimension. If None, it will default to hidden_size // num_heads
-        use_sliding_window (`bool`, *optional*, defaults to `False`):
-            Whether to use sliding window attention.
-        sliding_window (`int`, *optional*, defaults to 4096):
-            Sliding window attention (SWA) window size. If not specified, will default to `4096`.
 
     ```python
     >>> from transformers import TeleChat2Model, TeleChat2Config
@@ -165,7 +157,6 @@ class TeleChat2Config(PretrainedConfig):
         n_layer=30,
         n_head=32,
         num_key_value_heads=32,
-        hidden_act="silu",
         max_position_embeddings=2048,
         initializer_range=0.02,
         layer_norm_epsilon=1e-6,
@@ -177,42 +168,31 @@ class TeleChat2Config(PretrainedConfig):
         tie_word_embeddings=False,
         rope_theta=10000.0,
         rope_scaling=None,
-        attention_bias=False,
         attention_dropout=0.0,
         mlp_bias=False,
         head_dim=None,
-        use_sliding_window=False,
-        sliding_window=None,
-        embed_layernorm=False,
-        max_window_layers=28,
         **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
         self.ffn_hidden_size = ffn_hidden_size
-        self.num_hidden_layers = n_layer
-        self.num_attention_heads = n_head
+        self.n_layer = n_layer
+        self.n_head = n_head
         self.hidden_dropout = hidden_dropout
         # for backward compatibility
         if num_key_value_heads is None:
             num_key_value_heads = n_head
 
         self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.layer_norm_epsilon = layer_norm_epsilon
         self.pretraining_tp = pretraining_tp
         self.use_cache = use_cache
         self.rope_theta = rope_theta
-        self.embed_layernorm = embed_layernorm
         self.rope_scaling = rope_scaling
-        self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
-        self.use_sliding_window = use_sliding_window
-        self.sliding_window = sliding_window
-        self.max_window_layers = max_window_layers
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
         # Validate the correctness of rotary position embeddings parameters
         # BC: if there is a 'type' field, copy it it to 'rope_type'.

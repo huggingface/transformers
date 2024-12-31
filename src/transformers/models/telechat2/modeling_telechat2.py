@@ -197,8 +197,8 @@ class TeleChat2MLP(nn.Module):
     def __init__(self, config: TeleChat2Config):
         super().__init__()
         hidden_size = config.hidden_size
-        self.gate_proj = nn.Linear(hidden_size, config.ffn_hidden_size, bias=False)
-        self.up_proj = nn.Linear(hidden_size, config.ffn_hidden_size, bias=False)
+        self.gate_proj = nn.Linear(hidden_size, config.ffn_hidden_size, bias=config.mlp_bias)
+        self.up_proj = nn.Linear(hidden_size, config.ffn_hidden_size, bias=config.mlp_bias)
         self.down_proj = nn.Linear(config.ffn_hidden_size, hidden_size, bias=True)
         self.hidden_dropout = config.hidden_dropout
 
@@ -211,7 +211,7 @@ class TeleChat2MLP(nn.Module):
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
     This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    num_key_value_heads, seqlen, head_dim) to (batch, n_head, seqlen, head_dim)
     """
     batch, num_key_value_heads, slen, head_dim = hidden_states.shape
     if n_rep == 1:
@@ -255,15 +255,15 @@ class TeleChat2Attention(nn.Module):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.n_head)
+        self.num_key_value_groups = config.n_head // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
 
-        self.query = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
+        self.query = nn.Linear(config.hidden_size, config.n_head * self.head_dim, bias=False)
         self.key_value = nn.Linear(config.hidden_size, self.head_dim * config.num_key_value_heads * 2, bias=False)
-        self.dense = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size)
+        self.dense = nn.Linear(config.n_head * self.head_dim, config.hidden_size)
 
     def forward(
         self,
@@ -500,7 +500,7 @@ TELECHAT2_INPUTS_DOCSTRING = r"""
 )
 class TeleChat2Model(TeleChat2PreTrainedModel):
     """
-    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`TeleChat2DecoderLayer`]
+    Transformer decoder consisting of *config.n_layer* layers. Each layer is a [`TeleChat2DecoderLayer`]
 
     Args:
         config: TeleChat2Config
@@ -513,7 +513,7 @@ class TeleChat2Model(TeleChat2PreTrainedModel):
 
         self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
 
-        self.h = nn.ModuleList([TeleChat2DecoderLayer(config, i) for i in range(config.num_hidden_layers)])
+        self.h = nn.ModuleList([TeleChat2DecoderLayer(config, i) for i in range(config.n_layer)])
         self.ln_f = TeleChat2RMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         self.rotary_emb = TeleChat2RotaryEmbedding(config=config)
         self.gradient_checkpointing = False
@@ -586,7 +586,7 @@ class TeleChat2Model(TeleChat2PreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
 
-        for decoder_layer in self.h[: self.config.num_hidden_layers]:
+        for decoder_layer in self.h[: self.config.n_layer]:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
