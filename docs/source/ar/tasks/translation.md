@@ -134,7 +134,7 @@ pip install transformers datasets evaluate sacrebleu
 
 ## التقييم (Evaluate)
 
-يُعد تضمين مقياس أثناء التدريب مفيدًا غالبًا لتقييم أداء نموذجك. يمكنك تحميل طريقة تقييم بسرعة باستخدام مكتبة 🤗 [Evaluate](https://huggingface.co/docs/evaluate/index). لهذه المهمة، حمّل مقياس [SacreBLEU](https://huggingface.co/spaces/evaluate-metric/sacrebleu) (راجع [الجولة السريعة](https://huggingface.co/docs/evaluate/a_quick_tour) لـ 🤗 Evaluate لمعرفة المزيد حول كيفية تحميل وحساب مقياس):
+غالباً ما يكون تضمين مقياس أثناء التدريب مفيداً لتقييم أداء نموذجك. يمكنك تحميل طريقة تقييم بسرعة باستخدام مكتبة 🤗 [Evaluate](https://huggingface.co/docs/evaluate/index). لهذه المهمة، حمّل مقياس [SacreBLEU](https://huggingface.co/spaces/evaluate-metric/sacrebleu) (راجع [الجولة السريعة](https://huggingface.co/docs/evaluate/a_quick_tour) لـ 🤗 Evaluate لمعرفة المزيد حول كيفية تحميل وحساب مقياس):
 
 ```py
 >>> import evaluate
