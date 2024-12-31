@@ -530,3 +530,48 @@ class Qwen2VLIntegrationTest(unittest.TestCase):
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
         )
+
+    @slow
+    def test_small_model_integration_test_batch_inputs_embeds(self):
+        model = Qwen2VLForConditionalGeneration.from_pretrained(
+            "Qwen/Qwen2-VL-7B-Instruct", torch_dtype="auto", device_map="auto"
+        )
+        text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
+        inputs = self.processor(text=[text], images=[self.image], return_tensors="pt").to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=30)
+        output = [out_ids[len(in_ids) :] for in_ids, out_ids in zip(inputs.input_ids, output)]
+
+        input_ids = inputs["input_ids"]
+        attention_mask = inputs["attention_mask"]
+        pixel_values = inputs["pixel_values"]
+        image_grid_thw = inputs["image_grid_thw"]
+
+        inputs_embeds = model.model.embed_tokens(input_ids)
+        if pixel_values is not None:
+            pixel_values = pixel_values.type(model.visual.get_dtype())
+            image_embeds = model.visual(pixel_values, grid_thw=image_grid_thw)
+            n_image_tokens = (input_ids == model.config.image_token_id).sum().item()
+            n_image_features = image_embeds.shape[0]
+            if n_image_tokens != n_image_features:
+                raise ValueError(
+                    f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
+                )
+            image_mask = (
+                (input_ids == model.config.image_token_id)
+                .unsqueeze(-1)
+                .expand_as(inputs_embeds)
+                .to(inputs_embeds.device)
+            )
+            image_embeds = image_embeds.to(inputs_embeds.device, inputs_embeds.dtype)
+            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
+
+        if attention_mask is not None:
+            attention_mask = attention_mask.to(inputs_embeds.device)
+
+        output2 = model.generate(inputs_embeds=inputs_embeds, attention_mask=attention_mask, max_new_tokens=30)
+
+        self.assertEqual(
+            self.processor.batch_decode(output, skip_special_tokens=True),
+            self.processor.batch_decode(output2, skip_special_tokens=True),
+        )
