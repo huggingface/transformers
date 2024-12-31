@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 سيوضح لك هذا الدليل كيفية:
 
-1. ضبط دقيق [T5](https://huggingface.co/google-t5/t5-small) على المجموعة الفرعية الإنجليزية-الفرنسية من مجموعة بيانات [OPUS Books](https://huggingface.co/datasets/opus_books) لترجمة النص الإنجليزي إلى الفرنسية.
+1. ضبط دقيق لنموذج [T5](https://huggingface.co/google-t5/t5-small) على المجموعة الفرعية الإنجليزية-الفرنسية من مجموعة بيانات [OPUS Books](https://huggingface.co/datasets/opus_books) لترجمة النص الإنجليزي إلى الفرنسية.
 2. استخدام النموذج المضبوط بدقة للاستدلال.
 
 <Tip>
