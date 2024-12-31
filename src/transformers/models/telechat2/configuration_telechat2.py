@@ -208,4 +208,3 @@ class TeleChat2Config(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-
