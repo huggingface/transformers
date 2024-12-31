@@ -362,7 +362,7 @@ pip install transformers datasets evaluate sacrebleu
 >>> inputs = tokenizer(text, return_tensors="pt").input_ids
 ```
 
-استخدم طريقة [`~generation.GenerationMixin.generate`] لإنشاء الترجمة. لمزيد من التفاصيل حول استراتيجيات توليد النصوص المختلفة والمعلمات للتحكم في التوليد، تحقق من واجهة برمجة تطبيقات [توليد النصوص](../main_classes/text_generation).
+استخدم الدالة [`~generation.GenerationMixin.generate`] لإنشاء الترجمة. لمزيد من التفاصيل حول استراتيجيات توليد النصوص المختلفة والمعلمات للتحكم في التوليد، تحقق من واجهة برمجة تطبيقات [توليد النصوص](../main_classes/text_generation).
 
 ```py
 >>> from transformers import AutoModelForSeq2SeqLM
