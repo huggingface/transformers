@@ -29,7 +29,7 @@ rendered properly in your Markdown viewer.
 
 <Tip>
 
-لمشاهدة جميع البنى ونقاط التفتيش المتوافقة مع هذه المهمة، نوصي بالتحقق من [صفحة المهمة](https://huggingface.co/tasks/translation).
+لمشاهدة جميع البنى والنسخ المتوافقة مع هذه المهمة، نوصي بالتحقق من [صفحة المهمة](https://huggingface.co/tasks/translation).
 
 </Tip>
 
