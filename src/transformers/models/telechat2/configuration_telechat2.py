@@ -27,7 +27,8 @@ class TeleChat2Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`TeleChat2Model`]. It is used to instantiate an TeleChat2
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the TeleChat2-7B.
+    defaults will yield a similar configuration to that of
+    TeleChat2-7B [Tele-AI/TeleChat2-7B](https://huggingface.co/Tele-AI/TeleChat2-7B).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -39,11 +40,11 @@ class TeleChat2Config(PretrainedConfig):
             `inputs_ids` passed when calling [`TeleChat2Model`]
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 11008):
+        ffn_hidden_size (`int`, *optional*, defaults to 11008):
             Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
+        n_layer (`int`, *optional*, defaults to 32):
             Number of hidden layers in the Transformer decoder.
-        num_attention_heads (`int`, *optional*, defaults to 32):
+        n_head (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer decoder.
         num_key_value_heads (`int`, *optional*):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
@@ -60,7 +61,7 @@ class TeleChat2Config(PretrainedConfig):
             TeleChat2 2 up to 4096, CodeTeleChat2 up to 16384.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
+        layer_norm_epsilon (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the rms normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
@@ -125,6 +126,10 @@ class TeleChat2Config(PretrainedConfig):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
         head_dim (`int`, *optional*):
             The attention head dimension. If None, it will default to hidden_size // num_heads
+        use_sliding_window (`bool`, *optional*, defaults to `False`):
+            Whether to use sliding window attention.
+        sliding_window (`int`, *optional*, defaults to 4096):
+            Sliding window attention (SWA) window size. If not specified, will default to `4096`.
 
     ```python
     >>> from transformers import TeleChat2Model, TeleChat2Config
@@ -176,9 +181,9 @@ class TeleChat2Config(PretrainedConfig):
         attention_dropout=0.0,
         mlp_bias=False,
         head_dim=None,
+        use_sliding_window=False,
         sliding_window=None,
         embed_layernorm=False,
-        use_sliding_window=False,
         max_window_layers=28,
         **kwargs,
     ):

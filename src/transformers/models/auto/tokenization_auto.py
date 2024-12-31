@@ -261,7 +261,6 @@ else:
                     "LlamaTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
-            ("telechat2", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("llava", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("llava_next", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("llava_next_video", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
@@ -494,6 +493,7 @@ else:
             ),
             ("tapas", ("TapasTokenizer", None)),
             ("tapex", ("TapexTokenizer", None)),
+            ("telechat2", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("transfo-xl", ("TransfoXLTokenizer", None)),
             ("tvp", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             (
