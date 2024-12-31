@@ -477,7 +477,7 @@ class TrainingArguments:
         metric_for_best_model (`str`, *optional*):
             Use in conjunction with `load_best_model_at_end` to specify the metric to use to compare two different
             models. Must be the name of a metric returned by the evaluation with or without the prefix `"eval_"`. Will
-            default to `"loss"` if unspecified and `load_best_model_at_end=True` (to use the evaluation loss).
+            default to `"loss"` if unspecified, `load_best_model_at_end=True`, and `save_strategy!="best"`.
 
             If you set this value, `greater_is_better` will default to `True`. Don't forget to set it to `False` if
             your metric is better when lower.
