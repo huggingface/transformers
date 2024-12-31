@@ -42,11 +42,13 @@ class TeleChat2Config(PretrainedConfig):
             Dimension of the hidden representations.
         ffn_hidden_size (`int`, *optional*, defaults to 11008):
             Dimension of the MLP representations.
-        n_layer (`int`, *optional*, defaults to 32):
+        hidden_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout probability applied to the hidden layers in the MLP blocks.
+        num_hidden_layers (`int`, *optional*, defaults to 30):
             Number of hidden layers in the Transformer decoder.
-        n_head (`int`, *optional*, defaults to 32):
+        num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer decoder.
-        num_key_value_heads (`int`, *optional*):
+        num_key_value_heads (`int`, *optional*, defaults to 32):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
             `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
@@ -55,8 +57,7 @@ class TeleChat2Config(PretrainedConfig):
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
             `num_attention_heads`.
         max_position_embeddings (`int`, *optional*, defaults to 2048):
-            The maximum sequence length that this model might ever be used with. TeleChat2 1 supports up to 2048 tokens,
-            TeleChat2 2 up to 4096, CodeTeleChat2 up to 16384.
+            The maximum sequence length that this model might ever be used with. TeleChat2 1 supports up to 8192 tokens.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_epsilon (`float`, *optional*, defaults to 1e-06):
@@ -154,8 +155,8 @@ class TeleChat2Config(PretrainedConfig):
         hidden_size=4096,
         ffn_hidden_size=11008,
         hidden_dropout=0.0,
-        n_layer=30,
-        n_head=32,
+        num_hidden_layers=30,
+        num_attention_heads=32,
         num_key_value_heads=32,
         max_position_embeddings=2048,
         initializer_range=0.02,
@@ -177,12 +178,12 @@ class TeleChat2Config(PretrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
         self.ffn_hidden_size = ffn_hidden_size
-        self.n_layer = n_layer
-        self.n_head = n_head
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
         self.hidden_dropout = hidden_dropout
         # for backward compatibility
         if num_key_value_heads is None:
-            num_key_value_heads = n_head
+            num_key_value_heads = num_attention_heads
 
         self.num_key_value_heads = num_key_value_heads
         self.initializer_range = initializer_range
@@ -207,3 +208,4 @@ class TeleChat2Config(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+
