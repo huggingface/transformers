@@ -1279,10 +1279,10 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.embeddings.tok_embeddings
+        return self.model.embeddings.tok_embeddings
 
     def set_input_embeddings(self, value):
-        self.embeddings.tok_embeddings = value
+        self.model.embeddings.tok_embeddings = value
 
     @add_start_docstrings_to_model_forward(MODERNBERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -1396,10 +1396,10 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.embeddings.tok_embeddings
+        return self.model.embeddings.tok_embeddings
 
     def set_input_embeddings(self, value):
-        self.embeddings.tok_embeddings = value
+        self.model.embeddings.tok_embeddings = value
 
     @add_start_docstrings_to_model_forward(MODERNBERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
