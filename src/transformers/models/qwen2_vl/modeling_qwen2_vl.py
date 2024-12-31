@@ -32,13 +32,8 @@ from torch.nn import CrossEntropyLoss, LayerNorm
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, SlidingWindowCache, StaticCache
 from ...generation import GenerationMixin
-from ...modeling_attn_mask_utils import (
-    AttentionMaskConverter,
-)
-from ...modeling_outputs import (
-    BaseModelOutputWithPast,
-    ModelOutput,
-)
+from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -1676,7 +1671,7 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
                 attention_mask = attention_mask.to(inputs_embeds.device)
 
         # if we get 4D attention mask we cannot calculate rope deltas anymore. TODO @raushan fixme
-        if position_ids is None and input_ids is not None and (attention_mask is None or attention_mask.ndim == 2):
+        if position_ids is None and (attention_mask is None or attention_mask.ndim == 2):
             # calculate RoPE index once per generation in the pre-fill stage only
             if (cache_position is not None and cache_position[0] == 0) or self.rope_deltas is None:
                 position_ids, rope_deltas = self.get_rope_index(
