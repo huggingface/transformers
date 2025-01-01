@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024  The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,6 +16,7 @@
 
 from collections import OrderedDict
 from typing import Mapping
+from typing import Dict, List, Optional, Set, Tuple, Union, Callable, Any
 import functools
 import torch.nn as nn
 
@@ -29,9 +30,9 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class Aimv2Config(PretrainedConfig):
+class AIMv2Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`Aimv2Model`]. It is used to instantiate a AIM-v2
+    This is the configuration class to store the configuration of a [`AIMv2Model`]. It is used to instantiate a AIM-v2
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the AIM-v2 [apple/aimv2-large-patch14-224](...)
     architecture.
@@ -65,76 +66,120 @@ class Aimv2Config(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-5):
             The epsilon used by the layer normalization layers.
+        qkv_bias (`bool`, *optional*, defaults to `False`):
+            Whether or not to use bias in query, key, value.
+        use_bias (`bool`, *optional*, defaults to `False`):
+            Whether or not to use bias in all linear layers.
         use_cls_token (`bool`, *optional*, defaults to `False`):
             Whether or not to use a classification token.
-        use_mask_token (`bool`, *optional*, defaults to `False`):
-            Whether or not to use a mask token.
-        use_pos_embed (`str`, *optional*, defaults to `"absolute"`):
+        pos_embed_type (`str`, *optional*, defaults to `"absolute"`):
             Positional embedding type. Choose from 'absolute', 'sincos', or 'none'.
+        use_rms_norm (`bool`, *optional*, defaults to `False`):
+            Whether or not to use RMS norm.
+        post_trunk_norm (`bool`, *optional*, defaults to `False`):
+            Whether or not to use norm layer after the transformer blocks (layers).
+        probe_layers (`int`, *optional*, defaults to 6):
+            The layer ids to use for selecting features.
+        reduce (`bool`, *optional*, defaults to `False`):
+            Whether or not to reduce features using mean.
+        ffn_target_type (`str`, *optional*, defaults to `"swiglu"`):
+            Type of feedforward network (FFN) to use.
+        is_causal (`bool`, *optional*, defaults to `False`):
+            Whether or not to use causal attention.
         norm_layer (`[torch.nn.Module]`, *optional*, defaults to `torch.nn.LayerNorm`):
             Normalization layer to use.
-        Example:
+        num_queries (`int`, *optional*, defaults to 1):
+            Number of query tokens for attention pooling.
+        use_batch_norm (`bool`, *optional*, defaults to `True`):
+            Whether to use batch normalization in attention pooling.
+        proj_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use bias in the projection layer of the attention pooling.
+        average_pool (`bool`, *optional*, defaults to `True`):
+            Whether to use average pooling in the attention pooling.
+        num_labels (`int`, *optional*, defaults to 1000):
+            The number of labels for classification tasks.
+        **kwargs:
+            Remaining keyword arguments are passed to the superclass.
+
+    Example:
 
         ```python
-        >>> from aim.v2.configuration_aimv2 import Aimv2Config
-        >>> from aim.v2.modeling_aimv2 import Aimv2Model
+        >>> from aim.v2.configuration_aimv2 import AIMv2Config
 
         >>> # Initializing a aimv2-large-patch14-224 style configuration
-        >>> configuration = Aimv2Config()
-
-        >>> # Initializing a model (with random weights) from the aimv2-large-patch14-224 style configuration
-        >>> model = Aimv2Model(configuration)
+        >>> configuration = AIMv2Config()
 
         >>> # Accessing the model configuration
-        >>> configuration = model.config
+        >>> print(configuration)
         ```
     """
+
     model_type = "aimv2"
 
     def __init__(
         self,
-        image_size: int = 224,
-        patch_size: int = 14,
+        image_size: Union[int, Tuple[int, int]] = 224,
+        patch_size: Union[int, Tuple[int, int]] = 14,
         num_channels: int = 3,
         hidden_size: int = 1024,
         num_hidden_layers: int = 24,
         num_attention_heads: int = 16,
-        intermediate_size: int = 4096,
-        hidden_act: str = "gelu",
-        hidden_dropout_prob: float = 0.0,
-        attention_probs_dropout_prob: float = 0.0,
+        #mlp_ratio: float = 4.0,
+        hidden_act: Union[str, Callable] = "gelu",
+        hidden_dropout_prob: float = 0.1,
+        attention_probs_dropout_prob: float = 0.1,
         initializer_range: float = 0.02,
+        intermediate_size=2816,
         layer_norm_eps: float = 1e-5,
-        use_cls_token: bool = False,
-        use_mask_token: bool = False,
-        use_pos_embed: str = "absolute",
         qkv_bias: bool = False,
-        norm_layer=nn.LayerNorm,
+        use_bias: bool = False,
+        use_cls_token: bool = False,
+        pos_embed_type: str = "absolute",
+        #use_rms_norm: bool = False,
+        post_trunk_norm: bool = True,
+        probe_layers: Union[int, Tuple[int, ...]] = 6,
+        reduce: bool = False,
+        ffn_target_type: str = "swiglu",
+        is_causal: bool = False,
+        norm_layer: Optional[Callable[[int], nn.Module]] = nn.RMSNorm,
+        num_queries: int = 1,
+        use_batch_norm: bool = True,
+        proj_bias: bool = False,
+        average_pool: bool = True,
+        num_labels: int = 1000,
         **kwargs,
     ):
         super().__init__(**kwargs)
+
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
+        #self.mlp_ratio = mlp_ratio
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.initializer_range = initializer_range
+        self.intermediate_size=intermediate_size
         self.layer_norm_eps = layer_norm_eps
-        self.use_cls_token = use_cls_token
-        self.use_mask_token = use_mask_token
-        self.use_pos_embed = use_pos_embed  # we will use "sincos" or "absolute"
         self.qkv_bias = qkv_bias
-        # If norm_layer is provided, use it, otherwise, default to nn.LayerNorm with the specified eps
-        self.norm_layer = (
-            norm_layer
-            if norm_layer is not None
-            else functools.partial(nn.LayerNorm, eps=layer_norm_eps)
-        )
+        self.use_bias = use_bias
+        self.use_cls_token = use_cls_token
+        self.pos_embed_type = pos_embed_type
+        #self.use_rms_norm = use_rms_norm
+        self.post_trunk_norm = post_trunk_norm
+        self.probe_layers = probe_layers
+        self.reduce = reduce
+        self.ffn_target_type = ffn_target_type
+        self.is_causal = is_causal
+        self.norm_layer = norm_layer
+        self.num_queries = num_queries
+        self.use_batch_norm = use_batch_norm
+        self.proj_bias = proj_bias
+        self.average_pool = average_pool
+        self.num_labels = num_labels
 
 
 class AIMv2OnnxConfig(OnnxConfig):

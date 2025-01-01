@@ -1,4 +1,4 @@
-# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,10 +16,7 @@ from typing import TYPE_CHECKING
 
 from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
 
-_import_structure = {
-    "configuration_aimv2": ["AIMV2_PRETRAINED_CONFIG_ARCHIVE_MAP", "Aimv2Config"],
-    "modeling_aimv2": ["Aimv2ForImageClassification", "Aimv2Model", "Aimv2PreTrainedModel"],
-}
+_import_structure = {"configuration_aimv2": ["AIMv2Config"]}
 
 try:
     if not is_torch_available():
@@ -28,20 +25,25 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_aimv2"] = [
-        "Aimv2ForImageClassification",
-        "Aimv2Model",
-        "Aimv2PreTrainedModel",
+        "AIMv2ForImageClassification",
+        "AIMv2Model",
+        "AIMv2PreTrainedModel",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_aimv2 import AIMV2_PRETRAINED_CONFIG_ARCHIVE_MAP, Aimv2Config
+    from .configuration_aimv2 import AIMv2Config
+
     try:
         if not is_torch_available():
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_aimv2 import Aimv2ForImageClassification, Aimv2Model, Aimv2PreTrainedModel
+        from .modeling_aimv2 import (
+            AIMv2ForImageClassification,
+            AIMv2Model,
+            AIMv2PreTrainedModel,
+        )
 
 else:
     import sys
