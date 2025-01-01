@@ -486,7 +486,6 @@ OBJECTS_TO_IGNORE = [
     "TapasConfig",
     "TapasModel",
     "TapasTokenizer",
-    "TextNetImageProcessor",
     "Text2TextGenerationPipeline",
     "TextClassificationPipeline",
     "TextGenerationPipeline",

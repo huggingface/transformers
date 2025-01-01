@@ -564,7 +564,6 @@ _import_structure = {
     "models.t5": ["T5_PRETRAINED_CONFIG_ARCHIVE_MAP", "T5Config"],
     "models.table_transformer": ["TABLE_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP", "TableTransformerConfig"],
     "models.tapas": ["TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP", "TapasConfig", "TapasTokenizer"],
-    "models.textnet": ["TEXTNET_PRETRAINED_CONFIG_ARCHIVE_MAP", "TextNetConfig"],
     "models.time_series_transformer": [
         "TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP",
         "TimeSeriesTransformerConfig",
@@ -1001,7 +1000,6 @@ else:
     _import_structure["models.sam"].extend(["SamImageProcessor"])
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
-    _import_structure["models.textnet"].append("TextNetImageProcessor")
     _import_structure["models.tvlt"].append("TvltImageProcessor")
     _import_structure["models.videomae"].extend(["VideoMAEFeatureExtractor", "VideoMAEImageProcessor"])
     _import_structure["models.vilt"].extend(["ViltFeatureExtractor", "ViltImageProcessor", "ViltProcessor"])
@@ -2867,15 +2865,6 @@ else:
             "TapasModel",
             "TapasPreTrainedModel",
             "load_tf_weights_in_tapas",
-        ]
-    )
-    _import_structure["models.textnet"].extend(
-        [
-            "TEXTNET_PRETRAINED_CONFIG_ARCHIVE_MAP",
-            "TextNetBackbone",
-            "TextNetForImageClassification",
-            "TextNetModel",
-            "TextNetPreTrainedModel",
         ]
     )
     _import_structure["models.time_series_transformer"].extend(
@@ -4758,7 +4747,6 @@ if TYPE_CHECKING:
     from .models.t5 import T5_PRETRAINED_CONFIG_ARCHIVE_MAP, T5Config
     from .models.table_transformer import TABLE_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP, TableTransformerConfig
     from .models.tapas import TAPAS_PRETRAINED_CONFIG_ARCHIVE_MAP, TapasConfig, TapasTokenizer
-    from .models.textnet import TEXTNET_PRETRAINED_CONFIG_ARCHIVE_MAP, TextNetConfig
     from .models.time_series_transformer import (
         TIME_SERIES_TRANSFORMER_PRETRAINED_CONFIG_ARCHIVE_MAP,
         TimeSeriesTransformerConfig,
@@ -5143,7 +5131,6 @@ if TYPE_CHECKING:
         from .models.sam import SamImageProcessor
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.swin2sr import Swin2SRImageProcessor
-        from .models.textnet import TextNetImageProcessor
         from .models.tvlt import TvltImageProcessor
         from .models.videomae import VideoMAEFeatureExtractor, VideoMAEImageProcessor
         from .models.vilt import ViltFeatureExtractor, ViltImageProcessor, ViltProcessor
@@ -6688,13 +6675,6 @@ if TYPE_CHECKING:
             TapasModel,
             TapasPreTrainedModel,
             load_tf_weights_in_tapas,
-        )
-        from .models.textnet import (
-            TEXTNET_PRETRAINED_CONFIG_ARCHIVE_MAP,
-            TextNetBackbone,
-            TextNetForImageClassification,
-            TextNetModel,
-            TextNetPreTrainedModel,
         )
         from .models.time_series_transformer import (
             TIME_SERIES_TRANSFORMER_PRETRAINED_MODEL_ARCHIVE_LIST,
