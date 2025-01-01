@@ -128,11 +128,11 @@ class SamHQModelTester:
     def __init__(
         self,
         parent,
-        hidden_size=36,
+        hidden_size=768,
         intermediate_size=72,
         projection_dim=62,
         output_channels=32,
-        num_hidden_layers=14,
+        num_hidden_layers=6,
         num_attention_heads=4,
         num_channels=3,
         image_size=24,
@@ -235,7 +235,9 @@ class SamHQModelTester:
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
-            result = model(pixel_values)
+            # Explicitly pass multimask_output=True
+            result = model(pixel_values, multimask_output=True)
+        
         self.parent.assertEqual(result.iou_scores.shape, (self.batch_size, 1, 3))
         self.parent.assertEqual(result.pred_masks.shape[:3], (self.batch_size, 1, 3))
 
@@ -261,7 +263,7 @@ class SamHQModelTester:
             
 
         # after computing the convolutional features
-        expected_hidden_states_shape = (self.batch_size, 12, 12, 36)
+        expected_hidden_states_shape = (self.batch_size, 12, 12, 768)
         self.parent.assertEqual(len(result.hidden_states), self.num_hidden_layers + 1)
         self.parent.assertEqual(result[-1][0].shape, expected_hidden_states_shape)
 
@@ -275,7 +277,7 @@ class SamHQModelTester:
             
 
         # after computing the convolutional features
-        expected_hidden_states_shape = (self.batch_size, 12, 12, 36)
+        expected_hidden_states_shape = (self.batch_size, 12, 12, 768)
         self.parent.assertEqual(len(result[-1]), self.num_hidden_layers + 1)
         self.parent.assertEqual(result[-1][0].shape, expected_hidden_states_shape)
 
