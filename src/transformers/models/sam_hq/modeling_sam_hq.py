@@ -1090,7 +1090,9 @@ class SamHQMaskDecoder(nn.Module):
         upscaled_embedding_hq = self.activation(self.mask_norm(upscaled_embedding_hq))
         upscaled_embedding_hq = self.mask_conv2(upscaled_embedding_hq)
 
-        upscaled_embedding_hq = upscaled_embedding_hq + hq_features.repeat(batch_size, 1, 1, 1)
+        if hq_features.shape[0] == 1:
+            hq_features = hq_features.repeat(batch_size, 1, 1, 1)
+        upscaled_embedding_hq = upscaled_embedding_hq + hq_features
 
         hyper_in_list = []
         for i in range(self.num_mask_tokens):
@@ -1122,23 +1124,23 @@ class SamHQMaskDecoder(nn.Module):
             mask_slice = slice(1, self.num_mask_tokens - 1)
             iou_pred = iou_pred[:, :, mask_slice]
 
-            iou_pred, max_iou_idx = torch.max(iou_pred, dim=2)
-            iou_pred = iou_pred.unsqueeze(2)
+            iou_pred, max_iou_idx = torch.max(iou_pred, dim=1)
+            iou_pred = iou_pred.unsqueeze(1)
 
             masks_multi = masks[:, :, mask_slice, :, :]
             batch_indices = torch.arange(masks_multi.size(0)).unsqueeze(1).expand(-1, masks_multi.size(1))
             point_indices = torch.arange(masks_multi.size(1)).unsqueeze(0).expand(masks_multi.size(0), -1)
-            masks_sam = masks_multi[batch_indices, point_indices, max_iou_idx].unsqueeze(2)
+            masks_sam = masks_multi[batch_indices, point_indices, max_iou_idx].unsqueeze(1)
         else:
             mask_slice = slice(0, 1)
             iou_pred = iou_pred[:, :, mask_slice]
             masks_sam = masks[:, :, mask_slice, :, :]
-            masks_hq = masks[:, :, slice(self.num_mask_tokens - 1, self.num_mask_tokens), :, :]
 
-            if hq_token_only:
-                masks = masks_hq
-            else:
-                masks = masks_sam + masks_hq
+        masks_hq = masks[:, :, slice(self.num_mask_tokens - 1, self.num_mask_tokens), :, :]
+        if hq_token_only:
+            masks = masks_hq
+        else:
+            masks = masks_sam + masks_hq
 
         outputs = (masks, iou_pred)
         if output_attentions:
