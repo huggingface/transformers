@@ -83,6 +83,7 @@ class RtDetrV2ModelTester:
         decoder_ffn_dim=64,
         num_feature_levels=3,
         decoder_n_points=4,
+        decoder_n_levels=3,
         decoder_layers=2,
         decoder_attention_heads=2,
         decoder_activation_function="relu",
@@ -127,6 +128,7 @@ class RtDetrV2ModelTester:
         self.decoder_ffn_dim = decoder_ffn_dim
         self.num_feature_levels = num_feature_levels
         self.decoder_n_points = decoder_n_points
+        self.decoder_n_levels = decoder_n_levels
         self.decoder_layers = decoder_layers
         self.decoder_attention_heads = decoder_attention_heads
         self.decoder_activation_function = decoder_activation_function
@@ -194,6 +196,7 @@ class RtDetrV2ModelTester:
             decoder_ffn_dim=self.decoder_ffn_dim,
             num_feature_levels=self.num_feature_levels,
             decoder_n_points=self.decoder_n_points,
+            decoder_n_levels=self.decoder_n_levels,
             decoder_layers=self.decoder_layers,
             decoder_attention_heads=self.decoder_attention_heads,
             decoder_activation_function=self.decoder_activation_function,
@@ -387,9 +390,9 @@ class RtDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             self.assertListEqual(
                 list(cross_attentions[0].shape[-3:]),
                 [
+                    self.model_tester.num_queries,
                     self.model_tester.decoder_attention_heads,
-                    self.model_tester.num_feature_levels,
-                    self.model_tester.decoder_n_points,
+                    self.model_tester.decoder_n_levels * self.model_tester.decoder_n_points,
                 ],
             )
 
