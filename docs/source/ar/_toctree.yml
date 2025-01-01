@@ -47,8 +47,8 @@
 #       title: الترجمة
     - local: tasks/summarization
       title: التلخيص
-#     - local: tasks/multiple_choice
-#       title: الاختيار المتعدد
+    - local: tasks/multiple_choice
+      title: الاختيار المتعدد
     title: معالجة اللغات الطبيعية
 #   - isExpanded: false
 #     sections:
