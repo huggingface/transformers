@@ -352,6 +352,8 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 
 [[autodoc]] TextIteratorStreamer
 
+[[autodoc]] AsyncTextIteratorStreamer
+
 ## Caches
 
 [[autodoc]] Cache
@@ -436,3 +438,9 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
 
 [[autodoc]] SynthIDTextWatermarkDetector
     - __call__
+
+## Compile Utils
+
+[[autodoc]] CompileConfig
+    - __call__
+
