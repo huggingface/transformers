@@ -14,44 +14,41 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# RTDetrV2
+# RtDetrV2
 
 ## Overview
 
-The RTDetrV2 model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+The RtDetrV2 model was proposed in [RT-DETRv2: Improved Baseline with Bag-of-Freebies for Real-Time Detection Transformer](https://arxiv.org/abs/2407.17140) by Wenyu Lv, Yian Zhao, Qinyao Chang, Kui Huang, Guanzhong Wang, Yi Liu.
+
+RT-DETRv2 refines RT-DETR by introducing selective multi-scale feature extraction, a discrete sampling operator for broader deployment compatibility, and improved training strategies like dynamic data augmentation and scale-adaptive hyperparameters. These changes enhance flexibility and practicality while maintaining real-time performance.
 
 The abstract from the paper is the following:
 
-*<INSERT PAPER ABSTRACT HERE>*
+*In this report, we present RT-DETRv2, an improved Real-Time DEtection TRansformer (RT-DETR). RT-DETRv2 builds upon the previous state-of-the-art real-time detector, RT-DETR, and opens up a set of bag-of-freebies for flexibility and practicality, as well as optimizing the training strategy to achieve enhanced performance. To improve the flexibility, we suggest setting a distinct number of sampling points for features at different scales in the deformable attention to achieve selective multi-scale feature extraction by the decoder. To enhance practicality, we propose an optional discrete sampling operator to replace the grid_sample operator that is specific to RT-DETR compared to YOLOs. This removes the deployment constraints typically associated with DETRs. For the training strategy, we propose dynamic data augmentation and scale-adaptive hyperparameters customization to improve performance without loss of speed.*
 
-Tips:
-
-<INSERT TIPS ABOUT MODEL HERE>
-
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+This model was contributed by [jadechoghari](https://huggingface.co/jadechoghari).
+The original code can be found [here](https://github.com/lyuwenyu/RT-DETR).
 
 
-## RTDetrV2Config
+## RtDetrV2Config
 
-[[autodoc]] RTDetrV2Config
+[[autodoc]] RtDetrV2Config
 
-## RTDetrV2ResNetConfig
+## RtDetrV2ResNetConfig
 
-[[autodoc]] RTDetrV2ResNetConfig
+[[autodoc]] RtDetrV2ResNetConfig
 
-## RTDetrV2Model
+## RtDetrV2Model
 
-[[autodoc]] RTDetrV2Model
+[[autodoc]] RtDetrV2Model
     - forward
-
-## RTDetrV2ForObjectDetection
+ 
+## RtDetrV2ForObjectDetection
 
 [[autodoc]] RtDetrV2ForObjectDetection
     - forward
 
-## RTDetrV2ResNetBackbone
+## RtDetrV2ResNetBackbone
 
-[[autodoc]] RTDetrV2ResNetBackbone
+[[autodoc]] RtDetrV2ResNetBackbone
     - forward
