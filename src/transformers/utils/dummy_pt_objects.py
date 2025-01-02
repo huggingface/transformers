@@ -9095,6 +9095,27 @@ class TeleChat2ForCausalLM(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class TeleChat2ForQuestionAnswering(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TeleChat2ForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TeleChat2ForTokenClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class TeleChat2Model(metaclass=DummyObject):
     _backends = ["torch"]
 
