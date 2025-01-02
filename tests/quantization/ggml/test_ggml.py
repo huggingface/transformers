@@ -64,8 +64,8 @@ class GgufIntegrationTests(unittest.TestCase):
     mamba_model_id = "jpodivin/mamba-2.8b-hf-GGUF"
     nemotron_original_model_id = "nvidia/Nemotron-Mini-4B-Instruct"
     nemotron_model_id = "bartowski/Nemotron-Mini-4B-Instruct-GGUF"
-    gemma_original_model_id = "google/gemma-2-2b-it"
-    gemma_model_id = "bartowski/gemma-2-2b-it-GGUF"
+    original_gemma2_model_id = "google/gemma-2-2b-it"
+    gemma2_model_id = "bartowski/gemma-2-2b-it-GGUF"
 
     # standard quants
     q4_0_gguf_model_id = "tinyllama-1.1b-chat-v1.0.Q4_0.gguf"
