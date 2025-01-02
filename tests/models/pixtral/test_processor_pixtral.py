@@ -14,6 +14,7 @@
 import shutil
 import tempfile
 import unittest
+from typing import Optional
 
 import requests
 import torch
@@ -170,7 +171,7 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             input_ids[0].tolist(),
             # Equivalent to ["USER: [IMG][IMG][IMG_BREAK][IMG][IMG][IMG_END][IMG][IMG][IMG_BREAK][IMG][IMG][IMG_END]\nWhat's the difference between these two images? ASSISTANT:"]
             [21510, 1058, 1032, 10, 10, 12, 10, 10, 13, 10, 10, 12, 10, 10, 13, 1010, 7493, 1681, 1278, 6592, 2396, 2576, 2295, 8061, 1063, 1349, 4290, 16002, 41150, 1058]
-        )
+                    )
         # fmt: on
 
         # Test passing in a url
@@ -245,28 +246,31 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         )
         # fmt: on
 
+    def test_processor_returns_full_length_batches(self):
+        # to avoid https://github.com/huggingface/transformers/issues/34204
+        processor = self.processor_class.from_pretrained(self.tmpdirname)
+        prompt_string = [
+            "USER: [IMG]\nWhat's the content of the image? ASSISTANT:",
+        ] * 5
+        processor.tokenizer.pad_token = "</s>"
+        image_inputs = [self.image_0] * 5
+
+        # Make small for checking image token expansion
+        processor.image_processor.size = {"longest_edge": 30}
+        processor.image_processor.patch_size = {"height": 2, "width": 2}
+
+        # Test passing in an image
+        inputs_image = processor(text=prompt_string, images=image_inputs, return_tensors="pt", padding=True)
+        self.assertIn("input_ids", inputs_image)
+        self.assertTrue(len(inputs_image["input_ids"]) == 5)
+        self.assertTrue(len(inputs_image["pixel_values"]) == 5)
+
     # Override as PixtralProcessor needs nested images to work properly with batched inputs
-    def test_unstructured_kwargs_batched(self):
-        if "image_processor" not in self.processor_class.attributes:
-            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
-        processor_components = self.prepare_components()
-        processor = self.processor_class(**processor_components)
-        self.skip_processor_without_typed_kwargs(processor)
-
-        input_str = ["lower newer", "upper older longer string"]
-        image_input = [self.prepare_image_inputs()] * 2
-        inputs = processor(
-            text=input_str,
-            images=image_input,
-            return_tensors="pt",
-            do_rescale=True,
-            rescale_factor=-1,
-            padding="longest",
-            max_length=76,
-        )
-
-        self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
-        self.assertTrue(
-            len(inputs[self.text_input_name][0]) == len(inputs[self.text_input_name][1])
-            and len(inputs[self.text_input_name][1]) < 76
-        )
+    @require_vision
+    def prepare_image_inputs(self, batch_size: Optional[int] = None):
+        """This function prepares a list of PIL images for testing"""
+        if batch_size is None:
+            return super().prepare_image_inputs()
+        if batch_size < 1:
+            raise ValueError("batch_size must be greater than 0")
+        return [[super().prepare_image_inputs()]] * batch_size

@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import importlib
+import types
 from typing import TYPE_CHECKING, Union
 
 from packaging import version
@@ -30,9 +31,7 @@ from ..utils import is_torch_available, is_torchao_available, logging
 
 if is_torch_available():
     import torch
-
-if is_torchao_available():
-    from torchao.quantization import quantize_
+    import torch.nn as nn
 
 logger = logging.get_logger(__name__)
 
@@ -44,6 +43,25 @@ def find_parent(model, name):
     for m in module_tree:
         parent = parent._modules[m]
     return parent
+
+
+def _quantization_type(weight):
+    from torchao.dtypes import AffineQuantizedTensor
+    from torchao.quantization.linear_activation_quantized_tensor import LinearActivationQuantizedTensor
+
+    if isinstance(weight, AffineQuantizedTensor):
+        return f"{weight.__class__.__name__}({weight._quantization_type()})"
+
+    if isinstance(weight, LinearActivationQuantizedTensor):
+        return f"{weight.__class__.__name__}(activation={weight.input_quant_func}, weight={_quantization_type(weight.original_weight_tensor)})"
+
+
+def _linear_extra_repr(self):
+    weight = _quantization_type(self.weight)
+    if weight is None:
+        return f"in_features={self.weight.shape[1]}, out_features={self.weight.shape[0]}, weight=None"
+    else:
+        return f"in_features={self.weight.shape[1]}, out_features={self.weight.shape[0]}, weight={weight}"
 
 
 class TorchAoHfQuantizer(HfQuantizer):
@@ -73,6 +91,15 @@ class TorchAoHfQuantizer(HfQuantizer):
                     )
                 else:
                     self.offload = True
+        if self.pre_quantized:
+            weights_only = kwargs.get("weights_only", None)
+            if weights_only:
+                torch_version = version.parse(importlib.metadata.version("torch"))
+                if torch_version < version.parse("2.5.0"):
+                    raise RuntimeError(
+                        f"In order to use torchao pre-quantized model, you need to have torch>=2.5.0. However, the current version is {torch_version}."
+                        f" You can also set with `weights_only=False` in `from_pretrained` if you don't want to update torch"
+                    )
 
     def update_torch_dtype(self, torch_dtype):
         if self.quantization_config.quant_type == "int4_weight_only":
@@ -85,6 +112,13 @@ class TorchAoHfQuantizer(HfQuantizer):
                     "Setting torch_dtype to torch.bfloat16 for int4_weight_only quantization since only bfloat16 is supported right now. Please set torch_dtype=torch.bfloat16 to remove this warning."
                 )
                 torch_dtype = torch.bfloat16
+        if self.quantization_config.quant_type == "int8_dynamic_activation_int8_weight":
+            if torch_dtype is None:
+                logger.info(
+                    "Setting torch_dtype to torch.float32 for int8_dynamic_activation_int8_weight quantization as no torch_dtype was specified in from_pretrained"
+                )
+                # we need to set the torch_dtype, otherwise we have dtype mismatch when performing the quantized linear op
+                torch_dtype = torch.float32
         return torch_dtype
 
     def adjust_target_dtype(self, target_dtype: "torch.dtype") -> "torch.dtype":
@@ -152,11 +186,19 @@ class TorchAoHfQuantizer(HfQuantizer):
         Each nn.Linear layer that needs to be quantized is processsed here.
         First, we set the value the weight tensor, then we move it to the target device. Finally, we quantize the module.
         """
-        module, tensor_name = get_module_from_name(model, param_name)
-        module._parameters[tensor_name] = torch.nn.Parameter(param_value).to(device=target_device)
-        quantize_(module, self.quantization_config.get_apply_tensor_subclass())
+        from torchao.quantization import quantize_
 
-    def _process_model_after_weight_loading(self, model):
+        module, tensor_name = get_module_from_name(model, param_name)
+
+        if self.pre_quantized:
+            module._parameters[tensor_name] = torch.nn.Parameter(param_value.to(device=target_device))
+            if isinstance(module, nn.Linear):
+                module.extra_repr = types.MethodType(_linear_extra_repr, module)
+        else:
+            module._parameters[tensor_name] = torch.nn.Parameter(param_value).to(device=target_device)
+            quantize_(module, self.quantization_config.get_apply_tensor_subclass())
+
+    def _process_model_after_weight_loading(self, model, **kwargs):
         """No process required for torchao quantized model"""
         return
 
@@ -172,6 +214,12 @@ class TorchAoHfQuantizer(HfQuantizer):
         )
         if not _is_torchao_serializable:
             logger.warning("torchao quantized model is only serializable after huggingface_hub >= 0.25.0 ")
+        if self.offload and self.quantization_config.modules_to_not_convert is None:
+            logger.warning(
+                "The model contains offloaded modules and these modules are not quantized. We don't recommend saving the model as we won't be able to reload them."
+                "If you want to specify modules to not quantize, please specify modules_to_not_convert in the quantization_config."
+            )
+            return False
         return _is_torchao_serializable
 
     @property

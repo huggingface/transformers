@@ -44,7 +44,6 @@ from .tokenization_utils_base import (
     TruncationStrategy,
 )
 from .utils import (
-    CHAT_TEMPLATE_NAME,
     PROCESSOR_NAME,
     PushToHubMixin,
     TensorType,
@@ -527,18 +526,24 @@ class ProcessorMixin(PushToHubMixin):
         # If we save using the predefined names, we can load using `from_pretrained`
         # plus we save chat_template in its own file
         output_processor_file = os.path.join(save_directory, PROCESSOR_NAME)
-        output_chat_template_file = os.path.join(save_directory, CHAT_TEMPLATE_NAME)
+        output_raw_chat_template_file = os.path.join(save_directory, "chat_template.jinja")
+        output_chat_template_file = os.path.join(save_directory, "chat_template.json")
 
         processor_dict = self.to_dict()
         # Save `chat_template` in its own file. We can't get it from `processor_dict` as we popped it in `to_dict`
         # to avoid serializing chat template in json config file. So let's get it from `self` directly
         if self.chat_template is not None:
-            chat_template_json_string = (
-                json.dumps({"chat_template": self.chat_template}, indent=2, sort_keys=True) + "\n"
-            )
-            with open(output_chat_template_file, "w", encoding="utf-8") as writer:
-                writer.write(chat_template_json_string)
-            logger.info(f"chat template saved in {output_chat_template_file}")
+            if kwargs.get("save_raw_chat_template", False):
+                with open(output_raw_chat_template_file, "w", encoding="utf-8") as writer:
+                    writer.write(self.chat_template)
+                logger.info(f"chat template saved in {output_raw_chat_template_file}")
+            else:
+                chat_template_json_string = (
+                    json.dumps({"chat_template": self.chat_template}, indent=2, sort_keys=True) + "\n"
+                )
+                with open(output_chat_template_file, "w", encoding="utf-8") as writer:
+                    writer.write(chat_template_json_string)
+                logger.info(f"chat template saved in {output_chat_template_file}")
 
         # For now, let's not save to `processor_config.json` if the processor doesn't have extra attributes and
         # `auto_map` is not specified.
@@ -601,21 +606,23 @@ class ProcessorMixin(PushToHubMixin):
         is_local = os.path.isdir(pretrained_model_name_or_path)
         if os.path.isdir(pretrained_model_name_or_path):
             processor_file = os.path.join(pretrained_model_name_or_path, PROCESSOR_NAME)
-            chat_template_file = os.path.join(pretrained_model_name_or_path, "chat_template.json")
 
         if os.path.isfile(pretrained_model_name_or_path):
             resolved_processor_file = pretrained_model_name_or_path
             # cant't load chat-template when given a file as pretrained_model_name_or_path
             resolved_chat_template_file = None
+            resolved_raw_chat_template_file = None
             is_local = True
         elif is_remote_url(pretrained_model_name_or_path):
             processor_file = pretrained_model_name_or_path
             resolved_processor_file = download_url(pretrained_model_name_or_path)
             # can't load chat-template when given a file url as pretrained_model_name_or_path
             resolved_chat_template_file = None
+            resolved_raw_chat_template_file = None
         else:
             processor_file = PROCESSOR_NAME
-            chat_template_file = CHAT_TEMPLATE_NAME
+            chat_template_file = "chat_template.json"
+            raw_chat_template_file = "chat_template.jinja"
             try:
                 # Load from local folder or from cache or download from model Hub and cache
                 resolved_processor_file = cached_file(
@@ -650,6 +657,21 @@ class ProcessorMixin(PushToHubMixin):
                     subfolder=subfolder,
                     _raise_exceptions_for_missing_entries=False,
                 )
+
+                resolved_raw_chat_template_file = cached_file(
+                    pretrained_model_name_or_path,
+                    raw_chat_template_file,
+                    cache_dir=cache_dir,
+                    force_download=force_download,
+                    proxies=proxies,
+                    resume_download=resume_download,
+                    local_files_only=local_files_only,
+                    token=token,
+                    user_agent=user_agent,
+                    revision=revision,
+                    subfolder=subfolder,
+                    _raise_exceptions_for_missing_entries=False,
+                )
             except EnvironmentError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
                 # the original exception.
@@ -664,8 +686,11 @@ class ProcessorMixin(PushToHubMixin):
                 )
 
         # Add chat template as kwarg before returning because most models don't have processor config
-        chat_template = None
-        if resolved_chat_template_file is not None:
+        if resolved_raw_chat_template_file is not None:
+            with open(resolved_raw_chat_template_file, "r", encoding="utf-8") as reader:
+                chat_template = reader.read()
+            kwargs["chat_template"] = chat_template
+        elif resolved_chat_template_file is not None:
             with open(resolved_chat_template_file, "r", encoding="utf-8") as reader:
                 text = reader.read()
             chat_template = json.loads(text)["chat_template"]
@@ -696,7 +721,7 @@ class ProcessorMixin(PushToHubMixin):
 
         if "chat_template" in processor_dict and processor_dict["chat_template"] is not None:
             logger.warning_once(
-                "Chat templates should be in a 'chat_template.json' file but found key='chat_template' "
+                "Chat templates should be in a 'chat_template.jinja' file but found key='chat_template' "
                 "in the processor's config. Make sure to move your template to its own file."
             )
 
@@ -820,6 +845,8 @@ class ProcessorMixin(PushToHubMixin):
             "common_kwargs": {},
         }
 
+        used_keys = set()
+
         # get defaults from set model processor kwargs if they exist
         for modality in default_kwargs:
             default_kwargs[modality] = ModelProcessorKwargs._defaults.get(modality, {}).copy()
@@ -827,7 +854,12 @@ class ProcessorMixin(PushToHubMixin):
             for modality_key in ModelProcessorKwargs.__annotations__[modality].__annotations__.keys():
                 # init with tokenizer init kwargs if necessary
                 if modality_key in tokenizer_init_kwargs:
-                    default_kwargs[modality][modality_key] = tokenizer_init_kwargs[modality_key]
+                    value = (
+                        getattr(self.tokenizer, modality_key)
+                        if hasattr(self.tokenizer, modality_key)
+                        else tokenizer_init_kwargs[modality_key]
+                    )
+                    default_kwargs[modality][modality_key] = value
         # now defaults kwargs are updated with the tokenizers defaults.
         # pass defaults to output dictionary
         output_kwargs.update(default_kwargs)
@@ -846,18 +878,34 @@ class ProcessorMixin(PushToHubMixin):
                             f"in a dictionary for {modality} and as a **kwarg."
                         )
                 elif modality_key in kwargs:
-                    kwarg_value = kwargs.pop(modality_key, "__empty__")
+                    # we get a modality_key instead of popping it because modality-specific processors
+                    # can have overlapping kwargs
+                    kwarg_value = kwargs.get(modality_key, "__empty__")
                 else:
                     kwarg_value = "__empty__"
                 if kwarg_value != "__empty__":
                     output_kwargs[modality][modality_key] = kwarg_value
-        # if something remains in kwargs, it belongs to common after flattening
-        if set(kwargs) & set(default_kwargs):
-            # here kwargs is dictionary-based since it shares keys with default set
-            [output_kwargs["common_kwargs"].update(subdict) for _, subdict in kwargs.items()]
+                    used_keys.add(modality_key)
+
+        # Determine if kwargs is a flat dictionary or contains nested dictionaries
+        if any(key in default_kwargs for key in kwargs):
+            # kwargs is dictionary-based, and some keys match modality names
+            for modality, subdict in kwargs.items():
+                if modality in default_kwargs:
+                    for subkey, subvalue in subdict.items():
+                        if subkey not in used_keys:
+                            output_kwargs[modality][subkey] = subvalue
+                            used_keys.add(subkey)
         else:
-            # here it's a flat dict
-            output_kwargs["common_kwargs"].update(kwargs)
+            # kwargs is a flat dictionary
+            for key in kwargs:
+                if key not in used_keys:
+                    if key in ModelProcessorKwargs.__annotations__["common_kwargs"].__annotations__.keys():
+                        output_kwargs["common_kwargs"][key] = kwargs[key]
+                    else:
+                        logger.warning_once(
+                            f"Keyword argument `{key}` is not a valid argument for this processor and will be ignored."
+                        )
 
         # all modality-specific kwargs are updated with common kwargs
         for modality in output_kwargs:
@@ -1083,6 +1131,20 @@ class ProcessorMixin(PushToHubMixin):
         return self.tokenizer.apply_chat_template(
             conversation, chat_template=chat_template, tokenize=tokenize, **kwargs
         )
+
+    def post_process_image_text_to_text(self, generated_outputs):
+        """
+        Post-process the output of a vlm to decode the text.
+
+        Args:
+            generated_outputs (`torch.Tensor` or `np.ndarray`):
+                The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
+                or `(sequence_length,)`.
+
+        Returns:
+            `List[str]`: The decoded text.
+        """
+        return self.tokenizer.batch_decode(generated_outputs, skip_special_tokens=True)
 
 
 def _validate_images_text_input_order(images, text):

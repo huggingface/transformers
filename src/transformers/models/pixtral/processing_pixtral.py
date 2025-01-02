@@ -90,10 +90,10 @@ class BatchMixFeature(BatchFeature):
                 new_data[k] = [
                     element.to(*args, **kwargs) for sample in v for element in sample if is_torch_tensor(element)
                 ]
-            elif torch.is_floating_point(v):
+            elif isinstance(v, torch.Tensor) and torch.is_floating_point(v):
                 # cast and send to device
                 new_data[k] = v.to(*args, **kwargs)
-            elif device is not None:
+            elif isinstance(v, torch.Tensor) and device is not None:
                 new_data[k] = v.to(device=device)
             else:
                 new_data[k] = v
@@ -206,14 +206,15 @@ class PixtralProcessor(ProcessorMixin):
             if is_image_or_image_url(images):
                 images = [[images]]
             elif isinstance(images, list) and is_image_or_image_url(images[0]):
-                images = [images]
-            elif (
-                not isinstance(images, list)
-                and not isinstance(images[0], list)
-                and not is_image_or_image_url(images[0][0])
-            ):
+                if isinstance(text, list):
+                    images = [[im] for im in images]
+                else:
+                    images = [images]
+            elif isinstance(images, list) and isinstance(images[0], list) and is_image_or_image_url(images[0][0]):
+                pass
+            else:
                 raise ValueError(
-                    "Invalid input images. Please provide a single image or a list of images or a list of list of images."
+                    "Invalid input images. Please provide a single image, a list of images, or a list of lists of images."
                 )
             images = [[load_image(im) for im in sample] for sample in images]
             image_inputs = self.image_processor(images, patch_size=self.patch_size, **output_kwargs["images_kwargs"])

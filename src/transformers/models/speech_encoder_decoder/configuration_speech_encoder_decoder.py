@@ -71,6 +71,7 @@ class SpeechEncoderDecoderConfig(PretrainedConfig):
     ```"""
 
     model_type = "speech-encoder-decoder"
+    sub_configs = {"encoder": AutoConfig, "decoder": AutoConfig}
     is_composition = True
 
     def __init__(self, **kwargs):

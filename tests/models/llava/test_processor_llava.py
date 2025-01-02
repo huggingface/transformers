@@ -93,3 +93,24 @@ class LlavaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
         self.assertEqual(expected_prompt, formatted_prompt)
+
+    def test_chat_template_with_continue_final_message(self):
+        processor = LlavaProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
+        expected_prompt = "USER: <image>\nDescribe this image. ASSISTANT: There is a dog and"
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "image"},
+                    {"type": "text", "text": "Describe this image."},
+                ],
+            },
+            {
+                "role": "assistant",
+                "content": [
+                    {"type": "text", "text": "There is a dog and"},
+                ],
+            },
+        ]
+        prompt = processor.apply_chat_template(messages, continue_final_message=True)
+        self.assertEqual(expected_prompt, prompt)

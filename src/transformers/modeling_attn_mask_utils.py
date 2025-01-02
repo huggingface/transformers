@@ -169,6 +169,10 @@ class AttentionMaskConverter:
             diagonal = past_key_values_length - sliding_window - 1
 
             context_mask = torch.tril(torch.ones_like(mask, dtype=torch.bool), diagonal=diagonal)
+            # Recent changes in PyTorch prevent mutations on tensors converted with aten::_to_copy
+            # See https://github.com/pytorch/pytorch/issues/127571
+            if is_torchdynamo_compiling():
+                mask = mask.clone()
             mask.masked_fill_(context_mask, torch.finfo(dtype).min)
 
         return mask[None, None, :, :].expand(bsz, 1, tgt_len, tgt_len + past_key_values_length)
@@ -281,7 +285,7 @@ class AttentionMaskConverter:
         elif sliding_window is None or key_value_length < sliding_window:
             if len(attention_mask.shape) == 4:
                 return False
-            elif (is_training or not is_tracing) and torch.all(attention_mask == 1):
+            elif not is_tracing and torch.all(attention_mask == 1):
                 if query_length == 1 or key_value_length == query_length:
                     # For query_length == 1, causal attention and bi-directional attention are the same.
                     ignore_causal_mask = True

@@ -34,6 +34,9 @@ CONFIG_MAPPING = transformers.models.auto.configuration_auto.CONFIG_MAPPING
 SPECIAL_CASES_TO_ALLOW = {
     # 'max_position_embeddings' is not used in modeling file, but needed for eval frameworks like Huggingface's lighteval (https://github.com/huggingface/lighteval/blob/af24080ea4f16eaf1683e353042a2dfc9099f038/src/lighteval/models/base_model.py#L264).
     # periods and offsers are not used in modeling file, but used in the configuration file to define `layers_block_type` and `layers_num_experts`.
+    "BambaConfig": [
+        "attn_layer_indices",
+    ],
     "JambaConfig": [
         "max_position_embeddings",
         "attn_layer_offset",
@@ -47,6 +50,7 @@ SPECIAL_CASES_TO_ALLOW = {
     # `cache_implementation` should be in the default generation config, but we don't yet support per-model
     # generation configs (TODO joao)
     "Gemma2Config": ["tie_word_embeddings", "cache_implementation"],
+    "Cohere2Config": ["cache_implementation"],
     # used to compute the property `self.chunk_length`
     "EncodecConfig": ["overlap"],
     # used to compute the property `self.layers_block_type`
@@ -132,12 +136,68 @@ SPECIAL_CASES_TO_ALLOW = {
         "t2u_variance_predictor_hidden_dim",
         "t2u_variance_predictor_kernel_size",
     ],
+    "ZambaConfig": [
+        "tie_word_embeddings",
+        "attn_layer_offset",
+        "attn_layer_period",
+    ],
     "MllamaTextConfig": [
         "initializer_range",
     ],
     "MllamaVisionConfig": [
         "initializer_range",
         "supported_aspect_ratios",
+    ],
+    "ConditionalDetrConfig": [
+        "bbox_cost",
+        "bbox_loss_coefficient",
+        "class_cost",
+        "cls_loss_coefficient",
+        "dice_loss_coefficient",
+        "focal_alpha",
+        "giou_cost",
+        "giou_loss_coefficient",
+        "mask_loss_coefficient",
+    ],
+    "DetrConfig": [
+        "bbox_cost",
+        "bbox_loss_coefficient",
+        "class_cost",
+        "dice_loss_coefficient",
+        "eos_coefficient",
+        "giou_cost",
+        "giou_loss_coefficient",
+        "mask_loss_coefficient",
+    ],
+    "GroundingDinoConfig": [
+        "bbox_cost",
+        "bbox_loss_coefficient",
+        "class_cost",
+        "focal_alpha",
+        "giou_cost",
+        "giou_loss_coefficient",
+    ],
+    "RTDetrConfig": [
+        "eos_coefficient",
+        "focal_loss_alpha",
+        "focal_loss_gamma",
+        "matcher_alpha",
+        "matcher_bbox_cost",
+        "matcher_class_cost",
+        "matcher_gamma",
+        "matcher_giou_cost",
+        "use_focal_loss",
+        "weight_loss_bbox",
+        "weight_loss_giou",
+        "weight_loss_vfl",
+    ],
+    "YolosConfig": [
+        "bbox_cost",
+        "bbox_loss_coefficient",
+        "class_cost",
+        "eos_coefficient",
+        "giou_cost",
+        "giou_loss_coefficient",
     ],
 }
 
@@ -238,6 +298,7 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
         "pad_index",
         "unk_index",
         "mask_index",
+        "image_token_index",  # for VLMs
         "image_size",
         "use_cache",
         "out_features",
@@ -249,6 +310,10 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
         "backbone_config",
         "use_timm_backbone",
         "backbone_kwargs",
+        # rope attributes may not appear directly in the modeling but are used
+        "rope_theta",
+        "partial_rotary_factor",
+        "pretraining_tp",
     ]
     attributes_used_in_generation = ["encoder_no_repeat_ngram_size"]
 
@@ -324,7 +389,7 @@ def check_config_attributes_being_used(config_class):
 
 
 def check_config_attributes():
-    """Check the arguments in `__init__` of all configuration classes are used in  python files"""
+    """Check the arguments in `__init__` of all configuration classes are used in python files"""
     configs_with_unused_attributes = {}
     for _config_class in list(CONFIG_MAPPING.values()):
         # Skip deprecated models

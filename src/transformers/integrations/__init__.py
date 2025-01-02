@@ -21,8 +21,15 @@ _import_structure = {
     "awq": [
         "fuse_awq_modules",
         "post_init_awq_exllama_modules",
+        "post_init_awq_ipex_modules",
         "replace_quantization_scales",
         "replace_with_awq_linear",
+    ],
+    "bitnet": [
+        "BitLinear",
+        "pack_weights",
+        "replace_with_bitnet_linear",
+        "unpack_weights",
     ],
     "bitsandbytes": [
         "dequantize_and_replace",
@@ -47,6 +54,7 @@ _import_structure = {
     ],
     "eetq": ["replace_with_eetq_linear"],
     "fbgemm_fp8": ["FbgemmFp8Linear", "replace_with_fbgemm_fp8_linear"],
+    "fsdp": ["is_fsdp_managed_module"],
     "ggml": [
         "GGUF_CONFIG_MAPPING",
         "GGUF_TENSOR_MAPPING",
@@ -55,6 +63,7 @@ _import_structure = {
         "load_dequant_gguf_tensor",
         "load_gguf",
     ],
+    "higgs": ["HiggsLinear", "dequantize_higgs", "quantize_with_higgs", "replace_with_higgs_linear"],
     "hqq": ["prepare_for_hqq_linear"],
     "integration_utils": [
         "INTEGRATION_TO_CALLBACK",
@@ -97,6 +106,7 @@ _import_structure = {
     ],
     "peft": ["PeftAdapterMixin"],
     "quanto": ["replace_with_quanto_layers"],
+    "vptq": ["replace_with_vptq_linear"],
 }
 
 try:
@@ -115,8 +125,15 @@ if TYPE_CHECKING:
     from .awq import (
         fuse_awq_modules,
         post_init_awq_exllama_modules,
+        post_init_awq_ipex_modules,
         replace_quantization_scales,
         replace_with_awq_linear,
+    )
+    from .bitnet import (
+        BitLinear,
+        pack_weights,
+        replace_with_bitnet_linear,
+        unpack_weights,
     )
     from .bitsandbytes import (
         dequantize_and_replace,
@@ -141,6 +158,7 @@ if TYPE_CHECKING:
     )
     from .eetq import replace_with_eetq_linear
     from .fbgemm_fp8 import FbgemmFp8Linear, replace_with_fbgemm_fp8_linear
+    from .fsdp import is_fsdp_managed_module
     from .ggml import (
         GGUF_CONFIG_MAPPING,
         GGUF_TENSOR_MAPPING,
@@ -149,6 +167,7 @@ if TYPE_CHECKING:
         load_dequant_gguf_tensor,
         load_gguf,
     )
+    from .higgs import HiggsLinear, dequantize_higgs, quantize_with_higgs, replace_with_higgs_linear
     from .hqq import prepare_for_hqq_linear
     from .integration_utils import (
         INTEGRATION_TO_CALLBACK,
@@ -191,6 +210,7 @@ if TYPE_CHECKING:
     )
     from .peft import PeftAdapterMixin
     from .quanto import replace_with_quanto_layers
+    from .vptq import replace_with_vptq_linear
 
     try:
         if not is_torch_available():
