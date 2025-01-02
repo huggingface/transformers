@@ -68,4 +68,18 @@ In the following, we demonstrate how to use `TeleChat2-7B` for the inference. No
 
 [[autodoc]] TeleChat2ForCausalLM
     - forward
-    - generate
+
+## TeleChat2ForSequenceClassification
+
+[[autodoc]] TeleChat2ForSequenceClassification
+    - forward
+
+## TeleChat2ForTokenClassification
+
+[[autodoc]] TeleChat2ForTokenClassification
+    - forward
+
+## TeleChat2ForQuestionAnswering
+
+[[autodoc]] TeleChat2ForQuestionAnswering
+    - forward

@@ -31,9 +31,12 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_telechat2"] = [
-        "TeleChat2PreTrainedModel",
-        "TeleChat2Model",
         "TeleChat2ForCausalLM",
+        "TeleChat2ForQuestionAnswering",
+        "TeleChat2ForSequenceClassification",
+        "TeleChat2ForTokenClassification",
+        "TeleChat2Model",
+        "TeleChat2PreTrainedModel",
     ]
 
 
@@ -48,6 +51,9 @@ if TYPE_CHECKING:
     else:
         from .modeling_telechat2 import (
             TeleChat2ForCausalLM,
+            TeleChat2ForQuestionAnswering,
+            TeleChat2ForSequenceClassification,
+            TeleChat2ForTokenClassification,
             TeleChat2Model,
             TeleChat2PreTrainedModel,
         )

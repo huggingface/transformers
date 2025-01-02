@@ -3567,6 +3567,9 @@ else:
     _import_structure["models.telechat2"].extend(
         [
             "TeleChat2ForCausalLM",
+            "TeleChat2ForQuestionAnswering",
+            "TeleChat2ForSequenceClassification",
+            "TeleChat2ForTokenClassification",
             "TeleChat2Model",
             "TeleChat2PreTrainedModel",
         ]
@@ -8128,6 +8131,9 @@ if TYPE_CHECKING:
         )
         from .models.telechat2 import (
             TeleChat2ForCausalLM,
+            TeleChat2ForQuestionAnswering,
+            TeleChat2ForSequenceClassification,
+            TeleChat2ForTokenClassification,
             TeleChat2Model,
             TeleChat2PreTrainedModel,
         )

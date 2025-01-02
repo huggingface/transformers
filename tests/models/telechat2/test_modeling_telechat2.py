@@ -44,6 +44,9 @@ if is_torch_available():
 
     from transformers import (
         TeleChat2ForCausalLM,
+        TeleChat2ForQuestionAnswering,
+        TeleChat2ForSequenceClassification,
+        TeleChat2ForTokenClassification,
         TeleChat2Model,
     )
 
@@ -137,11 +140,11 @@ class TeleChat2ModelTester:
         return TeleChat2Config(
             vocab_size=self.vocab_size,
             hidden_size=self.hidden_size,
-            num_hidden_layers=self.num_hidden_layers,
+            n_layer=self.num_hidden_layers,
             max_window_layers=self.max_window_layers,
             use_sliding_window=self.use_sliding_window,
             sliding_window=self.sliding_window,
-            num_attention_heads=self.num_attention_heads,
+            n_head=self.num_attention_heads,
             num_key_value_heads=self.num_key_value_heads,
             ffn_hidden_size=self.intermediate_size,
             hidden_act=self.hidden_act,
@@ -301,6 +304,9 @@ class TeleChat2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         (
             TeleChat2Model,
             TeleChat2ForCausalLM,
+            TeleChat2ForSequenceClassification,
+            TeleChat2ForTokenClassification,
+            TeleChat2ForQuestionAnswering,
         )
         if is_torch_available()
         else ()
@@ -309,7 +315,11 @@ class TeleChat2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     pipeline_model_mapping = (
         {
             "feature-extraction": TeleChat2Model,
+            "text-classification": TeleChat2ForSequenceClassification,
+            "token-classification": TeleChat2ForTokenClassification,
             "text-generation": TeleChat2ForCausalLM,
+            "zero-shot": TeleChat2ForSequenceClassification,
+            "question-answering": TeleChat2ForQuestionAnswering,
         }
         if is_torch_available()
         else {}
@@ -347,6 +357,63 @@ class TeleChat2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
 
+    def test_TeleChat2_sequence_classification_model(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        print(config)
+        config.num_labels = 3
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
+        model = TeleChat2ForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
+        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+
+    def test_TeleChat2_sequence_classification_model_for_single_label(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        config.problem_type = "single_label_classification"
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
+        model = TeleChat2ForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
+        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+
+    def test_TeleChat2_sequence_classification_model_for_multi_label(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        config.problem_type = "multi_label_classification"
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        sequence_labels = ids_tensor(
+            [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
+        ).to(torch.float)
+        model = TeleChat2ForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
+        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+
+    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_llama_token_classification_model with llama->TeleChat2
+    def test_TeleChat2_token_classification_model(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        token_labels = ids_tensor([self.model_tester.batch_size, self.model_tester.seq_length], config.num_labels)
+        model = TeleChat2ForTokenClassification(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=token_labels)
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
+        )
+
     @unittest.skip(reason="TeleChat2 buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
         pass
@@ -365,7 +432,7 @@ class TeleChat2IntegrationTest(unittest.TestCase):
     def test_model_450m_logits(self):
         input_ids = [1, 306, 4658, 278, 6593, 310, 2834, 338]
         model = TeleChat2ForCausalLM.from_pretrained("TeleAI/TeleChat2-3B", device_map="auto")
-        input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
+        input_ids = torch.tensor([input_ids]).to(model.model.word_embeddings.weight.device)
         with torch.no_grad():
             out = model(input_ids).logits.float().cpu()
         # Expected mean on dim = -1
@@ -388,7 +455,7 @@ class TeleChat2IntegrationTest(unittest.TestCase):
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("TeleAI/TeleChat2-3B", use_fast=False)
         model = TeleChat2ForCausalLM.from_pretrained("TeleAI/TeleChat2-3B", device_map="auto")
-        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
+        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.word_embeddings.weight.device)
 
         # greedy generation outputs
         generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
@@ -413,7 +480,7 @@ class TeleChat2IntegrationTest(unittest.TestCase):
             load_in_4bit=True,
             attn_implementation="flash_attention_2",
         )
-        input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
+        input_ids = torch.tensor([input_ids]).to(model.model.word_embeddings.weight.device)
         generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
 
@@ -438,7 +505,7 @@ class TeleChat2IntegrationTest(unittest.TestCase):
         model = TeleChat2ForCausalLM.from_pretrained(
             "TeleAI/TeleChat2-3B", device_map="auto", attn_implementation="sdpa"
         )
-        input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
+        input_ids = torch.tensor([input_ids]).to(model.model.word_embeddings.weight.device)
         generated_ids = model.generate(input_ids, max_new_tokens=4, temperature=0)
         self.assertEqual(EXPECTED_OUTPUT_TOKEN_IDS, generated_ids[0][-2:].tolist())
 
@@ -460,7 +527,7 @@ class TeleChat2IntegrationTest(unittest.TestCase):
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("TeleAI/TeleChat2-3B", use_fast=False)
 
-        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
+        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.word_embeddings.weight.device)
 
         # greedy generation outputs
         generated_ids = model.generate(input_ids, max_new_tokens=20, temperature=0)
@@ -480,7 +547,7 @@ class TeleChat2IntegrationTest(unittest.TestCase):
         assistant_model = TeleChat2ForCausalLM.from_pretrained(
             "TeleChat/TeleChat2-3B", device_map="auto", torch_dtype=torch.float16
         )
-        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.embed_tokens.weight.device)
+        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.model.word_embeddings.weight.device)
 
         # greedy generation outputs
         set_seed(0)
