@@ -17,6 +17,7 @@ import inspect
 from typing import Callable, List, Optional, Set, Tuple, Union
 
 import torch
+from contextlib import nullcontext
 from packaging import version
 from safetensors.torch import storage_ptr, storage_size
 from torch import nn
@@ -355,3 +356,21 @@ def translate_to_torch_parallel_style(style: str):
         return ColwiseParallel(output_layouts=Replicate())
     else:
         raise ValueError(f"Unsupported parallel style value: {style}")
+
+
+def torch_compile(model, *args, **kwargs):
+    if not is_torch_greater_or_equal_than_2_0():
+        return model
+    else:
+        return torch_compile(model, *args, **kwargs)
+
+def torchdynamo_disable(fn=None, recursive=True):
+    if not is_torch_greater_or_equal_than_2_0():
+        return fn if fn is not None else nullcontext()
+    elif is_torch_greater_or_equal_than_2_1():
+        # use public API available since 2.1
+        import torch.compiler
+        return torch.compiler.disable(fn, recursive)
+    else:
+        import torch._dynamo
+        return torch._dynamo.disable(fn, recursive)
