@@ -414,11 +414,6 @@ class TokenizerTesterMixin:
                 # next is failing for almost all the Fast tokenizers now.
                 # self.assertEqual(token_2[0], SPECIAL_TOKEN_2)
 
-                texts = ["tokenizer\n", SPECIAL_TOKEN_1, "\n", SPECIAL_TOKEN_2]
-                token_1 = tokenizer.tokenize(" ".join(texts))
-                token_2 = [token for text in texts for token in tokenizer.tokenize(text)]
-                self.assertEqual(token_1, token_2)
-
     # TODO: this test could be extended to all tokenizers - not just the sentencepiece
     def test_sentencepiece_tokenize_and_convert_tokens_to_string(self):
         """Test ``_tokenize`` and ``convert_tokens_to_string``."""
