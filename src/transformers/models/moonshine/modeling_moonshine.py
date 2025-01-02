@@ -578,6 +578,7 @@ MOONSHINE_START_DOCSTRING = r"""
 class MoonshinePreTrainedModel(PreTrainedModel):
     config_class = MoonshineConfig
     base_model_prefix = "model"
+    main_input_name = "input_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MoonshineDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
@@ -589,7 +590,7 @@ class MoonshinePreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
+        if isinstance(module, (nn.Linear, nn.Conv1d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -597,6 +598,16 @@ class MoonshinePreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+
+    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
+        """
+        Computes the output length of the convolutional layers
+        """
+        output_conv1_length = int((input_lengths - self.config.conv1_kernel_size) / self.config.conv1_stride + 1)
+        output_conv2_length = int((output_conv1_length - self.config.conv2_kernel_size) / self.config.conv2_stride + 1)
+        output_conv3_length = int((output_conv2_length - self.config.conv3_kernel_size) / self.config.conv3_stride + 1)
+
+        return output_conv3_length
 
 
 @add_start_docstrings(
@@ -618,9 +629,15 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
         self.config = config
         embed_dim = config.hidden_size
 
-        self.conv1 = nn.Conv1d(1, embed_dim, kernel_size=127, stride=64, bias=False)
-        self.conv2 = nn.Conv1d(embed_dim, 2 * embed_dim, kernel_size=7, stride=3)
-        self.conv3 = nn.Conv1d(2 * embed_dim, embed_dim, kernel_size=3, stride=2)
+        self.conv1 = nn.Conv1d(
+            1, embed_dim, kernel_size=config.conv1_kernel_size, stride=config.conv1_stride, bias=False
+        )
+        self.conv2 = nn.Conv1d(
+            embed_dim, 2 * embed_dim, kernel_size=config.conv2_kernel_size, stride=config.conv2_stride
+        )
+        self.conv3 = nn.Conv1d(
+            2 * embed_dim, embed_dim, kernel_size=config.conv3_kernel_size, stride=config.conv3_stride
+        )
         self.groupnorm = nn.GroupNorm(num_groups=1, num_channels=embed_dim, eps=1e-5)
 
         self.rotary_emb = MoonshineRotaryEmbedding(
@@ -657,14 +674,10 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
         self,
         input_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         r"""
@@ -678,29 +691,6 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
             attention_mask (`torch.Tensor`)`, *optional*):
                 Moonshine does not support masking of the `input_values`, this argument is preserved for compatibility,
                 but it is not used.
-            position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-                config.n_positions - 1]`.
-
-                [What are position IDs?](../glossary#position-ids)
-            past_key_values (`Cache`, *optional*):
-                Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-                blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
-                returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
-
-                Two formats are allowed:
-                - a [`~cache_utils.Cache`] instance, see our
-                [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache);
-                - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
-                shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
-                cache format.
-
-                The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
-                legacy cache format will be returned.
-
-                If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
-                have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
-                of shape `(batch_size, sequence_length)`.
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
                 Optionally, instead of passing `input_values` you can choose to directly pass an embedded representation, where embedded
                 here refers to preprocessed input values that can be obtained by passing `input_values` to the encoder `preprocess` method.
@@ -714,50 +704,27 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
                 more detail.
             return_dict (`bool`, *optional*):
                 Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
-                this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
-                the complete sequence length.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_values is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_values or inputs_embeds")
 
-        if self.gradient_checkpointing and self.training and use_cache:
-            logger.warning_once(
-                "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
-            )
-            use_cache = False
-
         if inputs_embeds is None:
             inputs_embeds = self.preprocess(input_values)
 
-        if use_cache and past_key_values is None:
-            self_attention_cache = DynamicCache()
-            cross_attention_cache = DynamicCache()
-            past_key_values = EncoderDecoderCache(self_attention_cache, cross_attention_cache)
-
-        if cache_position is None:
-            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
-            )
-
-        if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+        position_ids = torch.arange(0, inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
 
         hidden_states = inputs_embeds
 
         # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
 
-        # decoder layers
+        # encoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
 
@@ -771,20 +738,17 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
                     hidden_states,
                     None,
                     position_ids,
-                    past_key_values,
+                    None,
                     output_attentions,
-                    use_cache,
-                    cache_position,
+                    False,
+                    None,
                     position_embeddings,
                 )
             else:
                 layer_outputs = encoder_layer(
                     hidden_states,
                     position_ids=position_ids,
-                    past_key_value=past_key_values,
                     output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
                     position_embeddings=position_embeddings,
                     **flash_attn_kwargs,
                 )
@@ -796,13 +760,12 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
 
         hidden_states = self.layer_norm(hidden_states)
 
-        # add hidden states from the last decoder layer
+        # add hidden states from the last encoder layer
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
         output = BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=past_key_values if use_cache else None,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
@@ -895,6 +858,8 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
     Args:
         config: MoonshineConfig
     """
+
+    main_input_name = "input_ids"
 
     def __init__(self, config: MoonshineConfig):
         super().__init__(config)

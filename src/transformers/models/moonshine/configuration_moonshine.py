@@ -25,6 +25,18 @@ class MoonshineConfig(PretrainedConfig):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*):
             Dimension of the MLP representations.
+        conv1_kernel_size (`int`, *optional*, defaults to 127):
+            Kernel size of the first convolutional layer.
+        conv1_stride (`int`, *optional*, defaults to 64):
+            Stride of the first convolutional layer.
+        conv2_kernel_size (`int`, *optional*, defaults to 7):
+            Kernel size of the second convolutional layer.
+        conv2_stride (`int`, *optional*, defaults to 3):
+            Stride of the second convolutional layer.
+        conv3_kernel_size (`int`, *optional*, defaults to 3):
+            Kernel size of the third convolutional layer.
+        conv3_stride (`int`, *optional*, defaults to 2):
+            Stride of the third convolutional layer.
         num_hidden_layers (`int`, *optional*, defaults to 6):
             Number of hidden layers in the Transformer encoder and decoder.
         num_attention_heads (`int`, *optional*, defaults to 8):
@@ -128,6 +140,12 @@ class MoonshineConfig(PretrainedConfig):
         vocab_size=32768,
         hidden_size=288,
         intermediate_size=None,
+        conv1_kernel_size=127,
+        conv1_stride=64,
+        conv2_kernel_size=7,
+        conv2_stride=3,
+        conv3_kernel_size=3,
+        conv3_stride=2,
         num_hidden_layers=6,
         num_attention_heads=8,
         num_key_value_heads=None,
@@ -158,6 +176,12 @@ class MoonshineConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
+        self.conv1_kernel_size = conv1_kernel_size
+        self.conv1_stride = conv1_stride
+        self.conv2_kernel_size = conv2_kernel_size
+        self.conv2_stride = conv2_stride
+        self.conv3_kernel_size = conv3_kernel_size
+        self.conv3_stride = conv3_stride
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
 
