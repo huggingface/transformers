@@ -16,8 +16,6 @@ rendered properly in your Markdown viewer.
 
 # moonshine
 
-# moonshine
-
 ## Overview
 
 The moonshine model was proposed in [Moonshine: Speech Recognition for Live Transcription and Voice Commands
