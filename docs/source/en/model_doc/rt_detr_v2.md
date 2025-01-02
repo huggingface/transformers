@@ -47,8 +47,3 @@ The original code can be found [here](https://github.com/lyuwenyu/RT-DETR).
 
 [[autodoc]] RtDetrV2ForObjectDetection
     - forward
-
-## RtDetrV2ResNetBackbone
-
-[[autodoc]] RtDetrV2ResNetBackbone
-    - forward
