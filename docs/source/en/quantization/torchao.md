@@ -35,12 +35,8 @@ tokenizer = AutoTokenizer.from_pretrained(model_name)
 input_text = "What are we having for dinner?"
 input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
 
-# compile the quantized model to get speedup
-import torchao
-torchao.quantization.utils.recommended_inductor_config_setter()
-quantized_model = torch.compile(quantized_model, mode="max-autotune")
-
-output = quantized_model.generate(**input_ids, max_new_tokens=10)
+# auto-compile the quantized model with `cache_implementation="static"` to get speedup
+output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
 print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 # benchmark the performance
@@ -59,11 +55,11 @@ def benchmark_fn(f, *args, **kwargs):
     return f"{(t0.blocked_autorange().mean):.3f}"
 
 MAX_NEW_TOKENS = 1000
-print("int4wo-128 model:", benchmark_fn(quantized_model.generate, **input_ids, max_new_tokens=MAX_NEW_TOKENS))
+print("int4wo-128 model:", benchmark_fn(quantized_model.generate, **input_ids, max_new_tokens=MAX_NEW_TOKENS, cache_implementation="static"))
 
 bf16_model = AutoModelForCausalLM.from_pretrained(model_name, device_map="cuda", torch_dtype=torch.bfloat16)
-bf16_model = torch.compile(bf16_model, mode="max-autotune")
-print("bf16 model:", benchmark_fn(bf16_model.generate, **input_ids, max_new_tokens=MAX_NEW_TOKENS))
+output = bf16_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static") # auto-compile
+print("bf16 model:", benchmark_fn(bf16_model.generate, **input_ids, max_new_tokens=MAX_NEW_TOKENS, cache_implementation="static"))
 
 ```
 
