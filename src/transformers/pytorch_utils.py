@@ -31,6 +31,7 @@ logger = logging.get_logger(__name__)
 
 parsed_torch_version_base = version.parse(version.parse(torch.__version__).base_version)
 
+is_torch_greater_or_equal_than_2_5 = parsed_torch_version_base >= version.parse("2.5")
 is_torch_greater_or_equal_than_2_4 = parsed_torch_version_base >= version.parse("2.4")
 is_torch_greater_or_equal_than_2_3 = parsed_torch_version_base >= version.parse("2.3")
 is_torch_greater_or_equal_than_2_2 = parsed_torch_version_base >= version.parse("2.2")
@@ -39,7 +40,7 @@ is_torch_greater_or_equal_than_2_1 = parsed_torch_version_base >= version.parse(
 # Cache this result has it's a C FFI call which can be pretty time-consuming
 _torch_distributed_available = torch.distributed.is_available()
 
-if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
+if is_torch_greater_or_equal_than_2_5 and _torch_distributed_available:
     from torch.distributed.tensor import Replicate
     from torch.distributed.tensor.parallel import (
         ColwiseParallel,
@@ -358,16 +359,8 @@ def translate_to_torch_parallel_style(style: str):
         raise ValueError(f"Unsupported parallel style value: {style}")
 
 
-def torch_compile(model, *args, **kwargs):
-    if not is_torch_greater_or_equal_than_2_0():
-        return model
-    else:
-        return torch_compile(model, *args, **kwargs)
-
 def torchdynamo_disable(fn=None, recursive=True):
-    if not is_torch_greater_or_equal_than_2_0():
-        return fn if fn is not None else nullcontext()
-    elif is_torch_greater_or_equal_than_2_1():
+    if is_torch_greater_or_equal_than_2_1:
         # use public API available since 2.1
         import torch.compiler
         return torch.compiler.disable(fn, recursive)
