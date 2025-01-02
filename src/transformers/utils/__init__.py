@@ -192,6 +192,7 @@ from .import_utils import (
     is_soundfile_availble,
     is_spacy_available,
     is_speech_available,
+    is_spqr_available,
     is_sudachi_available,
     is_sudachi_projection_available,
     is_tensorflow_probability_available,
