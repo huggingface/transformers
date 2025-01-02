@@ -325,6 +325,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("yolos", "YolosConfig"),
         ("yoso", "YosoConfig"),
         ("zamba", "ZambaConfig"),
+        ("zamba2", "Zamba2Config"),
         ("zoedepth", "ZoeDepthConfig"),
     ]
 )
@@ -660,6 +661,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("yolos", "YOLOS"),
         ("yoso", "YOSO"),
         ("zamba", "Zamba"),
+        ("zamba2", "Zamba2"),
         ("zoedepth", "ZoeDepth"),
     ]
 )
