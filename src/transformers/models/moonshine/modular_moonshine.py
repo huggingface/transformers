@@ -25,7 +25,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ..cohere.modeling_cohere import apply_rotary_pos_emb, rotate_half, CohereRotaryEmbedding
+from ..cohere.modeling_cohere import CohereRotaryEmbedding, apply_rotary_pos_emb, rotate_half
 from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaModel, repeat_kv
 from ..phi.modeling_phi import PhiMLP
 from ..whisper.modeling_whisper import WhisperModel, shift_tokens_right
@@ -54,6 +54,18 @@ class MoonshineConfig(PretrainedConfig):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*):
             Dimension of the MLP representations.
+        conv1_kernel_size (`int`, *optional*, defaults to 127):
+            Kernel size of the first convolutional layer.
+        conv1_stride (`int`, *optional*, defaults to 64):
+            Stride of the first convolutional layer.
+        conv2_kernel_size (`int`, *optional*, defaults to 7):
+            Kernel size of the second convolutional layer.
+        conv2_stride (`int`, *optional*, defaults to 3):
+            Stride of the second convolutional layer.
+        conv3_kernel_size (`int`, *optional*, defaults to 3):
+            Kernel size of the third convolutional layer.
+        conv3_stride (`int`, *optional*, defaults to 2):
+            Stride of the third convolutional layer.
         num_hidden_layers (`int`, *optional*, defaults to 6):
             Number of hidden layers in the Transformer encoder and decoder.
         num_attention_heads (`int`, *optional*, defaults to 8):
@@ -157,6 +169,12 @@ class MoonshineConfig(PretrainedConfig):
         vocab_size=32768,
         hidden_size=288,
         intermediate_size=None,
+        conv1_kernel_size=127,
+        conv1_stride=64,
+        conv2_kernel_size=7,
+        conv2_stride=3,
+        conv3_kernel_size=3,
+        conv3_stride=2,
         num_hidden_layers=6,
         num_attention_heads=8,
         num_key_value_heads=None,
@@ -187,6 +205,12 @@ class MoonshineConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
+        self.conv1_kernel_size = conv1_kernel_size
+        self.conv1_stride = conv1_stride
+        self.conv2_kernel_size = conv2_kernel_size
+        self.conv2_stride = conv2_stride
+        self.conv3_kernel_size = conv3_kernel_size
+        self.conv3_stride = conv3_stride
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
 
@@ -580,6 +604,7 @@ MOONSHINE_START_DOCSTRING = r"""
 class MoonshinePreTrainedModel(PreTrainedModel):
     config_class = MoonshineConfig
     base_model_prefix = "model"
+    main_input_name = "input_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MoonshineDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values"]
@@ -591,7 +616,7 @@ class MoonshinePreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
+        if isinstance(module, (nn.Linear, nn.Conv1d)):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
                 module.bias.data.zero_()
@@ -599,6 +624,16 @@ class MoonshinePreTrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
+
+    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor):
+        """
+        Computes the output length of the convolutional layers
+        """
+        output_conv1_length = int((input_lengths - self.config.conv1_kernel_size) / self.config.conv1_stride + 1)
+        output_conv2_length = int((output_conv1_length - self.config.conv2_kernel_size) / self.config.conv2_stride + 1)
+        output_conv3_length = int((output_conv2_length - self.config.conv3_kernel_size) / self.config.conv3_stride + 1)
+
+        return output_conv3_length
 
 
 MOONSHINE_INPUTS_DOCSTRING = r"""
@@ -695,9 +730,9 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
         self.config = config
         embed_dim = config.hidden_size
 
-        self.conv1 = nn.Conv1d(1, embed_dim, kernel_size=127, stride=64, bias=False)
-        self.conv2 = nn.Conv1d(embed_dim, 2 * embed_dim, kernel_size=7, stride=3)
-        self.conv3 = nn.Conv1d(2 * embed_dim, embed_dim, kernel_size=3, stride=2)
+        self.conv1 = nn.Conv1d(1, embed_dim, kernel_size=config.conv1_kernel_size, stride=config.conv1_stride, bias=False)
+        self.conv2 = nn.Conv1d(embed_dim, 2 * embed_dim, kernel_size=config.conv2_kernel_size, stride=config.conv2_stride)
+        self.conv3 = nn.Conv1d(2 * embed_dim, embed_dim, kernel_size=config.conv3_kernel_size, stride=config.conv3_stride)
         self.groupnorm = nn.GroupNorm(num_groups=1, num_channels=embed_dim, eps=1e-5)
 
         self.rotary_emb = MoonshineRotaryEmbedding(
@@ -838,6 +873,7 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
     MOONSHINE_START_DOCSTRING,
 )
 class MoonshineDecoder(LlamaModel):
+    main_input_name = "input_ids"
     def __init__(self, config: MoonshineConfig):
         super().__init__(config)
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps, bias=False)
