@@ -788,6 +788,7 @@ _import_structure = {
         "TapasConfig",
         "TapasTokenizer",
     ],
+    "models.telechat2": ["TeleChat2Config"],
     "models.time_series_transformer": ["TimeSeriesTransformerConfig"],
     "models.timesformer": ["TimesformerConfig"],
     "models.timm_backbone": ["TimmBackboneConfig"],
@@ -3573,6 +3574,16 @@ else:
             "load_tf_weights_in_tapas",
         ]
     )
+    _import_structure["models.telechat2"].extend(
+        [
+            "TeleChat2ForCausalLM",
+            "TeleChat2ForQuestionAnswering",
+            "TeleChat2ForSequenceClassification",
+            "TeleChat2ForTokenClassification",
+            "TeleChat2Model",
+            "TeleChat2PreTrainedModel",
+        ]
+    )
     _import_structure["models.time_series_transformer"].extend(
         [
             "TimeSeriesTransformerForPrediction",
@@ -5801,6 +5812,7 @@ if TYPE_CHECKING:
         TapasConfig,
         TapasTokenizer,
     )
+    from .models.telechat2 import TeleChat2Config
     from .models.time_series_transformer import (
         TimeSeriesTransformerConfig,
     )
@@ -8134,6 +8146,14 @@ if TYPE_CHECKING:
             TapasModel,
             TapasPreTrainedModel,
             load_tf_weights_in_tapas,
+        )
+        from .models.telechat2 import (
+            TeleChat2ForCausalLM,
+            TeleChat2ForQuestionAnswering,
+            TeleChat2ForSequenceClassification,
+            TeleChat2ForTokenClassification,
+            TeleChat2Model,
+            TeleChat2PreTrainedModel,
         )
         from .models.time_series_transformer import (
             TimeSeriesTransformerForPrediction,

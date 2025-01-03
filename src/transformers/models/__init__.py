@@ -251,6 +251,7 @@ from . import (
     t5,
     table_transformer,
     tapas,
+    telechat2,
     time_series_transformer,
     timesformer,
     timm_backbone,
