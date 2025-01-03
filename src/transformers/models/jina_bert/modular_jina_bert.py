@@ -2,14 +2,6 @@ import numpy as np
 from torch import nn
 from torch.nn.functional import scaled_dot_product_attention
 
-# TODO check
-# try:
-#     from optimum.exporters.onnx.model_configs import BertOnnxConfig
-#     OPTIMUM_INSTALLED = True
-# except ImportError:
-#     warnings.warn("optimum is not installed. To use OnnxConfig and BertOnnxConfig, make sure that `optimum` package is installed")
-#     OPTIMUM_INSTALLED = False
-
 from ..auto import AutoTokenizer
 from ..bert.configuration_bert import BertConfig
 from ..bert.modeling_bert import (
@@ -80,25 +72,6 @@ class JinaBertConfig(BertConfig):
         self.feed_forward_type = feed_forward_type
         self.emb_pooler = emb_pooler
         self.attn_implementation = attn_implementation
-
-
-# TODO check
-# if OPTIMUM_INSTALLED:
-#     class JinaBertOnnxConfig(BertOnnxConfig):
-
-#         @property
-#         def inputs(self) -> Mapping[str, Mapping[int, str]]:
-#             if self.task == "multiple-choice":
-#                 dynamic_axis = {0: "batch", 1: "choice", 2: "sequence"}
-#             else:
-#                 dynamic_axis = {0: "batch", 1: "sequence"}
-#             return OrderedDict(
-#                 [
-#                     ("input_ids", dynamic_axis),
-#                     ("attention_mask", dynamic_axis),
-#                 ]
-#             )
-
 
 class JinaBertEmbeddings(BertEmbeddings):
     def __init__(self, config: JinaBertConfig):
