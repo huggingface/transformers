@@ -8,14 +8,6 @@ try:
 except ImportError:
     scaled_dot_product_attention = None
 
-# TODO check
-# This is used by encode but user may not have it installed
-try:
-    from tqdm.autonotebook import trange
-
-    has_tqdm = True
-except ImportError:
-    has_tqdm = False
 
 # TODO check
 # try:
@@ -732,16 +724,7 @@ class JinaBertModel(BertModel):
 
         all_embeddings = []
 
-        if has_tqdm:
-            range_iter = trange(
-                0,
-                len(sentences),
-                batch_size,
-                desc="Encoding",
-                disable=not show_progress_bar,
-            )
-        else:
-            range_iter = range(0, len(sentences), batch_size)
+        range_iter = range(0, len(sentences), batch_size)
 
         for i in range_iter:
             encoded_input = self.tokenizer(
