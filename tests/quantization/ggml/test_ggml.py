@@ -39,7 +39,10 @@ if is_gguf_available():
 @slow
 class GgufQuantizationTests(unittest.TestCase):
     """
-    Test cases for weights dequantization with GGUF models:
+    Test cases for weights dequantization with GGUF models.
+    Note: The quantization names should keep aligned with `GGMLQuantizationType` in gguf-py:
+    https://github.com/ggerganov/llama.cpp/blob/4b0c638b9a68f577cb2066b638c9f622d91ee661/gguf-py/gguf/constants.py#L1545-L1576
+    So quantization like Q4_K_M or Q4_K_S dshouldn't be added to this tests.
     """
 
     example_text = "Hello"
@@ -55,9 +58,9 @@ class GgufQuantizationTests(unittest.TestCase):
     @parameterized.expand(
         [
             # standard quants
-            (QuantType.Q4_0.name, "Hello, World!\n\nStep 3: Add"),
-            (QuantType.Q5_0.name, "Hello, World!\n\n5. Use a library"),
-            (QuantType.Q8_0.name, "Hello, World!\n\n5. Use a library"),
+            ("Q4_0", "Hello, World!\n\nStep 3: Add"),
+            ("Q5_0", "Hello, World!\n\n5. Use a library"),
+            ("Q8_0", "Hello, World!\n\n5. Use a library"),
         ],
     )
     def test_standard_quants(self, quant_type: str, expected_text: str):
@@ -69,11 +72,11 @@ class GgufQuantizationTests(unittest.TestCase):
     # k-quants
     @parameterized.expand(
         [
-            (QuantType.Q2_K.name, "Hello, I'm a 22 year old female"),
-            (QuantType.Q3_K.name, "Hello\n\nI am trying to create a simple program that"),
-            (QuantType.Q4_K.name, "Hello\n\nI am trying to create a simple program that"),
-            (QuantType.Q5_K.name, "Helloveda is a 1999 Indian"),
-            (QuantType.Q6_K.name, "Hello\n\nI am trying to create a simple program that"),
+            ("Q2_K", "Hello, I'm a 22 year old female"),
+            ("Q3_K", "Hello\n\nI am trying to create a simple program that"),
+            ("Q4_K", "Hello\n\nI am trying to create a simple program that"),
+            ("Q5_K", "Helloveda is a 1999 Indian"),
+            ("Q6_K", "Hello\n\nI am trying to create a simple program that"),
         ],
     )
     def test_k_quants(self, quant_type: str, expected_text: str):
@@ -85,15 +88,15 @@ class GgufQuantizationTests(unittest.TestCase):
     @parameterized.expand(
         [
             # i-matrix
-            (QuantType.IQ1_S.name, "Hello, I'm a friend of mine, I"),
-            (QuantType.IQ1_M.name, "Hello, I am interested in purching a copy of"),
-            (QuantType.IQ2_XXS.name, "Hello, I'm a software engineer. I'"),
-            (QuantType.IQ2_XS.name, "Hello World!\n\n```\n<|user|"),
-            (QuantType.IQ2_S.name, "Hello World!\n\n```\n<|user|"),
-            (QuantType.IQ3_XXS.name, "Hello, I am interested in your product. Can you"),
-            (QuantType.IQ4_XS.name, "Hello, world!\n\n5. Using a loop"),
-            (QuantType.IQ3_S.name, "Hello, World!\n\n5. Python:\n"),
-            (QuantType.IQ4_NL.name, "Hello, world!\n\n5. Using a loop"),
+            ("IQ1_S", "Hello, I'm a friend of mine, I"),
+            ("IQ1_M", "Hello, I am interested in purching a copy of"),
+            ("IQ2_XXS", "Hello, I'm a software engineer. I'"),
+            ("IQ2_XS", "Hello World!\n\n```\n<|user|"),
+            ("IQ2_S", "Hello World!\n\n```\n<|user|"),
+            ("IQ3_XXS", "Hello, I am interested in your product. Can you"),
+            ("IQ4_XS", "Hello, world!\n\n5. Using a loop"),
+            ("IQ3_S", "Hello, World!\n\n5. Python:\n"),
+            ("IQ4_NL", "Hello, world!\n\n5. Using a loop"),
         ],
     )
     def test_imatrix_quants(self, quant_type: str, expected_text: str):
