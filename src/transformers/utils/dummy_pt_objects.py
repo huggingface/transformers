@@ -6712,6 +6712,11 @@ class ModernBertPreTrainedModel(metaclass=DummyObject):
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
+class ModernBertForQuestionAnswering(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
 
 class MoonshineForConditionalGeneration(metaclass=DummyObject):
     _backends = ["torch"]
