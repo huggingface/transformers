@@ -168,7 +168,8 @@ class HfTrainerDeepSpeedConfig(HfDeepSpeedConfig):
         self.fill_match("optimizer.params.eps", args.adam_epsilon, "adam_epsilon")
         self.fill_match("optimizer.params.weight_decay", args.weight_decay, "weight_decay")
 
-        self.fill_only("scheduler.params.warmup_min_lr", 0)  # not a trainer arg
+        self.fill_only("scheduler.params.warmup_min_lr", ds_config.get("warmup_min_lr", 0))
+
         self.fill_match("scheduler.params.warmup_max_lr", args.learning_rate, "learning_rate")
         # total_num_steps - will get set in trainer_config_finalize
 
