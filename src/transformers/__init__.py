@@ -212,6 +212,11 @@ _import_structure = {
         "BertTokenizer",
         "WordpieceTokenizer",
     ],
+    "models.jina_bert": [
+        "BasicTokenizer",
+        "JinaBertConfig",
+        "WordpieceTokenizer",
+    ],
     "models.bert_generation": ["BertGenerationConfig"],
     "models.bert_japanese": [
         "BertJapaneseTokenizer",
@@ -1598,6 +1603,21 @@ else:
             "BertModel",
             "BertPreTrainedModel",
             "load_tf_weights_in_bert",
+        ]
+    )
+    _import_structure["models.jina_bert"].extend(
+        [
+            "JinaBertForMaskedLM",
+            "JinaBertForMultipleChoice",
+            "JinaBertForNextSentencePrediction",
+            "JinaBertForPreTraining",
+            "JinaBertForQuestionAnswering",
+            "JinaBertForSequenceClassification",
+            "JinaBertForTokenClassification",
+            "JinaBertLMHeadModel",
+            "JinaBertModel",
+            "JinaBertPreTrainedModel",
+            "load_tf_weights_in_jina_bert",
         ]
     )
     _import_structure["models.bert_generation"].extend(
@@ -5488,6 +5508,11 @@ if TYPE_CHECKING:
     )
     from .models.jamba import JambaConfig
     from .models.jetmoe import JetMoeConfig
+    from .models.jina_bert import (
+        BasicTokenizer,
+        JinaBertConfig,
+        WordpieceTokenizer,
+    )
     from .models.kosmos2 import (
         Kosmos2Config,
         Kosmos2Processor,
@@ -7364,6 +7389,19 @@ if TYPE_CHECKING:
             JetMoeForSequenceClassification,
             JetMoeModel,
             JetMoePreTrainedModel,
+        )
+        from .models.jina_bert import (
+            JinaBertForMaskedLM,
+            JinaBertForMultipleChoice,
+            JinaBertForNextSentencePrediction,
+            JinaBertForPreTraining,
+            JinaBertForQuestionAnswering,
+            JinaBertForSequenceClassification,
+            JinaBertForTokenClassification,
+            JinaBertLMHeadModel,
+            JinaBertModel,
+            JinaBertPreTrainedModel,
+            load_tf_weights_in_jina_bert,
         )
         from .models.kosmos2 import (
             Kosmos2ForConditionalGeneration,
