@@ -184,21 +184,33 @@ class ScheduleInitTest(unittest.TestCase):
                 "optimizer": self.optimizer,
                 "num_warmup_steps": 2,
                 "num_training_steps": 10,
-                "scheduler_specific_kwargs": {"num_cooldown_steps": 2, "warmup_type": "linear", "cooldown_type": "linear"},
+                "scheduler_specific_kwargs": {
+                    "num_cooldown_steps": 2,
+                    "warmup_type": "linear",
+                    "cooldown_type": "linear",
+                },
             },
             {
                 "name": "warmup_stable_cooldown",
                 "optimizer": self.optimizer,
                 "num_warmup_steps": 2,
                 "num_training_steps": 10,
-                "scheduler_specific_kwargs": {"num_cooldown_steps": 2, "warmup_type": "cosine", "cooldown_type": "cosine"},
+                "scheduler_specific_kwargs": {
+                    "num_cooldown_steps": 2,
+                    "warmup_type": "cosine",
+                    "cooldown_type": "cosine",
+                },
             },
             {
                 "name": "warmup_stable_cooldown",
                 "optimizer": self.optimizer,
                 "num_warmup_steps": 2,
                 "num_training_steps": 10,
-                "scheduler_specific_kwargs": {"num_cooldown_steps": 2, "warmup_type": "1-sqrt", "cooldown_type": "1-sqrt"},
+                "scheduler_specific_kwargs": {
+                    "num_cooldown_steps": 2,
+                    "warmup_type": "1-sqrt",
+                    "cooldown_type": "1-sqrt",
+                },
             },
             {"name": "cosine", "optimizer": self.optimizer, "num_warmup_steps": 2, "num_training_steps": 10},
         ]
