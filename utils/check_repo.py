@@ -116,6 +116,7 @@ IGNORE_NON_TESTED = (
         "RealmReader",  # Not regular model.
         "RealmScorer",  # Not regular model.
         "RealmForOpenQA",  # Not regular model.
+        "EncodecDiscriminator",  # Building part of bigger (tested) model.
         "ReformerForMaskedLM",  # Needs to be setup as decoder.
         "TFElectraMainLayer",  # Building part of bigger (tested) model (should it be a TFPreTrainedModel ?)
         "TFRobertaForMultipleChoice",  # TODO: fix
@@ -188,6 +189,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "BlipForQuestionAnswering",
     "BlipVisionModel",
     "BlipTextLMHeadModel",
+    "EncodecDiscriminator",
     "BlipTextModel",
     "BrosSpadeEEForTokenClassification",
     "BrosSpadeELForTokenClassification",
