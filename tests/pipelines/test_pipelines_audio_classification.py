@@ -14,8 +14,8 @@
 
 import unittest
 
-import torch
 import numpy as np
+import torch
 from huggingface_hub import AudioClassificationOutputElement
 
 from transformers import MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING, TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
