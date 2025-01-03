@@ -145,10 +145,10 @@ class AudioClassificationPipelineTests(unittest.TestCase):
         output = audio_classifier(audio, top_k=4)
 
         EXPECTED_OUTPUT = [
-            {'score': 0.0839, 'label': 'no'},
-            {'score': 0.0837, 'label': 'go'},
-            {'score': 0.0836, 'label': 'yes'},
-            {'score': 0.0835, 'label': 'right'}
+            {"score": 0.0839, "label": "no"},
+            {"score": 0.0837, "label": "go"},
+            {"score": 0.0836, "label": "yes"},
+            {"score": 0.0835, "label": "right"},
         ]
         EXPECTED_OUTPUT_PT_2 = [
             {"score": 0.0845, "label": "stop"},
