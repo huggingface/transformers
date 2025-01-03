@@ -25,7 +25,6 @@ from ..bert.modeling_bert import (
 
 _CHECKPOINT_FOR_DOC = "jinaai/jina-embeddings-v2-base-code"
 
-
 class JinaBertConfig(BertConfig):
     model_type = "bert"
 
@@ -1102,7 +1101,6 @@ class JinaBertForQuestionAnswering(BertForQuestionAnswering):
         self.post_init()
 
 
-# TODO why do I need this but other modular implementations don't have it
 __all__ = [
     "JinaBertConfig",
     "JinaBertForMaskedLM",
