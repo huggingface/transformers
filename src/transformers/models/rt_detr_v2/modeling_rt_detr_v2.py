@@ -4,6 +4,20 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_rt_detr_v2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# coding=utf-8
+# Copyright 2024 Baidu Inc and The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import math
 import os
 import warnings
@@ -230,7 +244,9 @@ class RtDetrV2MultiscaleDeformableAttention(nn.Module):
         self.im2col_step = 64
 
         self.d_model = config.d_model
-        self.n_levels = config.num_feature_levels
+
+        # V2-specific attributes
+        self.n_levels = config.decoder_n_levels
         self.n_heads = num_heads
         self.n_points = n_points
 
@@ -240,8 +256,6 @@ class RtDetrV2MultiscaleDeformableAttention(nn.Module):
         self.output_proj = nn.Linear(config.d_model, config.d_model)
 
         self.disable_custom_kernels = config.disable_custom_kernels
-
-        # V2-specific attributes
         self.offset_scale = config.decoder_offset_scale
         # Initialize n_points list and scale
         n_points_list = [self.n_points for _ in range(self.n_levels)]

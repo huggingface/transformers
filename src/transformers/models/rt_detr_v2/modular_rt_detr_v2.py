@@ -1,3 +1,17 @@
+# coding=utf-8
+# Copyright 2024 Baidu Inc and The HuggingFace Inc. team.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import math
 from typing import List, Optional
 
@@ -6,7 +20,6 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 
 from ..rt_detr.configuration_rt_detr import RTDetrConfig
-from ..rt_detr.configuration_rt_detr_resnet import RTDetrResNetConfig
 from ..rt_detr.modeling_rt_detr import (
     MultiScaleDeformableAttentionFunction,
     RTDetrDecoder,
@@ -18,20 +31,10 @@ from ..rt_detr.modeling_rt_detr import (
 )
 
 
-class RtDetrV2ResNetConfig(RTDetrResNetConfig):
-    def __init__(
-        self,
-        **super_kwargs,
-    ):
-        super().__init__(**super_kwargs)
-
-
 class RtDetrV2Config(RTDetrConfig):
     r"""
-    decoder_n_levels (`int`, *optional*, defaults to 3):
-        The number of feature levels used by the decoder.
-    decoder_offset_scale (`float`, *optional*, defaults to 0.5):
-        Scaling factor applied to the attention offsets in the decoder.
+    decoder_n_levels (`int`, *optional*, defaults to 3): The number of feature levels used by the decoder.
+    decoder_offset_scale (`float`, *optional*, defaults to 0.5): Scaling factor applied to the attention offsets in the decoder.
     """
 
     model_type = "rt_detr_v2"
@@ -142,6 +145,7 @@ class RtDetrV2MultiscaleDeformableAttention(RTDetrMultiscaleDeformableAttention)
         super().__init__(config=config, num_heads=num_heads, n_points=n_points)
 
         # V2-specific attributes
+        self.n_levels = config.decoder_n_levels
         self.offset_scale = config.decoder_offset_scale
         # Initialize n_points list and scale
         n_points_list = [self.n_points for _ in range(self.n_levels)]
@@ -320,7 +324,6 @@ class RtDetrV2ForObjectDetection(RTDetrForObjectDetection):
 
 
 __all__ = [
-    "RtDetrV2ResNetConfig",
     "RtDetrV2Config",
     "RtDetrV2Model",
     "RtDetrV2PreTrainedModel",

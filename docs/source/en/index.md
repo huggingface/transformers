@@ -299,7 +299,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                       [RT-DETR](model_doc/rt_detr)                       |       ✅        |         ❌         |      ❌      |
 |                [RT-DETR-ResNet](model_doc/rt_detr_resnet)                |       ✅        |         ❌         |      ❌      |
 |                [RT-DETR-V2-ResNet](model_doc/rt_detr_v2)                 |       ✅        |         ❌         |      ❌      |
-|           [RtDetrV2ResNetConfig](model_doc/rt_detr_v2_resnet)            |       ❌        |         ❌         |      ❌      |
+|           [RtDetrV2ResNetConfig](model_doc/rt_detr_v2_resnet)            |       ✅        |         ❌         |      ❌      |
 |                          [RWKV](model_doc/rwkv)                          |       ✅        |         ❌         |      ❌      |
 |                           [SAM](model_doc/sam)                           |       ✅        |         ✅         |      ❌      |
 |                  [SeamlessM4T](model_doc/seamless_m4t)                   |       ✅        |         ❌         |      ❌      |

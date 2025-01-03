@@ -3365,7 +3365,13 @@ else:
         ]
     )
     _import_structure["models.rt_detr_v2"].extend(
-        ["RtDetrV2ForObjectDetection", "RtDetrV2Model", "RtDetrV2PreTrainedModel"]
+        [
+            "RtDetrV2ForObjectDetection",
+            "RtDetrV2Model",
+            "RtDetrV2PreTrainedModel",
+            "RtDetrV2ResNetBackbone",
+            "RtDetrV2ResNetPreTrainedModel",
+        ]
     )
     _import_structure["models.rwkv"].extend(
         [
