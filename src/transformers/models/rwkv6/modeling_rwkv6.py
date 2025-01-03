@@ -32,6 +32,8 @@ from transformers.utils import (
     add_start_docstrings_to_model_forward,
     logging,
 )
+from transformers.models.rwkv.modeling_rwkv import RwkvForCausalLM, RwkvModel, RwkvBlock
+from transformers.models.rwkv.modeling_rwkv import RwkvCausalLMOutput, RwkvOutput
 
 from .configuration_rwkv6 import Rwkv6Config
 
@@ -94,13 +96,13 @@ def rwkv6_linear_attention(
     batch, seq_length, _ = receptance.shape
     num_heads, head_size = time_first.shape
     # pylint: disable=line-too-long
-    key = key.float().view(batch, seq_length, num_heads, head_size).transpose(1, 2)  # B, T, H, K -> B, H, T, K
-    value = value.float().view(batch, seq_length, num_heads, head_size).transpose(1, 2)  # B, T, H, K - > B, H, T, V
-    receptance = receptance.float().view(batch, seq_length, num_heads, head_size).transpose(1, 2)  # B, H, T, K
+    key = key.view(batch, seq_length, num_heads, head_size).transpose(1, 2)  # B, T, H, K -> B, H, T, K
+    value = value.view(batch, seq_length, num_heads, head_size).transpose(1, 2)  # B, T, H, K - > B, H, T, V
+    receptance = receptance.view(batch, seq_length, num_heads, head_size).transpose(1, 2)  # B, H, T, K
     time_decay = (
-        -torch.exp(time_decay.float()).view(batch, seq_length, num_heads, head_size).permute(0, 2, 1, 3)
+        -torch.exp(time_decay).view(batch, seq_length, num_heads, head_size).permute(0, 2, 1, 3)
     )  # B, T, H, K -> B, H, T, K
-    time_first = time_first.float().reshape(num_heads, head_size)  # H, K
+    time_first = time_first.reshape(num_heads, head_size)  # H, K
     if receptance.device.type == "cpu":
         out, state = native_recurrent_rwkv6(
             receptance, key, value, time_decay, time_first, scale=1.0, initial_state=state, output_final_state=True
@@ -200,7 +202,7 @@ class Rwkv6SelfAttention(nn.Module):
 
         return receptance, key, value, gate, time_decay, state
 
-    def forward(self, hidden, state=None, use_cache=False, seq_mode=True):
+    def forward(self, hidden, state=None, use_cache=False):
         receptance, key, value, gate, time_decay, state = self.extract_key_value(hidden, state=state)
 
         B, T, _ = receptance.shape
@@ -224,11 +226,11 @@ class Rwkv6SelfAttention(nn.Module):
         out = F.group_norm(
             out,
             num_groups=H,
-            weight=self.ln_x.weight.to(out.dtype),
-            bias=self.ln_x.bias.to(out.dtype),
+            weight=self.ln_x.weight,
+            bias=self.ln_x.bias,
             eps=self.ln_x.eps,
         ).reshape(B, T, H * S)
-        out = out.to(dtype=hidden.dtype) * gate
+        out = out * gate
         out = self.output(out)
         return out, state
 
@@ -278,37 +280,12 @@ class Rwkv6FeedForward(nn.Module):
         return receptance * value, state
 
 
-class Rwkv6Block(nn.Module):
+class Rwkv6Block(RwkvBlock):
     def __init__(self, config, layer_id):
-        super().__init__()
-        self.config = config
-        self.layer_id = layer_id
-
-        if layer_id == 0:
-            self.pre_ln = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
-
-        self.ln1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
-        self.ln2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
+        super().__init__(config, layer_id)
 
         self.attention = Rwkv6SelfAttention(config, layer_id)
         self.feed_forward = Rwkv6FeedForward(config, layer_id)
-
-    def forward(self, hidden, state=None, use_cache=False, output_attentions=False, seq_mode=True):
-        if self.layer_id == 0:
-            hidden = self.pre_ln(hidden)
-        attention, state = self.attention(self.ln1(hidden), state=state, use_cache=use_cache, seq_mode=seq_mode)
-        hidden = hidden + attention
-
-        feed_forward, state = self.feed_forward(self.ln2(hidden), state=state)
-        hidden = hidden + feed_forward
-
-        outputs = (hidden, state)
-        if output_attentions:
-            outputs += (attention,)
-        else:
-            outputs += (None,)
-
-        return outputs
 
 
 class Rwkv6PreTrainedModel(PreTrainedModel):
@@ -417,64 +394,6 @@ class Rwkv6PreTrainedModel(PreTrainedModel):
                 module.time_maa_r.data = 1.0 - torch.pow(time_weight, ratio_1_to_almost0)
 
 
-@dataclass
-class Rwkv6Output(ModelOutput):
-    # pylint: disable=line-too-long
-    """
-    Class for the RWKV model outputs.
-
-    Args:
-        last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-            Sequence of hidden-states at the output of the last layer of the model.
-        state (list of five `torch.FloatTensor` of shape `(batch_size, hidden_size, num_hidden_layers)`):
-            The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
-            avoid providing the old `input_ids`.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of
-            the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
-    """
-
-    last_hidden_state: torch.FloatTensor = None
-    state: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-
-
-@dataclass
-class Rwkv6CausalLMOutput(ModelOutput):
-    """
-    Base class for causal language model (or autoregressive) outputs.
-
-    Args:
-        loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` is provided):
-            Language modeling loss (for next-token prediction).
-        logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
-            Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
-        state (list of five `torch.FloatTensor` of shape `(batch_size, hidden_size, num_hidden_layers)`):
-            The state of the model at the last time step. Can be used in a forward method with the next `input_ids` to
-            avoid providing the old `input_ids`.
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of
-            the model at the output of each layer plus the optional initial embedding outputs.
-        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`. Attentions weights after the attention softmax, used to compute the weighted average in
-            the self-attention heads.
-    """
-
-    loss: Optional[torch.FloatTensor] = None
-    logits: torch.FloatTensor = None
-    state: Optional[List[torch.FloatTensor]] = None
-    hidden_states: Optional[Tuple[torch.FloatTensor]] = None
-    attentions: Optional[Tuple[torch.FloatTensor]] = None
-
-
 RWKV6_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -521,7 +440,7 @@ RWKV6_INPUTS_DOCSTRING = r"""
     "The bare RWKV6 Model transformer outputting raw hidden-states without any specific head on top.",
     RWKV6_START_DOCSTRING,
 )
-class Rwkv6Model(Rwkv6PreTrainedModel):
+class Rwkv6Model(Rwkv6PreTrainedModel, RwkvModel):
     def __init__(self, config):
         super().__init__(config)
 
@@ -535,16 +454,10 @@ class Rwkv6Model(Rwkv6PreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
-        return self.embeddings
-
-    def set_input_embeddings(self, new_embeddings):
-        self.embeddings = new_embeddings
-
     @add_start_docstrings_to_model_forward(RWKV6_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=Rwkv6Output,
+        output_type=RwkvOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
@@ -557,7 +470,7 @@ class Rwkv6Model(Rwkv6PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, Rwkv6Output]:
+    ) -> Union[Tuple, RwkvOutput]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -612,14 +525,13 @@ class Rwkv6Model(Rwkv6PreTrainedModel):
             state.append(state_attn_kv)
             state.append(state_ffn_x)
 
-        seq_mode = inputs_embeds.shape[1] > 1
         hidden_states = inputs_embeds
 
         all_self_attentions = () if output_attentions else None
         all_hidden_states = () if output_hidden_states else None
         for idx, block in enumerate(self.blocks):
             hidden_states, state, attentions = block(
-                hidden_states, state=state, use_cache=use_cache, output_attentions=output_attentions, seq_mode=seq_mode
+                hidden_states, state=state, use_cache=use_cache, output_attentions=output_attentions,
             )
             if (
                 self.layers_are_rescaled
@@ -642,62 +554,14 @@ class Rwkv6Model(Rwkv6PreTrainedModel):
         if not return_dict:
             return (hidden_states, state, all_hidden_states, all_self_attentions)
 
-        return Rwkv6Output(
+        return RwkvOutput(
             last_hidden_state=hidden_states,
             state=state,
             hidden_states=all_hidden_states,  # None
             attentions=all_self_attentions,  # None
         )
 
-    def _rescale_layers(self):
-        # Layers should be rescaled for inference only.
-        if self.layers_are_rescaled == (not self.training):
-            return
-        if self.config.rescale_every > 0:
-            with torch.no_grad():
-                for block_id, block in enumerate(self.blocks):
-                    if self.training:
-                        block.attention.output.weight.mul_(2 ** int(block_id // self.config.rescale_every))
-                        block.feed_forward.value.weight.mul_(2 ** int(block_id // self.config.rescale_every))
-                    else:
-                        # Deal with quantization statistics
-                        if hasattr(block.attention.output.weight, "SCB"):
-                            block.attention.output.weight.SCB.div_(2 ** int(block_id // self.config.rescale_every))
-                            block.feed_forward.value.weight.SCB.div_(2 ** int(block_id // self.config.rescale_every))
-                        elif hasattr(block.attention.output.weight, "quant_state"):
-                            self._bnb_4bit_dequantize_and_rescale(block.attention.output, block_id)
-                            self._bnb_4bit_dequantize_and_rescale(block.feed_forward.value, block_id)
-                        else:
-                            block.attention.output.weight.div_(2 ** int(block_id // self.config.rescale_every))
-                            block.feed_forward.value.weight.div_(2 ** int(block_id // self.config.rescale_every))
 
-        self.layers_are_rescaled = not self.training
-
-    def _bnb_4bit_dequantize_and_rescale(self, target_layer, block_id):
-        r"""
-        Perform the dequantization and rescaling of the weights of a given layer. After that operation the layer will
-        be quantized again.
-        """
-        try:
-            import bitsandbytes as bnb
-        except ImportError:
-            raise ImportError("Please install bitsandbytes to use this method.")
-
-        dequant_weights = bnb.functional.dequantize_4bit(target_layer.weight.data, target_layer.weight.quant_state)
-
-        dequant_weights.div_(2 ** int(block_id // self.config.rescale_every))
-
-        # re-quantize the model:
-        # we need to put it first on CPU then back to the device
-        # this will create an overhead :/
-        # We set requires_grad=False as we cannot compute gradients on top of 4bit parameters anyway and to avoid
-        # bugs with bnb
-        quant_weight = bnb.nn.Params4bit(dequant_weights.to("cpu"), requires_grad=False).to(dequant_weights.device)
-        setattr(target_layer, "weight", quant_weight)
-
-
-# copied from HuggingFace
-# https://github.com/huggingface/transformers/blob/main/src/transformers/models/rwkv/modeling_rwkv.py
 @add_start_docstrings(
     """
     The RWKV6 Model transformer with a language modeling head on top (linear layer with weights tied to the input
@@ -705,7 +569,7 @@ class Rwkv6Model(Rwkv6PreTrainedModel):
     """,
     RWKV6_START_DOCSTRING,
 )
-class Rwkv6ForCausalLM(Rwkv6PreTrainedModel, GenerationMixin):
+class Rwkv6ForCausalLM(Rwkv6PreTrainedModel, RwkvForCausalLM, GenerationMixin):
     _tied_weights_keys = ["head.weight"]
 
     def __init__(self, config):
@@ -716,31 +580,10 @@ class Rwkv6ForCausalLM(Rwkv6PreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_output_embeddings(self):
-        return self.head
-
-    def set_output_embeddings(self, new_embeddings):
-        self.head = new_embeddings
-
-    def prepare_inputs_for_generation(self, input_ids, state=None, inputs_embeds=None, **kwargs):
-        # only last token for inputs_ids if the state is passed along.
-        if state is not None:
-            input_ids = input_ids[:, -1].unsqueeze(-1)
-
-        # if `inputs_embeds` are passed, we only want to use them in the 1st
-        # generation step
-        if inputs_embeds is not None and state is None:
-            model_inputs = {"inputs_embeds": inputs_embeds}
-        else:
-            model_inputs = {"input_ids": input_ids}
-
-        model_inputs["state"] = state
-        return model_inputs
-
     @add_start_docstrings_to_model_forward(RWKV6_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=Rwkv6CausalLMOutput,
+        output_type=RwkvCausalLMOutput,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
@@ -754,7 +597,7 @@ class Rwkv6ForCausalLM(Rwkv6PreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, Rwkv6CausalLMOutput]:
+    ) -> Union[Tuple, RwkvCausalLMOutput]:
         # pylint: disable=line-too-long
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -792,7 +635,7 @@ class Rwkv6ForCausalLM(Rwkv6PreTrainedModel, GenerationMixin):
             output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
-        return Rwkv6CausalLMOutput(
+        return RwkvCausalLMOutput(
             loss=loss,
             logits=logits,
             state=outputs.state,
