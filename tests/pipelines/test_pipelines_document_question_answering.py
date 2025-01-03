@@ -122,7 +122,6 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
         )
 
     @require_torch
-    @require_torch_bf16
     @require_detectron2
     @require_pytesseract
     def test_small_model_pt(self):
@@ -156,6 +155,7 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
         self.assertEqual(outputs, [])
 
     @require_torch
+    @require_torch_bf16
     @require_detectron2
     @require_pytesseract
     def test_small_model_pt_bf16(self):
