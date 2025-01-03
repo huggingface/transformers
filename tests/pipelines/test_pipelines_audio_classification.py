@@ -17,7 +17,11 @@ import unittest
 import numpy as np
 from huggingface_hub import AudioClassificationOutputElement
 
-from transformers import MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING, TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
+from transformers import (
+    MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
+    TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
+    is_torch_available,
+)
 from transformers.pipelines import AudioClassificationPipeline, pipeline
 from transformers.testing_utils import (
     compare_pipeline_output_to_hub_spec,
@@ -30,6 +34,10 @@ from transformers.testing_utils import (
 )
 
 from .test_pipelines_common import ANY
+
+
+if is_torch_available():
+    import torch
 
 
 @is_pipeline_test
@@ -129,7 +137,6 @@ class AudioClassificationPipelineTests(unittest.TestCase):
 
     @require_torch
     def test_small_model_pt_fp16(self):
-        import torch
         model = "anton-l/wav2vec2-random-tiny-classifier"
 
         audio_classifier = pipeline("audio-classification", model=model, torch_dtype=torch.float16)
