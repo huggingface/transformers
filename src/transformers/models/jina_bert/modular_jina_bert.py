@@ -1,7 +1,22 @@
+import math
+import warnings
+from typing import List, Optional, Tuple, Union
+
 import numpy as np
+import torch
 from torch import nn
+from torch.nn import CrossEntropyLoss
 from torch.nn.functional import scaled_dot_product_attention
 
+from ...activations import ACT2FN
+from ...modeling_outputs import (
+    BaseModelOutputWithPastAndCrossAttentions,
+    BaseModelOutputWithPoolingAndCrossAttentions,
+    CausalLMOutputWithCrossAttentions,
+)
+from ...utils import (
+    logging,
+)
 from ..auto import AutoTokenizer
 from ..bert.configuration_bert import BertConfig
 from ..bert.modeling_bert import (
@@ -17,13 +32,22 @@ from ..bert.modeling_bert import (
     BertForTokenClassification,
     BertLayer,
     BertLMHeadModel,
+    BertLMPredictionHead,
     BertModel,
+    BertOnlyMLMHead,
+    BertOnlyNSPHead,
+    BertPooler,
     BertPreTrainedModel,
+    BertPreTrainingHeads,
     BertSelfAttention,
+    BertSelfOutput,
 )
 
 
+logger = logging.get_logger(__name__)
+
 _CHECKPOINT_FOR_DOC = "jinaai/jina-embeddings-v2-base-code"
+
 
 class JinaBertConfig(BertConfig):
     model_type = "bert"
@@ -71,6 +95,7 @@ class JinaBertConfig(BertConfig):
         self.feed_forward_type = feed_forward_type
         self.emb_pooler = emb_pooler
         self.attn_implementation = attn_implementation
+
 
 class JinaBertEmbeddings(BertEmbeddings):
     def __init__(self, config: JinaBertConfig):
@@ -236,6 +261,10 @@ class JinaBertSelfAttention(BertSelfAttention):
         if self.is_decoder:
             outputs = outputs + (past_key_value,)
         return outputs
+
+
+class JinaBertSelfOutput(BertSelfOutput):
+    pass
 
 
 class JinaBertAttention(BertAttention):
@@ -549,19 +578,29 @@ class JinaBertEncoder(BertEncoder):
         )
 
 
-# class JinaBertLMPredictionHead(BertLMPredictionHead):
-#     def _tie_weights(self):
-#         raise AttributeError("Not needed for JinaBert")
+class JinaBertPooler(BertPooler):
+    pass
 
-# class JinaBertOnlyMLMHead(BertOnlyMLMHead):
-#     def __init__(self, config):
-#         super().__init__()
-#         self.predictions = JinaBertLMPredictionHead(config)
 
-# class JinaBertPreTrainingHeads(BertPreTrainingHeads):
-#     def __init__(self, config):
-#         super().__init__()
-#         self.predictions = JinaBertLMPredictionHead(config)
+class JinaBertLMPredictionHead(BertLMPredictionHead):
+    def _tie_weights(self):
+        raise AttributeError("Not needed for JinaBert")
+
+
+class JinaBertOnlyMLMHead(BertOnlyMLMHead):
+    def __init__(self, config):
+        super().__init__()
+        self.predictions = JinaBertLMPredictionHead(config)
+
+
+class JinaBertOnlyNSPHead(BertOnlyNSPHead):
+    pass
+
+
+class JinaBertPreTrainingHeads(BertPreTrainingHeads):
+    def __init__(self, config):
+        super().__init__()
+        self.predictions = JinaBertLMPredictionHead(config)
 
 
 class JinaBertPreTrainedModel(BertPreTrainedModel):
