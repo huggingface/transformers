@@ -17,12 +17,11 @@ import inspect
 from typing import Callable, List, Optional, Set, Tuple, Union
 
 import torch
-from contextlib import nullcontext
 from packaging import version
 from safetensors.torch import storage_ptr, storage_size
 from torch import nn
 
-from .utils import is_torch_greater_or_equal, is_torch_xla_available, logging
+from .utils import is_torch_xla_available, logging
 
 
 ALL_LAYERNORM_LAYERS = [nn.LayerNorm]

@@ -1,5 +1,5 @@
-from ..utils import is_accelerate_available, is_torch_available, logging
 from ..pytorch_utils import torch_compile
+from ..utils import is_accelerate_available, is_torch_available, logging
 
 
 if is_accelerate_available():
