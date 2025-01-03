@@ -330,6 +330,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "SiglipVisionModel",
     "SiglipTextModel",
     "ChameleonVQVAE",  # no autoclass for VQ-VAE models
+    "VitPoseForPoseEstimation",
     "CLIPTextModel",
     "MoshiForConditionalGeneration",  # no auto class for speech-to-speech
 ]
@@ -993,6 +994,8 @@ UNDOCUMENTED_OBJECTS = [
     "logging",  # External module
     "requires_backends",  # Internal function
     "AltRobertaModel",  # Internal module
+    "VitPoseBackbone",  # Internal module
+    "VitPoseBackboneConfig",  # Internal module
 ]
 
 # This list should be empty. Objects in it should get their own doc page.
