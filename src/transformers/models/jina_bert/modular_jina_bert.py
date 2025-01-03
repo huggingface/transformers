@@ -1,13 +1,6 @@
 import numpy as np
 from torch import nn
-
-
-# TODO this import is not copied to modeling_jina_bert.py
-try:
-    from torch.nn.functional import scaled_dot_product_attention
-except ImportError:
-    scaled_dot_product_attention = None
-
+from torch.nn.functional import scaled_dot_product_attention
 
 # TODO check
 # try:
