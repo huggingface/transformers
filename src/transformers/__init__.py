@@ -828,6 +828,7 @@ _import_structure = {
     ],
     "models.visual_bert": ["VisualBertConfig"],
     "models.vit": ["ViTConfig"],
+    "models.sapiens": ["SapiensConfig"],
     "models.vit_mae": ["ViTMAEConfig"],
     "models.vit_msn": ["ViTMSNConfig"],
     "models.vitdet": ["VitDetConfig"],
@@ -1262,6 +1263,7 @@ else:
     _import_structure["models.videomae"].extend(["VideoMAEFeatureExtractor", "VideoMAEImageProcessor"])
     _import_structure["models.vilt"].extend(["ViltFeatureExtractor", "ViltImageProcessor", "ViltProcessor"])
     _import_structure["models.vit"].extend(["ViTFeatureExtractor", "ViTImageProcessor"])
+    _import_structure["models.sapiens"].extend(["SapiensImageProcessor"])
     _import_structure["models.vitmatte"].append("VitMatteImageProcessor")
     _import_structure["models.vivit"].append("VivitImageProcessor")
     _import_structure["models.yolos"].extend(["YolosFeatureExtractor", "YolosImageProcessor"])
@@ -1283,6 +1285,7 @@ else:
     _import_structure["models.pixtral"].append("PixtralImageProcessorFast")
     _import_structure["models.rt_detr"].append("RTDetrImageProcessorFast")
     _import_structure["models.vit"].append("ViTImageProcessorFast")
+    _import_structure["models.sapiens"].append("SapiensImageProcessorFast")
 
 try:
     if not is_torchvision_available() and not is_timm_available():
@@ -3707,6 +3710,13 @@ else:
             "ViTPreTrainedModel",
         ]
     )
+    _import_structure["models.sapiens"].extend(
+        [
+            "SapiensForSemanticSegmentation",
+            "SapiensModel",
+            "SapiensPreTrainedModel",
+        ]
+    )
     _import_structure["models.vit_mae"].extend(
         [
             "ViTMAEForPreTraining",
@@ -5850,6 +5860,7 @@ if TYPE_CHECKING:
         VisualBertConfig,
     )
     from .models.vit import ViTConfig
+    from .models.sapiens import SapiensConfig
     from .models.vit_mae import ViTMAEConfig
     from .models.vit_msn import ViTMSNConfig
     from .models.vitdet import VitDetConfig
@@ -6286,6 +6297,7 @@ if TYPE_CHECKING:
         from .models.videomae import VideoMAEFeatureExtractor, VideoMAEImageProcessor
         from .models.vilt import ViltFeatureExtractor, ViltImageProcessor, ViltProcessor
         from .models.vit import ViTFeatureExtractor, ViTImageProcessor
+        from .models.sapiens import SapiensImageProcessor
         from .models.vitmatte import VitMatteImageProcessor
         from .models.vivit import VivitImageProcessor
         from .models.yolos import YolosFeatureExtractor, YolosImageProcessor
@@ -6303,6 +6315,7 @@ if TYPE_CHECKING:
         from .models.pixtral import PixtralImageProcessorFast
         from .models.rt_detr import RTDetrImageProcessorFast
         from .models.vit import ViTImageProcessorFast
+        from .models.sapiens import SapiensImageProcessorFast
 
     try:
         if not is_torchvision_available() and not is_timm_available():
@@ -8236,6 +8249,11 @@ if TYPE_CHECKING:
             ViTForMaskedImageModeling,
             ViTModel,
             ViTPreTrainedModel,
+        )
+        from .models.sapiens import (
+            SapiensForSemanticSegmentation,
+            SapiensModel,
+            SapiensPreTrainedModel,
         )
         from .models.vit_mae import (
             ViTMAEForPreTraining,
