@@ -15,6 +15,7 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torch.nn.functional import scaled_dot_product_attention
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
@@ -39,20 +40,11 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-
-# TODO check
-# try:
-#     from optimum.exporters.onnx.model_configs import BertOnnxConfig
-#     OPTIMUM_INSTALLED = True
-# except ImportError:
-#     warnings.warn("optimum is not installed. To use OnnxConfig and BertOnnxConfig, make sure that `optimum` package is installed")
-#     OPTIMUM_INSTALLED = False
 from ..auto import AutoTokenizer
 from .configuration_jina_bert import JinaBertConfig
 
 
 logger = logging.get_logger(__name__)
-
 
 _CHECKPOINT_FOR_DOC = "jinaai/jina-embeddings-v2-base-code"
 _CONFIG_FOR_DOC = "JinaBertConfig"
@@ -1143,16 +1135,7 @@ class JinaBertModel(JinaBertPreTrainedModel):
 
         all_embeddings = []
 
-        if has_tqdm:
-            range_iter = trange(
-                0,
-                len(sentences),
-                batch_size,
-                desc="Encoding",
-                disable=not show_progress_bar,
-            )
-        else:
-            range_iter = range(0, len(sentences), batch_size)
+        range_iter = range(0, len(sentences), batch_size)
 
         for i in range_iter:
             encoded_input = self.tokenizer(
@@ -2197,7 +2180,6 @@ class JinaBertForQuestionAnswering(JinaBertPreTrainedModel):
         )
 
 
-# TODO why do I need this but other modular implementations don't have it
 __all__ = [
     "JinaBertForMaskedLM",
     "JinaBertForNextSentencePrediction",

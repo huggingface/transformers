@@ -123,5 +123,4 @@ class JinaBertConfig(PretrainedConfig):
         self.attn_implementation = attn_implementation
 
 
-# TODO why do I need this but other modular implementations don't have it
 __all__ = ["JinaBertConfig"]
