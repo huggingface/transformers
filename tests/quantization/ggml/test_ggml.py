@@ -178,9 +178,14 @@ class GgufIntegrationTests(unittest.TestCase):
 
     def test_q2_k_serialization(self):
         q2_k_gguf_model_id = self.gguf_filename.format(quant_type=QuantType.Q2_K.name)
+        EXPECTED_TEXT = "Hello, World!\n\n[10:0"
 
         tokenizer = AutoTokenizer.from_pretrained(self.gguf_model_id, gguf_file=q2_k_gguf_model_id)
         model = AutoModelForCausalLM.from_pretrained(self.gguf_model_id, gguf_file=q2_k_gguf_model_id).to(torch_device)
+
+        orig_text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
+        orig_out = model.generate(**orig_text, max_new_tokens=10)
+        self.assertEqual(tokenizer.decode(orig_out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
@@ -192,7 +197,6 @@ class GgufIntegrationTests(unittest.TestCase):
             text = tokenizer(self.example_text, return_tensors="pt").to(torch_device)
             out = model.generate(**text, max_new_tokens=10)
 
-        EXPECTED_TEXT = "Hello, World!\n\n[10:0"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_q6_k_fp16(self):
