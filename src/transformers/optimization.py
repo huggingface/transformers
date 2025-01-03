@@ -387,51 +387,79 @@ def get_cosine_with_min_lr_schedule_with_warmup(
     return LambdaLR(optimizer, lr_lambda, last_epoch)
 
 
-def _get_wsd_scheduler_lambda(
+def _get_wsc_scheduler_lambda(
     current_step: int,
     *,
     num_warmup_steps: int,
-    num_stable_steps: int,
-    num_decay_steps: int,
-    num_cycles: float,
+    num_training_steps: int,
+    num_cooldown_steps: int,
+    warmup_type: str,
+    cooldown_type: str,
     min_lr_ratio: float,
+    num_cycles: float,
 ):
     if current_step < num_warmup_steps:
-        return float(current_step) / float(max(1, num_warmup_steps))
-    if current_step < num_warmup_steps + num_stable_steps:
+        progress = float(current_step) / float(max(1, num_warmup_steps))
+        if warmup_type == "linear":
+            factor = progress
+        elif warmup_type == "cosine":
+            factor = 0.5 * (1.0 - math.cos(math.pi * progress))
+        elif warmup_type == "1-sqrt":
+            factor = 1.0 - math.sqrt(1.0 - progress)
+        else:
+            raise ValueError(f"Unknown warmup type: {warmup_type}, expected 'linear', 'cosine' or '1-sqrt'")
+        factor = factor * (1.0 - min_lr_ratio) + min_lr_ratio
+        return max(0.0, factor)
+
+    if current_step < num_training_steps - num_cooldown_steps:
         return 1.0
-    if current_step < num_warmup_steps + num_stable_steps + num_decay_steps:
-        progress = float(current_step - num_warmup_steps - num_stable_steps) / float(max(1, num_decay_steps))
-        value = max(0.0, 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress)))
-        return (1.0 - min_lr_ratio) * value + min_lr_ratio
+
+    if current_step < num_training_steps:
+        progress = float(current_step - (num_training_steps - num_cooldown_steps)) / float(max(1, num_cooldown_steps))
+        if cooldown_type == "linear":
+            factor = 1.0 - progress
+        elif cooldown_type == "cosine":
+            factor = 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress))
+        elif cooldown_type == "1-sqrt":
+            factor = 1.0 - math.sqrt(progress)
+        else:
+            raise ValueError(f"Unknown cooldown type: {cooldown_type}, expected 'linear', 'cosine' or '1-sqrt'")
+        factor = factor * (1.0 - min_lr_ratio) + min_lr_ratio
+        return max(0.0, factor)
+
     return min_lr_ratio
 
 
-def get_wsd_schedule(
+def get_wsc_schedule(
     optimizer: Optimizer,
     num_warmup_steps: int,
-    num_stable_steps: int,
-    num_decay_steps: int,
+    num_training_steps: int,
+    num_cooldown_steps: int,
+    warmup_type: str = "linear",
+    cooldown_type: str = "linear",
     min_lr_ratio: float = 0,
     num_cycles: float = 0.5,
     last_epoch: int = -1,
 ):
     """
     Create a schedule with a learning rate that has three stages:
-    1. linear increase from 0 to initial lr.
-    2. constant lr (equal to initial lr).
-    3. decrease following the values of the cosine function between the initial lr set in the optimizer to
-       a fraction of initial lr.
+    1. warmup: increase from min_lr_ratio times the initial learning rate to the initial learning rate following a warmup_type.
+    2. stable: constant learning rate.
+    3. cooldown: decrease from the initial learning rate to min_lr_ratio times the initial learning rate following a cooldown_type.
 
     Args:
         optimizer ([`~torch.optim.Optimizer`]):
             The optimizer for which to schedule the learning rate.
         num_warmup_steps (`int`):
             The number of steps for the warmup phase.
-        num_stable_steps (`int`):
-            The number of steps for the stable phase.
-        num_decay_steps (`int`):
-            The number of steps for the cosine annealing phase.
+        num_training_steps (`int`):
+            The total number of training steps.
+        num_cooldown_steps (`int`):
+            The number of steps for the cooldown phase.
+        warmup_type (`str`, *optional*, defaults to "linear"):
+            The type of warmup to use. Can be 'linear', 'cosine' or '1-sqrt'.
+        cooldown_type (`str`, *optional*, defaults to "linear"):
+            The type of cooldown to use. Can be 'linear', 'cosine' or '1-sqrt'.
         min_lr_ratio (`float`, *optional*, defaults to 0):
             The minimum learning rate as a ratio of the initial learning rate.
         num_cycles (`float`, *optional*, defaults to 0.5):
@@ -444,173 +472,13 @@ def get_wsd_schedule(
         `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
     """
     lr_lambda = partial(
-        _get_wsd_scheduler_lambda,
+        _get_wsc_scheduler_lambda,
         num_warmup_steps=num_warmup_steps,
-        num_stable_steps=num_stable_steps,
-        num_decay_steps=num_decay_steps,
+        num_training_steps=num_training_steps,
+        num_cooldown_steps=num_cooldown_steps,
+        warmup_type=warmup_type,
+        cooldown_type=cooldown_type,
         min_lr_ratio=min_lr_ratio,
-        num_cycles=num_cycles,
-    )
-    return LambdaLR(optimizer, lr_lambda, last_epoch)
-
-
-def _get_constant_with_cooldown_schedule_with_warmup_lr_lambda(
-    current_step: int,
-    *,
-    num_warmup_steps: int,
-    num_training_steps: int,
-    num_cooldown_steps: int,
-    cooldown_type: str,
-    num_cycles: float,
-):
-    if current_step < num_warmup_steps:
-        return float(current_step) / float(max(1, num_warmup_steps))
-    if current_step < num_training_steps - num_cooldown_steps:
-        return 1.0
-    if current_step < num_training_steps:
-        progress = float(current_step - (num_training_steps - num_cooldown_steps)) / float(max(1, num_cooldown_steps))
-        if cooldown_type == "linear":
-            factor = 1.0 - progress
-        elif cooldown_type == "cosine":
-            factor = 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress))
-        elif cooldown_type == "1-sqrt":
-            factor = 1.0 - math.sqrt(progress)
-        else:
-            raise ValueError(f"Unknown cooldown type: {cooldown_type}, expected 'linear', 'cosine' or '1-sqrt'")
-        return max(0.0, factor)
-    return 0.0
-
-
-def get_constant_with_cooldown_schedule_with_warmup(
-    optimizer: Optimizer,
-    num_warmup_steps: int,
-    num_training_steps: int,
-    num_cooldown_steps: int,
-    cooldown_type: str = "linear",
-    num_cycles: float = 0.5,
-    last_epoch: int = -1,
-):
-    """
-    Create a schedule with a learning rate that has three stages:
-    warmup: linear increase from 0 to initial lr.
-    stable: constant lr (equal to initial lr).
-    cooldown: decrease following the values of the cosine function between the initial lr set in the optimizer to 0.
-
-    Args:
-        optimizer ([`~torch.optim.Optimizer`]):
-            The optimizer for which to schedule the learning rate.
-        num_warmup_steps (`int`):
-            The number of steps for the warmup phase.
-        num_training_steps (`int`):
-            The total number of training steps.
-        num_cooldown_steps (`int`):
-            The number of steps for the cooldown phase.
-        cooldown_type (`str`, *optional*, defaults to "linear"):
-            The type of cooldown to use. Can be 'linear', 'cosine' or '1-sqrt'.
-        num_cycles (`float`, *optional*, defaults to 0.5):
-            The number of waves in the cosine schedule (the defaults is to just decrease from the max value to 0
-            following a half-cosine). This is only used if `cooldown_type` is 'cosine'.
-        last_epoch (`int`, *optional*, defaults to -1):
-            The index of the last epoch when resuming training.
-
-    Return:
-        `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
-    """
-    lr_lambda = partial(
-        _get_constant_with_cooldown_schedule_with_warmup_lr_lambda,
-        num_warmup_steps=num_warmup_steps,
-        num_training_steps=num_training_steps,
-        num_cooldown_steps=num_cooldown_steps,
-        cooldown_type=cooldown_type,
-        num_cycles=num_cycles,
-    )
-    return LambdaLR(optimizer, lr_lambda, last_epoch)
-
-
-def _get_constant_with_cooldown_with_min_lr_schedule_with_warmup_lr_lambda(
-    current_step: int,
-    *,
-    num_warmup_steps: int,
-    num_training_steps: int,
-    num_cooldown_steps: int,
-    cooldown_type: str,
-    num_cycles: float,
-    min_lr_rate: float = 0.0,
-):
-    if current_step < num_warmup_steps:
-        return float(current_step) / float(max(1, num_warmup_steps))
-    if current_step < num_training_steps - num_cooldown_steps:
-        return 1.0
-    if current_step < num_training_steps:
-        progress = float(current_step - (num_training_steps - num_cooldown_steps)) / float(max(1, num_cooldown_steps))
-        if cooldown_type == "linear":
-            factor = 1.0 - progress
-        elif cooldown_type == "cosine":
-            factor = 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress))
-        elif cooldown_type == "1-sqrt":
-            factor = 1.0 - math.sqrt(progress)
-        else:
-            raise ValueError(f"Unknown cooldown type: {cooldown_type}, expected 'linear', 'cosine' or '1-sqrt'")
-        factor = factor * (1.0 - min_lr_rate) + min_lr_rate
-        return max(0.0, factor)
-    return min_lr_rate
-
-
-def get_constant_with_cooldown_with_min_lr_schedule_with_warmup(
-    optimizer: Optimizer,
-    num_warmup_steps: int,
-    num_training_steps: int,
-    num_cooldown_steps: int,
-    cooldown_type: str = "linear",
-    num_cycles: float = 0.5,
-    last_epoch: int = -1,
-    min_lr: float = None,
-    min_lr_rate: float = None,
-):
-    """
-    Create a schedule with a learning rate that has three stages:
-    warmup: linear increase from 0 to initial lr.
-    stable: constant lr (equal to initial lr).
-    cooldown: decrease following the values of the cosine function between the initial lr set in the optimizer to
-    a fraction of initial lr.
-
-    Args:
-        optimizer ([`~torch.optim.Optimizer`]):
-            The optimizer for which to schedule the learning rate.
-        num_warmup_steps (`int`):
-            The number of steps for the warmup phase.
-        num_training_steps (`int`):
-            The total number of training steps.
-        num_cooldown_steps (`int`):
-            The number of steps for the cooldown phase.
-        cooldown_type (`str`, *optional*, defaults to "linear"):
-            The type of cooldown to use. Can be 'linear', 'cosine' or '1-sqrt'.
-        num_cycles (`float`, *optional*, defaults to 0.5):
-            The number of waves in the cosine schedule (the defaults is to just decrease from the max value to 0
-            following a half-cosine). This is only used if `cooldown_type` is 'cosine'.
-        last_epoch (`int`, *optional*, defaults to -1):
-            The index of the last epoch when resuming training.
-        min_lr (`float`, *optional*):
-            The minimum learning rate to reach after the cosine schedule.
-        min_lr_rate (`float`, *optional*):
-            The minimum learning rate as a ratio of the initial learning rate. If set, `min_lr` should not be set.
-
-    Return:
-        `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
-    """
-    if min_lr is not None and min_lr_rate is not None:
-        raise ValueError("Only one of min_lr or min_lr_rate should be set")
-    elif min_lr is not None:
-        min_lr_rate = min_lr / optimizer.defaults["lr"]
-    elif min_lr_rate is None:
-        raise ValueError("One of min_lr or min_lr_rate should be set through the `lr_scheduler_kwargs`")
-
-    lr_lambda = partial(
-        _get_constant_with_cooldown_with_min_lr_schedule_with_warmup_lr_lambda,
-        num_warmup_steps=num_warmup_steps,
-        num_training_steps=num_training_steps,
-        num_cooldown_steps=num_cooldown_steps,
-        cooldown_type=cooldown_type,
         num_cycles=num_cycles,
     )
     return LambdaLR(optimizer, lr_lambda, last_epoch)
@@ -626,9 +494,7 @@ TYPE_TO_SCHEDULER_FUNCTION = {
     SchedulerType.INVERSE_SQRT: get_inverse_sqrt_schedule,
     SchedulerType.REDUCE_ON_PLATEAU: get_reduce_on_plateau_schedule,
     SchedulerType.COSINE_WITH_MIN_LR: get_cosine_with_min_lr_schedule_with_warmup,
-    SchedulerType.WARMUP_STABLE_DECAY: get_wsd_schedule,
-    SchedulerType.WARMUP_STABLE_COOLDOWN: get_constant_with_cooldown_schedule_with_warmup,
-    SchedulerType.WARMUP_STABLE_COOLDOWN_WITH_MIN_LR: get_constant_with_cooldown_with_min_lr_schedule_with_warmup,
+    SchedulerType.WARMUP_STABLE_COOLDOWN: get_wsc_schedule,
 }
 
 
@@ -703,9 +569,6 @@ def get_scheduler(
 
     if name == SchedulerType.INVERSE_SQRT:
         return schedule_func(optimizer, num_warmup_steps=num_warmup_steps)
-
-    if name == SchedulerType.WARMUP_STABLE_DECAY:
-        return schedule_func(optimizer, num_warmup_steps=num_warmup_steps, **scheduler_specific_kwargs)
 
     # All other schedulers require `num_training_steps`
     if num_training_steps is None:

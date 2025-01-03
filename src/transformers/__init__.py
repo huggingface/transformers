@@ -3912,15 +3912,13 @@ else:
         "AdamW",
         "get_constant_schedule",
         "get_constant_schedule_with_warmup",
-        "get_constant_with_cooldown_schedule_with_warmup",
-        "get_constant_with_cooldown_with_min_lr_schedule_with_warmup",
         "get_cosine_schedule_with_warmup",
         "get_cosine_with_hard_restarts_schedule_with_warmup",
         "get_inverse_sqrt_schedule",
         "get_linear_schedule_with_warmup",
         "get_polynomial_decay_schedule_with_warmup",
         "get_scheduler",
-        "get_wsd_schedule",
+        "get_wsc_schedule",
     ]
     _import_structure["pytorch_utils"] = [
         "Conv1D",
@@ -8402,15 +8400,13 @@ if TYPE_CHECKING:
             AdamW,
             get_constant_schedule,
             get_constant_schedule_with_warmup,
-            get_constant_with_cooldown_schedule_with_warmup,
-            get_constant_with_cooldown_with_min_lr_schedule_with_warmup,
             get_cosine_schedule_with_warmup,
             get_cosine_with_hard_restarts_schedule_with_warmup,
             get_inverse_sqrt_schedule,
             get_linear_schedule_with_warmup,
             get_polynomial_decay_schedule_with_warmup,
             get_scheduler,
-            get_wsd_schedule,
+            get_wsc_schedule,
         )
         from .pytorch_utils import Conv1D, apply_chunking_to_forward, prune_layer
 

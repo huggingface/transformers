@@ -50,10 +50,6 @@ The `.optimization` module provides:
 
 <img alt="" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/warmup_constant_schedule.png"/>
 
-[[autodoc]] get_constant_with_cooldown_schedule_with_warmup
-
-[[autodoc]] get_constant_with_cooldown_with_min_lr_schedule_with_warmup
-
 [[autodoc]] get_cosine_schedule_with_warmup
 
 <img alt="" src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/warmup_cosine_schedule.png"/>

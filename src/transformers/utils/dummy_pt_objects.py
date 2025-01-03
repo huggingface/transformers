@@ -10409,14 +10409,6 @@ def get_constant_schedule_with_warmup(*args, **kwargs):
     requires_backends(get_constant_schedule_with_warmup, ["torch"])
 
 
-def get_constant_with_cooldown_schedule_with_warmup(*args, **kwargs):
-    requires_backends(get_constant_with_cooldown_schedule_with_warmup, ["torch"])
-
-
-def get_constant_with_cooldown_with_min_lr_schedule_with_warmup(*args, **kwargs):
-    requires_backends(get_constant_with_cooldown_with_min_lr_schedule_with_warmup, ["torch"])
-
-
 def get_cosine_schedule_with_warmup(*args, **kwargs):
     requires_backends(get_cosine_schedule_with_warmup, ["torch"])
 
@@ -10441,8 +10433,8 @@ def get_scheduler(*args, **kwargs):
     requires_backends(get_scheduler, ["torch"])
 
 
-def get_wsd_schedule(*args, **kwargs):
-    requires_backends(get_wsd_schedule, ["torch"])
+def get_wsc_schedule(*args, **kwargs):
+    requires_backends(get_wsc_schedule, ["torch"])
 
 
 class Conv1D(metaclass=DummyObject):
