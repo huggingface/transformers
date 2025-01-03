@@ -6446,6 +6446,13 @@ class MobileViTV2PreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class MoonshineForConditionalGeneration(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class ModernBertForMaskedLM(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -6453,7 +6460,21 @@ class ModernBertForMaskedLM(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
+class MoonshineModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class ModernBertForSequenceClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class MoonshinePreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
