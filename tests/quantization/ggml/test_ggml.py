@@ -244,6 +244,30 @@ class GgufModelTests(unittest.TestCase):
     mamba_model_id = "jpodivin/mamba-2.8b-hf-GGUF"
     nemotron_original_model_id = "nvidia/Nemotron-Mini-4B-Instruct"
     nemotron_model_id = "bartowski/Nemotron-Mini-4B-Instruct-GGUF"
+    original_gemma2_model_id = "google/gemma-2-2b-it"
+    gemma2_model_id = "bartowski/gemma-2-2b-it-GGUF"
+
+    # standard quants
+    q4_0_gguf_model_id = "tinyllama-1.1b-chat-v1.0.Q4_0.gguf"
+    q5_0_gguf_model_id = "tinyllama-1.1b-chat-v1.0.Q5_0.gguf"
+    q8_0_gguf_model_id = "tinyllama-1.1b-chat-v1.0.Q8_0.gguf"
+    # k-quants
+    q2_k_gguf_model_id = "tinyllama-1.1b-chat-v1.0.Q2_K.gguf"
+    q3_k_gguf_model_id = "tinyllama-1.1b-chat-v1.0.Q3_K_L.gguf"
+    q4_k_gguf_model_id = "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
+    q5_k_gguf_model_id = "tinyllama-1.1b-chat-v1.0.Q5_K_M.gguf"
+    q6_k_gguf_model_id = "tinyllama-1.1b-chat-v1.0.Q6_K.gguf"
+    q4_k_m_stablelm_model_id = "stablelm-3b-4e1t.q4_k_m.gguf"
+    # imatrix
+    iq1_m_gguf_model_id = "TinyLlama-1.1B-Chat-v1.0-IQ1_M.gguf"
+    iq1_s_gguf_model_id = "TinyLlama-1.1B-Chat-v1.0-IQ1_S.gguf"
+    iq2_s_gguf_model_id = "TinyLlama-1.1B-Chat-v1.0-IQ2_S.gguf"
+    iq2_xs_gguf_model_id = "TinyLlama-1.1B-Chat-v1.0-IQ2_XS.gguf"
+    iq2_xxs_gguf_model_id = "TinyLlama-1.1B-Chat-v1.0-IQ2_XXS.gguf"
+    iq3_s_gguf_model_id = "TinyLlama-1.1B-Chat-v1.0-IQ3_S.gguf"
+    iq3_xxs_gguf_model_id = "TinyLlama-1.1B-Chat-v1.0-IQ3_XXS.gguf"
+    iq4_xs_gguf_model_id = "TinyLlama-1.1B-Chat-v1.0-IQ4_XS.gguf"
+    iq4_nl_gguf_model_id = "TinyLlama-1.1B-Chat-v1.0-IQ4_NL.gguf"
 
     q4_0_phi3_model_id = "Phi-3-mini-4k-instruct-q4.gguf"
     q4_0_mistral_model_id = "mistral-7b-instruct-v0.2.Q4_0.gguf"
@@ -269,6 +293,9 @@ class GgufModelTests(unittest.TestCase):
     fp16_mamba_model_id = "ggml-model-f16.gguf"
     q6_k_nemotron_model_id = "Nemotron-Mini-4B-Instruct-Q6_K.gguf"
     fp16_nemotron_model_id = "Nemotron-Mini-4B-Instruct-f16.gguf"
+    q3_k_gemma2_model_id = "gemma-2-2b-it-Q3_K_L.gguf"
+    q8_0_gemma2_model_id = "gemma-2-2b-it-Q8_0.gguf"
+    fp32_gemma2_model_id = "gemma-2-2b-it-f32.gguf"
 
     example_text = "Hello"
 
@@ -759,3 +786,124 @@ class GgufModelTests(unittest.TestCase):
 
         EXPECTED_TEXT = "'Hello. hotmail.com.'"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
+    def test_gemma2_q3_k(self):
+        model = AutoModelForCausalLM.from_pretrained(
+            self.gemma2_model_id,
+            gguf_file=self.q3_k_gemma2_model_id,
+            torch_dtype=torch.float16,
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained(self.gemma2_model_id, gguf_file=self.q3_k_gemma2_model_id)
+        text = tokenizer(self.example_text, return_tensors="pt")["input_ids"]
+        out = model.generate(text, max_new_tokens=10)
+
+        EXPECTED_TEXT = "Hello! 👋\n\nI'm trying to create a"
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
+    def test_gemma2_q8_0(self):
+        model = AutoModelForCausalLM.from_pretrained(
+            self.gemma2_model_id,
+            gguf_file=self.q8_0_gemma2_model_id,
+            torch_dtype=torch.float16,
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained(self.gemma2_model_id, gguf_file=self.q8_0_gemma2_model_id)
+        text = tokenizer(self.example_text, return_tensors="pt")["input_ids"]
+        out = model.generate(text, max_new_tokens=10)
+
+        EXPECTED_TEXT = "Hello! 👋\n\nI'm a large language model"
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
+    def test_gemma2_fp32(self):
+        model = AutoModelForCausalLM.from_pretrained(
+            self.gemma2_model_id,
+            gguf_file=self.fp32_gemma2_model_id,
+            torch_dtype=torch.float16,
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained(self.gemma2_model_id, gguf_file=self.fp32_gemma2_model_id)
+        text = tokenizer(self.example_text, return_tensors="pt")["input_ids"]
+        out = model.generate(text, max_new_tokens=10)
+
+        EXPECTED_TEXT = "Hello! 👋\n\nI'm a large language model"
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+
+    def test_gemma2_weights_conversion_fp32(self):
+        original_model = AutoModelForCausalLM.from_pretrained(
+            self.original_gemma2_model_id,
+            torch_dtype=torch.float16,
+        )
+
+        converted_model = AutoModelForCausalLM.from_pretrained(
+            self.gemma2_model_id,
+            gguf_file=self.fp32_gemma2_model_id,
+            torch_dtype=torch.float16,
+        )
+
+        converted_state_dict = converted_model.state_dict()
+        original_state_dict = original_model.state_dict()
+
+        for layer_name, original_params in original_state_dict.items():
+            if layer_name in converted_state_dict:
+                self.assertTrue(original_params.shape == converted_state_dict[layer_name].shape)
+                torch.testing.assert_close(original_params, converted_state_dict[layer_name])
+            else:
+                raise ValueError(f"Layer {layer_name} is not presented in GGUF model")
+
+    def test_tokenization_xnli(self):
+        import tqdm
+        from datasets import load_dataset
+
+        gguf_tokenizer = AutoTokenizer.from_pretrained(self.model_id, gguf_file=self.q8_0_gguf_model_id)
+        original_tokenizer = AutoTokenizer.from_pretrained(self.original_model_id)
+
+        dataset = load_dataset("google/code_x_glue_ct_code_to_text", "go")
+        for item in tqdm.tqdm(dataset["validation"]):
+            string = item["code"]
+            encoded1 = gguf_tokenizer.encode(string)
+            encoded2 = original_tokenizer.encode(string)
+
+            self.assertEqual(encoded1, encoded2)
+
+            decoded1 = gguf_tokenizer.decode(encoded1, skip_special_tokens=True)
+            decoded2 = original_tokenizer.decode(encoded2, skip_special_tokens=True)
+
+            self.assertEqual(decoded1, decoded2)
+
+        dataset = load_dataset("facebook/xnli", "all_languages")
+
+        for i, item in enumerate(tqdm.tqdm(dataset["train"].select(range(100)))):
+            for string in item["premise"].values():
+                encoded1 = gguf_tokenizer.encode(string)
+                encoded2 = original_tokenizer.encode(string)
+
+                self.assertEqual(encoded1, encoded2)
+
+                decoded1 = gguf_tokenizer.decode(encoded1, skip_special_tokens=True)
+                decoded2 = original_tokenizer.decode(encoded2, skip_special_tokens=True)
+
+                self.assertEqual(decoded1, decoded2)
+
+        # With special tokens
+        gguf_tokenizer = AutoTokenizer.from_pretrained(self.model_id, gguf_file=self.q8_0_gguf_model_id)
+        original_tokenizer = AutoTokenizer.from_pretrained(self.original_model_id)
+
+        gguf_tokenizer.add_special_tokens(
+            {"additional_special_tokens": [AddedToken("<token>", rstrip=False, lstrip=False)]}
+        )
+        original_tokenizer.add_special_tokens(
+            {"additional_special_tokens": [AddedToken("<token>", rstrip=False, lstrip=False)]}
+        )
+
+        text = "Hello <token>. <token> Hello"
+
+        encoded1 = gguf_tokenizer.encode(text)
+        encoded2 = original_tokenizer.encode(text)
+
+        self.assertEqual(encoded1, encoded2)
+
+        decoded1 = gguf_tokenizer.decode(encoded1, skip_special_tokens=True)
+        decoded2 = original_tokenizer.decode(encoded2, skip_special_tokens=True)
+
+        self.assertEqual(decoded1, decoded2)
