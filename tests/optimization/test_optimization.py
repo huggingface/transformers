@@ -37,7 +37,7 @@ if is_torch_available():
         get_linear_schedule_with_warmup,
         get_polynomial_decay_schedule_with_warmup,
         get_scheduler,
-        get_wsc_schedule,
+        get_wsd_schedule,
     )
 
 
@@ -152,8 +152,8 @@ class ScheduleInitTest(unittest.TestCase):
                 {"num_warmup_steps": 2},
                 [0.0, 5.0, 10.0, 8.165, 7.071, 6.325, 5.774, 5.345, 5.0, 4.714],
             ),
-            get_wsc_schedule: (
-                {**common_kwargs, "num_cooldown_steps": 2, "min_lr_ratio": 0.0},
+            get_wsd_schedule: (
+                {**common_kwargs, "num_decay_steps": 2, "min_lr_ratio": 0.0},
                 [0.0, 5.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 5.0],
             ),
         }
@@ -180,36 +180,36 @@ class ScheduleInitTest(unittest.TestCase):
     def test_get_scheduler(self):
         test_params = [
             {
-                "name": "warmup_stable_cooldown",
+                "name": "warmup_stable_decay",
                 "optimizer": self.optimizer,
                 "num_warmup_steps": 2,
                 "num_training_steps": 10,
                 "scheduler_specific_kwargs": {
-                    "num_cooldown_steps": 2,
+                    "num_decay_steps": 2,
                     "warmup_type": "linear",
-                    "cooldown_type": "linear",
+                    "decay_type": "linear",
                 },
             },
             {
-                "name": "warmup_stable_cooldown",
+                "name": "warmup_stable_decay",
                 "optimizer": self.optimizer,
                 "num_warmup_steps": 2,
                 "num_training_steps": 10,
                 "scheduler_specific_kwargs": {
-                    "num_cooldown_steps": 2,
+                    "num_decay_steps": 2,
                     "warmup_type": "cosine",
-                    "cooldown_type": "cosine",
+                    "decay_type": "cosine",
                 },
             },
             {
-                "name": "warmup_stable_cooldown",
+                "name": "warmup_stable_decay",
                 "optimizer": self.optimizer,
                 "num_warmup_steps": 2,
                 "num_training_steps": 10,
                 "scheduler_specific_kwargs": {
-                    "num_cooldown_steps": 2,
+                    "num_decay_steps": 2,
                     "warmup_type": "1-sqrt",
-                    "cooldown_type": "1-sqrt",
+                    "decay_type": "1-sqrt",
                 },
             },
             {"name": "cosine", "optimizer": self.optimizer, "num_warmup_steps": 2, "num_training_steps": 10},

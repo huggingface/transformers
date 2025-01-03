@@ -387,14 +387,14 @@ def get_cosine_with_min_lr_schedule_with_warmup(
     return LambdaLR(optimizer, lr_lambda, last_epoch)
 
 
-def _get_wsc_scheduler_lambda(
+def _get_wsd_scheduler_lambda(
     current_step: int,
     *,
     num_warmup_steps: int,
     num_training_steps: int,
-    num_cooldown_steps: int,
+    num_decay_steps: int,
     warmup_type: str,
-    cooldown_type: str,
+    decay_type: str,
     min_lr_ratio: float,
     num_cycles: float,
 ):
@@ -411,32 +411,32 @@ def _get_wsc_scheduler_lambda(
         factor = factor * (1.0 - min_lr_ratio) + min_lr_ratio
         return max(0.0, factor)
 
-    if current_step < num_training_steps - num_cooldown_steps:
+    if current_step < num_training_steps - num_decay_steps:
         return 1.0
 
     if current_step < num_training_steps:
-        progress = float(current_step - (num_training_steps - num_cooldown_steps)) / float(max(1, num_cooldown_steps))
-        if cooldown_type == "linear":
+        progress = float(current_step - (num_training_steps - num_decay_steps)) / float(max(1, num_decay_steps))
+        if decay_type == "linear":
             factor = 1.0 - progress
-        elif cooldown_type == "cosine":
+        elif decay_type == "cosine":
             factor = 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress))
-        elif cooldown_type == "1-sqrt":
+        elif decay_type == "1-sqrt":
             factor = 1.0 - math.sqrt(progress)
         else:
-            raise ValueError(f"Unknown cooldown type: {cooldown_type}, expected 'linear', 'cosine' or '1-sqrt'")
+            raise ValueError(f"Unknown decay type: {decay_type}, expected 'linear', 'cosine' or '1-sqrt'")
         factor = factor * (1.0 - min_lr_ratio) + min_lr_ratio
         return max(0.0, factor)
 
     return min_lr_ratio
 
 
-def get_wsc_schedule(
+def get_wsd_schedule(
     optimizer: Optimizer,
     num_warmup_steps: int,
     num_training_steps: int,
-    num_cooldown_steps: int,
+    num_decay_steps: int,
     warmup_type: str = "linear",
-    cooldown_type: str = "linear",
+    decay_type: str = "linear",
     min_lr_ratio: float = 0,
     num_cycles: float = 0.5,
     last_epoch: int = -1,
@@ -445,7 +445,7 @@ def get_wsc_schedule(
     Create a schedule with a learning rate that has three stages:
     1. warmup: increase from min_lr_ratio times the initial learning rate to the initial learning rate following a warmup_type.
     2. stable: constant learning rate.
-    3. cooldown: decrease from the initial learning rate to min_lr_ratio times the initial learning rate following a cooldown_type.
+    3. decay: decrease from the initial learning rate to min_lr_ratio times the initial learning rate following a decay_type.
 
     Args:
         optimizer ([`~torch.optim.Optimizer`]):
@@ -454,12 +454,12 @@ def get_wsc_schedule(
             The number of steps for the warmup phase.
         num_training_steps (`int`):
             The total number of training steps.
-        num_cooldown_steps (`int`):
-            The number of steps for the cooldown phase.
+        num_decay_steps (`int`):
+            The number of steps for the decay phase.
         warmup_type (`str`, *optional*, defaults to "linear"):
             The type of warmup to use. Can be 'linear', 'cosine' or '1-sqrt'.
-        cooldown_type (`str`, *optional*, defaults to "linear"):
-            The type of cooldown to use. Can be 'linear', 'cosine' or '1-sqrt'.
+        decay_type (`str`, *optional*, defaults to "linear"):
+            The type of decay to use. Can be 'linear', 'cosine' or '1-sqrt'.
         min_lr_ratio (`float`, *optional*, defaults to 0):
             The minimum learning rate as a ratio of the initial learning rate.
         num_cycles (`float`, *optional*, defaults to 0.5):
@@ -472,12 +472,12 @@ def get_wsc_schedule(
         `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
     """
     lr_lambda = partial(
-        _get_wsc_scheduler_lambda,
+        _get_wsd_scheduler_lambda,
         num_warmup_steps=num_warmup_steps,
         num_training_steps=num_training_steps,
-        num_cooldown_steps=num_cooldown_steps,
+        num_decay_steps=num_decay_steps,
         warmup_type=warmup_type,
-        cooldown_type=cooldown_type,
+        decay_type=decay_type,
         min_lr_ratio=min_lr_ratio,
         num_cycles=num_cycles,
     )
@@ -494,7 +494,7 @@ TYPE_TO_SCHEDULER_FUNCTION = {
     SchedulerType.INVERSE_SQRT: get_inverse_sqrt_schedule,
     SchedulerType.REDUCE_ON_PLATEAU: get_reduce_on_plateau_schedule,
     SchedulerType.COSINE_WITH_MIN_LR: get_cosine_with_min_lr_schedule_with_warmup,
-    SchedulerType.WARMUP_STABLE_COOLDOWN: get_wsc_schedule,
+    SchedulerType.WARMUP_STABLE_DECAY: get_wsd_schedule,
 }
 
 
