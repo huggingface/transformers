@@ -104,6 +104,7 @@ from . import (
     git,
     glm,
     glpn,
+    got_ocr2,
     gpt2,
     gpt_bigcode,
     gpt_neo,
