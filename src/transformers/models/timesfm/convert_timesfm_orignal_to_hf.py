@@ -19,7 +19,7 @@ python src/transformers/models/timesfm/convert_timesfm_orignal_to_hf.py \
 """
 
 
-def write_model(model_path, safe_serialization=True):
+def write_model(model_path, safe_serialization=True, huggingface_repo_id="google/timesfm-2.0-500m-pytorch"):
     os.makedirs(model_path, exist_ok=True)
     tmp_model_path = os.path.join(model_path, "tmp")
     os.makedirs(tmp_model_path, exist_ok=True)
@@ -29,8 +29,13 @@ def write_model(model_path, safe_serialization=True):
             backend="cuda" if torch.cuda.is_available() else "cpu",
             per_core_batch_size=32,
             horizon_len=128,
+            input_patch_len=32,
+            output_patch_len=128,
+            num_layers=50,
+            model_dims=1280,
+            use_positional_embedding=False,
         ),
-        checkpoint=timesfm.TimesFmCheckpoint(huggingface_repo_id="google/timesfm-1.0-200m-pytorch"),
+        checkpoint=timesfm.TimesFmCheckpoint(huggingface_repo_id=huggingface_repo_id),
     )
 
     timesfm_config = TimesFMConfig(
@@ -42,6 +47,7 @@ def write_model(model_path, safe_serialization=True):
         intermediate_size=tfm.hparams.model_dims,
         head_dim=tfm.hparams.model_dims // tfm.hparams.num_heads,
         num_heads=tfm.hparams.num_heads,
+        use_positional_embedding=tfm.hparams.use_positional_embedding,
     )
     timesfm_config.save_pretrained(tmp_model_path)
     timesfm_model = TimesFMModelForPrediction(timesfm_config)
@@ -132,7 +138,7 @@ def write_model(model_path, safe_serialization=True):
     shutil.rmtree(tmp_model_path)
 
 
-def check_outputs(model_path):
+def check_outputs(model_path, huggingface_repo_id):
     """Compares outputs between original and converted models."""
     print("\nChecking model outputs...")
 
@@ -142,8 +148,13 @@ def check_outputs(model_path):
             backend="cuda" if torch.cuda.is_available() else "cpu",
             per_core_batch_size=32,
             horizon_len=128,
+            input_patch_len=32,
+            output_patch_len=128,
+            num_layers=50,
+            model_dims=1280,
+            use_positional_embedding=False,
         ),
-        checkpoint=timesfm.TimesFmCheckpoint(huggingface_repo_id="google/timesfm-1.0-200m-pytorch"),
+        checkpoint=timesfm.TimesFmCheckpoint(huggingface_repo_id=huggingface_repo_id),
     )
 
     # Load converted model
@@ -229,6 +240,12 @@ def main():
     parser.add_argument(
         "--safe_serialization", type=bool, default=True, help="Whether or not to save using `safetensors`."
     )
+    parser.add_argument(
+        "--huggingface_repo_id",
+        type=str,
+        default="google/timesfm-2.0-500m-pytorch",
+        help="The Hugging Face repository ID to use for the model.",
+    )
     args = parser.parse_args()
 
     # if the saved model file exists, skip the conversion
@@ -240,8 +257,9 @@ def main():
         write_model(
             model_path=args.output_dir,
             safe_serialization=args.safe_serialization,
+            huggingface_repo_id=args.huggingface_repo_id,
         )
-    check_outputs(args.output_dir)
+    check_outputs(args.output_dir, args.huggingface_repo_id)
 
 
 if __name__ == "__main__":
