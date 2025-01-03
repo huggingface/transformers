@@ -900,7 +900,7 @@ class TimesFMModelForPrediction(TimesFMPreTrainedModel):
         freq: torch.LongTensor,
         horizon_len: int,
         output_patch_len: int | None = None,
-        max_len: int = 512,
+        max_len: int | None = None,
         return_forecast_on_context: bool = False,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -914,7 +914,8 @@ class TimesFMModelForPrediction(TimesFMPreTrainedModel):
           horizon_len: prediction length.
           output_patch_len: output length to be fetched from one step of
             auto-regressive decoding.
-          max_len: maximum training context length.
+          max_len: maximum training context length. If None, then we use the length
+            of the initial context as max length.
           return_forecast_on_context: whether to return the model forecast on the
             context except the first input patch.
 
@@ -940,6 +941,9 @@ class TimesFMModelForPrediction(TimesFMPreTrainedModel):
             )
         if output_patch_len is None:
             output_patch_len = self.config.horizon_len
+        if max_len is None:
+            max_len = context_len
+
         num_decode_patches = (horizon_len + output_patch_len - 1) // output_patch_len
         for step_index in range(num_decode_patches):
             current_padding = paddings[:, 0 : final_out.shape[1]]
@@ -961,7 +965,8 @@ class TimesFMModelForPrediction(TimesFMPreTrainedModel):
                 # For the first decodings step, collect the model forecast on the
                 # context except the unavailable first input batch forecast.
                 new_full_ts = fprop_outputs[:, :-1, : self.config.patch_len, :]
-                new_full_ts = fprop_outputs.view(new_full_ts.size(0), -1, new_full_ts.size(3))
+                # We have to use reshape and not view for non-contiguous memory
+                new_full_ts = new_full_ts.reshape(new_full_ts.size(0), -1, new_full_ts.size(3))
 
                 full_outputs.append(new_full_ts)
 
