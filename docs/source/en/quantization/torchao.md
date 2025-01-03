@@ -16,7 +16,8 @@ rendered properly in your Markdown viewer.
 Before you begin, make sure the following libraries are installed with their latest version:
 
 ```bash
-pip install --upgrade torch torchao
+# Updating 🤗 Transformers to the latest version, as the example script below uses the new auto compilation
+pip install --upgrade torch torchao transformers
 ```
 
 By default, the weights are loaded in full precision (torch.float32) regardless of the actual data type the weights are stored in such as torch.float16. Set `torch_dtype="auto"` to load the weights in the data type defined in a model's `config.json` file to automatically load the most memory-optimal data type.
