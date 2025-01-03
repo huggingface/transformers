@@ -3051,6 +3051,7 @@ else:
             "ModernBertForTokenClassification",
             "ModernBertModel",
             "ModernBertPreTrainedModel",
+            "ModernBertForQuestionAnswering",
         ]
     )
     _import_structure["models.moonshine"].extend(
@@ -7971,6 +7972,7 @@ if TYPE_CHECKING:
             ModernBertForTokenClassification,
             ModernBertModel,
             ModernBertPreTrainedModel,
+            ModernBertForQuestionAnswering,
         )
         from .models.moonshine import (
             MoonshineForConditionalGeneration,
