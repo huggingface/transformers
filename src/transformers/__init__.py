@@ -608,6 +608,14 @@ _import_structure = {
     "models.mobilenet_v2": ["MobileNetV2Config"],
     "models.mobilevit": ["MobileViTConfig"],
     "models.mobilevitv2": ["MobileViTV2Config"],
+    "models.molmo": [
+        "MolmoConfig",
+        "MolmoImageProcessor",
+        "MolmoPoolingConfig",
+        "MolmoProcessor",
+        "MolmoTextConfig",
+        "MolmoVisionConfig",
+    ],
     "models.modernbert": ["ModernBertConfig"],
     "models.moshi": [
         "MoshiConfig",
@@ -1240,6 +1248,7 @@ else:
     _import_structure["models.mobilenet_v1"].extend(["MobileNetV1FeatureExtractor", "MobileNetV1ImageProcessor"])
     _import_structure["models.mobilenet_v2"].extend(["MobileNetV2FeatureExtractor", "MobileNetV2ImageProcessor"])
     _import_structure["models.mobilevit"].extend(["MobileViTFeatureExtractor", "MobileViTImageProcessor"])
+    _import_structure["models.molmo"].append("MolmoImageProcessor")
     _import_structure["models.nougat"].append("NougatImageProcessor")
     _import_structure["models.oneformer"].extend(["OneFormerImageProcessor"])
     _import_structure["models.owlv2"].append("Owlv2ImageProcessor")
@@ -1280,6 +1289,7 @@ else:
     _import_structure["image_processing_utils_fast"] = ["BaseImageProcessorFast"]
     _import_structure["models.deformable_detr"].append("DeformableDetrImageProcessorFast")
     _import_structure["models.detr"].append("DetrImageProcessorFast")
+    _import_structure["models.molmo"].append("MolmoImageProcessorFast")
     _import_structure["models.pixtral"].append("PixtralImageProcessorFast")
     _import_structure["models.rt_detr"].append("RTDetrImageProcessorFast")
     _import_structure["models.vit"].append("ViTImageProcessorFast")
@@ -2882,6 +2892,15 @@ else:
             "MobileViTV2PreTrainedModel",
         ]
     )
+    _import_structure["models.molmo"].extend(
+        [
+            "MolmoForCausalLM",
+            "MolmoForConditionalGeneration",
+            "MolmoPreTrainedModel",
+            "MolmoTextModel",
+        ]
+    )
+
     _import_structure["models.modernbert"].extend(
         [
             "ModernBertForMaskedLM",
@@ -5596,6 +5615,14 @@ if TYPE_CHECKING:
         MobileViTV2Config,
     )
     from .models.modernbert import ModernBertConfig
+    from .models.molmo import (
+        MolmoConfig,
+        MolmoImageProcessor,
+        MolmoPoolingConfig,
+        MolmoProcessor,
+        MolmoTextConfig,
+        MolmoVisionConfig,
+    )
     from .models.moshi import (
         MoshiConfig,
         MoshiDepthConfig,
@@ -6261,6 +6288,7 @@ if TYPE_CHECKING:
             MobileNetV2ImageProcessor,
         )
         from .models.mobilevit import MobileViTFeatureExtractor, MobileViTImageProcessor
+        from .models.molmo import MolmoImageProcessor
         from .models.nougat import NougatImageProcessor
         from .models.oneformer import OneFormerImageProcessor
         from .models.owlv2 import Owlv2ImageProcessor
@@ -6300,6 +6328,7 @@ if TYPE_CHECKING:
         from .image_processing_utils_fast import BaseImageProcessorFast
         from .models.deformable_detr import DeformableDetrImageProcessorFast
         from .models.detr import DetrImageProcessorFast
+        from .models.molmo import MolmoImageProcessorFast
         from .models.pixtral import PixtralImageProcessorFast
         from .models.rt_detr import RTDetrImageProcessorFast
         from .models.vit import ViTImageProcessorFast
@@ -7601,6 +7630,12 @@ if TYPE_CHECKING:
             ModernBertForTokenClassification,
             ModernBertModel,
             ModernBertPreTrainedModel,
+        )
+        from .models.molmo import (
+            MolmoForCausalLM,
+            MolmoForConditionalGeneration,
+            MolmoPreTrainedModel,
+            MolmoTextModel,
         )
         from .models.moshi import (
             MoshiForCausalLM,

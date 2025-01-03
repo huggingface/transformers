@@ -169,6 +169,7 @@ from . import (
     mobilevit,
     mobilevitv2,
     modernbert,
+    molmo,
     moshi,
     mpnet,
     mpt,
