@@ -45,13 +45,13 @@ Avant de poursuivre, il est utile d'avoir quelques connaissances de base sur l'a
 
 Ce modèle comporte quatre composants principaux :
 
-1. **Encodeur de caractéristiques** : Il prend le signal audio brut, le normalise pour avoir une moyenne nulle et une variance unitaire, et le convertit en une séquence de vecteurs de caractéristiques, chacun représentant une durée de 20 ms.
+1. **Encodeur de caractéristiques** (*feature encoder*): Il prend le signal audio brut, le normalise pour avoir une moyenne nulle et une variance unitaire, et le convertit en une séquence de vecteurs de caractéristiques, chacun représentant une durée de 20 ms.
 
-2. **Module de quantification** : Les vecteurs de caractéristiques sont passés à ce module pour apprendre des unités de parole discrètes. Chaque vecteur est associé à un *codebook* (une collection de mots-clés), et l'unité de parole la plus représentative est sélectionnée parmi celles du codebook et transmise au modèle.
+2. **Module de quantification** (*quantization module*): Les vecteurs de caractéristiques sont passés à ce module pour apprendre des unités de parole discrètes. Chaque vecteur est associé à un *codebook* (une collection de mots-clés), et l'unité de parole la plus représentative est sélectionnée parmi celles du codebook et transmise au modèle.
 
-3. **Réseau de contexte** : Environ la moitié des vecteurs de caractéristiques sont masqués aléatoirement. Les vecteurs masqués sont ensuite envoyés à un *réseau de contexte*, qui est un encodeur qui ajoute des embeddings positionnels relatifs.
+3. **Réseau de contexte** (*context network*): Environ la moitié des vecteurs de caractéristiques sont masqués aléatoirement. Les vecteurs masqués sont ensuite envoyés à un *réseau de contexte*, qui est un encodeur qui ajoute des embeddings positionnels relatifs.
 
-4. **Tâche contrastive** : Le réseau de contexte est préentraîné avec une tâche contrastive. Le modèle doit prédire la véritable unité de parole quantifiée à partir de la prédiction masquée parmi un ensemble de fausses, ce qui pousse le modèle à trouver l'unité de parole quantifiée la plus proche de la prédiction.
+4. **Tâche contrastive** (*contrastive task*): Le réseau de contexte est préentraîné avec une tâche contrastive. Le modèle doit prédire la véritable unité de parole quantifiée à partir de la prédiction masquée parmi un ensemble de fausses, ce qui pousse le modèle à trouver l'unité de parole quantifiée la plus proche de la prédiction.
 
 Une fois préentraîné, wav2vec2 peut être ajusté sur vos propres données pour des tâches comme la classification audio ou la reconnaissance automatique de la parole !
 
@@ -63,7 +63,7 @@ Prêt à vous lancer dans la classification audio ? Consultez notre [guide compl
 
 ### Reconnaissance vocale
 
-Pour utiliser le modèle préentraîné pour la reconnaissance vocale, ajoutez une tête de modélisation du langage au-dessus du modèle Wav2Vec2 de base pour la [classification temporelle connexionniste (CTC)](glossary#connectionist-temporal-classification-ctc). Cette tête de modélisation du langage est une couche linéaire qui prend les états cachés (*hidden states*) de l'encodeur et les convertit en logits. Chaque logit correspond à une classe de token (le nombre de tokens provient du vocabulaire de la tâche). La perte CTC est calculée entre les logits et les cibles pour identifier la séquence de tokens la plus probable, qui est ensuite décodée en transcription.
+Pour utiliser le modèle préentraîné pour la reconnaissance vocale, ajoutez une tête de modélisation du langage au-dessus du modèle Wav2Vec2 de base pour la [classification temporelle connexionniste (CTC)](glossary#connectionist-temporal-classification-ctc). Cette tête de modélisation du langage est une couche linéaire qui prend les états cachés (*hidden states*) de l'encodeur et les convertit en logits. Chaque logit correspond à une classe de token (le nombre de tokens provient du vocabulaire de la tâche). La perte CTC est calculée entre les logits et les cibles (*targets*) pour identifier la séquence de tokens la plus probable, qui est ensuite décodée en transcription.
 
 Prêt à vous lancer dans la reconnaissance automatique de la parole ? Consultez notre [guide complet de reconnaissance automatique de la parole](tasks/asr) pour apprendre à ajuster Wav2Vec2 et à l'utiliser pour l'inférence !
 
@@ -132,9 +132,9 @@ ConvNeXT modernise un CNN de cinq manières :
 
 1. **Modification du nombre de blocs** : ConvNeXT utilise une approche similaire à ViT en "patchifiant" l'image avec un stride plus grand et une taille de noyau correspondante, divisant ainsi l'image en patches non chevauchants.
 
-2. **Couche de goulot d'étranglement** : Cette couche réduit puis restaure le nombre de canaux pour accélérer les convolutions 1x1, permettant une plus grande profondeur du réseau. Un goulot d'étranglement inversé augmente d'abord le nombre de canaux avant de les réduire, optimisant ainsi l'utilisation de la mémoire.
+2. **Couche de goulot d'étranglement** (*bottleneck layer*) : Cette couche réduit puis restaure le nombre de canaux pour accélérer les convolutions 1x1, permettant une plus grande profondeur du réseau. Un goulot d'étranglement inversé augmente d'abord le nombre de canaux avant de les réduire, optimisant ainsi l'utilisation de la mémoire.
 
-3. **Convolution en profondeur** : Remplace la convolution 3x3 traditionnelle par une convolution appliquée à chaque canal d'entrée séparément, améliorant ainsi la largeur du réseau et ses performances.
+3. **Convolution en profondeur** (*depthwise convolution*): Remplace la convolution 3x3 traditionnelle par une convolution appliquée à chaque canal d'entrée séparément, améliorant ainsi la largeur du réseau et ses performances.
 
 4. **Augmentation de la taille du noyau** : ConvNeXT utilise un noyau de 7x7 pour imiter le champ réceptif global de ViT, ce qui permet de capturer des informations sur une plus grande partie de l'image.
 
