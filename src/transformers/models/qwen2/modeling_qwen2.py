@@ -330,7 +330,7 @@ class Qwen2RotaryEmbedding(nn.Module):
 
         # Core RoPE block
         if self.inv_freq.device != x.device:
-            self.inv_freq = self.inv_freq.to(x.device) 
+            self.inv_freq = self.inv_freq.to(x.device)
 
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
