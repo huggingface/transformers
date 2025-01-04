@@ -254,3 +254,12 @@ Once your file is downloaded and locally cached, specify it's local path to load
 See the [How to download files from the Hub](https://huggingface.co/docs/hub/how-to-downstream) section for more details on downloading files stored on the Hub.
 
 </Tip>
+
+# Windows-Specific Issues
+
+If you encounter issues on Windows, you may need to activate Developer Mode. Alternatively, create and activate a virtual environment as shown below:
+
+```
+python -m venv env
+.\env\Scripts\activate
+```
