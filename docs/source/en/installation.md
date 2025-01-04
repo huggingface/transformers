@@ -274,7 +274,9 @@ Ensure you’re in the project directory before executing the command.
 ## c) Windows-Specific Issues
 
 If you encounter issues on Windows, you may need to activate Developer Mode. 
+
 To enable it, navigate to Windows Settings > For Developers > Developer Mode.
+
 Alternatively, create and activate a virtual environment as shown below:
 
 ```
