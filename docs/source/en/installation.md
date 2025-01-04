@@ -269,6 +269,8 @@ Install all required dependencies by running:
 ```
 pip install -r requirements.txt
 ```
+Ensure you’re in the project directory before executing the command.
+
 ## c) Windows-Specific Issues
 
 If you encounter issues on Windows, you may need to activate Developer Mode. Alternatively, create and activate a virtual environment as shown below:
