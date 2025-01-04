@@ -34,19 +34,19 @@ You should install 🤗 Transformers in a [virtual environment](https://docs.pyt
 
 Start by creating a virtual environment in your project directory:
 
-```bash
-python -m venv .env
+### Create and Activate a Virtual Environment
+
+To avoid dependency conflicts, it’s recommended to use a virtual environment.
+
+#### For macOS/Linux:
 ```
-
-Activate the virtual environment. On Linux and MacOs:
-
-```bash
-source .env/bin/activate
+python3 -m venv env
+source env/bin/activate
 ```
-Activate Virtual environment on Windows
-
-```bash
-.env/Scripts/activate
+#### For window OS:
+```
+python -m venv env
+.\env\Scripts\activate
 ```
 
 Now you're ready to install 🤗 Transformers with the following command:
@@ -254,3 +254,46 @@ Once your file is downloaded and locally cached, specify it's local path to load
 See the [How to download files from the Hub](https://huggingface.co/docs/hub/how-to-downstream) section for more details on downloading files stored on the Hub.
 
 </Tip>
+
+# Troubleshooting
+
+## a) Error: Python Version Not Supported
+Ensure you are using Python 3.9 or later.
+To check your Python version, run:
+```
+python --version
+```
+## b) Error: Missing Dependencies
+
+Install all required dependencies by running:
+```
+pip install -r requirements.txt
+```
+Ensure you’re in the project directory before executing the command.
+
+## c) Windows-Specific Issues
+
+If you encounter issues on Windows, you may need to activate Developer Mode. 
+
+To enable it, navigate to Windows Settings > For Developers > Developer Mode.
+
+Alternatively, create and activate a virtual environment as shown below:
+
+```
+python -m venv env
+.\env\Scripts\activate
+```
+
+### GPU Setup (Optional)
+
+For GPU acceleration, install the appropriate CUDA drivers for your system:
+
+a) PyTorch CUDA Compatibility: (https://pytorch.org/get-started/locally)  
+b) TensorFlow GPU Support: (https://www.tensorflow.org/install/pip)  
+
+#### Verify GPU availability:
+
+To check if your system detects an NVIDIA GPU, run:
+```bash
+nvidia-smi
+```
