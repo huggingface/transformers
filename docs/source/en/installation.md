@@ -288,8 +288,8 @@ python -m venv env
 
 For GPU acceleration, install the appropriate CUDA drivers for your system:
 
-a) [PyTorch CUDA Compatibility](https://pytorch.org/get-started/locally)  
-b) [TensorFlow GPU Support](https://www.tensorflow.org/install/pip)  
+a) PyTorch CUDA Compatibility: (https://pytorch.org/get-started/locally)  
+b) TensorFlow GPU Support: (https://www.tensorflow.org/install/pip)  
 
 #### Verify GPU availability:
 
