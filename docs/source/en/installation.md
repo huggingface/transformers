@@ -34,19 +34,19 @@ You should install 🤗 Transformers in a [virtual environment](https://docs.pyt
 
 Start by creating a virtual environment in your project directory:
 
-```bash
-python -m venv .env
+### Create and Activate a Virtual Environment
+
+To avoid dependency conflicts, it’s recommended to use a virtual environment.
+
+#### For macOS/Linux:
 ```
-
-Activate the virtual environment. On Linux and MacOs:
-
-```bash
-source .env/bin/activate
+python3 -m venv env
+source env/bin/activate
 ```
-Activate Virtual environment on Windows
-
-```bash
-.env/Scripts/activate
+#### For window OS:
+```
+python -m venv env
+.\env\Scripts\activate
 ```
 
 Now you're ready to install 🤗 Transformers with the following command:
