@@ -403,6 +403,7 @@ _import_structure = {
     "models.depth_anything": ["DepthAnythingConfig"],
     "models.depth_pro": ["DepthProConfig"],
     "models.detr": ["DetrConfig"],
+    "models.d_fine": ["DFineConfig", "DFineResNetConfig"],
     "models.dialogpt": [],
     "models.diffllama": ["DiffLlamaConfig"],
     "models.dinat": ["DinatConfig"],
@@ -2192,6 +2193,14 @@ else:
             "DepthProForDepthEstimation",
             "DepthProModel",
             "DepthProPreTrainedModel",
+        ]
+    )
+    _import_structure["models.d_fine"].extend(
+        [
+            "DFineForObjectDetection",
+            "DFineModel",
+            "DFineResNetBackbone",
+            "DFineResNetPreTrainedModel",
         ]
     )
     _import_structure["models.detr"].extend(
@@ -5521,6 +5530,7 @@ if TYPE_CHECKING:
     )
     from .models.depth_anything import DepthAnythingConfig
     from .models.depth_pro import DepthProConfig
+    from .models.d_fine import DFineConfig
     from .models.detr import DetrConfig
     from .models.diffllama import DiffLlamaConfig
     from .models.dinat import DinatConfig
@@ -7209,6 +7219,10 @@ if TYPE_CHECKING:
             DepthProForDepthEstimation,
             DepthProModel,
             DepthProPreTrainedModel,
+        )
+        from .models.d_fine import (
+            DFineModel,
+            DFineModelForObjectDetection,
         )
         from .models.detr import (
             DetrForObjectDetection,

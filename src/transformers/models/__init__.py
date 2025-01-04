@@ -75,6 +75,7 @@ from . import (
     deprecated,
     depth_anything,
     depth_pro,
+    d_fine,
     detr,
     dialogpt,
     diffllama,
