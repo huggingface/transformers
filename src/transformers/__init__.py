@@ -401,6 +401,7 @@ _import_structure = {
     "models.deprecated.xlm_prophetnet": ["XLMProphetNetConfig"],
     "models.depth_anything": ["DepthAnythingConfig"],
     "models.detr": ["DetrConfig"],
+    "models.d_fine": ["DFineConfig", "DFineResNetConfig"],
     "models.dialogpt": [],
     "models.dinat": ["DinatConfig"],
     "models.dinov2": ["Dinov2Config"],
@@ -2135,6 +2136,14 @@ else:
         [
             "DepthAnythingForDepthEstimation",
             "DepthAnythingPreTrainedModel",
+        ]
+    )
+    _import_structure["models.d_fine"].extend(
+        [
+            "DFineForObjectDetection",
+            "DFineModel",
+            "DFineResNetBackbone",
+            "DFineResNetPreTrainedModel",
         ]
     )
     _import_structure["models.detr"].extend(
@@ -5368,6 +5377,7 @@ if TYPE_CHECKING:
         XLMProphetNetConfig,
     )
     from .models.depth_anything import DepthAnythingConfig
+    from .models.d_fine import DFineConfig
     from .models.detr import DetrConfig
     from .models.dinat import DinatConfig
     from .models.dinov2 import Dinov2Config
@@ -7010,6 +7020,10 @@ if TYPE_CHECKING:
         from .models.depth_anything import (
             DepthAnythingForDepthEstimation,
             DepthAnythingPreTrainedModel,
+        )
+        from .models.d_fine import (
+            DFineModel,
+            DFineModelForObjectDetection,
         )
         from .models.detr import (
             DetrForObjectDetection,
