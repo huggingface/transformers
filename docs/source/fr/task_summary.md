@@ -24,7 +24,7 @@ Cette page fournit un aperçu des différentes tâches de traitement de la parol
 
 Les tâches de traitement audio et de la parole sont légèrement différentes des autres modalités principalement parce que l'audio en tant que donnée d'entrée est un signal continu. Contrairement au texte, un signal audio brut ne peut pas discrétisé de la manière dont une phrase peut être divisée en mots. Pour contourner cela, le signal audio brut est généralement échantillonné à intervalles réguliers. Si vous prenez plus d'échantillons dans un intervalle, le taux d'échantillonnage est plus élevé et l'audio ressemble davantage à la source audio originale.
 
-Les approches précédentes prétraitaient l'audio pour en extraire des caractéristiques utiles. Il est maintenant plus courant de commencer les tâches de traitement audio et de la parole en donnant directement le signal audio brut à un encodeur de caractéristiques (*feature encoder* en anglais) pour extraire une représentation de l'audio. Cela correspond àl'étape de prétraitement et permet au modèle d'apprendre les caractéristiques les plus essentielles du signal.
+Les approches précédentes prétraitaient l'audio pour en extraire des caractéristiques utiles. Il est maintenant plus courant de commencer les tâches de traitement audio et de la parole en donnant directement le signal audio brut à un encodeur de caractéristiques (*feature encoder* en anglais) pour extraire une représentation de l'audio. Cela correspond à l'étape de prétraitement et permet au modèle d'apprendre les caractéristiques les plus essentielles du signal.
 
 ### Classification audio
 
