@@ -338,4 +338,4 @@ La réponse à des questions sur des documents consiste à répondre à des ques
 [{'score': 0.8531, 'answer': '17,000', 'start': 4, 'end': 4}]
 ```
 
-En espérant que cette page vous ait donné plus d'informations sur les différents types de tâches dans chaque modalité et l'importance pratique de chacune d'elles. Dans la [section suivante](tasks_explained), vous découvrirez **comment** 🤗 Transformers fonctionnent pour résoudre ces tâches.
+En espérant que cette page vous ait donné plus d'informations sur les différents types de tâches dans chaque modalité et l'importance pratique de chacune d'elles. Dans la [section suivante](tasks_explained), vous découvrirez **comment** 🤗 Transformers fonctionne pour résoudre ces tâches.
