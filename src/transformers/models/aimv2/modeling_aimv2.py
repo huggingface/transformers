@@ -190,12 +190,24 @@ class AIMv2Attention(nn.Module):
 
         self.is_causal = config.is_causal
 
-    def forward(self, hidden_states, attention_mask: Optional[torch.Tensor] = None, output_attentions: bool = False) -> torch.Tensor:
-        batch_size, seq_length, _ = hidden_states.size()
+    def forward(
+        self,
+        hidden_states,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+    ) -> torch.Tensor:
+        print("AIMv2Attention - hidden_states.shape:", hidden_states.shape)
 
-        # Linear projections for query, key, value
-        qkv = self.qkv(hidden_states).view(batch_size, seq_length, 3, self.num_attention_heads, self.attention_head_size)
+        qkv = self.qkv(hidden_states)
+        print("AIMv2Attention - qkv.shape (before view):", qkv.shape)
+        print("AIMv2Attention - qkv size :", qkv.size())
+
+        qkv = qkv.view(-1, hidden_states.shape[1], 3, self.num_attention_heads, self.attention_head_size)
+        print("AIMv2Attention - qkv.shape (after view):", qkv.shape)
+
         qkv = qkv.permute(2, 0, 3, 1, 4)  # (3, batch_size, num_heads, seq_length, head_size)
+        print("AIMv2Attention - qkv.shape (after permute):", qkv.shape)
+
         query_layer, key_layer, value_layer = qkv[0], qkv[1], qkv[2]
 
         # Scaled dot-product attention
@@ -203,7 +215,7 @@ class AIMv2Attention(nn.Module):
             query_layer, key_layer, value_layer, attn_mask=attention_mask, is_causal=self.is_causal
         )
 
-        attention_output = attention_output.transpose(1, 2).contiguous().view(batch_size, seq_length, self.all_head_size)
+        attention_output = attention_output.transpose(1, 2).contiguous().view(-1, hidden_states.shape[1], self.all_head_size)
         attention_output = self.out_proj(attention_output)
         return self.proj_drop(attention_output)
 
@@ -260,7 +272,7 @@ class AIMv2Layer(nn.Module):
         self.attention = attn_target(config)
 
         self.ffn = ffn_target(config)
-       
+
         if config.norm_layer == nn.LayerNorm:
             self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
             self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -273,15 +285,13 @@ class AIMv2Layer(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        mask: Optional[torch.Tensor] = None,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
-        
+        print("AIMv2Layer - hidden_states.shape:", hidden_states.shape)
         # Apply pre-norm before attention
         norm_hidden_states = self.norm1(hidden_states)
         attention_output = self.attention(
             norm_hidden_states,
             attention_mask=attention_mask,
-            mask=mask
         )
         # First residual connection
         hidden_states = hidden_states + attention_output
@@ -301,12 +311,20 @@ class AIMv2AverageLayers(nn.Module):
         super().__init__()
         self.layers = config.probe_layers
         self.reduce = config.reduce if hasattr(config, "reduce") else False
+        self.hidden_size = config.hidden_size
 
     def forward(self, layer_features: List[torch.Tensor]) -> torch.Tensor:
         # layer_features shape: (num_layers, B, N, D)
         feats = torch.stack([layer_features[layer_id] for layer_id in self.layers], dim=0) # (num_layers, B, N, D)
         feats = feats.mean(dim=0) # (B, N, D)
-        return feats.mean(dim=1) if self.reduce else feats
+        if self.reduce:
+            return feats.mean(dim=1) # (B, D)
+        else:
+            # Reshape to (B, H, W, D)
+            batch_size, num_patches, hidden_dim = feats.shape
+            height = width = int(math.sqrt(num_patches))
+            feats = feats.reshape(batch_size, height, width, hidden_dim)
+            return feats
 
     @property
     def max_block_id(self) -> int:
@@ -350,7 +368,6 @@ class AIMv2Encoder(nn.Module):
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
-        mask: Optional[torch.Tensor] = None,
     ) -> Union[tuple, BaseModelOutput]:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
@@ -359,7 +376,10 @@ class AIMv2Encoder(nn.Module):
         max_block_id = self.post_transformer_layer.max_block_id
 
         features = []
+        print("AIMv2Encoder - hidden_states.shape:", hidden_states.shape)
         for blk_id, blk in enumerate(self.layer):
+            print("***for blk_id, blk in enumerate(self.layer):***")
+            print("blk_id:" + str(blk_id) + ", blk:" + str(blk))
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -377,11 +397,13 @@ class AIMv2Encoder(nn.Module):
                     head_mask[blk_id],
                 )
             else:
+                print("Inside else: ", "  hidden_states.shape -", hidden_states.shape)
                 layer_outputs = blk(
-                    hidden_states, head_mask[blk_id], output_attentions=output_attentions, mask=mask
+                    hidden_states, head_mask[blk_id], output_attentions=output_attentions
                 )
 
-            hidden_states = layer_outputs[0]
+            hidden_states = layer_outputs
+            print("Inside else: ", "  hidden_states.shape -", hidden_states.shape)
 
             features.append(hidden_states)
             if blk_id == max_block_id:
@@ -390,7 +412,8 @@ class AIMv2Encoder(nn.Module):
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
 
-        hidden_states = self.post_transformer_layer(features)  # passing only features
+        #hidden_states = self.post_transformer_layer(features)  # passing only features
+        hidden_states = self.post_transformer_layer(features)  # B, N, D
 
         if self.norm is not None:
             hidden_states = self.norm(hidden_states)
@@ -556,8 +579,7 @@ class AIMv2Model(AIMv2PreTrainedModel):
             head_mask=head_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-            mask=mask,
+            return_dict=return_dict
         )
         sequence_output = encoder_outputs[0]
 

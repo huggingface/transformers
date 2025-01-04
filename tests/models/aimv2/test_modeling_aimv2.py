@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,37 +14,32 @@
 # limitations under the License.
 """Testing suite for the PyTorch AIMv2 model."""
 
+import inspect
 import unittest
 
 from transformers import AIMv2Config
 from transformers.testing_utils import (
-    require_accelerate,
     require_torch,
-    require_torch_accelerator,
-    require_torch_fp16,
-    require_vision,
     slow,
     torch_device,
 )
 from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.testing_utils import require_vision
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
-
 if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import AIMv2ForImageClassification, AIMv2ForMaskedImageModeling, AIMv2Model
-
+    from transformers import AIMv2ForImageClassification, AIMv2Model, AIMv2PreTrainedModel
 
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ViTImageProcessor
-
+    from transformers import AutoImageProcessor
 
 class AIMv2ModelTester:
     def __init__(
@@ -52,7 +47,7 @@ class AIMv2ModelTester:
         parent,
         batch_size=13,
         image_size=30,
-        patch_size=2,
+        patch_size=14,
         num_channels=3,
         is_training=True,
         use_labels=True,
@@ -66,9 +61,6 @@ class AIMv2ModelTester:
         type_sequence_label_size=10,
         initializer_range=0.02,
         scope=None,
-        encoder_stride=2,
-        mask_ratio=0.5,
-        attn_implementation="eager",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -87,15 +79,10 @@ class AIMv2ModelTester:
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
         self.scope = scope
-        self.encoder_stride = encoder_stride
-        self.attn_implementation = attn_implementation
 
-        # in AIMv2, the seq length equals the number of patches + 1 (we add 1 for the [CLS] token)
+        # in AIMv2, the seq length equals the number of patches
         num_patches = (image_size // patch_size) ** 2
-        self.seq_length = num_patches + 1
-        self.mask_ratio = mask_ratio
-        self.num_masks = int(mask_ratio * self.seq_length)
-        self.mask_length = num_patches
+        self.seq_length = num_patches
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -120,10 +107,7 @@ class AIMv2ModelTester:
             hidden_act=self.hidden_act,
             hidden_dropout_prob=self.hidden_dropout_prob,
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
-            is_decoder=False,
             initializer_range=self.initializer_range,
-            encoder_stride=self.encoder_stride,
-            attn_implementation=self.attn_implementation,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -133,27 +117,9 @@ class AIMv2ModelTester:
         result = model(pixel_values)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    def create_and_check_for_masked_image_modeling(self, config, pixel_values, labels):
-        model = AIMv2ForMaskedImageModeling(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(pixel_values)
-        self.parent.assertEqual(
-            result.reconstruction.shape, (self.batch_size, self.num_channels, self.image_size, self.image_size)
-        )
-
-        # test greyscale images
-        config.num_channels = 1
-        model = AIMv2ForMaskedImageModeling(config)
-        model.to(torch_device)
-        model.eval()
-
-        pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
-        result = model(pixel_values)
-        self.parent.assertEqual(result.reconstruction.shape, (self.batch_size, 1, self.image_size, self.image_size))
-
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
+        config.problem_type = "single_label_classification"
         model = AIMv2ForImageClassification(config)
         model.to(torch_device)
         model.eval()
@@ -180,7 +146,6 @@ class AIMv2ModelTester:
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
-
 @require_torch
 class AIMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
@@ -192,7 +157,6 @@ class AIMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         (
             AIMv2Model,
             AIMv2ForImageClassification,
-            AIMv2ForMaskedImageModeling,
         )
         if is_torch_available()
         else ()
@@ -203,7 +167,6 @@ class AIMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
     fx_compatible = False
-
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
@@ -212,13 +175,6 @@ class AIMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.model_tester = AIMv2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=AIMv2Config, has_text_modality=False, hidden_size=37)
 
-    @unittest.skip(
-        "Since `torch==2.3+cu121`, although this test passes, many subsequent tests have `CUDA error: misaligned address`."
-        "If `nvidia-xxx-cu118` are also installed, no failure (even with `torch==2.3+cu121`)."
-    )
-    def test_multi_gpu_data_parallel_forward(self):
-        super().test_multi_gpu_data_parallel_forward()
-
     def test_config(self):
         self.config_tester.run_common_tests()
 
@@ -226,7 +182,7 @@ class AIMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    def test_model_get_set_embeddings(self):
+    def test_model_common_attributes(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -235,13 +191,21 @@ class AIMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            # signature.parameters is an OrderedDict => so arg_names order is deterministic
+            arg_names = [*signature.parameters.keys()]
+
+            expected_arg_names = ["pixel_values"]
+            self.assertListEqual(arg_names[:1], expected_arg_names)
+
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_for_masked_image_modeling(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_for_masked_image_modeling(*config_and_inputs)
 
     def test_for_image_classification(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -249,86 +213,136 @@ class AIMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "google/aimv2-base-patch16-224"
-        model = AIMv2Model.from_pretrained(model_name)
+        model = AIMv2Model.from_pretrained("apple/aimv2-large-patch14-224")
         self.assertIsNotNone(model)
 
+    @unittest.skip(reason="AIMv2 does not support feedforward chunking yet")
+    def test_feed_forward_chunking(self):
+        pass
+
+    def test_attention_outputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.return_dict = True
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = False
+            config.return_dict = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+            # check that output_attentions also work using config
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+            attentions = outputs.attentions
+            self.assertEqual(len(attentions), self.model_tester.num_hidden_layers)
+
+            self.assertListEqual(
+                list(attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, self.model_tester.seq_length, self.model_tester.seq_length],
+            )
+            out_len = len(outputs)
+
+            # Check attention is always last and order is fine
+            inputs_dict["output_attentions"] = True
+            inputs_dict["output_hidden_states"] = True
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            if hasattr(self.model_tester, "num_labels"):
+                self.assertEqual(out_len + 2, len(outputs))
+            else:
+                self.assertEqual(out_len, len(outputs))
+
+            self_attentions = outputs.attentions
+
+            self.assertEqual(len(self_attentions), self.model_tester.num_hidden_layers)
+            self.assertListEqual(
+                list(self_attentions[0].shape[-3:]),
+                [self.model_tester.num_attention_heads, self.model_tester.seq_length, self.model_tester.seq_length],
+            )
+
+    def test_hidden_states_output(self):
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            hidden_states = outputs.hidden_states
+
+            expected_num_layers = getattr(
+                self.model_tester, "expected_num_hidden_layers", self.model_tester.num_hidden_layers + 1
+            )
+            self.assertEqual(len(hidden_states), expected_num_layers)
+
+            seq_length = self.model_tester.seq_length
+
+            self.assertListEqual(
+                list(hidden_states[0].shape[-2:]),
+                [seq_length, self.model_tester.hidden_size],
+            )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+
+            check_hidden_states_output(inputs_dict, config, model_class)
 
 # We will verify our results on an image of cute cats
 def prepare_img():
     image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
     return image
 
-
 @require_torch
 @require_vision
 class AIMv2ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return ViTImageProcessor.from_pretrained("google/aimv2-base-patch16-224") if is_vision_available() else None
+        return AutoImageProcessor.from_pretrained("apple/aimv2-large-patch14-224") if is_vision_available() else None
 
     @slow
-    def test_inference_image_classification_head(self):
-        model = AIMv2ForImageClassification.from_pretrained("google/aimv2-base-patch16-224").to(torch_device)
+    def test_inference_no_head(self):
+        model = AIMv2Model.from_pretrained("apple/aimv2-large-patch14-224").to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
-        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
+        inputs = image_processor(image, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():
             outputs = model(**inputs)
 
-        # verify the logits
-        expected_shape = torch.Size((1, 1000))
-        self.assertEqual(outputs.logits.shape, expected_shape)
-
-        expected_slice = torch.tensor([-0.2744, 0.8215, -0.0836]).to(torch_device)
-
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
-
-    @slow
-    def test_inference_interpolate_pos_encoding(self):
-        # AIMv2 models have an `interpolate_pos_encoding` argument in their forward method,
-        # allowing to interpolate the pre-trained position embeddings in order to use
-        # the model on higher resolutions. The DINO model by Facebook AI leverages this
-        # to visualize self-attention on higher resolution images.
-        model = AIMv2Model.from_pretrained("facebook/dino-aimv2s8").to(torch_device)
-
-        image_processor = ViTImageProcessor.from_pretrained("facebook/dino-aimv2s8", size=480)
-        image = prepare_img()
-        inputs = image_processor(images=image, return_tensors="pt")
-        pixel_values = inputs.pixel_values.to(torch_device)
-
-        # forward pass
-        with torch.no_grad():
-            outputs = model(pixel_values, interpolate_pos_encoding=True)
-
-        # verify the logits
-        expected_shape = torch.Size((1, 3601, 384))
+        # verify the last hidden states
+        expected_shape = torch.Size((1, 256, 1024))
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[4.2340, 4.3906, -6.6692], [4.5463, 1.8928, -6.7257], [4.4429, 0.8496, -5.8585]]
-        ).to(torch_device)
+            [[[ 0.0416, -0.1574, -0.4397],
+            [-0.5877, -0.7594, -0.5272],
+            [-0.6514, -0.7898, -0.4859]]],
+            device=torch_device,
+        )
 
         self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=1e-4))
-
-    @slow
-    @require_accelerate
-    @require_torch_accelerator
-    @require_torch_fp16
-    def test_inference_fp16(self):
-        r"""
-        A small test to make sure that inference work in half precision without any problem.
-        """
-        model = AIMv2Model.from_pretrained("facebook/dino-aimv2s8", torch_dtype=torch.float16, device_map="auto")
-        image_processor = self.default_image_processor
-
-        image = prepare_img()
-        inputs = image_processor(images=image, return_tensors="pt")
-        pixel_values = inputs.pixel_values.to(torch_device)
-
-        # forward pass to make sure inference works in fp16
-        with torch.no_grad():
-            _ = model(pixel_values)

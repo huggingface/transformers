@@ -78,7 +78,7 @@ class AIMv2Config(PretrainedConfig):
             Whether or not to use RMS norm.
         post_trunk_norm (`bool`, *optional*, defaults to `False`):
             Whether or not to use norm layer after the transformer blocks (layers).
-        probe_layers (`int`, *optional*, defaults to 6):
+        probe_layers (`int`, *optional*, defaults to 6):   # Change this to a list
             The layer ids to use for selecting features.
         reduce (`bool`, *optional*, defaults to `False`):
             Whether or not to reduce features using mean.
@@ -137,7 +137,7 @@ class AIMv2Config(PretrainedConfig):
         pos_embed_type: str = "absolute",
         #use_rms_norm: bool = False,
         post_trunk_norm: bool = True,
-        probe_layers: Union[int, Tuple[int, ...]] = 6,
+        probe_layers: Union[int, Tuple[int, ...]] = [6], # Change this to a list
         reduce: bool = False,
         ffn_target_type: str = "swiglu",
         is_causal: bool = False,
