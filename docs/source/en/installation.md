@@ -255,7 +255,21 @@ See the [How to download files from the Hub](https://huggingface.co/docs/hub/how
 
 </Tip>
 
-# Windows-Specific Issues
+# Troubleshooting
+
+## a) Error: Python Version Not Supported
+Ensure you are using Python 3.9 or later.
+To check your Python version, run:
+```
+python --version
+```
+## b) Error: Missing Dependencies
+
+Install all required dependencies by running:
+```
+pip install -r requirements.txt
+```
+## c) Windows-Specific Issues
 
 If you encounter issues on Windows, you may need to activate Developer Mode. Alternatively, create and activate a virtual environment as shown below:
 
