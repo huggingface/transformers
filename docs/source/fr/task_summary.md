@@ -69,7 +69,7 @@ L'une des premières réussites en vision par ordinateur a été la reconnaissan
 Il existe deux approches principales pour résoudre les tâches de vision par ordinateur :
 
 1. Utiliser des convolutions pour apprendre les caractéristiques hiérarchiques d'une image, des détails de bas niveau aux éléments abstraits de plus haut niveau.
-2. Diviser l'image en morceaux (*patchs* en anglais) et utiliser un Transformer pour apprendre progressivement comment chaque morceau est lié aux autres pour former l'image complète. Contrairement à l'approche ascendante des CNNs, cette méthode ressemble à un processus où l'on démarre avec une image floue pour ensuite la mettre au point petit à petit. 
+2. Diviser l'image en morceaux (*patches* en anglais) et utiliser un Transformer pour apprendre progressivement comment chaque morceau est lié aux autres pour former l'image complète. Contrairement à l'approche ascendante des CNNs, cette méthode ressemble à un processus où l'on démarre avec une image floue pour ensuite la mettre au point petit à petit. 
 
 ### Classification d'images
 
