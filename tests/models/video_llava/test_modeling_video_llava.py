@@ -127,7 +127,6 @@ class VideoLlavaVisionText2TextModelTester:
         self.num_image_tokens = (vision_config["image_size"] // vision_config["patch_size"]) ** 2
         self.num_video_tokens = (self.num_image_tokens + 1) * self.num_frames
         self.seq_length = seq_length + self.num_image_tokens + self.num_video_tokens
-        self.encoder_seq_length = self.seq_length
 
     def get_config(self):
         return VideoLlavaConfig(
@@ -180,22 +179,6 @@ class VideoLlavaVisionText2TextModelTester:
         inputs_dict = {
             "pixel_values_videos": pixel_values_videos,
             "pixel_values_images": pixel_values_images,
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-        }
-        return config, inputs_dict
-
-    def prepare_config_and_inputs_for_batched_test(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        config, _, pixel_values_videos = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
-        attention_mask = input_ids.ne(1).to(torch_device)
-
-        # make sure no other special tokens are set
-        input_ids[(input_ids == 0) | (input_ids == 1)] = 3
-        input_ids[:, 0] = config.video_token_index
-        inputs_dict = {
-            "pixel_values_videos": pixel_values_videos,
             "input_ids": input_ids,
             "attention_mask": attention_mask,
         }
@@ -339,7 +322,7 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
                     ),
                 )
 
-        config, batched_input = self.model_tester.prepare_config_and_inputs_for_batched_test()
+        config, batched_input = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             config.output_hidden_states = True
