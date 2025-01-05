@@ -62,7 +62,7 @@ pip install transformers datasets evaluate seqeval
 }
 ```
 
-يمثل كل رقم في `ner_tags` كيان. قم بتحويل الأرقام إلى أسماء التصنيفات لمعرفة ماهية الكيانات:
+يمثل كل رقم في `ner_tags` كياناً. حوّل الأرقام إلى أسماء التصنيفات لمعرفة ماهية الكيانات:
 
 ```py
 >>> label_list = wnut["train"].features[f"ner_tags"].feature.names
