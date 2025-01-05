@@ -149,7 +149,7 @@ pip install transformers datasets evaluate seqeval
 >>> tokenized_wnut = wnut.map(tokenize_and_align_labels, batched=True)
 ```
 
-الآن قم بإنشاء دفعة من الأمثلة باستخدام [`DataCollatorWithPadding`]. من الأكثر كفاءة *التحديد الديناميكي* للجمل إلى أطول طول في دفعة أثناء التجميع، بدلاً من تحديد مجموعة البيانات بالكامل إلى الطول الأقصى.
+الآن قم بإنشاء دفعة من الأمثلة باستخدام [`DataCollatorWithPadding`].من الأفضل استخدام *الحشو الديناميكي* للجمل إلى أطول طول في دفعة أثناء التجميع، بدلاً من حشو مجموعة البيانات بالكامل إلى الطول الأقصى.
 
 <frameworkcontent>
 <pt>
