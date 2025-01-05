@@ -66,3 +66,17 @@ class TestAttentionMaskIssue(unittest.TestCase):
             output_packed.logits.shape[:-1],
             input_ids_packed.shape
         )
+
+    def test_attention_patterns(self):
+        # Test that attention patterns are preserved
+        input_ids, mask_4d = self.prepare_data(packing=True)
+        
+        # Create equivalent 2D mask
+        mask_2d = (mask_4d[:, 0, 0] > -1).float()
+        
+        # Compare outputs
+        output_4d = self.model(input_ids, attention_mask=mask_4d)
+        output_2d = self.model(input_ids, attention_mask=mask_2d)
+        
+        # Outputs should be nearly identical
+        torch.testing.assert_close(output_4d.logits, output_2d.logits)
