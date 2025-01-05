@@ -1636,7 +1636,7 @@ class TrainingArguments:
             self.save_steps = int(self.save_steps)
 
         # Sanity checks for load_best_model_at_end: we require save and eval strategies to be compatible.
-        if self.load_best_model_at_end:
+        if self.load_best_model_at_end and self.save_strategy != SaveStrategy.BEST:
             if self.eval_strategy != self.save_strategy:
                 raise ValueError(
                     "--load_best_model_at_end requires the save and eval strategy to match, but found\n- Evaluation "
