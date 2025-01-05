@@ -388,7 +388,7 @@ pip install transformers datasets evaluate seqeval
 >>> callbacks = [metric_callback, push_to_hub_callback]
 ```
 
-أخيرًا، أنت مستعد الآن لبدء تدريب نموذجك! قم باستدعاء [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) مع مجموعات بيانات التدريب والتحقق، وعدد الحقبات، ومكالماتك لتعديل النموذج:
+أخيرًا، أنت جاهز الآن لبدء تدريب نموذجك! قم باستدعاء [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) مع بيانات التدريب والتحقق، وعدد الحقبات، وcallbacks لتعديل النموذج:
 
 ```py
 >>> model.fit(x=tf_train_set, validation_data=tf_validation_set, epochs=3, callbacks=callbacks)
