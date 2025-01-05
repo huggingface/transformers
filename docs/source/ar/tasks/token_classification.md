@@ -254,7 +254,7 @@ pip install transformers datasets evaluate seqeval
 
 </Tip>
 
-أنت مستعد الآن لبدء تدريب نموذجك! قم بتحميل DistilBERT مع [`AutoModelForTokenClassification`] إلى جانب عدد التصنيفات المتوقعة، وتخطيطات التسميات:
+أنت مستعد الآن لبدء تدريب نموذجك! قم بتحميل DistilBERT مع [`AutoModelForTokenClassification`] إلى جانب عدد التصنيفات المتوقعة، وخريطة التسميات:
 
 ```py
 >>> from transformers import AutoModelForTokenClassification, TrainingArguments, Trainer
