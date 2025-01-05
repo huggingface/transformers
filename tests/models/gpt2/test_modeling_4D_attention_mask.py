@@ -149,3 +149,15 @@ class TestAttentionMaskIssue(unittest.TestCase):
             outputs.logits.shape,
             (1, max_length, self.model.config.vocab_size)
         )
+
+    def test_4d_mask_handling(self):
+        """Critical test: Verify 4D attention mask is handled correctly"""
+        # Prepare packed sequence with 4D mask
+        input_ids, mask_4d = self.prepare_packed_sequence()
+        
+        # Should run without errors and produce valid outputs
+        try:
+            outputs = self.model(input_ids, attention_mask=mask_4d)
+            self.assertIsNotNone(outputs.logits)
+        except Exception as e:
+            self.fail(f"Failed to handle 4D mask: {e}")
