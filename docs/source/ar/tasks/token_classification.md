@@ -478,7 +478,7 @@ pip install transformers datasets evaluate seqeval
 ...     logits = model(**inputs).logits
 ```
 
-احصل على الفئة ذات الاحتمالية الأعلى، واستخدم خريطة `id2label` للنموذج لتحويلها إلى تسمية نصية:
+استخرج الفئة ذات الاحتمالية الأعلى، واستخدم جدول `id2label` الخاصة بالنموذج لتحويلها إلى تسمية نصية:
 
 ```py
 >>> predictions = torch.argmax(logits, dim=2)
