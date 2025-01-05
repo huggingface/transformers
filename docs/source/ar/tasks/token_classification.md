@@ -94,7 +94,7 @@ pip install transformers datasets evaluate seqeval
 
 <Youtube id="iY2AZYdZAr0"/>
 
-الخطوة التالية هي تحميل مجزء النصوص DistilBERT للمعالجة المسبقة لحقل `tokens`:
+الخطوة التالية هي تحميل مُجزِّئ النصوص DistilBERT للمعالجة المسبقة لحقل `tokens`:
 
 ```py
 >>> from transformers import AutoTokenizer
