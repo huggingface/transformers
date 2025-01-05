@@ -207,7 +207,7 @@ pip install transformers datasets evaluate seqeval
 ...     }
 ```
 
-دالة `compute_metrics` الخاصة بك جاهزة الآن، وستعود إليها عند إعداد تدريبك.
+دالة `compute_metrics` جاهزة للاستخدام، وستحتاج إليها عند إعداد التدريب.
 
 ## التدريب(Train)
 
