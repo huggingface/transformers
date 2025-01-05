@@ -102,7 +102,7 @@ pip install transformers datasets evaluate seqeval
 >>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
-كما رأيت في حقل `tokens` المثال أعلاه، يبدو أن الإدخال قد تم تحليله بالفعل. لكن الإدخال لم يتم تجزئته بالفعل بعد وسيتعين عليك تعيين `is_split_into_words=True` لتحليل الكلمات إلى كلمات فرعية. على سبيل المثال:
+كما رأيت في حقل `tokens` المثال أعلاه، يبدو أن المدخل قد تم تحليله بالفعل. لكن المدخل  لم يُجزأ بعد ويتعيّن عليك ضبط `is_split_into_words=True` لتقسيم الكلمات إلى كلمات فرعية. على سبيل المثال:
 
 ```py
 >>> example = wnut["train"][0]
