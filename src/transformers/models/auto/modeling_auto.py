@@ -1239,6 +1239,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("mixtral", "MixtralForTokenClassification"),
         ("mobilebert", "MobileBertForTokenClassification"),
         ("modernbert", "ModernBertForTokenClassification"),
+        ("modernbert", "ModernBertForQuestionAnswering"),
         ("mpnet", "MPNetForTokenClassification"),
         ("mpt", "MptForTokenClassification"),
         ("mra", "MraForTokenClassification"),
