@@ -114,11 +114,11 @@ pip install transformers datasets evaluate seqeval
 
 ومع ذلك، يضيف هذا بعض الرموز الخاصة `[CLS]` و`[SEP]` وتحليل الكلمات الفرعية يخلق عدم تطابق بين الإدخال والتسميات. قد يتم تقسيم كلمة واحدة تقابل تسمية واحدة الآن إلى كلمتين فرعيتين. ستحتاج إلى إعادة محاذاة الرموز والتسميات عن طريق:
 
-1. تعيين جميع الرموز إلى كلماتهم المقابلة مع طريقة [`word_ids`](https://huggingface.co/docs/transformers/main_classes/tokenizer#transformers.BatchEncoding.word_ids).
-2. تعيين التسمية `-100` إلى الرموز الخاصة `[CLS]` و`[SEP]` بحيث يتم تجاهلها بواسطة دالة الخسارة PyTorch (انظر [CrossEntropyLoss](https://pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html)).
-3. تسمية الرمز الأول فقط لكلمة معينة. قم بتعيين `-100` إلى الرموز الفرعية الأخرى من نفس الكلمة.
+1. ربط كل رمز بالكلمة الأصلية باستخدام الخاصية [`word_ids`](https://huggingface.co/docs/transformers/main_classes/tokenizer#transformers.BatchEncoding.word_ids).
+2. تعيين التسمية `-100` للرموز الخاصة `[CLS]` و`[SEP]` بحيث يتم تجاهلها بواسطة دالة الخسارة PyTorch (انظر [CrossEntropyLoss](https://pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html)).
+3. تسمية الرمز الأول فقط لكلمة معينة. قم بتعيين `-100` لأجزاء الكلمة الأخرى.
 
-هنا كيف يمكنك إنشاء وظيفة لإعادة محاذاة الرموز والتسميات، وقص السلاسل لتكون أطول من طول الإدخال الأقصى لـ DistilBERT:
+هنا كيف يمكنك إنشاء وظيفة لإعادة محاذاة الرموز والتسميات، وقص الجمل لتتجاوز الحد الأقصى لطول مُدخلات DistilBERT:
 
 ```py
 >>> def tokenize_and_align_labels(examples):
