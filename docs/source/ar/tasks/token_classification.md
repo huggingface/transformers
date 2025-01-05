@@ -522,7 +522,7 @@ pip install transformers datasets evaluate seqeval
 >>> logits = model(**inputs).logits
 ```
 
-احصل على الفئة ذات الاحتمالية الأعلى، واستخدم خريطة `id2label` للنموذج لتحويلها إلى تسمية نصية:
+استخرج الفئة ذات الاحتمالية الأعلى، واستخدم جدول `id2label` الخاصة بالنموذج لتحويلها إلى تسمية نصية:
 
 ```py
 >>> predicted_token_class_ids = tf.math.argmax(logits, axis=-1)
