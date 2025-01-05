@@ -161,3 +161,45 @@ class TestAttentionMaskIssue(unittest.TestCase):
             self.assertIsNotNone(outputs.logits)
         except Exception as e:
             self.fail(f"Failed to handle 4D mask: {e}")
+
+    def test_2d_vs_4d_mask_behavior(self):
+        """Test that 2D and 4D masks produce consistent behavior"""
+        model = GPT2LMHeadModel.from_pretrained(
+            self.model_name,
+            attn_implementation="eager"
+        )
+        
+        # Create a simple sequence with both 2D and 4D masks
+        input_ids = torch.tensor([[1, 2, 3, 4]], dtype=torch.long)
+        
+        # 2D mask: [1, 1, 0, 0] (masking last two tokens)
+        mask_2d = torch.tensor([[1, 1, 0, 0]], dtype=torch.float)
+        
+        # Equivalent 4D mask
+        mask_4d = torch.full((1, 1, 4, 4), float('-inf'))
+        mask_4d[0, 0, :2, :2] = 0  # Allow attention for first two tokens
+        
+        # Get outputs for both masks
+        outputs_2d = model(
+            input_ids,
+            attention_mask=mask_2d,
+            output_attentions=True
+        )
+        
+        outputs_4d = model(
+            input_ids,
+            attention_mask=mask_4d,
+            output_attentions=True
+        )
+        
+        print("\n2D mask attention patterns:")
+        print(outputs_2d.attentions[0][0, 0])  # First layer, first batch, first head
+        
+        print("\n4D mask attention patterns:")
+        print(outputs_4d.attentions[0][0, 0])
+        
+        print("\n2D mask:")
+        print(mask_2d)
+        
+        print("\n4D mask:")
+        print(mask_4d[0, 0])
