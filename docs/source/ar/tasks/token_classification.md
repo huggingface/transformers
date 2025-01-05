@@ -211,7 +211,7 @@ pip install transformers datasets evaluate seqeval
 
 ## التدريب(Train)
 
-قبل البدء في تدريب نموذجك، قم بإنشاء خريطة للتعريفات المتوقعة إلى تسمياتها باستخدام `id2label` و`label2id`:
+قبل تدريب النموذج، جهّز خريطة تربط بين المعرّفات المتوقعة وتسمياتها باستخدام `id2label` و `label2id`:
 
 ```py
 >>> id2label = {
