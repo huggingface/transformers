@@ -353,7 +353,7 @@ pip install transformers datasets evaluate seqeval
 ... )
 ```
 
-قم بتهيئة النموذج للتدريب مع [`compile`](https://keras.io/api/models/model_training_apis/#compile-method). لاحظ أن نماذج Transformers لديها جميعها دالة خسارة ذات صلة بالمهمة بشكل افتراضي، لذلك لا تحتاج إلى تحديد واحدة ما لم ترغب في ذلك:
+هيّئ النموذج للتدريب باستخدام [`compile`](https://keras.io/api/models/model_training_apis/#compile-method). لاحظ أن نماذج Transformers تتضمن دالة خسارة افتراضية مرتبطة بالمهمة، لذلك لا تحتاج إلى تحديد واحدة إلا إذا كنت ترغب في ذلك:
 
 ```py
 >>> import tensorflow as tf
