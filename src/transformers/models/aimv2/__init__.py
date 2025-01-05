@@ -14,9 +14,16 @@
 
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available
+from transformers.utils import (
+    OptionalDependencyNotAvailable,
+    _LazyModule,
+    is_torch_available,
+)
 
-_import_structure = {"configuration_aimv2": ["AIMv2Config"]}
+_import_structure = {
+    "configuration_aimv2": ["AIMv2Config"],
+    "modeling_aimv2": ["AIMv2Model", "AIMv2PreTrainedModel"],
+}
 
 try:
     if not is_torch_available():
@@ -25,7 +32,6 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_aimv2"] = [
-        "AIMv2ForImageClassification",
         "AIMv2Model",
         "AIMv2PreTrainedModel",
     ]
@@ -39,13 +45,11 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_aimv2 import (
-            AIMv2ForImageClassification,
-            AIMv2Model,
-            AIMv2PreTrainedModel,
-        )
+        from .modeling_aimv2 import AIMv2Model, AIMv2PreTrainedModel
 
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    sys.modules[__name__] = _LazyModule(
+        __name__, globals()["__file__"], _import_structure, module_spec=__spec__
+    )

@@ -3710,7 +3710,6 @@ else:
     )
     _import_structure["models.aimv2"].extend(
         [
-            "AIMv2ForImageClassification",
             "AIMv2Model",
             "AIMv2PreTrainedModel",
         ]
@@ -8247,7 +8246,6 @@ if TYPE_CHECKING:
             ViTPreTrainedModel,
         )
         from .models.aimv2 import (
-            AIMv2ForImageClassification,
             AIMv2Model,
             AIMv2PreTrainedModel,
         )

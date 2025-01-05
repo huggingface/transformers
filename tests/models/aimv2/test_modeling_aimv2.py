@@ -34,7 +34,7 @@ if is_torch_available():
     import torch
     from torch import nn
 
-    from transformers import AIMv2ForImageClassification, AIMv2Model, AIMv2PreTrainedModel
+    from transformers import AIMv2ForImageClassification, AIMv2Model, AIMv2PreTrainedModel, AIMv2PatchEmbeddings
 
 if is_vision_available():
     from PIL import Image
@@ -61,6 +61,7 @@ class AIMv2ModelTester:
         type_sequence_label_size=10,
         initializer_range=0.02,
         scope=None,
+        norm_layer="rmsnorm",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -79,6 +80,7 @@ class AIMv2ModelTester:
         self.type_sequence_label_size = type_sequence_label_size
         self.initializer_range = initializer_range
         self.scope = scope
+        self.norm_layer = norm_layer
 
         # in AIMv2, the seq length equals the number of patches
         num_patches = (image_size // patch_size) ** 2
@@ -184,10 +186,10 @@ class AIMv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def test_model_common_attributes(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
+    
         for model_class in self.all_model_classes:
             model = model_class(config)
-            self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
+            self.assertIsInstance(model.get_input_embeddings(), (AIMv2PatchEmbeddings))
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
 
