@@ -24,7 +24,7 @@
 
 <Tip>
 
-لرؤية جميع البنى والنقاط المتوافقة مع هذه المهمة، نوصي بالتحقق من [صفحة المهمة](https://huggingface.co/tasks/token-classification).
+للاطلاع جميع البنى والنقاط المتوافقة مع هذه المهمة، نوصي بالرجوع من [صفحة المهمة](https://huggingface.co/tasks/token-classification).
 
 </Tip>
 
