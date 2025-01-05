@@ -1,14 +1,13 @@
-<!-- حقوق النشر 2022 فريق هاجينج فيس. جميع الحقوق محفوظة.
-
-مرخص بموجب رخصة أباتشي، الإصدار 2.0 (الرخصة)؛ لا يجوز لك استخدام هذا الملف إلا وفقًا لشروط الرخصة. يمكنك الحصول على نسخة من الرخصة على
-
-http://www.apache.org/licenses/LICENSE-2.0
-
-ما لم يتطلب القانون المعمول به أو يتم الاتفاق عليه كتابيًا، يتم توزيع البرامج الموزعة بموجب الرخصة على أساس "كما هي" بدون ضمانات أو شروط من أي نوع، سواء كانت صريحة أو ضمنية. راجع الرخصة للحصول على اللغة المحددة التي تحكم الأذونات والقيود بموجب الرخصة.
-
-⚠️ يرجى ملاحظة أن هذا الملف مكتوب بلغة Markdown ولكنه يحتوي على بناء جملة محدد لمبني المستندات الخاص بنا (يشبه MDX) والذي قد لا يتم عرضه بشكل صحيح في عارض Markdown الخاص بك.
-
--->
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+	Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+	the License. You may obtain a copy of the License at
+	http://www.apache.org/licenses/LICENSE-2.0
+	Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+	an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+	specific language governing permissions and limitations under the License.
+	⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+	rendered properly in your Markdown viewer.
+	-->
 
 # تصنيف الرموز(Token classification)
 
