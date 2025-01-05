@@ -203,3 +203,34 @@ class TestAttentionMaskIssue(unittest.TestCase):
         
         print("\n4D mask:")
         print(mask_4d[0, 0])
+
+    def prepare_packed_sequence(self):
+        """Helper to prepare a packed sequence with 4D attention mask"""
+        texts = ["Hello world", "This is a test"]
+        encoded = self.tokenizer(texts)
+        
+        total_length = sum(len(x) for x in encoded["input_ids"])
+        input_ids = torch.zeros((1, total_length), dtype=torch.long)
+        
+        # Create 4D attention mask initialized to -inf
+        mask_4d = torch.full(
+            (1, 1, total_length, total_length), 
+            float('-inf'),
+            dtype=torch.float
+        )
+        
+        offset = 0
+        for ids in encoded["input_ids"]:
+            length = len(ids)
+            input_ids[0, offset:offset + length] = torch.tensor(ids)
+            # Set valid attention positions to 0.0
+            mask_4d[0, 0, offset:offset + length, offset:offset + length] = 0.0
+            offset += length
+            
+        # Add debugging print
+        print("Mask statistics:")
+        print("- Total positions:", mask_4d.numel())
+        print("- Masked positions:", (mask_4d == float('-inf')).sum().item())
+        print("- Unmasked positions:", (mask_4d == 0).sum().item())
+        
+        return input_ids, mask_4d
