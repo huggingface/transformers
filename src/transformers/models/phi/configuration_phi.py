@@ -198,6 +198,3 @@ class PhiConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-
-
-__all__ = ["PhiConfig"]

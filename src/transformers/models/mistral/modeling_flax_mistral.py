@@ -740,6 +740,3 @@ append_call_sample_docstring(
     _CONFIG_FOR_DOC,
     real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
 )
-
-
-__all__ = ["FlaxMistralForCausalLM", "FlaxMistralModel", "FlaxMistralPreTrainedModel"]
