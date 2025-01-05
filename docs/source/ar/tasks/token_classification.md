@@ -400,7 +400,7 @@ pip install transformers datasets evaluate seqeval
 
 <Tip>
 
-للحصول على مثال أكثر عمقًا حول كيفية تعديل نموذج لتصنيف الرموز، ألق نظرة على الدفتر المقابل
+للحصول على مثال أكثر تفصيلاً حول كيفية تعديل نموذج لتصنيف الرموز، ألق نظرة على الدفتر المقابل
 [دفتر PyTorch](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification.ipynb)
 أو [دفتر TensorFlow](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb).
 
