@@ -20,7 +20,7 @@
 سيوضح لك هذا الدليل كيفية:
 
 1. ضبط [DistilBERT](https://huggingface.co/distilbert/distilbert-base-uncased) على مجموعة بيانات [WNUT 17](https://huggingface.co/datasets/wnut_17) للكشف عن كيانات جديدة.
-2. استخدام نموذج الضبط الدقيق الخاص بك للاستنتاج.
+2.  استخدام نموذجك المضبوط بدقة للاستدلال.
 
 <Tip>
 
