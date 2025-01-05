@@ -234,3 +234,6 @@ class TestAttentionMaskIssue(unittest.TestCase):
         print("- Unmasked positions:", (mask_4d == 0).sum().item())
         
         return input_ids, mask_4d
+    
+if __name__ == "__main__":
+    unittest.main()
