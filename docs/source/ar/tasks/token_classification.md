@@ -504,7 +504,7 @@ pip install transformers datasets evaluate seqeval
 ```
 </pt>
 <tf>
-قم بتقسيم النص إلى رموز وعودة تنسورات TensorFlow:
+قسّم النص إلى رموز وأرجع المُوتّرات ب TensorFlow:
 
 ```py
 >>> from transformers import AutoTokenizer
