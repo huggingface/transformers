@@ -178,7 +178,7 @@ pip install transformers datasets evaluate seqeval
 >>> seqeval = evaluate.load("seqeval")
 ```
 
-احصل على تسميات الكيانات المسماة (NER) أولاً، ثم قم بإنشاء دالة تمرر تنبؤاتك وتسمياتك الصحيحة إلى [`~evaluate.EvaluationModule.compute`] لحساب الدرجات:
+احصل على تسميات الكيانات المسماة (NER) أولاً،ثم أنشئ دالة تُمرر تنبؤاتك وتسمياتك الصحيحة إلى [`~evaluate.EvaluationModule.compute`] لحساب النتائج:
 
 ```py
 >>> import numpy as np
