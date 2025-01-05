@@ -48,3 +48,21 @@ class TestAttentionMaskIssue(unittest.TestCase):
                 attention_mask[i, :len(mask)] = torch.tensor(mask)
                 
             return input_ids, attention_mask
+    
+    def test_attention_mask_shapes(self):
+        # Test both regular and packed versions
+        input_ids_regular, mask_regular = self.prepare_data(packing=False)
+        output_regular = self.model(input_ids=input_ids_regular, attention_mask=mask_regular)
+        
+        input_ids_packed, mask_packed = self.prepare_data(packing=True)
+        output_packed = self.model(input_ids=input_ids_packed, attention_mask=mask_packed)
+        
+        # Verify outputs have expected shapes
+        self.assertEqual(
+            output_regular.logits.shape[:-1],
+            input_ids_regular.shape
+        )
+        self.assertEqual(
+            output_packed.logits.shape[:-1],
+            input_ids_packed.shape
+        )
