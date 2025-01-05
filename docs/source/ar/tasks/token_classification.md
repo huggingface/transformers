@@ -112,7 +112,7 @@ pip install transformers datasets evaluate seqeval
 ['[CLS]', '@', 'paul', '##walk', 'it', "'", 's', 'the', 'view', 'from', 'where', 'i', "'", 'm', 'living', 'for', 'two', 'weeks', '.', 'empire', 'state', 'building', '=', 'es', '##b', '.', 'pretty', 'bad', 'storm', 'here', 'last', 'evening', '.', '[SEP]']
 ```
 
-ومع ذلك، يضيف هذا بعض الرموز الخاصة `[CLS]` و`[SEP]` وتحليل الكلمات الفرعية يخلق عدم تطابق بين الإدخال والتسميات. قد يتم تقسيم كلمة واحدة تقابل تسمية واحدة الآن إلى كلمتين فرعيتين. ستحتاج إلى إعادة محاذاة الرموز والتسميات عن طريق:
+ومع ذلك، يضيف هذا بعض الرموز الخاصة `[CLS]` و`[SEP]` وتقسيم الكلمات إلى أجزاء يُنشئ عدم تطابق بين المُدخلات والتسميات. قد يتم تقسيم كلمة واحدة تقابل تسمية واحدة الآن إلى كلمتين فرعيتين. ستحتاج إلى إعادة محاذاة الرموز والتسميات عن طريق:
 
 1. ربط كل رمز بالكلمة الأصلية باستخدام الخاصية [`word_ids`](https://huggingface.co/docs/transformers/main_classes/tokenizer#transformers.BatchEncoding.word_ids).
 2. تعيين التسمية `-100` للرموز الخاصة `[CLS]` و`[SEP]` بحيث يتم تجاهلها بواسطة دالة الخسارة PyTorch (انظر [CrossEntropyLoss](https://pytorch.org/docs/stable/generated/torch.nn.CrossEntropyLoss.html)).
