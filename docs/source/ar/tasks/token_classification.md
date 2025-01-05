@@ -382,7 +382,7 @@ pip install transformers datasets evaluate seqeval
 ... )
 ```
 
-ثم قم بتجميع مكالماتك معًا:
+ثم جمّع callbacks الخاصة بك معًا:
 
 ```py
 >>> callbacks = [metric_callback, push_to_hub_callback]
