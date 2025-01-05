@@ -459,7 +459,7 @@ pip install transformers datasets evaluate seqeval
 
 <frameworkcontent>
 <pt>
-قم بتقسيم النص إلى رموز وعودة تنسورات PyTorch:
+قسّم النص إلى رموز وأرجع المُوتّرات بلغة PyTorch:
 
 ```py
 >>> from transformers import AutoTokenizer
