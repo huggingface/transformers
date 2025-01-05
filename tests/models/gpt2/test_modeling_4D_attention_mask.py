@@ -80,3 +80,13 @@ class TestAttentionMaskIssue(unittest.TestCase):
         
         # Outputs should be nearly identical
         torch.testing.assert_close(output_4d.logits, output_2d.logits)
+
+    def test_causal_attention(self):
+        # Test causal attention is preserved with 4D masks
+        input_ids, mask_4d = self.prepare_data(packing=True)
+        outputs = self.model(input_ids, attention_mask=mask_4d, output_attentions=True)
+        
+        # Verify upper triangle is masked
+        attentions = outputs.attentions[0]  # First layer
+        upper_triangle = torch.triu(attentions, diagonal=1)
+        assert torch.all(upper_triangle == 0)
