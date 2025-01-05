@@ -124,3 +124,28 @@ class TestAttentionMaskIssue(unittest.TestCase):
             rtol=1e-5,
             atol=1e-5
         )
+
+    def test_edge_cases(self):
+        # Test edge cases
+        
+        # 1. Empty sequence (just padding)
+        empty_ids = torch.zeros((1, 10), dtype=torch.long)
+        empty_mask = torch.full((1, 1, 10, 10), float("-inf"))
+        outputs = self.model(empty_ids, attention_mask=empty_mask)
+        self.assertEqual(outputs.logits.shape, (1, 10, self.model.config.vocab_size))
+        
+        # 2. Single token
+        single_token = torch.tensor([[1]], dtype=torch.long)
+        single_mask = torch.zeros((1, 1, 1, 1))
+        outputs = self.model(single_token, attention_mask=single_mask)
+        self.assertEqual(outputs.logits.shape, (1, 1, self.model.config.vocab_size))
+        
+        # 3. Maximum context length
+        max_length = self.model.config.max_position_embeddings
+        long_ids = torch.ones((1, max_length), dtype=torch.long)
+        long_mask = torch.zeros((1, 1, max_length, max_length))
+        outputs = self.model(long_ids, attention_mask=long_mask)
+        self.assertEqual(
+            outputs.logits.shape,
+            (1, max_length, self.model.config.vocab_size)
+        )
