@@ -413,7 +413,6 @@ def _get_wsd_scheduler_lambda(
         return max(0.0, factor)
 
     if num_training_steps is not None:
-
         if current_step < num_training_steps - num_decay_steps:
             return 1.0
 
@@ -430,7 +429,6 @@ def _get_wsd_scheduler_lambda(
             factor = factor * (1.0 - min_lr_ratio) + min_lr_ratio
             return max(0.0, factor)
     else:
-
         if current_step < num_warmup_steps + num_stable_steps:
             return 1.0
 
