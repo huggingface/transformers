@@ -563,7 +563,6 @@ class SEWFlashAttention2(SEWAttention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -883,15 +882,15 @@ class SEWEncoder(nn.Module):
         all_self_attentions = () if output_attentions else None
 
         if attention_mask is not None:
+            expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
             if self._use_flash_attention_2:
                 # make sure padded tokens output 0
-                hidden_states[~attention_mask] = 0.0
+                hidden_states[~expand_attention_mask] = 0.0
                 # 2d mask is passed through the layers
                 attention_mask = attention_mask if (attention_mask is not None and 0 in attention_mask) else None
             else:
                 # make sure padded tokens output 0
-                hidden_states[~attention_mask] = 0.0
-
+                hidden_states[~expand_attention_mask] = 0.0
                 input_lengths = (attention_mask.long()).sum(-1)
                 # apply pooling formula to get real output_lengths
                 output_lengths = input_lengths // self.config.squeeze_factor
@@ -1474,7 +1473,8 @@ class SEWForSequenceClassification(SEWPreTrainedModel):
             pooled_output = hidden_states.mean(dim=1)
         else:
             padding_mask = self._get_feature_vector_attention_mask(hidden_states.shape[1], attention_mask)
-            hidden_states[~padding_mask] = 0.0
+            expand_padding_mask = padding_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
+            hidden_states[~expand_padding_mask] = 0.0
             pooled_output = hidden_states.sum(dim=1) / padding_mask.sum(dim=1).view(-1, 1)
 
         logits = self.classifier(pooled_output)
@@ -1494,3 +1494,6 @@ class SEWForSequenceClassification(SEWPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = ["SEWForCTC", "SEWForSequenceClassification", "SEWModel", "SEWPreTrainedModel"]

@@ -849,7 +849,7 @@ class UMT5Stack(UMT5PreTrainedModel):
         output_attentions: bool,
     ):
         if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and 0.0 in attention_mask:
+            if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
 
@@ -2014,3 +2014,14 @@ class UMT5ForQuestionAnswering(UMT5PreTrainedModel):
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
         )
+
+
+__all__ = [
+    "UMT5EncoderModel",
+    "UMT5ForConditionalGeneration",
+    "UMT5ForQuestionAnswering",
+    "UMT5ForSequenceClassification",
+    "UMT5ForTokenClassification",
+    "UMT5Model",
+    "UMT5PreTrainedModel",
+]

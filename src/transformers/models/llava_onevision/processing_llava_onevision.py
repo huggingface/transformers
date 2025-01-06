@@ -315,3 +315,6 @@ class LlavaOnevisionProcessor(ProcessorMixin):
             )
 
         return processor
+
+
+__all__ = ["LlavaOnevisionProcessor"]

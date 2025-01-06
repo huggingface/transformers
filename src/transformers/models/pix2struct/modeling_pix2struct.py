@@ -1587,7 +1587,7 @@ class Pix2StructTextModel(Pix2StructPreTrainedModel):
         output_attentions: bool,
     ):
         if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and 0.0 in attention_mask:
+            if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
 
@@ -1892,3 +1892,11 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel, GenerationMi
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
         )
+
+
+__all__ = [
+    "Pix2StructPreTrainedModel",
+    "Pix2StructForConditionalGeneration",
+    "Pix2StructVisionModel",
+    "Pix2StructTextModel",
+]

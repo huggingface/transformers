@@ -362,7 +362,7 @@ class ChameleonAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2 with Llama->Chameleon
+# NO LONGER EXIST copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2 with Llama->Chameleon
 # TODO(joao): add me back asap :)
 class ChameleonFlashAttention2(ChameleonAttention):
     """
@@ -1385,7 +1385,7 @@ class ChameleonModel(ChameleonPreTrainedModel):
         output_attentions: bool,
     ):
         if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and 0.0 in attention_mask:
+            if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
 
