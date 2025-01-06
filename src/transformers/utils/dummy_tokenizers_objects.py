@@ -303,6 +303,13 @@ class MobileBertTokenizerFast(metaclass=DummyObject):
         requires_backends(self, ["tokenizers"])
 
 
+class ModernBertTokenizerFast(metaclass=DummyObject):
+    _backends = ["tokenizers"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["tokenizers"])
+
+
 class MPNetTokenizerFast(metaclass=DummyObject):
     _backends = ["tokenizers"]
 

@@ -1114,6 +1114,7 @@ else:
     _import_structure["models.mbart"].append("MBartTokenizerFast")
     _import_structure["models.mbart50"].append("MBart50TokenizerFast")
     _import_structure["models.mobilebert"].append("MobileBertTokenizerFast")
+    _import_structure["models.modernbert"].append("ModernBertTokenizerFast")
     _import_structure["models.mpnet"].append("MPNetTokenizerFast")
     _import_structure["models.mt5"].append("MT5TokenizerFast")
     _import_structure["models.mvp"].append("MvpTokenizerFast")
@@ -6136,6 +6137,7 @@ if TYPE_CHECKING:
         from .models.mbart import MBartTokenizerFast
         from .models.mbart50 import MBart50TokenizerFast
         from .models.mobilebert import MobileBertTokenizerFast
+        from .models.modernbert import ModernBertTokenizerFast
         from .models.mpnet import MPNetTokenizerFast
         from .models.mt5 import MT5TokenizerFast
         from .models.mvp import MvpTokenizerFast
