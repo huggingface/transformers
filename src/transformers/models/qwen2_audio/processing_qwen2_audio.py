@@ -40,15 +40,18 @@ class Qwen2AudioProcessor(ProcessorMixin):
         chat_template (`Optional[str]`, *optional*):
                 The Jinja template to use for formatting the conversation. If not provided, the default chat template
                 is used.
+        audio_token (`str`, *optional*, defaults to `"<|AUDIO|>"`):
+            The token to use for audio tokens.
     """
 
     attributes = ["feature_extractor", "tokenizer"]
     feature_extractor_class = "WhisperFeatureExtractor"
     tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, feature_extractor=None, tokenizer=None, chat_template=None):
+    def __init__(self, feature_extractor=None, tokenizer=None, chat_template=None, audio_token="<|AUDIO|>"):
         if chat_template is None:
             chat_template = self.default_chat_template
+        self.audio_token = tokenizer.audio_token if hasattr(tokenizer, "audio_token") else audio_token
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
     def __call__(
