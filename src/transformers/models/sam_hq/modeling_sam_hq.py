@@ -38,40 +38,43 @@ from .configuration_sam_hq import SamHQConfig, SamHQMaskDecoderConfig, SamHQProm
 @dataclass
 class SamHQVisionEncoderOutput(ModelOutput):
     """
-    Base class for SAM-HQ vision model's outputs. Inherits from SamVisionEncoderOutput with additional field for intermediate embeddings.
+    Base class for sam_hq vision model's outputs that also contains image embeddings obtained by applying the projection
+    layer to the pooler_output.
 
     Args:
-        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*):
+        image_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim)` *optional* returned when model is initialized with `with_projection=True`):
             The image embeddings obtained by applying the projection layer to the pooler_output.
-
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
+
+            Hidden-states of the model at the output of each layer plus the optional initial embedding outputs.
+        attentions (`tuple(torch.FloatTensor)`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+            sequence_length)`.
+
+            Attentions weights after the attention softmax, used to compute the weighted average in the self-attention
+            heads.
 
         intermediate_embeddings (`list(torch.FloatTensor)`, *optional*):
             A list of intermediate embeddings collected from certain blocks within the model, typically those without
             windowed attention. Each element in the list is of shape `(batch_size, sequence_length, hidden_size)`.
             This is specific to SAM-HQ and not present in base SAM.
-
-        hidden_states (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
-            one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`.
-
-        attentions (`tuple(torch.FloatTensor)`, *optional*):
-            Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-            sequence_length)`.
     """
 
     image_embeds: Optional[torch.FloatTensor] = None
-    intermediate_embeddings: Optional[List[torch.FloatTensor]] = None
     last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+    intermediate_embeddings: Optional[List[torch.FloatTensor]] = None
 
 
 @dataclass
 class SamHQImageSegmentationOutput(ModelOutput):
     """
-    Base class for Segment-Anything High Quality model's output
+    Base class for Segment-Anything model's output
 
     Args:
         iou_scores (`torch.FloatTensor` of shape `(batch_size, num_masks)`):
@@ -447,8 +450,8 @@ class SamHQVisionEncoder(nn.Module):
         self.patch_embed = SamHQPatchEmbeddings(config)
 
         self.pos_embed = None
-
         if config.use_abs_pos:
+            # Initialize absolute positional embedding with pretrain image size.
             self.pos_embed = nn.Parameter(
                 torch.zeros(
                     1,
@@ -984,7 +987,6 @@ class SamHQMaskDecoder(nn.Module):
         self.compress_vit_conv1 = nn.ConvTranspose2d(config.vit_dim, self.hidden_size, kernel_size=2, stride=2)
         self.compress_vit_norm = SamHQLayerNorm(self.hidden_size, data_format="channels_first")
         self.compress_vit_conv2 = nn.ConvTranspose2d(self.hidden_size, self.hidden_size // 8, kernel_size=2, stride=2)
-        self.activation = nn.GELU()
 
         # Embedding encoder
         self.encoder_conv1 = nn.ConvTranspose2d(self.hidden_size, self.hidden_size // 4, kernel_size=2, stride=2)

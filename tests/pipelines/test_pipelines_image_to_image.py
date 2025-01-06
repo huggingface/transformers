@@ -47,7 +47,7 @@ else:
 class ImageToImagePipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_IMAGE_TO_IMAGE_MAPPING
     examples = [
-        Image.open("./fixtures/test_samples/COCO/000000039769.png"),
+        Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png"),
         "http://images.cocodataset.org/val2017/000000039769.jpg",
     ]
 
