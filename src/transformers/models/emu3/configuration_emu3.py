@@ -180,6 +180,8 @@ class Emu3TextConfig(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the attention probabilities.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
 
     ```python
@@ -219,6 +221,7 @@ class Emu3TextConfig(PretrainedConfig):
         mlp_bias=False,
         attention_bias=False,
         attention_dropout: float = 0.1,
+        initializer_range: float = 0.02,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -235,6 +238,7 @@ class Emu3TextConfig(PretrainedConfig):
         self.rope_scaling = rope_scaling
         self.mlp_bias = mlp_bias
         self.attention_bias = attention_bias
+        self.initializer_range = initializer_range
         rope_config_validation(self)
 
         self.attention_dropout = attention_dropout

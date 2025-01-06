@@ -2152,12 +2152,14 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
                 input_ids = input_ids[:, cache_position]
 
+        # `clone` calls in below ensure a consistent stride. See #32227
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
             if past_key_values is not None:
                 position_ids = position_ids[:, -input_ids.shape[1] :]
+            position_ids = position_ids.clone(memory_format=torch.contiguous_format)
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if inputs_embeds is not None and cache_position[0] == 0:
