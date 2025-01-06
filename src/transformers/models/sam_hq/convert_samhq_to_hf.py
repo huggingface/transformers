@@ -29,7 +29,7 @@ import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import SamHQConfig, SamHQModel, SamHQVisionConfig, SamHQProcessor, SamImageProcessor
+from transformers import SamHQConfig, SamHQModel, SamHQProcessor, SamHQVisionConfig, SamImageProcessor
 
 
 def get_config(model_name):
@@ -54,9 +54,7 @@ def get_config(model_name):
         vit_dim = 1280  # Huge model dimension
 
     # Create mask decoder config with appropriate vit_dim
-    mask_decoder_config = {
-        "vit_dim": vit_dim
-    }
+    mask_decoder_config = {"vit_dim": vit_dim}
 
     config = SamHQConfig(
         vision_config=vision_config,
@@ -64,6 +62,7 @@ def get_config(model_name):
     )
 
     return config
+
 
 KEYS_TO_MODIFY_MAPPING = {
     "iou_prediction_head.layers.0": "iou_prediction_head.proj_in",
@@ -100,6 +99,7 @@ KEYS_TO_MODIFY_MAPPING = {
     "mask_decoder.embedding_maskfeature.3": "mask_decoder.mask_conv2",
 }
 
+
 def replace_keys(state_dict):
     model_state_dict = {}
     state_dict.pop("pixel_mean", None)
@@ -122,7 +122,7 @@ def replace_keys(state_dict):
                 new_key = new_key.replace("layers.1", "layers.0")
             elif layer_nb == 2:
                 new_key = new_key.replace("layers.2", "proj_out")
-        
+
         # Handle HQ-specific MLP layers
         if re.match(hf_mlp_layers_pattern, new_key):
             layer_nb = int(re.match(hf_mlp_layers_pattern, new_key).group(1))
@@ -141,6 +141,7 @@ def replace_keys(state_dict):
 
     return model_state_dict
 
+
 def convert_sam_hq_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, push_to_hub):
     config = get_config(model_name)
 
@@ -155,7 +156,7 @@ def convert_sam_hq_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, 
     device = "cuda" if torch.cuda.is_available() else "cpu"
 
     hf_model.load_state_dict(state_dict)
-    
+
     hf_model = hf_model.to(device)
 
     # Test the model with a sample image
@@ -167,12 +168,10 @@ def convert_sam_hq_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, 
 
     # Basic test without prompts
     inputs = processor(images=np.array(raw_image), return_tensors="pt").to(device)
-    
 
-    
     with torch.no_grad():
         hf_model(**inputs)
-    
+
     if model_name == "sam_hq_vit_b":
         inputs = processor(
             images=np.array(raw_image), input_points=input_points, input_labels=input_labels, return_tensors="pt"
@@ -190,14 +189,12 @@ def convert_sam_hq_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, 
             hf_model(**inputs)
 
         input_boxes = [[[75.0, 275.0, 1725.0, 850.0]]]
-        
 
         inputs = processor(images=np.array(raw_image), input_boxes=input_boxes, return_tensors="pt").to(device)
 
         with torch.no_grad():
             hf_model(**inputs)
 
-        
         input_points = [[[400, 650], [800, 650]]]
         input_labels = [[1, 1]]
 
@@ -208,7 +205,6 @@ def convert_sam_hq_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, 
         with torch.no_grad():
             output = hf_model(**inputs)
 
-
     if pytorch_dump_folder is not None:
         processor.save_pretrained(pytorch_dump_folder)
         hf_model.save_pretrained(pytorch_dump_folder)
@@ -217,7 +213,6 @@ def convert_sam_hq_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, 
         repo_id = f"sushmanth/{model_name}"
         processor.push_to_hub(repo_id)
         hf_model.push_to_hub(repo_id)
-
 
 
 if __name__ == "__main__":

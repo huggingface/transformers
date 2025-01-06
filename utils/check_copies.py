@@ -34,7 +34,7 @@ python utils/check_copies.py --fix_and_overwrite
 ```
 
 for a check that will fix all inconsistencies automatically (used by `make fix-copies`).
-"""    
+"""
 
 import argparse
 import glob

@@ -55,7 +55,6 @@ if is_torchvision_available():
     from torchvision.ops.boxes import batched_nms
 
 
-
 logger = logging.get_logger(__name__)
 
 
@@ -448,7 +447,6 @@ class SamHQImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
                     - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
@@ -775,7 +773,7 @@ class SamHQImageProcessor(BaseImageProcessor):
             stability_score_offset (`float`, *optional*, defaults to 1):
                 The offset for the stability score used in the `_compute_stability_score` method.
             return_tensors (`str`, *optional*, defaults to `pt`):
-                If `pt`, returns `torch.Tensor`. If `tf`, returns `tf.Tensor`.
+                If `pt`, returns `torch.Tensor`.
         """
         if return_tensors == "pt":
             return self._filter_masks_pt(
@@ -1180,4 +1178,3 @@ def _postprocess_for_mg(rle_masks, iou_scores, mask_boxes, amg_crops_nms_thresh=
     masks = [_rle_to_mask(rle) for rle in rle_masks]
 
     return masks, iou_scores, rle_masks, mask_boxes
-

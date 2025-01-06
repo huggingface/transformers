@@ -19,7 +19,6 @@ __import_structure = {
 }
 
 
-
 try:
     if not is_torch_available():
         raise OptionalDependencyNotAvailable()
@@ -49,7 +48,6 @@ if TYPE_CHECKING:
     )
     from .processing_samhq import SamHQProcessor
 
-
     try:
         if not is_torch_available():
             raise OptionalDependencyNotAvailable()
@@ -57,7 +55,6 @@ if TYPE_CHECKING:
         pass
     else:
         from .modeling_sam_hq import SamHQModel, SamHQPreTrainedModel
-
 
     try:
         if not is_vision_available():

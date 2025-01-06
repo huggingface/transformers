@@ -5654,8 +5654,8 @@ if TYPE_CHECKING:
     )
     from .models.sam_hq import (
         SamHQConfig,
-        SamHQProcessor,
         SamHQMaskDecoderConfig,
+        SamHQProcessor,
         SamHQPromptEncoderConfig,
         SamHQVisionConfig,
     )

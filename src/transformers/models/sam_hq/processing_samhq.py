@@ -16,7 +16,6 @@
 Processor class for SAMHQ
 """
 
-
 from copy import deepcopy
 from typing import Optional, Union
 
@@ -24,8 +23,7 @@ import numpy as np
 
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
-from ...utils import TensorType,  is_torch_available
-
+from ...utils import TensorType, is_torch_available
 
 
 if is_torch_available():
@@ -44,6 +42,7 @@ class SamHQProcessor(ProcessorMixin):
         image_processor (`SamImageProcessor`):
             An instance of [`SamImageProcessor`]. The image processor is a required input.
     """
+
     attributes = ["image_processor"]
     image_processor_class = "SamImageProcessor"
 
@@ -52,8 +51,6 @@ class SamHQProcessor(ProcessorMixin):
         self.current_processor = self.image_processor
         self.point_pad_value = -10
         self.target_size = self.image_processor.size["longest_edge"]
-
-
 
     def __call__(
         self,
@@ -75,7 +72,6 @@ class SamHQProcessor(ProcessorMixin):
             return_tensors=return_tensors,
             **kwargs,
         )
-
 
         # pop arguments that are not used in the foward but used nevertheless
         original_sizes = encoding_image_processor["original_sizes"]
@@ -99,8 +95,6 @@ class SamHQProcessor(ProcessorMixin):
         )
 
         return encoding_image_processor
-    
-
 
     def _normalize_and_convert(
         self,
@@ -144,8 +138,6 @@ class SamHQProcessor(ProcessorMixin):
                 ]
             input_boxes = np.array(input_boxes)
 
-
-        
         if input_boxes is not None:
             if return_tensors == "pt":
                 input_boxes = torch.from_numpy(input_boxes)
@@ -163,7 +155,6 @@ class SamHQProcessor(ProcessorMixin):
             encoding_image_processor.update({"input_labels": input_labels})
 
         return encoding_image_processor
-
 
     def _pad_points_and_labels(self, input_points, input_labels):
         r"""
@@ -256,12 +247,3 @@ class SamHQProcessor(ProcessorMixin):
 
     def post_process_masks(self, *args, **kwargs):
         return self.image_processor.post_process_masks(*args, **kwargs)
-
-
-
-    
-    
-
-
-
-    

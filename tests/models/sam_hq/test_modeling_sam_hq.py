@@ -237,7 +237,7 @@ class SamHQModelTester:
         with torch.no_grad():
             # Explicitly pass multimask_output=True
             result = model(pixel_values, multimask_output=True)
-        
+
         self.parent.assertEqual(result.iou_scores.shape, (self.batch_size, 1, 3))
         self.parent.assertEqual(result.pred_masks.shape[:3], (self.batch_size, 1, 3))
 
@@ -247,7 +247,7 @@ class SamHQModelTester:
         model.eval()
         with torch.no_grad():
             result = model.get_image_embeddings(pixel_values)
-            
+
         self.parent.assertEqual(result[0][0].shape, (self.output_channels, 12, 12))
 
     def create_and_check_get_image_hidden_states(self, config, pixel_values):
@@ -260,7 +260,6 @@ class SamHQModelTester:
                 output_hidden_states=True,
                 return_dict=True,
             )
-            
 
         # after computing the convolutional features
         expected_hidden_states_shape = (self.batch_size, 12, 12, 768)
@@ -273,8 +272,6 @@ class SamHQModelTester:
                 output_hidden_states=True,
                 return_dict=False,
             )
-
-            
 
         # after computing the convolutional features
         expected_hidden_states_shape = (self.batch_size, 12, 12, 768)
