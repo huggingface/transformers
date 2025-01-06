@@ -13,7 +13,7 @@ docs/ @stevhliu
 /src/transformers/models/*/*_modeling* @Rocketknight1 # for appropriate dispatch !a
 /src/transformers/**/*_tokenization* @ArthurZucker
 /src/tranformers/generation/ @gante
-trainer.py @muellerzr
+trainer.py @muellerzr @SunMarc
 /src/transformers/pipeline @Rocketknight1 @yonigozlan
 /src/transformers/integrations @SunMarc @MekkCyber @muellerzr
 /src/transformers/quantizers @SunMarc @MekkCyber
