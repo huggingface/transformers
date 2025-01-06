@@ -390,6 +390,7 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        device: Optional["torch.device"] = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -437,6 +438,8 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+            device (`torch.device`, *optional*):
+                The device to process the images on. If unset, the device is inferred from the input images.
         """
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_extra_kwargs)
 
@@ -458,17 +461,16 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
         image_std = image_std if image_std is not None else self.image_std
         do_pad = do_pad if do_pad is not None else self.do_pad
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
-        device = kwargs.pop("device", None)
+        device = device if device is not None else self.device
 
         images = self._prepare_input_images(
             images=images,
             do_convert_rgb=do_convert_rgb,
-            device=device,
             input_data_format=input_data_format,
+            device=device,
         )
 
         image_mean, image_std, size, crop_size, interpolation = self._prepare_process_arguments(
-            device=images[0].device,
             do_resize=do_resize,
             size=size,
             resample=resample,
@@ -480,6 +482,7 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
             image_std=image_std,
             return_tensors=return_tensors,
             data_format=data_format,
+            device=images[0].device,
             **kwargs,
         )
 

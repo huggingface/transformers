@@ -205,6 +205,7 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        device: Optional["torch.device"] = None,
         **kwargs,
     ) -> BatchMixFeature:
         """
@@ -254,6 +255,8 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+            device (`torch.device`, *optional*):
+                The device to process the images on. If unset, the device is inferred from the input images.
         """
         patch_size = patch_size if patch_size is not None else self.patch_size
         patch_size = get_size_dict(patch_size, default_to_square=True)
@@ -267,7 +270,7 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
-        device = kwargs.pop("device", None)
+        device = device if device is not None else self.device
 
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
@@ -333,13 +336,10 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
                         interpolation=interpolation,
                     )
 
-                if do_rescale and do_normalize:
-                    # fused rescale and normalize
-                    image = F.normalize(image.to(dtype=torch.float32), new_mean, new_std)
-                elif do_rescale:
-                    image = image * rescale_factor
-                elif do_normalize:
-                    image = F.normalize(image, image_mean, image_std)
+                # Fused rescale and normalize
+                image = self.rescale_and_normalize(
+                    image, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+                )
 
                 images.append(image)
                 image_sizes.append(get_image_size(image, input_data_format))

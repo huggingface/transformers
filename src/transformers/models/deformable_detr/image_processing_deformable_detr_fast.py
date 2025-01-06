@@ -669,6 +669,7 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         pad_size: Optional[Dict[str, int]] = None,
+        device: Optional["torch.device"] = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -744,6 +745,8 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
                 The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
                 provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
                 height and width in the batch.
+            device (`torch.device`, *optional*):
+                The device to process the images on. If unset, the device is inferred from the input images.
         """
         if "pad_and_return_pixel_mask" in kwargs:
             logger.warning_once(
@@ -773,7 +776,7 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
         do_pad = self.do_pad if do_pad is None else do_pad
         pad_size = self.pad_size if pad_size is None else pad_size
         format = self.format if format is None else format
-        device = kwargs.pop("device", None)
+        device = device if device is not None else self.device
 
         # Make hashable for cache
         size = SizeDict(**size)
