@@ -364,27 +364,6 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_pad = do_pad
         self.pad_size = pad_size
-        self._valid_processor_keys = [
-            "images",
-            "annotations",
-            "return_segmentation_masks",
-            "masks_path",
-            "do_resize",
-            "size",
-            "resample",
-            "do_rescale",
-            "rescale_factor",
-            "do_normalize",
-            "do_convert_annotations",
-            "image_mean",
-            "image_std",
-            "do_pad",
-            "pad_size",
-            "format",
-            "return_tensors",
-            "data_format",
-            "input_data_format",
-        ]
 
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
@@ -776,7 +755,6 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
         do_pad = self.do_pad if do_pad is None else do_pad
         pad_size = self.pad_size if pad_size is None else pad_size
         format = self.format if format is None else format
-        device = device if device is not None else self.device
 
         # Make hashable for cache
         size = SizeDict(**size)
@@ -788,7 +766,7 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
 
         if image_type not in [ImageType.PIL, ImageType.TORCH, ImageType.NUMPY]:
             raise ValueError(f"Unsupported input image type {image_type}")
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_extra_kwargs)
 
         self._validate_input_arguments(
             do_rescale=do_rescale,

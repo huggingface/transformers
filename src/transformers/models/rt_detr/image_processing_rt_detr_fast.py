@@ -565,7 +565,6 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
         pad_size = self.pad_size if pad_size is None else pad_size
         format = self.format if format is None else format
         return_tensors = "pt" if return_tensors is None else return_tensors
-        device = device if device is not None else self.device
 
         # Make hashable for cache
         size = SizeDict(**size)
