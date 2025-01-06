@@ -38,6 +38,7 @@ if TYPE_CHECKING:
     from .configuration_fast import FAST_PRETRAINED_CONFIG_ARCHIVE_MAP, FastConfig
     from .image_processing_fast import FastImageProcessor
 
+
     try:
         if not is_torch_available():
             raise OptionalDependencyNotAvailable()

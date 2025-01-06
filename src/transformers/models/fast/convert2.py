@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 Microsoft Research and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 the Fast authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,29 +14,40 @@
 # limitations under the License.
 
 import argparse
-import copy
 import json
 import logging
+import re
+from collections import OrderedDict
 
 import requests
 import torch
+from huggingface_hub import hf_hub_download
 from PIL import Image
 
-from transformers import FastConfig, FastForSceneTextRecognition, TextNetConfig
+from transformers import AutoConfig, AutoBackbone
+from transformers.models.fast.modeling_textnet import TextNetBackbone
+from transformers.models.fast.configuration_textnet import TextNetConfig
+from transformers.models.fast.image_processing_textnet import TextNetImageProcessor
+from transformers import FastConfig, FastForSceneTextRecognition
 from transformers.models.fast.image_processing_fast import FastImageProcessor
+AutoConfig.register("textnet", TextNetConfig)
+AutoBackbone.register(TextNetConfig, TextNetBackbone)
+
 
 
 tiny_config_url = "https://raw.githubusercontent.com/czczup/FAST/main/config/fast/nas-configs/fast_tiny.config"
 small_config_url = "https://raw.githubusercontent.com/czczup/FAST/main/config/fast/nas-configs/fast_small.config"
 base_config_url = "https://raw.githubusercontent.com/czczup/FAST/main/config/fast/nas-configs/fast_base.config"
 
-rename_key_mappings = {"bn": "batch_norm", "hor": "horizontal", "ver": "vertical", "det_head": "text_detection_head", "first_conv": "stem"}
-
-
-def prepare_img():
-    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+rename_key_mappings = {
+    "module.backbone": "backbone.textnet",
+    "first_conv": "stem",
+    "bn": "batch_norm",
+    "ver": "vertical",
+    "hor": "horizontal",
+    "module.neck": "neck",
+    "module.det_head": "text_detection_head",
+}
 
 
 def prepare_config(size_config_url, size, pooling_size, min_area, bbox_type, loss_bg):
@@ -58,8 +69,7 @@ def prepare_config(size_config_url, size, pooling_size, min_area, bbox_type, los
                     else:
                         # If the key is not in merged_dict, create a new list with the value
                         merged_dict[key] = [value]
-        backbone_config[f"encoder.stage{stage_ix}"] = merged_dict
-
+        backbone_config[f"stage{stage_ix}"] = merged_dict
 
     neck_in_channels = []
     neck_out_channels = []
@@ -82,47 +92,35 @@ def prepare_config(size_config_url, size, pooling_size, min_area, bbox_type, los
             neck_groups.append(layer_dict["groups"])
 
     textnet_config = TextNetConfig(
-        kernel_size=config_dict["stem"]["kernel_size"],
-        stride=config_dict["stem"]["stride"],
-        dilation=config_dict["stem"]["dilation"],
-        groups=config_dict["stem"]["groups"],
-        bias=config_dict["stem"]["bias"],
-        has_shuffle=config_dict["stem"]["has_shuffle"],
-        in_channels=config_dict["stem"]["in_channels"],
-        out_channels=config_dict["stem"]["out_channels"],
-        use_bn=config_dict["stem"]["use_bn"],
-        act_func=config_dict["stem"]["act_func"],
-        dropout_rate=config_dict["stem"]["dropout_rate"],
-        ops_order=config_dict["stem"]["ops_order"],
-        stage1_in_channels=backbone_config["stage1"]["in_channels"],
-        stage1_out_channels=backbone_config["stage1"]["out_channels"],
-        stage1_kernel_size=backbone_config["stage1"]["kernel_size"],
-        stage1_stride=backbone_config["stage1"]["stride"],
-        stage1_dilation=backbone_config["stage1"]["dilation"],
-        stage1_groups=backbone_config["stage1"]["groups"],
-        stage2_in_channels=backbone_config["stage2"]["in_channels"],
-        stage2_out_channels=backbone_config["stage2"]["out_channels"],
-        stage2_kernel_size=backbone_config["stage2"]["kernel_size"],
-        stage2_stride=backbone_config["stage2"]["stride"],
-        stage2_dilation=backbone_config["stage2"]["dilation"],
-        stage2_groups=backbone_config["stage2"]["groups"],
-        stage3_in_channels=backbone_config["stage3"]["in_channels"],
-        stage3_out_channels=backbone_config["stage3"]["out_channels"],
-        stage3_kernel_size=backbone_config["stage3"]["kernel_size"],
-        stage3_stride=backbone_config["stage3"]["stride"],
-        stage3_dilation=backbone_config["stage3"]["dilation"],
-        stage3_groups=backbone_config["stage3"]["groups"],
-        stage4_in_channels=backbone_config["stage4"]["in_channels"],
-        stage4_out_channels=backbone_config["stage4"]["out_channels"],
-        stage4_kernel_size=backbone_config["stage4"]["kernel_size"],
-        stage4_stride=backbone_config["stage4"]["stride"],
-        stage4_dilation=backbone_config["stage4"]["dilation"],
-        stage4_groups=backbone_config["stage4"]["groups"],
+        stem_kernel_size=config_dict["first_conv"]["kernel_size"],
+        stem_stride=config_dict["first_conv"]["stride"],
+        stem_num_channels=config_dict["first_conv"]["in_channels"],
+        stem_out_channels=config_dict["first_conv"]["out_channels"],
+        stem_act_func=config_dict["first_conv"]["act_func"],
+        conv_layer_kernel_sizes=[
+            backbone_config["stage1"]["kernel_size"],
+            backbone_config["stage2"]["kernel_size"],
+            backbone_config["stage3"]["kernel_size"],
+            backbone_config["stage4"]["kernel_size"],
+        ],
+        conv_layer_strides=[
+            backbone_config["stage1"]["stride"],
+            backbone_config["stage2"]["stride"],
+            backbone_config["stage3"]["stride"],
+            backbone_config["stage4"]["stride"],
+        ],
+        hidden_sizes=[
+            config_dict["first_conv"]["out_channels"],
+            backbone_config["stage1"]["out_channels"][-1],
+            backbone_config["stage2"]["out_channels"][-1],
+            backbone_config["stage3"]["out_channels"][-1],
+            backbone_config["stage4"]["out_channels"][-1],
+        ],
         out_features=["stage1", "stage2", "stage3", "stage4"],
         out_indices=[1, 2, 3, 4],
     )
 
-    return FastConfig(
+    fast_config = FastConfig(
         use_timm_backbone=False,
         backbone_config=textnet_config,
         neck_in_channels=neck_in_channels,
@@ -156,6 +154,7 @@ def prepare_config(size_config_url, size, pooling_size, min_area, bbox_type, los
         loss_bg=loss_bg,
     )
 
+    return fast_config
 
 def get_small_model_config():
     pass
@@ -165,76 +164,108 @@ def get_base_model_config():
     pass
 
 
-def convert_fast_checkpoint(
-    checkpoint_url, checkpoint_config_url, pytorch_dump_folder_path, validate_logits, save_backbone_separately
-):
-    response = requests.get(checkpoint_config_url)
-    content = response.text
-    namespace = {}
-
-    exec(content, namespace)
-
-    model_config = namespace.get("model")
-    test_config = namespace.get("test_cfg", None)
-    data_config = namespace.get("data")
-
+def convert_fast_checkpoint(checkpoint_url, checkpoint_config_filename, pytorch_dump_folder_path, save_backbone_separately):
     config_filepath = hf_hub_download(repo_id="Raghavan/fast_model_config_files", filename="fast_model_configs.json")
+    # we download the json file for safety reasons
+    checkpoint_config_filename_to_json = checkpoint_config_filename.replace(".py", ".json")
+    config_model_file_path = hf_hub_download(repo_id="jadechoghari/fast-configs", filename=checkpoint_config_filename_to_json)
 
     with open(config_filepath) as f:
         content = json.loads(f.read())
     
-    model_config = content["model"]
-    test_config = content.get("test_cfg", None)
-    data_config = content["data"]
+    with open(config_model_file_path) as f:
+        content_model = json.loads(f.read())
 
+    size = content[checkpoint_config_filename]["short_size"]
 
+    #TODO: add logic for py/json files maybe both
+    model_config = content_model["model"]
+    test_config = content_model.get("test_cfg", None)
+    data_config = content_model["data"]
     min_area = 250
     bbox_type = "rect"
-    loss_bg = False
     if test_config is not None:
         min_area = test_config.get("min_area", min_area)
         bbox_type = test_config.get("bbox_type", bbox_type)
         loss_bg = test_config.get("loss_emb", None) == "EmbLoss_v2"
 
-    if "tiny" in model_config["backbone"]["config"]:
+    if "tiny" in content[checkpoint_config_filename]["config"]:
         config = prepare_config(
-            tiny_config_url, model_config["detection_head"]["pooling_size"], min_area, bbox_type, loss_bg
+            tiny_config_url, size, model_config["detection_head"]["pooling_size"], min_area, bbox_type, loss_bg
         )
-    elif "small" in model_config["backbone"]["config"]:
+
+    elif "small" in content[checkpoint_config_filename]["config"]:
         config = prepare_config(
-            small_config_url, model_config["detection_head"]["pooling_size"], min_area, bbox_type, loss_bg
+            small_config_url, size, model_config["detection_head"]["pooling_size"], min_area, bbox_type, loss_bg
         )
+
     else:
         config = prepare_config(
-            base_config_url, model_config["detection_head"]["pooling_size"], min_area, bbox_type, loss_bg
+            base_config_url, size, model_config["detection_head"]["pooling_size"], min_area, bbox_type, loss_bg
         )
-    size = 640
+    
     if "train" in data_config:
         if "short_size" in data_config["train"]:
             size = data_config["train"]["short_size"]
+
     model = FastForSceneTextRecognition(config)
     fast_image_processor = FastImageProcessor(
-        size={"height": size, "width": size},
+        size={"shortest_edge": size},
         min_area=config.min_area,
         bbox_type=config.bbox_type,
         pooling_size=config.head_pooling_size,
     )
     state_dict = torch.hub.load_state_dict_from_url(checkpoint_url, map_location="cpu", check_hash=True)["ema"]
-    state_dict_changed = copy.deepcopy(state_dict)
+    state_dict_changed = OrderedDict()
     for key in state_dict:
-        val = state_dict_changed.pop(key)
-        new_key = key.replace("module.", "").replace("backbone.", "backbone.textnet.")
-        for search, replacement in rename_key_mappings.items():
-            if search in new_key:
-                new_key = new_key.replace(search, replacement)
-        state_dict_changed[new_key] = val
-    model.load_state_dict(state_dict_changed)
+        #TODO: see if we add more
+        if "backbone" or "textnet" in key:
+            val = state_dict[key]
+            new_key = key
+            for search, replacement in rename_key_mappings.items():
+                if search in new_key:
+                    new_key = new_key.replace(search, replacement)
 
+            pattern = r"textnet\.stage(\d)"
+
+            def adjust_stage(match):
+                stage_number = int(match.group(1)) - 1
+                return f"textnet.encoder.stages.{stage_number}.stage"
+
+            # Using regex to find and replace the pattern in the string
+            new_key = re.sub(pattern, adjust_stage, new_key)
+            state_dict_changed[new_key] = val
+        
+    model.load_state_dict(state_dict_changed)
+    model.eval()
+
+    url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+    image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+
+    original_pixel_values = torch.tensor(
+        [0.1939, 0.3481, 0.4166, 0.3309, 0.4508, 0.4679, 0.4851, 0.4851, 0.3309, 0.4337]
+    )
+    pixel_values = fast_image_processor(image, return_tensors="pt").pixel_values
+    assert torch.allclose(original_pixel_values, pixel_values[0][0][3][:10], atol=1e-4)
+
+    with torch.no_grad():
+        output = model(pixel_values)
+
+    target_sizes = [(image.shape[1], image.shape[2]) for image in pixel_values]
+    threshold = 0.85
+    text_locations = fast_image_processor.post_process_text_detection(output, target_sizes, threshold, bbox_type="poly")
+    #TODO: update assert logic
+    # text_locations[0]["bboxes"][0][:10]
+    # assert torch.allclose(output["feature_maps"][-1][0][10][12][:10].detach(), expected_slice_backbone, atol=1e-3)
+    breakpoint()
+    #TODO: fix the safetensor sharing problem to use safetensors
+    model.text_detection_head.final.fused_conv.weight = model.text_detection_head.final.fused_conv.weight.clone()
+    model.text_detection_head.final.conv.weight = model.text_detection_head.final.conv.weight.clone()
     model.save_pretrained(pytorch_dump_folder_path)
     if save_backbone_separately:
         model.backbone.save_pretrained(pytorch_dump_folder_path + "/textnet/")
     fast_image_processor.save_pretrained(pytorch_dump_folder_path)
-    logging.info("The converted weights are save here : " + pytorch_dump_folder_path)
+    logging.info("The converted weights are saved here : " + pytorch_dump_folder_path)
 
 
 if __name__ == "__main__":
@@ -242,24 +273,15 @@ if __name__ == "__main__":
 
     parser.add_argument(
         "--checkpoint_url",
-        default="https://conversationhub.blob.core.windows.net/beit-share-public/beit/beit_base_patch16_224_pt22k_ft22kto1k.pth",
+        default="https://github.com/czczup/FAST/releases/download/release/fast_tiny_ic17mlt_640.pth",
         type=str,
         help="URL to the original PyTorch checkpoint (.pth file).",
     )
     parser.add_argument(
-        "--checkpoint_config_url",
-        default="https://conversationhub.blob.core.windows.net/beit-share-public/beit/beit_base_patch16_224_pt22k_ft22kto1k.pth",
+        "--checkpoint_config_filename",
+        default="fast_tiny_ic17mlt_640.py",
         type=str,
         help="URL to the original PyTorch checkpoint (.pth file).",
-    )
-    parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the folder to output PyTorch model."
-    )
-    parser.add_argument(
-        "--validate_logits",
-        default=False,
-        type=bool,
-        help="whether to assert logits outputs",
     )
     parser.add_argument(
         "--save_backbone_separately",
@@ -267,12 +289,14 @@ if __name__ == "__main__":
         type=bool,
         help="whether to assert logits outputs",
     )
+    parser.add_argument(
+        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the folder to output PyTorch model."
+    )
     args = parser.parse_args()
 
     convert_fast_checkpoint(
         args.checkpoint_url,
-        args.checkpoint_config_url,
+        args.checkpoint_config_filename,
         args.pytorch_dump_folder_path,
-        args.validate_logits,
         args.save_backbone_separately,
     )

@@ -35,7 +35,7 @@ from transformers import (
     PreTrainedModel,
     add_start_docstrings,
     is_timm_available,
-    requires_backends,
+    requires_backends
 )
 from transformers.utils import ModelOutput, add_start_docstrings_to_model_forward, replace_return_docstrings
 
@@ -610,7 +610,10 @@ class FastForSceneTextRecognition(FastPreTrainedModel):
                 **kwargs,
             )
         else:
+            #TODO: check how to configure this backbone
+            # from transformers.models.fast.modeling_textnet import TextNetBackbone
             backbone = AutoBackbone.from_config(config.backbone_config)
+            # backbone = TextNetBackbone.from_pretrained("/home/user/app/transformers/src/transformers/models/fast/ic17mlt_Fast_T")
 
         self.backbone = backbone
         self.neck = FASTNeck(config=config)
@@ -697,6 +700,12 @@ class FastForSceneTextRecognition(FastPreTrainedModel):
         features = (
             self.backbone(pixel_values) if self.config.use_timm_backbone else self.backbone(pixel_values).feature_maps
         )
+        from transformers.models.fast.modeling_textnet import TextNetBackbone
+        model_test = TextNetBackbone.from_pretrained("jadechoghari/textnet-tiny")
+        features = (
+            model_test(pixel_values).feature_maps
+        )
+
 
         hidden_states = self.neck(features)
 
