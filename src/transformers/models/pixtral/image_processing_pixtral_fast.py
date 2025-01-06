@@ -125,22 +125,6 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
         self.image_mean = image_mean if image_mean is not None else [0.48145466, 0.4578275, 0.40821073]
         self.image_std = image_std if image_std is not None else [0.26862954, 0.26130258, 0.27577711]
         self.do_convert_rgb = do_convert_rgb
-        self._valid_processor_keys = [
-            "images",
-            "do_resize",
-            "size",
-            "patch_size",
-            "resample",
-            "do_rescale",
-            "rescale_factor",
-            "do_normalize",
-            "image_mean",
-            "image_std",
-            "do_convert_rgb",
-            "return_tensors",
-            "data_format",
-            "input_data_format",
-        ]
 
     def resize(
         self,
@@ -270,9 +254,8 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
-        device = device if device is not None else self.device
 
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
+        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_extra_kwargs)
 
         images_list = make_list_of_images(images)
         image_type = get_image_type(images_list[0][0])
@@ -314,8 +297,8 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
 
         if do_rescale and do_normalize:
             # fused rescale and normalize
-            new_mean = torch.tensor(image_mean, device=images_list[0][0].device) * (1.0 / rescale_factor)
-            new_std = torch.tensor(image_std, device=images_list[0][0].device) * (1.0 / rescale_factor)
+            image_mean = torch.tensor(image_mean, device=images_list[0][0].device) * (1.0 / rescale_factor)
+            image_std = torch.tensor(image_std, device=images_list[0][0].device) * (1.0 / rescale_factor)
 
         batch_images = []
         batch_image_sizes = []

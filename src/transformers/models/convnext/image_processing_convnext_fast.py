@@ -264,7 +264,6 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
         return_tensors = "pt" if return_tensors is None else return_tensors
-        device = device if device is not None else self.device
 
         images = self._prepare_input_images(
             images=images,
