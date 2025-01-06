@@ -490,7 +490,7 @@ class Trainer:
                 f"The model you have picked ({model.__class__.__name__}) cannot be used as is for training: it only "
                 "computes hidden states and does not accept any labels. You should choose a model with a head "
                 "suitable for your task like any of the `AutoModelForXxx` listed at "
-                "httpsace.co/docs/transformers/model_doc/auto"
+                "https://huggingface.co/docs/transformers/model_doc/auto"
             )
 
         if getattr(model, "is_parallelizable", False) and getattr(model, "model_parallel", False):
