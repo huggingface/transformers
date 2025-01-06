@@ -21,10 +21,9 @@ import torch.utils.checkpoint
 from torch import Tensor, nn
 
 from ...configuration_utils import PretrainedConfig
-from ...utils import ModelOutput, add_start_docstrings, add_start_docstrings_to_model_forward, logging
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from ..sam.configuration_sam import SamConfig, SamPromptEncoderConfig, SamVisionConfig
 from ..sam.modeling_sam import (
-    SamVisionEncoderOutput,
     SamFeedForward,
     SamImageSegmentationOutput,
     SamLayerNorm,
@@ -36,9 +35,10 @@ from ..sam.modeling_sam import (
     SamPromptEncoder,
     SamTwoWayTransformer,
     SamVisionAttention,
+    SamVisionEncoder,
+    SamVisionEncoderOutput,
     SamVisionLayer,
     SamVisionNeck,
-    SamVisionEncoder,
 )
 
 
@@ -197,6 +197,7 @@ class SamHQVisionEncoderOutput(SamVisionEncoderOutput):
         windowed attention. Each element in the list is of shape `(batch_size, sequence_length, hidden_size)`.
         This is specific to SAM-HQ and not present in base SAM.
     """
+
     intermediate_embeddings: Optional[List[torch.FloatTensor]] = None
 
 
@@ -504,7 +505,6 @@ class SamHQMaskDecoder(nn.Module):
         self.compress_vit_conv1 = nn.ConvTranspose2d(config.vit_dim, self.hidden_size, kernel_size=2, stride=2)
         self.compress_vit_norm = SamHQLayerNorm(self.hidden_size, data_format="channels_first")
         self.compress_vit_conv2 = nn.ConvTranspose2d(self.hidden_size, self.hidden_size // 8, kernel_size=2, stride=2)
-        
 
         # Embedding encoder
         self.encoder_conv1 = nn.ConvTranspose2d(self.hidden_size, self.hidden_size // 4, kernel_size=2, stride=2)
