@@ -122,7 +122,7 @@ def divide_to_patches(
 
 class BaseImageProcessorFast(BaseImageProcessor):
     r"""
-    Constructs a Fast Base image processor.
+    Constructs a fast base image processor.
 
     Args:
         do_resize (`bool`, *optional*):
@@ -302,6 +302,27 @@ class BaseImageProcessorFast(BaseImageProcessor):
         """
         return F.normalize(image, mean, std)
 
+    def rescale_and_normalize(
+        self,
+        images: "torch.Tensor",
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: Union[float, List[float]],
+        image_std: Union[float, List[float]],
+    ) -> "torch.Tensor":
+        """
+        Rescale and normalize images.
+        """
+        if do_rescale and do_normalize:
+            images = self.normalize(images.to(dtype=torch.float32), image_mean, image_std)
+        elif do_rescale:
+            images = images * rescale_factor
+        elif do_normalize:
+            images = self.normalize(images, image_mean, image_std)
+
+        return images
+
     def center_crop(
         self,
         image: "torch.Tensor",
@@ -361,8 +382,8 @@ class BaseImageProcessorFast(BaseImageProcessor):
         self,
         images: ImageInput,
         do_convert_rgb: bool = None,
-        device: Optional["torch.device"] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        device: Optional["torch.device"] = None,
     ) -> List["torch.Tensor"]:
         """
         Prepare the input images for processing.
@@ -396,7 +417,6 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
     def _prepare_process_arguments(
         self,
-        device: Optional["torch.device"] = None,
         do_resize: bool = None,
         size: Dict[str, int] = None,
         resample: Optional[Union["PILImageResampling", "F.InterpolationMode"]] = None,
@@ -408,6 +428,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
+        device: Optional["torch.device"] = None,
     ) -> tuple:
         """
         Prepare the arguments for the process method.
@@ -432,7 +453,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         )
 
         if do_rescale and do_normalize:
-            # fused rescale and normalize
+            # Fused rescale and normalize
             image_mean = torch.tensor(image_mean, device=device) * (1.0 / rescale_factor)
             image_std = torch.tensor(image_std, device=device) * (1.0 / rescale_factor)
 
@@ -459,6 +480,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        device: Optional["torch.device"] = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -506,6 +528,8 @@ class BaseImageProcessorFast(BaseImageProcessor):
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+            device (`torch.device`, *optional*):
+                The device to process the images on. If unset, the device is inferred from the input images.
         """
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_extra_kwargs)
 
@@ -525,17 +549,16 @@ class BaseImageProcessorFast(BaseImageProcessor):
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
-        device = kwargs.pop("device", None)
+        device = device if device is not None else self.device
 
         images = self._prepare_input_images(
             images=images,
             do_convert_rgb=do_convert_rgb,
-            device=device,
             input_data_format=input_data_format,
+            device=device,
         )
 
         image_mean, image_std, size, crop_size, interpolation = self._prepare_process_arguments(
-            device=images[0].device,
             do_resize=do_resize,
             size=size,
             resample=resample,
@@ -547,6 +570,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
             image_std=image_std,
             return_tensors=return_tensors,
             data_format=data_format,
+            device=images[0].device,
         )
 
         # Group images by size for batched resizing
@@ -566,13 +590,9 @@ class BaseImageProcessorFast(BaseImageProcessor):
             if do_center_crop:
                 stacked_images = self.center_crop(stacked_images, crop_size)
             # Fused rescale and normalize
-            if do_rescale and do_normalize:
-                stacked_images = self.normalize(stacked_images.to(dtype=torch.float32), image_mean, image_std)
-            elif do_rescale:
-                stacked_images = stacked_images * rescale_factor
-            elif do_normalize:
-                stacked_images = self.normalize(stacked_images, image_mean, image_std)
-            processed_images_grouped[shape] = stacked_images
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
         processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images

@@ -65,3 +65,6 @@ class DeiTImageProcessorFast(BaseImageProcessorFast):
     do_center_crop = True
     do_rescale = True
     do_normalize = True
+
+
+__all__ = ["DeiTImageProcessorFast"]

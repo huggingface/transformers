@@ -137,7 +137,6 @@ class LlavaOnevisionProcessor(ProcessorMixin):
             - **pixel_values_videos** -- Pixel values of a video input to be fed to a model. Returned when `videos` is not `None`.
             - **image_sizes** -- Size of each image that will be used to unpad an image. Returned when `images` is not `None`.
         """
-        print("kwargs: ", kwargs)
 
         output_kwargs = self._merge_kwargs(
             LlavaOnevisionProcessorKwargs,
