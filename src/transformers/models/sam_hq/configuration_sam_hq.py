@@ -71,9 +71,10 @@ class SamHQPromptEncoderConfig(PretrainedConfig):
 
 class SamHQVisionConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`SamHQVisionModel`]. It is used to instantiate a
-    SAM HQ vision encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with defaults will yield a configuration similar to that of the SAM HQ Vision model.
+    This is the configuration class to store the configuration of a [`SamHQVisionModel`]. It is used to instantiate a SAM_HQ
+    vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
+    defaults will yield a similar configuration to that of the SAM_HQ ViT-h
+    [facebook/sam_hq-vit-huge](https://huggingface.co/facebook/sam_hq-vit-huge) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -94,7 +95,7 @@ class SamHQVisionConfig(PretrainedConfig):
         patch_size (`int`, *optional*, defaults to 16):
             Size of the patches to be extracted from the input image.
         hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string).
+            The non-linear activation function (function or string)
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):

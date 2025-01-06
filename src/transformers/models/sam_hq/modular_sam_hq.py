@@ -67,55 +67,6 @@ class SamHQPromptEncoderConfig(SamPromptEncoderConfig):
 
 
 class SamHQVisionConfig(SamVisionConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`SamHQVisionModel`]. It is used to instantiate a
-    SAM HQ vision encoder according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with defaults will yield a configuration similar to that of the SAM HQ Vision model.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        output_channels (`int`, *optional*, defaults to 256):
-            Dimensionality of the output channels in the Patch Encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_channels (`int`, *optional*, defaults to 3):
-            Number of channels in the input image.
-        image_size (`int`, *optional*, defaults to 1024):
-            Expected resolution. Target size of the resized input image.
-        patch_size (`int`, *optional*, defaults to 16):
-            Size of the patches to be extracted from the input image.
-        hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string).
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 1e-10):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        qkv_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add a bias to query, key, value projections.
-        mlp_ratio (`float`, *optional*, defaults to 4.0):
-            Ratio of mlp hidden dim to embedding dim.
-        use_abs_pos (`bool`, *optional*, defaults to `True`):
-            Whether to use absolute position embedding.
-        use_rel_pos (`bool`, *optional*, defaults to `True`):
-            Whether to use relative position embedding.
-        window_size (`int`, *optional*, defaults to 14):
-            Window size for relative position.
-        global_attn_indexes (`List[int]`, *optional*, defaults to `[2, 5, 8, 11]`):
-            The indexes of the global attention layers.
-        num_pos_feats (`int`, *optional*, defaults to 128):
-            The dimensionality of the position embedding.
-        mlp_dim (`int`, *optional*):
-            The dimensionality of the MLP layer in the Transformer encoder. If `None`, defaults to `mlp_ratio *
-            hidden_size`.
-    """
     pass
 
 
