@@ -472,7 +472,7 @@ class VipLlavaForConditionalGeneration(VipLlavaPreTrainedModel, GenerationMixin)
                 pixel_values=pixel_values, vision_feature_layers=vision_feature_layers
             )
 
-        if legacy_processing:
+        if legacy_processing and image_features is not None:
             logger.warning_once(
                 "Expanding inputs for image tokens in VipLLaVa should be done in processing. "
                 "Please add `patch_size` and `vision_feature_select_strategy` to the model's image processing config. "

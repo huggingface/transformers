@@ -863,7 +863,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
                 image_newline=self.image_newline,
             )
 
-        if legacy_processing:
+        if legacy_processing and image_features is not None:
             logger.warning_once(
                 "Expanding inputs for image tokens in LLaVa-NeXT should be done in processing. "
                 "Please add `patch_size` and `vision_feature_select_strategy` to the model's processing config or set directly "

@@ -954,7 +954,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
             video_features = torch.cat(video_features, dim=0)
             video_feature_lens = torch.tensor(video_feature_lens, dtype=torch.long, device=video_features.device)
 
-        if legacy_processing:
+        if legacy_processing and (image_features is not None or video_features is not None):
             logger.warning_once(
                 "Expanding inputs for image.video tokens in LLaVa-NeXT-Video should be done in processing. "
                 "Please add `patch_size` and `vision_feature_select_strategy` to the model's processing config or set directly "
