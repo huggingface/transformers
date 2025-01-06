@@ -37,7 +37,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    __import_structure["image_processing_sam"] = ["SamImageProcessor"]
+    __import_structure["image_processing_sam_hq"] = ["SamHQImageProcessor"]
 
 
 if TYPE_CHECKING:
@@ -65,7 +65,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from transformers.models.sam.image_processing_sam import SamImageProcessor
+        from transformers.models.sam_hq.image_processing_sam_hq import SamHQImageProcessor
 
 
 else:
