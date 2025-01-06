@@ -20,6 +20,7 @@ import unittest
 import pytest
 
 from transformers import AutoTokenizer, BambaConfig, is_torch_available
+from transformers.models.bamba.modular_bamba import get_cu_seq_lens_from_position_ids, get_seq_idx_from_cu_seq_lens
 from transformers.testing_utils import (
     require_torch,
     require_torch_gpu,
@@ -36,10 +37,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import (
-        BambaForCausalLM,
-        BambaModel,
-    )
+    from transformers import BambaForCausalLM, BambaModel
     from transformers.models.bamba.modeling_bamba import (
         HybridMambaAttentionDynamicCache,
     )
@@ -589,3 +587,65 @@ class BambaModelIntegrationTest(unittest.TestCase):
 
             torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_0, rtol=1e-3, atol=1)
             torch.testing.assert_close(logits[1, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_1, rtol=1e-3, atol=1)
+
+
+def test_cu_seq_lens_from_position_ids() -> None:
+    seq_length = 256
+    chunks_per_batch = 4
+    batch_size = 1
+
+    # Split each batch into `chunks_per_batch` sequences.
+    eos_idxs = (
+        torch.stack([torch.randperm(seq_length) for _ in range(batch_size)], dim=0)[:, : chunks_per_batch - 1]
+        .sort(dim=-1)
+        .values
+    )
+    seq_lens = torch.cat(
+        (torch.full((batch_size, 1), -1), eos_idxs, torch.full((batch_size, 1), seq_length - 1)), dim=-1
+    ).diff(dim=-1)
+
+    # Create the corresponding position_ids and seq_idx
+    position_ids = torch.stack(
+        [
+            torch.cat(
+                [torch.arange(s, dtype=torch.int32) for s in sl],
+                dim=0,
+            )
+            for sl in seq_lens
+        ],
+        dim=0,
+    )
+
+    cu_seq_lens_pred = get_cu_seq_lens_from_position_ids(position_ids)
+    assert torch.allclose(
+        cu_seq_lens_pred,
+        torch.cat(
+            [torch.tensor([[0]], dtype=seq_lens.dtype, device=seq_lens.device), seq_lens.cumsum(dim=-1)], dim=-1
+        ),
+    )
+
+
+def test_seq_idx_from_cu_seq_lens() -> None:
+    n_chunks = 5
+    max_chunk_len = 64
+    batch_size = 1
+
+    seq_lens = torch.randint(1, max_chunk_len, size=(batch_size, n_chunks))
+    cu_seq_lens = torch.cat([torch.tensor([[0]]), seq_lens.cumsum(dim=-1)], dim=-1)
+    seq_idx = torch.cat(
+        [
+            torch.full(
+                (
+                    batch_size,
+                    n,
+                ),
+                idx,
+                dtype=torch.int32,
+                device=cu_seq_lens.device,
+            )
+            for idx, n in enumerate(seq_lens[0])
+        ],
+        dim=-1,
+    )
+    seq_idx_pred = get_seq_idx_from_cu_seq_lens(cu_seq_lens)
+    assert torch.allclose(seq_idx_pred, seq_idx)
