@@ -9,7 +9,7 @@ docs/ @stevhliu
 /src/transformers/models/*/*_processing_** @molbap @yonigozlan
 /src/tranformers/models/*/*image_processing* @qubvel
 /src/transformers/models/*/*_image_processing_*_fast* @yonigozlan
-# /src/transformers/models/*/*_modeling* depending on the type of the model, @qubvel @NielsRogge @Cyrilvallez @zucchini-nlp
+# /src/transformers/models/*/*_modeling* depending on the type of the model, @qubvel @NielsRogge @Cyrilvallez @zucchini-nlp @molbap 
 /src/transformers/models/*/*_modeling* @Rocketknight1 # for appropriate dispatch !a
 /src/transformers/**/*_tokenization* @ArthurZucker
 /src/tranformers/generation/ @gante
