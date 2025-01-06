@@ -107,6 +107,16 @@ class Qwen2AudioProcessor(ProcessorMixin):
             raise ValueError("You need to specify either a `text` input to process.")
         elif isinstance(text, str):
             text = [text]
+        elif not isinstance(text, list) and not isinstance(text[0], str):
+            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+
+        # ensure we have as much audios as audio tokens
+        num_audio_tokens = sum(sample.count(self.audio_token) for sample in text)
+        num_audios = 1 if type(audios) == np.ndarray else len(audios)
+        if num_audio_tokens != num_audios:
+            raise ValueError(
+                f"Found {num_audio_tokens} {self.audio_token} token{'s' if num_audio_tokens > 1 else ''} in provided text but received {num_audios} audio{'s' if num_audios > 1 else ''}"
+            )
 
         if audios is not None:
             audio_inputs = self.feature_extractor(
@@ -118,6 +128,7 @@ class Qwen2AudioProcessor(ProcessorMixin):
 
             expanded_text = []
             audio_lengths = audio_inputs["feature_attention_mask"].sum(-1).tolist()
+
             for sample in text:
                 replace_str = []
                 while self.audio_token in sample:
