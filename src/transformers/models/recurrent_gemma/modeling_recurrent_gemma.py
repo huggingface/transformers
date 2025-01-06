@@ -77,7 +77,6 @@ class RecurrentGemmaRotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", tensor=inv_freq, persistent=False)
 
     @torch.no_grad()
-    # Copied from transformers.models.gemma.modeling_gemma.GemmaRotaryEmbedding.forward with Gemma->RecurrentGemma
     def forward(self, x, position_ids, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
         self.inv_freq.to(x.device)
@@ -185,7 +184,7 @@ class RecurrentGemmaSdpaAttention(nn.Module):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        cos, sin = self.rotary_emb(value_states, position_ids, seq_len=None)
+        cos, sin = self.rotary_emb(value_states, position_ids)
 
         # Partial rotary embedding
         query_rot, query_pass = torch.chunk(query_states, int(1 / self.partial_rotary_factor), dim=-1)
@@ -904,3 +903,6 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel, GenerationMixin):
                 k_state = k_state.index_select(0, beam_idx.to(k_state.device))
                 v_state = v_state.index_select(0, beam_idx.to(v_state.device))
         return None
+
+
+__all__ = ["RecurrentGemmaForCausalLM", "RecurrentGemmaModel", "RecurrentGemmaPreTrainedModel"]
