@@ -91,7 +91,8 @@ class Qwen2AudioProcessor(ProcessorMixin):
 
         if text is None:
             raise ValueError("You need to specify either a `text` input to process.")
-        inputs = self.tokenizer(text, padding=padding, **kwargs)
+        elif isinstance(text, str):
+            text = [text]
 
         if audios is not None:
             audio_inputs = self.feature_extractor(
@@ -100,6 +101,26 @@ class Qwen2AudioProcessor(ProcessorMixin):
             audio_inputs["feature_attention_mask"] = audio_inputs.pop(
                 "attention_mask"
             )  # rename attention_mask to prevent conflicts later on
+
+            expanded_text = []
+            audio_lengths = audio_inputs["feature_attention_mask"].sum(-1).tolist()
+            for sample in text:
+                replace_str = []
+                while self.audio_token in sample:
+                    audio_length = audio_lengths.pop(0)
+                    input_length = (audio_length - 1) // 2 + 1
+                    num_audio_tokens = (input_length - 2) // 2 + 1
+                    replace_str.append(self.audio_token * num_audio_tokens)
+                    sample = sample.replace(self.audio_token, "<placeholder>", 1)
+
+                while "<placeholder>" in sample:
+                    sample = sample.replace("<placeholder>", replace_str.pop(0), 1)
+                expanded_text.append(sample)
+            text = expanded_text
+
+        inputs = self.tokenizer(text, padding=padding, **kwargs)
+
+        if audios is not None:
             inputs.update(audio_inputs)
 
         return BatchFeature(data={**inputs})
