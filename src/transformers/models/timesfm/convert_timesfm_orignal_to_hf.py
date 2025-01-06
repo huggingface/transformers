@@ -153,6 +153,7 @@ def check_outputs(model_path, huggingface_repo_id):
             num_layers=50,
             model_dims=1280,
             use_positional_embedding=False,
+            point_forecast_mode="mean",
         ),
         checkpoint=timesfm.TimesFmCheckpoint(huggingface_repo_id=huggingface_repo_id),
     )
