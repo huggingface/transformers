@@ -21,9 +21,7 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_rt_detr_v2 import *
-    from .configuration_rt_detr_v2_resnet import *
     from .modeling_rt_detr_v2 import *
-    from .modeling_rt_detr_v2_resnet import *
 else:
     import sys
 

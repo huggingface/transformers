@@ -20,6 +20,7 @@ import torch.nn.functional as F
 from torch import Tensor, nn
 
 from ..rt_detr.configuration_rt_detr import RTDetrConfig
+from ..rt_detr.configuration_rt_detr_resnet import RTDetrResNetConfig
 from ..rt_detr.modeling_rt_detr import (
     MultiScaleDeformableAttentionFunction,
     RTDetrDecoder,
@@ -29,6 +30,14 @@ from ..rt_detr.modeling_rt_detr import (
     RTDetrMultiscaleDeformableAttention,
     RTDetrPreTrainedModel,
 )
+
+
+class RtDetrV2ResNetConfig(RTDetrResNetConfig):
+    def __init__(
+        self,
+        **super_kwargs,
+    ):
+        super().__init__(**super_kwargs)
 
 
 class RtDetrV2Config(RTDetrConfig):
