@@ -9,7 +9,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
 specific language governing permissions and limitations under the License.
 
-⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+⚠️ Note that this file is in Markdown but contains specific syntax for our doc-builder (similar to MDX) that may not be
 rendered properly in your Markdown viewer.
 
 -->
@@ -20,12 +20,12 @@ rendered properly in your Markdown viewer.
 
 <Youtube id="KWwzcmG98Ds"/>
 
-Audio classification - just like with text - assigns a class label output from the input data. The only difference is instead of text inputs, you have raw audio waveforms. Some practical applications of audio classification include identifying speaker intent, language classification, and even animal species by their sounds.
+Audio classification - just like with text - assigns a class label as output from the input data. The only difference is instead of text inputs, you have raw audio waveforms. Some practical applications of audio classification include identifying speaker intent, language classification, and even animal species by their sounds.
 
 This guide will show you how to:
 
-1. Finetune [Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base) on the [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) dataset to classify speaker intent.
-2. Use your finetuned model for inference.
+1. Fine-tune [Wav2Vec2](https://huggingface.co/facebook/wav2vec2-base) on the [MInDS-14](https://huggingface.co/datasets/PolyAI/minds14) dataset to classify speaker intent.
+2. Use your fine-tuned model for inference.
 
 <Tip>
 
@@ -57,7 +57,7 @@ Start by loading the MInDS-14 dataset from the 🤗 Datasets library:
 >>> minds = load_dataset("PolyAI/minds14", name="en-US", split="train")
 ```
 
-Split the dataset's `train` split into a smaller train and test set with the [`~datasets.Dataset.train_test_split`] method. This'll give you a chance to experiment and make sure everything works before spending more time on the full dataset.
+Split the dataset's `train` split into a smaller train and test set with the [`~datasets.Dataset.train_test_split`] method. This will give you a chance to experiment and make sure everything works before spending more time on the full dataset.
 
 ```py
 >>> minds = minds.train_test_split(test_size=0.2)
@@ -79,13 +79,13 @@ DatasetDict({
 })
 ```
 
-While the dataset contains a lot of useful information, like `lang_id` and `english_transcription`, you'll focus on the `audio` and `intent_class` in this guide. Remove the other columns with the [`~datasets.Dataset.remove_columns`] method:
+While the dataset contains a lot of useful information, like `lang_id` and `english_transcription`, you will focus on the `audio` and `intent_class` in this guide. Remove the other columns with the [`~datasets.Dataset.remove_columns`] method:
 
 ```py
 >>> minds = minds.remove_columns(["path", "transcription", "english_transcription", "lang_id"])
 ```
 
-Take a look at an example now:
+Here's an example:
 
 ```py
 >>> minds["train"][0]
@@ -155,7 +155,7 @@ Now create a preprocessing function that:
 ...     return inputs
 ```
 
-To apply the preprocessing function over the entire dataset, use 🤗 Datasets [`~datasets.Dataset.map`] function. You can speed up `map` by setting `batched=True` to process multiple elements of the dataset at once. Remove the columns you don't need, and rename `intent_class` to `label` because that's the name the model expects:
+To apply the preprocessing function over the entire dataset, use 🤗 Datasets [`~datasets.Dataset.map`] function. You can speed up `map` by setting `batched=True` to process multiple elements of the dataset at once. Remove unnecessary columns and rename `intent_class` to `label`, as required by the model:
 
 ```py
 >>> encoded_minds = minds.map(preprocess_function, remove_columns="audio", batched=True)
@@ -210,7 +210,7 @@ At this point, only three steps remain:
 
 1. Define your training hyperparameters in [`TrainingArguments`]. The only required parameter is `output_dir`, which specifies where to save your model. You'll push this model to the Hub by setting `push_to_hub=True` (you need to be signed in to Hugging Face to upload your model). At the end of each epoch, the [`Trainer`] will evaluate the accuracy and save the training checkpoint.
 2. Pass the training arguments to [`Trainer`] along with the model, dataset, tokenizer, data collator, and `compute_metrics` function.
-3. Call [`~Trainer.train`] to finetune your model.
+3. Call [`~Trainer.train`] to fine-tune your model.
 
 
 ```py
@@ -252,15 +252,15 @@ Once training is completed, share your model to the Hub with the [`~transformers
 
 <Tip>
 
-For a more in-depth example of how to finetune a model for audio classification, take a look at the corresponding [PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/audio_classification.ipynb).
+For a more in-depth example of how to fine-tune a model for audio classification, take a look at the corresponding [PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/audio_classification.ipynb).
 
 </Tip>
 
 ## Inference
 
-Great, now that you've finetuned a model, you can use it for inference!
+Great, now that you've fine-tuned a model, you can use it for inference!
 
-Load an audio file you'd like to run inference on. Remember to resample the sampling rate of the audio file to match the sampling rate of the model if you need to!
+Load an audio file for inference. Remember to resample the sampling rate of the audio file to match the model's sampling rate, if necessary.
 
 ```py
 >>> from datasets import load_dataset, Audio
@@ -271,7 +271,7 @@ Load an audio file you'd like to run inference on. Remember to resample the samp
 >>> audio_file = dataset[0]["audio"]["path"]
 ```
 
-The simplest way to try out your finetuned model for inference is to use it in a [`pipeline`]. Instantiate a `pipeline` for audio classification with your model, and pass your audio file to it:
+The simplest way to try out your fine-tuned model for inference is to use it in a [`pipeline`]. Instantiate a `pipeline` for audio classification with your model, and pass your audio file to it:
 
 ```py
 >>> from transformers import pipeline

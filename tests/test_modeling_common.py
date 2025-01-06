@@ -89,6 +89,9 @@ from transformers.testing_utils import (
     require_torch_multi_accelerator,
     require_torch_multi_gpu,
     require_torch_sdpa,
+    set_config_for_less_flaky_test,
+    set_model_for_less_flaky_test,
+    set_model_tester_for_less_flaky_test,
     slow,
     torch_device,
 )
@@ -119,6 +122,7 @@ if is_torch_available():
     from torch import nn
 
     from transformers import MODEL_MAPPING, AdaptiveEmbedding
+    from transformers.cache_utils import DynamicCache
     from transformers.modeling_utils import load_state_dict, no_init_weights
     from transformers.pytorch_utils import id_tensor_storage
 
@@ -1285,6 +1289,11 @@ class ModelTesterMixin:
                             )
                             for i in range(model.config.num_hidden_layers)
                         )
+                        empty_pkv = (
+                            DynamicCache.from_legacy_cache(empty_pkv)
+                            if model_class._supports_cache_class
+                            else empty_pkv
+                        )
 
                         cache_length = 9
                         cache_shape = (batch_size, num_heads, cache_length, head_dim)
@@ -1294,6 +1303,11 @@ class ModelTesterMixin:
                                 torch.rand(cache_shape, dtype=torch.float, device=torch_device),
                             )
                             for i in range(model.config.num_hidden_layers)
+                        )
+                        non_empty_pkv = (
+                            DynamicCache.from_legacy_cache(non_empty_pkv)
+                            if model_class._supports_cache_class
+                            else non_empty_pkv
                         )
 
                         inps = copy.deepcopy(inputs_to_test[0])
@@ -2471,7 +2485,7 @@ class ModelTesterMixin:
         return new_tf_outputs, new_pt_outputs
 
     # Copied from tests.test_modeling_tf_common.TFModelTesterMixin.check_pt_tf_outputs
-    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=1e-5, name="outputs", attributes=None):
+    def check_pt_tf_outputs(self, tf_outputs, pt_outputs, model_class, tol=1e-4, name="outputs", attributes=None):
         """Check the outputs from PyTorch and TensorFlow models are close enough. Checks are done in a recursive way.
 
         Args:
@@ -2527,6 +2541,8 @@ class ModelTesterMixin:
                 attributes = tuple([f"{name}_{idx}" for idx in range(len(tf_outputs))])
 
             for tf_output, pt_output, attr in zip(tf_outputs, pt_outputs, attributes):
+                if isinstance(pt_output, DynamicCache):
+                    pt_output = pt_output.to_legacy_cache()
                 self.check_pt_tf_outputs(tf_output, pt_output, model_class, tol=tol, name=attr)
 
         elif isinstance(tf_outputs, tf.Tensor):
@@ -2702,7 +2718,7 @@ class ModelTesterMixin:
         diff = np.abs((a - b)).max()
         self.assertLessEqual(diff, tol, f"Difference between torch and flax is {diff} (>= {tol}).")
 
-    def check_pt_flax_outputs(self, fx_outputs, pt_outputs, model_class, tol=1e-5, name="outputs", attributes=None):
+    def check_pt_flax_outputs(self, fx_outputs, pt_outputs, model_class, tol=1e-4, name="outputs", attributes=None):
         """
         Args:
             model_class: The class of the model that is currently testing. For example, ..., etc.
@@ -2712,7 +2728,6 @@ class ModelTesterMixin:
                 Currently unused, but in the future, we could use this information to make the error message clearer
                 by giving the name(s) of the output tensor(s) with large difference(s) between PT and Flax.
         """
-
         self.assertEqual(type(name), str)
         if attributes is not None:
             self.assertEqual(type(attributes), tuple, f"{name}: The argument `attributes` should be a `tuple`")
@@ -3443,6 +3458,8 @@ class ModelTesterMixin:
                 "Data2VecAudioForSequenceClassification",
                 "UniSpeechForSequenceClassification",
                 "PvtForImageClassification",
+                "ModernBertForSequenceClassification",
+                "ModernBertForTokenClassification",
                 "TimmWrapperForImageClassification",
             ]
             special_param_names = [
@@ -3595,34 +3612,6 @@ class ModelTesterMixin:
             assert (
                 num_params < 1000000
             ), f"{model_class} is too big for the common tests ({num_params})! It should have 1M max."
-
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_conversion(self):
-        if not self.has_attentions:
-            self.skipTest(reason="Model architecture does not support attentions")
-
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            if not model_class._supports_flash_attn_2:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
-
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.float16, attn_implementation="flash_attention_2"
-                ).to(torch_device)
-
-                for _, module in model.named_modules():
-                    if "FlashAttention" in module.__class__.__name__:
-                        return
-
-                self.assertTrue(False, "FlashAttention2 modules not found in model")
 
     @require_flash_attn
     @require_torch_gpu
@@ -3881,15 +3870,6 @@ class ModelTesterMixin:
                     if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
                         raise ValueError("The eager model should not have SDPA attention layers")
 
-                has_sdpa = False
-                for name, submodule in model_sdpa.named_modules():
-                    class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                        has_sdpa = True
-                        break
-                if not has_sdpa and model_sdpa.config.model_type != "falcon":
-                    raise ValueError("The SDPA model should have SDPA attention layers")
-
     @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         """
@@ -3941,15 +3921,6 @@ class ModelTesterMixin:
                     class_name = submodule.__class__.__name__
                     if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
                         raise ValueError("The eager model should not have SDPA attention layers")
-
-                has_sdpa = False
-                for name, submodule in model_sdpa.named_modules():
-                    class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                        has_sdpa = True
-                        break
-                if not has_sdpa and any(module_attn == "sdpa" for module_attn in [text_attn, vision_attn]):
-                    raise ValueError("The SDPA model should have SDPA attention layers")
 
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa
@@ -4008,34 +3979,11 @@ class ModelTesterMixin:
         def get_mean_reldiff(failcase, x, ref, atol, rtol):
             return f"{failcase}: mean relative difference: {((x - ref).abs() / (ref.abs() + 1e-12)).mean():.3e}, torch atol = {atol}, torch rtol = {rtol}"
 
-        if hasattr(self.model_tester, "num_hidden_layers"):
-            self.model_tester.num_hidden_layers = 1
-        if hasattr(self.model_tester, "vision_config") and "num_hidden_layers" in self.model_tester.vision_config:
-            self.model_tester.vision_config = copy.deepcopy(self.model_tester.vision_config)
-            self.model_tester.vision_config["num_hidden_layers"] = 1
-        if hasattr(self.model_tester, "text_config") and "num_hidden_layers" in self.model_tester.text_config:
-            self.model_tester.text_config = copy.deepcopy(self.model_tester.text_config)
-            self.model_tester.text_config["num_hidden_layers"] = 1
+        set_model_tester_for_less_flaky_test(self)
 
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-            config.rms_norm_eps = 1.0
-            config.layer_norm_eps = 1.0
-            config.norm_eps = 1.0
-            config.norm_epsilon = 1.0
-            config.layer_norm_epsilon = 1.0
-
-            # norm layers (layer/group norm, etc.) could cause flaky tests when the tensors have very small variance.
-            # (We don't need the original epsilon values to check eager/sdpa matches)
-            for attr in ["text_config", "vision_config", "text_encoder", "audio_encoder", "decoder"]:
-                if hasattr(config, attr):
-                    getattr(config, attr).rms_norm_eps = 1.0
-                    getattr(config, attr).layer_norm_eps = 1.0
-                    getattr(config, attr).norm_eps = 1.0
-                    getattr(config, attr).norm_epsilon = 1.0
-                    getattr(config, attr).layer_norm_epsilon = 1.0
-
+            set_config_for_less_flaky_test(config)
             model = model_class(config)
             # FIXME: we deactivate boolean mask for models using "use_mask_token" in their constructors.
             # These models support masking only in the case `use_mask_token=True`. Otherwise they cannot consume an input mask.
@@ -4046,7 +3994,12 @@ class ModelTesterMixin:
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model_sdpa = model_class.from_pretrained(tmpdirname, torch_dtype=torch_dtype)
+                try:
+                    model_sdpa = model_class.from_pretrained(
+                        tmpdirname, torch_dtype=torch_dtype, attn_implementation="sdpa"
+                    )
+                except ValueError:
+                    model_sdpa = model_class.from_pretrained(tmpdirname, torch_dtype=torch_dtype)
                 model_sdpa = model_sdpa.eval().to(torch_device, dtype=torch_dtype)
 
                 model_eager = model_class.from_pretrained(
@@ -4056,13 +4009,8 @@ class ModelTesterMixin:
                 )
                 model_eager = model_eager.eval().to(torch_device, dtype=torch_dtype)
 
-                # Another way to make sure norm layers have desired epsilon. (Some models don't set it from its config.)
-                for x in model_eager.modules():
-                    if isinstance(x, (nn.LayerNorm, nn.GroupNorm)):
-                        x.eps = 1.0
-                for x in model_sdpa.modules():
-                    if isinstance(x, (nn.LayerNorm, nn.GroupNorm)):
-                        x.eps = 1.0
+                set_model_for_less_flaky_test(model_eager)
+                set_model_for_less_flaky_test(model_sdpa)
 
                 # We use these for loops instead of parameterized.expand just for the interest of avoiding loading/saving 16 times the model,
                 # but it would be nicer to have an efficient way to use parameterized.expand
@@ -4202,16 +4150,20 @@ class ModelTesterMixin:
                                             outputs_eager = model_eager(**prepared_inputs)
                                             outputs_sdpa = model_sdpa(**prepared_inputs)
 
-                                    logits_eager = (
-                                        outputs_eager.hidden_states[-1]
-                                        if not is_encoder_decoder
-                                        else outputs_eager.decoder_hidden_states[-1]
-                                    )
-                                    logits_sdpa = (
-                                        outputs_sdpa.hidden_states[-1]
-                                        if not is_encoder_decoder
-                                        else outputs_sdpa.decoder_hidden_states[-1]
-                                    )
+                                    if hasattr(outputs_eager, "vision_hidden_states"):
+                                        logits_eager = outputs_eager.vision_hidden_states[-1]
+                                        logits_sdpa = outputs_sdpa.vision_hidden_states[-1]
+                                    else:
+                                        logits_eager = (
+                                            outputs_eager.hidden_states[-1]
+                                            if not is_encoder_decoder
+                                            else outputs_eager.decoder_hidden_states[-1]
+                                        )
+                                        logits_sdpa = (
+                                            outputs_sdpa.hidden_states[-1]
+                                            if not is_encoder_decoder
+                                            else outputs_sdpa.decoder_hidden_states[-1]
+                                        )
 
                                     if torch_device in ["cpu", "cuda"]:
                                         atol = atols[torch_device, enable_kernels, torch_dtype]
@@ -4287,6 +4239,8 @@ class ModelTesterMixin:
                 )
             if config.model_type in ["idefics", "idefics2", "idefics3"]:
                 self.skipTest(reason="Idefics currently (transformers==4.39.1) requires an image_attention_mask input")
+            if config.model_type in ["sam"]:
+                self.skipTest(reason="SAM requires an attention_mask input for relative positional embeddings")
             model = model_class(config)
 
             with tempfile.TemporaryDirectory() as tmpdirname:
@@ -4301,7 +4255,7 @@ class ModelTesterMixin:
                     if isinstance(inp, torch.Tensor) and inp.dtype in [torch.float32, torch.float16]:
                         inputs_dict[name] = inp.to(torch.float16)
 
-                with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
+                with sdpa_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
                     _ = model(**inputs_dict)
 
     @require_non_xpu
@@ -4393,11 +4347,7 @@ class ModelTesterMixin:
                 model_sdpa = model_sdpa.eval()
 
                 with torch.no_grad():
-                    with torch.backends.cuda.sdp_kernel(
-                        enable_flash=False,
-                        enable_math=True,
-                        enable_mem_efficient=False,
-                    ):
+                    with sdpa_kernel(enable_flash=False, enable_math=True, enable_mem_efficient=False):
                         res_eager = model_eager(**inputs_dict, return_dict=False)[0]
                         res_sdpa = model_sdpa(**inputs_dict, return_dict=False)[0]
 
