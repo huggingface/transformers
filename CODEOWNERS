@@ -23,3 +23,5 @@ trainer.py @muellerzr
 /dockers @ydshieh @ArthurZucker
 /src/transformers/loss @ArthurZucker
 /src/transformers/onnx @michaelbenayoun
+/.circleci/config.yml @ArthurZucker @ydshieh
+/utils/tests_fetcher.py @ydshieh
