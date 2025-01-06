@@ -295,6 +295,53 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
             EXPECTED_DECODED_TEXT,
         )
 
+        # test the error when incorrect number of audio tokens
+        inputs["input_ids"] = torch.tensor(
+            [
+                [
+                    151644,
+                    8948,
+                    198,
+                    2610,
+                    525,
+                    264,
+                    10950,
+                    17847,
+                    13,
+                    151645,
+                    198,
+                    151644,
+                    872,
+                    198,
+                    14755,
+                    220,
+                    16,
+                    25,
+                    220,
+                    151647,
+                ]
+                + [151646] * 200
+                + [
+                    151648,
+                    198,
+                    3838,
+                    594,
+                    429,
+                    5112,
+                    30,
+                    151645,
+                    198,
+                    151644,
+                    77091,
+                    198,
+                ]
+            ]
+        )
+        with self.assertRaisesRegex(
+            ValueError, "Audio features and audio tokens do not match: tokens: 200, features 101"
+        ):
+            model.generate(**inputs, max_new_tokens=32)
+
     @slow
     def test_small_model_integration_test_batch(self):
         # Let' s make sure we test the preprocessing to replace what is used
