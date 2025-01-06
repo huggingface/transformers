@@ -42,16 +42,30 @@ class Qwen2AudioProcessor(ProcessorMixin):
                 is used.
         audio_token (`str`, *optional*, defaults to `"<|AUDIO|>"`):
             The token to use for audio tokens.
+        audio_bos_token (`str`, *optional*, defaults to `"<|audio_bos|>"`):
+            The token to use for audio bos tokens.
+        audio_eos_token (`str`, *optional*, defaults to `"<|audio_eos|>"`):
+            The token to use for audio eos tokens.
     """
 
     attributes = ["feature_extractor", "tokenizer"]
     feature_extractor_class = "WhisperFeatureExtractor"
     tokenizer_class = "AutoTokenizer"
 
-    def __init__(self, feature_extractor=None, tokenizer=None, chat_template=None, audio_token="<|AUDIO|>"):
+    def __init__(
+        self,
+        feature_extractor=None,
+        tokenizer=None,
+        chat_template=None,
+        audio_token="<|AUDIO|>",
+        audio_bos_token="<|audio_bos|>",
+        audio_eos_token="<|audio_eos|>",
+    ):
         if chat_template is None:
             chat_template = self.default_chat_template
         self.audio_token = tokenizer.audio_token if hasattr(tokenizer, "audio_token") else audio_token
+        self.audio_bos_token = tokenizer.audio_bos_token if hasattr(tokenizer, "audio_bos_token") else audio_bos_token
+        self.audio_eos_token = tokenizer.audio_eos_token if hasattr(tokenizer, "audio_eos_token") else audio_eos_token
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
     def __call__(
@@ -110,7 +124,26 @@ class Qwen2AudioProcessor(ProcessorMixin):
                     audio_length = audio_lengths.pop(0)
                     input_length = (audio_length - 1) // 2 + 1
                     num_audio_tokens = (input_length - 2) // 2 + 1
-                    replace_str.append(self.audio_token * num_audio_tokens)
+
+                    expanded_audio_token = self.audio_token * num_audio_tokens
+
+                    audio_token_start_idx = sample.find(self.audio_token)
+                    audio_token_end_idx = audio_token_start_idx + len(self.audio_token)
+
+                    has_bos = (
+                        sample[audio_token_start_idx - len(self.audio_bos_token) : audio_token_start_idx]
+                        == self.audio_bos_token
+                    )
+                    has_eos = (
+                        sample[audio_token_end_idx : audio_token_end_idx + len(self.audio_eos_token)]
+                        == self.audio_eos_token
+                    )
+
+                    # Check if this audio token is surrounded by bos/eos tokens
+                    if not has_bos and not has_eos:
+                        expanded_audio_token = self.audio_bos_token + expanded_audio_token + self.audio_eos_token
+
+                    replace_str.append(expanded_audio_token)
                     sample = sample.replace(self.audio_token, "<placeholder>", 1)
 
                 while "<placeholder>" in sample:
