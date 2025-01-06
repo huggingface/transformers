@@ -392,6 +392,7 @@ def _get_wsd_scheduler_lambda(
     *,
     num_warmup_steps: int,
     num_training_steps: int,
+    num_stable_steps: int,
     num_decay_steps: int,
     warmup_type: str,
     decay_type: str,
@@ -411,30 +412,50 @@ def _get_wsd_scheduler_lambda(
         factor = factor * (1.0 - min_lr_ratio) + min_lr_ratio
         return max(0.0, factor)
 
-    if current_step < num_training_steps - num_decay_steps:
-        return 1.0
+    if num_training_steps is not None:
 
-    if current_step < num_training_steps:
-        progress = float(current_step - (num_training_steps - num_decay_steps)) / float(max(1, num_decay_steps))
-        if decay_type == "linear":
-            factor = 1.0 - progress
-        elif decay_type == "cosine":
-            factor = 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress))
-        elif decay_type == "1-sqrt":
-            factor = 1.0 - math.sqrt(progress)
-        else:
-            raise ValueError(f"Unknown decay type: {decay_type}, expected 'linear', 'cosine' or '1-sqrt'")
-        factor = factor * (1.0 - min_lr_ratio) + min_lr_ratio
-        return max(0.0, factor)
+        if current_step < num_training_steps - num_decay_steps:
+            return 1.0
+
+        if current_step < num_training_steps:
+            progress = float(current_step - (num_training_steps - num_decay_steps)) / float(max(1, num_decay_steps))
+            if decay_type == "linear":
+                factor = 1.0 - progress
+            elif decay_type == "cosine":
+                factor = 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress))
+            elif decay_type == "1-sqrt":
+                factor = 1.0 - math.sqrt(progress)
+            else:
+                raise ValueError(f"Unknown decay type: {decay_type}, expected 'linear', 'cosine' or '1-sqrt'")
+            factor = factor * (1.0 - min_lr_ratio) + min_lr_ratio
+            return max(0.0, factor)
+    else:
+
+        if current_step < num_warmup_steps + num_stable_steps:
+            return 1.0
+
+        if current_step < num_warmup_steps + num_stable_steps + num_decay_steps:
+            progress = float(current_step - num_warmup_steps - num_stable_steps) / float(max(1, num_decay_steps))
+            if decay_type == "linear":
+                factor = 1.0 - progress
+            elif decay_type == "cosine":
+                factor = 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress))
+            elif decay_type == "1-sqrt":
+                factor = 1.0 - math.sqrt(progress)
+            else:
+                raise ValueError(f"Unknown decay type: {decay_type}, expected 'linear', 'cosine' or '1-sqrt'")
+            factor = factor * (1.0 - min_lr_ratio) + min_lr_ratio
+            return max(0.0, factor)
 
     return min_lr_ratio
 
 
 def get_wsd_schedule(
     optimizer: Optimizer,
-    num_warmup_steps: int,
-    num_training_steps: int,
-    num_decay_steps: int,
+    num_warmup_steps: int = None,
+    num_training_steps: int = None,
+    num_stable_steps: int = None,
+    num_decay_steps: int = None,
     warmup_type: str = "linear",
     decay_type: str = "linear",
     min_lr_ratio: float = 0,
@@ -454,6 +475,8 @@ def get_wsd_schedule(
             The number of steps for the warmup phase.
         num_training_steps (`int`):
             The total number of training steps.
+        num_stable_steps (`int`):
+            The number of steps for the stable phase.
         num_decay_steps (`int`):
             The number of steps for the decay phase.
         warmup_type (`str`, *optional*, defaults to "linear"):
@@ -471,10 +494,18 @@ def get_wsd_schedule(
     Return:
         `torch.optim.lr_scheduler.LambdaLR` with the appropriate schedule.
     """
+
+    if num_training_steps is None and num_stable_steps is None:
+        raise ValueError("Either num_training_steps or num_stable_steps must be specified.")
+
+    if num_training_steps is not None and num_stable_steps is not None:
+        warnings.warn("Both num_training_steps and num_stable_steps are specified. num_training_steps will be used.")
+
     lr_lambda = partial(
         _get_wsd_scheduler_lambda,
         num_warmup_steps=num_warmup_steps,
         num_training_steps=num_training_steps,
+        num_stable_steps=num_stable_steps,
         num_decay_steps=num_decay_steps,
         warmup_type=warmup_type,
         decay_type=decay_type,
