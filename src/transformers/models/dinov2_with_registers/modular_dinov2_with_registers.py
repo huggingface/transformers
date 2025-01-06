@@ -231,8 +231,7 @@ class Dinov2WithRegistersEmbeddings(nn.Module):
             size=(torch_int(height), torch_int(width)),  # Explicit size instead of scale_factor
             mode="bicubic",
             align_corners=False,
-            # Maintain backward compatibility with antialias if configured
-            antialias=getattr(self.config, "interpolate_antialias", False),
+            antialias=True,
         ).to(dtype=target_dtype)
 
         # Validate output dimensions if not tracing
