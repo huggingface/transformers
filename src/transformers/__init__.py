@@ -2199,6 +2199,7 @@ else:
         [
             "DFineForObjectDetection",
             "DFineModel",
+            "DFinePreTrainedModel",
             "DFineResNetBackbone",
             "DFineResNetPreTrainedModel",
         ]
@@ -7221,8 +7222,9 @@ if TYPE_CHECKING:
             DepthProPreTrainedModel,
         )
         from .models.d_fine import (
+            DFineForObjectDetection,
             DFineModel,
-            DFineModelForObjectDetection,
+            DFinePreTrainedModel,
         )
         from .models.detr import (
             DetrForObjectDetection,
