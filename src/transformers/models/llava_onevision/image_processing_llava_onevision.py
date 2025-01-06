@@ -119,7 +119,7 @@ def _get_patch_output_size(image, target_resolution, input_data_format):
 
 class LlavaOnevisionImageProcessor(BaseImageProcessor):
     r"""
-    Constructs a LLaVa-Onevisino-Video video processor. Based on [`SiglipImageProcessor`] with incorporation of processing each video frame.
+    Constructs a LLaVa-Onevision image processor. Based on [`SiglipImageProcessor`] with incorporation of processing each video frame.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):

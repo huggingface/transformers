@@ -55,7 +55,7 @@ if is_torchvision_available():
 
 class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
     r"""
-    Constructs a fast LLaVa-Onevisino-Video video processor. Based on [`SiglipImageProcessor`] with incorporation of processing each video frame.
+    Constructs a fast LLaVa-Onevision image processor. Based on [`SiglipImageProcessor`] with incorporation of processing each video frame.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
