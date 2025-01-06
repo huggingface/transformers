@@ -86,4 +86,5 @@ class ModernBertTokenizerFast(PreTrainedTokenizerFast):
 
         self.add_prefix_space = add_prefix_space
 
+
 __all__ = ["ModernBertTokenizerFast"]
