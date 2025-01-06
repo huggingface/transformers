@@ -316,7 +316,7 @@ class StaticCacheConfig(CacheConfig):
     cache_implementation = "static"
 
     def __init__(self, batch_size: int, max_cache_len: int, device="cpu"):
-        self.batch_size = batch_size
+        self.max_batch_size = batch_size
         self.max_cache_len = max_cache_len
         self.device = device
 
@@ -328,12 +328,12 @@ class StaticCacheConfig(CacheConfig):
             "but found {found_value}"
         )
 
-        if self.batch_size <= 0:
+        if self.max_batch_size <= 0:
             raise ValueError(
                 incorrect_arg_msg.format(
                     key="batch_size",
                     correct_value="> 0",
-                    found_value=self.batch_size,
+                    found_value=self.max_batch_size,
                 ),
             )
 
@@ -1142,7 +1142,7 @@ class StaticCache(Cache):
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
         # Note: There will be significant perf decrease if switching to use 5D tensors instead.
-        cache_shape = (self.batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
+        cache_shape = (self.max_batch_size, self.num_key_value_heads, self.max_cache_len, self.head_dim)
         for idx in range(config.num_hidden_layers):
             if layer_device_map is not None:
                 layer_device = layer_device_map[idx]
@@ -1640,9 +1640,9 @@ class HybridCache(Cache):
         )
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
-        global_cache_shape = (self.batch_size, self.num_key_value_heads, max_cache_len, self.head_dim)
+        global_cache_shape = (self.max_batch_size, self.num_key_value_heads, max_cache_len, self.head_dim)
         sliding_cache_shape = (
-            self.batch_size,
+            self.max_batch_size,
             self.num_key_value_heads,
             min(config.sliding_window, max_cache_len),
             self.head_dim,
