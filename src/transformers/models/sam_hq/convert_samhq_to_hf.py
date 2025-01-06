@@ -203,7 +203,7 @@ def convert_sam_hq_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, 
         ).to(device)
 
         with torch.no_grad():
-            output = hf_model(**inputs)
+            hf_model(**inputs)
 
     if pytorch_dump_folder is not None:
         processor.save_pretrained(pytorch_dump_folder)
