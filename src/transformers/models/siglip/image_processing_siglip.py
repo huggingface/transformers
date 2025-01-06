@@ -198,11 +198,11 @@ class SiglipImageProcessor(BaseImageProcessor):
             size=size,
             resample=resample,
         )
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
-
         if do_convert_rgb:
             images = [convert_to_rgb(image) for image in images]
+
+        # All transformations expect numpy arrays.
+        images = [to_numpy_array(image) for image in images]
 
         if is_scaled_image(images[0]) and do_rescale:
             logger.warning_once(
@@ -239,3 +239,6 @@ class SiglipImageProcessor(BaseImageProcessor):
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+
+__all__ = ["SiglipImageProcessor"]

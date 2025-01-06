@@ -93,11 +93,13 @@ FSDP_MIN_VERSION = "1.12.0"
 GGUF_MIN_VERSION = "0.10.0"
 XLA_FSDPV2_MIN_VERSION = "2.2.0"
 HQQ_MIN_VERSION = "0.2.1"
+VPTQ_MIN_VERSION = "0.0.4"
 
 
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
 _apex_available = _is_package_available("apex")
 _aqlm_available = _is_package_available("aqlm")
+_vptq_available, _vptq_version = _is_package_available("vptq", return_version=True)
 _av_available = importlib.util.find_spec("av") is not None
 _bitsandbytes_available = _is_package_available("bitsandbytes")
 _eetq_available = _is_package_available("eetq")
@@ -126,6 +128,7 @@ except importlib.metadata.PackageNotFoundError:
         _faiss_available = False
 _ftfy_available = _is_package_available("ftfy")
 _g2p_en_available = _is_package_available("g2p_en")
+_hadamard_available = _is_package_available("fast_hadamard_transform")
 _ipex_available, _ipex_version = _is_package_available("intel_extension_for_pytorch", return_version=True)
 _jieba_available = _is_package_available("jieba")
 _jinja_available = _is_package_available("jinja2")
@@ -192,7 +195,7 @@ _hqq_available, _hqq_version = _is_package_available("hqq", return_version=True)
 _tiktoken_available = _is_package_available("tiktoken")
 _blobfile_available = _is_package_available("blobfile")
 _liger_kernel_available = _is_package_available("liger_kernel")
-
+_triton_available = _is_package_available("triton")
 
 _torch_version = "N/A"
 _torch_available = False
@@ -330,6 +333,10 @@ def is_torch_deterministic():
         return True
 
 
+def is_hadamard_available():
+    return _hadamard_available
+
+
 def is_hqq_available(min_version: str = HQQ_MIN_VERSION):
     return _hqq_available and version.parse(_hqq_version) >= version.parse(min_version)
 
@@ -356,6 +363,17 @@ def is_torch_sdpa_available():
         return version.parse(_torch_version) >= version.parse("2.1.0")
     # NOTE: We require torch>=2.1.1 to avoid a numerical issue in SDPA with non-contiguous inputs: https://github.com/pytorch/pytorch/issues/112577
     return version.parse(_torch_version) >= version.parse("2.1.1")
+
+
+def is_torch_flex_attn_available():
+    if not is_torch_available():
+        return False
+    elif _torch_version == "N/A":
+        return False
+
+    # TODO check if some bugs cause push backs on the exact version
+    # NOTE: We require torch>=2.5.0 as it is the first release
+    return version.parse(_torch_version) >= version.parse("2.5.0")
 
 
 def is_torchvision_available():
@@ -602,6 +620,13 @@ def is_flax_available():
     return _flax_available
 
 
+def is_flute_available():
+    try:
+        return importlib.util.find_spec("flute") is not None and importlib.metadata.version("flute-kernel") >= "0.3.0"
+    except importlib.metadata.PackageNotFoundError:
+        return False
+
+
 def is_ftfy_available():
     return _ftfy_available
 
@@ -805,6 +830,10 @@ def is_aqlm_available():
     return _aqlm_available
 
 
+def is_vptq_available(min_version: str = VPTQ_MIN_VERSION):
+    return _vptq_available and version.parse(_vptq_version) >= version.parse(min_version)
+
+
 def is_av_available():
     return _av_available
 
@@ -916,6 +945,7 @@ def is_flash_attn_2_available():
         return False
 
 
+@lru_cache()
 def is_flash_attn_greater_or_equal_2_10():
     if not _is_package_available("flash_attn"):
         return False
@@ -929,6 +959,14 @@ def is_flash_attn_greater_or_equal(library_version: str):
         return False
 
     return version.parse(importlib.metadata.version("flash_attn")) >= version.parse(library_version)
+
+
+@lru_cache()
+def is_torch_greater_or_equal(library_version: str):
+    if not _is_package_available("torch"):
+        return False
+
+    return version.parse(importlib.metadata.version("torch")) >= version.parse(library_version)
 
 
 def is_torchdistx_available():
@@ -975,13 +1013,6 @@ def is_optimum_available():
 
 def is_auto_awq_available():
     return _auto_awq_available
-
-
-def is_quanto_available():
-    logger.warning_once(
-        "Importing from quanto will be deprecated in v4.47. Please install optimum-quanto instrad `pip install optimum-quanto`"
-    )
-    return _quanto_available
 
 
 def is_optimum_quanto_available():
@@ -1128,7 +1159,7 @@ def is_training_run_on_sagemaker():
     return "SAGEMAKER_JOB_NAME" in os.environ
 
 
-def is_soundfile_availble():
+def is_soundfile_available():
     return _soundfile_available
 
 
@@ -1228,6 +1259,10 @@ def is_liger_kernel_available():
         return False
 
     return version.parse(importlib.metadata.version("liger_kernel")) >= version.parse("0.3.0")
+
+
+def is_triton_available():
+    return _triton_available
 
 
 # docstyle-ignore

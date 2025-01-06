@@ -740,7 +740,7 @@ class BloomModel(BloomPreTrainedModel):
         output_attentions: bool,
     ):
         if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and 0.0 in attention_mask:
+            if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
 
@@ -911,7 +911,7 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
         # This part differs from other models because BLOOM needs a 2D mask to construct alibi tensor
         # The only difference is the usage of 2D instead of 4D mask, but the shape will be static
         if isinstance(past_key_values, StaticCache) and attention_mask is not None:
-            target_length = past_key_values.get_max_length()
+            target_length = past_key_values.get_max_cache_shape()
             batch_size, seq_length = attention_mask.shape
             diff = target_length - seq_length
 
@@ -1362,3 +1362,13 @@ class BloomForQuestionAnswering(BloomPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "BloomForCausalLM",
+    "BloomModel",
+    "BloomPreTrainedModel",
+    "BloomForSequenceClassification",
+    "BloomForTokenClassification",
+    "BloomForQuestionAnswering",
+]

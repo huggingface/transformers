@@ -163,6 +163,9 @@ class LlavaNextProcessor(ProcessorMixin):
                 for sample in text:
                     while self.image_token in sample:
                         image_size = next(image_sizes)
+                        if not isinstance(image_size, (list, tuple)):
+                            # cast to list to avoid numerical precision errors when calculating unpadding
+                            image_size = image_size.tolist()
                         orig_height, orig_width = image_size
                         num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
                         if self.vision_feature_select_strategy == "default":
@@ -239,3 +242,6 @@ class LlavaNextProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+
+__all__ = ["LlavaNextProcessor"]

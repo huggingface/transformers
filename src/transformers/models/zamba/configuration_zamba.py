@@ -106,7 +106,7 @@ class ZambaConfig(PretrainedConfig):
         mamba_expand (`int`, *optional*, defaults to 2):
             Expanding factor (relative to hidden_size) used to determine the mamba intermediate size
         mamba_dt_rank (`Union[int,str]`, *optional*, defaults to `"auto"`):
-            Rank of the the mamba discretization projection matrix. `"auto"` means that it will default to `math.ceil(self.hidden_size / 16)`
+            Rank of the mamba discretization projection matrix. `"auto"` means that it will default to `math.ceil(self.hidden_size / 16)`
         time_step_min (`float`, *optional*, defaults to 0.001):
             Minimum `time_step` used to bound `dt_proj_bias`.
         time_step_max (`float`, *optional*, defaults to 0.1):
@@ -222,3 +222,6 @@ class ZambaConfig(PretrainedConfig):
             "hybrid",
         ] + ["hybrid" if i % attn_layer_period == attn_layer_offset else "mamba" for i in range(num_hidden_layers - 3)]
         return layers
+
+
+__all__ = ["ZambaConfig"]
