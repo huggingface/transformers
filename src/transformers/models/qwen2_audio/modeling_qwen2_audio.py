@@ -1210,9 +1210,8 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
                     )
                 else:
                     num_audios, max_audio_tokens, embed_dim = audio_features.shape
-                    audio_features_mask = torch.arange(max_audio_tokens).expand(num_audios, max_audio_tokens).to(
-                        audio_output_lengths.device
-                    ) < audio_output_lengths.unsqueeze(1)
+                    audio_features_mask = torch.arange(max_audio_tokens, device=audio_output_lengths.device)[None, :]
+                    audio_features_mask = audio_features_mask < audio_output_lengths[:, None]
                     audio_features = audio_features[audio_features_mask]
 
                     n_audio_tokens = (input_ids == self.config.audio_token_index).sum().item()
@@ -1222,12 +1221,8 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
                         raise ValueError(
                             f"Audio features and audio tokens do not match: tokens: {n_audio_tokens}, features {n_audio_features}"
                         )
-                    special_audio_mask = (
-                        (input_ids == self.config.audio_token_index)
-                        .unsqueeze(-1)
-                        .expand_as(inputs_embeds)
-                        .to(inputs_embeds.device)
-                    )
+                    special_audio_mask = (input_ids == self.config.audio_token_index).to(inputs_embeds.device)
+                    special_audio_mask = special_audio_mask.unsqueeze(-1).expand_as(inputs_embeds)
                     audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
                     inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, audio_features)
 
