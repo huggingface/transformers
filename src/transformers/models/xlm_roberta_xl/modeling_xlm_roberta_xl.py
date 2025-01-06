@@ -1122,7 +1122,9 @@ class XLMRobertaXLForCausalLM(XLMRobertaXLPreTrainedModel, GenerationMixin):
         # Create missing `position_ids` on the fly
         position_ids = None
         if model_kwargs.get("position_ids") is None:
-            position_ids = create_position_ids_from_input_ids(input_ids, padding_idx=self.config.pad_token_id)  # placed in kwargs for further processing (see below)
+            position_ids = create_position_ids_from_input_ids(
+                input_ids, padding_idx=self.config.pad_token_id
+            )  # placed in kwargs for further processing (see below)
 
         # cut decoder_input_ids if past_key_values is used
         if past_key_values is not None:
