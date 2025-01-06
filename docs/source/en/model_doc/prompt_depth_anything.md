@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The Prompt Depth Anything model was introduced in [Prompting Depth Anything for 4K Resolution Accurate Metric Depth Estimation](https://promptda.github.io/) by Haotong Lin, Sida Peng, Jingxiao Chen, Songyou Peng, Jiaming Sun, Minghuan Liu, Hujun Bao, Jiashi Feng, Xiaowei Zhou, Bingyi Kang. 
+The Prompt Depth Anything model was introduced in [Prompting Depth Anything for 4K Resolution Accurate Metric Depth Estimation](https://arxiv.org/abs/2412.14015) by Haotong Lin, Sida Peng, Jingxiao Chen, Songyou Peng, Jiaming Sun, Minghuan Liu, Hujun Bao, Jiashi Feng, Xiaowei Zhou, Bingyi Kang. 
 
 
 The abstract from the paper is as follows:
@@ -28,11 +28,11 @@ The abstract from the paper is as follows:
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/prompt_depth_anything_architecture.jpg"
 alt="drawing" width="600"/>
 
-<small> Prompt Depth Anything overview. Taken from the <a href="https://promptda.github.io/">original paper</a>.</small>
+<small> Prompt Depth Anything overview. Taken from the <a href="https://arxiv.org/pdf/2412.14015">original paper</a>.</small>
 
 ## Usage example
 
-The transformers library allows you to use the model with just a few lines of code:
+The Transformers library allows you to use the model with just a few lines of code:
 
 ```python
 >>> from transformers import AutoImageProcessor, AutoModelForDepthEstimation
