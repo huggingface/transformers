@@ -231,9 +231,9 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
 
     def test_init_zero3_missing_params(self):
         # test that zero.Init() for missing parameters works correctly under zero3
-        import deepspeed
         import torch
 
+        import deepspeed
         from transformers.models.gpt2.modeling_gpt2 import GPT2PreTrainedModel
 
         class TinyGPT2WithUninitializedWeights(GPT2PreTrainedModel):
