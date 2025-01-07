@@ -171,9 +171,11 @@ class PromptDepthAnythingDepthEstimationHead(DepthAnythingDepthEstimationHead):
         hidden_states = hidden_states[self.head_in_index]
 
         predicted_depth = self.conv1(hidden_states)
+        target_height = torch_int(patch_height * self.patch_size)
+        target_width = torch_int(patch_width * self.patch_size)
         predicted_depth = nn.functional.interpolate(
             predicted_depth,
-            (torch_int(patch_height * self.patch_size), torch_int(patch_width * self.patch_size)),
+            (target_height, target_width),
             mode="bilinear",
             align_corners=True,
         )
