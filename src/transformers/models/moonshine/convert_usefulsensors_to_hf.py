@@ -22,7 +22,7 @@ import numpy as np
 import torch
 from huggingface_hub import hf_hub_download
 
-from transformers.models.moonshine.modeling_moonshine_arch import MoonshineConfig, MoonshineForConditionalGeneration
+from transformers.models.moonshine.modeling_moonshine import MoonshineConfig, MoonshineForConditionalGeneration
 
 
 # Copied from https://github.com/usefulsensors/moonshine/blob/a1d77cc573b0471ac4602b86f67b3f48d67df1a9/moonshine/model.py
