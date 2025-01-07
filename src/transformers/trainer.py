@@ -2448,10 +2448,7 @@ class Trainer:
                     step += 1
                     do_sync_step = (step + 1) % args.gradient_accumulation_steps == 0 or (step + 1) == steps_in_epoch
                     # Since we perform prefetching, we need to manually set sync_gradients
-                    if not do_sync_step:
-                        self.accelerator.gradient_state._set_sync_gradients(False)
-                    else:
-                        self.accelerator.gradient_state._set_sync_gradients(True)
+                    self.accelerator.gradient_state._set_sync_gradients(do_sync_step)
 
                     if self.args.include_num_input_tokens_seen:
                         main_input_name = getattr(self.model, "main_input_name", "input_ids")
@@ -2518,32 +2515,7 @@ class Trainer:
 
                         # Gradient clipping
                         if args.max_grad_norm is not None and args.max_grad_norm > 0:
-                            # deepspeed does its own clipping
-
-                            if is_sagemaker_mp_enabled() and args.fp16:
-                                _grad_norm = self.optimizer.clip_master_grads(args.max_grad_norm)
-                            elif self.use_apex:
-                                # Revert to normal clipping otherwise, handling Apex or full precision
-                                _grad_norm = nn.utils.clip_grad_norm_(
-                                    amp.master_params(self.optimizer),
-                                    args.max_grad_norm,
-                                )
-                            else:
-                                _grad_norm = self.accelerator.clip_grad_norm_(
-                                    model.parameters(),
-                                    args.max_grad_norm,
-                                )
-
-                            if (
-                                is_accelerate_available()
-                                and self.accelerator.distributed_type == DistributedType.DEEPSPEED
-                            ):
-                                grad_norm = model.get_global_grad_norm()
-                                # In some cases the grad norm may not return a float
-                                if hasattr(grad_norm, "item"):
-                                    grad_norm = grad_norm.item()
-                            else:
-                                grad_norm = _grad_norm
+                            grad_norm = self.clip_grads(model, args)
 
                         self.control = self.callback_handler.on_pre_optimizer_step(args, self.state, self.control)
 
@@ -2551,8 +2523,7 @@ class Trainer:
 
                         self.control = self.callback_handler.on_optimizer_step(args, self.state, self.control)
 
-                        optimizer_was_run = not self.accelerator.optimizer_step_was_skipped
-                        if optimizer_was_run:
+                        if not self.accelerator.optimizer_step_was_skipped:
                             # Delay optimizer scheduling until metrics are generated
                             if not isinstance(self.lr_scheduler, torch.optim.lr_scheduler.ReduceLROnPlateau):
                                 self.lr_scheduler.step()
@@ -5135,3 +5106,30 @@ class Trainer:
             num_items_in_batch = num_items_in_batch.item()
 
         return batch_samples, num_items_in_batch
+
+    def clip_grads(self, model, args):
+        """
+        Clips gradients properly based on setup
+        """
+        if is_sagemaker_mp_enabled() and args.fp16:
+            _grad_norm = self.optimizer.clip_master_grads(args.max_grad_norm)
+        elif self.use_apex:
+            # Revert to normal clipping otherwise, handling Apex or full precision
+            _grad_norm = nn.utils.clip_grad_norm_(
+                amp.master_params(self.optimizer),
+                args.max_grad_norm,
+            )
+        else:
+            _grad_norm = self.accelerator.clip_grad_norm_(
+                model.parameters(),
+                args.max_grad_norm,
+            )
+
+        if is_accelerate_available() and self.accelerator.distributed_type == DistributedType.DEEPSPEED:
+            grad_norm = model.get_global_grad_norm()
+            # In some cases the grad norm may not return a float
+            if hasattr(grad_norm, "item"):
+                grad_norm = grad_norm.item()
+        else:
+            grad_norm = _grad_norm
+        return grad_norm
