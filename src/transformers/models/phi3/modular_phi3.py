@@ -219,10 +219,10 @@ class Phi3RotaryEmbedding(MistralRotaryEmbedding):
     def _longrope_frequency_update(self, position_ids, device):
         """Longrope uses long factor if sequence is larger than original pretraining length, short otherwise."""
         seq_len = torch.max(position_ids) + 1
-        if hasattr(config, "original_max_position_embeddings"):
-            original_max_position_embeddings = config.original_max_position_embeddings
+        if hasattr(self.config, "original_max_position_embeddings"):
+            original_max_position_embeddings = self.config.original_max_position_embeddings
         else:
-            original_max_position_embeddings = config.max_position_embeddings
+            original_max_position_embeddings = self.config.max_position_embeddings
         if seq_len > original_max_position_embeddings:
             if not hasattr(self, "long_inv_freq"):
                 self.long_inv_freq, _ = self.rope_init_fn(self.config, device, seq_len=original_max_position_embeddings + 1)
