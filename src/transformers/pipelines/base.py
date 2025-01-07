@@ -447,6 +447,12 @@ def load_assistant_model(
     if not model.can_generate() or assistant_model is None:
         return None, None
 
+    if not isinstance(model, PreTrainedModel):
+        raise ValueError(
+            "Assisted generation, triggered by the `assistant_model` argument, is only available for "
+            "`PreTrainedModel` model instances. For instance, TF or JAX models are not supported."
+        )
+
     # If the model is passed as a string, load the model and the corresponding tokenizer
     if isinstance(assistant_model, str):
         assistant_config = AutoConfig.from_pretrained(assistant_model)
