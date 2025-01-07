@@ -217,7 +217,12 @@ class ImageClassificationPipeline(Pipeline):
             raise ValueError(f"Unrecognized `function_to_apply` argument: {function_to_apply}")
 
         dict_scores = [
-            {"label": self.model.config.id2label[i], "score": score.item()} for i, score in enumerate(scores)
+            {
+                "index": i,
+                "label": self.model.config.id2label[i],
+                "score": score.item(),
+            }
+            for i, score in enumerate(scores)
         ]
         dict_scores.sort(key=lambda x: x["score"], reverse=True)
         if top_k is not None:
