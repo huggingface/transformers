@@ -155,12 +155,12 @@ def add_neck_mappings():
                 f"depth_head.scratch.refinenet{i}.resConfUnit2.conv1.bias": f"neck.fusion_stage.layers.{j}.residual_layer2.convolution1.bias",
                 f"depth_head.scratch.refinenet{i}.resConfUnit2.conv2.weight": f"neck.fusion_stage.layers.{j}.residual_layer2.convolution2.weight",
                 f"depth_head.scratch.refinenet{i}.resConfUnit2.conv2.bias": f"neck.fusion_stage.layers.{j}.residual_layer2.convolution2.bias",
-                f"depth_head.scratch.refinenet{i}.resConfUnit_depth.0.weight": f"neck.fusion_stage.layers.{j}.residual_layer_depth.convolution1.weight",
-                f"depth_head.scratch.refinenet{i}.resConfUnit_depth.0.bias": f"neck.fusion_stage.layers.{j}.residual_layer_depth.convolution1.bias",
-                f"depth_head.scratch.refinenet{i}.resConfUnit_depth.2.weight": f"neck.fusion_stage.layers.{j}.residual_layer_depth.convolution2.weight",
-                f"depth_head.scratch.refinenet{i}.resConfUnit_depth.2.bias": f"neck.fusion_stage.layers.{j}.residual_layer_depth.convolution2.bias",
-                f"depth_head.scratch.refinenet{i}.resConfUnit_depth.4.weight": f"neck.fusion_stage.layers.{j}.residual_layer_depth.convolution3.weight",
-                f"depth_head.scratch.refinenet{i}.resConfUnit_depth.4.bias": f"neck.fusion_stage.layers.{j}.residual_layer_depth.convolution3.bias",
+                f"depth_head.scratch.refinenet{i}.resConfUnit_depth.0.weight": f"neck.fusion_stage.layers.{j}.prompt_depth_layer.convolution1.weight",
+                f"depth_head.scratch.refinenet{i}.resConfUnit_depth.0.bias": f"neck.fusion_stage.layers.{j}.prompt_depth_layer.convolution1.bias",
+                f"depth_head.scratch.refinenet{i}.resConfUnit_depth.2.weight": f"neck.fusion_stage.layers.{j}.prompt_depth_layer.convolution2.weight",
+                f"depth_head.scratch.refinenet{i}.resConfUnit_depth.2.bias": f"neck.fusion_stage.layers.{j}.prompt_depth_layer.convolution2.bias",
+                f"depth_head.scratch.refinenet{i}.resConfUnit_depth.4.weight": f"neck.fusion_stage.layers.{j}.prompt_depth_layer.convolution3.weight",
+                f"depth_head.scratch.refinenet{i}.resConfUnit_depth.4.bias": f"neck.fusion_stage.layers.{j}.prompt_depth_layer.convolution3.bias",
             }
         )
 

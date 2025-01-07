@@ -58,7 +58,7 @@ class PromptDepthAnythingConfig(DepthAnythingConfig):
     model_type = "prompt_depth_anything"
 
 
-class PromptDepthAnythingResidualLayer(nn.Module):
+class PromptDepthAnythingLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.convolution1 = nn.Conv2d(
@@ -103,7 +103,7 @@ class PromptDepthAnythingResidualLayer(nn.Module):
 class PromptDepthAnythingFeatureFusionLayer(DepthAnythingFeatureFusionLayer):
     def __init__(self, config):
         super().__init__(config)
-        self.residual_layer_depth = PromptDepthAnythingResidualLayer(config)
+        self.prompt_depth_layer = PromptDepthAnythingLayer(config)
 
     def forward(self, hidden_state, residual=None, size=None, prompt_depth=None):
         if residual is not None:
@@ -119,7 +119,7 @@ class PromptDepthAnythingFeatureFusionLayer(DepthAnythingFeatureFusionLayer):
             prompt_depth = nn.functional.interpolate(
                 prompt_depth, hidden_state.shape[2:], mode="bilinear", align_corners=False
             )
-            res = self.residual_layer_depth(prompt_depth)
+            res = self.prompt_depth_layer(prompt_depth)
             hidden_state = hidden_state + res
 
         modifier = {"scale_factor": 2} if size is None else {"size": size}
