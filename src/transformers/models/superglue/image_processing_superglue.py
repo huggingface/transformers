@@ -108,19 +108,9 @@ def validate_and_format_image_pairs(images: ImageInput):
         "Input images must be a one of the following :",
         " - A pair of PIL images.",
         " - A pair of 3D arrays.",
-        " - A 4D array with shape (2, H, W, C).",
-        " - A 5D array with shape (B, 2, H, W, C).",
         " - A list of pairs of PIL images.",
         " - A list of pairs of 3D arrays.",
-        " - A list of 4D arrays with shape (2, H, W, C).",
     )
-
-    def _flatten_image_list(image_list):
-        """
-        Flattens a list of images.
-        In the case of images being an array of shape (B, H, W, C), returns a B long list of (H, W, C) images.
-        """
-        return list(image_list)
 
     def _flatten_image_list_sequence(image_list_sequence):
         """
@@ -148,23 +138,6 @@ def validate_and_format_image_pairs(images: ImageInput):
             and len(images) != 2
         )
 
-    def _is_list_of_4d_arrays(images):
-        """images is a list of 4D arrays with shape (2, H, W, C)."""
-        return all(_is_4d_array(image) for image in images)
-
-    def _is_4d_array(image):
-        """images is a 4D array with shape (2, H, W, C)."""
-        return is_valid_image(image) and not is_pil_image(image) and len(image.shape) == 4 and image.shape[0] == 2
-
-    def _is_5d_array(images):
-        """images is a 5D array with shape (B, 2, H, W, C)."""
-        return (
-            is_valid_image(images)
-            and get_image_type(images) != ImageType.PIL
-            and len(images.shape) == 5
-            and images.shape[1] == 2
-        )
-
     def _format_image_list(images):
         """
         Function that takes a valid image input and turns it into a list of images.
@@ -185,17 +158,8 @@ def validate_and_format_image_pairs(images: ImageInput):
                 return images
             if _is_list_of_images_with_length_different_from_two(images):
                 raise ValueError(error_message)
-            if _is_list_of_4d_arrays(images):
-                return _flatten_image_list_sequence(images)
         if is_valid_image(images):
-            if is_pil_image(images):
-                raise ValueError(error_message)
-            if _is_3d_array(images):
-                raise ValueError(error_message)
-            if _is_4d_array(images):
-                return _flatten_image_list(images)
-            if _is_5d_array(images):
-                return _flatten_image_list_sequence(images)
+            raise ValueError(error_message)
         return images
 
     def _is_list_sequence(images):
