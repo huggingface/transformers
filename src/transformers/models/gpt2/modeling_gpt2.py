@@ -295,9 +295,9 @@ class GPT2Attention(nn.Module):
         shape_q = (*query_states.shape[:-1], -1, self.head_dim)
         shape_kv = (*key_states.shape[:-1], -1, self.head_dim)
 
-        query_states = query_states.reshape(shape_q).transpose(1, 2)
-        key_states = key_states.reshape(shape_kv).transpose(1, 2)
-        value_states = value_states.reshape(shape_kv).transpose(1, 2)
+        query_states = query_states.view(shape_q).transpose(1, 2)
+        key_states = key_states.view(shape_kv).transpose(1, 2)
+        value_states = value_states.view(shape_kv).transpose(1, 2)
 
         if layer_past is not None:
             past_key, past_value = layer_past
@@ -1660,3 +1660,15 @@ class GPT2ForQuestionAnswering(GPT2PreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "GPT2DoubleHeadsModel",
+    "GPT2ForQuestionAnswering",
+    "GPT2ForSequenceClassification",
+    "GPT2ForTokenClassification",
+    "GPT2LMHeadModel",
+    "GPT2Model",
+    "GPT2PreTrainedModel",
+    "load_tf_weights_in_gpt2",
+]
