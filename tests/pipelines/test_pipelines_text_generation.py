@@ -613,7 +613,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
     @require_torch
     def test_pipeline_assisted_generation(self):
         """Tests that we can run assisted generation in the pipeline"""
-        model = "distilbert/distilgpt2"
+        model = "hf-internal-testing/tiny-random-MistralForCausalLM"
         pipe = pipeline("text-generation", model=model, assistant_model=model)
 
         # We can run the pipeline
