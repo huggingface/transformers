@@ -667,7 +667,7 @@ class GPTNeoXJapaneseModel(GPTNeoXJapanesePreTrainedModel):
         output_attentions: bool,
     ):
         if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and 0.0 in attention_mask:
+            if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
 
@@ -896,3 +896,11 @@ class GPTNeoXJapaneseForCausalLM(GPTNeoXJapanesePreTrainedModel, GenerationMixin
                 + layer_past[2:],
             )
         return reordered_past
+
+
+__all__ = [
+    "GPTNeoXJapaneseForCausalLM",
+    "GPTNeoXJapaneseLayer",
+    "GPTNeoXJapaneseModel",
+    "GPTNeoXJapanesePreTrainedModel",
+]
