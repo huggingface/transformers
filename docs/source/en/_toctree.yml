@@ -754,8 +754,6 @@
         title: dac
       - local: model_doc/encodec
         title: EnCodec
-      - local: model_doc/hiera
-        title: Hiera
       - local: model_doc/hubert
         title: Hubert
       - local: model_doc/mctct
