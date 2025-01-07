@@ -96,8 +96,8 @@ class LlavaOnevisionProcessor(ProcessorMixin):
     ):
         self.num_image_tokens = num_image_tokens
         self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.image_token = image_token
-        self.video_token = video_token
+        self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
+        self.video_token = tokenizer.video_token if hasattr(tokenizer, "video_token") else video_token
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
 
     def __call__(
@@ -188,7 +188,11 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         for sample in text:
             while special_token in sample:
                 image_size_list = next(image_sizes)
-                orig_height, orig_width = image_size_list[0] if num_frames != 1 else image_size_list
+                original_size = image_size_list[0] if num_frames != 1 else image_size_list
+                if not isinstance(original_size, (list, tuple)):
+                    # cast to list to avoid numerical precision errors when calculating unpadding
+                    original_size = original_size.tolist()
+                orig_height, orig_width = original_size
                 num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
                 if self.vision_feature_select_strategy == "default":
                     num_image_tokens -= 1
@@ -310,3 +314,6 @@ class LlavaOnevisionProcessor(ProcessorMixin):
             )
 
         return processor
+
+
+__all__ = ["LlavaOnevisionProcessor"]

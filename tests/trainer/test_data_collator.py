@@ -299,7 +299,7 @@ class DataCollatorIntegrationTest(unittest.TestCase):
         self.assertEqual(batch["input_ids"].shape, torch.Size((2, 16)))
         self.assertEqual(batch["labels"].shape, torch.Size((2, 16)))
 
-        tokenizer._pad_token = None
+        tokenizer.pad_token = None
         data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False)
         with self.assertRaises(ValueError):
             # Expect error due to padding token missing
@@ -978,7 +978,7 @@ class TFDataCollatorIntegrationTest(unittest.TestCase):
         self.assertEqual(batch["input_ids"].shape.as_list(), [2, 16])
         self.assertEqual(batch["labels"].shape.as_list(), [2, 16])
 
-        tokenizer._pad_token = None
+        tokenizer.pad_token = None
         data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False, return_tensors="tf")
         with self.assertRaises(ValueError):
             # Expect error due to padding token missing
@@ -1673,7 +1673,7 @@ class NumpyDataCollatorIntegrationTest(unittest.TestCase):
         self.assertEqual(batch["input_ids"].shape, (2, 16))
         self.assertEqual(batch["labels"].shape, (2, 16))
 
-        tokenizer._pad_token = None
+        tokenizer.pad_token = None
         data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False, return_tensors="np")
         with self.assertRaises(ValueError):
             # Expect error due to padding token missing

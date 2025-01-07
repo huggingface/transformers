@@ -403,7 +403,7 @@ culture, and they allow us to design the'
 
 This guide illustrates the main parameters that enable various decoding strategies. More advanced parameters exist for the
 [`generate`] method, which gives you even further control over the [`generate`] method's behavior.
-For the complete list of the available parameters, refer to the [API documentation](./main_classes/text_generation.md).
+For the complete list of the available parameters, refer to the [API documentation](./main_classes/text_generation).
 
 ### Speculative Decoding
 
@@ -436,7 +436,7 @@ To enable assisted decoding, set the `assistant_model` argument with a model.
 ```
 
 <Tip>
-
+  
 If you're using a `pipeline` object, all you need to do is to pass the assistant checkpoint under `assistant_model`
 
 ```python
@@ -455,7 +455,8 @@ If you're using a `pipeline` object, all you need to do is to pass the assistant
 ```
 
 </Tip>
-
+  
+  
 When using assisted decoding with sampling methods, you can use the `temperature` argument to control the randomness,
 just like in multinomial sampling. However, in assisted decoding, reducing the temperature may help improve the latency.
 
@@ -477,8 +478,44 @@ just like in multinomial sampling. However, in assisted decoding, reducing the t
 ['Alice and Bob, a couple of friends of mine, who are both in the same office as']
 ```
 
+#### Universal Assisted Decoding
+
+Universal Assisted Decoding (UAD) adds support for main and assistant models with different tokenizers.
+To use it, simply pass the tokenizers using the `tokenizer` and `assistant_tokenizer` arguments (see below).
+Internally, the main model input tokens are re-encoded into assistant model tokens, then candidate tokens are generated in the assistant encoding, which are
+in turn re-encoded into main model candidate tokens. Validation then proceeds as explained above.
+The re-encoding steps involve decoding token ids into text and then encoding the text using a different tokenizer.
+Since re-encoding the tokens may result in tokenization discrepancies, UAD finds the longest common subsequence between the source and target encodings,
+to ensure the new tokens include the correct prompt suffix.
+
+#### Prompt Lookup
+
 Alternatively, you can also set the `prompt_lookup_num_tokens` to trigger n-gram based assisted decoding, as opposed
 to model based assisted decoding. You can read more about it [here](https://twitter.com/joao_gante/status/1747322413006643259).
+
+#### Self-Speculative Decoding
+
+An LLM can be trained to also use its language modeling head with earlier hidden states as input, effectively
+skipping layers to yield a lower-quality output -- a technique called early exiting.
+We use the lower-quality early exit output as an assistant output, and apply self-speculation to fix the output using the remaining layers. The final generation of that self-speculative solution is the same (or has the same distribution) as the original model's generation.
+If the model you're using was trained to do early exit, you can pass
+`assistant_early_exit` (integer). In this case, the assistant model will be the same model but exiting early, hence the
+"self-speculative" name. Because the assistant model is a portion of the target model, caches and weights can be shared, which results in lower memory requirements. As in other assisted generation methods, the final generated result has the same quality as if no assistant had been used.
+
+```python
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer
+
+>>> prompt = "Alice and Bob"
+>>> checkpoint = "facebook/layerskip-llama3.2-1B"
+
+>>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+>>> inputs = tokenizer(prompt, return_tensors="pt")
+
+>>> model = AutoModelForCausalLM.from_pretrained(checkpoint)
+>>> outputs = model.generate(**inputs, assistant_early_exit=4, do_sample=False, max_new_tokens=20)
+>>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
+['Alice and Bob are sitting in a bar. Alice is drinking a beer and Bob is drinking a']
+```
 
 #### Universal Assisted Decoding
 
@@ -508,6 +545,8 @@ to ensure the new tokens include the correct prompt suffix.
 ['Alice and Bob are sitting in a bar. Alice is drinking a beer and Bob is drinking a']
 ```
 
+We recommend to install `scikit-learn` library to enhance the candidate generation strategy and achieve additional speedup.
+
 ### DoLa Decoding
 
 **D**ecoding by C**o**ntrasting **La**yers (DoLa) is a contrastive decoding strategy to improve the factuality and reduce the
@@ -527,10 +566,11 @@ See the following examples for DoLa decoding with the 32-layer LLaMA-7B model.
 ```python
 >>> from transformers import AutoTokenizer, AutoModelForCausalLM, set_seed
 >>> import torch
+>>> from accelerate.test_utils.testing import get_backend
 
 >>> tokenizer = AutoTokenizer.from_pretrained("huggyllama/llama-7b")
 >>> model = AutoModelForCausalLM.from_pretrained("huggyllama/llama-7b", torch_dtype=torch.float16)
->>> device = 'cuda' if torch.cuda.is_available() else 'cpu'
+>>> device, _, _ = get_backend() # automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
 >>> model.to(device)
 >>> set_seed(42)
 

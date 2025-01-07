@@ -14,10 +14,11 @@
 # limitations under the License.
 """Testing suite for the PyTorch Mllama model."""
 
-import gc
 import unittest
 
+import pytest
 import requests
+from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
@@ -30,12 +31,11 @@ from transformers import (
 )
 from transformers.models.mllama.configuration_mllama import MllamaTextConfig
 from transformers.testing_utils import (
-    is_flaky,
+    cleanup,
     require_bitsandbytes,
     require_read_token,
     require_torch,
     require_torch_gpu,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -264,6 +264,7 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
 
     all_model_classes = (MllamaForConditionalGeneration,) if is_torch_available() else ()
     all_generative_model_classes = (MllamaForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = {"image-text-to-text": MllamaForConditionalGeneration} if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
     test_torchscript = False
@@ -271,7 +272,12 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
 
     def setUp(self):
         self.model_tester = MllamaVisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=MllamaConfig, has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self, config_class=MllamaConfig, has_text_modality=False, common_properties=["image_token_index"]
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
     def test_inputs_embeds(self):
@@ -353,19 +359,18 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
 
             self.assertListEqual([layer_attention.shape for layer_attention in iter_attentions], expected_shapes)
 
-    @require_torch_sdpa
-    @slow
-    @is_flaky()
-    def test_eager_matches_sdpa_inference_1_bfloat16(self):
-        # A workaround to override parametrized test with flaky decorator
-        super().test_eager_matches_sdpa_inference_1_bfloat16()
-
     @unittest.skip("For some unknown reasons the tests fails in CrossAttention layer when doing torch.sdpa(). ")
     def test_sdpa_can_compile_dynamic(self):
         pass
 
     @unittest.skip(reason="AssertionError: Items in the second set but not the first: might be a setting issue")
     def test_model_parallelism(self):
+        pass
+
+    @parameterized.expand([("offloaded",)])
+    @pytest.mark.generate
+    @unittest.skip(reason="Offloaded cache seems to not work with mllama's kv cache type")
+    def test_offloaded_cache_implementation(self, cache_implementation):
         pass
 
     def test_generate_text_only_with_cache(self):
@@ -396,8 +401,7 @@ class MllamaForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.instruct_model_checkpoint = "meta-llama/Llama-3.2-11B-Vision-Instruct"
 
     def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     @require_torch_gpu

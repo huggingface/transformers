@@ -213,8 +213,13 @@ class MllamaProcessor(ProcessorMixin):
     tokenizer_class = "PreTrainedTokenizerFast"
 
     def __init__(self, image_processor, tokenizer):
-        self.image_token = "<|image|>"
-        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        if not hasattr(tokenizer, "image_token"):
+            self.image_token = "<|image|>"
+            self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        else:
+            self.image_token = tokenizer.image_token
+            self.image_token_id = tokenizer.image_token_id
+
         self.python_token = "<|python_tag|>"
         self.python_token_id = tokenizer.convert_tokens_to_ids(self.python_token)
         self.bos_token = tokenizer.bos_token
@@ -342,8 +347,27 @@ class MllamaProcessor(ProcessorMixin):
         """
         return self.tokenizer.decode(*args, **kwargs)
 
+    def post_process_image_text_to_text(self, generated_outputs):
+        """
+        Post-process the output of the model to decode the text.
+
+        Args:
+            generated_outputs (`torch.Tensor` or `np.ndarray`):
+                The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
+                or `(sequence_length,)`.
+
+        Returns:
+            `List[str]`: The decoded text.
+        """
+        return self.tokenizer.batch_decode(
+            generated_outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False
+        )
+
     @property
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(tokenizer_input_names + image_processor_input_names + ["cross_attention_mask"])
+
+
+__all__ = ["MllamaProcessor"]

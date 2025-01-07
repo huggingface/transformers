@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import gc
 import inspect
 import random
 import unittest
@@ -21,7 +20,7 @@ from datasets import Audio, load_dataset
 
 from transformers import UnivNetConfig, UnivNetFeatureExtractor
 from transformers.testing_utils import (
-    backend_empty_cache,
+    cleanup,
     is_torch_available,
     require_torch,
     require_torch_accelerator,
@@ -211,8 +210,7 @@ class UnivNetModelTest(ModelTesterMixin, unittest.TestCase):
 class UnivNetModelIntegrationTests(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
-        gc.collect()
-        backend_empty_cache(torch_device)
+        cleanup(torch_device, gc_collect=True)
 
     def _load_datasamples(self, num_samples, sampling_rate=24000):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")

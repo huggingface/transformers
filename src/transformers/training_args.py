@@ -71,8 +71,6 @@ if is_torch_available():
     import torch
     import torch.distributed as dist
 
-    from .pytorch_utils import is_torch_greater_or_equal_than_2_0
-
 if is_accelerate_available():
     from accelerate.state import AcceleratorState, PartialState
     from accelerate.utils import DistributedType
@@ -700,8 +698,8 @@ class TrainingArguments:
         hub_token (`str`, *optional*):
             The token to use to push the model to the Hub. Will default to the token in the cache folder obtained with
             `huggingface-cli login`.
-        hub_private_repo (`bool`, *optional*, defaults to `False`):
-            If True, the Hub repo will be set to private.
+        hub_private_repo (`bool`, *optional*):
+            Whether to make the repo private. If `None` (default), the repo will be public unless the organization's default is private. This value is ignored if the repo already exists.
         hub_always_push (`bool`, *optional*, defaults to `False`):
             Unless this is `True`, the `Trainer` will skip pushing a checkpoint when the previous push is not finished.
         gradient_checkpointing (`bool`, *optional*, defaults to `False`):
@@ -1030,7 +1028,7 @@ class TrainingArguments:
     use_cpu: bool = field(
         default=False,
         metadata={
-            "help": " Whether or not to use cpu. If set to False, we will use cuda/tpu/mps/npu device if available."
+            "help": "Whether or not to use cpu. If set to False, we will use cuda/tpu/mps/npu device if available."
         },
     )
     use_mps_device: bool = field(
@@ -1157,7 +1155,7 @@ class TrainingArguments:
         },
     )
     dataloader_prefetch_factor: Optional[int] = field(
-        default=None if not is_torch_available() or is_torch_greater_or_equal_than_2_0 else 2,
+        default=None,
         metadata={
             "help": (
                 "Number of batches loaded in advance by each worker. "
@@ -1350,7 +1348,12 @@ class TrainingArguments:
         metadata={"help": "The hub strategy to use when `--push_to_hub` is activated."},
     )
     hub_token: Optional[str] = field(default=None, metadata={"help": "The token to use to push to the Model Hub."})
-    hub_private_repo: bool = field(default=False, metadata={"help": "Whether the model repository is private or not."})
+    hub_private_repo: Optional[bool] = field(
+        default=None,
+        metadata={
+            "help": "Whether to make the repo private. If `None` (default), the repo will be public unless the organization's default is private. This value is ignored if the repo already exists."
+        },
+    )
     hub_always_push: bool = field(
         default=False,
         metadata={"help": "Unless `True`, the Trainer will skip pushes if the previous one wasn't finished yet."},
@@ -1697,14 +1700,6 @@ class TrainingArguments:
                         raise ValueError(
                             "Your setup doesn't support bf16/gpu. You need torch>=1.10, using Ampere GPU with cuda>=11.0"
                         )
-                    elif not is_torch_xpu_available():
-                        # xpu
-                        from .pytorch_utils import is_torch_greater_or_equal_than_1_12
-
-                        if not is_torch_greater_or_equal_than_1_12:
-                            raise ValueError(
-                                "Your setup doesn't support bf16/xpu. You need torch>=1.12, using Intel XPU/GPU with IPEX installed"
-                            )
 
         if self.fp16 and self.bf16:
             raise ValueError("At most one of fp16 and bf16 can be True, but not both")
@@ -2051,11 +2046,7 @@ class TrainingArguments:
         if self.use_cpu:
             self.dataloader_pin_memory = False
 
-        if (
-            (not is_torch_available() or is_torch_greater_or_equal_than_2_0)
-            and self.dataloader_num_workers == 0
-            and self.dataloader_prefetch_factor is not None
-        ):
+        if self.dataloader_num_workers == 0 and self.dataloader_prefetch_factor is not None:
             raise ValueError(
                 "--dataloader_prefetch_factor can only be set when data is loaded in a different process, i.e."
                 " when --dataloader_num_workers > 1."
@@ -2173,7 +2164,7 @@ class TrainingArguments:
             if not is_accelerate_available():
                 raise ImportError(
                     f"Using the `Trainer` with `PyTorch` requires `accelerate>={ACCELERATE_MIN_VERSION}`: "
-                    "Please run `pip install transformers[torch]` or `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
+                    f"Please run `pip install transformers[torch]` or `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
                 )
         # We delay the init of `PartialState` to the end for clarity
         accelerator_state_kwargs = {"enabled": True, "use_configured_state": False}
@@ -2862,7 +2853,7 @@ class TrainingArguments:
         model_id: str,
         strategy: Union[str, HubStrategy] = "every_save",
         token: Optional[str] = None,
-        private_repo: bool = False,
+        private_repo: Optional[bool] = None,
         always_push: bool = False,
     ):
         """
@@ -2903,7 +2894,7 @@ class TrainingArguments:
                 The token to use to push the model to the Hub. Will default to the token in the cache folder obtained
                 with `huggingface-cli login`.
             private_repo (`bool`, *optional*, defaults to `False`):
-                If True, the Hub repo will be set to private.
+                Whether to make the repo private. If `None` (default), the repo will be public unless the organization's default is private. This value is ignored if the repo already exists.
             always_push (`bool`, *optional*, defaults to `False`):
                 Unless this is `True`, the `Trainer` will skip pushing a checkpoint when the previous push is not
                 finished.

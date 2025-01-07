@@ -14,7 +14,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch Llava-NeXT model."""
 
-import gc
 import unittest
 
 import numpy as np
@@ -29,6 +28,7 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    cleanup,
     require_bitsandbytes,
     require_torch,
     slow,
@@ -48,8 +48,6 @@ from ...test_modeling_common import (
 if is_torch_available():
     import torch
 
-else:
-    is_torch_greater_or_equal_than_2_0 = False
 
 if is_vision_available():
     from PIL import Image
@@ -217,13 +215,22 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
 
     all_model_classes = (LlavaOnevisionForConditionalGeneration,) if is_torch_available() else ()
     all_generative_model_classes = (LlavaOnevisionForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = (
+        {"image-text-to-text": LlavaOnevisionForConditionalGeneration} if is_torch_available() else {}
+    )
     test_pruning = False
     test_head_masking = False
     _is_composite = True
 
     def setUp(self):
         self.model_tester = LlavaOnevisionVisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LlavaOnevisionConfig, has_text_modality=False)
+        common_properties = ["image_token_index", "video_token_index", "vision_feature_layer"]
+        self.config_tester = ConfigTester(
+            self, config_class=LlavaOnevisionConfig, has_text_modality=False, common_properties=common_properties
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -336,8 +343,7 @@ class LlavaOnevisionForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.prompt_video = "user\n<video>\nWhat do you see in this video?<|im_end|>\n<|im_start|>assistant\n"
 
     def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     @require_bitsandbytes

@@ -24,6 +24,7 @@ from packaging import version
 
 from .utils import (
     ExplicitEnum,
+    TensorType,
     is_jax_tensor,
     is_numpy_array,
     is_tf_tensor,
@@ -385,6 +386,27 @@ def load_image(image: Union[str, "PIL.Image.Image"], timeout: Optional[float] = 
     return image
 
 
+def load_images(
+    images: Union[List, Tuple, str, "PIL.Image.Image"], timeout: Optional[float] = None
+) -> Union["PIL.Image.Image", List["PIL.Image.Image"], List[List["PIL.Image.Image"]]]:
+    """Loads images, handling different levels of nesting.
+
+    Args:
+      images: A single image, a list of images, or a list of lists of images to load.
+      timeout: Timeout for loading images.
+
+    Returns:
+      A single image, a list of images, a list of lists of images.
+    """
+    if isinstance(images, (list, tuple)):
+        if len(images) and isinstance(images[0], (list, tuple)):
+            return [[load_image(image, timeout=timeout) for image in image_group] for image_group in images]
+        else:
+            return [load_image(image, timeout=timeout) for image in images]
+    else:
+        return load_image(images, timeout=timeout)
+
+
 def validate_preprocess_arguments(
     do_rescale: Optional[bool] = None,
     rescale_factor: Optional[float] = None,
@@ -424,6 +446,44 @@ def validate_preprocess_arguments(
 
     if do_resize and (size is None or resample is None):
         raise ValueError("`size` and `resample` must be specified if `do_resize` is `True`.")
+
+
+def validate_fast_preprocess_arguments(
+    do_rescale: Optional[bool] = None,
+    rescale_factor: Optional[float] = None,
+    do_normalize: Optional[bool] = None,
+    image_mean: Optional[Union[float, List[float]]] = None,
+    image_std: Optional[Union[float, List[float]]] = None,
+    do_pad: Optional[bool] = None,
+    size_divisibility: Optional[int] = None,
+    do_center_crop: Optional[bool] = None,
+    crop_size: Optional[Dict[str, int]] = None,
+    do_resize: Optional[bool] = None,
+    size: Optional[Dict[str, int]] = None,
+    resample: Optional["PILImageResampling"] = None,
+    return_tensors: Optional[Union[str, TensorType]] = None,
+    data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
+):
+    """
+    Checks validity of typically used arguments in an `ImageProcessorFast` `preprocess` method.
+    Raises `ValueError` if arguments incompatibility is caught.
+    """
+    validate_preprocess_arguments(
+        do_rescale=do_rescale,
+        rescale_factor=rescale_factor,
+        do_normalize=do_normalize,
+        image_mean=image_mean,
+        image_std=image_std,
+        do_resize=do_resize,
+        size=size,
+        resample=resample,
+    )
+    # Extra checks for ImageProcessorFast
+    if return_tensors != "pt":
+        raise ValueError("Only returning PyTorch tensors is currently supported.")
+
+    if data_format != ChannelDimension.FIRST:
+        raise ValueError("Only channel first data format is currently supported.")
 
 
 # In the future we can add a TF implementation here when we have TF models.

@@ -276,6 +276,7 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         {
             "feature-extraction": ChameleonModel,
             "text-generation": ChameleonForConditionalGeneration,
+            "image-text-to-text": ChameleonForConditionalGeneration,
         }
         if is_torch_available()
         else {}

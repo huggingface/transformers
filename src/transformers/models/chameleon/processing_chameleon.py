@@ -66,9 +66,12 @@ class ChameleonProcessor(ProcessorMixin):
 
     def __init__(self, image_processor, tokenizer, image_seq_length: int = 1024, image_token: str = "<image>"):
         self.image_seq_length = image_seq_length
-        self.image_token = image_token
-        self.image_start_token = "<racm3:break>"  # fixed tokens for start and end, so can hardcode
-        self.image_end_token = "<eoss>"
+        self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
+        self.image_start_token = (
+            tokenizer.boi_token if hasattr(tokenizer, "boi_token") else "<racm3:break>"
+        )  # fixed tokens for start and end, so can hardcode
+        self.image_end_token = tokenizer.eoi_token if hasattr(tokenizer, "eoi_token") else "<eoss>"
+
         super().__init__(image_processor, tokenizer)
 
     def __call__(
@@ -165,3 +168,6 @@ class ChameleonProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+
+__all__ = ["ChameleonProcessor"]

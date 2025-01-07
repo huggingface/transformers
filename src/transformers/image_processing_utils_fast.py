@@ -15,13 +15,17 @@
 
 import functools
 from dataclasses import dataclass
+from typing import Any, Iterable, List, Optional, Tuple
 
 from .image_processing_utils import BaseImageProcessor
-from .utils.import_utils import is_torchvision_available
+from .utils.import_utils import is_torch_available, is_torchvision_available
 
 
 if is_torchvision_available():
     from torchvision.transforms import Compose
+
+if is_torch_available():
+    import torch
 
 
 @dataclass(frozen=True)
@@ -66,3 +70,64 @@ class BaseImageProcessorFast(BaseImageProcessor):
         encoder_dict = super().to_dict()
         encoder_dict.pop("_transform_params", None)
         return encoder_dict
+
+
+def get_image_size_for_max_height_width(
+    image_size: Tuple[int, int],
+    max_height: int,
+    max_width: int,
+) -> Tuple[int, int]:
+    """
+    Computes the output image size given the input image and the maximum allowed height and width. Keep aspect ratio.
+    Important, even if image_height < max_height and image_width < max_width, the image will be resized
+    to at least one of the edges be equal to max_height or max_width.
+
+    For example:
+        - input_size: (100, 200), max_height: 50, max_width: 50 -> output_size: (25, 50)
+        - input_size: (100, 200), max_height: 200, max_width: 500 -> output_size: (200, 400)
+
+    Args:
+        image_size (`Tuple[int, int]`):
+            The image to resize.
+        max_height (`int`):
+            The maximum allowed height.
+        max_width (`int`):
+            The maximum allowed width.
+    """
+    height, width = image_size
+    height_scale = max_height / height
+    width_scale = max_width / width
+    min_scale = min(height_scale, width_scale)
+    new_height = int(height * min_scale)
+    new_width = int(width * min_scale)
+    return new_height, new_width
+
+
+def safe_squeeze(tensor: "torch.Tensor", axis: Optional[int] = None) -> "torch.Tensor":
+    """
+    Squeezes a tensor, but only if the axis specified has dim 1.
+    """
+    if axis is None:
+        return tensor.squeeze()
+
+    try:
+        return tensor.squeeze(axis=axis)
+    except ValueError:
+        return tensor
+
+
+def max_across_indices(values: Iterable[Any]) -> List[Any]:
+    """
+    Return the maximum value across all indices of an iterable of values.
+    """
+    return [max(values_i) for values_i in zip(*values)]
+
+
+def get_max_height_width(images: List["torch.Tensor"]) -> Tuple[int]:
+    """
+    Get the maximum height and width across all images in a batch.
+    """
+
+    _, max_height, max_width = max_across_indices([img.shape for img in images])
+
+    return (max_height, max_width)

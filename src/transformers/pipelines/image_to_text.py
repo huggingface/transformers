@@ -140,6 +140,10 @@ class ImageToTextPipeline(Pipeline):
         image = load_image(image, timeout=timeout)
 
         if prompt is not None:
+            logger.warning_once(
+                "Passing `prompt` to the `image-to-text` pipeline is deprecated and will be removed in version 4.48"
+                " of 🤗 Transformers. Use the `image-text-to-text` pipeline instead",
+            )
             if not isinstance(prompt, str):
                 raise ValueError(
                     f"Received an invalid text input, got - {type(prompt)} - but expected a single string. "

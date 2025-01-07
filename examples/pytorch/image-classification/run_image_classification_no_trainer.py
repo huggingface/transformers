@@ -49,7 +49,7 @@ from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.47.0.dev0")
+check_min_version("4.48.0.dev0")
 
 logger = get_logger(__name__)
 
@@ -331,7 +331,7 @@ def main():
     config = AutoConfig.from_pretrained(
         args.model_name_or_path,
         num_labels=len(labels),
-        i2label=id2label,
+        id2label=id2label,
         label2id=label2id,
         finetuning_task="image-classification",
         trust_remote_code=args.trust_remote_code,
