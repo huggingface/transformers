@@ -40,6 +40,8 @@ from torch.utils.data.distributed import DistributedSampler
 
 from .integrations.deepspeed import is_deepspeed_zero3_enabled
 from .tokenization_utils_base import BatchEncoding
+
+# check if circular import?
 from .utils import (
     is_sagemaker_mp_enabled,
     is_torch_available,
