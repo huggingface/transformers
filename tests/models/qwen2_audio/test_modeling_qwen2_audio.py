@@ -241,47 +241,13 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=32)
 
-        EXPECTED_INPUT_IDS = torch.tensor(
-            [
-                [
-                    151644,
-                    8948,
-                    198,
-                    2610,
-                    525,
-                    264,
-                    10950,
-                    17847,
-                    13,
-                    151645,
-                    198,
-                    151644,
-                    872,
-                    198,
-                    14755,
-                    220,
-                    16,
-                    25,
-                    220,
-                    151647,
-                ]
-                + [151646] * 101
-                + [
-                    151648,
-                    198,
-                    3838,
-                    594,
-                    429,
-                    5112,
-                    30,
-                    151645,
-                    198,
-                    151644,
-                    77091,
-                    198,
-                ]
-            ]
-        )
+        # fmt: off
+        EXPECTED_INPUT_IDS = torch.tensor([[
+            151644, 8948, 198, 2610, 525, 264, 10950, 17847, 13, 151645, 198, 151644, 872, 198, 14755, 220, 16, 25, 220, 151647,
+            *[151646] * 101,
+            151648, 198, 3838, 594, 429, 5112, 30, 151645, 198, 151644, 77091, 198,
+        ]])
+        # fmt: on
         self.assertTrue(torch.equal(inputs["input_ids"], EXPECTED_INPUT_IDS))
 
         EXPECTED_DECODED_TEXT = (
@@ -296,47 +262,13 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
         # test the error when incorrect number of audio tokens
-        inputs["input_ids"] = torch.tensor(
-            [
-                [
-                    151644,
-                    8948,
-                    198,
-                    2610,
-                    525,
-                    264,
-                    10950,
-                    17847,
-                    13,
-                    151645,
-                    198,
-                    151644,
-                    872,
-                    198,
-                    14755,
-                    220,
-                    16,
-                    25,
-                    220,
-                    151647,
-                ]
-                + [151646] * 200
-                + [
-                    151648,
-                    198,
-                    3838,
-                    594,
-                    429,
-                    5112,
-                    30,
-                    151645,
-                    198,
-                    151644,
-                    77091,
-                    198,
-                ]
-            ]
-        )
+        # fmt: off
+        inputs["input_ids"] = torch.tensor([[
+            151644, 8948, 198, 2610, 525, 264, 10950, 17847, 13, 151645, 198, 151644, 872, 198, 14755, 220, 16, 25, 220, 151647,
+            *[151646] * 200,
+            151648, 198, 3838, 594, 429, 5112, 30, 151645, 198, 151644, 77091, 198,
+        ]])
+        # fmt: on
         with self.assertRaisesRegex(
             ValueError, "Audio features and audio tokens do not match: tokens: 200, features 101"
         ):
