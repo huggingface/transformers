@@ -728,7 +728,7 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         final_descriptors1 = final_descriptors[:, 1]
 
         # Compute matching descriptor distance.
-        scores = torch.einsum("bnd,bmd->bnm", final_descriptors0, final_descriptors1)
+        scores = final_descriptors0 @ final_descriptors1.transpose(1, 2)
         scores = scores / self.config.hidden_size**0.5
 
         if mask is not None:
