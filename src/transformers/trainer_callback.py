@@ -159,9 +159,10 @@ class TrainerState:
         """
         for step_kind in ("logging", "eval", "save"):
             num_steps = getattr(args, f"{step_kind}_steps")
-            if num_steps < 1:
-                num_steps = math.ceil(max_steps * num_steps)
-            setattr(self, f"{step_kind}_steps", num_steps)
+            if num_steps is not None:
+                if num_steps < 1:
+                    num_steps = math.ceil(max_steps * num_steps)
+                setattr(self, f"{step_kind}_steps", num_steps)
 
 
 class ExportableState:
