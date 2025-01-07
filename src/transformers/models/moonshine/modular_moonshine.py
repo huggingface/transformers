@@ -25,7 +25,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ..cohere.modeling_cohere import CohereRotaryEmbedding, apply_rotary_pos_emb, rotate_half
+from ..cohere.modeling_cohere import CohereRotaryEmbedding
 from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaModel, repeat_kv
 from ..phi.modeling_phi import PhiMLP
 from ..whisper.modeling_whisper import WhisperModel, shift_tokens_right
@@ -250,6 +250,7 @@ class MoonshineConfig(PretrainedConfig):
         )
 
 
+# TODO: @eustlb remove this once modular edge case is fixed
 # modular edge case: cannot import from Cohere's modeling file since it is call in the attention that inherits from LlamaAttention
 # should be removed in the future
 def rotate_half(x):
@@ -260,6 +261,7 @@ def rotate_half(x):
     return rot_x
 
 
+# TODO: @eustlb remove this once modular edge case is fixed
 # modular edge case: cannot import from Cohere's modeling file since it is call in the attention that inherits from LlamaAttention
 # should be removed in the future
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
@@ -360,6 +362,7 @@ def eager_attention_forward(
 
     return attn_output, attn_weights
 
+
 class MoonshineAttention(LlamaAttention):
     def __init__(self, config: MoonshineConfig, layer_idx: int, is_causal: bool):
         super().__init__(config, layer_idx)
@@ -379,7 +382,9 @@ class MoonshineAttention(LlamaAttention):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len = hidden_states.shape[:-1]
 
-        query_states = self.q_proj(hidden_states).view(bsz, q_len, self.config.num_key_value_heads, self.head_dim).transpose(1, 2)
+        query_states = (
+            self.q_proj(hidden_states).view(bsz, q_len, self.config.num_key_value_heads, self.head_dim).transpose(1, 2)
+        )
 
         is_cross_attention = key_value_states is not None
         if past_key_value is not None:
@@ -397,8 +402,16 @@ class MoonshineAttention(LlamaAttention):
             key_states = past_key_value.key_cache[self.layer_idx]
             value_states = past_key_value.value_cache[self.layer_idx]
         else:
-            key_states = self.k_proj(current_states).view(bsz, -1, self.config.num_key_value_heads, self.head_dim).transpose(1, 2)
-            value_states = self.v_proj(current_states).view(bsz, -1, self.config.num_key_value_heads, self.head_dim).transpose(1, 2)
+            key_states = (
+                self.k_proj(current_states)
+                .view(bsz, -1, self.config.num_key_value_heads, self.head_dim)
+                .transpose(1, 2)
+            )
+            value_states = (
+                self.v_proj(current_states)
+                .view(bsz, -1, self.config.num_key_value_heads, self.head_dim)
+                .transpose(1, 2)
+            )
             if is_cross_attention and past_key_value is not None:
                 key_states, value_states = past_key_value.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
@@ -730,9 +743,15 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
         self.config = config
         embed_dim = config.hidden_size
 
-        self.conv1 = nn.Conv1d(1, embed_dim, kernel_size=config.conv1_kernel_size, stride=config.conv1_stride, bias=False)
-        self.conv2 = nn.Conv1d(embed_dim, 2 * embed_dim, kernel_size=config.conv2_kernel_size, stride=config.conv2_stride)
-        self.conv3 = nn.Conv1d(2 * embed_dim, embed_dim, kernel_size=config.conv3_kernel_size, stride=config.conv3_stride)
+        self.conv1 = nn.Conv1d(
+            1, embed_dim, kernel_size=config.conv1_kernel_size, stride=config.conv1_stride, bias=False
+        )
+        self.conv2 = nn.Conv1d(
+            embed_dim, 2 * embed_dim, kernel_size=config.conv2_kernel_size, stride=config.conv2_stride
+        )
+        self.conv3 = nn.Conv1d(
+            2 * embed_dim, embed_dim, kernel_size=config.conv3_kernel_size, stride=config.conv3_stride
+        )
         self.groupnorm = nn.GroupNorm(num_groups=1, num_channels=embed_dim, eps=1e-5)
 
         self.rotary_emb = MoonshineRotaryEmbedding(
@@ -812,9 +831,7 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.preprocess(input_values)
 
-        position_ids = torch.arange(
-            0, inputs_embeds.shape[1], device=inputs_embeds.device
-        ).unsqueeze(0)
+        position_ids = torch.arange(0, inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
 
         hidden_states = inputs_embeds
 
@@ -868,12 +885,14 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
         )
         return output if return_dict else output.to_tuple()
 
+
 @add_start_docstrings(
     "The bare Moonshine decoder outputting raw hidden-states without any specific head on top.",
     MOONSHINE_START_DOCSTRING,
 )
 class MoonshineDecoder(LlamaModel):
     main_input_name = "input_ids"
+
     def __init__(self, config: MoonshineConfig):
         super().__init__(config)
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps, bias=False)

@@ -179,18 +179,21 @@ class MoonshineModelTester:
         self.parent.assertTrue(len(outputs.attentions) > 0)
 
     def prepare_config_and_inputs_for_common(self):
-        config, input_values, attention_mask, decoder_input_ids, decoder_attention_mask = self.prepare_config_and_inputs()
-        inputs_dict = {"input_values": input_values, "attention_mask": attention_mask, "decoder_input_ids": decoder_input_ids, "decoder_attention_mask": decoder_attention_mask}
+        config, input_values, attention_mask, decoder_input_ids, decoder_attention_mask = (
+            self.prepare_config_and_inputs()
+        )
+        inputs_dict = {
+            "input_values": input_values,
+            "attention_mask": attention_mask,
+            "decoder_input_ids": decoder_input_ids,
+            "decoder_attention_mask": decoder_attention_mask,
+        }
         return config, inputs_dict
 
 
 @require_torch
 class MoonshineModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (MoonshineModel, MoonshineForConditionalGeneration)
-        if is_torch_available()
-        else ()
-    )
+    all_model_classes = (MoonshineModel, MoonshineForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "automatic-speech-recognition": MoonshineForConditionalGeneration,
@@ -501,7 +504,6 @@ class MoonshineModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
 @require_torch
 class MoonshineModelIntegrationTests(unittest.TestCase):
-
     def setUp(self):
         self.processor_tiny = AutoProcessor.from_pretrained("eustlb/moonshine-tiny")
         self.processor_base = AutoProcessor.from_pretrained("eustlb/moonshine-base")
