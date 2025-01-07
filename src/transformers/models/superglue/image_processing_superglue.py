@@ -431,27 +431,22 @@ class SuperGlueImageProcessor(BaseImageProcessor):
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images[0])
 
-        if do_resize:
-            images = [
-                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
-                for image in images
-            ]
+        all_images = []
+        for image in images:
+            if do_resize:
+                image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
 
-        if do_rescale:
-            images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
-                for image in images
-            ]
+            if do_rescale:
+                image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
 
-        if do_grayscale:
-            images = [convert_to_grayscale(image, input_data_format=input_data_format) for image in images]
+            if do_grayscale:
+                image = convert_to_grayscale(image, input_data_format=input_data_format)
 
-        images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
-        ]
+            image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+            all_images.append(image)
 
         # Convert back the flattened list of images into a list of pairs of images.
-        image_pairs = [images[i : i + 2] for i in range(0, len(images), 2)]
+        image_pairs = [all_images[i : i + 2] for i in range(0, len(all_images), 2)]
 
         data = {"pixel_values": image_pairs}
 
