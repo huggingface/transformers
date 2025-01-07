@@ -556,14 +556,12 @@ class Emu3IntegrationTest(unittest.TestCase):
         def prefix_allowed_tokens_fn(batch_id, input_ids):
             height, width = HEIGHT, WIDTH
             visual_tokens = VISUAL_TOKENS
-            image_wrapper_token_id = processor.tokenizer.encode("<|image token|>", return_tensors="pt")[0].to(
-                model.device
-            )
-            eoi_token_id = processor.tokenizer.encode("<|image end|>", return_tensors="pt")[0]
-            eos_token_id = processor.tokenizer.encode("<|extra_204|>", return_tensors="pt")[0]
-            pad_token_id = processor.tokenizer.encode("<|endoftext|>", return_tensors="pt")[0]
+            image_wrapper_token_id = torch.tensor([processor.tokenizer.image_wrapper_token_id], device=model.device)
+            eoi_token_id = torch.tensor([processor.tokenizer.eoi_token_id], device=model.device)
+            eos_token_id = torch.tensor([processor.tokenizer.eos_token_id], device=model.device)
+            pad_token_id = torch.tensor([processor.tokenizer.pad_token_id], device=model.device)
+            eof_token_id = torch.tensor([processor.tokenizer.eof_token_id], device=model.device)
             eol_token_id = processor.tokenizer.encode("<|extra_200|>", return_tensors="pt")[0]
-            eof_token_id = processor.tokenizer.encode("<|extra_201|>", return_tensors="pt")[0]
 
             position = torch.nonzero(input_ids == image_wrapper_token_id, as_tuple=True)[0][0]
             offset = input_ids.shape[0] - position

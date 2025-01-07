@@ -4,9 +4,25 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_emu3.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# coding=utf-8
+# Copyright 2024 HuggingFace Inc. team. All rights reserved.
+#
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import math
 from functools import cached_property
-from typing import List, Optional, Tuple, Union
+from typing import Callable, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -16,16 +32,15 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
-from ...modeling_flash_attention_utils import FlashAttentionKwargs, _flash_attention_forward
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...modeling_utils import PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     LossKwargs,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
 )
@@ -58,93 +73,6 @@ class Emu3RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-class Emu3RotaryEmbedding(nn.Module):
-    def __init__(
-        self,
-        dim=None,
-        max_position_embeddings=2048,
-        base=10000,
-        device=None,
-        scaling_factor=1.0,
-        rope_type="default",
-        config: Optional[Emu3Config] = None,
-    ):
-        super().__init__()
-        # TODO (joao): remove the `if` below, only used for BC
-        self.rope_kwargs = {}
-        if config is None:
-            logger.warning_once(
-                "`Emu3RotaryEmbedding` can now be fully parameterized by passing the model config through the "
-                "`config` argument. All other arguments will be removed in v4.46"
-            )
-            self.rope_kwargs = {
-                "rope_type": rope_type,
-                "factor": scaling_factor,
-                "dim": dim,
-                "base": base,
-                "max_position_embeddings": max_position_embeddings,
-            }
-            self.rope_type = rope_type
-            self.max_seq_len_cached = max_position_embeddings
-            self.original_max_seq_len = max_position_embeddings
-        else:
-            # BC: "rope_type" was originally "type"
-            if config.rope_scaling is not None:
-                self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-            else:
-                self.rope_type = "default"
-            self.max_seq_len_cached = config.max_position_embeddings
-            self.original_max_seq_len = config.max_position_embeddings
-
-        self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, **self.rope_kwargs)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
-
-    def _dynamic_frequency_update(self, position_ids, device):
-        """
-        dynamic RoPE layers should recompute `inv_freq` in the following situations:
-        1 - growing beyond the cached sequence length (allow scaling)
-        2 - the current sequence length is in the original scale (avoid losing precision with small sequences)
-        """
-        seq_len = torch.max(position_ids) + 1
-        if seq_len > self.max_seq_len_cached:  # growth
-            inv_freq, self.attention_scaling = self.rope_init_fn(
-                self.config, device, seq_len=seq_len, **self.rope_kwargs
-            )
-            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
-            self.max_seq_len_cached = seq_len
-
-        if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
-            self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
-            self.max_seq_len_cached = self.original_max_seq_len
-
-    @torch.no_grad()
-    def forward(self, x, position_ids):
-        if "dynamic" in self.rope_type:
-            self._dynamic_frequency_update(position_ids, device=x.device)
-
-        # Core RoPE block
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
-        position_ids_expanded = position_ids[:, None, :].float()
-        # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
-        device_type = x.device.type
-        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos()
-            sin = emb.sin()
-
-        # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
-        cos = cos * self.attention_scaling
-        sin = sin * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-
 class Emu3MLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -159,24 +87,6 @@ class Emu3MLP(nn.Module):
     def forward(self, x):
         down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
         return down_proj
-
-
-class Emu3LayerNorm(nn.LayerNorm):
-    """
-    LayerNorm but computes stats only over the last dim because Emu3 applies gamma and beta
-    from each shard separately to each head, instead of reducing. We can apply each head's own
-    gamma/beta by repeat-interleaving weights from each shard, but the stats have to be computed
-    in the last dimension. This module applies gamma/beta manually to fulfill this requirement.
-    """
-
-    def __init__(self, hidden_size, *args, **kwargs):
-        super().__init__(hidden_size, *args, **kwargs)
-        self.normalized_shape = (hidden_size[-1],)
-
-    def forward(self, hidden_states):
-        hidden_states = F.layer_norm(hidden_states, self.normalized_shape, None, None, eps=1e-5)
-        hidden_states = hidden_states * self.weight + self.bias
-        return hidden_states
 
 
 def rotate_half(x):
@@ -225,167 +135,75 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+        attn_weights = attn_weights + causal_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 class Emu3Attention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: Emu3Config, layer_idx: Optional[int] = None):
+    def __init__(self, config: Emu3Config, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
-        if layer_idx is None:
-            logger.warning_once(
-                f"Instantiating {self.__class__.__name__} without passing a `layer_idx` is not recommended and will "
-                "lead to errors during the forward call if caching is used. Please make sure to provide a `layer_idx` "
-                "when creating this class."
-            )
-
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
+        self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
-        self.hidden_size = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = getattr(config, "head_dim", self.hidden_size // self.num_heads)
-        self.num_key_value_heads = config.num_key_value_heads
-        self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.max_position_embeddings = config.max_position_embeddings
-        self.rope_theta = config.rope_theta
         self.is_causal = True
 
-        self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=config.attention_bias)
-        self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=config.attention_bias)
-        self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.hidden_size, bias=config.attention_bias)
-
-        # TODO (joao): remove in v4.46 (RoPE is computed in the model, not in the decoder layers)
-        self.rotary_emb = Emu3RotaryEmbedding(config=self.config)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
-        output_attentions: bool = False,
-        use_cache: bool = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.46
-        **kwargs,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        bsz, q_len, _ = hidden_states.size()
-
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
-
-        # use -1 to infer num_heads and num_key_value_heads as they may vary if tensor parallel is used
-        query_states = query_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
-
-        if position_embeddings is None:
-            logger.warning_once(
-                "The attention layers in this model are transitioning from computing the RoPE embeddings internally "
-                "through `position_ids` (2D tensor with the indexes of the tokens), to using externally computed "
-                "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.46 `position_ids` will be "
-                "removed and `position_embeddings` will be mandatory."
-            )
-            cos, sin = self.rotary_emb(value_states, position_ids)
-        else:
-            cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
-        if past_key_value is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
-
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
-
-        if attention_mask is not None:  # no matter the length, we just slice it
-            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-            attn_weights = attn_weights + causal_mask
-
-        # upcast attention to fp32
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
-        attn_output = torch.matmul(attn_weights, value_states)
-
-        if attn_output.size() != (bsz, self.num_heads, q_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, q_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
-        attn_output = attn_output.transpose(1, 2).contiguous()
-
-        attn_output = attn_output.reshape(bsz, q_len, -1)
-
-        attn_output = self.o_proj(attn_output)
-
-        if not output_attentions:
-            attn_weights = None
-
-        return attn_output, attn_weights, past_key_value
-
-
-class Emu3FlashAttention2(Emu3Attention):
-    """
-    Emu3 flash attention module. This module inherits from `Emu3Attention` as the weights of the module stays
-    untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
-    flash attention and deal with padding tokens in case the input contains any of them.
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
-        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
-        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
-        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
+        self.q_proj = nn.Linear(
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.k_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.v_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        )
+        self.o_proj = nn.Linear(
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
+        )
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
+        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        attention_mask: Optional[torch.Tensor],
         past_key_value: Optional[Cache] = None,
-        output_attentions: bool = False,
-        use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.46
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        if isinstance(past_key_value, StaticCache):
-            raise ValueError(
-                "`static` cache implementation is not compatible with `attn_implementation==flash_attention_2` "
-                "make sure to use `sdpa` in the mean time, and open an issue at https://github.com/huggingface/transformers"
-            )
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        output_attentions = False
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        bsz, q_len, _ = hidden_states.size()
-
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
-
-        # Flash attention requires the input to have the shape
-        # batch_size x seq_length x head_dim x hidden_dim
-        # therefore we just need to keep the original shape
-        query_states = query_states.view(bsz, q_len, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
-
-        if position_embeddings is None:
-            logger.warning_once(
-                "The attention layers in this model are transitioning from computing the RoPE embeddings internally "
-                "through `position_ids` (2D tensor with the indexes of the tokens), to using externally computed "
-                "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.46 `position_ids` will be "
-                "removed and `position_embeddings` will be mandatory."
-            )
-            cos, sin = self.rotary_emb(value_states, position_ids)
-        else:
-            cos, sin = position_embeddings
+        cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
@@ -393,168 +211,30 @@ class Emu3FlashAttention2(Emu3Attention):
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        # TODO: These transpose are quite inefficient but Flash Attention requires the layout [batch_size, sequence_length, num_heads, head_dim]. We would need to refactor the KV cache
-        # to be able to avoid many of these transpose/reshape/view.
-        query_states = query_states.transpose(1, 2)
-        key_states = key_states.transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
-
-        dropout_rate = self.attention_dropout if self.training else 0.0
-
-        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
-        # therefore the input hidden states gets silently casted in float32. Hence, we need
-        # cast them back in the correct dtype just to be sure everything works as expected.
-        # This might slowdown training & inference so it is recommended to not cast the LayerNorms
-        # in fp32. (Emu3RMSNorm handles it correctly)
-
-        input_dtype = query_states.dtype
-        if input_dtype == torch.float32:
-            if torch.is_autocast_enabled():
-                target_dtype = torch.get_autocast_gpu_dtype()
-            # Handle the case where the model is quantized
-            elif hasattr(self.config, "_pre_quantization_dtype"):
-                target_dtype = self.config._pre_quantization_dtype
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                )
             else:
-                target_dtype = self.q_proj.weight.dtype
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-            logger.warning_once(
-                f"The input hidden states seems to be silently casted in float32, this might be related to"
-                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
-                f" {target_dtype}."
-            )
-
-            query_states = query_states.to(target_dtype)
-            key_states = key_states.to(target_dtype)
-            value_states = value_states.to(target_dtype)
-
-        attn_output = _flash_attention_forward(
+        attn_output, attn_weights = attention_interface(
+            self,
             query_states,
             key_states,
             value_states,
             attention_mask,
-            q_len,
-            position_ids=position_ids,
-            dropout=dropout_rate,
-            sliding_window=getattr(self, "sliding_window", None),
-            use_top_left_mask=self._flash_attn_uses_top_left_mask,
-            is_causal=self.is_causal,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
             **kwargs,
         )
 
-        attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-
-        if not output_attentions:
-            attn_weights = None
-
-        return attn_output, attn_weights, past_key_value
-
-
-class Emu3SdpaAttention(Emu3Attention):
-    """
-    Emu3 attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
-    `Emu3Attention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
-    SDPA API.
-    """
-
-    # Adapted from Emu3Attention.forward
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
-        output_attentions: bool = False,
-        use_cache: bool = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.46
-        **kwargs,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        if output_attentions:
-            # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
-            logger.warning_once(
-                "Emu3Model is using Emu3SdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
-                'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-            )
-            return super().forward(
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                position_ids=position_ids,
-                past_key_value=past_key_value,
-                output_attentions=output_attentions,
-                use_cache=use_cache,
-                cache_position=cache_position,
-                position_embeddings=position_embeddings,
-            )
-
-        bsz, q_len, _ = hidden_states.size()
-
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
-
-        # use -1 to infer num_heads and num_key_value_heads as they may vary if tensor parallel is used
-        query_states = query_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
-
-        if position_embeddings is None:
-            logger.warning_once(
-                "The attention layers in this model are transitioning from computing the RoPE embeddings internally "
-                "through `position_ids` (2D tensor with the indexes of the tokens), to using externally computed "
-                "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.46 `position_ids` will be "
-                "removed and `position_embeddings` will be mandatory."
-            )
-            cos, sin = self.rotary_emb(value_states, position_ids)
-        else:
-            cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
-        if past_key_value is not None:
-            # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
-
-        key_states = repeat_kv(key_states, self.num_key_value_groups)
-        value_states = repeat_kv(value_states, self.num_key_value_groups)
-
-        causal_mask = attention_mask
-        if attention_mask is not None:
-            causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
-
-        # SDPA with memory-efficient backend is currently (torch==2.1.2) bugged with non-contiguous inputs with custom attn_mask,
-        # Reference: https://github.com/pytorch/pytorch/issues/112577.
-        if query_states.device.type == "cuda" and causal_mask is not None:
-            query_states = query_states.contiguous()
-            key_states = key_states.contiguous()
-            value_states = value_states.contiguous()
-
-        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
-        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
-        is_causal = True if causal_mask is None and q_len > 1 else False
-
-        attn_output = torch.nn.functional.scaled_dot_product_attention(
-            query_states,
-            key_states,
-            value_states,
-            attn_mask=causal_mask,
-            dropout_p=self.attention_dropout if self.training else 0.0,
-            is_causal=is_causal,
-        )
-
-        attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.view(bsz, q_len, -1)
-
-        attn_output = self.o_proj(attn_output)
-
-        return attn_output, None, past_key_value
-
-
-EMU3_ATTENTION_CLASSES = {
-    "eager": Emu3Attention,
-    "flash_attention_2": Emu3FlashAttention2,
-    "sdpa": Emu3SdpaAttention,
-}
+        return attn_output, attn_weights
 
 
 class Emu3DecoderLayer(nn.Module):
@@ -562,7 +242,7 @@ class Emu3DecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = EMU3_ATTENTION_CLASSES[config._attn_implementation](config=config, layer_idx=layer_idx)
+        self.self_attn = Emu3Attention(config=config, layer_idx=layer_idx)
 
         self.mlp = Emu3MLP(config)
         self.input_layernorm = Emu3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
@@ -605,7 +285,7 @@ class Emu3DecoderLayer(nn.Module):
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+        hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -622,15 +302,12 @@ class Emu3DecoderLayer(nn.Module):
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
+        hidden_states = residual + self.dropout(hidden_states)
 
         outputs = (hidden_states,)
 
         if output_attentions:
             outputs += (self_attn_weights,)
-
-        if use_cache:
-            outputs += (present_key_value,)
 
         return outputs
 
@@ -696,15 +373,10 @@ class Emu3VQVAEConv3d(nn.Module):
         self,
         in_channel: int,
         out_channel: int,
-        kernel_size: Union[int, tuple],
-        stride: Union[int, tuple],
+        kernel_size: Tuple[int],
+        stride: Tuple[int],
     ):
         super().__init__()
-
-        if isinstance(kernel_size, int):
-            kernel_size = (kernel_size,) * 3
-        if isinstance(stride, int):
-            stride = (stride,) * 3
 
         padding_sizes = [one_kernel - one_stride for one_kernel, one_stride in zip(kernel_size[1:], stride[1:])]
         self.padding = ()
@@ -773,8 +445,8 @@ class Emu3VQVAETemporalUpsample(nn.Module):
         self.conv = Emu3VQVAEConv3d(
             in_channel,
             out_channel,
-            kernel_size=3,
-            stride=1,
+            kernel_size=(3, 3, 3),
+            stride=(1, 1, 1),
         )
 
     def forward(self, hidden_states: torch.Tensor):
@@ -822,15 +494,15 @@ class Emu3VQVAETemporalResnetBlock(nn.Module):
         self.conv1 = Emu3VQVAEConv3d(
             in_channels,
             out_channels,
-            kernel_size=3,
-            stride=1,
+            kernel_size=(3, 3, 3),
+            stride=(1, 1, 1),
         )
         self.norm2 = nn.BatchNorm3d(out_channels)
         self.conv2 = Emu3VQVAEConv3d(
             out_channels,
             out_channels,
-            kernel_size=3,
-            stride=1,
+            kernel_size=(3, 3, 3),
+            stride=(1, 1, 1),
         )
         if self.in_channels != self.out_channels:
             self.nin_shortcut = nn.Conv3d(
@@ -921,45 +593,78 @@ class Emu3VQVAEResnetBlock(nn.Module):
 
 
 class Emu3VQVAEAttnBlock(nn.Module):
-    def __init__(self, in_channels, quant_channels=None):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(self, config):
         super().__init__()
-        self.in_channels = in_channels
-        self.quant_channels = quant_channels
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.head_dim = self.embed_dim // self.num_heads
+        if self.head_dim * self.num_heads != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+                f" {self.num_heads})."
+            )
+        self.scale = self.head_dim**-0.5
+        self.dropout = config.attention_dropout
 
-        if quant_channels is None:
-            self.norm = nn.GroupNorm(num_channels=in_channels, num_groups=32, eps=1e-6, affine=True)
-        else:
-            self.norm = Emu3VQVAESpatialNorm(quant_channels, in_channels)
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
 
-        self.q = nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
-        self.k = nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
-        self.v = nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
-        self.proj_out = nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
+        """Input shape: Batch x Time x Channel"""
 
-    def forward(self, hidden_states, quant_channels=None):
-        norm_args = () if self.quant_channels is None else (quant_channels,)
+        batch_size, q_len, _ = hidden_states.size()
 
-        residual = hidden_states
-        hidden_states = self.norm(hidden_states, *norm_args)
-        query_states = self.q(hidden_states)
-        key_states = self.k(hidden_states)
-        value_states = self.v(hidden_states)
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
 
-        # compute attention
-        batch_size, channels, height, width = query_states.shape
-        query_states = query_states.reshape(batch_size, channels, height * width).permute(0, 2, 1)
-        key_states = key_states.reshape(batch_size, channels, height * width)
-        attn_weights = torch.bmm(query_states, key_states)
-        attn_weights = attn_weights * (int(channels) ** (-0.5))
-        attn_weights = F.softmax(attn_weights, dim=2)
+        query_states = query_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(batch_size, q_len, self.num_heads, self.head_dim).transpose(1, 2)
 
-        # attend to values
-        value_states = value_states.reshape(batch_size, channels, height * width)
-        attn_weights = attn_weights.permute(0, 2, 1)
-        attn_output = torch.bmm(value_states, attn_weights).reshape(batch_size, channels, height, width)
+        k_v_seq_len = key_states.shape[-2]
+        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * self.scale
 
-        attn_output = self.proj_out(attn_output)
-        return residual + attn_output
+        if attn_weights.size() != (batch_size, self.num_heads, q_len, k_v_seq_len):
+            raise ValueError(
+                f"Attention weights should be of size {(batch_size, self.num_heads, q_len, k_v_seq_len)}, but is"
+                f" {attn_weights.size()}"
+            )
+
+        if attention_mask is not None:
+            if attention_mask.size() != (batch_size, 1, q_len, k_v_seq_len):
+                raise ValueError(
+                    f"Attention mask should be of size {(batch_size, 1, q_len, k_v_seq_len)}, but is {attention_mask.size()}"
+                )
+            attn_weights = attn_weights + attention_mask
+
+        # upcast attention to fp32
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        attn_output = torch.matmul(attn_weights, value_states)
+
+        if attn_output.size() != (batch_size, self.num_heads, q_len, self.head_dim):
+            raise ValueError(
+                f"`attn_output` should be of size {(batch_size, self.num_heads, q_len, self.head_dim)}, but is"
+                f" {attn_output.size()}"
+            )
+
+        attn_output = attn_output.transpose(1, 2).contiguous()
+        attn_output = attn_output.reshape(batch_size, q_len, self.embed_dim)
+
+        attn_output = self.out_proj(attn_output)
+
+        return attn_output, attn_weights
 
 
 class Emu3VQVAEEncoder(nn.Module):
@@ -975,13 +680,13 @@ class Emu3VQVAEEncoder(nn.Module):
         channel_multiplier = config.channel_multiplier
 
         self.conv_in = torch.nn.Conv2d(in_channels, base_channels, kernel_size=3, stride=1, padding=1)
-
         in_channel_multiplier = (1,) + tuple(channel_multiplier)
         self.in_channel_multiplier = in_channel_multiplier
         self.down = nn.ModuleList()
         for i_level in range(self.num_resolutions):
             block = nn.ModuleList()
             attn = nn.ModuleList()
+            attn_norms = nn.ModuleList()
             block_in = base_channels * in_channel_multiplier[i_level]
             block_out = base_channels * channel_multiplier[i_level]
             for i_block in range(self.num_res_blocks):
@@ -993,11 +698,13 @@ class Emu3VQVAEEncoder(nn.Module):
                 )
                 block_in = block_out
                 if config.attn_resolutions is not None and i_level in config.attn_resolutions:
-                    attn.append(Emu3VQVAEAttnBlock(block_in))
+                    attn.append(Emu3VQVAEAttnBlock(config))
+                    attn_norms.append(nn.GroupNorm(num_channels=block_in, num_groups=32, eps=1e-6, affine=True))
 
             down = nn.Module()
             down.block = block
             down.attn = attn
+            down.attn_norms = attn_norms
             if i_level != self.num_resolutions - 1:
                 down.downsample = Emu3VQVAEEncoderConvDownsample(block_in)
             self.down.append(down)
@@ -1007,7 +714,8 @@ class Emu3VQVAEEncoder(nn.Module):
             in_channels=block_in,
             out_channels=block_in,
         )
-        self.mid.attn_1 = Emu3VQVAEAttnBlock(block_in)
+        self.mid.attn_1 = Emu3VQVAEAttnBlock(config)
+        self.mid.attn_norm = nn.GroupNorm(num_channels=block_in, num_groups=32, eps=1e-6, affine=True)
         self.mid.block_2 = Emu3VQVAEResnetBlock(
             in_channels=block_in,
             out_channels=block_in,
@@ -1025,20 +733,18 @@ class Emu3VQVAEEncoder(nn.Module):
 
         temporal_down_blocks = int(math.log2(config.temporal_downsample_factor))
         self.time_conv = nn.ModuleList()
+        self.time_res_stack = nn.ModuleList()
 
         for i in range(temporal_down_blocks):
             conv = Emu3VQVAETemporalDownsample(out_channels, out_channels)
             self.time_conv.append(conv)
 
-        self.time_res_stack = nn.Sequential(
-            *[
-                Emu3VQVAETemporalResnetBlock(
-                    in_channels=out_channels,
-                    out_channels=out_channels,
-                )
-                for _ in range(self.num_res_blocks)
-            ]
-        )
+        for _ in range(self.num_res_blocks):
+            time_res_conv = Emu3VQVAETemporalResnetBlock(
+                in_channels=out_channels,
+                out_channels=out_channels,
+            )
+            self.time_res_stack.append(time_res_conv)
 
     def forward(self, pixel_values: torch.LongTensor):
         temporal_dim = pixel_values.shape[1]
@@ -1052,13 +758,27 @@ class Emu3VQVAEEncoder(nn.Module):
                     hidden_states,
                 )
                 if len(self.down[i_level].attn) > 0:
-                    hidden_states = self.down[i_level].attn[i_block](hidden_states)
+                    residual = hidden_states
+                    hidden_states = self.down[i_level].attn_norms[i_block](hidden_states)
+                    batch_size, channels, height, width = hidden_states.shape
+                    hidden_states = hidden_states.view(batch_size, channels, height * width).transpose(1, 2)
+                    hidden_states = self.down[i_level].attn[i_block](hidden_states)[0]
+
+                    hidden_states = hidden_states.reshape(batch_size, height, width, channels).permute(0, 3, 1, 2)
+                    hidden_states = residual + hidden_states
+
             if i_level != self.num_resolutions - 1:
                 hidden_states = self.down[i_level].downsample(hidden_states)
 
         # middle
         hidden_states = self.mid.block_1(hidden_states)
-        hidden_states = self.mid.attn_1(hidden_states)
+        residual = hidden_states
+        hidden_states = self.mid.attn_norm(hidden_states)
+        batch_size, channels, height, width = hidden_states.shape
+        hidden_states = hidden_states.view(batch_size, channels, height * width).transpose(1, 2)
+        hidden_states = self.mid.attn_1(hidden_states)[0]
+        hidden_states = hidden_states.reshape(batch_size, height, width, channels).permute(0, 3, 1, 2)
+        hidden_states = residual + hidden_states
         hidden_states = self.mid.block_2(hidden_states)
 
         # end
@@ -1073,7 +793,9 @@ class Emu3VQVAEEncoder(nn.Module):
             hidden_states = conv(hidden_states)
             hidden_states *= torch.sigmoid(hidden_states)
 
-        hidden_states = self.time_res_stack(hidden_states)
+        for layer in self.time_res_stack:
+            hidden_states = layer(hidden_states)
+
         hidden_states = hidden_states.permute(0, 2, 1, 3, 4)
 
         return hidden_states
@@ -1088,15 +810,12 @@ class Emu3VQVAEDecoder(nn.Module):
 
         quant_channels = config.embed_dim
         block_in = config.base_channels * config.channel_multiplier[-1]
-        self.time_res_stack = nn.Sequential(
-            *[
-                Emu3VQVAETemporalResnetBlock(
-                    in_channels=config.latent_channels,
-                    out_channels=config.latent_channels,
-                )
-                for _ in range(config.num_res_blocks)
-            ]
-        )
+        self.time_res_stack = nn.ModuleList()
+        for _ in range(config.num_res_blocks):
+            time_res_conv = Emu3VQVAETemporalResnetBlock(
+                in_channels=config.latent_channels, out_channels=config.latent_channels
+            )
+            self.time_res_stack.append(time_res_conv)
 
         temp_upsample_block_num = int(math.log2(config.temporal_downsample_factor))
         self.time_conv = nn.ModuleList()
@@ -1119,7 +838,8 @@ class Emu3VQVAEDecoder(nn.Module):
             out_channels=block_in,
             quant_channels=quant_channels,
         )
-        self.mid.attn_1 = Emu3VQVAEAttnBlock(block_in, quant_channels)
+        self.mid.attn_norm = Emu3VQVAESpatialNorm(quant_channels, block_in)
+        self.mid.attn_1 = Emu3VQVAEAttnBlock(config)
         self.mid.block_2 = Emu3VQVAEResnetBlock(
             in_channels=block_in,
             out_channels=block_in,
@@ -1131,6 +851,7 @@ class Emu3VQVAEDecoder(nn.Module):
         for i_level in reversed(range(self.num_resolutions)):
             block = nn.ModuleList()
             attn = nn.ModuleList()
+            attn_norms = nn.ModuleList()
             block_out = config.base_channels * config.channel_multiplier[i_level]
             for i_block in range(self.num_res_blocks + 1):
                 block.append(
@@ -1142,11 +863,13 @@ class Emu3VQVAEDecoder(nn.Module):
                 )
                 block_in = block_out
                 if i_level in config.attn_resolutions:
-                    attn.append(Emu3VQVAEAttnBlock(block_in, quant_channels))
+                    attn.append(Emu3VQVAEAttnBlock(config))
+                    attn_norms.append(Emu3VQVAESpatialNorm(quant_channels, block_in))
 
             up = nn.Module()
             up.block = block
             up.attn = attn
+            up.attn_norms = attn_norms
             if i_level != 0:
                 up.upsample = Emu3VQVAEEncoderConvUpsample(block_in)
 
@@ -1164,10 +887,11 @@ class Emu3VQVAEDecoder(nn.Module):
     def forward(self, hidden_states: torch.Tensor, quant_states: torch.Tensor):
         hidden_quant_states = torch.cat((hidden_states, quant_states), dim=0)
         hidden_quant_states = hidden_quant_states.permute(0, 2, 1, 3, 4)
-        hidden_quant_states = self.time_res_stack(hidden_quant_states)
+        for layer in self.time_res_stack:
+            hidden_quant_states = layer(hidden_quant_states)
 
-        for conv in self.time_conv:
-            hidden_quant_states = conv(hidden_quant_states)
+        for layer in self.time_conv:
+            hidden_quant_states = layer(hidden_quant_states)
             hidden_quant_states *= torch.sigmoid(hidden_quant_states)
 
         hidden_quant_states = hidden_quant_states.permute(0, 2, 1, 3, 4)
@@ -1181,7 +905,13 @@ class Emu3VQVAEDecoder(nn.Module):
 
         # middle
         hidden_states = self.mid.block_1(hidden_states, quant_states)
-        hidden_states = self.mid.attn_1(hidden_states, quant_states)
+        residual = hidden_states
+        hidden_states = self.mid.attn_norm(hidden_states)
+        batch_size, channels, height, width = hidden_states.shape
+        hidden_states = hidden_states.view(batch_size, channels, height * width).transpose(1, 2)
+        hidden_states = self.mid.attn_1(hidden_states)[0]
+        hidden_states = hidden_states.reshape(batch_size, height, width, channels).permute(0, 3, 1, 2)
+        hidden_states = residual + hidden_states
         hidden_states = self.mid.block_2(hidden_states, quant_states)
 
         # upsampling
@@ -1189,8 +919,13 @@ class Emu3VQVAEDecoder(nn.Module):
             for i_block in range(self.num_res_blocks + 1):
                 hidden_states = self.up[i_level].block[i_block](hidden_states, quant_states)
                 if len(self.up[i_level].attn) > 0:
-                    hidden_states = self.up[i_level].attn[i_block](hidden_states, quant_states)
-
+                    residual = hidden_states
+                    hidden_states = self.up[i_level].attn_norms[i_block](hidden_states)
+                    batch_size, channels, height, width = hidden_states.shape
+                    hidden_states = hidden_states.view(batch_size, channels, height * width).transpose(1, 2)
+                    hidden_states = self.up[i_level].attn[i_block](hidden_states)[0]
+                    hidden_states = hidden_states.reshape(batch_size, height, width, channels).permute(0, 3, 1, 2)
+                    hidden_states = residual + hidden_states
             if i_level != 0:
                 hidden_states = self.up[i_level].upsample(hidden_states)
 
@@ -1428,7 +1163,72 @@ class Emu3PreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-EMU3_TEXT_INPUTS_DOCSTRING = r"""
+class Emu3RotaryEmbedding(nn.Module):
+    def __init__(
+        self,
+        config: Emu3Config,
+        device=None,
+    ):
+        super().__init__()
+        self.rope_kwargs = {}
+        # BC: "rope_type" was originally "type"
+        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+        else:
+            self.rope_type = "default"
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
+        self.config = config
+        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, **self.rope_kwargs)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = self.inv_freq
+
+    def _dynamic_frequency_update(self, position_ids, device):
+        """
+        dynamic RoPE layers should recompute `inv_freq` in the following situations:
+        1 - growing beyond the cached sequence length (allow scaling)
+        2 - the current sequence length is in the original scale (avoid losing precision with small sequences)
+        """
+        seq_len = torch.max(position_ids) + 1
+        if seq_len > self.max_seq_len_cached:  # growth
+            inv_freq, self.attention_scaling = self.rope_init_fn(
+                self.config, device, seq_len=seq_len, **self.rope_kwargs
+            )
+            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
+            self.max_seq_len_cached = seq_len
+
+        if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
+            self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
+            self.max_seq_len_cached = self.original_max_seq_len
+
+    @torch.no_grad()
+    def forward(self, x, position_ids):
+        if "dynamic" in self.rope_type:
+            self._dynamic_frequency_update(position_ids, device=x.device)
+
+        # Core RoPE block
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        position_ids_expanded = position_ids[:, None, :].float()
+        # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
+        device_type = x.device.type
+        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos()
+            sin = emb.sin()
+
+        # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
+        cos = cos * self.attention_scaling
+        sin = sin * self.attention_scaling
+
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
+EMU3_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
@@ -1463,15 +1263,19 @@ EMU3_TEXT_INPUTS_DOCSTRING = r"""
             config.n_positions - 1]`.
 
             [What are position IDs?](../glossary#position-ids)
-        past_key_values (`Cache`, *optional*):
+        past_key_values (`Cache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
             Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
             blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
             returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
 
-            Has to be an instance of [`~cache_utils.Cache`] instance, see our
-            [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+            Two formats are allowed:
+            - a [`~cache_utils.Cache`] instance, see our
+            [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache);
+            - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
+            shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
+            cache format.
 
-            The model will output the same cache type that is fed as input. If no `past_key_values` are passed, the
+            The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
             legacy cache format will be returned.
 
             If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
@@ -1500,13 +1304,18 @@ EMU3_TEXT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The Emu3 Text Model which consists of transformer with self attention layers.",
+    "The bare Emu3Text Model outputting raw hidden-states without any specific head on top.",
     EMU3_START_DOCSTRING,
 )
 class Emu3TextModel(Emu3PreTrainedModel):
-    config_class = Emu3TextConfig
+    """
+    Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Emu3TextDecoderLayer`]
 
-    def __init__(self, config: Emu3TextConfig):
+    Args:
+        config: Emu3TextConfig
+    """
+
+    def __init__(self, config: Emu3Config):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
@@ -1528,7 +1337,7 @@ class Emu3TextModel(Emu3PreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    @add_start_docstrings_to_model_forward(EMU3_TEXT_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(EMU3_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1541,6 +1350,7 @@ class Emu3TextModel(Emu3PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -1548,6 +1358,9 @@ class Emu3TextModel(Emu3PreTrainedModel):
         )
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning_once(
@@ -1574,7 +1387,6 @@ class Emu3TextModel(Emu3PreTrainedModel):
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
         )
 
-        # embed positions
         hidden_states = inputs_embeds
 
         # create position embeddings to be shared across the decoder layers
@@ -1583,9 +1395,8 @@ class Emu3TextModel(Emu3PreTrainedModel):
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
-        next_decoder_cache = None
 
-        for decoder_layer in self.layers:
+        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -1611,12 +1422,10 @@ class Emu3TextModel(Emu3PreTrainedModel):
                     use_cache=use_cache,
                     cache_position=cache_position,
                     position_embeddings=position_embeddings,
+                    **flash_attn_kwargs,
                 )
 
             hidden_states = layer_outputs[0]
-
-            if use_cache:
-                next_decoder_cache = layer_outputs[2 if output_attentions else 1]
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
@@ -1627,17 +1436,13 @@ class Emu3TextModel(Emu3PreTrainedModel):
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
 
-        next_cache = next_decoder_cache if use_cache else None
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, next_cache, all_hidden_states, all_self_attns] if v is not None)
-
-        return BaseModelOutputWithPast(
+        output = BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
-            past_key_values=next_cache,
+            past_key_values=past_key_values if use_cache else None,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
         )
+        return output if return_dict else output.to_tuple()
 
     def _update_causal_mask(
         self,
@@ -1648,7 +1453,7 @@ class Emu3TextModel(Emu3PreTrainedModel):
         output_attentions: bool,
     ):
         if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and 0.0 in attention_mask:
+            if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
 
@@ -1764,10 +1569,77 @@ class Emu3TextModel(Emu3PreTrainedModel):
 class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 
 
-@add_start_docstrings(
-    "Emu3 Model with a head on top used for outputting logits for next token prediction.",
-    EMU3_START_DOCSTRING,
-)
+EMU3_TEXT_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            If `past_key_values` is used, optionally only the last `input_ids` have to be input (see
+            `past_key_values`).
+
+            If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
+            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
+            information on the default strategy.
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.n_positions - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
+        past_key_values (`Cache`, *optional*):
+            Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
+            returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
+
+            Has to be an instance of [`~cache_utils.Cache`] instance, see our
+            [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
+
+            The model will output the same cache type that is fed as input. If no `past_key_values` are passed, the
+            legacy cache format will be returned.
+
+            If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
+            have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
+            of shape `(batch_size, sequence_length)`.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
+        use_cache (`bool`, *optional*):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
+            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
+            the complete sequence length.
+"""
+
+
 class Emu3ForCausalLM(Emu3PreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
@@ -1889,89 +1761,6 @@ class Emu3ForCausalLM(Emu3PreTrainedModel, GenerationMixin):
         )
 
 
-EMU3_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, max_num_images, max_num_tiles, channels, image_size, image_size)):
-            The tensors corresponding to the input images. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`Emu3ImageProcessor.__call__`] for details ([]`Emu3Processor`] uses
-            [`Emu3ImageProcessor`] for processing images).
-        image_sizes (`torch.LongTensor` of shape `(batch_size, 2)`):
-                The sizes of the images in the batch, being (height, width) for each image. Image sizes can be obtained using
-            [`AutoImageProcessor`]. See [`Emu3ImageProcessor.__call__`] for details ([]`Emu3Processor`] uses
-            [`Emu3ImageProcessor`] for processing images).
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            If `past_key_values` is used, optionally only the last `input_ids` have to be input (see
-            `past_key_values`).
-
-            If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
-            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
-            information on the default strategy.
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.n_positions - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        past_key_values (`Cache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
-            Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-            blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
-            returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
-
-            Has to be an instance of [`~cache_utils.Cache`] instance, see our
-            [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
-
-            The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
-            legacy cache format will be returned.
-
-            If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
-            have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
-            of shape `(batch_size, sequence_length)`.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
-            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
-            the complete sequence length.
-"""
-
-
-@add_start_docstrings(
-    """The Emu3 model which consists of a VQ-VAE and a language model.""",
-    EMU3_START_DOCSTRING,
-)
 class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
     def __init__(self, config):
         super().__init__(config)
@@ -2152,7 +1941,6 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
             elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
                 input_ids = input_ids[:, cache_position]
 
-        # `clone` calls in below ensure a consistent stride. See #32227
         if attention_mask is not None and position_ids is None:
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1

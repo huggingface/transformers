@@ -41,6 +41,12 @@ class Emu3VQVAEConfig(PretrainedConfig):
             Residual block number in each stage.
         attn_resolutions (`List[int]`, *optional*, defaults to `[3]`):
             Stage indices to apply attention.
+        hidden_size (`int`, *optional*, defaults to 1024):
+            Dimension of the hidden representations in the attention layer.
+        num_attention_heads (`int`, *optional*, defaults to 1):
+            Number of attention heads for each attention layer.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
 
     ```python
     >>> from transformers import Emu3VQVAE, Emu3VQVAEConfig
@@ -70,6 +76,9 @@ class Emu3VQVAEConfig(PretrainedConfig):
         channel_multiplier: List[int] = [1, 2, 2, 4],
         num_res_blocks: int = 2,
         attn_resolutions: List[int] = [3],
+        hidden_size: int = 1024,
+        num_attention_heads: int = 1,
+        attention_dropout: float = 0.0,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -85,6 +94,9 @@ class Emu3VQVAEConfig(PretrainedConfig):
         self.channel_multiplier = channel_multiplier
         self.num_res_blocks = num_res_blocks
         self.attn_resolutions = attn_resolutions
+        self.hidden_size = hidden_size
+        self.num_attention_heads = num_attention_heads
+        self.attention_dropout = attention_dropout
 
 
 class Emu3TextConfig(PretrainedConfig):

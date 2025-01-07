@@ -217,16 +217,31 @@ KEYS_TO_MODIFY_MAPPING = {
     "^quant_conv": "model.vqmodel.quant_conv",
     "^quantize": "model.vqmodel.quantize",
     "^model": "text_model.model",
-    "lm_head.weight": "text_model.lm_head.weight",
-    "^text_model.model.vqmodel": "vqmodel",
+    r"lm_head\.weight": "text_model.lm_head.weight",
+    r"^text_model\.model\.vqmodel": "vqmodel",
+    # rename QKV proj for the VQ-VAE model because we use SiglipAttention
+    r"\.q\.": ".q_proj.",
+    r"\.k\.": ".k_proj.",
+    r"\.v\.": ".v_proj.",
+    r"\.proj_out\.": ".out_proj.",
+    # move the attention norms outside of attention modules
+    r"mid\.attn_1\.norm\.": "mid.attn_norm.",
+    r"attn\.0\.norm\.": "attn_norms.0.",
+    r"attn\.1\.norm\.": "attn_norms.1.",
+    r"attn\.2\.norm\.": "attn_norms.2.",
+    r"attn\.3\.norm\.": "attn_norms.3.",
 }
-
-# Missing key(s) in state_dict: "vq_model.encoder.conv_in.weight", "vq_model.encoder.conv_in.bias"
-# Unexpected key(s) in state_dict: "vqmodel.encoder.conv_in.weight", "vqmodel.encoder.conv_in.bias", "
 
 
 def convert_state_dict_to_hf(old_state_dict, new_state_dict):
     for key, value in old_state_dict.items():
+        # convert conv layers in attn to linear
+        if (
+            any(key.endswith(name) for name in ["q.weight", "k.weight", "v.weight", "proj_out.weight"])
+            and value.ndim == 4
+        ):
+            value = value.squeeze()
+
         for old_pattern, new_pattern in KEYS_TO_MODIFY_MAPPING.items():
             key = re.sub(old_pattern, new_pattern, key)
 
