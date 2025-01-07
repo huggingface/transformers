@@ -2210,10 +2210,11 @@ class Trainer:
         max_steps = args.max_steps
         len_dataloader = len(train_dataloader) if has_length(train_dataloader) else None
 
-        if args.max_steps < 1 and has_length(train_dataloader):
+        if has_length(train_dataloader):
             num_update_steps_per_epoch = len(train_dataloader) // args.gradient_accumulation_steps
             num_update_steps_per_epoch = max(num_update_steps_per_epoch, 1)
-            max_steps = math.ceil(args.num_train_epochs * num_update_steps_per_epoch)
+            if args.max_steps < 1:
+                max_steps = math.ceil(args.num_train_epochs * num_update_steps_per_epoch)
 
         if self.args.include_tokens_per_second:
             num_train_tokens = self.num_tokens(train_dataloader, max_steps)
