@@ -33,7 +33,6 @@ from ...image_utils import (
     infer_channel_dimension_format,
     is_scaled_image,
     is_torch_available,
-    is_torch_tensor,
     make_list_of_images,
     to_numpy_array,
     valid_images,
@@ -275,7 +274,9 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
         pad_size_left, pad_size_right = _get_pad(height, size_divisor)
         pad_size_top, pad_size_bottom = _get_pad(width, size_divisor)
 
-        padded_image = pad(image, ((pad_size_left, pad_size_right), (pad_size_top, pad_size_bottom)), data_format=data_format)
+        padded_image = pad(
+            image, ((pad_size_left, pad_size_right), (pad_size_top, pad_size_bottom)), data_format=data_format
+        )
         return padded_image
 
     @filter_out_non_signature_kwargs()
@@ -307,8 +308,8 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
                 Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
             prompt_depth (`ImageInput`, *optional*):
-                Prompt depth to preprocess, which can be sparse depth obtained from multi-view geometry or 
-                low-resolution depth from a depth sensor. Generally has shape (height, width), where height 
+                Prompt depth to preprocess, which can be sparse depth obtained from multi-view geometry or
+                low-resolution depth from a depth sensor. Generally has shape (height, width), where height
                 and width can be smaller than the images.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
