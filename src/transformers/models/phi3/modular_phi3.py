@@ -225,7 +225,9 @@ class Phi3RotaryEmbedding(MistralRotaryEmbedding):
             original_max_position_embeddings = self.config.max_position_embeddings
         if seq_len > original_max_position_embeddings:
             if not hasattr(self, "long_inv_freq"):
-                self.long_inv_freq, _ = self.rope_init_fn(self.config, device, seq_len=original_max_position_embeddings + 1)
+                self.long_inv_freq, _ = self.rope_init_fn(
+                    self.config, device, seq_len=original_max_position_embeddings + 1
+                )
             self.register_buffer("inv_freq", self.long_inv_freq, persistent=False)
         else:
             self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)

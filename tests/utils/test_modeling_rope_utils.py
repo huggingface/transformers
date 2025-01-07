@@ -313,8 +313,8 @@ class RopeTest(unittest.TestCase):
 
         # longrope applies scaling on EACH inv frequency, `short_factor` or `long_factor`, depending on the seq_len
         dim = config.hidden_size // config.num_attention_heads
-        short_factor = [2.0] * (dim // 2)  # scaling applied when seq_len <= config.max_position_embeddings
-        long_factor = torch.ones(dim // 2).cumsum(0).tolist()  # scaling applied when seq_len > config.max_position_embeddings
+        short_factor = [2.0] * (dim // 2)  # scaling applied when seq_len <= max_position_embeddings
+        long_factor = torch.ones(dim // 2).cumsum(0).tolist()  # scaling applied when seq_len > max_position_embeddings
 
         rope_fn = ROPE_INIT_FUNCTIONS["default"]
         default_inv_freq, _ = rope_fn(config=config, device=torch_device)
@@ -364,7 +364,7 @@ class RopeTest(unittest.TestCase):
         torch.testing.assert_close(inv_freq, default_inv_freq / torch.tensor(short_factor).to(torch_device))
 
         # Check 3: seq_len > max_position_embeddings -> long factor is applied to the default frequencies
-        inv_freq, _ = rope_fn(config=config, device=torch_device, seq_len=config.max_position_embeddings+1)
+        inv_freq, _ = rope_fn(config=config, device=torch_device, seq_len=config.max_position_embeddings + 1)
         torch.testing.assert_close(inv_freq, default_inv_freq / torch.tensor(long_factor).to(torch_device))
 
     def test_llama3_rope_numerically(self):
