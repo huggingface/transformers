@@ -351,7 +351,9 @@ class PromptDepthAnythingNeck(nn.Module):
         # fusion
         self.fusion_stage = PromptDepthAnythingFeatureFusionStage(config)
 
-    def forward(self, hidden_states: List[torch.Tensor], patch_height=None, patch_width=None) -> List[torch.Tensor]:
+    def forward(
+        self, hidden_states: List[torch.Tensor], patch_height=None, patch_width=None, prompt_depth=None
+    ) -> List[torch.Tensor]:
         """
         Args:
             hidden_states (`List[torch.FloatTensor]`, each of shape `(batch_size, sequence_length, hidden_size)` or `(batch_size, hidden_size, height, width)`):
@@ -369,7 +371,7 @@ class PromptDepthAnythingNeck(nn.Module):
         features = [self.convs[i](feature) for i, feature in enumerate(hidden_states)]
 
         # fusion blocks
-        output = self.fusion_stage(features)
+        output = self.fusion_stage(features, prompt_depth=prompt_depth)
 
         return output
 
@@ -455,8 +457,8 @@ class PromptDepthAnythingForDepthEstimation(PromptDepthAnythingPreTrainedModel):
         >>> url = "https://github.com/DepthAnything/PromptDA/blob/main/assets/example_images/image.jpg?raw=true"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("depth-anything/promptda_vits_hf")
-        >>> model = AutoModelForDepthEstimation.from_pretrained("depth-anything/promptda_vits_hf")
+        >>> image_processor = AutoImageProcessor.from_pretrained("depth-anything/prompt-depth-anything-vits-hf")
+        >>> model = AutoModelForDepthEstimation.from_pretrained("depth-anything/prompt-depth-anything-vits-hf")
 
         >>> prompt_depth_url = "https://github.com/DepthAnything/PromptDA/blob/main/assets/example_images/arkit_depth.png?raw=true"
         >>> prompt_depth = Image.open(requests.get(prompt_depth_url, stream=True).raw)

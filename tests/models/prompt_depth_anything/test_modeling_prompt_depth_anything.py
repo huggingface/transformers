@@ -207,7 +207,7 @@ class PromptDepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
 
     @slow
     def test_model_from_pretrained(self):
-        model_name = "depth-anything/promptda_vits_hf"
+        model_name = "depth-anything/prompt-depth-anything-vits-hf"
         model = PromptDepthAnythingForDepthEstimation.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -241,10 +241,10 @@ def prepare_img():
 @slow
 class PromptDepthAnythingModelIntegrationTest(unittest.TestCase):
     def test_inference(self):
-        image_processor = DPTImageProcessor.from_pretrained("depth-anything/promptda_vits_hf")
-        model = PromptDepthAnythingForDepthEstimation.from_pretrained("depth-anything/promptda_vits_hf").to(
-            torch_device
-        )
+        image_processor = DPTImageProcessor.from_pretrained("depth-anything/prompt-depth-anything-vits-hf")
+        model = PromptDepthAnythingForDepthEstimation.from_pretrained(
+            "depth-anything/prompt-depth-anything-vits-hf"
+        ).to(torch_device)
 
         image = prepare_img()
         prompt_depth_url = (
@@ -274,11 +274,13 @@ class PromptDepthAnythingModelIntegrationTest(unittest.TestCase):
                 if not is_torch_greater_or_equal_than_2_4:
                     self.skipTest(reason="This test requires torch >= 2.4 to run.")
                 model = (
-                    PromptDepthAnythingForDepthEstimation.from_pretrained("depth-anything/promptda_vits_hf")
+                    PromptDepthAnythingForDepthEstimation.from_pretrained(
+                        "depth-anything/prompt-depth-anything-vits-hf"
+                    )
                     .to(torch_device)
                     .eval()
                 )
-                image_processor = DPTImageProcessor.from_pretrained("depth-anything/promptda_vits_hf")
+                image_processor = DPTImageProcessor.from_pretrained("depth-anything/prompt-depth-anything-vits-hf")
                 image = prepare_img()
                 inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
 

@@ -7,6 +7,7 @@ from transformers.models.depth_anything.configuration_depth_anything import Dept
 from transformers.models.depth_anything.modeling_depth_anything import (
     DepthAnythingDepthEstimationHead,
     DepthAnythingFeatureFusionLayer,
+    DepthAnythingFeatureFusionStage,
     DepthAnythingForDepthEstimation,
     DepthAnythingNeck,
     DepthAnythingReassembleLayer,
@@ -135,13 +136,7 @@ class PromptDepthAnythingFeatureFusionLayer(DepthAnythingFeatureFusionLayer):
         return hidden_state
 
 
-class PromptDepthAnythingFeatureFusionStage(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.layers = nn.ModuleList()
-        for _ in range(len(config.neck_hidden_sizes)):
-            self.layers.append(PromptDepthAnythingFeatureFusionLayer(config))
-
+class PromptDepthAnythingFeatureFusionStage(DepthAnythingFeatureFusionStage):
     def forward(self, hidden_states, size=None, prompt_depth=None):
         # reversing the hidden_states, we start from the last
         hidden_states = hidden_states[::-1]
@@ -164,9 +159,6 @@ class PromptDepthAnythingFeatureFusionStage(nn.Module):
 
 
 class PromptDepthAnythingDepthEstimationHead(DepthAnythingDepthEstimationHead):
-    def __init__(self, config):
-        super().__init__(config)
-
     def forward(self, hidden_states: List[torch.Tensor], patch_height, patch_width) -> torch.Tensor:
         hidden_states = hidden_states[self.head_in_index]
 
@@ -232,7 +224,29 @@ class PromptDepthAnythingReassembleStage(DepthAnythingReassembleStage):
 
 
 class PromptDepthAnythingNeck(DepthAnythingNeck):
-    pass
+    def forward(
+        self, hidden_states: List[torch.Tensor], patch_height=None, patch_width=None, prompt_depth=None
+    ) -> List[torch.Tensor]:
+        """
+        Args:
+            hidden_states (`List[torch.FloatTensor]`, each of shape `(batch_size, sequence_length, hidden_size)` or `(batch_size, hidden_size, height, width)`):
+                List of hidden states from the backbone.
+        """
+        if not isinstance(hidden_states, (tuple, list)):
+            raise TypeError("hidden_states should be a tuple or list of tensors")
+
+        if len(hidden_states) != len(self.config.neck_hidden_sizes):
+            raise ValueError("The number of hidden states should be equal to the number of neck hidden sizes.")
+
+        # postprocess hidden states
+        hidden_states = self.reassemble_stage(hidden_states, patch_height, patch_width)
+
+        features = [self.convs[i](feature) for i, feature in enumerate(hidden_states)]
+
+        # fusion blocks
+        output = self.fusion_stage(features, prompt_depth=prompt_depth)
+
+        return output
 
 
 @add_start_docstrings(
@@ -270,8 +284,8 @@ class PromptDepthAnythingForDepthEstimation(DepthAnythingForDepthEstimation):
         >>> url = "https://github.com/DepthAnything/PromptDA/blob/main/assets/example_images/image.jpg?raw=true"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("depth-anything/promptda_vits_hf")
-        >>> model = AutoModelForDepthEstimation.from_pretrained("depth-anything/promptda_vits_hf")
+        >>> image_processor = AutoImageProcessor.from_pretrained("depth-anything/prompt-depth-anything-vits-hf")
+        >>> model = AutoModelForDepthEstimation.from_pretrained("depth-anything/prompt-depth-anything-vits-hf")
 
         >>> prompt_depth_url = "https://github.com/DepthAnything/PromptDA/blob/main/assets/example_images/arkit_depth.png?raw=true"
         >>> prompt_depth = Image.open(requests.get(prompt_depth_url, stream=True).raw)

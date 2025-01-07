@@ -191,9 +191,9 @@ def transform_qkv_weights(key, value, config):
 
 
 name_to_checkpoint = {
-    "promptda_vits": "model.ckpt",
-    "promptda_vits_transparent": "model.ckpt",
-    "promptda_vitl": "model.ckpt",
+    "prompt-depth-anything-vits": "model.ckpt",
+    "prompt-depth-anything-vits-transparent": "model.ckpt",
+    "prompt-depth-anything-vitl": "model.ckpt",
 }
 
 
@@ -211,9 +211,9 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
     add_neck_mappings()
 
     model_name_to_repo = {
-        "promptda_vits": "depth-anything/promptda_vits",
-        "promptda_vits_transparent": "depth-anything/promptda_vits_transparent",
-        "promptda_vitl": "depth-anything/promptda_vitl",
+        "prompt-depth-anything-vits": "depth-anything/prompt-depth-anything-vits",
+        "prompt-depth-anything-vits-transparent": "depth-anything/prompt-depth-anything-vits-transparent",
+        "prompt-depth-anything-vitl": "depth-anything/prompt-depth-anything-vitl",
     }
 
     # load original state_dict
@@ -274,15 +274,15 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
     # assert logits
     if verify_logits:
         expected_shape = torch.Size([1, 756, 1008])
-        if model_name == "promptda_vits":
+        if model_name == "prompt-depth-anything-vits":
             expected_slice = torch.tensor(
                 [[3.0100, 3.0016, 3.0219], [3.0046, 3.0137, 3.0275], [3.0083, 3.0191, 3.0292]]
             )
-        elif model_name == "promptda_vits_transparent":
+        elif model_name == "prompt-depth-anything-vits-transparent":
             expected_slice = torch.tensor(
                 [[3.0058, 3.0397, 3.0460], [3.0314, 3.0393, 3.0504], [3.0326, 3.0465, 3.0545]]
             )
-        elif model_name == "promptda_vitl":
+        elif model_name == "prompt-depth-anything-vitl":
             expected_slice = torch.tensor(
                 [[3.1336, 3.1358, 3.1363], [3.1368, 3.1267, 3.1414], [3.1397, 3.1385, 3.1448]]
             )
@@ -309,7 +309,7 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model_name",
-        default="promptda_vits",
+        default="prompt_depth_anything_vits",
         type=str,
         choices=name_to_checkpoint.keys(),
         help="Name of the model you'd like to convert.",

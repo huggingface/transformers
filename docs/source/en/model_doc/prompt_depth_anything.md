@@ -44,8 +44,8 @@ The Transformers library allows you to use the model with just a few lines of co
 >>> url = "https://github.com/DepthAnything/PromptDA/blob/main/assets/example_images/image.jpg?raw=true"
 >>> image = Image.open(requests.get(url, stream=True).raw)
 
->>> image_processor = AutoImageProcessor.from_pretrained("depth-anything/promptda_vits_hf")
->>> model = AutoModelForDepthEstimation.from_pretrained("depth-anything/promptda_vits_hf")
+>>> image_processor = AutoImageProcessor.from_pretrained("depth-anything/prompt-depth-anything-vits-hf")
+>>> model = AutoModelForDepthEstimation.from_pretrained("depth-anything/prompt-depth-anything-vits-hf")
 
 >>> prompt_depth_url = "https://github.com/DepthAnything/PromptDA/blob/main/assets/example_images/arkit_depth.png?raw=true"
 >>> prompt_depth = Image.open(requests.get(prompt_depth_url, stream=True).raw)
