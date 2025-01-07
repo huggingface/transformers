@@ -32,6 +32,7 @@ logger = logging.get_logger(__name__)
 MODEL_MAPPING_NAMES = OrderedDict(
     [
         # Base model mapping
+        ("aimv2", "AIMv2Model"),
         ("albert", "AlbertModel"),
         ("align", "AlignModel"),
         ("altclip", "AltCLIPModel"),
@@ -276,7 +277,6 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("vision-text-dual-encoder", "VisionTextDualEncoderModel"),
         ("visual_bert", "VisualBertModel"),
         ("vit", "ViTModel"),
-        ("aimv2", "AIMv2Model"),
         ("vit_hybrid", "ViTHybridModel"),
         ("vit_mae", "ViTMAEModel"),
         ("vit_msn", "ViTMSNModel"),
@@ -576,6 +576,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
     [
         # Model for Image mapping
+        ("aimv2", "AIMv2Model"),
         ("beit", "BeitModel"),
         ("bit", "BitModel"),
         ("conditional_detr", "ConditionalDetrModel"),
@@ -621,7 +622,6 @@ MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
         ("van", "VanModel"),
         ("videomae", "VideoMAEModel"),
         ("vit", "ViTModel"),
-        ("aimv2", "AIMv2Model"),
         ("vit_hybrid", "ViTHybridModel"),
         ("vit_mae", "ViTMAEModel"),
         ("vit_msn", "ViTMSNModel"),
@@ -652,6 +652,7 @@ MODEL_FOR_CAUSAL_IMAGE_MODELING_MAPPING_NAMES = OrderedDict(
 MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Image Classification mapping
+        ("aimv2", "AIMv2ForImageClassification"),
         ("beit", "BeitForImageClassification"),
         ("bit", "BitForImageClassification"),
         ("clip", "CLIPForImageClassification"),
@@ -708,7 +709,6 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("timm_wrapper", "TimmWrapperForImageClassification"),
         ("van", "VanForImageClassification"),
         ("vit", "ViTForImageClassification"),
-        ("aimv2", "AIMv2ForImageClassification"),
         ("vit_hybrid", "ViTHybridForImageClassification"),
         ("vit_msn", "ViTMSNForImageClassification"),
     ]

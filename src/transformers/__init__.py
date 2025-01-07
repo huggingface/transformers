@@ -5121,6 +5121,7 @@ if TYPE_CHECKING:
         load_tf2_model_in_pytorch_model,
         load_tf2_weights_in_pytorch_model,
     )
+    from .models.aimv2 import AIMv2Config
     from .models.albert import AlbertConfig
     from .models.align import (
         AlignConfig,
@@ -5869,7 +5870,6 @@ if TYPE_CHECKING:
         VisualBertConfig,
     )
     from .models.vit import ViTConfig
-    from .models.aimv2 import AIMv2Config
     from .models.vit_mae import ViTMAEConfig
     from .models.vit_msn import ViTMSNConfig
     from .models.vitdet import VitDetConfig
@@ -6430,6 +6430,10 @@ if TYPE_CHECKING:
         )
         from .modeling_rope_utils import ROPE_INIT_FUNCTIONS
         from .modeling_utils import PreTrainedModel
+        from .models.aimv2 import (
+            AIMv2Model,
+            AIMv2PreTrainedModel,
+        )
         from .models.albert import (
             AlbertForMaskedLM,
             AlbertForMultipleChoice,
@@ -8265,10 +8269,6 @@ if TYPE_CHECKING:
             ViTModel,
             ViTPreTrainedModel,
         )
-        from .models.aimv2 import (
-            AIMv2Model,
-            AIMv2PreTrainedModel,
-        )
         from .models.vit_mae import (
             ViTMAEForPreTraining,
             ViTMAEModel,
@@ -8964,7 +8964,6 @@ if TYPE_CHECKING:
             TFViTModel,
             TFViTPreTrainedModel,
         )
-   
         from .models.vit_mae import (
             TFViTMAEForPreTraining,
             TFViTMAEModel,
@@ -9315,7 +9314,6 @@ if TYPE_CHECKING:
             FlaxViTModel,
             FlaxViTPreTrainedModel,
         )
-      
         from .models.wav2vec2 import (
             FlaxWav2Vec2ForCTC,
             FlaxWav2Vec2ForPreTraining,

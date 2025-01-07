@@ -22,9 +22,9 @@ from torch.nn import functional as F
 
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
-
+from ...utils import add_start_docstrings
 from .configuration_aimv2 import AIMv2Config
+
 
 __all__ = ["AIMv2Model", "AIMv2PreTrainedModel"]
 
@@ -67,6 +67,7 @@ AIMV2_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
 
+
 class AIMv2RMSNorm(nn.Module):
     def __init__(self, hidden_size: int, eps: float = 1e-6):
         super().__init__()
@@ -82,6 +83,7 @@ class AIMv2RMSNorm(nn.Module):
 
     def _norm(self, hidden_states: torch.Tensor) -> torch.Tensor:
         return hidden_states * torch.rsqrt(hidden_states.pow(2).mean(-1, keepdim=True) + self.eps)
+
 
 class AIMv2SwiGLUFFN(nn.Module):
     def __init__(self, config: AIMv2Config):
@@ -99,6 +101,7 @@ class AIMv2SwiGLUFFN(nn.Module):
         hidden_states = self.fc2(hidden_states)
         return hidden_states
 
+
 class AIMv2PatchEmbed(nn.Module):
     def __init__(self, config: AIMv2Config):
         super().__init__()
@@ -115,6 +118,7 @@ class AIMv2PatchEmbed(nn.Module):
         x = self.norm(x)
         return x
 
+
 class AIMv2ViTPreprocessor(nn.Module):
     def __init__(self, config: AIMv2Config):
         super().__init__()
@@ -130,6 +134,7 @@ class AIMv2ViTPreprocessor(nn.Module):
         tokens = tokens + pos_embed[:, :num_tokens]
         return tokens
 
+
 class AIMv2Attention(nn.Module):
     def __init__(self, config: AIMv2Config):
         super().__init__()
@@ -144,17 +149,7 @@ class AIMv2Attention(nn.Module):
         self.proj = nn.Linear(self.all_head_size, hidden_size, bias=config.use_bias)
         self.proj_drop = nn.Dropout(config.projection_dropout)
 
-    def transpose_for_scores(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        new_x_shape = hidden_states.size()[:-1] + (
-            self.num_attention_heads,
-            self.attention_head_size,
-        )
-        hidden_states = hidden_states.view(new_x_shape)
-        return hidden_states.permute(0, 2, 1, 3)
-
-    def forward(
-        self, hidden_states: torch.Tensor, mask: Optional[torch.Tensor] = None
-    ) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         batch_size, seq_length, _ = hidden_states.shape
         qkv = (
             self.qkv(hidden_states)
@@ -163,13 +158,7 @@ class AIMv2Attention(nn.Module):
         )
         query, key, value = qkv.unbind(0)
 
-        key_layer = self.transpose_for_scores(key)
-        value_layer = self.transpose_for_scores(value)
-        query_layer = self.transpose_for_scores(query)
-
-        context_layer = F.scaled_dot_product_attention(
-            query_layer, key_layer, value_layer, attn_mask=mask
-        )
+        context_layer = F.scaled_dot_product_attention(query, key, value, attn_mask=mask)
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
 
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
@@ -180,6 +169,7 @@ class AIMv2Attention(nn.Module):
 
         return context_layer
 
+
 class AIMv2Block(nn.Module):
     def __init__(self, config: AIMv2Config):
         super().__init__()
@@ -188,22 +178,17 @@ class AIMv2Block(nn.Module):
         self.mlp = AIMv2SwiGLUFFN(config)
         self.norm_2 = AIMv2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    def forward(
-        self, hidden_states: torch.Tensor, mask: Optional[torch.Tensor] = None
-    ) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
         hidden_states = hidden_states + self.attn(self.norm_1(hidden_states), mask)
         hidden_states = hidden_states + self.mlp(self.norm_2(hidden_states))
         return hidden_states
 
+
 class AIMv2Transformer(nn.Module):
     def __init__(self, config: AIMv2Config):
         super().__init__()
-        self.blocks = nn.ModuleList(
-            [AIMv2Block(config) for _ in range(config.num_hidden_layers)]
-        )
-        self.post_trunk_norm = AIMv2RMSNorm(
-            config.hidden_size, eps=config.rms_norm_eps
-        )
+        self.blocks = nn.ModuleList([AIMv2Block(config) for _ in range(config.num_hidden_layers)])
+        self.post_trunk_norm = AIMv2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
     def forward(
         self,
@@ -213,11 +198,17 @@ class AIMv2Transformer(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor, ...]]]:
         hidden_states = () if output_hidden_states else None
         for block in self.blocks:
-            tokens = block(tokens, mask)
             if output_hidden_states:
                 hidden_states += (tokens,)
+
+            tokens = block(tokens, mask)
+
+        if output_hidden_states:
+            hidden_states += (tokens,)
+
         tokens = self.post_trunk_norm(tokens)
         return tokens, hidden_states
+
 
 @add_start_docstrings(
     "The bare AIMv2 Model transformer outputting raw hidden-states without any specific head on top.",
@@ -231,15 +222,23 @@ class AIMv2PreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
 
     def _init_weights(self, module):
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Based on MAE (timm repo)
+        """Initialize the weights"""
+        if isinstance(module, nn.Linear):
             module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 module.bias.data.zero_()
+        elif isinstance(module, nn.Conv2d):
+            # Use Kaiming initialization for convolutional layers
+            nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
+            if module.bias is not None:
+                module.bias.data.zero_()
         elif isinstance(module, AIMv2ViTPreprocessor):
-            torch.nn.init.normal_(module.pos_embed, std=0.02)
-        elif isinstance(module, AIMv2RMSNorm):
-            module.weight.data.fill_(1.0)
+            module.pos_embed.data = nn.init.trunc_normal_(
+                module.pos_embed.data.to(torch.float32),
+                mean=0.0,
+                std=self.config.initializer_range,
+            ).to(module.pos_embed.dtype)
+
 
 @add_start_docstrings(
     "The bare AIMv2 Model transformer outputting raw hidden-states without any specific head on top.",
@@ -251,22 +250,71 @@ class AIMv2Model(AIMv2PreTrainedModel):
         self.preprocessor = AIMv2ViTPreprocessor(config)
         self.trunk = AIMv2Transformer(config)
 
-    @add_start_docstrings_to_model_forward(AIMV2_INPUTS_DOCSTRING)
-    @replace_return_docstrings(
-        output_type=BaseModelOutputWithNoAttention, config_class=_CONFIG_FOR_DOC
-    )
+    def _init_weights(self, module):
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, AIMv2RMSNorm):
+            module.weight.data.fill_(1.0)
+        elif isinstance(module, AIMv2ViTPreprocessor):
+            module.pos_embed.data = nn.init.trunc_normal_(
+                module.pos_embed.data.to(torch.float32),
+                mean=0.0,
+                std=self.config.initializer_range,
+            ).to(module.pos_embed.dtype)
+
+    def get_input_embeddings(self) -> AIMv2PatchEmbed:
+        return self.preprocessor.patchifier
+
     def forward(
         self,
         pixel_values: torch.Tensor,
         mask: Optional[torch.Tensor] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        output_attentions: Optional[bool] = None,
     ) -> Union[
         Tuple[torch.Tensor],
         Tuple[torch.Tensor, Tuple[torch.Tensor, ...]],
         BaseModelOutputWithNoAttention,
     ]:
         """
+         Args:
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`~AutoImageProcessor.__call__`] for details.
+
+        mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to apply to the attention scores. A value of 1 indicates the position is not masked, and a value of 0
+            indicates the position is masked.
+
+            <Tip>
+
+            What is the mask? Most models expect a value of 1, indicating the position *should* attend, and 0,
+            indicating the position *should not* attend. For example, if your input sequence length is 5 and you only
+            want to attend to the first 3 positions, the mask should be `[1, 1, 1, 0, 0]`.
+
+            </Tip>
+
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        output_attentions (`bool`, *optional*):
+             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+             tensors for more detail.
+
+    Returns:
+        Returns a tuple if not dictionary if config.use_return_dict is set to True, else a tuple.
+        x (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+        Hidden states of the output at the output of the last layer of the model.
+        hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned if `output_hidden_states=True` is passed or if `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
+        one for the output of each layer) of shape `(batch_size, sequence_length, hidden_size)`. Hidden-states of
+        the model at the output of each layer plus the optional initial embedding outputs.
+
         Returns:
 
         Examples:
@@ -286,15 +334,14 @@ class AIMv2Model(AIMv2PreTrainedModel):
         >>> last_hidden_state = outputs.last_hidden_state
         ```
         """
-        if output_hidden_states is None:
-            output_hidden_states = self.config.output_hidden_states
-        if return_dict is None:
-            return_dict = self.config.use_return_dict
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         x = self.preprocessor(pixel_values)
-        x, hidden_states = self.trunk(
-            x, mask, output_hidden_states=output_hidden_states
-        )
+        x, hidden_states = self.trunk(x, mask, output_hidden_states=output_hidden_states)
 
         if not return_dict:
             res = (x,)
@@ -303,5 +350,5 @@ class AIMv2Model(AIMv2PreTrainedModel):
 
         return BaseModelOutputWithNoAttention(
             last_hidden_state=x,
-            hidden_states=hidden_states,
+            hidden_states=hidden_states if output_hidden_states else None,
         )

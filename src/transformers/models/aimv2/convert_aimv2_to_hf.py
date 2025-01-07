@@ -20,16 +20,19 @@ URL: https://github.com/apple/ml-aim/tree/main/aim-v2
 import argparse
 from pathlib import Path
 
+import requests
 import torch
 from huggingface_hub import hf_hub_download
-import requests
 from PIL import Image
+from safetensors import safe_open
 
 from transformers import AIMv2Config, AIMv2Model, AutoImageProcessor
 from transformers.utils import logging
 
+
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
+
 
 def get_aimv2_config(model_name):
     config = AIMv2Config()
@@ -63,6 +66,7 @@ def get_aimv2_config(model_name):
 
     return config
 
+
 def create_rename_keys(config):
     rename_keys = []
     # fmt: off
@@ -90,15 +94,18 @@ def create_rename_keys(config):
     # fmt: on
     return rename_keys
 
+
 def rename_key(dct, old, new):
     val = dct.pop(old)
     dct[new] = val
+
 
 # We will verify our results on an image of a dog
 def prepare_img():
     url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/beignets-task-guide.png"
     image = Image.open(requests.get(url, stream=True).raw)
     return image
+
 
 @torch.no_grad()
 def convert_aimv2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=False):
@@ -126,14 +133,17 @@ def convert_aimv2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=F
 
     # define default AIMv2 configuration
     config = get_aimv2_config(model_name)
+    logger.info(f"Model config: {config}")
 
     # load original model from torch hub
     repo_id = model_name_to_repo_id[model_name]
     filename = "model.safetensors"
 
-    state_dict = {}
     filepath = hf_hub_download(repo_id=repo_id, filename=filename)
-    state_dict.update(torch.load(filepath, map_location="cpu"))
+    state_dict = {}
+    with safe_open(filepath, framework="pt", device="cpu") as f:
+        for key in f.keys():
+            state_dict[key] = f.get_tensor(key)
 
     # load HuggingFace model
     model = AIMv2Model(config).eval()
@@ -156,7 +166,7 @@ def convert_aimv2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=F
     inputs = preprocessor(images=image, return_tensors="pt")
 
     with torch.no_grad():
-        outputs = model(**inputs)
+        model(**inputs)
 
     print("Looks ok!")
 
@@ -170,6 +180,7 @@ def convert_aimv2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub=F
     if push_to_hub:
         model.push_to_hub(f"apple/{model_name}")
         preprocessor.push_to_hub(f"apple/{model_name}")
+
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -211,6 +222,4 @@ if __name__ == "__main__":
     )
 
     args = parser.parse_args()
-    convert_aimv2_checkpoint(
-        args.model_name, args.pytorch_dump_folder_path, args.push_to_hub
-    )
+    convert_aimv2_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
