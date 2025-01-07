@@ -192,6 +192,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
+# TODO: @eustlb remove this once modular edge case is fixed
 # modular edge case: cannot import from Cohere's modeling file since it is call in the attention that inherits from LlamaAttention
 # should be removed in the future
 def rotate_half(x):
@@ -202,6 +203,7 @@ def rotate_half(x):
     return rot_x
 
 
+# TODO: @eustlb remove this once modular edge case is fixed
 # modular edge case: cannot import from Cohere's modeling file since it is call in the attention that inherits from LlamaAttention
 # should be removed in the future
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
@@ -1099,7 +1101,7 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
         output_attentions: bool,
     ):
         if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and 0.0 in attention_mask:
+            if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
 
