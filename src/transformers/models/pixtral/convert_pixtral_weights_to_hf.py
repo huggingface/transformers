@@ -296,7 +296,7 @@ def main():
         help="Location to write HF model and tokenizer",
         required=True,
     )
-    parser.add_argument("--tokenizer_file", help="Location of the specific tokenizer model file to use.")
+    parser.add_argument("--tokenizer_file", help="Location of the specific tokenizer model file to use.", required=True)
     parser.add_argument(
         "--chat_template_file",
         help="Optional file containing a raw chat template. Will be set as the processor's chat template.",
