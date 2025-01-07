@@ -56,7 +56,13 @@ generate_ids = generate_ids[:, inputs.input_ids.size(1):]
 response = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
 
 # We can also omit the audio_bos and audio_eos tokens
-prompt = "<|AUDIO|><|audio_eos|>Generate the caption in English:"
+prompt = "<|AUDIO|>Generate the caption in English:"
+inputs = processor(text=prompt, audios=audio, return_tensors="pt").to(model.device)
+
+generate_ids = model.generate(**inputs, max_length=256)
+generate_ids = generate_ids[:, inputs.input_ids.size(1):]
+
+response = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
 ```
 
 In the following, we demonstrate how to use `Qwen2-Audio-7B-Instruct` for the inference, supporting both voice chat and audio analysis modes. Note that we have used the ChatML format for dialog, in this demo we show how to leverage `apply_chat_template` for this purpose.
