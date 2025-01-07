@@ -188,7 +188,6 @@ class PromptDepthAnythingDepthEstimationHead(DepthAnythingDepthEstimationHead):
         return predicted_depth
 
 
-# Copied from transformers.models.dpt.modeling_dpt.DPTPreTrainedModel with DPT->PromptDepthAnything,dpt->prompt_depth_anything
 class PromptDepthAnythingPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -229,58 +228,11 @@ class PromptDepthAnythingReassembleLayer(DepthAnythingReassembleLayer):
 
 
 class PromptDepthAnythingReassembleStage(DepthAnythingReassembleStage):
-    """
-    This class reassembles the hidden states of the backbone into image-like feature representations at various
-    resolutions.
-
-    This happens in 3 stages:
-    1. Take the patch embeddings and reshape them to image-like feature representations.
-    2. Project the channel dimension of the hidden states according to `config.neck_hidden_sizes`.
-    3. Resizing the spatial dimensions (height, width).
-
-    Args:
-        config (`[PromptDepthAnythingConfig]`):
-            Model configuration class defining the model architecture.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-
-        self.config = config
-        self.layers = nn.ModuleList()
-        for channels, factor in zip(config.neck_hidden_sizes, config.reassemble_factors):
-            self.layers.append(PromptDepthAnythingReassembleLayer(config, channels=channels, factor=factor))
+    pass
 
 
 class PromptDepthAnythingNeck(DepthAnythingNeck):
-    def __init__(self, config):
-        super().__init__(config)
-        self.reassemble_stage = PromptDepthAnythingReassembleStage(config)
-        self.fusion_stage = PromptDepthAnythingFeatureFusionStage(config)
-
-    def forward(
-        self, hidden_states: List[torch.Tensor], patch_height=None, patch_width=None, prompt_depth=None
-    ) -> List[torch.Tensor]:
-        """
-        Args:
-            hidden_states (`List[torch.FloatTensor]`, each of shape `(batch_size, sequence_length, hidden_size)` or `(batch_size, hidden_size, height, width)`):
-                List of hidden states from the backbone.
-        """
-        if not isinstance(hidden_states, (tuple, list)):
-            raise TypeError("hidden_states should be a tuple or list of tensors")
-
-        if len(hidden_states) != len(self.config.neck_hidden_sizes):
-            raise ValueError("The number of hidden states should be equal to the number of neck hidden sizes.")
-
-        # postprocess hidden states
-        hidden_states = self.reassemble_stage(hidden_states, patch_height, patch_width)
-
-        features = [self.convs[i](feature) for i, feature in enumerate(hidden_states)]
-
-        # fusion blocks
-        output = self.fusion_stage(features, prompt_depth=prompt_depth)
-
-        return output
+    pass
 
 
 @add_start_docstrings(
@@ -290,12 +242,6 @@ class PromptDepthAnythingNeck(DepthAnythingNeck):
     PROMPT_DEPTH_ANYTHING_START_DOCSTRING,
 )
 class PromptDepthAnythingForDepthEstimation(DepthAnythingForDepthEstimation):
-    def __init__(self, config):
-        super().__init__(config)
-        self.neck = PromptDepthAnythingNeck(config)
-        self.head = PromptDepthAnythingDepthEstimationHead(config)
-        self.post_init()
-
     @add_start_docstrings_to_model_forward(PROMPT_DEPTH_ANYTHING_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=DepthEstimatorOutput, config_class=_CONFIG_FOR_DOC)
     def forward(

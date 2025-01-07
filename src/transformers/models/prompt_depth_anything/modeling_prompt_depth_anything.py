@@ -22,7 +22,7 @@ from .configuration_prompt_depth_anything import PromptDepthAnythingConfig
 _CONFIG_FOR_DOC = "PromptDepthAnythingConfig"
 
 
-class PromptDepthAnythingResidualLayer(nn.Module):
+class PromptDepthAnythingLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.convolution1 = nn.Conv2d(
@@ -33,7 +33,7 @@ class PromptDepthAnythingResidualLayer(nn.Module):
             padding=1,
             bias=True,
         )
-        self.activation1 = nn.ReLU(False)
+        self.activation1 = nn.ReLU()
 
         self.convolution2 = nn.Conv2d(
             config.fusion_hidden_size,
@@ -43,7 +43,7 @@ class PromptDepthAnythingResidualLayer(nn.Module):
             padding=1,
             bias=True,
         )
-        self.activation2 = nn.ReLU(False)
+        self.activation2 = nn.ReLU()
 
         self.convolution3 = nn.Conv2d(
             config.fusion_hidden_size,
@@ -121,7 +121,7 @@ class PromptDepthAnythingFeatureFusionLayer(nn.Module):
 
         self.residual_layer1 = PromptDepthAnythingPreActResidualLayer(config)
         self.residual_layer2 = PromptDepthAnythingPreActResidualLayer(config)
-        self.residual_layer_depth = PromptDepthAnythingResidualLayer(config)
+        self.prompt_depth_layer = PromptDepthAnythingLayer(config)
 
     def forward(self, hidden_state, residual=None, size=None, prompt_depth=None):
         if residual is not None:
@@ -137,7 +137,7 @@ class PromptDepthAnythingFeatureFusionLayer(nn.Module):
             prompt_depth = nn.functional.interpolate(
                 prompt_depth, hidden_state.shape[2:], mode="bilinear", align_corners=False
             )
-            res = self.residual_layer_depth(prompt_depth)
+            res = self.prompt_depth_layer(prompt_depth)
             hidden_state = hidden_state + res
 
         modifier = {"scale_factor": 2} if size is None else {"size": size}
@@ -212,9 +212,11 @@ class PromptDepthAnythingDepthEstimationHead(nn.Module):
         hidden_states = hidden_states[self.head_in_index]
 
         predicted_depth = self.conv1(hidden_states)
+        target_height = torch_int(patch_height * self.patch_size)
+        target_width = torch_int(patch_width * self.patch_size)
         predicted_depth = nn.functional.interpolate(
             predicted_depth,
-            (torch_int(patch_height * self.patch_size), torch_int(patch_width * self.patch_size)),
+            (target_height, target_width),
             mode="bilinear",
             align_corners=True,
         )
@@ -227,7 +229,6 @@ class PromptDepthAnythingDepthEstimationHead(nn.Module):
         return predicted_depth
 
 
-# Copied from transformers.models.dpt.modeling_dpt.DPTPreTrainedModel with DPT->PromptDepthAnything,dpt->prompt_depth_anything
 class PromptDepthAnythingPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -340,16 +341,17 @@ class PromptDepthAnythingNeck(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
+
         self.reassemble_stage = PromptDepthAnythingReassembleStage(config)
 
         self.convs = nn.ModuleList()
         for channel in config.neck_hidden_sizes:
             self.convs.append(nn.Conv2d(channel, config.fusion_hidden_size, kernel_size=3, padding=1, bias=False))
+
+        # fusion
         self.fusion_stage = PromptDepthAnythingFeatureFusionStage(config)
 
-    def forward(
-        self, hidden_states: List[torch.Tensor], patch_height=None, patch_width=None, prompt_depth=None
-    ) -> List[torch.Tensor]:
+    def forward(self, hidden_states: List[torch.Tensor], patch_height=None, patch_width=None) -> List[torch.Tensor]:
         """
         Args:
             hidden_states (`List[torch.FloatTensor]`, each of shape `(batch_size, sequence_length, hidden_size)` or `(batch_size, hidden_size, height, width)`):
@@ -367,7 +369,7 @@ class PromptDepthAnythingNeck(nn.Module):
         features = [self.convs[i](feature) for i, feature in enumerate(hidden_states)]
 
         # fusion blocks
-        output = self.fusion_stage(features, prompt_depth=prompt_depth)
+        output = self.fusion_stage(features)
 
         return output
 
