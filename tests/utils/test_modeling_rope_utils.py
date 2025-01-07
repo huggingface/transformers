@@ -354,10 +354,9 @@ class RopeTest(unittest.TestCase):
             rope_config_validation(config)
 
         # Check 2: seq_len == 0 -> short factor is applied to the default frequencies
-        factor = 1.0
         config.rope_scaling = {
             "rope_type": "longrope",
-            "factor": factor,
+            "factor": 1.0,
             "short_factor": short_factor,
             "long_factor": long_factor,
         }
@@ -365,13 +364,6 @@ class RopeTest(unittest.TestCase):
         torch.testing.assert_close(inv_freq, default_inv_freq / torch.tensor(short_factor).to(torch_device))
 
         # Check 3: seq_len > max_position_embeddings -> long factor is applied to the default frequencies
-        factor = 10.0
-        config.rope_scaling = {
-            "rope_type": "longrope",
-            "factor": factor,
-            "short_factor": short_factor,
-            "long_factor": long_factor,
-        }
         inv_freq, _ = rope_fn(config=config, device=torch_device, seq_len=config.max_position_embeddings+1)
         torch.testing.assert_close(inv_freq, default_inv_freq / torch.tensor(long_factor).to(torch_device))
 
