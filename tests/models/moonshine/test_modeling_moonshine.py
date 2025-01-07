@@ -18,8 +18,9 @@ import copy
 import unittest
 
 from transformers import MoonshineConfig, is_torch_available
-from transformers.testing_utils import require_torch, torch_device
+from transformers.testing_utils import cleanup, require_torch, slow, torch_device
 
+from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
@@ -33,9 +34,12 @@ if is_torch_available():
     import torch
 
     from transformers import (
+        AutoProcessor,
         MoonshineForConditionalGeneration,
         MoonshineModel,
     )
+
+from datasets import load_dataset
 
 
 class MoonshineModelTester:
@@ -181,7 +185,7 @@ class MoonshineModelTester:
 
 
 @require_torch
-class MoonshineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class MoonshineModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (MoonshineModel, MoonshineForConditionalGeneration)
         if is_torch_available()
@@ -494,3 +498,166 @@ class MoonshineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+
+@require_torch
+class MoonshineModelIntegrationTests(unittest.TestCase):
+
+    def setUp(self):
+        self.processor_tiny = AutoProcessor.from_pretrained("eustlb/moonshine-tiny")
+        self.processor_base = AutoProcessor.from_pretrained("eustlb/moonshine-base")
+
+    def tearDown(self):
+        cleanup(torch_device, gc_collect=True)
+
+    def _load_datasamples(self, num_samples):
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        # automatic decoding with librispeech
+        speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
+
+        return [x["array"] for x in speech_samples]
+
+    @slow
+    def test_tiny_logits_single(self):
+        model = MoonshineForConditionalGeneration.from_pretrained("eustlb/moonshine-tiny")
+        model.to(torch_device)
+
+        inputs = self.processor_tiny(self._load_datasamples(1), return_tensors="pt")
+        inputs.to(torch_device)
+        outputs = model.generate(**inputs, max_new_tokens=1, return_dict_in_generate=True, output_logits=True)
+
+        # fmt: off
+        EXPECTED_LOGITS = torch.tensor([
+            -5.9775,  4.0908, 11.3396, -7.3772, -7.7979, -8.2989, -7.7634, -8.0795, -8.5730, -8.3415,
+            -7.8777, -7.8082, -8.1875, -7.9751, -7.8597, -8.1751, -8.1304, -7.5688, -7.9222, -7.8248,
+            -8.5372, -7.8276, -7.8369, -7.4459, -8.2137, -7.8129, -7.4717, -7.2522, -8.2155, -7.7587,
+        ])
+        # fmt: on
+        self.assertTrue(torch.allclose(outputs.logits[0][0, :30].cpu(), EXPECTED_LOGITS, atol=1e-4))
+
+    @slow
+    def test_base_logits_single(self):
+        model = MoonshineForConditionalGeneration.from_pretrained("eustlb/moonshine-base")
+        model.to(torch_device)
+
+        inputs = self.processor_base(self._load_datasamples(1), return_tensors="pt")
+        inputs.to(torch_device)
+        outputs = model.generate(**inputs, max_new_tokens=1, return_dict_in_generate=True, output_logits=True)
+
+        # fmt: off
+        EXPECTED_LOGITS = torch.tensor([
+            -6.7340,  1.9483,  5.2449, -8.0277, -7.9167, -7.8956, -7.9649, -7.9348, -8.1312, -8.0616,
+            -8.1070, -7.7696, -7.8809, -7.9451, -8.1013, -7.8177, -7.8598, -7.8257, -7.8729, -7.9657,
+            -7.9310, -8.1024, -7.8698, -7.8231, -8.0752, -7.9764, -7.8127, -8.0536, -7.9492, -7.9289,
+        ])
+        # fmt: on
+        self.assertTrue(torch.allclose(outputs.logits[0][0, :30].cpu(), EXPECTED_LOGITS, atol=1e-4))
+
+    @slow
+    def test_tiny_logits_batch(self):
+        model = MoonshineForConditionalGeneration.from_pretrained("eustlb/moonshine-tiny")
+        model.to(torch_device)
+
+        inputs = self.processor_tiny(self._load_datasamples(4), return_tensors="pt", padding=True)
+        inputs.to(torch_device)
+        outputs = model.generate(**inputs, max_new_tokens=1, return_dict_in_generate=True, output_logits=True)
+        # fmt: off
+        EXPECTED_LOGITS = torch.tensor([
+            [-4.9763,  4.5247, 10.2098, -7.4247, -7.7815, -8.3471, -7.7532, -8.0495, -8.5072, -8.2964],
+            [-3.1452, -1.7097, 10.9730, -7.3581, -7.8165, -7.5148, -7.0205, -7.4499, -7.7192, -7.3988],
+            [-7.3976,  2.7249,  6.5921, -7.2217, -7.4929, -7.1929, -7.0791, -7.5758, -7.2907, -7.2343],
+            [-7.1467,  3.4882,  7.0442, -6.0044, -6.3131, -6.4540, -6.2300, -6.4451, -6.2651, -6.2361]
+        ])
+        # fmt: on
+        self.assertTrue(torch.allclose(outputs.logits[0][:, :10].cpu(), EXPECTED_LOGITS, atol=1e-4))
+
+    @slow
+    def test_base_logits_batch(self):
+        model = MoonshineForConditionalGeneration.from_pretrained("eustlb/moonshine-base")
+        model.to(torch_device)
+
+        inputs = self.processor_base(self._load_datasamples(4), return_tensors="pt", padding=True)
+        inputs.to(torch_device)
+        outputs = model.generate(**inputs, max_new_tokens=1, return_dict_in_generate=True, output_logits=True)
+
+        # fmt: off
+        EXPECTED_LOGITS = torch.tensor([
+            [-7.7288,  1.4636,  5.2273, -7.7310, -7.6249, -7.6009, -7.6786, -7.6438, -7.8450, -7.7546],
+            [-6.2161, -0.5891,  7.9489, -7.0693, -6.9996, -6.9980, -7.0952, -7.0830, -7.1685, -7.0136],
+            [-7.3186,  3.1192,  3.8938, -5.7208, -5.8429, -5.7610, -5.9997, -5.8213, -5.8616, -5.8720],
+            [-9.5488,  1.0147,  4.1174, -5.9972, -6.0616, -6.0331, -6.2105, -6.0320, -6.0791, -6.0875]
+        ])
+
+        # fmt: on
+        self.assertTrue(torch.allclose(outputs.logits[0][:, :10].cpu(), EXPECTED_LOGITS, atol=1e-4))
+
+    @slow
+    def test_tiny_generation_single(self):
+        model = MoonshineForConditionalGeneration.from_pretrained("eustlb/moonshine-tiny")
+        model.to(torch_device)
+
+        audio_array = self._load_datasamples(1)
+        inputs = self.processor_tiny(audio_array, return_tensors="pt")
+        inputs.to(torch_device)
+        generated_ids = model.generate(**inputs, max_new_tokens=20)
+        transcript = self.processor_tiny.batch_decode(generated_ids, skip_special_tokens=True)[0]
+
+        EXPECTED_TRANSCRIPT = "Mr. Quilter is the apostle of the middle classes, and we are glad to welcome"
+        self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
+
+    @slow
+    def test_base_generation_single(self):
+        model = MoonshineForConditionalGeneration.from_pretrained("eustlb/moonshine-base")
+        model.to(torch_device)
+
+        audio_array = self._load_datasamples(1)
+        inputs = self.processor_base(audio_array, return_tensors="pt")
+        inputs.to(torch_device)
+        generated_ids = model.generate(**inputs, max_new_tokens=20)
+        transcript = self.processor_base.batch_decode(generated_ids, skip_special_tokens=True)[0]
+
+        EXPECTED_TRANSCRIPT = "Mr. Quilter is the apostle of the middle classes, and we are glad to welcome"
+        self.assertEqual(transcript, EXPECTED_TRANSCRIPT)
+
+    @slow
+    def test_tiny_generation_batch(self):
+        model = MoonshineForConditionalGeneration.from_pretrained("eustlb/moonshine-tiny")
+        model.to(torch_device)
+
+        audio_array = self._load_datasamples(4)
+        inputs = self.processor_tiny(audio_array, return_tensors="pt", padding=True)
+        inputs.to(torch_device)
+        generated_ids = model.generate(**inputs, max_new_tokens=20)
+        transcript = self.processor_tiny.batch_decode(generated_ids, skip_special_tokens=True)
+
+        # fmt: off
+        EXPECTED_TRANSCRIPT = [
+            "Mr. Quilter is the apostle of the middle classes, and we are glad to welcome",
+            "Nor is Mr. Quilter's manner less interesting than his matter.",
+            "He tells us that at this festive season of the year, with Christmas and Rose beef lo",
+            "He has grave doubts whether Sir Frederick Layton's work is really Greek after all,",
+        ]
+        # fmt: on
+
+        self.assertListEqual(transcript, EXPECTED_TRANSCRIPT)
+
+    @slow
+    def test_base_generation_batch(self):
+        model = MoonshineForConditionalGeneration.from_pretrained("eustlb/moonshine-base")
+        model.to(torch_device)
+
+        audio_array = self._load_datasamples(4)
+        inputs = self.processor_base(audio_array, return_tensors="pt", padding=True)
+        inputs.to(torch_device)
+        generated_ids = model.generate(**inputs, max_new_tokens=20)
+        transcript = self.processor_base.batch_decode(generated_ids, skip_special_tokens=True)
+
+        # fmt: off
+        EXPECTED_TRANSCRIPT = [
+            "Mr. Quilter is the apostle of the middle classes, and we are glad to welcome",
+            "Nor is Mr. Quilter's manner less interesting than his matter.",
+            "He tells us that at this festive season of the year, with Christmas and rose beef lo",
+            "He has grave doubts whether Sir Frederick Layton's work is really Greek after all,",
+        ]
+        # fmt: on
+
+        self.assertListEqual(transcript, EXPECTED_TRANSCRIPT)
