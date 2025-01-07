@@ -38,7 +38,6 @@ from ...modeling_outputs import (
     XVectorOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import is_torch_greater_or_equal_than_1_13
 from ...utils import (
     ModelOutput,
     add_code_sample_docstrings,
@@ -1590,7 +1589,7 @@ class Wav2Vec2PreTrainedModel(PreTrainedModel):
                     cache_dir=cache_dir,
                 )
 
-                weights_only_kwarg = {"weights_only": True} if is_torch_greater_or_equal_than_1_13 else {}
+                weights_only_kwarg = {"weights_only": True}
                 state_dict = torch.load(
                     weight_path,
                     map_location="cpu",
@@ -2715,3 +2714,15 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "Wav2Vec2ForAudioFrameClassification",
+    "Wav2Vec2ForCTC",
+    "Wav2Vec2ForMaskedLM",
+    "Wav2Vec2ForPreTraining",
+    "Wav2Vec2ForSequenceClassification",
+    "Wav2Vec2ForXVector",
+    "Wav2Vec2Model",
+    "Wav2Vec2PreTrainedModel",
+]
