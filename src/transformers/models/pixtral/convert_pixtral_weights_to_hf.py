@@ -289,10 +289,12 @@ def main():
     parser.add_argument(
         "--input_dir",
         help="Location of LLaMA weights, which contains tokenizer.model and model folders",
+        required=True,
     )
     parser.add_argument(
         "--output_dir",
         help="Location to write HF model and tokenizer",
+        required=True,
     )
     parser.add_argument("--tokenizer_file", help="Location of the specific tokenizer model file to use.")
     parser.add_argument(
