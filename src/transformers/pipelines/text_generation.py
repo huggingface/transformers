@@ -270,15 +270,17 @@ class TextGenerationPipeline(Pipeline):
             if isinstance(text_inputs, types.GeneratorType):
                 text_inputs, _ = itertools.tee(text_inputs)
                 first_item = next(_)
+                is_generator = True
             else:
                 first_item = text_inputs[0]
+                is_generator = False
             if isinstance(first_item, (list, tuple, dict)):
                 # We have one or more prompts in list-of-dicts format, so this is chat mode
                 if isinstance(first_item, dict):
                     return super().__call__(Chat(text_inputs), **kwargs)
                 else:
                     chats = (Chat(chat) for chat in text_inputs)  # 🐈 🐈 🐈
-                    if isinstance(text_inputs, types.GeneratorType):
+                    if is_generator:
                         return super().__call__(chats, **kwargs)
                     else:
                         return super().__call__(list(chats), **kwargs)
