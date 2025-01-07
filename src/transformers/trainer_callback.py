@@ -164,7 +164,6 @@ class TrainerState:
             setattr(self, f"{step_kind}_steps", num_steps)
 
 
-
 class ExportableState:
     """
     A class for objects that include the ability to have its state
@@ -562,6 +561,7 @@ class CallbackHandler(TrainerCallback):
         self.trial_params = None
         if trial is not None:
             from transformers.integrations import hp_params
+
             assignments = trial.assignments if trainer.hp_search_backend == HPSearchBackend.SIGOPT else trial
             self.trial_params = hp_params(assignments)
 
@@ -569,7 +569,6 @@ class CallbackHandler(TrainerCallback):
         self.num_train_epochs = num_train_epochs
         self.is_local_process_zero = trainer.is_local_process_zero()
         self.is_world_process_zero = trainer.is_world_process_zero()
-
 
 
 class DefaultFlowCallback(TrainerCallback):
