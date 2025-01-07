@@ -1,5 +1,6 @@
 import enum
 import itertools
+import types
 import warnings
 from typing import Dict
 
@@ -261,7 +262,10 @@ class TextGenerationPipeline(Pipeline):
               ids of the generated text.
         """
         if isinstance(
-            text_inputs, (list, tuple, types.GeneratorType, KeyDataset) if is_torch_available() else (list, tuple, types.GeneratorType)
+            text_inputs,
+            (list, tuple, types.GeneratorType, KeyDataset)
+            if is_torch_available()
+            else (list, tuple, types.GeneratorType),
         ):
             if isinstance(text_inputs, types.GeneratorType):
                 text_inputs, _ = itertools.tee(text_inputs)
