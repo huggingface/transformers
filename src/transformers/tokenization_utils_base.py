@@ -2501,7 +2501,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         file_names = (tokenizer_config_file, special_tokens_map_file)
         if saved_raw_chat_template:
-            file_names += (chat_template_file, )
+            file_names += (chat_template_file,)
 
         save_files = self._save_pretrained(
             save_directory=save_directory,
