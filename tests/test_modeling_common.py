@@ -89,6 +89,9 @@ from transformers.testing_utils import (
     require_torch_multi_accelerator,
     require_torch_multi_gpu,
     require_torch_sdpa,
+    set_config_for_less_flaky_test,
+    set_model_for_less_flaky_test,
+    set_model_tester_for_less_flaky_test,
     slow,
     torch_device,
 )
@@ -3058,6 +3061,7 @@ class ModelTesterMixin:
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
+    @require_torch_gpu
     @require_torch_multi_gpu
     def test_model_parallelization(self):
         if not self.test_model_parallel:
@@ -3120,6 +3124,7 @@ class ModelTesterMixin:
             gc.collect()
             torch.cuda.empty_cache()
 
+    @require_torch_gpu
     @require_torch_multi_gpu
     def test_model_parallel_equal_results(self):
         if not self.test_model_parallel:
@@ -3976,34 +3981,11 @@ class ModelTesterMixin:
         def get_mean_reldiff(failcase, x, ref, atol, rtol):
             return f"{failcase}: mean relative difference: {((x - ref).abs() / (ref.abs() + 1e-12)).mean():.3e}, torch atol = {atol}, torch rtol = {rtol}"
 
-        if hasattr(self.model_tester, "num_hidden_layers"):
-            self.model_tester.num_hidden_layers = 1
-        if hasattr(self.model_tester, "vision_config") and "num_hidden_layers" in self.model_tester.vision_config:
-            self.model_tester.vision_config = copy.deepcopy(self.model_tester.vision_config)
-            self.model_tester.vision_config["num_hidden_layers"] = 1
-        if hasattr(self.model_tester, "text_config") and "num_hidden_layers" in self.model_tester.text_config:
-            self.model_tester.text_config = copy.deepcopy(self.model_tester.text_config)
-            self.model_tester.text_config["num_hidden_layers"] = 1
+        set_model_tester_for_less_flaky_test(self)
 
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-            config.rms_norm_eps = 1.0
-            config.layer_norm_eps = 1.0
-            config.norm_eps = 1.0
-            config.norm_epsilon = 1.0
-            config.layer_norm_epsilon = 1.0
-
-            # norm layers (layer/group norm, etc.) could cause flaky tests when the tensors have very small variance.
-            # (We don't need the original epsilon values to check eager/sdpa matches)
-            for attr in ["text_config", "vision_config", "text_encoder", "audio_encoder", "decoder"]:
-                if hasattr(config, attr):
-                    getattr(config, attr).rms_norm_eps = 1.0
-                    getattr(config, attr).layer_norm_eps = 1.0
-                    getattr(config, attr).norm_eps = 1.0
-                    getattr(config, attr).norm_epsilon = 1.0
-                    getattr(config, attr).layer_norm_epsilon = 1.0
-
+            set_config_for_less_flaky_test(config)
             model = model_class(config)
             # FIXME: we deactivate boolean mask for models using "use_mask_token" in their constructors.
             # These models support masking only in the case `use_mask_token=True`. Otherwise they cannot consume an input mask.
@@ -4029,13 +4011,8 @@ class ModelTesterMixin:
                 )
                 model_eager = model_eager.eval().to(torch_device, dtype=torch_dtype)
 
-                # Another way to make sure norm layers have desired epsilon. (Some models don't set it from its config.)
-                for x in model_eager.modules():
-                    if isinstance(x, (nn.LayerNorm, nn.GroupNorm)):
-                        x.eps = 1.0
-                for x in model_sdpa.modules():
-                    if isinstance(x, (nn.LayerNorm, nn.GroupNorm)):
-                        x.eps = 1.0
+                set_model_for_less_flaky_test(model_eager)
+                set_model_for_less_flaky_test(model_sdpa)
 
                 # We use these for loops instead of parameterized.expand just for the interest of avoiding loading/saving 16 times the model,
                 # but it would be nicer to have an efficient way to use parameterized.expand
@@ -4280,7 +4257,7 @@ class ModelTesterMixin:
                     if isinstance(inp, torch.Tensor) and inp.dtype in [torch.float32, torch.float16]:
                         inputs_dict[name] = inp.to(torch.float16)
 
-                with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
+                with sdpa_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
                     _ = model(**inputs_dict)
 
     @require_non_xpu
@@ -4372,11 +4349,7 @@ class ModelTesterMixin:
                 model_sdpa = model_sdpa.eval()
 
                 with torch.no_grad():
-                    with torch.backends.cuda.sdp_kernel(
-                        enable_flash=False,
-                        enable_math=True,
-                        enable_mem_efficient=False,
-                    ):
+                    with sdpa_kernel(enable_flash=False, enable_math=True, enable_mem_efficient=False):
                         res_eager = model_eager(**inputs_dict, return_dict=False)[0]
                         res_sdpa = model_sdpa(**inputs_dict, return_dict=False)[0]
 

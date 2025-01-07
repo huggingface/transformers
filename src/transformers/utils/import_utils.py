@@ -129,6 +129,7 @@ except importlib.metadata.PackageNotFoundError:
         _faiss_available = False
 _ftfy_available = _is_package_available("ftfy")
 _g2p_en_available = _is_package_available("g2p_en")
+_hadamard_available = _is_package_available("fast_hadamard_transform")
 _ipex_available, _ipex_version = _is_package_available("intel_extension_for_pytorch", return_version=True)
 _jieba_available = _is_package_available("jieba")
 _jinja_available = _is_package_available("jinja2")
@@ -333,6 +334,10 @@ def is_torch_deterministic():
         return True
 
 
+def is_hadamard_available():
+    return _hadamard_available
+
+
 def is_hqq_available(min_version: str = HQQ_MIN_VERSION):
     return _hqq_available and version.parse(_hqq_version) >= version.parse(min_version)
 
@@ -356,6 +361,9 @@ def is_torch_sdpa_available():
     # - Memory-efficient attention supports arbitrary attention_mask: https://github.com/pytorch/pytorch/pull/104310
     # NOTE: MLU is OK with non-contiguous inputs.
     if is_torch_mlu_available():
+        return version.parse(_torch_version) >= version.parse("2.1.0")
+    # NOTE: NPU can use SDPA in Transformers with torch>=2.1.0.
+    if is_torch_npu_available():
         return version.parse(_torch_version) >= version.parse("2.1.0")
     # NOTE: We require torch>=2.1.1 to avoid a numerical issue in SDPA with non-contiguous inputs: https://github.com/pytorch/pytorch/issues/112577
     return version.parse(_torch_version) >= version.parse("2.1.1")
@@ -614,6 +622,13 @@ def is_openai_available():
 
 def is_flax_available():
     return _flax_available
+
+
+def is_flute_available():
+    try:
+        return importlib.util.find_spec("flute") is not None and importlib.metadata.version("flute-kernel") >= "0.3.0"
+    except importlib.metadata.PackageNotFoundError:
+        return False
 
 
 def is_ftfy_available():
@@ -1148,7 +1163,7 @@ def is_training_run_on_sagemaker():
     return "SAGEMAKER_JOB_NAME" in os.environ
 
 
-def is_soundfile_availble():
+def is_soundfile_available():
     return _soundfile_available
 
 
