@@ -107,6 +107,7 @@ from .trainer_pt_utils import (
     nested_xla_mesh_reduce,
     reissue_pt_warnings,
     remove_dummy_checkpoint,
+    set_rng_state_for_device,
 )
 from .trainer_utils import (
     PREFIX_CHECKPOINT_DIR,
@@ -3043,52 +3044,19 @@ class Trainer:
         random.setstate(checkpoint_rng_state["python"])
         np.random.set_state(checkpoint_rng_state["numpy"])
         torch.random.set_rng_state(checkpoint_rng_state["cpu"])
-        if torch.cuda.is_available():
-            if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
-                torch.cuda.random.set_rng_state_all(checkpoint_rng_state["cuda"])
-            else:
-                try:
-                    torch.cuda.random.set_rng_state(checkpoint_rng_state["cuda"])
-                except Exception as e:
-                    logger.info(
-                        f"Didn't manage to set back the RNG states of the GPU because of the following error:\n {e}"
-                        "\nThis won't yield the same results as if the training had not been interrupted."
-                    )
         if is_torch_xla_available():
             xm.set_rng_state(checkpoint_rng_state["xla"])
+
+        is_distributed = self.args.parallel_mode == ParallelMode.DISTRIBUTED
+        if torch.cuda.is_available():
+            set_rng_state_for_device("GPU", torch.cuda, checkpoint_rng_state, is_distributed)
         if is_torch_npu_available():
-            if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
-                torch.npu.random.set_rng_state_all(checkpoint_rng_state["npu"])
-            else:
-                try:
-                    torch.npu.random.set_rng_state(checkpoint_rng_state["npu"])
-                except Exception as e:
-                    logger.info(
-                        f"Didn't manage to set back the RNG states of the NPU because of the following error:\n {e}"
-                        "\nThis won't yield the same results as if the training had not been interrupted."
-                    )
+            set_rng_state_for_device("NPU", torch.npu, checkpoint_rng_state, is_distributed)
         if is_torch_mlu_available():
-            if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
-                torch.mlu.random.set_rng_state_all(checkpoint_rng_state["mlu"])
-            else:
-                try:
-                    torch.mlu.random.set_rng_state(checkpoint_rng_state["mlu"])
-                except Exception as e:
-                    logger.info(
-                        f"Didn't manage to set back the RNG states of the MLU because of the following error:\n {e}"
-                        "\nThis won't yield the same results as if the training had not been interrupted."
-                    )
+            set_rng_state_for_device("MLU", torch.mlu, checkpoint_rng_state, is_distributed)
+
         if is_torch_musa_available():
-            if self.args.parallel_mode == ParallelMode.DISTRIBUTED:
-                torch.musa.set_rng_state_all(checkpoint_rng_state["musa"])
-            else:
-                try:
-                    torch.musa.set_rng_state(checkpoint_rng_state["musa"])
-                except Exception as e:
-                    logger.info(
-                        f"Didn't manage to set back the RNG states of the MUSA because of the following error:\n {e}"
-                        "\nThis won't yield the same results as if the training had not been interrupted."
-                    )
+            set_rng_state_for_device("MUSA", torch.musa, checkpoint_rng_state, is_distributed)
 
     def _determine_best_metric(self, metrics, trial):
         """
