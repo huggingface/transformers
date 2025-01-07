@@ -226,6 +226,64 @@ def make_list_of_images(images, expected_ndims: int = 3) -> List[ImageInput]:
     )
 
 
+def make_flat_list_of_images(
+    images: Union[List[ImageInput], ImageInput],
+) -> ImageInput:
+    """
+    Ensure that the input is a flat list of images. If the input is a single image, it is converted to a list of length 1.
+    If the input is a nested list of images, it is converted to a flat list of images.
+    Args:
+        images (`Union[List[ImageInput], ImageInput]`):
+            The input image.
+    Returns:
+        list: A list of images or a 4d array of images.
+    """
+    # If the input is a nested list of images, we flatten it
+    if isinstance(images, (list, tuple)) and isinstance(images[0], (list, tuple)) and is_valid_image(images[0][0]):
+        return [img for img_list in images for img in img_list]
+
+    elif isinstance(images, (list, tuple)) and is_valid_image(images[0]):
+        return images
+
+    elif is_pil_image(images):
+        return [images]
+
+    elif is_valid_image(images):
+        if len(images.shape) == 4:
+            return images
+        elif len(images.shape) == 3:
+            return [images]
+
+    raise ValueError(f"Could not make a flat list of images from {images}")
+
+
+def make_batched_videos(videos) -> VideoInput:
+    """
+    Ensure that the input is a list of videos.
+    Args:
+        videos (`VideoInput`):
+            Video or videos to turn into a list of videos.
+    Returns:
+        list: A list of videos.
+    """
+    if isinstance(videos, (list, tuple)) and isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0]):
+        return videos
+
+    elif isinstance(videos, (list, tuple)) and is_valid_image(videos[0]):
+        if is_pil_image(videos[0]):
+            return [videos]
+        elif len(videos[0].shape) == 4:
+            return [list(video) for video in videos]
+
+    elif is_valid_image(videos):
+        if is_pil_image(videos):
+            return [[videos]]
+        elif len(videos.shape) == 4:
+            return [list(videos)]
+
+    raise ValueError(f"Could not make batched video from {videos}")
+
+
 def to_numpy_array(img) -> np.ndarray:
     if not is_valid_image(img):
         raise ValueError(f"Invalid image type: {type(img)}")
