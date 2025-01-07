@@ -397,66 +397,13 @@ class SuperGlueModelIntegrationTest(unittest.TestCase):
         predicted_matching_scores_values = outputs.matching_scores[0, 0, :20]
 
         expected_number_of_matches = 282
-        expected_matches_values = torch.tensor(
-            [
-                125,
-                630,
-                137,
-                138,
-                136,
-                143,
-                135,
-                -1,
-                -1,
-                153,
-                154,
-                156,
-                117,
-                160,
-                -1,
-                149,
-                147,
-                152,
-                168,
-                -1,
-                165,
-                182,
-                -1,
-                190,
-                187,
-                188,
-                189,
-                112,
-                -1,
-                193,
-            ],
-            device=predicted_matches_values.device,
-        )
-        expected_matching_scores_values = torch.tensor(
-            [
-                0.9899,
-                0.0033,
-                0.9897,
-                0.9889,
-                0.9879,
-                0.7464,
-                0.7109,
-                0.0,
-                0.0,
-                0.9841,
-                0.9889,
-                0.9639,
-                0.0114,
-                0.9559,
-                0.0,
-                0.9735,
-                0.8018,
-                0.5190,
-                0.9157,
-                0.0,
-            ],
-            device=predicted_matches_values.device,
-        )
+        expected_matches_values = torch.tensor([125,630,137,138,136,143,135,-1,-1,153,
+                                                154,156,117,160,-1,149,147,152,168,-1,
+                                                165,182,-1,190,187,188,189,112,-1,193],
+                                                device=predicted_matches_values.device)  # fmt:skip
+        expected_matching_scores_values = torch.tensor([0.9899,0.0033,0.9897,0.9889,0.9879,0.7464,0.7109,0.0,0.0,0.9841,
+                                                        0.9889,0.9639,0.0114,0.9559,0.0,0.9735,0.8018,0.5190,0.9157,0.0],
+                                                        device=predicted_matches_values.device)  # fmt:skip
 
         """
         Because of inconsistencies introduced between CUDA versions, the checks here are less strict. SuperGlue relies
