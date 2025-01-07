@@ -402,8 +402,10 @@ _import_structure = {
     "models.depth_anything": ["DepthAnythingConfig"],
     "models.detr": ["DetrConfig"],
     "models.dialogpt": [],
+    "models.diffllama": ["DiffLlamaConfig"],
     "models.dinat": ["DinatConfig"],
     "models.dinov2": ["Dinov2Config"],
+    "models.dinov2_with_registers": ["Dinov2WithRegistersConfig"],
     "models.distilbert": [
         "DistilBertConfig",
         "DistilBertTokenizer",
@@ -2154,6 +2156,16 @@ else:
             "DetrPreTrainedModel",
         ]
     )
+    _import_structure["models.diffllama"].extend(
+        [
+            "DiffLlamaForCausalLM",
+            "DiffLlamaForQuestionAnswering",
+            "DiffLlamaForSequenceClassification",
+            "DiffLlamaForTokenClassification",
+            "DiffLlamaModel",
+            "DiffLlamaPreTrainedModel",
+        ]
+    )
     _import_structure["models.dinat"].extend(
         [
             "DinatBackbone",
@@ -2168,6 +2180,14 @@ else:
             "Dinov2ForImageClassification",
             "Dinov2Model",
             "Dinov2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.dinov2_with_registers"].extend(
+        [
+            "Dinov2WithRegistersBackbone",
+            "Dinov2WithRegistersForImageClassification",
+            "Dinov2WithRegistersModel",
+            "Dinov2WithRegistersPreTrainedModel",
         ]
     )
     _import_structure["models.distilbert"].extend(
@@ -5379,8 +5399,10 @@ if TYPE_CHECKING:
     )
     from .models.depth_anything import DepthAnythingConfig
     from .models.detr import DetrConfig
+    from .models.diffllama import DiffLlamaConfig
     from .models.dinat import DinatConfig
     from .models.dinov2 import Dinov2Config
+    from .models.dinov2_with_registers import Dinov2WithRegistersConfig
     from .models.distilbert import (
         DistilBertConfig,
         DistilBertTokenizer,
@@ -7036,6 +7058,14 @@ if TYPE_CHECKING:
             DetrModel,
             DetrPreTrainedModel,
         )
+        from .models.diffllama import (
+            DiffLlamaForCausalLM,
+            DiffLlamaForQuestionAnswering,
+            DiffLlamaForSequenceClassification,
+            DiffLlamaForTokenClassification,
+            DiffLlamaModel,
+            DiffLlamaPreTrainedModel,
+        )
         from .models.dinat import (
             DinatBackbone,
             DinatForImageClassification,
@@ -7047,6 +7077,12 @@ if TYPE_CHECKING:
             Dinov2ForImageClassification,
             Dinov2Model,
             Dinov2PreTrainedModel,
+        )
+        from .models.dinov2_with_registers import (
+            Dinov2WithRegistersBackbone,
+            Dinov2WithRegistersForImageClassification,
+            Dinov2WithRegistersModel,
+            Dinov2WithRegistersPreTrainedModel,
         )
         from .models.distilbert import (
             DistilBertForMaskedLM,
