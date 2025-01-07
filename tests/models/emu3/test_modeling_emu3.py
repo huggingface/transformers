@@ -17,12 +17,11 @@
 import unittest
 
 import numpy as np
-import pytest
 import requests
 from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
-from transformers import Emu3Config, Emu3TextConfig, StaticCache, is_torch_available, is_vision_available, set_seed
+from transformers import Emu3Config, Emu3TextConfig, is_torch_available, is_vision_available, set_seed
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_torch,
@@ -290,6 +289,7 @@ class Emu3Vision2TextModelTester:
             "temporal_downsample_factor": self.temporal_downsample_factor,
             "base_channels": self.base_channels,
             "channel_multiplier": self.vq_channel_multiplier,
+            "hidden_size": self.base_channels,
         }
         return Emu3Config(text_config=text_config, vq_config=vq_config, vocabulary_map=vocab_map)
 
@@ -371,56 +371,6 @@ class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
                 out_ids = model(input_ids=input_ids, **inputs)[0]
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
             self.assertTrue(torch.allclose(out_embeds, out_ids))
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    # while some other models require pixel_values to be present
-    @pytest.mark.generate
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        """
-        Test that StaticCache can generate from inputs_embeds and calculates max_cache_length
-        correctly in `generate()`. We force the model to not stop generation until max-length is reached
-        to verify that the cache length is indeed set correctly and we don't run out of index when slicing the cache.
-        """
-        for model_class in self.all_generative_model_classes:
-            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            model = model_class(config).to(torch_device).eval()
-            input_ids = inputs_dict.pop("input_ids")
-
-            model.config.use_cache = True
-            model.config.is_decoder = True
-            batch_size = input_ids.shape[0]
-            max_cache_len = input_ids.shape[1] + 5
-
-            # here we force to not stop at eos and go until max-length
-            model.generation_config.eos_token_id = model.config.get_text_config().eos_token_id = -1
-            generation_kwargs = {
-                "max_length": max_cache_len,
-                "cache_implementation": "static",
-                "return_dict_in_generate": True,  # Required to return `past_key_values`
-            }
-
-            text_config = model.config.get_text_config()
-            head_dim = (
-                text_config.head_dim
-                if hasattr(text_config, "head_dim")
-                else text_config.hidden_size // text_config.num_attention_heads
-            )
-            num_key_value_heads = (
-                text_config.num_attention_heads
-                if getattr(text_config, "num_key_value_heads", None) is None
-                else text_config.num_key_value_heads
-            )
-            num_hidden_layers = text_config.num_hidden_layers
-
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-            inputs_dict.pop("pixel_values")
-            outputs = model.generate(inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict)
-
-            # we should get `max_length` in shape, not `max_length - embeds_length`
-            cache_shape = (batch_size, num_key_value_heads, max_cache_len, head_dim)
-            self.assertTrue(isinstance(outputs.past_key_values, StaticCache))
-            self.assertTrue(len(outputs.past_key_values.key_cache) == num_hidden_layers)
-            self.assertTrue(outputs.past_key_values.key_cache[0].shape == cache_shape)
 
     @unittest.skip(
         "Emu3 has a VQ module that uses `weight.data` directly in forward which prevent offloding on that module"
