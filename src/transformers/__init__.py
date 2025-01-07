@@ -158,6 +158,7 @@ _import_structure = {
     ],
     # Models
     "models": [],
+    "models.aimv2": ["AIMv2Config"],
     "models.albert": ["AlbertConfig"],
     "models.align": [
         "AlignConfig",
@@ -1403,6 +1404,13 @@ else:
     _import_structure["modeling_utils"] = ["PreTrainedModel"]
 
     # PyTorch models structure
+
+    _import_structure["models.aimv2"].extend(
+        [
+            "AIMv2Model",
+            "AIMv2PreTrainedModel",
+        ]
+    )
 
     _import_structure["models.albert"].extend(
         [
