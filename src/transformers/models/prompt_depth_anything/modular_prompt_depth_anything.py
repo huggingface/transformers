@@ -69,7 +69,7 @@ class PromptDepthAnythingResidualLayer(nn.Module):
             padding=1,
             bias=True,
         )
-        self.activation1 = nn.ReLU(False)
+        self.activation1 = nn.ReLU()
 
         self.convolution2 = nn.Conv2d(
             config.fusion_hidden_size,
@@ -79,7 +79,7 @@ class PromptDepthAnythingResidualLayer(nn.Module):
             padding=1,
             bias=True,
         )
-        self.activation2 = nn.ReLU(False)
+        self.activation2 = nn.ReLU()
 
         self.convolution3 = nn.Conv2d(
             config.fusion_hidden_size,
