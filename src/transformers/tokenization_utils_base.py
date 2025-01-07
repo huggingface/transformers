@@ -2499,10 +2499,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             f.write(out_str)
         logger.info(f"Special tokens file saved in {special_tokens_map_file}")
 
+        file_names = (tokenizer_config_file, special_tokens_map_file)
         if saved_raw_chat_template:
-            file_names = (tokenizer_config_file, special_tokens_map_file, chat_template_file)
-        else:
-            file_names = (tokenizer_config_file, special_tokens_map_file)
+            file_names += (chat_template_file, )
 
         save_files = self._save_pretrained(
             save_directory=save_directory,
