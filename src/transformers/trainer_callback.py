@@ -164,6 +164,30 @@ class TrainerState:
                     num_steps = math.ceil(max_steps * num_steps)
                 setattr(self, f"{step_kind}_steps", num_steps)
 
+    def init_training_references(self, trainer, train_dataloader, max_steps, num_train_epochs, trial):
+        """
+        Stores the initial training references needed in `self`
+        """
+        for attr in ("model", "optimizer", "lr_scheduler"):
+            setattr(self, attr, getattr(trainer, attr))
+
+        self.train_dataloader = train_dataloader
+        if trainer.hp_name is not None and trainer._trial is not None:
+            # use self._trial because the SigOpt/Optuna hpo only call `_hp_search_setup(trial)` instead of passing trial
+            # parameter to Train when using DDP.
+            self.trial_name = trainer.hp_name(trainer._trial)
+        self.trial_params = None
+        if trial is not None:
+            from transformers.integrations import hp_params
+
+            assignments = trial.assignments if trainer.hp_search_backend == HPSearchBackend.SIGOPT else trial
+            self.trial_params = hp_params(assignments)
+
+        self.max_steps = max_steps
+        self.num_train_epochs = num_train_epochs
+        self.is_local_process_zero = trainer.is_local_process_zero()
+        self.is_world_process_zero = trainer.is_world_process_zero()
+
 
 class ExportableState:
     """
@@ -546,30 +570,6 @@ class CallbackHandler(TrainerCallback):
             if result is not None:
                 control = result
         return control
-
-    def init_training_references(self, trainer, train_dataloader, max_steps, num_train_epochs, trial):
-        """
-        Stores the initial training references needed in `self`
-        """
-        for attr in ("model", "optimizer", "lr_scheduler"):
-            setattr(self, attr, getattr(trainer, attr))
-
-        self.train_dataloader = train_dataloader
-        if trainer.hp_name is not None and trainer._trial is not None:
-            # use self._trial because the SigOpt/Optuna hpo only call `_hp_search_setup(trial)` instead of passing trial
-            # parameter to Train when using DDP.
-            self.trial_name = trainer.hp_name(trainer._trial)
-        self.trial_params = None
-        if trial is not None:
-            from transformers.integrations import hp_params
-
-            assignments = trial.assignments if trainer.hp_search_backend == HPSearchBackend.SIGOPT else trial
-            self.trial_params = hp_params(assignments)
-
-        self.max_steps = max_steps
-        self.num_train_epochs = num_train_epochs
-        self.is_local_process_zero = trainer.is_local_process_zero()
-        self.is_world_process_zero = trainer.is_world_process_zero()
 
 
 class DefaultFlowCallback(TrainerCallback):
