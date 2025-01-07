@@ -225,11 +225,7 @@ class GPTNeoXJapaneseAttention(nn.Module):
 
 # Copied from transformers.models.gpt_neox.modeling_gpt_neox.GPTNeoXRotaryEmbedding with GPTNeoX->GPTNeoXJapanese
 class GPTNeoXJapaneseRotaryEmbedding(nn.Module):
-    def __init__(
-        self,
-        config: GPTNeoXJapaneseConfig,
-        device=None,
-    ):
+    def __init__(self, config: GPTNeoXJapaneseConfig, device=None):
         super().__init__()
         self.rope_kwargs = {}
         # BC: "rope_type" was originally "type"

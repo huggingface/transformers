@@ -158,11 +158,7 @@ ALL_LAYERNORM_LAYERS.append(GraniteMoeRMSNorm)
 
 # Copied from transformers.models.granite.modeling_granite.GraniteRotaryEmbedding with Granite->GraniteMoe
 class GraniteMoeRotaryEmbedding(nn.Module):
-    def __init__(
-        self,
-        config: GraniteMoeConfig,
-        device=None,
-    ):
+    def __init__(self, config: GraniteMoeConfig, device=None):
         super().__init__()
         self.rope_kwargs = {}
         # BC: "rope_type" was originally "type"

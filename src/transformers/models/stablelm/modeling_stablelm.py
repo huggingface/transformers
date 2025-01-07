@@ -63,11 +63,7 @@ _CONFIG_FOR_DOC = "StableLmConfig"
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->StableLm
 class StableLmRotaryEmbedding(nn.Module):
-    def __init__(
-        self,
-        config: StableLmConfig,
-        device=None,
-    ):
+    def __init__(self, config: StableLmConfig, device=None):
         super().__init__()
         self.rope_kwargs = {}
         # BC: "rope_type" was originally "type"
