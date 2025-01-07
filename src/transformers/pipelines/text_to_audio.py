@@ -150,7 +150,7 @@ class TextToAudioPipeline(Pipeline):
                 raise ValueError(
                     "You're using the `TextToAudioPipeline` with a forward-only model, but `generate_kwargs` is non "
                     "empty. For forward-only TTA models, please use `forward_params` instead of `generate_kwargs`. "
-                    f"For reference, here are the `generate_kwargs` used here: {generate_kwargs.keys()}"
+                    f"For reference, the `generate_kwargs` used here are: {generate_kwargs.keys()}"
                 )
             output = self.model(**model_inputs, **forward_params)[0]
 
