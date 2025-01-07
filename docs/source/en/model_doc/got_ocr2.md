@@ -131,7 +131,7 @@ Here is an example of how to process multiple pages at once:
 
 >>> image1 = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/page1.png"
 >>> image2 = "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/page2.png"
->>> inputs = processor([image1, image2], return_tensors="pt", format=True).to(device)
+>>> inputs = processor([image1, image2], return_tensors="pt", multi_page=True, format=True).to(device)
 
 >>> generate_ids = model.generate(
 ...     **inputs,
