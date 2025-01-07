@@ -1109,7 +1109,7 @@ class TokenizerTesterMixin:
                 with tempfile.TemporaryDirectory() as tmp_dir_name:
                     save_files = tokenizer.save_pretrained(tmp_dir_name)
                     # Check we aren't saving a chat_template.jinja file
-                    self.assertFalse(any([file.endswith("chat_template.jinja") for file in save_files]))
+                    self.assertFalse(any(file.endswith("chat_template.jinja") for file in save_files))
                     new_tokenizer = tokenizer.from_pretrained(tmp_dir_name)
 
                 self.assertEqual(new_tokenizer.chat_template, dummy_template)  # Test template has persisted
@@ -1121,7 +1121,7 @@ class TokenizerTesterMixin:
                 with tempfile.TemporaryDirectory() as tmp_dir_name:
                     save_files = tokenizer.save_pretrained(tmp_dir_name, save_raw_chat_template=True)
                     # Check we are saving a chat_template.jinja file
-                    self.assertTrue(any([file.endswith("chat_template.jinja") for file in save_files]))
+                    self.assertTrue(any(file.endswith("chat_template.jinja") for file in save_files))
                     chat_template_file = Path(tmp_dir_name) / "chat_template.jinja"
                     self.assertTrue(chat_template_file.is_file())
                     self.assertEqual(chat_template_file.read_text(), dummy_template)
