@@ -436,7 +436,7 @@ To enable assisted decoding, set the `assistant_model` argument with a model.
 ```
 
 <Tip>
-  
+
 If you're using a `pipeline` object, all you need to do is to pass the assistant checkpoint under `assistant_model`
 
 ```python
@@ -455,8 +455,8 @@ If you're using a `pipeline` object, all you need to do is to pass the assistant
 ```
 
 </Tip>
-  
-  
+
+
 When using assisted decoding with sampling methods, you can use the `temperature` argument to control the randomness,
 just like in multinomial sampling. However, in assisted decoding, reducing the temperature may help improve the latency.
 
@@ -477,6 +477,8 @@ just like in multinomial sampling. However, in assisted decoding, reducing the t
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ['Alice and Bob, a couple of friends of mine, who are both in the same office as']
 ```
+
+We recommend to install `scikit-learn` library to enhance the candidate generation strategy and achieve additional speedup.
 
 #### Universal Assisted Decoding
 
@@ -544,8 +546,6 @@ to ensure the new tokens include the correct prompt suffix.
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
 ['Alice and Bob are sitting in a bar. Alice is drinking a beer and Bob is drinking a']
 ```
-
-We recommend to install `scikit-learn` library to enhance the candidate generation strategy and achieve additional speedup.
 
 ### DoLa Decoding
 
