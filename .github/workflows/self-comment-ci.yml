@@ -49,7 +49,7 @@ jobs:
           fetch-depth: "0"
           ref: "refs/pull/${{needs.get-pr-number.outputs.PR_NUMBER}}/merge"
 
-      - name: Get SHA
+      - name: Get SHA (and verify timestamps against the issue comment date)
         id: get_sha
         env:
           PR_NUMBER: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
