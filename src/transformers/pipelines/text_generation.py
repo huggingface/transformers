@@ -268,12 +268,12 @@ class TextGenerationPipeline(Pipeline):
             else (list, tuple, types.GeneratorType),
         ):
             if isinstance(text_inputs, types.GeneratorType):
-                text_inputs, _ = itertools.tee(text_inputs)
-                first_item = next(_)
                 is_generator = True
+                text_inputs, _ = itertools.tee(text_inputs)
+                text_inputs, first_item = (x for x in text_inputs), next(_)
             else:
-                first_item = text_inputs[0]
                 is_generator = False
+                first_item = text_inputs[0]
             if isinstance(first_item, (list, tuple, dict)):
                 # We have one or more prompts in list-of-dicts format, so this is chat mode
                 if isinstance(first_item, dict):
