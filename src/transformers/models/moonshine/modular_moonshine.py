@@ -103,7 +103,7 @@ class MoonshineConfig(PretrainedConfig):
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities. 
+            The dropout ratio for the attention probabilities.
         ff_mult (`int`, *optional*, defaults to 4):
             Factor by which to scale the intermediate size.
         bos_token_id (`int`, *optional*, defaults to 1):
