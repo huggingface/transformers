@@ -52,12 +52,21 @@ jobs:
       - name: Get SHA
         id: get_sha
         env:
-          PR_NUMBER: ${{needs.get-pr-number.outputs.PR_NUMBER}}
+          PR_NUMBER: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+          COMMENT_TIMESTAMP: ${{ github.event.issue.comment.created_at }}
         run: |
             git fetch origin refs/pull/$PR_NUMBER/head:refs/remotes/pull/$PR_NUMBER/head
             git checkout refs/remotes/pull/$PR_NUMBER/head
             echo "PR_HEAD_SHA: $(git log -1 --format=%H)"
             echo "PR_HEAD_SHA=$(git log -1 --format=%H)" >> "$GITHUB_OUTPUT"
+            git fetch origin refs/pull/$PR_NUMBER/merge:refs/remotes/pull/$PR_NUMBER/merge
+            git checkout refs/remotes/pull/$PR_NUMBER/merge
+            PR_MERGE_COMMIT_TIMESTAMP=$(git log -1 --date=unix --format=%cd)
+            echo "PR_MERGE_COMMIT_TIMESTAMP: $PR_MERGE_COMMIT_TIMESTAMP"
+            if [ $COMMENT_TIMESTAMP -le $PR_MERGE_COMMIT_TIMESTAMP ]; then
+              echo "Last commit on the pull request is newer than the issue comment triggering this run! Abort!";
+              exit -1;
+            fi
 
   # use a python script to handle this complex logic
   # case 1: `run-slow` (auto. infer with limited number of models, but in particular, new model)
