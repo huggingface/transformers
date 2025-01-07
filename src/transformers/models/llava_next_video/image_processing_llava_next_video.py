@@ -39,14 +39,10 @@ from ...image_utils import (
     to_numpy_array,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_vision_available, logging
+from ...utils import TensorType, logging
 
 
 logger = logging.get_logger(__name__)
-
-
-if is_vision_available():
-    pass
 
 
 class LlavaNextVideoImageProcessor(BaseImageProcessor):
