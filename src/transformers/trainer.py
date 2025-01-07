@@ -4938,11 +4938,10 @@ class Trainer:
         accelerator_config = self.args.accelerator_config.to_dict()
 
         if is_accelerate_available("0.28.0"):
+            # Extract dataloader config params from accelerator config
+            dataloader_params = ["split_batches", "dispatch_batches", "even_batches", "use_seedable_sampler"]
             dataloader_config = DataLoaderConfiguration(
-                split_batches=accelerator_config.pop("split_batches"),
-                dispatch_batches=accelerator_config.pop("dispatch_batches"),
-                even_batches=accelerator_config.pop("even_batches"),
-                use_seedable_sampler=accelerator_config.pop("use_seedable_sampler"),
+                **{param: accelerator_config.pop(param) for param in dataloader_params}
             )
             if is_accelerate_available("1.1.0"):
                 dataloader_config.data_seed = self.args.data_seed
@@ -4987,12 +4986,8 @@ class Trainer:
         # post accelerator creation setup
         if self.is_fsdp_enabled:
             fsdp_plugin = self.accelerator.state.fsdp_plugin
-            fsdp_plugin.limit_all_gathers = self.args.fsdp_config.get(
-                "limit_all_gathers", fsdp_plugin.limit_all_gathers
-            )
-            fsdp_plugin.activation_checkpointing = self.args.fsdp_config.get(
-                "activation_checkpointing", fsdp_plugin.activation_checkpointing
-            )
+            for param in ["limit_all_gathers", "activation_checkpointing"]:
+                setattr(fsdp_plugin, param, self.args.fsdp_config.get(param, getattr(fsdp_plugin, param)))
             if fsdp_plugin.activation_checkpointing and self.args.gradient_checkpointing:
                 raise ValueError(
                     "The activation_checkpointing in FSDP config and the gradient_checkpointing in training arg "
