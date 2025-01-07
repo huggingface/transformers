@@ -146,7 +146,7 @@ class ClvpFeatureExtractor(SequenceFeatureExtractor):
 
         if self.mel_norms is not None:
             log_specs = log_specs / np.array(self.mel_norms)[:, None, None]
-        
+
         return log_specs
 
     def __call__(
@@ -246,7 +246,7 @@ class ClvpFeatureExtractor(SequenceFeatureExtractor):
 
         # make sure list is in array format
         input_features = padded_inputs.get("input_features").transpose(2, 0, 1)
-        
+
         input_features = self._np_extract_fbank_features_batch(list(input_features[0])).astype(np.float32)
 
         if isinstance(input_features[0], List):

@@ -126,7 +126,9 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
             ).T
         return features
 
-    def _extract_fbank_features_batch(self, waveform_list: List[np.ndarray],
+    def _extract_fbank_features_batch(
+        self,
+        waveform_list: List[np.ndarray],
     ) -> List[np.ndarray]:
         """
         Batch version of `_extract_fbank_features`.
@@ -138,9 +140,7 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
                 waveform_torch = torch.from_numpy(waveform).unsqueeze(0)
 
                 features = ta_kaldi.fbank(
-                    waveform_torch,
-                    num_mel_bins=self.num_mel_bins,
-                    sample_frequency=self.sampling_rate
+                    waveform_torch, num_mel_bins=self.num_mel_bins, sample_frequency=self.sampling_rate
                 )
                 features = features.numpy()
 
@@ -160,7 +160,8 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
                 mel_filters=self.mel_filters,
                 log_mel="log",
                 mel_floor=1.192092955078125e-07,
-                remove_dc_offset=True,)
+                remove_dc_offset=True,
+            )
             features_list = [features.T for features in features_list]
 
         return features_list
