@@ -267,7 +267,6 @@ class DisentangledSelfAttention(nn.Module):
         attention_scores = attention_scores.masked_fill(~(attention_mask), torch.finfo(query_layer.dtype).min)
         # bsz x height x length x dimension
         attention_probs = nn.functional.softmax(attention_scores, dim=-1)
-        attention_probs.masked_fill(attention_mask, 0)
 
         attention_probs = self.dropout(attention_probs)
         context_layer = torch.bmm(
@@ -1507,3 +1506,14 @@ class DebertaV2ForMultipleChoice(DebertaV2PreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "DebertaV2ForMaskedLM",
+    "DebertaV2ForMultipleChoice",
+    "DebertaV2ForQuestionAnswering",
+    "DebertaV2ForSequenceClassification",
+    "DebertaV2ForTokenClassification",
+    "DebertaV2Model",
+    "DebertaV2PreTrainedModel",
+]
