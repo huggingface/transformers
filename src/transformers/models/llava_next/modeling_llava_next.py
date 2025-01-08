@@ -912,7 +912,6 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
                     attention_mask = torch.cat((extended_attention_mask, attention_mask[:, -target_length:]), dim=1)
                     position_ids = torch.sum(attention_mask, dim=1).unsqueeze(-1) - 1
                     cache_position = torch.arange(attention_mask.shape[1], device=attention_mask.device)[-target_length:]
-                    
             # TODO: @raushan retain only the new behavior after v4.47
             else:
                 n_image_tokens = (input_ids == self.config.image_token_index).sum().item()
