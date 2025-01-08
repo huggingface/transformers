@@ -158,8 +158,8 @@ class LlavaProcessor(ProcessorMixin):
             pixel_values = image_inputs["pixel_values"]
             height, width = get_image_size(to_numpy_array(pixel_values[0]))
             num_image_tokens = (height // self.patch_size) * (
-                    width // self.patch_size
-                ) + self.num_additional_image_tokens
+                width // self.patch_size
+            ) + self.num_additional_image_tokens
             if self.vision_feature_select_strategy == "default":
                 num_image_tokens -= 1
 
