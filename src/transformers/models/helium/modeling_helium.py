@@ -254,7 +254,7 @@ class HeliumAttention(nn.Module):
         self.v_proj = nn.Linear(
             config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
         )
-        self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
+        self.o_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
 
     def forward(
         self,
@@ -502,11 +502,7 @@ class HeliumModel(HeliumPreTrainedModel):
             [HeliumDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
         self.norm = HeliumRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = HeliumRotaryEmbedding(
-            dim=config.head_dim,
-            max_position_embeddings=config.max_position_embeddings,
-            base=config.rope_theta,
-        )
+        self.rotary_emb = HeliumRotaryEmbedding(config)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
