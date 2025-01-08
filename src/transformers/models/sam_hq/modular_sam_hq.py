@@ -561,7 +561,7 @@ class SamHQMaskDecoder(nn.Module):
         """
         batch_size, num_channels, height, width = image_embeddings.shape
         point_batch_size = sparse_prompt_embeddings.shape[1]
-        vit_features = intermediate_embeddings[0].permute(0, 3, 1, 2)
+        vit_features = intermediate_embeddings[0].permute(0, 3, 1, 2).contiguous()
 
         embed_encode = self.encoder_conv1(image_embeddings)
         embed_encode = self.activation(self.encoder_norm(embed_encode))
