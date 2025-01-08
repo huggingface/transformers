@@ -213,8 +213,7 @@ class VitPoseModelTest(ModelTesterMixin, unittest.TestCase):
 
     @slow
     def test_model_from_pretrained(self):
-        # TODO update organization
-        model_name = "nielsr/vitpose-base-simple"
+        model_name = "usyd-community/vitpose-base-simple"
         model = VitPoseForPoseEstimation.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
@@ -231,14 +230,16 @@ def prepare_img():
 class VitPoseModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        # TODO update organization
-        return VitPoseImageProcessor.from_pretrained("danelcsb/vitpose-base-simple") if is_vision_available() else None
+        return (
+            VitPoseImageProcessor.from_pretrained("usyd-community/vitpose-base-simple")
+            if is_vision_available()
+            else None
+        )
 
     @slow
     def test_inference_pose_estimation(self):
         image_processor = self.default_image_processor
-        # TODO update organization
-        model = VitPoseForPoseEstimation.from_pretrained("danelcsb/vitpose-base-simple")
+        model = VitPoseForPoseEstimation.from_pretrained("usyd-community/vitpose-base-simple")
         model.to(torch_device)
         model.eval()
 
@@ -289,8 +290,7 @@ class VitPoseModelIntegrationTest(unittest.TestCase):
     @slow
     def test_batched_inference(self):
         image_processor = self.default_image_processor
-        # TODO update organization
-        model = VitPoseForPoseEstimation.from_pretrained("danelcsb/vitpose-base-simple")
+        model = VitPoseForPoseEstimation.from_pretrained("usyd-community/vitpose-base-simple")
         model.to(torch_device)
         model.eval()
 
