@@ -109,6 +109,7 @@ class Qwen2VLImageProcessingTester:
             torchify=torchify,
         )
 
+
 @require_torch
 @require_vision
 class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
