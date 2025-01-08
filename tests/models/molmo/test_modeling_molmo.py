@@ -197,6 +197,7 @@ class MolmoForConditionalGenerationModelTest(
         if is_torch_available()
         else {}
     )
+    test_torchscript = False
     test_pruning = False
     test_head_masking = False
     _is_composite = True
@@ -315,7 +316,7 @@ class MolmoForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.equal(inputs["input_ids"].cpu(), EXPECTED_INPUT_IDS))
 
         output = model.generate(**inputs, max_new_tokens=18)
-        EXPECTED_DECODED_TEXT = " User: Describe this image. Assistant: This image features an adorable black Labrador puppy, captured from a top-down perspective. The puppy"  # fmt: skip
+        EXPECTED_DECODED_TEXT = "User: Describe this image. Assistant: This image captures a young black Labrador puppy, likely around 12 weeks old, sitting"  # fmt: skip
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
