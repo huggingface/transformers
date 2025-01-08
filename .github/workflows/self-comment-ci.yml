@@ -9,6 +9,8 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.issue.number }}-${{ startsWith(github.event.comment.body, 'run-slow') || startsWith(github.event.comment.body, 'run slow') || startsWith(github.event.comment.body, 'run_slow') }}
   cancel-in-progress: true
+permissions: read-all
+
 
 jobs:
   get-pr-number:
@@ -78,7 +80,6 @@ jobs:
     runs-on: ubuntu-22.04
     needs: get-pr-number
     if: ${{ needs.get-pr-number.outputs.PR_NUMBER != ''}}
-    permissions: write-all
     outputs:
       models: ${{ steps.models_to_run.outputs.models }}
     steps:
@@ -102,23 +103,32 @@ jobs:
           echo "models=${{ env.models }}" >> $GITHUB_ENV
           echo "models=${{ env.models }}" >> $GITHUB_OUTPUT
 
+  reply_to_comment:
+    name: Reply to the comment
+    if: ${{ needs.get-tests.outputs.models != '[]' }}
+    needs: [get-pr-number, get-tests]
+    permissions:
+      pull-requests: write
+    runs-on: ubuntu-22.04
+    steps:
       - name: Reply to the comment
-        if: ${{ env.models != '[]' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MODELS: ${{ needs.get-tests.outputs.models }}
         run: |
           gh api \
             --method POST \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             repos/${{ github.repository }}/issues/${{ needs.get-pr-number.outputs.PR_NUMBER }}/comments \
-            -f "body=This comment contains run-slow, running the specified jobs: ${{ env.models }} ..."
+            -f "body=This comment contains run-slow, running the specified jobs: ${{ env.MODELS }} ..."
 
   create_run:
     name: Create run
     if: ${{ needs.get-tests.outputs.models != '[]' }}
-    needs: [get-sha, get-tests]
-    permissions: write-all
+    needs: [get-sha, get-tests, reply_to_comment]
+    permissions:
+      statuses: write
     runs-on: ubuntu-22.04
     steps:
       - name: Create Run
@@ -235,7 +245,8 @@ jobs:
   update_run_status:
     name: Update Check Run Status
     needs: [get-sha, create_run, run_models_gpu]
-    permissions: write-all
+    permissions:
+      statuses: write
     if: ${{ always() && needs.create_run.result == 'success' }}
     runs-on: ubuntu-22.04
     env:
