@@ -816,7 +816,10 @@ class ModelTesterMixin:
                     ),
                 )
 
+        set_model_tester_for_less_flaky_test(self)
+
         config, batched_input = self.model_tester.prepare_config_and_inputs_for_common()
+        set_config_for_less_flaky_test(config)
         equivalence = get_tensor_equivalence_function(batched_input)
 
         for model_class in self.all_model_classes:
@@ -827,6 +830,7 @@ class ModelTesterMixin:
                 config, batched_input = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
             batched_input_prepared = self._prepare_for_class(batched_input, model_class)
             model = model_class(config).to(torch_device).eval()
+            set_model_for_less_flaky_test(model)
 
             batch_size = self.model_tester.batch_size
             single_row_input = {}
