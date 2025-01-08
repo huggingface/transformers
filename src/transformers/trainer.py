@@ -2518,7 +2518,30 @@ class Trainer:
 
                         # Gradient clipping
                         if args.max_grad_norm is not None and args.max_grad_norm > 0:
-                            grad_norm = self.clip_grads(model, args)
+                            if is_sagemaker_mp_enabled() and args.fp16:
+                                _grad_norm = self.optimizer.clip_master_grads(args.max_grad_norm)
+                            elif self.use_apex:
+                                # Revert to normal clipping otherwise, handling Apex or full precision
+                                _grad_norm = nn.utils.clip_grad_norm_(
+                                    amp.master_params(self.optimizer),
+                                    args.max_grad_norm,
+                                )
+                            else:
+                                _grad_norm = self.accelerator.clip_grad_norm_(
+                                    model.parameters(),
+                                    args.max_grad_norm,
+                                )
+
+                            if (
+                                is_accelerate_available()
+                                and self.accelerator.distributed_type == DistributedType.DEEPSPEED
+                            ):
+                                grad_norm = model.get_global_grad_norm()
+                                # In some cases the grad norm may not return a float
+                                if hasattr(grad_norm, "item"):
+                                    grad_norm = grad_norm.item()
+                            else:
+                                grad_norm = _grad_norm
 
                         self.control = self.callback_handler.on_pre_optimizer_step(args, self.state, self.control)
 
@@ -5071,30 +5094,3 @@ class Trainer:
             num_items_in_batch = num_items_in_batch.item()
 
         return batch_samples, num_items_in_batch
-
-    def clip_grads(self, model, args):
-        """
-        Clips gradients properly based on setup
-        """
-        if is_sagemaker_mp_enabled() and args.fp16:
-            _grad_norm = self.optimizer.clip_master_grads(args.max_grad_norm)
-        elif self.use_apex:
-            # Revert to normal clipping otherwise, handling Apex or full precision
-            _grad_norm = nn.utils.clip_grad_norm_(
-                amp.master_params(self.optimizer),
-                args.max_grad_norm,
-            )
-        else:
-            _grad_norm = self.accelerator.clip_grad_norm_(
-                model.parameters(),
-                args.max_grad_norm,
-            )
-
-        if is_accelerate_available() and self.accelerator.distributed_type == DistributedType.DEEPSPEED:
-            grad_norm = model.get_global_grad_norm()
-            # In some cases the grad norm may not return a float
-            if hasattr(grad_norm, "item"):
-                grad_norm = grad_norm.item()
-        else:
-            grad_norm = _grad_norm
-        return grad_norm
