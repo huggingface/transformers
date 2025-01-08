@@ -45,8 +45,21 @@ from .configuration_helium import HeliumConfig
 logger = logging.get_logger(__name__)
 
 
-class HeliumRMSNorm(LlamaRMSNorm):
-    pass
+class HeliumRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return (self.weight.to(torch.float32) * hidden_states).to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 class HeliumRotaryEmbedding(LlamaRotaryEmbedding):
@@ -102,21 +115,6 @@ class HeliumAttention(GraniteAttention):
         super().__init__(config, layer_idx)
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
         self.scaling = 1 / math.sqrt(self.head_dim)
-
-
-class HeliumFlashAttention2(HeliumAttention, GraniteFlashAttention2):
-    pass
-
-
-class HeliumSdpaAttention(GraniteSdpaAttention):
-    pass
-
-
-Helium_ATTENTION_CLASSES = {
-    "eager": HeliumAttention,
-    "flash_attention_2": HeliumFlashAttention2,
-    "sdpa": HeliumSdpaAttention,
-}
 
 
 class HeliumDecoderLayer(LlamaDecoderLayer):
