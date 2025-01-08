@@ -370,7 +370,7 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
         >>> processor = TextNetImageProcessor.from_pretrained("czczup/textnet-base")
         >>> model = TextNetForImageClassification.from_pretrained("czczup/textnet-base")
 
-        >>> inputs = processor(images=image, return_tensors="pt", size={"height": 640, "width": 640})
+        >>> inputs = processor(images=image, return_tensors="pt")
         >>> with torch.no_grad():
         ...     outputs = model(**inputs)
         >>> outputs.logits.shape
