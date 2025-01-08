@@ -280,15 +280,16 @@ class VitPoseForPoseEstimation(VitPosePreTrainedModel):
         >>> from PIL import Image
         >>> import requests
 
-        >>> processor = AutoImageProcessor.from_pretrained("")
-        >>> model = VitPoseForPoseEstimation.from_pretrained("")
+        >>> processor = AutoImageProcessor.from_pretrained("usyd-community/vitpose-base-simple")
+        >>> model = VitPoseForPoseEstimation.from_pretrained("usyd-community/vitpose-base-simple")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
         >>> boxes = [[[412.8, 157.61, 53.05, 138.01], [384.43, 172.21, 15.12, 35.74]]]
         >>> inputs = processor(image, boxes=boxes, return_tensors="pt")
 
-        >>> outputs = model(**inputs)
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
         >>> heatmaps = outputs.heatmaps
         ```"""
 

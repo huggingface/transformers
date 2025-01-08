@@ -27,7 +27,7 @@ class VitPoseBackboneConfig(BackboneConfigMixin, PretrainedConfig):
     This is the configuration class to store the configuration of a [`VitPoseBackbone`]. It is used to instantiate a
     VitPose model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the VitPose
-    [google/vitpose-base-patch16-224](https://huggingface.co/google/vitpose-base-patch16-224) architecture.
+    [usyd-community/vitpose-base-simple](https://huggingface.co/usyd-community/vitpose-base-simple) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
