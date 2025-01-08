@@ -1427,7 +1427,10 @@ def set_model_tester_for_less_flaky_test(test_case):
     if hasattr(test_case.model_tester, "num_hidden_groups"):
         test_case.model_tester.num_hidden_groups = test_case.model_tester.num_hidden_layers
     if hasattr(test_case.model_tester, "neck_hidden_sizes"):
-        test_case.model_tester.neck_hidden_sizes = test_case.model_tester.neck_hidden_sizes[:test_case.model_tester.num_hidden_layers]
+        test_case.model_tester.neck_hidden_sizes = test_case.model_tester.neck_hidden_sizes[
+            : test_case.model_tester.num_hidden_layers
+        ]
+
 
 def set_config_for_less_flaky_test(config):
     target_attrs = [
