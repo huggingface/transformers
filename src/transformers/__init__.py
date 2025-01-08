@@ -701,6 +701,10 @@ _import_structure = {
         "Qwen2Config",
         "Qwen2Tokenizer",
     ],
+    "models.qwen2_5_vl": [
+        "Qwen2_5_VLConfig",
+        "Qwen2_5_VLProcessor",
+    ],
     "models.qwen2_audio": [
         "Qwen2AudioConfig",
         "Qwen2AudioEncoderConfig",
@@ -710,10 +714,6 @@ _import_structure = {
     "models.qwen2_vl": [
         "Qwen2VLConfig",
         "Qwen2VLProcessor",
-    ],
-    "models.qwen2_5_vl": [
-        "Qwen2_5_VLConfig",
-        "Qwen2_5_VLProcessor",
     ],
     "models.rag": ["RagConfig", "RagRetriever", "RagTokenizer"],
     "models.recurrent_gemma": ["RecurrentGemmaConfig"],
@@ -1257,8 +1257,8 @@ else:
     _import_structure["models.pixtral"].append("PixtralImageProcessor")
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
-    _import_structure["models.qwen2_vl"].extend(["Qwen2VLImageProcessor"])
     _import_structure["models.qwen2_5_vl"].extend(["Qwen2_5_VLImageProcessor"])
+    _import_structure["models.qwen2_vl"].extend(["Qwen2VLImageProcessor"])
     _import_structure["models.rt_detr"].extend(["RTDetrImageProcessor"])
     _import_structure["models.sam"].extend(["SamImageProcessor"])
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
@@ -3247,6 +3247,13 @@ else:
             "Qwen2PreTrainedModel",
         ]
     )
+    _import_structure["models.qwen2_5_vl"].extend(
+        [
+            "Qwen2_5_VLForConditionalGeneration",
+            "Qwen2_5_VLModel",
+            "Qwen2_5_VLPreTrainedModel",
+        ]
+    )
     _import_structure["models.qwen2_audio"].extend(
         [
             "Qwen2AudioEncoder",
@@ -3269,13 +3276,6 @@ else:
             "Qwen2VLForConditionalGeneration",
             "Qwen2VLModel",
             "Qwen2VLPreTrainedModel",
-        ]
-    )
-    _import_structure["models.qwen2_5_vl"].extend(
-        [
-            "Qwen2_5_VLForConditionalGeneration",
-            "Qwen2_5_VLModel",
-            "Qwen2_5_VLPreTrainedModel",
         ]
     )
     _import_structure["models.rag"].extend(
