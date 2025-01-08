@@ -37,6 +37,9 @@ class TimmWrapperConfig(PretrainedConfig):
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
+    Config loads imagenet label descriptions and stores them in `id2label` attribute, `label2id` attribute for default
+    imagenet models is set to `None` due to occlusions in the label descriptions.
+
     Args:
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
