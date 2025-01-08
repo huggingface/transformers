@@ -652,7 +652,7 @@ class VitPoseImageProcessor(BaseImageProcessor):
 
         poses = torch.Tensor(preds)
         scores = torch.Tensor(scores)
-        labels = torch.range(0, num_keypoints - 1)
+        labels = torch.arange(0, num_keypoints)
         bboxes_xyxy = torch.Tensor(coco_to_pascal_voc(all_boxes))
 
         results: List[List[Dict[str, torch.Tensor]]] = []
