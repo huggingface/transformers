@@ -249,19 +249,13 @@ class VitPoseBackboneMoeMLP(nn.Module):
         hidden_state = self.fc1(hidden_state)
         hidden_state = self.act(hidden_state)
         shared_hidden_state = self.fc2(hidden_state)
-        indices = indices.view(-1)
+        indices = indices.view(-1, 1, 1)
 
-        # Convert indices to boolean mask
-        router_mask = nn.functional.one_hot(indices, num_classes=self.num_experts).bool()
-        # Identify active experts
-        seq_len, num_experts = router_mask.shape
-        idx_mask = router_mask.sum(dim=[0])
-        active_experts = torch.nonzero(idx_mask, as_tuple=True)[0].tolist()
-
-        for idx, expert in enumerate(active_experts):
-            mask = router_mask[idx, :]
-            current_hidden_state = self.experts[expert](hidden_state[mask])
-            expert_hidden_state[mask] = current_hidden_state
+        # to support ddp training
+        for i in range(self.num_experts):
+            selected_index = indices == i
+            current_hidden_state = self.experts[i](hidden_state) * selected_index
+            expert_hidden_state = expert_hidden_state + current_hidden_state
 
         hidden_state = torch.cat([shared_hidden_state, expert_hidden_state], dim=-1)
 
