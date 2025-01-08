@@ -274,13 +274,7 @@ class VitPoseModelIntegrationTest(unittest.TestCase):
                 [3.9596e02, 1.7948e02],
             ]
         )
-        expected_scores = torch.tensor(
-            [
-                [8.7529e-01],
-                [8.4315e-01],
-                [9.2678e-01],
-            ]
-        )
+        expected_scores = torch.tensor([8.7529e-01, 8.4315e-01, 9.2678e-01])
 
         self.assertEqual(len(pose_results), 2)
         self.assertTrue(torch.allclose(pose_results[1]["bbox"].cpu(), expected_bbox, atol=1e-4))
@@ -329,13 +323,7 @@ class VitPoseModelIntegrationTest(unittest.TestCase):
                 [3.9596e02, 1.7948e02],
             ]
         )
-        expected_scores = torch.tensor(
-            [
-                [8.7529e-01],
-                [8.4315e-01],
-                [9.2678e-01],
-            ]
-        )
+        expected_scores = torch.tensor([8.7529e-01, 8.4315e-01, 9.2678e-01])
 
         self.assertEqual(len(pose_results), 2)
         self.assertEqual(len(pose_results[0]), 2)
