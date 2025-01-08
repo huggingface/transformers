@@ -170,7 +170,7 @@ class VivitImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertIsInstance(video[0], np.ndarray)
 
         # Test not batched input
-        encoded_videos = image_processing(video_inputs[0], return_tensors="pt").pixel_values
+        encoded_videos = image_processing(video_inputs[0], return_tensors="pt").pixel_values_videos
         expected_output_video_shape = self.image_processor_tester.expected_output_image_shape([encoded_videos[0]])
         self.assertEqual(tuple(encoded_videos.shape), (1, *expected_output_video_shape))
 
