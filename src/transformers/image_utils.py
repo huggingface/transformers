@@ -25,10 +25,10 @@ from packaging import version
 
 from .utils import (
     ExplicitEnum,
+    TensorType,
     is_av_available,
     is_cv2_available,
     is_decord_available,
-    TensorType,
     is_jax_tensor,
     is_numpy_array,
     is_tf_tensor,

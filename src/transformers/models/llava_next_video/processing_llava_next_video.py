@@ -18,8 +18,6 @@ Processor class for LLaVa-NeXT-Video.
 
 from typing import TYPE_CHECKING, List, Optional, Union
 
-import numpy as np
-
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils import select_best_resolution
 from ...image_utils import ImageInput, VideoInput, get_image_size, to_numpy_array
