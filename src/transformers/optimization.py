@@ -600,7 +600,12 @@ def get_scheduler(
         return schedule_func(optimizer, num_warmup_steps=num_warmup_steps)
 
     if name == SchedulerType.WARMUP_STABLE_DECAY:
-        return schedule_func(optimizer, num_warmup_steps=num_warmup_steps, num_training_steps=num_training_steps, **scheduler_specific_kwargs)
+        return schedule_func(
+            optimizer,
+            num_warmup_steps=num_warmup_steps,
+            num_training_steps=num_training_steps,
+            **scheduler_specific_kwargs,
+        )
 
     # All other schedulers require `num_training_steps`
     if num_training_steps is None:
