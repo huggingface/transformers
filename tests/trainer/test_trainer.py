@@ -1276,8 +1276,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     @require_torch_bf16
     @require_intel_extension_for_pytorch
     def test_number_of_steps_in_training_with_ipex(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            for mix_bf16 in [True, False]:
+        for mix_bf16 in [True, False]:
+            with tempfile.TemporaryDirectory() as tmp_dir:
                 # Regular training has n_epochs * len(train_dl) steps
                 trainer = get_regression_trainer(
                     learning_rate=0.1, use_ipex=True, bf16=mix_bf16, use_cpu=True, output_dir=tmp_dir
@@ -1794,8 +1794,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             # Check this works
             _ = trainer.train()
 
-            for name, param in tiny_llama.named_parameters():
-                self.assertFalse(torch.allclose(param, previous_params[name].to(param.device), rtol=1e-12, atol=1e-12))
+        for name, param in tiny_llama.named_parameters():
+            self.assertFalse(torch.allclose(param, previous_params[name].to(param.device), rtol=1e-12, atol=1e-12))
 
     @require_lomo
     @require_torch_gpu
@@ -2387,8 +2387,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     @require_torch_bf16
     @require_intel_extension_for_pytorch
     def test_evaluate_with_ipex(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            for mix_bf16 in [True, False]:
+        for mix_bf16 in [True, False]:
+            with tempfile.TemporaryDirectory() as tmp_dir:
                 trainer = get_regression_trainer(
                     a=1.5,
                     b=2.5,
@@ -2589,8 +2589,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     @require_torch_bf16
     @require_intel_extension_for_pytorch
     def test_predict_with_ipex(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            for mix_bf16 in [True, False]:
+        for mix_bf16 in [True, False]:
+            with tempfile.TemporaryDirectory() as tmp_dir:
                 trainer = get_regression_trainer(
                     a=1.5, b=2.5, use_ipex=True, bf16=mix_bf16, use_cpu=True, output_dir=tmp_dir
                 )
