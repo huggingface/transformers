@@ -889,6 +889,7 @@ class Emu3VQVAEEncoder(nn.Module):
         hidden_states = hidden_states.reshape(-1, temporal_dim, *hidden_states.shape[1:])
         hidden_states = hidden_states.permute(0, 2, 1, 3, 4)
 
+        # temporal convs
         for conv in self.time_conv:
             hidden_states = conv(hidden_states)
             hidden_states *= torch.sigmoid(hidden_states)
@@ -944,6 +945,8 @@ class Emu3VQVAEDecoder(nn.Module):
     def forward(self, hidden_states: torch.Tensor, quant_states: torch.Tensor):
         hidden_quant_states = torch.cat((hidden_states, quant_states), dim=0)
         hidden_quant_states = hidden_quant_states.permute(0, 2, 1, 3, 4)
+
+        # temporal convs
         for layer in self.time_res_stack:
             hidden_quant_states = layer(hidden_quant_states)
 
