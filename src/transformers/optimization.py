@@ -399,6 +399,11 @@ def _get_wsd_scheduler_lambda(
     min_lr_ratio: float,
     num_cycles: float,
 ):
+    if warmup_type not in ["linear", "cosine", "1-sqrt"]:
+        raise ValueError(f"Unknown warmup type: {warmup_type}, expected 'linear', 'cosine' or '1-sqrt'")
+    if decay_type not in ["linear", "cosine", "1-sqrt"]:
+        raise ValueError(f"Unknown decay type: {decay_type}, expected 'linear', 'cosine' or '1-sqrt'")
+
     if current_step < num_warmup_steps:
         progress = float(current_step) / float(max(1, num_warmup_steps))
         if warmup_type == "linear":
@@ -407,45 +412,23 @@ def _get_wsd_scheduler_lambda(
             factor = 0.5 * (1.0 - math.cos(math.pi * progress))
         elif warmup_type == "1-sqrt":
             factor = 1.0 - math.sqrt(1.0 - progress)
-        else:
-            raise ValueError(f"Unknown warmup type: {warmup_type}, expected 'linear', 'cosine' or '1-sqrt'")
         factor = factor * (1.0 - min_lr_ratio) + min_lr_ratio
         return max(0.0, factor)
 
-    if num_training_steps is not None:
-        if current_step < num_training_steps - num_decay_steps:
-            return 1.0
+    stable_stage = num_warmup_steps + num_stable_steps if num_training_steps is None else num_training_steps - num_decay_steps
 
-        if current_step < num_training_steps:
-            progress = float(current_step - (num_training_steps - num_decay_steps)) / float(max(1, num_decay_steps))
-            if decay_type == "linear":
-                factor = 1.0 - progress
-            elif decay_type == "cosine":
-                factor = 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress))
-            elif decay_type == "1-sqrt":
-                factor = 1.0 - math.sqrt(progress)
-            else:
-                raise ValueError(f"Unknown decay type: {decay_type}, expected 'linear', 'cosine' or '1-sqrt'")
-            factor = factor * (1.0 - min_lr_ratio) + min_lr_ratio
-            return max(0.0, factor)
-    else:
-        if current_step < num_warmup_steps + num_stable_steps:
-            return 1.0
-
-        if current_step < num_warmup_steps + num_stable_steps + num_decay_steps:
-            progress = float(current_step - num_warmup_steps - num_stable_steps) / float(max(1, num_decay_steps))
-            if decay_type == "linear":
-                factor = 1.0 - progress
-            elif decay_type == "cosine":
-                factor = 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress))
-            elif decay_type == "1-sqrt":
-                factor = 1.0 - math.sqrt(progress)
-            else:
-                raise ValueError(f"Unknown decay type: {decay_type}, expected 'linear', 'cosine' or '1-sqrt'")
-            factor = factor * (1.0 - min_lr_ratio) + min_lr_ratio
-            return max(0.0, factor)
-
-    return min_lr_ratio
+    if current_step < stable_stage:
+        return 1.0
+    
+    progress = float(current_step - stable_stage) / float(max(1, num_decay_steps))
+    if decay_type == "linear":
+        factor = 1.0 - progress
+    elif decay_type == "cosine":
+        factor = 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress))
+    elif decay_type == "1-sqrt":
+        factor = 1.0 - math.sqrt(progress)
+    factor = factor * (1.0 - min_lr_ratio) + min_lr_ratio
+    return max(0.0, factor)
 
 
 def get_wsd_schedule(
