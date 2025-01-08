@@ -65,9 +65,10 @@ class TimmWrapperConfig(PretrainedConfig):
     @classmethod
     def from_dict(cls, config_dict: Dict[str, Any], **kwargs):
         label_names = config_dict.get("label_names", None)
+        is_custom_model = "num_labels" in kwargs or "id2label" in kwargs
 
         # if no labels added to config, use imagenet labeller in timm
-        if label_names is None:
+        if label_names is None and not is_custom_model:
             imagenet_subset = infer_imagenet_subset(config_dict)
             if imagenet_subset:
                 dataset_info = ImageNetInfo(imagenet_subset)
@@ -75,7 +76,6 @@ class TimmWrapperConfig(PretrainedConfig):
                 label_descriptions = dataset_info.label_descriptions(as_dict=True)
                 label_names = [label_descriptions[synset] for synset in synsets]
 
-        is_custom_model = "num_labels" in kwargs or "id2label" in kwargs
         if label_names is not None and not is_custom_model:
             kwargs["id2label"] = dict(enumerate(label_names))
 
