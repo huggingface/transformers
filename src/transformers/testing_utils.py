@@ -1409,30 +1409,42 @@ def assert_screenout(out, what):
 
 
 def set_model_tester_for_less_flaky_test(test_case):
-    if hasattr(test_case.model_tester, "num_hidden_layers"):
-        if not (hasattr(test_case.model_tester, "out_features") or hasattr(test_case.model_tester, "out_indices")):
-            test_case.model_tester.num_hidden_layers = 1
+    target_num_hidden_layers = 1
+    # TODO (if possible): Avoid exceptional cases
+    exceptional_classes = [
+        "ZambaModelTester",
+        "RwkvModelTester",
+        "AriaVisionText2TextModelTester",
+        "GPTNeoModelTester",
+        "DPTModelTester",
+    ]
+    if test_case.model_tester.__class__.__name__ in exceptional_classes:
+        target_num_hidden_layers = None
+    if hasattr(test_case.model_tester, "out_features") or hasattr(test_case.model_tester, "out_indices"):
+        target_num_hidden_layers = None
+
+    if hasattr(test_case.model_tester, "num_hidden_layers") and target_num_hidden_layers is not None:
+        test_case.model_tester.num_hidden_layers = target_num_hidden_layers
     if (
         hasattr(test_case.model_tester, "vision_config")
         and "num_hidden_layers" in test_case.model_tester.vision_config
-        and (not (hasattr(test_case.model_tester.vision_config, "out_features") or hasattr(test_case.model_tester.vision_config, "out_indices")))
+        and target_num_hidden_layers is not None
     ):
         test_case.model_tester.vision_config = copy.deepcopy(test_case.model_tester.vision_config)
-        test_case.model_tester.vision_config["num_hidden_layers"] = 1
-    if hasattr(test_case.model_tester, "text_config") and "num_hidden_layers" in test_case.model_tester.text_config:
+        test_case.model_tester.vision_config["num_hidden_layers"] = target_num_hidden_layers
+    if (
+        hasattr(test_case.model_tester, "text_config")
+        and "num_hidden_layers" in test_case.model_tester.text_config
+        and target_num_hidden_layers is not None
+    ):
         test_case.model_tester.text_config = copy.deepcopy(test_case.model_tester.text_config)
-        test_case.model_tester.text_config["num_hidden_layers"] = 1
+        test_case.model_tester.text_config["num_hidden_layers"] = target_num_hidden_layers
 
     # A few model class specific handling
 
     # For Albert
     if hasattr(test_case.model_tester, "num_hidden_groups"):
         test_case.model_tester.num_hidden_groups = test_case.model_tester.num_hidden_layers
-    # For DPT
-    if hasattr(test_case.model_tester, "neck_hidden_sizes"):
-        test_case.model_tester.neck_hidden_sizes = test_case.model_tester.neck_hidden_sizes[
-            : test_case.model_tester.num_hidden_layers
-        ]
 
 
 def set_config_for_less_flaky_test(config):
