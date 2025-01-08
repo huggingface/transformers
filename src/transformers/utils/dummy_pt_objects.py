@@ -9158,6 +9158,34 @@ def load_tf_weights_in_tapas(*args, **kwargs):
     requires_backends(load_tf_weights_in_tapas, ["torch"])
 
 
+class TextNetBackbone(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TextNetForImageClassification(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TextNetModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
+class TextNetPreTrainedModel(metaclass=DummyObject):
+    _backends = ["torch"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["torch"])
+
+
 class TimeSeriesTransformerForPrediction(metaclass=DummyObject):
     _backends = ["torch"]
 
