@@ -2804,18 +2804,22 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer.train(resume_from_checkpoint=True)
         self.assertTrue("No valid checkpoint found in output directory" in str(context.exception))
 
-    @require_torch_up_to_2_accelerators
+    # require_torch_non_multi_accelerator is necessary because this worker blocks runs when using multiple GPUs, making
+    # the test slower.
+    @require_torch_non_multi_accelerator
     @run_test_using_subprocess
     @slow
     def test_can_resume_training_lm(self):
         # Check if it works for a simple language modeling example
+        training_steps = 10
+        resume_from_step = 8
         with tempfile.TemporaryDirectory() as tmpdir:
             enable_full_determinism(0)
             kwargs = {
                 "output_dir": tmpdir,
                 "fp16": True,
-                "max_steps": 20,
-                "per_device_train_batch_size": 4,
+                "max_steps": training_steps,
+                "per_device_train_batch_size": 1,
                 "learning_rate": 1e-5,
                 "lr_scheduler_type": "cosine",
                 "save_strategy": "steps",
@@ -2828,9 +2832,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer = get_language_model_trainer(**kwargs)
             trainer.train(resume_from_checkpoint=False)
             # Get the parameter length of the model
-            model_params = torch.cat([p.flatten() for p in trainer.model.parameters()])
+            model_params = torch.cat([p.cpu().flatten() for p in trainer.model.parameters()])
             model_param_len = len(model_params)
-            # Sample 1000 uniform index and save the values of the parameters (considering an unrolled vector with
+            # Sample uniform indexes and save the values of the parameters (considering an unrolled vector with
             # all of them)
             indices = torch.randint(0, model_param_len, (1000,))
             # Save the values of the parameters for later comparison
@@ -2838,17 +2842,17 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             state1 = dataclasses.asdict(trainer.state)
             # Delete the reference
             del model_params, trainer
-            # Checks if all checkpoints are there
+            # Checks if all checkpoints are there, +1 is necessary because range is 1-indexed
             self.check_saved_checkpoints(
-                tmpdir, freq=1, total=20, is_pretrained=True, safe_weights=True, use_scaler=True
+                tmpdir, freq=1, total=training_steps + 1, is_pretrained=True, safe_weights=True, use_scaler=True
             )
 
-            # Checkpoint at step 11
+            # Checkpoint at intermediate step
             enable_full_determinism(0)
-            checkpoint = os.path.join(tmpdir, "checkpoint-11")
+            checkpoint = os.path.join(tmpdir, f"checkpoint-{resume_from_step+1}")
             trainer = get_language_model_trainer(**kwargs)
             trainer.train(resume_from_checkpoint=checkpoint)
-            model_params = torch.cat([p.flatten() for p in trainer.model.parameters()])
+            model_params = torch.cat([p.cpu().flatten() for p in trainer.model.parameters()])
 
             # Check that the parameters are the same
             self.assertTrue(torch.allclose(model_params[indices], model_params_sample))
