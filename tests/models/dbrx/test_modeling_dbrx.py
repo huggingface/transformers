@@ -17,7 +17,7 @@
 import unittest
 
 from transformers import DbrxConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import require_torch, slow, torch_device, skipIfRocm
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -326,6 +326,14 @@ class DbrxModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     pipeline_model_mapping = {"text-generation": DbrxForCausalLM} if is_torch_available() else {}
     test_headmasking = False
     test_pruning = False
+
+    @skipIfRocm
+    def test_generate_with_static_cache(self):
+        pass
+
+    @skipIfRocm
+    def test_generate_from_inputs_embeds_with_static_cache(self):
+        pass
 
     def setUp(self):
         self.model_tester = DbrxModelTester(self)

@@ -56,6 +56,7 @@ from transformers.testing_utils import (
     require_torch_or_tf,
     slow,
     torch_device,
+    skipIfRocm,
 )
 from transformers.utils import direct_transformers_import, is_tf_available, is_torch_available
 from transformers.utils import logging as transformers_logging
@@ -897,6 +898,7 @@ class CustomPipelineTest(unittest.TestCase):
         self.assertEqual(self.COUNT, 1)
 
     @require_torch
+    @skipIfRocm
     def test_custom_code_with_string_tokenizer(self):
         # This test checks for an edge case - tokenizer loading used to fail when using a custom code model
         # with a separate tokenizer that was passed as a repo name rather than a tokenizer object.

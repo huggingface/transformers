@@ -131,7 +131,9 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase):
         )
 
         for single_output in output:
-            compare_pipeline_output_to_hub_spec(single_output, ZeroShotImageClassificationOutputElement)
+            #compare_pipeline_output_to_hub_spec(single_output, ZeroShotImageClassificationOutputElement)
+            for sub_output in single_output:
+                compare_pipeline_output_to_hub_spec(sub_output, ZeroShotImageClassificationOutputElement)
 
     @require_torch
     def test_small_model_pt_fp16(self):

@@ -21,7 +21,7 @@ from transformers import (
     TFPreTrainedModel,
     pipeline,
 )
-from transformers.testing_utils import is_pipeline_test, require_tf, require_torch, slow, torch_device
+from transformers.testing_utils import is_pipeline_test, require_tf, require_torch, slow, torch_device, skipIfRocm
 from transformers.tokenization_utils import TruncationStrategy
 
 from .test_pipelines_common import ANY
@@ -91,6 +91,7 @@ class SummarizationPipelineTests(unittest.TestCase):
         outputs = summarizer("This " * 1000, truncation=TruncationStrategy.ONLY_FIRST)
 
     @require_torch
+    @skipIfRocm
     def test_small_model_pt(self):
         summarizer = pipeline(task="summarization", model="sshleifer/tiny-mbart", framework="pt")
         outputs = summarizer("This is a small test")

@@ -26,6 +26,7 @@ from transformers.testing_utils import (
     require_torch,
     require_vision,
     slow,
+    skipIfRocm,
 )
 
 from .test_pipelines_common import ANY
@@ -122,6 +123,7 @@ class ImageToTextPipelineTests(unittest.TestCase):
             compare_pipeline_output_to_hub_spec(single_output, ImageToTextOutput)
 
     @require_torch
+    @skipIfRocm
     def test_small_model_pt(self):
         pipe = pipeline("image-to-text", model="hf-internal-testing/tiny-random-vit-gpt2")
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"

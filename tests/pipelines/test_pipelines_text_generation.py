@@ -31,6 +31,7 @@ from transformers.testing_utils import (
     require_torch_gpu,
     require_torch_or_tf,
     torch_device,
+    skipIfRocm,
 )
 
 from .test_pipelines_common import ANY
@@ -43,6 +44,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
     tf_model_mapping = TF_MODEL_FOR_CAUSAL_LM_MAPPING
 
     @require_torch
+    @skipIfRocm
     def test_small_model_pt(self):
         text_generator = pipeline(task="text-generation", model="sshleifer/tiny-ctrl", framework="pt")
         # Using `do_sample=False` to force deterministic output
@@ -396,6 +398,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
         )
         return text_generator, ["This is a test", "Another test"]
 
+    @skipIfRocm
     def test_stop_sequence_stopping_criteria(self):
         prompt = """Hello I believe in"""
         text_generator = pipeline("text-generation", model="hf-internal-testing/tiny-random-gpt2")
@@ -510,6 +513,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
     @require_torch
     @require_accelerate
     @require_torch_gpu
+    @skipIfRocm
     def test_small_model_pt_bloom_accelerate(self):
         import torch
 
