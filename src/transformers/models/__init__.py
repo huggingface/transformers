@@ -252,6 +252,7 @@ from . import (
     t5,
     table_transformer,
     tapas,
+    textnet,
     time_series_transformer,
     timesformer,
     timm_backbone,
