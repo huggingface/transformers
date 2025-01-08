@@ -567,11 +567,11 @@ class SamHQMaskDecoder(nn.Module):
         embed_encode = self.activation(self.encoder_norm(embed_encode))
         embed_encode = self.encoder_conv2(embed_encode)
 
-        com_vit_feat = self.compress_vit_conv1(vit_features)
-        com_vit_feat = self.activation(self.compress_vit_norm(com_vit_feat))
-        com_vit_feat = self.compress_vit_conv2(com_vit_feat)
+        compressed_vit_features = self.compress_vit_conv1(vit_features)
+        compressed_vit_features = self.activation(self.compress_vit_norm(compressed_vit_features))
+        compressed_vit_features = self.compress_vit_conv2(compressed_vit_features)
 
-        hq_features = embed_encode + com_vit_feat
+        hq_features = embed_encode + compressed_vit_features
 
         output_tokens = torch.cat([self.iou_token.weight, self.mask_tokens.weight, self.hq_token.weight], dim=0)
         output_tokens = output_tokens.repeat(batch_size, point_batch_size, 1, 1)
