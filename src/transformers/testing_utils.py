@@ -1421,6 +1421,11 @@ def set_model_tester_for_less_flaky_test(test_case):
         test_case.model_tester.text_config = copy.deepcopy(test_case.model_tester.text_config)
         test_case.model_tester.text_config["num_hidden_layers"] = 1
 
+    # A few model class specific handling
+
+    # For Albert
+    if hasattr(test_case.model_tester, "num_hidden_groups"):
+        test_case.model_tester.num_hidden_groups = test_case.model_tester.num_hidden_layers
 
 def set_config_for_less_flaky_test(config):
     target_attrs = [
