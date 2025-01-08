@@ -85,7 +85,7 @@ class SamHQMaskDecoderTester:
         iou_head_depth=3,
         iou_head_hidden_dim=32,
         layer_norm_eps=1e-6,
-        vit_dim=768,
+        vit_dim=36,
     ):
         self.hidden_size = hidden_size
         self.hidden_act = hidden_act
@@ -128,7 +128,7 @@ class SamHQModelTester:
     def __init__(
         self,
         parent,
-        hidden_size=768,
+        hidden_size=36,
         intermediate_size=72,
         projection_dim=62,
         output_channels=32,
@@ -262,7 +262,7 @@ class SamHQModelTester:
             )
 
         # after computing the convolutional features
-        expected_hidden_states_shape = (self.batch_size, 12, 12, 768)
+        expected_hidden_states_shape = (self.batch_size, 12, 12, 36)
         self.parent.assertEqual(len(result.hidden_states), self.num_hidden_layers + 1)
         self.parent.assertEqual(result[-1][0].shape, expected_hidden_states_shape)
 
@@ -274,7 +274,7 @@ class SamHQModelTester:
             )
 
         # after computing the convolutional features
-        expected_hidden_states_shape = (self.batch_size, 12, 12, 768)
+        expected_hidden_states_shape = (self.batch_size, 12, 12, 36)
         self.parent.assertEqual(len(result[-1]), self.num_hidden_layers + 1)
         self.parent.assertEqual(result[-1][0].shape, expected_hidden_states_shape)
 
