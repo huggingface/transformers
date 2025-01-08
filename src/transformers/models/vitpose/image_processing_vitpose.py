@@ -650,26 +650,30 @@ class VitPoseImageProcessor(BaseImageProcessor):
         all_boxes[:, 0:2] = centers[:, 0:2]
         all_boxes[:, 2:4] = scales[:, 0:2]
 
-        poses = torch.Tensor(preds)
-        scores = torch.Tensor(scores)
+        poses = torch.tensor(preds)
+        scores = torch.tensor(scores)
         labels = torch.arange(0, num_keypoints)
-        bboxes_xyxy = torch.Tensor(coco_to_pascal_voc(all_boxes))
+        bboxes_xyxy = torch.tensor(coco_to_pascal_voc(all_boxes))
 
         results: List[List[Dict[str, torch.Tensor]]] = []
 
         pose_bbox_pairs = zip(poses, scores, bboxes_xyxy)
 
-        for batch_bbox in boxes:
-            batch_results: List[Dict[str, torch.Tensor]] = []
-            for _ in batch_bbox:
+        for image_bboxes in boxes:
+            image_results: List[Dict[str, torch.Tensor]] = []
+            for _ in image_bboxes:
                 # Unpack the next pose and bbox_xyxy from the iterator
                 pose, score, bbox_xyxy = next(pose_bbox_pairs)
+                score = score.squeeze()
+                keypoints_labels = labels
                 if threshold is not None:
-                    score_condition = (score > threshold).squeeze(1)
-                    pose, score, labels = pose[score_condition], score[score_condition], labels[score_condition]
-                pose_result = {"keypoints": pose, "scores": score, "labels": labels, "bbox": bbox_xyxy}
-                batch_results.append(pose_result)
-            results.append(batch_results)
+                    keep = score > threshold
+                    pose = pose[keep]
+                    score = score[keep]
+                    keypoints_labels = keypoints_labels[keep]
+                pose_result = {"keypoints": pose, "scores": score, "labels": keypoints_labels, "bbox": bbox_xyxy}
+                image_results.append(pose_result)
+            results.append(image_results)
 
         return results
 
