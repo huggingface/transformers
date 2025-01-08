@@ -262,22 +262,24 @@ class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertTrue((image_grid_thws_nested == expected_image_grid_thws).all())
 
     def test_video_inputs(self):
-        image_processor_dict = self.image_processor_dict.copy()
-        for num_frames in range(1, 7):
-            image_processor_dict["num_frames"] = num_frames
-            image_processing = self.image_processing_class(**image_processor_dict)
-            video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=True)
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        expected_dims_by_frames = {1: 34300, 2: 34300, 3: 68600, 4: 68600, 5: 102900, 6: 102900}
+
+        for num_frames, expected_dims in expected_dims_by_frames.items():
+            image_processor_tester = Qwen2VLImageProcessingTester(self, num_frames=num_frames)
+            video_inputs = image_processor_tester.prepare_video_inputs(equal_resolution=True)
             prcocess_out = image_processing(None, videos=video_inputs, return_tensors="pt")
-            encoded_images = prcocess_out.pixel_values_videos
-            expected_output_image_shape = (171500, 1176)
-            self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
+            encoded_video = prcocess_out.pixel_values_videos
+            expected_output_video_shape = (expected_dims, 1176)
+            self.assertEqual(tuple(encoded_video.shape), expected_output_video_shape)
 
     def test_custom_patch_size(self):
-        image_processor_dict = self.image_processor_dict.copy()
-        image_processor_dict["patch_size"] = 5
-        image_processing = self.image_processing_class(**image_processor_dict)
-        video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=True)
-        prcocess_out = image_processing(None, videos=video_inputs, return_tensors="pt")
-        encoded_images = prcocess_out.pixel_values_videos
-        expected_output_image_shape = (1400000, 150)
-        self.assertEqual(tuple(encoded_images.shape), expected_output_image_shape)
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+
+        for patch_size in (1, 3, 5, 7):
+            image_processor_tester = Qwen2VLImageProcessingTester(self, patch_size=patch_size)
+            video_inputs = image_processor_tester.prepare_video_inputs(equal_resolution=True)
+            prcocess_out = image_processing(None, videos=video_inputs, return_tensors="pt")
+            encoded_video = prcocess_out.pixel_values_videos
+            expected_output_video_shape = (171500, 1176)
+            self.assertEqual(tuple(encoded_video.shape), expected_output_video_shape)
