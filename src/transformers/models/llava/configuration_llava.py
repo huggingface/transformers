@@ -133,3 +133,6 @@ class LlavaConfig(PretrainedConfig):
         self.multimodal_projector_bias = multimodal_projector_bias
 
         super().__init__(**kwargs)
+
+
+__all__ = ["LlavaConfig"]

@@ -508,3 +508,6 @@ class PixtralVisionModel(PixtralPreTrainedModel):
         )
         out = self.transformer(patch_embeds, attention_mask, position_embedding)
         return out
+
+
+__all__ = ["PixtralVisionModel", "PixtralPreTrainedModel"]
