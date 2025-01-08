@@ -609,6 +609,7 @@ _import_structure = {
     "models.mobilenet_v2": ["MobileNetV2Config"],
     "models.mobilevit": ["MobileViTConfig"],
     "models.mobilevitv2": ["MobileViTV2Config"],
+    "models.modernbert": ["ModernBertConfig"],
     "models.molmo": [
         "MolmoConfig",
         "MolmoImageProcessor",
@@ -617,7 +618,6 @@ _import_structure = {
         "MolmoTextConfig",
         "MolmoVisionConfig",
     ],
-    "models.modernbert": ["ModernBertConfig"],
     "models.moshi": [
         "MoshiConfig",
         "MoshiDepthConfig",
@@ -2903,15 +2903,6 @@ else:
             "MobileViTV2PreTrainedModel",
         ]
     )
-    _import_structure["models.molmo"].extend(
-        [
-            "MolmoForCausalLM",
-            "MolmoForConditionalGeneration",
-            "MolmoPreTrainedModel",
-            "MolmoTextModel",
-        ]
-    )
-
     _import_structure["models.modernbert"].extend(
         [
             "ModernBertForMaskedLM",
@@ -2919,6 +2910,15 @@ else:
             "ModernBertForTokenClassification",
             "ModernBertModel",
             "ModernBertPreTrainedModel",
+        ]
+    )
+
+    _import_structure["models.molmo"].extend(
+        [
+            "MolmoForCausalLM",
+            "MolmoForConditionalGeneration",
+            "MolmoPreTrainedModel",
+            "MolmoTextModel",
         ]
     )
     _import_structure["models.moshi"].extend(
