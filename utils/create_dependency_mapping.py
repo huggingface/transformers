@@ -7,13 +7,13 @@ def topological_sort(dependencies):
     new_dependencies = {}
     graph = defaultdict(list)
     for node, deps in dependencies.items():
-        node_name = node.split("/")[-2]
+        node_name = node.rsplit("modular_", 1)[1].replace(".py", "")
         for dep in deps:
             dep_name = dep.split(".")[-2]
             if dep_name == node_name:
                 # Skip self dependencies for topological sort as they create cycles
                 continue
-            if "example" not in node and "auto" not in dep and node_name not in graph[dep_name]:
+            if "auto" not in dep and node_name not in graph[dep_name]:
                 graph[dep_name].append(node_name)
         new_dependencies[node_name] = node
 
