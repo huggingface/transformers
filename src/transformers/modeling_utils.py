@@ -4039,6 +4039,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     )
 
                 dtype_orig = cls._set_default_torch_dtype(torch_dtype)
+            else:
+                # set fp32 as the default dtype for BC
+                default_dtype = str(torch.get_default_dtype()).split(".")[-1]
+                config.torch_dtype = default_dtype
+                for key in config.sub_configs.keys():
+                    value = getattr(config, key)
+                    value.torch_dtype = default_dtype
 
             # Check if `_keep_in_fp32_modules` is not None
             use_keep_in_fp32_modules = (cls._keep_in_fp32_modules is not None) and (
