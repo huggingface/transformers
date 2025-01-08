@@ -113,7 +113,7 @@ def validate_and_format_image_pairs(images: ImageInput):
     )
 
     def _is_valid_image(image):
-        """images is a 3D array."""
+        """images is a PIL Image or a 3D array."""
         return is_pil_image(image) or (
             is_valid_image(image) and get_image_type(image) != ImageType.PIL and len(image.shape) == 3
         )
