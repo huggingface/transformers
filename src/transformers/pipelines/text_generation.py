@@ -1,7 +1,6 @@
 import enum
 import itertools
 import types
-import warnings
 from typing import Dict
 
 from ..utils import add_end_docstrings, is_tf_available, is_torch_available
