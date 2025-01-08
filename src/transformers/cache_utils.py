@@ -451,9 +451,17 @@ class DynamicCache(Cache):
 
         return self.key_cache[layer_idx], self.value_cache[layer_idx]
 
-    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
-        """Returns the sequence length of the cached states. A layer index can be optionally passed."""
-        # TODO: deprecate this function in favor of `cache_position`
+    def get_seq_length(self, layer_idx: Optional[int] = None) -> int:
+        """
+        Returns the sequence length of the cached states. A layer index can be optionally passed -- if not passed,
+        it returns the maximum sequence length for all layers.
+        """
+        if layer_idx is None:
+            if len(self) > 0:
+                return max([self.get_seq_length(layer_idx) for layer_idx in range(len(self))])
+            else:
+                return 0
+
         is_empty_layer = (
             len(self.key_cache) == 0  # no cache in any layer
             or len(self.key_cache) <= layer_idx  # skipped `layer_idx` and hasn't run a layer with cache after it
