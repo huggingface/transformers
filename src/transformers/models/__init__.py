@@ -277,6 +277,8 @@ from . import (
     vit_msn,
     vitdet,
     vitmatte,
+    vitpose,
+    vitpose_backbone,
     vits,
     vivit,
     wav2vec2,
