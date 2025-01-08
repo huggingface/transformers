@@ -29,11 +29,11 @@ from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
+    QuestionAnsweringModelOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
 from ...modeling_utils import PreTrainedModel
-from ...modeling_outputs import QuestionAnsweringModelOutput
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -1487,6 +1487,7 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 @add_start_docstrings(
     """
     The ModernBert Model with a span classification head on top for extractive question-answering tasks like SQuAD
@@ -1583,6 +1584,7 @@ class ModernBertForQuestionAnswering(ModernBertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
 
 __all__ = [
     "ModernBertConfig",
