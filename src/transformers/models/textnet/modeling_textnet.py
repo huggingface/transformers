@@ -82,6 +82,15 @@ class TextNetConvLayer(nn.Module):
 
 
 class TextNetRepConvLayer(nn.Module):
+    r"""
+    This layer supports re-parameterization by combining multiple convolutional branches
+    (e.g., main convolution, vertical, horizontal, and identity branches) during training.
+    At inference time, these branches can be collapsed into a single convolution for
+    efficiency, as per the re-parameterization paradigm.
+
+    The "Rep" in the name stands for "re-parameterization" (introduced by RepVGG).
+    """
+
     def __init__(self, config: TextNetConfig, in_channels: int, out_channels: int, kernel_size: int, stride: int):
         super().__init__()
 
@@ -143,11 +152,13 @@ class TextNetRepConvLayer(nn.Module):
         main_outputs = self.main_conv(hidden_states)
         main_outputs = self.main_batch_norm(main_outputs)
 
+        # applies a convolution with a vertical kernel
         if self.vertical_conv is not None:
             vertical_outputs = self.vertical_conv(hidden_states)
             vertical_outputs = self.vertical_batch_norm(vertical_outputs)
             main_outputs = main_outputs + vertical_outputs
 
+        # applies a convolution with a horizontal kernel
         if self.horizontal_conv is not None:
             horizontal_outputs = self.horizontal_conv(hidden_states)
             horizontal_outputs = self.horizontal_batch_norm(horizontal_outputs)
@@ -319,12 +330,13 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.textnet = TextNetModel(config)
+        self.avg_pool = nn.AdaptiveAvgPool2d((1, 1))
+        self.flatten = nn.Flatten()
+        self.fc = nn.Linear(config.hidden_sizes[-1], config.num_labels) if config.num_labels > 0 else nn.Identity()
+
         # classification head
-        self.classifier = nn.Sequential(
-            nn.AdaptiveAvgPool2d((1, 1)),
-            nn.Flatten(),
-            nn.Linear(config.hidden_sizes[-1], config.num_labels) if config.num_labels > 0 else nn.Identity(),
-        )
+        self.classifier = nn.ModuleList([self.avg_pool, self.flatten])
+
         # initialize weights and apply final processing
         self.post_init()
 
@@ -368,7 +380,9 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
 
         outputs = self.textnet(pixel_values, output_hidden_states=output_hidden_states, return_dict=return_dict)
         last_hidden_state = outputs[0]
-        logits = self.classifier(last_hidden_state)
+        for layer in self.classifier:
+            last_hidden_state = layer(last_hidden_state)
+        logits = self.fc(last_hidden_state)
         loss = None
 
         if labels is not None:
@@ -468,3 +482,6 @@ class TextNetBackbone(TextNetPreTrainedModel, BackboneMixin):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=None,
         )
+
+
+__all__ = ["TextNetBackbone", "TextNetModel", "TextNetPreTrainedModel", "TextNetForImageClassification"]
