@@ -676,19 +676,21 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
                 image_feature = image_feature[1:]
                 height = width = self.config.vision_config.image_size // self.config.vision_config.patch_size
 
-                if vision_feature_select_strategy == "default":
-                    expected_num_patches = height * width
-                elif vision_feature_select_strategy == "full":
-                    expected_num_patches = height * width + 1
-                if expected_num_patches != base_image_feature.shape[0]:
-                    raise ValueError("The number of patches is not consistent with the image size.")
-
                 num_patch_height, num_patch_width = get_anyres_image_grid_shape(
                     image_sizes[image_idx],
                     self.config.image_grid_pinpoints,
                     self.config.vision_config.image_size,
                 )
-                image_feature = image_feature.view(num_patch_height, num_patch_width, height, width, -1)
+                try:
+                    image_feature = image_feature.view(num_patch_height, num_patch_width, height, width, -1)
+                except RuntimeError as e:
+                    if vision_feature_select_strategy == "default":
+                        logger.warning_once(
+                            "Image feature shape does not line up with the provided patch size. "
+                            "You may be using the `default` vision_feature_select_strategy with a"
+                            " visual encoder that does not have CLS."
+                        )
+                    raise e
                 image_feature = image_feature.permute(4, 0, 2, 1, 3).contiguous()
                 image_feature = image_feature.flatten(1, 2).flatten(2, 3)
                 image_feature = unpad_image(image_feature, image_sizes[image_idx])
