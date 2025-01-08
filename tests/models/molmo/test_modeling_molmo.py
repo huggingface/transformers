@@ -316,7 +316,7 @@ class MolmoForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.equal(inputs["input_ids"].cpu(), EXPECTED_INPUT_IDS))
 
         output = model.generate(**inputs, max_new_tokens=18)
-        EXPECTED_DECODED_TEXT = "User: Describe this image. Assistant: This image captures a young black Labrador puppy, likely around 12 weeks old, sitting"  # fmt: skip
+        EXPECTED_DECODED_TEXT = " User: Describe this image. Assistant: This image captures a young black Labrador puppy, likely around 12 weeks old, sitting"  # fmt: skip
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
