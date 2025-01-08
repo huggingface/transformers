@@ -23,6 +23,13 @@ class ImageFeatureExtractionMixin(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class AriaImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class BeitFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -605,6 +612,13 @@ class SuperPointImageProcessor(metaclass=DummyObject):
 
 
 class Swin2SRImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class TextNetImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):

@@ -28,7 +28,7 @@ import warnings
 from pathlib import Path
 
 import requests
-from huggingface_hub import HfApi, HfFolder, delete_repo
+from huggingface_hub import HfApi, HfFolder
 from pytest import mark
 from requests.exceptions import HTTPError
 
@@ -45,9 +45,9 @@ from transformers import (
 )
 from transformers.testing_utils import (
     TOKEN,
-    USER,
     CaptureLogger,
     LoggingLevel,
+    TemporaryHubRepo,
     TestCasePlus,
     is_staging_test,
     require_accelerate,
@@ -618,32 +618,17 @@ class ModelUtilsTest(TestCasePlus):
         if is_flash_attn_2_available():
             attn_implementation_available.append("flash_attention_2")
 
-        mistral_attention_classes = {
-            "eager": "MistralAttention",
-            "sdpa": "MistralSdpaAttention",
-            "flash_attention_2": "MistralFlashAttention2",
-        }
         for requested_attn_implementation in attn_implementation_available:
             model = AutoModelForCausalLM.from_pretrained(
                 TINY_MISTRAL, attn_implementation=requested_attn_implementation
             )
             self.assertEqual(model.config._attn_implementation, requested_attn_implementation)
-            for module in model.modules():
-                if "Attention" in module.__class__.__name__:
-                    self.assertEqual(
-                        module.__class__.__name__, mistral_attention_classes[requested_attn_implementation]
-                    )
 
             config = AutoConfig.from_pretrained(TINY_MISTRAL)
             model = AutoModelForCausalLM.from_pretrained(
                 TINY_MISTRAL, config=config, attn_implementation=requested_attn_implementation
             )
             self.assertEqual(model.config._attn_implementation, requested_attn_implementation)
-            for module in model.modules():
-                if "Attention" in module.__class__.__name__:
-                    self.assertEqual(
-                        module.__class__.__name__, mistral_attention_classes[requested_attn_implementation]
-                    )
 
     def test_model_from_config_attn_implementation(self):
         # test that the model can be instantiated with attn_implementation of either
@@ -657,11 +642,6 @@ class ModelUtilsTest(TestCasePlus):
         if is_flash_attn_2_available():
             attn_implementation_available.append("flash_attention_2")
 
-        mistral_attention_classes = {
-            "eager": "MistralAttention",
-            "sdpa": "MistralSdpaAttention",
-            "flash_attention_2": "MistralFlashAttention2",
-        }
         for requested_attn_implementation in attn_implementation_available:
             config = AutoConfig.from_pretrained(TINY_MISTRAL, attn_implementation=requested_attn_implementation)
             # Ensure the config was set correctly
@@ -669,11 +649,6 @@ class ModelUtilsTest(TestCasePlus):
             self.assertEqual(config._attn_implementation_internal, requested_attn_implementation)
             model = AutoModelForCausalLM.from_config(config)
             self.assertEqual(model.config._attn_implementation, requested_attn_implementation)
-            for module in model.modules():
-                if "Attention" in module.__class__.__name__:
-                    self.assertEqual(
-                        module.__class__.__name__, mistral_attention_classes[requested_attn_implementation]
-                    )
 
             config = AutoConfig.from_pretrained(TINY_MISTRAL)
             # When the config is not set, the default is "eager"
@@ -681,11 +656,6 @@ class ModelUtilsTest(TestCasePlus):
             self.assertEqual(config._attn_implementation_internal, None)
             model = AutoModelForCausalLM.from_config(config=config, attn_implementation=requested_attn_implementation)
             self.assertEqual(model.config._attn_implementation, requested_attn_implementation)
-            for module in model.modules():
-                if "Attention" in module.__class__.__name__:
-                    self.assertEqual(
-                        module.__class__.__name__, mistral_attention_classes[requested_attn_implementation]
-                    )
 
             # Set a nonsense attn_implementation in the config, which should be overridden by the explicit argument
             config = AutoConfig.from_pretrained(TINY_MISTRAL, attn_implementation="foo-bar-baz")
@@ -693,11 +663,6 @@ class ModelUtilsTest(TestCasePlus):
             self.assertEqual(config._attn_implementation_internal, "foo-bar-baz")
             model = AutoModelForCausalLM.from_config(config=config, attn_implementation=requested_attn_implementation)
             self.assertEqual(model.config._attn_implementation, requested_attn_implementation)
-            for module in model.modules():
-                if "Attention" in module.__class__.__name__:
-                    self.assertEqual(
-                        module.__class__.__name__, mistral_attention_classes[requested_attn_implementation]
-                    )
 
     def test_torch_dtype_byte_sizes(self):
         torch_dtypes_and_bytes = [
@@ -1805,6 +1770,26 @@ class ModelUtilsTest(TestCasePlus):
                 new_model.generate(random_ids, max_new_tokens=3)
             self.assertTrue(len(w) == 0)
 
+    def test_load_model_with_state_dict_only(self):
+        model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+        state_dict = model.state_dict()
+        config = model.config
+
+        model_loaded = BertModel.from_pretrained(
+            pretrained_model_name_or_path=None, config=config, state_dict=state_dict
+        )
+        self.assertTrue(check_models_equal(model, model_loaded))
+
+    def test_load_model_with_state_dict_only_low_cpu_mem_usage(self):
+        model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+        state_dict = model.state_dict()
+        config = model.config
+
+        model_loaded = BertModel.from_pretrained(
+            pretrained_model_name_or_path=None, config=config, state_dict=state_dict, low_cpu_mem_usage=True
+        )
+        self.assertTrue(check_models_equal(model, model_loaded))
+
 
 @slow
 @require_torch
@@ -2055,168 +2040,127 @@ class ModelPushToHubTester(unittest.TestCase):
         cls._token = TOKEN
         HfFolder.save_token(TOKEN)
 
-    @staticmethod
-    def _try_delete_repo(repo_id, token):
-        try:
-            # Reset repo
-            delete_repo(repo_id=repo_id, token=token)
-        except:  # noqa E722
-            pass
-
     @unittest.skip(reason="This test is flaky")
     def test_push_to_hub(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            try:
-                tmp_repo = f"{USER}/test-model-{Path(tmp_dir).name}"
-                config = BertConfig(
-                    vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
-                )
-                model = BertModel(config)
-                model.push_to_hub(tmp_repo, token=self._token)
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
+            config = BertConfig(
+                vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+            )
+            model = BertModel(config)
+            model.push_to_hub(tmp_repo.repo_id, token=self._token)
 
-                new_model = BertModel.from_pretrained(tmp_repo)
-                for p1, p2 in zip(model.parameters(), new_model.parameters()):
-                    self.assertTrue(torch.equal(p1, p2))
-            finally:
-                # Always (try to) delete the repo.
-                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
+            new_model = BertModel.from_pretrained(tmp_repo.repo_id)
+            for p1, p2 in zip(model.parameters(), new_model.parameters()):
+                self.assertTrue(torch.equal(p1, p2))
 
     @unittest.skip(reason="This test is flaky")
     def test_push_to_hub_via_save_pretrained(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            try:
-                tmp_repo = f"{USER}/test-model-{Path(tmp_dir).name}"
-                config = BertConfig(
-                    vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
-                )
-                model = BertModel(config)
-                # Push to hub via save_pretrained
-                model.save_pretrained(tmp_dir, repo_id=tmp_repo, push_to_hub=True, token=self._token)
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
+            config = BertConfig(
+                vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+            )
+            model = BertModel(config)
+            # Push to hub via save_pretrained
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                model.save_pretrained(tmp_dir, repo_id=tmp_repo.repo_id, push_to_hub=True, token=self._token)
 
-                new_model = BertModel.from_pretrained(tmp_repo)
-                for p1, p2 in zip(model.parameters(), new_model.parameters()):
-                    self.assertTrue(torch.equal(p1, p2))
-            finally:
-                # Always (try to) delete the repo.
-                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
+            new_model = BertModel.from_pretrained(tmp_repo.repo_id)
+            for p1, p2 in zip(model.parameters(), new_model.parameters()):
+                self.assertTrue(torch.equal(p1, p2))
 
     def test_push_to_hub_with_description(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            try:
-                tmp_repo = f"{USER}/test-model-{Path(tmp_dir).name}"
-                config = BertConfig(
-                    vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
-                )
-                model = BertModel(config)
-                COMMIT_DESCRIPTION = """
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
+            config = BertConfig(
+                vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+            )
+            model = BertModel(config)
+            COMMIT_DESCRIPTION = """
 The commit description supports markdown synthax see:
 ```python
 >>> form transformers import AutoConfig
 >>> config = AutoConfig.from_pretrained("google-bert/bert-base-uncased")
 ```
 """
-                commit_details = model.push_to_hub(
-                    tmp_repo, use_auth_token=self._token, create_pr=True, commit_description=COMMIT_DESCRIPTION
-                )
-                self.assertEqual(commit_details.commit_description, COMMIT_DESCRIPTION)
-            finally:
-                # Always (try to) delete the repo.
-                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
+            commit_details = model.push_to_hub(
+                tmp_repo.repo_id, use_auth_token=self._token, create_pr=True, commit_description=COMMIT_DESCRIPTION
+            )
+            self.assertEqual(commit_details.commit_description, COMMIT_DESCRIPTION)
 
     @unittest.skip(reason="This test is flaky")
     def test_push_to_hub_in_organization(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            try:
-                tmp_repo = f"valid_org/test-model-org-{Path(tmp_dir).name}"
-                config = BertConfig(
-                    vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
-                )
-                model = BertModel(config)
-                model.push_to_hub(tmp_repo, token=self._token)
+        with TemporaryHubRepo(namespace="valid_org", token=self._token) as tmp_repo:
+            config = BertConfig(
+                vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+            )
+            model = BertModel(config)
+            model.push_to_hub(tmp_repo.repo_id, token=self._token)
 
-                new_model = BertModel.from_pretrained(tmp_repo)
-                for p1, p2 in zip(model.parameters(), new_model.parameters()):
-                    self.assertTrue(torch.equal(p1, p2))
-            finally:
-                # Always (try to) delete the repo.
-                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
+            new_model = BertModel.from_pretrained(tmp_repo.repo_id)
+            for p1, p2 in zip(model.parameters(), new_model.parameters()):
+                self.assertTrue(torch.equal(p1, p2))
 
     @unittest.skip(reason="This test is flaky")
     def test_push_to_hub_in_organization_via_save_pretrained(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            try:
-                tmp_repo = f"valid_org/test-model-org-{Path(tmp_dir).name}"
-                config = BertConfig(
-                    vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
-                )
-                model = BertModel(config)
-                # Push to hub via save_pretrained
-                model.save_pretrained(tmp_dir, push_to_hub=True, token=self._token, repo_id=tmp_repo)
+        with TemporaryHubRepo(namespace="valid_org", token=self._token) as tmp_repo:
+            config = BertConfig(
+                vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+            )
+            model = BertModel(config)
+            # Push to hub via save_pretrained
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                model.save_pretrained(tmp_dir, push_to_hub=True, token=self._token, repo_id=tmp_repo.repo_id)
 
-                new_model = BertModel.from_pretrained(tmp_repo)
-                for p1, p2 in zip(model.parameters(), new_model.parameters()):
-                    self.assertTrue(torch.equal(p1, p2))
-            finally:
-                # Always (try to) delete the repo.
-                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
+            new_model = BertModel.from_pretrained(tmp_repo.repo_id)
+            for p1, p2 in zip(model.parameters(), new_model.parameters()):
+                self.assertTrue(torch.equal(p1, p2))
 
     def test_push_to_hub_dynamic_model(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            try:
-                tmp_repo = f"{USER}/test-dynamic-model-{Path(tmp_dir).name}"
-                CustomConfig.register_for_auto_class()
-                CustomModel.register_for_auto_class()
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
+            CustomConfig.register_for_auto_class()
+            CustomModel.register_for_auto_class()
 
-                config = CustomConfig(hidden_size=32)
-                model = CustomModel(config)
+            config = CustomConfig(hidden_size=32)
+            model = CustomModel(config)
 
-                model.push_to_hub(tmp_repo, token=self._token)
-                # checks
-                self.assertDictEqual(
-                    config.auto_map,
-                    {"AutoConfig": "custom_configuration.CustomConfig", "AutoModel": "custom_modeling.CustomModel"},
-                )
+            model.push_to_hub(tmp_repo.repo_id, token=self._token)
+            # checks
+            self.assertDictEqual(
+                config.auto_map,
+                {"AutoConfig": "custom_configuration.CustomConfig", "AutoModel": "custom_modeling.CustomModel"},
+            )
 
-                new_model = AutoModel.from_pretrained(tmp_repo, trust_remote_code=True)
-                # Can't make an isinstance check because the new_model is from the CustomModel class of a dynamic module
-                self.assertEqual(new_model.__class__.__name__, "CustomModel")
-                for p1, p2 in zip(model.parameters(), new_model.parameters()):
-                    self.assertTrue(torch.equal(p1, p2))
+            new_model = AutoModel.from_pretrained(tmp_repo.repo_id, trust_remote_code=True)
+            # Can't make an isinstance check because the new_model is from the CustomModel class of a dynamic module
+            self.assertEqual(new_model.__class__.__name__, "CustomModel")
+            for p1, p2 in zip(model.parameters(), new_model.parameters()):
+                self.assertTrue(torch.equal(p1, p2))
 
-                config = AutoConfig.from_pretrained(tmp_repo, trust_remote_code=True)
-                new_model = AutoModel.from_config(config, trust_remote_code=True)
-                self.assertEqual(new_model.__class__.__name__, "CustomModel")
-            finally:
-                # Always (try to) delete the repo.
-                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
+            config = AutoConfig.from_pretrained(tmp_repo.repo_id, trust_remote_code=True)
+            new_model = AutoModel.from_config(config, trust_remote_code=True)
+            self.assertEqual(new_model.__class__.__name__, "CustomModel")
 
     def test_push_to_hub_with_tags(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            try:
-                tmp_repo = f"{USER}/test-dynamic-model-with-tags-{Path(tmp_dir).name}"
-                from huggingface_hub import ModelCard
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
+            from huggingface_hub import ModelCard
 
-                new_tags = ["tag-1", "tag-2"]
+            new_tags = ["tag-1", "tag-2"]
 
-                CustomConfig.register_for_auto_class()
-                CustomModel.register_for_auto_class()
+            CustomConfig.register_for_auto_class()
+            CustomModel.register_for_auto_class()
 
-                config = CustomConfig(hidden_size=32)
-                model = CustomModel(config)
+            config = CustomConfig(hidden_size=32)
+            model = CustomModel(config)
 
-                self.assertTrue(model.model_tags is None)
+            self.assertTrue(model.model_tags is None)
 
-                model.add_model_tags(new_tags)
+            model.add_model_tags(new_tags)
 
-                self.assertTrue(model.model_tags == new_tags)
+            self.assertTrue(model.model_tags == new_tags)
 
-                model.push_to_hub(tmp_repo, token=self._token)
+            model.push_to_hub(tmp_repo.repo_id, token=self._token)
 
-                loaded_model_card = ModelCard.load(tmp_repo)
-                self.assertEqual(loaded_model_card.data.tags, new_tags)
-            finally:
-                # Always (try to) delete the repo.
-                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
+            loaded_model_card = ModelCard.load(tmp_repo.repo_id)
+            self.assertEqual(loaded_model_card.data.tags, new_tags)
 
 
 @require_torch

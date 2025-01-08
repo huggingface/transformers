@@ -14,6 +14,7 @@
 # limitations under the License.
 """Image processor class for Pixtral."""
 
+import math
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -179,7 +180,7 @@ def _num_image_tokens(image_size: Tuple[int, int], patch_size: Tuple[int, int]) 
 
 
 def get_resize_output_image_size(
-    input_image: np.ndarray,
+    input_image: ImageInput,
     size: Union[int, Tuple[int, int], List[int], Tuple[int]],
     patch_size: Union[int, Tuple[int, int], List[int], Tuple[int]],
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -189,7 +190,7 @@ def get_resize_output_image_size(
     size.
 
     Args:
-        input_image (`np.ndarray`):
+        input_image (`ImageInput`):
             The image to resize.
         size (`int` or `Tuple[int, int]`):
             Max image size an input image can be. Must be a dictionary with the key "longest_edge".
@@ -210,8 +211,8 @@ def get_resize_output_image_size(
 
     if ratio > 1:
         # Orgiginal implementation uses `round` which utilises bankers rounding, which can lead to surprising results
-        height = int(np.ceil(height / ratio))
-        width = int(np.ceil(width / ratio))
+        height = int(math.ceil(height / ratio))
+        width = int(math.ceil(width / ratio))
 
     num_height_tokens, num_width_tokens = _num_image_tokens((height, width), (patch_height, patch_width))
     return num_height_tokens * patch_height, num_width_tokens * patch_width
@@ -472,7 +473,7 @@ class PixtralImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         images_list = [[to_numpy_array(image) for image in images] for images in images_list]
 
-        if is_scaled_image(images_list[0][0]) and do_rescale:
+        if do_rescale and is_scaled_image(images_list[0][0]):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -518,3 +519,6 @@ class PixtralImageProcessor(BaseImageProcessor):
         # Convert to tensor type outside of BatchFeature to avoid batching the images of different sizes
         images_list = [[convert_to_tensor(image, return_tensors) for image in images] for images in images_list]
         return BatchMixFeature(data={"pixel_values": images_list, "image_sizes": batch_image_sizes}, tensor_type=None)
+
+
+__all__ = ["PixtralImageProcessor"]
