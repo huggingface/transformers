@@ -17,6 +17,7 @@ import inspect
 import tempfile
 import unittest
 
+from transformers import pipeline
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_timm,
@@ -293,6 +294,19 @@ class TimmWrapperModelIntegrationTest(unittest.TestCase):
         resulted_slice = outputs.logits[0, :3]
         is_close = torch.allclose(resulted_slice, expected_slice, atol=1e-3)
         self.assertTrue(is_close, f"Expected {expected_slice}, but got {resulted_slice}")
+
+    @slow
+    def test_inference_with_pipeline(self):
+        image = prepare_img()
+        classifier = pipeline(model="timm/resnet18.a1_in1k", device=torch_device)
+        result = classifier(image)
+
+        # verify result
+        expected_label = "tabby, tabby cat"
+        expected_score = 0.4329
+
+        self.assertEqual(result[0]["label"], expected_label)
+        self.assertAlmostEqual(result[0]["score"], expected_score, places=3)
 
     @slow
     @require_bitsandbytes
