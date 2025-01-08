@@ -723,6 +723,8 @@
         title: Swin2SR
       - local: model_doc/table-transformer
         title: Table Transformer
+      - local: model_doc/textnet
+        title: TextNet
       - local: model_doc/timm_wrapper
         title: Timm Wrapper
       - local: model_doc/upernet
@@ -741,6 +743,8 @@
         title: ViTMatte
       - local: model_doc/vit_msn
         title: ViTMSN
+      - local: model_doc/vitpose
+        title: ViTPose
       - local: model_doc/yolos
         title: YOLOS
       - local: model_doc/zoedepth
@@ -758,8 +762,6 @@
         title: dac
       - local: model_doc/encodec
         title: EnCodec
-      - local: model_doc/hiera
-        title: Hiera
       - local: model_doc/hubert
         title: Hubert
       - local: model_doc/mctct

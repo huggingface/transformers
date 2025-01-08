@@ -790,6 +790,7 @@ _import_structure = {
         "TapasConfig",
         "TapasTokenizer",
     ],
+    "models.textnet": ["TextNetConfig"],
     "models.time_series_transformer": ["TimeSeriesTransformerConfig"],
     "models.timesformer": ["TimesformerConfig"],
     "models.timm_backbone": ["TimmBackboneConfig"],
@@ -834,6 +835,8 @@ _import_structure = {
     "models.vit_msn": ["ViTMSNConfig"],
     "models.vitdet": ["VitDetConfig"],
     "models.vitmatte": ["VitMatteConfig"],
+    "models.vitpose": ["VitPoseConfig"],
+    "models.vitpose_backbone": ["VitPoseBackboneConfig"],
     "models.vits": [
         "VitsConfig",
         "VitsTokenizer",
@@ -1259,12 +1262,14 @@ else:
     _import_structure["models.siglip"].append("SiglipImageProcessor")
     _import_structure["models.superpoint"].extend(["SuperPointImageProcessor"])
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
+    _import_structure["models.textnet"].extend(["TextNetImageProcessor"])
     _import_structure["models.tvp"].append("TvpImageProcessor")
     _import_structure["models.video_llava"].append("VideoLlavaImageProcessor")
     _import_structure["models.videomae"].extend(["VideoMAEFeatureExtractor", "VideoMAEImageProcessor"])
     _import_structure["models.vilt"].extend(["ViltFeatureExtractor", "ViltImageProcessor", "ViltProcessor"])
     _import_structure["models.vit"].extend(["ViTFeatureExtractor", "ViTImageProcessor"])
     _import_structure["models.vitmatte"].append("VitMatteImageProcessor")
+    _import_structure["models.vitpose"].append("VitPoseImageProcessor")
     _import_structure["models.vivit"].append("VivitImageProcessor")
     _import_structure["models.yolos"].extend(["YolosFeatureExtractor", "YolosImageProcessor"])
     _import_structure["models.zoedepth"].append("ZoeDepthImageProcessor")
@@ -3592,6 +3597,14 @@ else:
             "load_tf_weights_in_tapas",
         ]
     )
+    _import_structure["models.textnet"].extend(
+        [
+            "TextNetBackbone",
+            "TextNetForImageClassification",
+            "TextNetModel",
+            "TextNetPreTrainedModel",
+        ]
+    )
     _import_structure["models.time_series_transformer"].extend(
         [
             "TimeSeriesTransformerForPrediction",
@@ -3751,6 +3764,18 @@ else:
         [
             "VitMatteForImageMatting",
             "VitMattePreTrainedModel",
+        ]
+    )
+    _import_structure["models.vitpose"].extend(
+        [
+            "VitPoseForPoseEstimation",
+            "VitPosePreTrainedModel",
+        ]
+    )
+    _import_structure["models.vitpose_backbone"].extend(
+        [
+            "VitPoseBackbone",
+            "VitPoseBackbonePreTrainedModel",
         ]
     )
     _import_structure["models.vits"].extend(
@@ -5822,6 +5847,7 @@ if TYPE_CHECKING:
         TapasConfig,
         TapasTokenizer,
     )
+    from .models.textnet import TextNetConfig
     from .models.time_series_transformer import (
         TimeSeriesTransformerConfig,
     )
@@ -5875,6 +5901,8 @@ if TYPE_CHECKING:
     from .models.vit_msn import ViTMSNConfig
     from .models.vitdet import VitDetConfig
     from .models.vitmatte import VitMatteConfig
+    from .models.vitpose import VitPoseConfig
+    from .models.vitpose_backbone import VitPoseBackboneConfig
     from .models.vits import (
         VitsConfig,
         VitsTokenizer,
@@ -6302,12 +6330,14 @@ if TYPE_CHECKING:
         from .models.siglip import SiglipImageProcessor
         from .models.superpoint import SuperPointImageProcessor
         from .models.swin2sr import Swin2SRImageProcessor
+        from .models.textnet import TextNetImageProcessor
         from .models.tvp import TvpImageProcessor
         from .models.video_llava import VideoLlavaImageProcessor
         from .models.videomae import VideoMAEFeatureExtractor, VideoMAEImageProcessor
         from .models.vilt import ViltFeatureExtractor, ViltImageProcessor, ViltProcessor
         from .models.vit import ViTFeatureExtractor, ViTImageProcessor
         from .models.vitmatte import VitMatteImageProcessor
+        from .models.vitpose import VitPoseImageProcessor
         from .models.vivit import VivitImageProcessor
         from .models.yolos import YolosFeatureExtractor, YolosImageProcessor
         from .models.zoedepth import ZoeDepthImageProcessor
@@ -8169,6 +8199,12 @@ if TYPE_CHECKING:
             TapasPreTrainedModel,
             load_tf_weights_in_tapas,
         )
+        from .models.textnet import (
+            TextNetBackbone,
+            TextNetForImageClassification,
+            TextNetModel,
+            TextNetPreTrainedModel,
+        )
         from .models.time_series_transformer import (
             TimeSeriesTransformerForPrediction,
             TimeSeriesTransformerModel,
@@ -8290,6 +8326,11 @@ if TYPE_CHECKING:
             VitMatteForImageMatting,
             VitMattePreTrainedModel,
         )
+        from .models.vitpose import (
+            VitPoseForPoseEstimation,
+            VitPosePreTrainedModel,
+        )
+        from .models.vitpose_backbone import VitPoseBackbone, VitPoseBackbonePreTrainedModel
         from .models.vits import (
             VitsModel,
             VitsPreTrainedModel,
