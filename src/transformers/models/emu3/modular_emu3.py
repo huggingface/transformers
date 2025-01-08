@@ -23,7 +23,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.utils.checkpoint
 
-from ...cache_utils import Cache, StaticCache
+from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_outputs import (
     CausalLMOutputWithPast,
@@ -64,6 +64,7 @@ _CHECKPOINT_FOR_DOC = "Emu3-community/Emu3-Chat-hf"
 logger = logging.get_logger(__name__)
 
 
+# Has extra dropout which no other model in the library has
 class Emu3DecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: Emu3Config, layer_idx: int):
         super().__init__(config, layer_idx)
@@ -408,19 +409,64 @@ class Emu3VQVAEAttnBlock(SiglipAttention):
     pass
 
 
-class Emu3VQVAEEncoder(nn.Module):
+class Emu3VQVAEGroupNorm(nn.GroupNorm):
+    """
+    Same as the torch GroupNorm with the only difference that this ones accepts
+    an optional kwarg `quant_states` which is not used. This class makes it easier to
+    use SpatialNorm or GroupNorm without conditionals
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def forward(self, input, quant_states=None):
+        return F.group_norm(input, self.num_groups, self.weight, self.bias, self.eps)
+
+
+class Emu3VQVAEMiddleBlock(nn.Module):
+    def __init__(self, config, in_channels, quant_channels=None):
+        super().__init__()
+
+        self.mid = nn.Module()
+        self.mid.block_1 = Emu3VQVAEResnetBlock(
+            in_channels=in_channels,
+            out_channels=in_channels,
+            quant_channels=quant_channels,
+        )
+        self.mid.attn_1 = Emu3VQVAEAttnBlock(config)
+        if quant_channels is None:
+            self.mid.attn_norm = Emu3VQVAEGroupNorm(num_channels=in_channels, num_groups=32, eps=1e-6, affine=True)
+        else:
+            self.mid.attn_norm = Emu3VQVAESpatialNorm(quant_channels, in_channels)
+
+        self.mid.block_2 = Emu3VQVAEResnetBlock(
+            in_channels=in_channels,
+            out_channels=in_channels,
+            quant_channels=quant_channels,
+        )
+
+    def forward(self, hidden_states: torch.FloatTensor, quant_states: torch.FloatTensor = None):
+        hidden_states = self.mid.block_1(hidden_states, quant_states)
+        residual = hidden_states
+        hidden_states = self.mid.attn_norm(hidden_states, quant_states)
+        batch_size, channels, height, width = hidden_states.shape
+        hidden_states = hidden_states.view(batch_size, channels, height * width).transpose(1, 2)
+        hidden_states = self.mid.attn_1(hidden_states)[0]
+        hidden_states = hidden_states.reshape(batch_size, height, width, channels).permute(0, 3, 1, 2)
+        hidden_states = residual + hidden_states
+        hidden_states = self.mid.block_2(hidden_states, quant_states)
+        return hidden_states
+
+
+class Emu3VQVAEDownBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
 
         self.num_resolutions = len(config.channel_multiplier)
         self.num_res_blocks = config.num_res_blocks
         base_channels = config.base_channels
-        in_channels = config.in_channels
-        double_latent = config.double_latent
-        latent_channels = config.latent_channels
         channel_multiplier = config.channel_multiplier
 
-        self.conv_in = torch.nn.Conv2d(in_channels, base_channels, kernel_size=3, stride=1, padding=1)
         in_channel_multiplier = (1,) + tuple(channel_multiplier)
         self.in_channel_multiplier = in_channel_multiplier
         self.down = nn.ModuleList()
@@ -450,49 +496,7 @@ class Emu3VQVAEEncoder(nn.Module):
                 down.downsample = Emu3VQVAEEncoderConvDownsample(block_in)
             self.down.append(down)
 
-        self.mid = nn.Module()
-        self.mid.block_1 = Emu3VQVAEResnetBlock(
-            in_channels=block_in,
-            out_channels=block_in,
-        )
-        self.mid.attn_1 = Emu3VQVAEAttnBlock(config)
-        self.mid.attn_norm = nn.GroupNorm(num_channels=block_in, num_groups=32, eps=1e-6, affine=True)
-        self.mid.block_2 = Emu3VQVAEResnetBlock(
-            in_channels=block_in,
-            out_channels=block_in,
-        )
-
-        self.norm_out = torch.nn.GroupNorm(num_groups=32, num_channels=block_in, eps=1e-6, affine=True)
-        out_channels = 2 * latent_channels if double_latent else latent_channels
-        self.conv_out = torch.nn.Conv2d(
-            block_in,
-            out_channels,
-            kernel_size=3,
-            stride=1,
-            padding=1,
-        )
-
-        temporal_down_blocks = int(math.log2(config.temporal_downsample_factor))
-        self.time_conv = nn.ModuleList()
-        self.time_res_stack = nn.ModuleList()
-
-        for i in range(temporal_down_blocks):
-            conv = Emu3VQVAETemporalDownsample(out_channels, out_channels)
-            self.time_conv.append(conv)
-
-        for _ in range(self.num_res_blocks):
-            time_res_conv = Emu3VQVAETemporalResnetBlock(
-                in_channels=out_channels,
-                out_channels=out_channels,
-            )
-            self.time_res_stack.append(time_res_conv)
-
-    def forward(self, pixel_values: torch.LongTensor):
-        temporal_dim = pixel_values.shape[1]
-        pixel_values = pixel_values.reshape(-1, *pixel_values.shape[2:])
-
-        # downsampling
-        hidden_states = self.conv_in(pixel_values)
+    def forward(self, hidden_states: torch.FloatTensor):
         for i_level in range(self.num_resolutions):
             for i_block in range(self.num_res_blocks):
                 hidden_states = self.down[i_level].block[i_block](
@@ -511,83 +515,19 @@ class Emu3VQVAEEncoder(nn.Module):
             if i_level != self.num_resolutions - 1:
                 hidden_states = self.down[i_level].downsample(hidden_states)
 
-        # middle
-        hidden_states = self.mid.block_1(hidden_states)
-        residual = hidden_states
-        hidden_states = self.mid.attn_norm(hidden_states)
-        batch_size, channels, height, width = hidden_states.shape
-        hidden_states = hidden_states.view(batch_size, channels, height * width).transpose(1, 2)
-        hidden_states = self.mid.attn_1(hidden_states)[0]
-        hidden_states = hidden_states.reshape(batch_size, height, width, channels).permute(0, 3, 1, 2)
-        hidden_states = residual + hidden_states
-        hidden_states = self.mid.block_2(hidden_states)
-
-        # end
-        hidden_states = self.norm_out(hidden_states)
-        hidden_states *= torch.sigmoid(hidden_states)
-        hidden_states = self.conv_out(hidden_states)
-
-        hidden_states = hidden_states.reshape(-1, temporal_dim, *hidden_states.shape[1:])
-        hidden_states = hidden_states.permute(0, 2, 1, 3, 4)
-
-        for conv in self.time_conv:
-            hidden_states = conv(hidden_states)
-            hidden_states *= torch.sigmoid(hidden_states)
-
-        for layer in self.time_res_stack:
-            hidden_states = layer(hidden_states)
-
-        hidden_states = hidden_states.permute(0, 2, 1, 3, 4)
-
         return hidden_states
 
 
-class Emu3VQVAEDecoder(nn.Module):
-    def __init__(self, config: Emu3VQVAEConfig):
+class Emu3VQVAEUpBlock(nn.Module):
+    def __init__(self, config):
         super().__init__()
-        self.base_channels = config.base_channels
+
         self.num_resolutions = len(config.channel_multiplier)
         self.num_res_blocks = config.num_res_blocks
 
         quant_channels = config.embed_dim
         block_in = config.base_channels * config.channel_multiplier[-1]
-        self.time_res_stack = nn.ModuleList()
-        for _ in range(config.num_res_blocks):
-            time_res_conv = Emu3VQVAETemporalResnetBlock(
-                in_channels=config.latent_channels, out_channels=config.latent_channels
-            )
-            self.time_res_stack.append(time_res_conv)
 
-        temp_upsample_block_num = int(math.log2(config.temporal_downsample_factor))
-        self.time_conv = nn.ModuleList()
-        for i in range(temp_upsample_block_num):
-            conv = Emu3VQVAETemporalUpsample(config.latent_channels, config.latent_channels)
-            self.time_conv.append(conv)
-
-        self.conv_in = nn.Conv2d(
-            config.latent_channels,
-            block_in,
-            kernel_size=3,
-            stride=1,
-            padding=1,
-        )
-
-        # middle
-        self.mid = nn.Module()
-        self.mid.block_1 = Emu3VQVAEResnetBlock(
-            in_channels=block_in,
-            out_channels=block_in,
-            quant_channels=quant_channels,
-        )
-        self.mid.attn_norm = Emu3VQVAESpatialNorm(quant_channels, block_in)
-        self.mid.attn_1 = Emu3VQVAEAttnBlock(config)
-        self.mid.block_2 = Emu3VQVAEResnetBlock(
-            in_channels=block_in,
-            out_channels=block_in,
-            quant_channels=quant_channels,
-        )
-
-        # upsampling
         self.up = nn.ModuleList()
         for i_level in reversed(range(self.num_resolutions)):
             block = nn.ModuleList()
@@ -616,6 +556,124 @@ class Emu3VQVAEDecoder(nn.Module):
 
             self.up.insert(0, up)
 
+    def forward(self, hidden_states: torch.FloatTensor, quant_states: torch.FloatTensor):
+        for i_level in reversed(range(self.num_resolutions)):
+            for i_block in range(self.num_res_blocks + 1):
+                hidden_states = self.up[i_level].block[i_block](hidden_states, quant_states)
+                if len(self.up[i_level].attn) > 0:
+                    residual = hidden_states
+                    hidden_states = self.up[i_level].attn_norms[i_block](hidden_states, quant_states)
+                    batch_size, channels, height, width = hidden_states.shape
+                    hidden_states = hidden_states.view(batch_size, channels, height * width).transpose(1, 2)
+                    hidden_states = self.up[i_level].attn[i_block](hidden_states)[0]
+                    hidden_states = hidden_states.reshape(batch_size, height, width, channels).permute(0, 3, 1, 2)
+                    hidden_states = residual + hidden_states
+            if i_level != 0:
+                hidden_states = self.up[i_level].upsample(hidden_states)
+
+        return hidden_states
+
+
+class Emu3VQVAEEncoder(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+        base_channels = config.base_channels
+        in_channels = config.in_channels
+        double_latent = config.double_latent
+        latent_channels = config.latent_channels
+        channel_multiplier = config.channel_multiplier
+        out_channels = 2 * latent_channels if double_latent else latent_channels
+        block_in = base_channels * channel_multiplier[-1]
+
+        self.conv_in = torch.nn.Conv2d(in_channels, base_channels, kernel_size=3, stride=1, padding=1)
+        self.down_block = Emu3VQVAEDownBlock(config)
+        self.middle_block = Emu3VQVAEMiddleBlock(config, block_in)
+
+        self.norm_out = torch.nn.GroupNorm(num_groups=32, num_channels=block_in, eps=1e-6, affine=True)
+        self.conv_out = torch.nn.Conv2d(
+            block_in,
+            out_channels,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+        )
+
+        temporal_down_blocks = int(math.log2(config.temporal_downsample_factor))
+        self.time_conv = nn.ModuleList()
+        self.time_res_stack = nn.ModuleList()
+
+        for i in range(temporal_down_blocks):
+            conv = Emu3VQVAETemporalDownsample(out_channels, out_channels)
+            self.time_conv.append(conv)
+
+        for _ in range(config.num_res_blocks):
+            time_res_conv = Emu3VQVAETemporalResnetBlock(
+                in_channels=out_channels,
+                out_channels=out_channels,
+            )
+            self.time_res_stack.append(time_res_conv)
+
+    def forward(self, pixel_values: torch.LongTensor):
+        temporal_dim = pixel_values.shape[1]
+        pixel_values = pixel_values.reshape(-1, *pixel_values.shape[2:])
+
+        # downsampling & middle
+        hidden_states = self.conv_in(pixel_values)
+        hidden_states = self.down_block(hidden_states)
+        hidden_states = self.middle_block(hidden_states)
+
+        # end
+        hidden_states = self.norm_out(hidden_states)
+        hidden_states *= torch.sigmoid(hidden_states)
+        hidden_states = self.conv_out(hidden_states)
+
+        hidden_states = hidden_states.reshape(-1, temporal_dim, *hidden_states.shape[1:])
+        hidden_states = hidden_states.permute(0, 2, 1, 3, 4)
+
+        for conv in self.time_conv:
+            hidden_states = conv(hidden_states)
+            hidden_states *= torch.sigmoid(hidden_states)
+
+        for layer in self.time_res_stack:
+            hidden_states = layer(hidden_states)
+
+        hidden_states = hidden_states.permute(0, 2, 1, 3, 4)
+
+        return hidden_states
+
+
+class Emu3VQVAEDecoder(nn.Module):
+    def __init__(self, config: Emu3VQVAEConfig):
+        super().__init__()
+
+        quant_channels = config.embed_dim
+        block_in = config.base_channels * config.channel_multiplier[-1]
+        self.time_res_stack = nn.ModuleList()
+        for _ in range(config.num_res_blocks):
+            time_res_conv = Emu3VQVAETemporalResnetBlock(
+                in_channels=config.latent_channels, out_channels=config.latent_channels
+            )
+            self.time_res_stack.append(time_res_conv)
+
+        temp_upsample_block_num = int(math.log2(config.temporal_downsample_factor))
+        self.time_conv = nn.ModuleList()
+        for i in range(temp_upsample_block_num):
+            conv = Emu3VQVAETemporalUpsample(config.latent_channels, config.latent_channels)
+            self.time_conv.append(conv)
+
+        self.conv_in = nn.Conv2d(
+            config.latent_channels,
+            block_in,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+        )
+
+        self.middle_block = Emu3VQVAEMiddleBlock(config, block_in, quant_channels=quant_channels)
+        self.up_block = Emu3VQVAEUpBlock(config)
+
+        block_in = config.base_channels * config.channel_multiplier[0]
         self.norm_out = Emu3VQVAESpatialNorm(quant_channels, block_in)
         self.conv_out = nn.Conv2d(
             block_in,
@@ -636,39 +694,15 @@ class Emu3VQVAEDecoder(nn.Module):
             hidden_quant_states *= torch.sigmoid(hidden_quant_states)
 
         hidden_quant_states = hidden_quant_states.permute(0, 2, 1, 3, 4)
-
         hidden_states, quant_states = torch.chunk(hidden_quant_states, 2, dim=0)
-
         hidden_states = hidden_states.reshape(-1, *hidden_states.shape[2:])
         quant_states = quant_states.reshape(-1, *quant_states.shape[2:])
 
         hidden_states = self.conv_in(hidden_states)
 
-        # middle
-        hidden_states = self.mid.block_1(hidden_states, quant_states)
-        residual = hidden_states
-        hidden_states = self.mid.attn_norm(hidden_states)
-        batch_size, channels, height, width = hidden_states.shape
-        hidden_states = hidden_states.view(batch_size, channels, height * width).transpose(1, 2)
-        hidden_states = self.mid.attn_1(hidden_states)[0]
-        hidden_states = hidden_states.reshape(batch_size, height, width, channels).permute(0, 3, 1, 2)
-        hidden_states = residual + hidden_states
-        hidden_states = self.mid.block_2(hidden_states, quant_states)
-
-        # upsampling
-        for i_level in reversed(range(self.num_resolutions)):
-            for i_block in range(self.num_res_blocks + 1):
-                hidden_states = self.up[i_level].block[i_block](hidden_states, quant_states)
-                if len(self.up[i_level].attn) > 0:
-                    residual = hidden_states
-                    hidden_states = self.up[i_level].attn_norms[i_block](hidden_states)
-                    batch_size, channels, height, width = hidden_states.shape
-                    hidden_states = hidden_states.view(batch_size, channels, height * width).transpose(1, 2)
-                    hidden_states = self.up[i_level].attn[i_block](hidden_states)[0]
-                    hidden_states = hidden_states.reshape(batch_size, height, width, channels).permute(0, 3, 1, 2)
-                    hidden_states = residual + hidden_states
-            if i_level != 0:
-                hidden_states = self.up[i_level].upsample(hidden_states)
+        # middle & upsampling
+        hidden_states = self.middle_block(hidden_states, quant_states)
+        hidden_states = self.up_block(hidden_states)
 
         hidden_states = self.norm_out(hidden_states, quant_states)
         hidden_states *= torch.sigmoid(hidden_states)
@@ -1226,80 +1260,6 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         )
 
         return outputs
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        pixel_values=None,
-        past_key_values=None,
-        image_sizes=None,
-        attention_mask=None,
-        inputs_embeds=None,
-        cache_position=None,
-        position_ids=None,
-        use_cache=True,
-        **kwargs,
-    ):
-        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
-        # Exception 1: when passing input_embeds, input_ids may be missing entries
-        # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
-        if past_key_values is not None:
-            if inputs_embeds is not None:  # Exception 1
-                input_ids = input_ids[:, -cache_position.shape[0] :]
-            elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
-                input_ids = input_ids[:, cache_position]
-
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values is not None:
-                position_ids = position_ids[:, -input_ids.shape[1] :]
-            position_ids = position_ids.clone(memory_format=torch.contiguous_format)
-
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and cache_position[0] == 0:
-            model_inputs = {"inputs_embeds": inputs_embeds, "input_ids": None}
-        else:
-            model_inputs = {"input_ids": input_ids.clone(memory_format=torch.contiguous_format), "inputs_embeds": None}
-
-        # 6. Create 4D attention mask is we are using a `StaticCache` (important for performant compiled forward pass)
-        if isinstance(past_key_values, StaticCache) and attention_mask.ndim == 2:
-            if model_inputs["inputs_embeds"] is not None:
-                batch_size, sequence_length, _ = model_inputs["inputs_embeds"].shape
-                device = model_inputs["inputs_embeds"].device
-            else:
-                batch_size, sequence_length = model_inputs["input_ids"].shape
-                device = model_inputs["input_ids"].device
-
-            attention_mask = self.text_model.model._prepare_4d_causal_attention_mask_with_cache_position(
-                attention_mask,
-                sequence_length=sequence_length,
-                target_length=past_key_values.get_max_cache_shape(),
-                dtype=self.dtype,
-                device=device,
-                cache_position=cache_position,
-                batch_size=batch_size,
-                config=self.config,
-                past_key_values=past_key_values,
-            )
-
-        if cache_position[0] == 0:
-            # If we're in cached decoding stage, pixel values should be `None` because input ids do not contain special image token anymore
-            # Otherwise we need pixel values to be passed to model
-            model_inputs["pixel_values"] = pixel_values
-            model_inputs["image_sizes"] = image_sizes
-
-        model_inputs.update(
-            {
-                "position_ids": position_ids,
-                "cache_position": cache_position,
-                "past_key_values": past_key_values,
-                "use_cache": use_cache,
-                "attention_mask": attention_mask,
-            }
-        )
-        return model_inputs
 
 
 __all__ = [

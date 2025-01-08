@@ -219,6 +219,10 @@ KEYS_TO_MODIFY_MAPPING = {
     "^model": "text_model.model",
     r"lm_head\.weight": "text_model.lm_head.weight",
     r"^text_model\.model\.vqmodel": "vqmodel",
+    # isolate down/mid/up into separate classes for readability
+    r"\.down\.": ".down_block.down.",
+    r"\.up\.": ".up_block.up.",
+    r"\.mid\.": ".middle_block.mid.",
     # rename QKV proj for the VQ-VAE model because we use SiglipAttention
     r"\.q\.": ".q_proj.",
     r"\.k\.": ".k_proj.",
@@ -397,7 +401,7 @@ def convert_model(vq_model_id, llm_model_id, output_dir, hub_model_id=None, test
             negative_prompt_attention_mask=neg_inputs.attention_mask,
         )
 
-        image = model.model.decode_image_tokens(out[:, inputs.input_ids.shape[1] :], height=HEIGHT, width=WIDTH)
+        image = model.decode_image_tokens(out[:, inputs.input_ids.shape[1] :], height=HEIGHT, width=WIDTH)
         images = processor.postprocess(
             list(image.float()), return_tensors="PIL.Image.Image"
         )  # internally we convert to np but it's not supported in bf16 precision
