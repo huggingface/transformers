@@ -402,6 +402,7 @@ _import_structure = {
     "models.depth_anything": ["DepthAnythingConfig"],
     "models.detr": ["DetrConfig"],
     "models.dialogpt": [],
+    "models.diffllama": ["DiffLlamaConfig"],
     "models.dinat": ["DinatConfig"],
     "models.dinov2": ["Dinov2Config"],
     "models.dinov2_with_registers": ["Dinov2WithRegistersConfig"],
@@ -788,6 +789,7 @@ _import_structure = {
         "TapasConfig",
         "TapasTokenizer",
     ],
+    "models.textnet": ["TextNetConfig"],
     "models.time_series_transformer": ["TimeSeriesTransformerConfig"],
     "models.timesfm": ["TimesFMConfig"],
     "models.timesformer": ["TimesformerConfig"],
@@ -1258,6 +1260,7 @@ else:
     _import_structure["models.siglip"].append("SiglipImageProcessor")
     _import_structure["models.superpoint"].extend(["SuperPointImageProcessor"])
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
+    _import_structure["models.textnet"].extend(["TextNetImageProcessor"])
     _import_structure["models.tvp"].append("TvpImageProcessor")
     _import_structure["models.video_llava"].append("VideoLlavaImageProcessor")
     _import_structure["models.videomae"].extend(["VideoMAEFeatureExtractor", "VideoMAEImageProcessor"])
@@ -2144,6 +2147,16 @@ else:
             "DetrForSegmentation",
             "DetrModel",
             "DetrPreTrainedModel",
+        ]
+    )
+    _import_structure["models.diffllama"].extend(
+        [
+            "DiffLlamaForCausalLM",
+            "DiffLlamaForQuestionAnswering",
+            "DiffLlamaForSequenceClassification",
+            "DiffLlamaForTokenClassification",
+            "DiffLlamaModel",
+            "DiffLlamaPreTrainedModel",
         ]
     )
     _import_structure["models.dinat"].extend(
@@ -3572,6 +3585,14 @@ else:
             "TapasModel",
             "TapasPreTrainedModel",
             "load_tf_weights_in_tapas",
+        ]
+    )
+    _import_structure["models.textnet"].extend(
+        [
+            "TextNetBackbone",
+            "TextNetForImageClassification",
+            "TextNetModel",
+            "TextNetPreTrainedModel",
         ]
     )
     _import_structure["models.time_series_transformer"].extend(
@@ -5377,6 +5398,7 @@ if TYPE_CHECKING:
     )
     from .models.depth_anything import DepthAnythingConfig
     from .models.detr import DetrConfig
+    from .models.diffllama import DiffLlamaConfig
     from .models.dinat import DinatConfig
     from .models.dinov2 import Dinov2Config
     from .models.dinov2_with_registers import Dinov2WithRegistersConfig
@@ -5809,6 +5831,7 @@ if TYPE_CHECKING:
         TapasConfig,
         TapasTokenizer,
     )
+    from .models.textnet import TextNetConfig
     from .models.time_series_transformer import (
         TimeSeriesTransformerConfig,
     )
@@ -6290,6 +6313,7 @@ if TYPE_CHECKING:
         from .models.siglip import SiglipImageProcessor
         from .models.superpoint import SuperPointImageProcessor
         from .models.swin2sr import Swin2SRImageProcessor
+        from .models.textnet import TextNetImageProcessor
         from .models.tvp import TvpImageProcessor
         from .models.video_llava import VideoLlavaImageProcessor
         from .models.videomae import VideoMAEFeatureExtractor, VideoMAEImageProcessor
@@ -7025,6 +7049,14 @@ if TYPE_CHECKING:
             DetrForSegmentation,
             DetrModel,
             DetrPreTrainedModel,
+        )
+        from .models.diffllama import (
+            DiffLlamaForCausalLM,
+            DiffLlamaForQuestionAnswering,
+            DiffLlamaForSequenceClassification,
+            DiffLlamaForTokenClassification,
+            DiffLlamaModel,
+            DiffLlamaPreTrainedModel,
         )
         from .models.dinat import (
             DinatBackbone,
@@ -8143,6 +8175,12 @@ if TYPE_CHECKING:
             TapasModel,
             TapasPreTrainedModel,
             load_tf_weights_in_tapas,
+        )
+        from .models.textnet import (
+            TextNetBackbone,
+            TextNetForImageClassification,
+            TextNetModel,
+            TextNetPreTrainedModel,
         )
         from .models.time_series_transformer import (
             TimeSeriesTransformerForPrediction,

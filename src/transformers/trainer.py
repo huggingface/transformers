@@ -3673,7 +3673,10 @@ class Trainer:
             return loss_mb.reduce_mean().detach().to(self.args.device)
 
         with self.compute_loss_context_manager():
-            loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
+            if self.model_accepts_loss_kwargs:
+                loss = self.compute_loss(model, inputs)
+            else:
+                loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
 
         del inputs
         if (
@@ -5155,6 +5158,10 @@ class Trainer:
             except StopIteration:
                 break
 
+        # Keep default behavior the same
+        if not self.model_accepts_loss_kwargs:
+            return batch_samples, None
+
         if len(batch_samples) > 0 and "labels" in batch_samples[0]:
             # For now we don't support object detection
             try:
@@ -5162,7 +5169,7 @@ class Trainer:
             except (TypeError, AttributeError):
                 pass
 
-        if self.args.average_tokens_across_devices:
+        if self.args.average_tokens_across_devices and num_items_in_batch is not None:
             num_items_in_batch = self.accelerator.gather(num_items_in_batch).sum().item()
 
         if torch.is_tensor(num_items_in_batch):

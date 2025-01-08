@@ -125,6 +125,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                          [DETA](model_doc/deta)                          |       ✅        |         ❌         |      ❌      |
 |                          [DETR](model_doc/detr)                          |       ✅        |         ❌         |      ❌      |
 |                      [DialoGPT](model_doc/dialogpt)                      |       ✅        |         ✅         |      ✅      |
+|                     [DiffLlama](model_doc/diffllama)                     |       ✅        |         ❌         |      ❌      |
 |                         [DiNAT](model_doc/dinat)                         |       ✅        |         ❌         |      ❌      |
 |                        [DINOv2](model_doc/dinov2)                        |       ✅        |         ❌         |      ✅      |
 |         [DINOv2 with Registers](model_doc/dinov2_with_registers)         |       ✅        |         ❌         |      ❌      |
@@ -325,6 +326,7 @@ Flax), PyTorch, and/or TensorFlow.
 |             [Table Transformer](model_doc/table-transformer)             |       ✅        |         ❌         |      ❌      |
 |                         [TAPAS](model_doc/tapas)                         |       ✅        |         ✅         |      ❌      |
 |                         [TAPEX](model_doc/tapex)                         |       ✅        |         ✅         |      ✅      |
+|                       [TextNet](model_doc/textnet)                       |       ✅        |         ❌         |      ❌      |
 |       [Time Series Transformer](model_doc/time_series_transformer)       |       ✅        |         ❌         |      ❌      |
 |                       [TimesFM](model_doc/timesfm)                       |       ✅        |         ❌         |      ❌      |
 |                   [TimeSformer](model_doc/timesformer)                   |       ✅        |         ❌         |      ❌      |

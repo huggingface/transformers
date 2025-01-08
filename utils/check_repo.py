@@ -1020,6 +1020,7 @@ SHOULD_HAVE_THEIR_OWN_PAGE = [
     "ResNetBackbone",
     "SwinBackbone",
     "Swinv2Backbone",
+    "TextNetBackbone",
     "TimmBackbone",
     "TimmBackboneConfig",
     "VitDetBackbone",
@@ -1107,7 +1108,7 @@ def check_public_method_exists(documented_methods_map):
         try:
             obj_class = getattr(submodule, class_name)
         except AttributeError:
-            failures.append(f"Could not parse {submodule_name}. Are the required dependencies installed?")
+            failures.append(f"Could not parse {class_name}. Are the required dependencies installed?")
             continue
 
         # Checks that all explicitly documented methods are defined in the class
