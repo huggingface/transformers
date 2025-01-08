@@ -177,7 +177,7 @@ def permute_for_rope(value, n_heads, config):
     return value.view(n_heads, dim1 // n_heads // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2)
 
 
-def convert_dictionnary(original_state_dict, vision_config, text_config):
+def convert_dictionary(original_state_dict, vision_config, text_config):
     new_dict = {}
 
     all_keys = "\n" + "\n".join(original_state_dict.keys())
@@ -277,7 +277,7 @@ def convert_mistral_model(input_dir, output_dir):
             loaded_dict = safe_load_file(f"{input_dir}/{file}")
             full_original_state_dict.update(loaded_dict)
 
-    new_dict = convert_dictionnary(full_original_state_dict, vision_config, text_config)
+    new_dict = convert_dictionary(full_original_state_dict, vision_config, text_config)
     with torch.device("meta"):
         model = LlavaForConditionalGeneration(config)
     model.load_state_dict(new_dict, strict=True, assign=True)
