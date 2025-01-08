@@ -415,11 +415,13 @@ def _get_wsd_scheduler_lambda(
         factor = factor * (1.0 - min_lr_ratio) + min_lr_ratio
         return max(0.0, factor)
 
-    stable_stage = num_warmup_steps + num_stable_steps if num_training_steps is None else num_training_steps - num_decay_steps
+    stable_stage = (
+        num_warmup_steps + num_stable_steps if num_training_steps is None else num_training_steps - num_decay_steps
+    )
 
     if current_step < stable_stage:
         return 1.0
-    
+
     progress = float(current_step - stable_stage) / float(max(1, num_decay_steps))
     if decay_type == "linear":
         factor = 1.0 - progress
