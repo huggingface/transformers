@@ -44,10 +44,8 @@ from ..clip.modeling_clip import (
 from ..cohere.configuration_cohere import CohereConfig
 from ..cohere.modeling_cohere import (
     CohereAttention,
-    CohereFlashAttention2,
     CohereModel,
     CoherePreTrainedModel,
-    CohereSdpaAttention,
 )
 from ..llava.modeling_llava import LlavaCausalLMOutputWithPast, LlavaForConditionalGeneration
 from ..qwen2.modeling_qwen2 import (
@@ -567,16 +565,9 @@ class MolmoTextLayerNorm(Qwen2RMSNorm):
 
 class MolmoTextAttention(CohereAttention):
     def __init__(self, config: MolmoTextConfig, layer_idx: Optional[int] = None):
+        self.hidden_size = config.hidden_size
         super().__init__(config, layer_idx)
         self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
-
-
-class MolmoTextSdpaAttention(MolmoTextAttention, CohereSdpaAttention):
-    pass
-
-
-class MolmoTextFlashAttention2(MolmoTextAttention, CohereFlashAttention2):
-    pass
 
 
 class MolmoTextDecoderLayer(Qwen2DecoderLayer):
@@ -625,7 +616,7 @@ class MolmoTextPrenormDecoderLayer(MolmoTextDecoderLayer):
         hidden_states = self.input_layernorm(hidden_states)
 
         # Self Attention
-        hidden_states, self_attn_weights, present_key_value = self.self_attn(
+        hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -647,9 +638,6 @@ class MolmoTextPrenormDecoderLayer(MolmoTextDecoderLayer):
 
         if output_attentions:
             outputs += (self_attn_weights,)
-
-        if use_cache:
-            outputs += (present_key_value,)
 
         return outputs
 
