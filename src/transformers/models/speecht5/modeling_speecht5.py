@@ -2114,7 +2114,7 @@ class SpeechT5Model(SpeechT5PreTrainedModel):
             return self.encoder.get_input_embeddings()
         if isinstance(self.decoder, SpeechT5DecoderWithTextPrenet):
             return self.decoder.get_input_embeddings()
-        return None
+        raise NotImplementedError
 
     def set_input_embeddings(self, value):
         if isinstance(self.encoder, SpeechT5EncoderWithTextPrenet):
@@ -3382,3 +3382,13 @@ class SpeechT5HifiGan(PreTrainedModel):
             waveform = hidden_states.squeeze(1)
 
         return waveform
+
+
+__all__ = [
+    "SpeechT5ForSpeechToText",
+    "SpeechT5ForSpeechToSpeech",
+    "SpeechT5ForTextToSpeech",
+    "SpeechT5Model",
+    "SpeechT5PreTrainedModel",
+    "SpeechT5HifiGan",
+]
