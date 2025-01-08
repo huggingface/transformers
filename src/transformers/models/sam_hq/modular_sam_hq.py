@@ -497,7 +497,7 @@ class SamHQMaskDecoder(nn.Module):
         )
 
         self.hq_token = nn.Embedding(1, self.hidden_size)
-        self.hf_mlp = SamHQFeedForward(self.hidden_size, self.hidden_size, self.hidden_size // 8, 3)
+        self.hq_mask_mlp = SamHQFeedForward(self.hidden_size, self.hidden_size, self.hidden_size // 8, 3)
         self.num_mask_tokens = self.num_mask_tokens + 1
 
         # Compress ViT features
@@ -619,7 +619,7 @@ class SamHQMaskDecoder(nn.Module):
                 current_mlp = self.output_hypernetworks_mlps[i]
                 hyper_in_list += [current_mlp(mask_tokens_out[:, :, i, :])]
             else:
-                current_mlp = self.hf_mlp
+                current_mlp = self.hq_mask_mlp
                 hyper_in_list += [current_mlp(mask_tokens_out[:, :, i, :])]
 
         hyper_in = torch.stack(hyper_in_list, dim=2)
