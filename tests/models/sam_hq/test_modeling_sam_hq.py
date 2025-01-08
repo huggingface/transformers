@@ -770,3 +770,86 @@ class SamHQModelIntegrationTest(unittest.TestCase):
         raw_image = prepare_image()
 
         _ = generator(raw_image, points_per_batch=64)
+
+    def test_intermediate_embeddings(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config, pixel_values = config_and_inputs
+        model = SamHQModel(config=config)
+        model.to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            # Get image embeddings and intermediate embeddings
+            image_embeddings, intermediate_embeddings = model.get_image_embeddings(pixel_values)
+
+            # Check if intermediate embeddings are returned
+            self.assertIsNotNone(intermediate_embeddings)
+            self.assertIsInstance(intermediate_embeddings, list)
+            self.assertTrue(len(intermediate_embeddings) > 0)
+            for embedding in intermediate_embeddings:
+                self.assertEqual(embedding.shape, (self.model_tester.batch_size, 12, 12, 36))
+
+    def test_mask_decoder_hq_token_only(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config, pixel_values = config_and_inputs
+
+        model = SamHQModel(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        with torch.no_grad():
+            image_embeddings, intermediate_embeddings = model.get_image_embeddings(pixel_values)
+
+            dummy_points = torch.tensor([[[400, 650]]], device=torch_device)
+            dummy_labels = torch.tensor([[1]], device=torch_device)
+            sparse_embeddings, dense_embeddings = model.prompt_encoder(
+                input_points=dummy_points, input_labels=dummy_labels
+            )
+
+            outputs = model.mask_decoder(
+                image_embeddings=image_embeddings,
+                image_positional_embeddings=model.get_image_wide_positional_embeddings(),
+                sparse_prompt_embeddings=sparse_embeddings,
+                dense_prompt_embeddings=dense_embeddings,
+                intermediate_embeddings=intermediate_embeddings,
+                multimask_output=True,
+                hq_token_only=True,
+            )
+
+            self.assertIsNotNone(outputs[0])
+            self.assertIsNotNone(outputs[1])
+
+            self.assertEqual(outputs[0].shape, (self.model_tester.batch_size, 1, 1, 256, 256))
+            self.assertEqual(outputs[1].shape, (self.model_tester.batch_size, 1, 1))
+
+    def test_mask_decoder_single_mask_output(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        config, pixel_values = config_and_inputs
+
+        model = SamHQModel(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        with torch.no_grad():
+            image_embeddings, intermediate_embeddings = model.get_image_embeddings(pixel_values)
+
+            dummy_points = torch.tensor([[[400, 650]]], device=torch_device)
+            dummy_labels = torch.tensor([[1]], device=torch_device)
+            sparse_embeddings, dense_embeddings = model.prompt_encoder(
+                input_points=dummy_points, input_labels=dummy_labels
+            )
+
+            outputs = model.mask_decoder(
+                image_embeddings=image_embeddings,
+                image_positional_embeddings=model.get_image_wide_positional_embeddings(),
+                sparse_prompt_embeddings=sparse_embeddings,
+                dense_prompt_embeddings=dense_embeddings,
+                intermediate_embeddings=intermediate_embeddings,
+                multimask_output=False,
+                hq_token_only=False,
+            )
+
+            self.assertIsNotNone(outputs[0])
+            self.assertIsNotNone(outputs[1])
+
+            self.assertEqual(outputs[0].shape, (self.model_tester.batch_size, 1, 1, 256, 256))
+            self.assertEqual(outputs[1].shape, (self.model_tester.batch_size, 1, 1))
