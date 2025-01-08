@@ -1,6 +1,7 @@
 import ast
 from collections import defaultdict
 
+
 # Function to perform topological sorting
 def topological_sort(dependencies: dict):
     # Nodes are the name of the models to convert (we only add those to the graph)
