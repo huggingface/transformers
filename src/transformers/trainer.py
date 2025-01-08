@@ -2216,6 +2216,7 @@ class Trainer:
             if args.max_steps < 1:
                 max_steps = math.ceil(args.num_train_epochs * num_update_steps_per_epoch)
 
+        num_train_tokens = None
         if self.args.include_tokens_per_second:
             num_train_tokens = self.num_tokens(train_dataloader, max_steps)
             if has_length(train_dataloader) and args.max_steps < 1:
