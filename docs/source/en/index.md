@@ -66,6 +66,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                     [AriaText](model_doc/aria_text)                      |       ✅        |         ❌         |      ❌      |
 | [Audio Spectrogram Transformer](model_doc/audio-spectrogram-transformer) |       ✅        |         ❌         |      ❌      |
 |                    [Autoformer](model_doc/autoformer)                    |       ✅        |         ❌         |      ❌      |
+|                         [Bamba](model_doc/bamba)                         |       ✅        |         ❌         |      ❌      |
 |                          [Bark](model_doc/bark)                          |       ✅        |         ❌         |      ❌      |
 |                          [BART](model_doc/bart)                          |       ✅        |         ✅         |      ✅      |
 |                       [BARThez](model_doc/barthez)                       |       ✅        |         ✅         |      ✅      |
@@ -99,6 +100,8 @@ Flax), PyTorch, and/or TensorFlow.
 |                       [CodeGen](model_doc/codegen)                       |       ✅        |         ❌         |      ❌      |
 |                    [CodeLlama](model_doc/code_llama)                     |       ✅        |         ❌         |      ✅      |
 |                        [Cohere](model_doc/cohere)                        |       ✅        |         ❌         |      ❌      |
+|                       [Cohere2](model_doc/cohere2)                       |       ✅        |         ❌         |      ❌      |
+|                       [ColPali](model_doc/colpali)                       |       ✅        |         ❌         |      ❌      |
 |              [Conditional DETR](model_doc/conditional_detr)              |       ✅        |         ❌         |      ❌      |
 |                      [ConvBERT](model_doc/convbert)                      |       ✅        |         ✅         |      ❌      |
 |                      [ConvNeXT](model_doc/convnext)                      |       ✅        |         ✅         |      ❌      |
@@ -122,8 +125,10 @@ Flax), PyTorch, and/or TensorFlow.
 |                          [DETA](model_doc/deta)                          |       ✅        |         ❌         |      ❌      |
 |                          [DETR](model_doc/detr)                          |       ✅        |         ❌         |      ❌      |
 |                      [DialoGPT](model_doc/dialogpt)                      |       ✅        |         ✅         |      ✅      |
+|                     [DiffLlama](model_doc/diffllama)                     |       ✅        |         ❌         |      ❌      |
 |                         [DiNAT](model_doc/dinat)                         |       ✅        |         ❌         |      ❌      |
 |                        [DINOv2](model_doc/dinov2)                        |       ✅        |         ❌         |      ✅      |
+|         [DINOv2 with Registers](model_doc/dinov2_with_registers)         |       ✅        |         ❌         |      ❌      |
 |                    [DistilBERT](model_doc/distilbert)                    |       ✅        |         ✅         |      ✅      |
 |                           [DiT](model_doc/dit)                           |       ✅        |         ❌         |      ✅      |
 |                       [DonutSwin](model_doc/donut)                       |       ✅        |         ❌         |      ❌      |
@@ -139,6 +144,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                           [ESM](model_doc/esm)                           |       ✅        |         ✅         |      ❌      |
 |              [FairSeq Machine-Translation](model_doc/fsmt)               |       ✅        |         ❌         |      ❌      |
 |                        [Falcon](model_doc/falcon)                        |       ✅        |         ❌         |      ❌      |
+|                       [Falcon3](model_doc/falcon3)                       |       ✅        |         ❌         |      ✅      |
 |                  [FalconMamba](model_doc/falcon_mamba)                   |       ✅        |         ❌         |      ❌      |
 |         [FastSpeech2Conformer](model_doc/fastspeech2_conformer)          |       ✅        |         ❌         |      ❌      |
 |                       [FLAN-T5](model_doc/flan-t5)                       |       ✅        |         ✅         |      ✅      |
@@ -228,6 +234,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                  [MobileNetV2](model_doc/mobilenet_v2)                   |       ✅        |         ❌         |      ❌      |
 |                     [MobileViT](model_doc/mobilevit)                     |       ✅        |         ✅         |      ❌      |
 |                   [MobileViTV2](model_doc/mobilevitv2)                   |       ✅        |         ❌         |      ❌      |
+|                    [ModernBERT](model_doc/modernbert)                    |       ✅        |         ❌         |      ❌      |
 |                         [Moshi](model_doc/moshi)                         |       ✅        |         ❌         |      ❌      |
 |                         [MPNet](model_doc/mpnet)                         |       ✅        |         ✅         |      ❌      |
 |                           [MPT](model_doc/mpt)                           |       ✅        |         ❌         |      ❌      |
@@ -319,6 +326,7 @@ Flax), PyTorch, and/or TensorFlow.
 |             [Table Transformer](model_doc/table-transformer)             |       ✅        |         ❌         |      ❌      |
 |                         [TAPAS](model_doc/tapas)                         |       ✅        |         ✅         |      ❌      |
 |                         [TAPEX](model_doc/tapex)                         |       ✅        |         ✅         |      ✅      |
+|                       [TextNet](model_doc/textnet)                       |       ✅        |         ❌         |      ❌      |
 |       [Time Series Transformer](model_doc/time_series_transformer)       |       ✅        |         ❌         |      ❌      |
 |                   [TimeSformer](model_doc/timesformer)                   |       ✅        |         ❌         |      ❌      |
 |                [TimmWrapperModel](model_doc/timm_wrapper)                |       ✅        |         ❌         |      ❌      |
@@ -348,6 +356,8 @@ Flax), PyTorch, and/or TensorFlow.
 |                       [ViTMAE](model_doc/vit_mae)                        |       ✅        |         ✅         |      ❌      |
 |                      [ViTMatte](model_doc/vitmatte)                      |       ✅        |         ❌         |      ❌      |
 |                       [ViTMSN](model_doc/vit_msn)                        |       ✅        |         ❌         |      ❌      |
+|                       [VitPose](model_doc/vitpose)                       |       ✅        |         ❌         |      ❌      |
+|              [VitPoseBackbone](model_doc/vitpose_backbone)               |       ✅        |         ❌         |      ❌      |
 |                          [VITS](model_doc/vits)                          |       ✅        |         ❌         |      ❌      |
 |                         [ViViT](model_doc/vivit)                         |       ✅        |         ❌         |      ❌      |
 |                      [Wav2Vec2](model_doc/wav2vec2)                      |       ✅        |         ✅         |      ✅      |

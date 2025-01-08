@@ -37,6 +37,9 @@ from transformers.testing_utils import (
     require_torch_multi_accelerator,
     require_torch_multi_gpu,
     require_torch_sdpa,
+    set_config_for_less_flaky_test,
+    set_model_for_less_flaky_test,
+    set_model_tester_for_less_flaky_test,
     slow,
     torch_device,
 )
@@ -1202,6 +1205,7 @@ class GenerationTesterMixin:
                     "prophetnet",
                     "seamlessm4t",
                     "clvp",
+                    "fuyu",
                 ]
             ):
                 self.skipTest(reason="May fix in the future: need model-specific fixes")
@@ -1611,9 +1615,7 @@ class GenerationTesterMixin:
 
             # There are a few exception patterns in this test:
             # 1 - Some models can't generate without `input_ids`, when `inputs_embeds` are passed
-            requires_inputs_ids = any(
-                model_name in model_class.__name__.lower() for model_name in ["idefics", "qwen2vl"]
-            )
+            requires_inputs_ids = any(model_name in model_class.__name__.lower() for model_name in ["idefics"])
             # 2 - Complex `inputs_embeds` computation, i.e. the correct computation of inputs embeds is more complex
             # than calling the embedding layer with `input_ids`. Subcases of this exception:
             #   2.A - Ignore `scale_embedding`, if the model supports it (it is controlled by a model-dependent flag)
@@ -1920,11 +1922,13 @@ class GenerationTesterMixin:
         Tests that generating with static cache give almost same results as with dynamic cache, and the output cache
         has the expected shapes
         """
+        set_model_tester_for_less_flaky_test(self)
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_static_cache:
                 self.skipTest(reason="This model does not support the static cache format")
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            set_config_for_less_flaky_test(config)
             main_input = inputs_dict[model_class.main_input_name]
 
             if config.is_encoder_decoder:
@@ -1937,6 +1941,8 @@ class GenerationTesterMixin:
 
             for dtype in (torch.float32, torch.float16):
                 model = model_class(config).to(torch_device).to(dtype).eval()
+                set_model_for_less_flaky_test(model)
+
                 generation_kwargs = {
                     "max_new_tokens": max_new_tokens,
                     "return_dict_in_generate": True,  # Required to return `past_key_values`
@@ -2312,6 +2318,7 @@ class GenerationTesterMixin:
         # 2. We ignore models that have unique cache structures (e.g. mamba) or are in need of refatoring to match the
         #    standard cache format (e.g.gptbigcode )
         models_without_standard_cache = (
+            "bamba",
             "ctrl",
             "fsmt",
             "gptbigcode",
