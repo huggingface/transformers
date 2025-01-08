@@ -667,6 +667,54 @@ class Emu3VQVAEAttnBlock(nn.Module):
         return attn_output, attn_weights
 
 
+class Emu3VQVAEGroupNorm(nn.GroupNorm):
+    """
+    Same as the torch GroupNorm with the only difference that this ones accepts
+    an optional kwarg `quant_states` which is not used. This class makes it easier to
+    use SpatialNorm or GroupNorm without conditionals
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def forward(self, input, quant_states=None):
+        return F.group_norm(input, self.num_groups, self.weight, self.bias, self.eps)
+
+
+class Emu3VQVAEMiddleBlock(nn.Module):
+    def __init__(self, config, in_channels, quant_channels=None):
+        super().__init__()
+
+        self.block_1 = Emu3VQVAEResnetBlock(
+            in_channels=in_channels,
+            out_channels=in_channels,
+            quant_channels=quant_channels,
+        )
+        self.attn_1 = Emu3VQVAEAttnBlock(config)
+        if quant_channels is None:
+            self.attn_norm = Emu3VQVAEGroupNorm(num_channels=in_channels, num_groups=32, eps=1e-6, affine=True)
+        else:
+            self.attn_norm = Emu3VQVAESpatialNorm(quant_channels, in_channels)
+
+        self.block_2 = Emu3VQVAEResnetBlock(
+            in_channels=in_channels,
+            out_channels=in_channels,
+            quant_channels=quant_channels,
+        )
+
+    def forward(self, hidden_states: torch.FloatTensor, quant_states: torch.FloatTensor = None):
+        hidden_states = self.block_1(hidden_states, quant_states)
+        residual = hidden_states
+        hidden_states = self.attn_norm(hidden_states, quant_states)
+        batch_size, channels, height, width = hidden_states.shape
+        hidden_states = hidden_states.view(batch_size, channels, height * width).transpose(1, 2)
+        hidden_states = self.attn_1(hidden_states)[0]
+        hidden_states = hidden_states.reshape(batch_size, height, width, channels).permute(0, 3, 1, 2)
+        hidden_states = residual + hidden_states
+        hidden_states = self.block_2(hidden_states, quant_states)
+        return hidden_states
+
+
 class Emu3VQVAEDownBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -706,23 +754,22 @@ class Emu3VQVAEDownBlock(nn.Module):
             self.down.append(down)
 
     def forward(self, hidden_states: torch.FloatTensor):
-        for i_level in range(self.num_resolutions):
+        for i_level, blocks in enumerate(self.down):
             for i_block in range(self.num_res_blocks):
-                hidden_states = self.down[i_level].block[i_block](
-                    hidden_states,
-                )
-                if len(self.down[i_level].attn) > 0:
+                hidden_states = blocks.block[i_block](hidden_states)
+                if len(blocks.attn) > 0:
                     residual = hidden_states
-                    hidden_states = self.down[i_level].attn_norms[i_block](hidden_states)
+                    hidden_states = blocks.attn_norms[i_block](hidden_states)
+
                     batch_size, channels, height, width = hidden_states.shape
                     hidden_states = hidden_states.view(batch_size, channels, height * width).transpose(1, 2)
-                    hidden_states = self.down[i_level].attn[i_block](hidden_states)[0]
+                    hidden_states = blocks.attn[i_block](hidden_states)[0]
 
                     hidden_states = hidden_states.reshape(batch_size, height, width, channels).permute(0, 3, 1, 2)
                     hidden_states = residual + hidden_states
 
             if i_level != self.num_resolutions - 1:
-                hidden_states = self.down[i_level].downsample(hidden_states)
+                hidden_states = blocks.downsample(hidden_states)
 
         return hidden_states
 
@@ -766,69 +813,22 @@ class Emu3VQVAEUpBlock(nn.Module):
             self.up.insert(0, up)
 
     def forward(self, hidden_states: torch.FloatTensor, quant_states: torch.FloatTensor):
-        for i_level in reversed(range(self.num_resolutions)):
+        for i_level, blocks in enumerate(self.up):
             for i_block in range(self.num_res_blocks + 1):
-                hidden_states = self.up[i_level].block[i_block](hidden_states, quant_states)
-                if len(self.up[i_level].attn) > 0:
+                hidden_states = blocks.block[i_block](hidden_states, quant_states)
+                if len(blocks.attn) > 0:
                     residual = hidden_states
-                    hidden_states = self.up[i_level].attn_norms[i_block](hidden_states, quant_states)
+                    hidden_states = blocks.attn_norms[i_block](hidden_states, quant_states)
+
                     batch_size, channels, height, width = hidden_states.shape
                     hidden_states = hidden_states.view(batch_size, channels, height * width).transpose(1, 2)
-                    hidden_states = self.up[i_level].attn[i_block](hidden_states)[0]
+                    hidden_states = blocks.attn[i_block](hidden_states)[0]
+
                     hidden_states = hidden_states.reshape(batch_size, height, width, channels).permute(0, 3, 1, 2)
                     hidden_states = residual + hidden_states
             if i_level != 0:
-                hidden_states = self.up[i_level].upsample(hidden_states)
+                hidden_states = blocks.upsample(hidden_states)
 
-        return hidden_states
-
-
-class Emu3VQVAEGroupNorm(nn.GroupNorm):
-    """
-    Same as the torch GroupNorm with the only difference that this ones accepts
-    an optional kwarg `quant_states` which is not used. This class makes it easier to
-    use SpatialNorm or GroupNorm without conditionals
-    """
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-    def forward(self, input, quant_states=None):
-        return F.group_norm(input, self.num_groups, self.weight, self.bias, self.eps)
-
-
-class Emu3VQVAEMiddleBlock(nn.Module):
-    def __init__(self, config, in_channels, quant_channels=None):
-        super().__init__()
-
-        self.mid = nn.Module()
-        self.mid.block_1 = Emu3VQVAEResnetBlock(
-            in_channels=in_channels,
-            out_channels=in_channels,
-            quant_channels=quant_channels,
-        )
-        self.mid.attn_1 = Emu3VQVAEAttnBlock(config)
-        if quant_channels is None:
-            self.mid.attn_norm = Emu3VQVAEGroupNorm(num_channels=in_channels, num_groups=32, eps=1e-6, affine=True)
-        else:
-            self.mid.attn_norm = Emu3VQVAESpatialNorm(quant_channels, in_channels)
-
-        self.mid.block_2 = Emu3VQVAEResnetBlock(
-            in_channels=in_channels,
-            out_channels=in_channels,
-            quant_channels=quant_channels,
-        )
-
-    def forward(self, hidden_states: torch.FloatTensor, quant_states: torch.FloatTensor = None):
-        hidden_states = self.mid.block_1(hidden_states, quant_states)
-        residual = hidden_states
-        hidden_states = self.mid.attn_norm(hidden_states, quant_states)
-        batch_size, channels, height, width = hidden_states.shape
-        hidden_states = hidden_states.view(batch_size, channels, height * width).transpose(1, 2)
-        hidden_states = self.mid.attn_1(hidden_states)[0]
-        hidden_states = hidden_states.reshape(batch_size, height, width, channels).permute(0, 3, 1, 2)
-        hidden_states = residual + hidden_states
-        hidden_states = self.mid.block_2(hidden_states, quant_states)
         return hidden_states
 
 

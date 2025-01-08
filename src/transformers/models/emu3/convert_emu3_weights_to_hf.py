@@ -219,10 +219,6 @@ KEYS_TO_MODIFY_MAPPING = {
     "^model": "text_model.model",
     r"lm_head\.weight": "text_model.lm_head.weight",
     r"^text_model\.model\.vqmodel": "vqmodel",
-    # isolate down/mid/up into separate classes for readability
-    r"\.down\.": ".down_block.down.",
-    r"\.up\.": ".up_block.up.",
-    r"\.mid\.": ".middle_block.mid.",
     # rename QKV proj for the VQ-VAE model because we use SiglipAttention
     r"\.q\.": ".q_proj.",
     r"\.k\.": ".k_proj.",
@@ -234,6 +230,10 @@ KEYS_TO_MODIFY_MAPPING = {
     r"attn\.1\.norm\.": "attn_norms.1.",
     r"attn\.2\.norm\.": "attn_norms.2.",
     r"attn\.3\.norm\.": "attn_norms.3.",
+    # isolate down/mid/up into separate classes for readability
+    r"\.down\.": ".down_block.down.",
+    r"\.up\.": ".up_block.up.",
+    r"\.mid\.": ".middle_block.",
 }
 
 
