@@ -16,7 +16,7 @@
 
 import itertools
 import math
-from typing import Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
@@ -45,6 +45,9 @@ if is_vision_available():
 if is_scipy_available():
     from scipy.linalg import inv
     from scipy.ndimage import affine_transform, gaussian_filter
+
+if TYPE_CHECKING:
+    from .modeling_vitpose import VitPoseEstimatorOutput
 
 logger = logging.get_logger(__name__)
 
@@ -593,7 +596,7 @@ class VitPoseImageProcessor(BaseImageProcessor):
 
     def post_process_pose_estimation(
         self,
-        outputs: torch.Tensor,
+        outputs: "VitPoseEstimatorOutput",
         boxes: Union[List[List[List[float]]], np.ndarray],
         kernel_size: int = 11,
         threshold: float = None,
@@ -603,8 +606,8 @@ class VitPoseImageProcessor(BaseImageProcessor):
         Transform the heatmaps into keypoint predictions and transform them back to the image.
 
         Args:
-            outputs (torch.Tensor):
-                Model outputs.
+            outputs (`VitPoseEstimatorOutput`):
+                VitPoseForPoseEstimation model outputs.
             boxes (`List[List[List[float]]]` or `np.ndarray`):
                 List or array of bounding boxes for each image. Each box should be a list of 4 floats representing the bounding
                 box coordinates in COCO format (top_left_x, top_left_y, width, height).
