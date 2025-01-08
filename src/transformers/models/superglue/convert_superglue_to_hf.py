@@ -28,14 +28,15 @@ from transformers import (
 )
 
 
-def prepare_imgs_for_image_processor():
+def prepare_imgs():
     dataset = load_dataset("hf-internal-testing/image-matching-test-dataset", split="train")
-    return [[dataset[0]["image"], dataset[1]["image"]], [dataset[2]["image"], dataset[1]["image"]]]
+    image1 = dataset[0]["image"]
+    image2 = dataset[1]["image"]
+    image3 = dataset[2]["image"]
+    return [[image1, image2], [image3, image2]]
 
 
 def verify_model_outputs(model, model_name, device):
-    from tests.models.superglue.test_modeling_superglue import prepare_imgs
-
     images = prepare_imgs()
     preprocessor = SuperGlueImageProcessor()
     inputs = preprocessor(images=images, return_tensors="pt").to(device)
