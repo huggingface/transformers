@@ -9,7 +9,7 @@ docs/ @stevhliu
 /src/transformers/models/*/*processing* @molbap @yonigozlan @qubvel
 /src/transformers/models/*/image_processing* @qubvel
 /src/transformers/models/*/image_processing_*_fast* @yonigozlan
-/src/transformers/models/*/*_modeling* @arthurzucker
+/src/transformers/models/*/*_modeling* @Rocketknight1
 /src/transformers/**/*_tokenization* @ArthurZucker
 /src/transformers/generation/ @gante
 trainer.py @muellerzr @SunMarc
