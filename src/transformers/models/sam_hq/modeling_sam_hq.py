@@ -527,10 +527,8 @@ class SamHQVisionEncoder(nn.Module):
 
         hidden_states = self.neck(hidden_states)
 
-        image_embeddings = hidden_states
-
         if not return_dict:
-            outputs = (image_embeddings, intermediate_embeddings)
+            outputs = (hidden_states, intermediate_embeddings)
             if output_hidden_states:
                 outputs = outputs + (all_hidden_states,)
             if output_attentions:
@@ -538,7 +536,6 @@ class SamHQVisionEncoder(nn.Module):
             return outputs
 
         return SamHQVisionEncoderOutput(
-            image_embeds=image_embeddings,
             last_hidden_state=hidden_states,
             intermediate_embeddings=intermediate_embeddings,
             hidden_states=all_hidden_states,
@@ -981,7 +978,7 @@ class SamHQMaskDecoder(nn.Module):
         )
 
         self.hq_token = nn.Embedding(1, self.hidden_size)
-        self.hf_mlp = SamHQFeedForward(self.hidden_size, self.hidden_size, self.hidden_size // 8, 3)
+        self.hq_mask_mlp = SamHQFeedForward(self.hidden_size, self.hidden_size, self.hidden_size // 8, 3)
         self.num_mask_tokens = self.num_mask_tokens + 1
 
         # Compress ViT features
@@ -1007,7 +1004,7 @@ class SamHQMaskDecoder(nn.Module):
         dense_prompt_embeddings: torch.Tensor,
         multimask_output: bool,
         hq_token_only: bool,
-        interm_embeddings: torch.Tensor,
+        intermediate_embeddings: torch.Tensor,
         output_attentions: Optional[bool] = None,
         attention_similarity: torch.Tensor = None,
         target_embedding: torch.Tensor = None,
@@ -1028,7 +1025,7 @@ class SamHQMaskDecoder(nn.Module):
                 Whether to return multiple masks or a single mask.
             hq_token_only (bool):
                 Whether to use only the high-quality token output or combine with SAM output.
-            interm_embeddings (`torch.Tensor`):
+            intermediate_embeddings (`torch.Tensor`):
                 Intermediate embeddings from the vision encoder for feature fusion.
             output_attentions (bool, *optional*):
                 Whether or not to return the attentions tensors of all attention layers.
@@ -1045,17 +1042,17 @@ class SamHQMaskDecoder(nn.Module):
         """
         batch_size, num_channels, height, width = image_embeddings.shape
         point_batch_size = sparse_prompt_embeddings.shape[1]
-        vit_features = interm_embeddings[0].permute(0, 3, 1, 2)
+        vit_features = intermediate_embeddings[0].permute(0, 3, 1, 2).contiguous()
 
         embed_encode = self.encoder_conv1(image_embeddings)
         embed_encode = self.activation(self.encoder_norm(embed_encode))
         embed_encode = self.encoder_conv2(embed_encode)
 
-        com_vit_feat = self.compress_vit_conv1(vit_features)
-        com_vit_feat = self.activation(self.compress_vit_norm(com_vit_feat))
-        com_vit_feat = self.compress_vit_conv2(com_vit_feat)
+        compressed_vit_features = self.compress_vit_conv1(vit_features)
+        compressed_vit_features = self.activation(self.compress_vit_norm(compressed_vit_features))
+        compressed_vit_features = self.compress_vit_conv2(compressed_vit_features)
 
-        hq_features = embed_encode + com_vit_feat
+        hq_features = embed_encode + compressed_vit_features
 
         output_tokens = torch.cat([self.iou_token.weight, self.mask_tokens.weight, self.hq_token.weight], dim=0)
         output_tokens = output_tokens.repeat(batch_size, point_batch_size, 1, 1)
@@ -1103,7 +1100,7 @@ class SamHQMaskDecoder(nn.Module):
                 current_mlp = self.output_hypernetworks_mlps[i]
                 hyper_in_list += [current_mlp(mask_tokens_out[:, :, i, :])]
             else:
-                current_mlp = self.hf_mlp
+                current_mlp = self.hq_mask_mlp
                 hyper_in_list += [current_mlp(mask_tokens_out[:, :, i, :])]
 
         hyper_in = torch.stack(hyper_in_list, dim=2)
@@ -1257,7 +1254,7 @@ SAM_HQ_INPUTS_DOCSTRING = r"""
             more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        interm_embeddings (`List[torch.FloatTensor]`, *optional*):
+        intermediate_embeddings (`List[torch.FloatTensor]`, *optional*):
             Intermediate embeddings from vision encoder's non-windowed blocks, used by SAM-HQ for enhanced mask quality.
             Required when providing pre-computed image_embeddings instead of pixel_values.
 """
@@ -1379,7 +1376,7 @@ class SamHQModel(SamHQPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        interm_embeddings: Optional[List[torch.FloatTensor]] = None,
+        intermediate_embeddings: Optional[List[torch.FloatTensor]] = None,
         **kwargs,
     ) -> List[Dict[str, torch.Tensor]]:
         r"""
@@ -1463,14 +1460,14 @@ class SamHQModel(SamHQPreTrainedModel):
 
             if return_dict:
                 image_embeddings = vision_outputs.last_hidden_state
-                interm_embeddings = vision_outputs.intermediate_embeddings
+                intermediate_embeddings = vision_outputs.intermediate_embeddings
                 if output_hidden_states:
                     vision_hidden_states = vision_outputs.hidden_states
                 if output_attentions:
                     vision_attentions = vision_outputs.attentions
             else:
                 image_embeddings = vision_outputs[0]
-                interm_embeddings = vision_outputs[1]
+                intermediate_embeddings = vision_outputs[1]
                 if output_hidden_states:
                     vision_hidden_states = vision_outputs[2]
                 if output_attentions:
@@ -1494,7 +1491,7 @@ class SamHQModel(SamHQPreTrainedModel):
             dense_prompt_embeddings=dense_embeddings,
             multimask_output=multimask_output,
             hq_token_only=hq_token_only,
-            interm_embeddings=interm_embeddings,
+            intermediate_embeddings=intermediate_embeddings,
             attention_similarity=attention_similarity,
             target_embedding=target_embedding,
             output_attentions=output_attentions,

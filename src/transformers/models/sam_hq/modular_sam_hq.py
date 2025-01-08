@@ -281,8 +281,6 @@ class SamHQVisionEncoder(SamVisionEncoder):
 
         hidden_states = self.neck(hidden_states)
 
-
-
         if not return_dict:
             outputs = (hidden_states, intermediate_embeddings)
             if output_hidden_states:
