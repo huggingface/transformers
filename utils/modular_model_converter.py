@@ -1691,9 +1691,13 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.files_to_parse == ["all"]:
         args.files_to_parse = glob.glob("src/transformers/models/**/modular_*.py", recursive=True)
-        args.files_to_parse += glob.glob("examples/**/modular_*.py", recursive=True)
+    if args.files_to_parse == ["examples"]:
+        args.files_to_parse = glob.glob("examples/**/modular_*.py", recursive=True)
 
-    for file_name in find_priority_list(args.files_to_parse):
+    priority_list = find_priority_list(args.files_to_parse)
+    assert len(priority_list) == len(args.files_to_parse), "Some files will not be converted"
+
+    for file_name in priority_list:
         print(f"Converting {file_name} to a single model single file format")
         module_path = file_name.replace("/", ".").replace(".py", "").replace("src.", "")
         converted_files = convert_modular_file(file_name)

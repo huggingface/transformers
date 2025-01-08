@@ -1,53 +1,30 @@
 import ast
 from collections import defaultdict
 
-
 # Function to perform topological sorting
-def topological_sort(dependencies):
-    new_dependencies = {}
-    graph = defaultdict(list)
+def topological_sort(dependencies: dict):
+    # Nodes are the name of the models to convert (we only add those to the graph)
+    nodes = {node.rsplit("modular_", 1)[1].replace(".py", "") for node in dependencies.keys()}
+    # This will be a graph from models to convert, to models to convert that should be converted before (as they are a dependency)
+    graph = {}
+    name_mapping = {}
     for node, deps in dependencies.items():
         node_name = node.rsplit("modular_", 1)[1].replace(".py", "")
-        for dep in deps:
-            dep_name = dep.split(".")[-2]
-            if dep_name == node_name:
-                # Skip self dependencies for topological sort as they create cycles
-                continue
-            if "auto" not in dep and node_name not in graph[dep_name]:
-                graph[dep_name].append(node_name)
-        new_dependencies[node_name] = node
+        dep_names = {dep.split(".")[-2] for dep in deps}
+        dependencies = {dep for dep in dep_names if dep in nodes and dep != node_name}
+        graph[node_name] = dependencies
+        name_mapping[node_name] = node
 
-    # Create a graph and in-degree count for each node
-    def filter_one_by_one(filtered_list, reverse):
-        if len(reverse) == 0:
-            return filtered_list
+    sorting_list = []
+    while len(graph) > 0:
+        # Find the nodes with 0 out-degree
+        leaf_nodes = {node for node in graph if len(graph[node]) == 0}
+        # Add them to the list
+        sorting_list += list(leaf_nodes)
+        # Remove the leafs from the graph (and from the deps of other nodes)
+        graph = {node: deps - leaf_nodes for node, deps in graph.items() if node not in leaf_nodes}
 
-        graph = defaultdict(list)
-        # Build the graph
-        for node, deps in reverse.items():
-            for dep in deps:
-                graph[dep].append(node)
-
-        base_modules = set(reverse.keys()) - set(graph.keys())
-        if base_modules == reverse.keys():
-            # we are at the end
-            return filtered_list + list(graph.keys())
-        to_add = []
-        for k in graph.keys():
-            if len(graph[k]) == 1 and graph[k][0] in base_modules:
-                if graph[k][0] in reverse:
-                    del reverse[graph[k][0]]
-                if k not in filtered_list:
-                    to_add += [k]
-        for k in base_modules:
-            if k not in filtered_list:
-                to_add += [k]
-        filtered_list += list(to_add)
-        return filter_one_by_one(filtered_list, reverse)
-
-    final_order = filter_one_by_one([], graph)
-
-    return [new_dependencies.get(k) for k in final_order if k in new_dependencies]
+    return [name_mapping[x] for x in sorting_list]
 
 
 # Function to extract class and import info from a file
