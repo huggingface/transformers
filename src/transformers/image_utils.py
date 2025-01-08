@@ -276,27 +276,24 @@ def make_nested_list_of_images(
     Returns:
         list: A list of images or a 4d array of images.
     """
-    # If the input is a nested list of images, we flatten it
-    if (
+    # If it's a single image, convert it to a list of lists
+    if is_valid_image(images):
+        output_images = [[images]]
+    # If it's a list of images, it's a single batch, so convert it to a list of lists
+    elif isinstance(images, (list, tuple)) and is_valid_list_of_images(images):
+        output_images = [images]
+    # If it's a list of batches, it's already in the right format
+    elif (
         isinstance(images, (list, tuple))
         and all(isinstance(images_i, (list, tuple)) for images_i in images)
         and all(is_valid_list_of_images(images_i) for images_i in images)
     ):
-        return [img for img_list in images for img in img_list]
-
-    elif isinstance(images, (list, tuple)) and is_valid_list_of_images(images):
-        return images
-
-    elif is_pil_image(images):
-        return [images]
-
-    elif is_valid_image(images):
-        if len(images.shape) == 4:
-            return images
-        elif len(images.shape) == 3:
-            return [images]
-
-    raise ValueError(f"Could not make a flat list of images from {images}")
+        output_images = images
+    else:
+        raise ValueError(
+            "Invalid input type. Must be a single image, a list of images, or a list of batches of images."
+        )
+    return output_images
 
 
 def make_batched_videos(videos) -> VideoInput:
