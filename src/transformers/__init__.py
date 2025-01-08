@@ -7941,11 +7941,11 @@ if TYPE_CHECKING:
         )
         from .models.modernbert import (
             ModernBertForMaskedLM,
+            ModernBertForQuestionAnswering,
             ModernBertForSequenceClassification,
             ModernBertForTokenClassification,
             ModernBertModel,
             ModernBertPreTrainedModel,
-            ModernBertForQuestionAnswering,
         )
         from .models.moonshine import (
             MoonshineForConditionalGeneration,
