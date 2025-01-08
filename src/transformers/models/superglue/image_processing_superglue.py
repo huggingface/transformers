@@ -112,104 +112,23 @@ def validate_and_format_image_pairs(images: ImageInput):
         " - A list of pairs of 3D arrays.",
     )
 
-    def _flatten_image_list_sequence(image_list_sequence):
-        """
-        Flattens a list of list of images.
-        In the case of images being an array of shape (B, 2, H, W, C), returns a B * 2 long list of (H, W, C) images.
-        """
-        return [image for image_list in image_list_sequence for image in image_list]
-
-    def _is_pair_of_PIL(images):
-        """images is a pair of PIL images."""
-        return len(images) == 2 and all(is_pil_image(image) for image in images)
-
-    def _is_3d_array(image):
+    def _is_valid_image(image):
         """images is a 3D array."""
-        return is_valid_image(image) and get_image_type(image) != ImageType.PIL and len(image.shape) == 3
-
-    def _is_pair_of_3d_arrays(images):
-        """images is a pair of 3D arrays."""
-        return all(_is_3d_array(image) for image in images) and len(images) == 2
-
-    def _is_list_of_images_with_length_different_from_two(images):
-        """images is a flat list of either PIL images or 3D arrays but not a pair of images."""
-        return (
-            all(is_valid_image(image) and (is_pil_image(image) or _is_3d_array(image)) for image in images)
-            and len(images) != 2
+        return is_pil_image(image) or (
+            is_valid_image(image) and get_image_type(image) != ImageType.PIL and len(image.shape) == 3
         )
 
-    def _format_image_list(images):
-        """
-        Function that takes a valid image input and turns it into a list of images.
-
-        A valid image input is one of the following:
-        - A pair of PIL images.
-        - A pair of 3D arrays.
-        - A list of 4D arrays with shape (2, H, W, C).
-        - A 5D array with shape (B, 2, H, W, C).
-
-        Raises a ValueError if the input is one of the following :
-        - A list of images of length != 2.
-        - A single PIL image.
-        - A single 3D array.
-        """
-        if isinstance(images, list):
-            if _is_pair_of_PIL(images) or _is_pair_of_3d_arrays(images):
-                return images
-            if _is_list_of_images_with_length_different_from_two(images):
-                raise ValueError(error_message)
-        if is_valid_image(images):
-            raise ValueError(error_message)
-        return images
-
-    def _is_list_sequence(images):
-        """images is a list of lists of images."""
-        return isinstance(images, list) and all(isinstance(image, list) for image in images)
-
-    def _is_list_of_pairs(images):
-        """images is a list of either pairs of PIL images or pairs of 3D arrays."""
-        return all(_is_pair_of_PIL(image) or _is_pair_of_3d_arrays(image) for image in images)
-
-    def _format_image_list_sequence(images):
-        """Function that takes an image pair sequence that is either a list of pairs of PIL images or a list of pairs of 3D
-        arrays and turns it into a flatten list of images."""
-        if _is_list_sequence(images):
-            if _is_list_of_pairs(images):
-                return _flatten_image_list_sequence(images)
-        return images
-
-    def _is_list_of_pil(images):
-        """images is a list of PIL images with even length."""
-        return (
-            all(is_valid_image(image) and get_image_type(image) == ImageType.PIL for image in images)
-            and len(images) % 2 == 0
-        )
-
-    def _is_list_of_3d_arrays(images):
-        """images is a list of 3D arrays with even length."""
-        return all(_is_3d_array(image) for image in images) and len(images) % 2 == 0
-
-    def _validate_image_list_format(images):
-        """
-        Function that validates the format of the output list.
-
-        A valid output is one of the following:
-        - A list of PIL images with even length.
-        - A list of 3D arrays with even length.
-
-        Raises a ValueError if the output is not one of the above.
-        """
-        if _is_list_of_pil(images):
+    if isinstance(images, list):
+        if len(images) == 2 and all((_is_valid_image(image)) for image in images):
             return images
-        if _is_list_of_3d_arrays(images):
-            return images
-        raise ValueError(error_message)
-
-    images = _format_image_list(images)
-    images = _format_image_list_sequence(images)
-    images = _validate_image_list_format(images)
-
-    return images
+        if all(
+            isinstance(image_pair, list)
+            and len(image_pair) == 2
+            and all(_is_valid_image(image) for image in image_pair)
+            for image_pair in images
+        ):
+            return [image for image_pair in images for image in image_pair]
+    raise ValueError(error_message)
 
 
 class SuperGlueImageProcessor(BaseImageProcessor):
