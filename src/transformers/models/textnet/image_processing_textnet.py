@@ -56,7 +56,7 @@ class TextNetImageProcessor(BaseImageProcessor):
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by
             `do_resize` in the `preprocess` method.
-        size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 224}`):
+        size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 640}`):
             Size of the image after resizing. The shortest edge of the image is resized to size["shortest_edge"], with
             the longest edge resized to keep the input aspect ratio. Can be overridden by `size` in the `preprocess`
             method.
@@ -108,7 +108,7 @@ class TextNetImageProcessor(BaseImageProcessor):
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
-        size = size if size is not None else {"shortest_edge": 224}
+        size = size if size is not None else {"shortest_edge": 640}
         size = get_size_dict(size, default_to_square=False)
         crop_size = crop_size if crop_size is not None else {"height": 224, "width": 224}
         crop_size = get_size_dict(crop_size, param_name="crop_size")

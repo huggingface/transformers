@@ -96,6 +96,12 @@ distribution over the entire vocabulary with various strategy-specific adjustmen
 the decoding strategies that support multiple sequence candidates, e.g. variations of beam search and sampling. Decoding
 strategies like greedy search and contrastive search return a single output sequence.
 
+It is also possible to extend `generate()` with external libraries or handcrafted code. The `logits_processor` argument
+allows you to pass custom [`LogitsProcessor`] instances, allowing you to manipulate the next token probability
+distributions. Likewise, the `stopping_criteria` argument lets you set custom [`StoppingCriteria`] to stop text generation.
+The [`logits-processor-zoo`](https://github.com/NVIDIA/logits-processor-zoo) library contains examples of external
+`generate()`-compatible extensions.
+
 ## Save a custom decoding strategy with your model
 
 If you would like to share your fine-tuned model with a specific generation configuration, you can:
