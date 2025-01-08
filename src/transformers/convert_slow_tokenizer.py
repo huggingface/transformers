@@ -1452,6 +1452,8 @@ class HeliumConverter(SpmConverter):
     def __init__(self, vocab_file=None, *args):
         requires_backends(self, "protobuf")
 
+        Converter.__init__(self, vocab_file)
+
         # from .utils import sentencepiece_model_pb2 as model_pb2
         model_pb2 = import_protobuf()
 
@@ -1485,6 +1487,7 @@ class HeliumConverter(SpmConverter):
             ]
         )
         tokenizer.add_tokens([AddedToken("\n", normalized=False, special=False)])
+        tokenizer.enable_padding(pad_token ="<pad>", pad_id=3)
         return tokenizer
 
     def vocab(self, proto):
