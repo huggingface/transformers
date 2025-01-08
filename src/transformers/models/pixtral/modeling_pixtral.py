@@ -97,7 +97,7 @@ class PixtralRotaryEmbedding(nn.Module):
             emb = freqs
             cos = emb.cos()
             sin = emb.sin()
-        return cos.to(dtype=torch.float32), sin.to(dtype=torch.float32)
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
     def _dynamic_frequency_update(self, position_ids, device):
         """
@@ -150,7 +150,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     sin = sin.unsqueeze(unsqueeze_dim)
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed.to(q.dtype), k_embed.to(k.dtype)
+    return q_embed, k_embed
 
 
 class PixtralAttention(nn.Module):
@@ -193,14 +193,15 @@ class PixtralAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=0)
 
-        attn_weights = torch.matmul(query_states.float(), key_states.float().transpose(2, 3)) * self.scale
+        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * self.scale
 
         if attention_mask is not None:
             attn_weights = attn_weights + attention_mask
 
         # upcast attention to fp32
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32)
-        attn_output = torch.matmul(attn_weights, value_states.float()).to(hidden_states.dtype)
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        attn_output = torch.matmul(attn_weights, value_states)
 
         attn_output = attn_output.transpose(1, 2).contiguous()
         attn_output = attn_output.reshape(batch_size, patches, -1)
@@ -506,8 +507,7 @@ class PixtralVisionModel(PixtralPreTrainedModel):
         attention_mask = generate_block_attention_mask(
             [p.shape[-2] * p.shape[-1] for p in patch_embeds_list], patch_embeds
         )
-        out = self.transformer(patch_embeds, attention_mask, position_embedding)
-        return out
+        return self.transformer(patch_embeds, attention_mask, position_embedding)
 
 
 __all__ = ["PixtralVisionModel", "PixtralPreTrainedModel"]
