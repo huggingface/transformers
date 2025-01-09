@@ -147,6 +147,8 @@ else:
             ),
             ("codegen", ("CodeGenTokenizer", "CodeGenTokenizerFast" if is_tokenizers_available() else None)),
             ("cohere", (None, "CohereTokenizerFast" if is_tokenizers_available() else None)),
+            ("cohere2", (None, "CohereTokenizerFast" if is_tokenizers_available() else None)),
+            ("colpali", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("convbert", ("ConvBertTokenizer", "ConvBertTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "cpm",
@@ -166,6 +168,13 @@ else:
                 (
                     "DebertaV2Tokenizer" if is_sentencepiece_available() else None,
                     "DebertaV2TokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
+            (
+                "diffllama",
+                (
+                    "LlamaTokenizer" if is_sentencepiece_available() else None,
+                    "LlamaTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
             ("distilbert", ("DistilBertTokenizer", "DistilBertTokenizerFast" if is_tokenizers_available() else None)),
@@ -311,6 +320,7 @@ else:
             ("mllama", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("mluke", ("MLukeTokenizer" if is_sentencepiece_available() else None, None)),
             ("mobilebert", ("MobileBertTokenizer", "MobileBertTokenizerFast" if is_tokenizers_available() else None)),
+            ("modernbert", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
             ("moshi", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
             ("mpnet", ("MPNetTokenizer", "MPNetTokenizerFast" if is_tokenizers_available() else None)),
             ("mpt", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
