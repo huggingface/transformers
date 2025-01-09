@@ -125,11 +125,7 @@ class MolmoTextMLP(nn.Module):
 
 
 class MolmoTextRotaryEmbedding(nn.Module):
-    def __init__(
-        self,
-        config: MolmoTextConfig,
-        device=None,
-    ):
+    def __init__(self, config: MolmoTextConfig, device=None):
         super().__init__()
         self.rope_kwargs = {}
         # BC: "rope_type" was originally "type"
