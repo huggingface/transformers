@@ -547,9 +547,9 @@ class MoonshinePreTrainedModel(PreTrainedModel):
         """
         Computes the output length of the convolutional layers
         """
-        output_conv1_length = int((input_lengths - self.config.conv1_kernel_size) / self.config.conv1_stride + 1)
-        output_conv2_length = int((output_conv1_length - self.config.conv2_kernel_size) / self.config.conv2_stride + 1)
-        output_conv3_length = int((output_conv2_length - self.config.conv3_kernel_size) / self.config.conv3_stride + 1)
+        output_conv1_length = int((input_lengths - 127) / 64 + 1)
+        output_conv2_length = int((output_conv1_length - 7) / 3 + 1)
+        output_conv3_length = int((output_conv2_length - 3) / 2 + 1)
 
         return output_conv3_length
 
@@ -648,15 +648,9 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
         self.config = config
         embed_dim = config.hidden_size
 
-        self.conv1 = nn.Conv1d(
-            1, embed_dim, kernel_size=config.conv1_kernel_size, stride=config.conv1_stride, bias=False
-        )
-        self.conv2 = nn.Conv1d(
-            embed_dim, 2 * embed_dim, kernel_size=config.conv2_kernel_size, stride=config.conv2_stride
-        )
-        self.conv3 = nn.Conv1d(
-            2 * embed_dim, embed_dim, kernel_size=config.conv3_kernel_size, stride=config.conv3_stride
-        )
+        self.conv1 = nn.Conv1d(1, embed_dim, kernel_size=127, stride=64, bias=False)
+        self.conv2 = nn.Conv1d(embed_dim, 2 * embed_dim, kernel_size=7, stride=3)
+        self.conv3 = nn.Conv1d(2 * embed_dim, embed_dim, kernel_size=3, stride=2)
         self.groupnorm = nn.GroupNorm(num_groups=1, num_channels=embed_dim, eps=1e-5)
 
         self.rotary_emb = MoonshineRotaryEmbedding(
