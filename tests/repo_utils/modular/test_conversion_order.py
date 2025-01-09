@@ -33,6 +33,8 @@ FILES_TO_PARSE = [
     os.path.join(MODEL_ROOT, "glm", "modular_glm.py"),
     os.path.join(MODEL_ROOT, "phi", "modular_phi.py"),
     os.path.join(MODEL_ROOT, "mistral", "modular_mistral.py"),
+    os.path.join(MODEL_ROOT, "phi3", "modular_phi3.py"),
+    os.path.join(MODEL_ROOT, "cohere", "modular_cohere.py"),
 ]
 
 
@@ -56,3 +58,5 @@ class ConversionOrderTest(unittest.TestCase):
         self.assertTrue(appear_after("olmo2", "olmo", model_priority_list))
         self.assertTrue(appear_after("diffllama", "mistral", model_priority_list))
         self.assertTrue(appear_after("cohere2", "gemma2", model_priority_list))
+        self.assertTrue(appear_after("cohere2", "cohere", model_priority_list))
+        self.assertTrue(appear_after("phi3", "mistral", model_priority_list))
