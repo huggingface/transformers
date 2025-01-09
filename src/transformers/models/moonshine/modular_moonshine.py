@@ -697,27 +697,24 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
         return output if return_dict else output.to_tuple()
 
 
-@add_start_docstrings(
-    "The bare Moonshine decoder outputting raw hidden-states without any specific head on top.",
-    MOONSHINE_START_DOCSTRING,
-)
 class MoonshineDecoder(LlamaModel):
     main_input_name = "input_ids"
 
     def __init__(self, config: MoonshineConfig):
+        config = copy.deepcopy(config)
+        config.num_hidden_layers = config.decoder_num_hidden_layers
+        config.num_attention_heads = config.decoder_num_attention_heads
+        config.num_key_value_heads = config.decoder_num_key_value_heads
+
         super().__init__(config)
-        self.norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps, bias=False)
-        self.rotary_emb = MoonshineRotaryEmbedding(
-            dim=max(config.hidden_size // config.num_attention_heads // 2, config.min_rotary_ndims)
-        )
+        self.norm = nn.LayerNorm(config.hidden_size, bias=False)
+        self.rotary_emb = MoonshineRotaryEmbedding(config=config)
 
     def forward(
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
-        encoder_position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         use_cache: Optional[bool] = None,
@@ -725,86 +722,19 @@ class MoonshineDecoder(LlamaModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_position_ids: Optional[torch.LongTensor] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         """
         Args:
-            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-                it.
-
-                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-                [`PreTrainedTokenizer.__call__`] for details.
-
-                [What are input IDs?](../glossary#input-ids)
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-                - 1 for tokens that are **not masked**,
-                - 0 for tokens that are **masked**.
-
-                [What are attention masks?](../glossary#attention-mask)
-
-                Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-                [`PreTrainedTokenizer.__call__`] for details.
-
-                If `past_key_values` is used, optionally only the last `input_ids` have to be input (see
-                `past_key_values`).
-
-                If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
-                and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
-                information on the default strategy.
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
             encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
                 of the decoder.
-            position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Indices of positions of each input sequence tokens in the position embeddings.
-
-                [What are position IDs?](../glossary#position-ids)
             encoder_position_ids (`torch.LongTensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
                 Indices of positions of each encoder input's hidden states in the position embeddings.
 
                 [What are position IDs?](../glossary#position-ids)
-            past_key_values (`Cache`, *optional*):
-                Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
-                blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
-                returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
-
-                Two formats are allowed:
-                - a [`~cache_utils.Cache`] instance, see our
-                [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache);
-                - Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
-                shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`). This is also known as the legacy
-                cache format.
-
-                The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
-                legacy cache format will be returned.
-
-                If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
-                have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
-                of shape `(batch_size, sequence_length)`.
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-                is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-                model's internal embedding lookup matrix.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-                `past_key_values`).
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-                tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-                more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-            cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-                Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
-                this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
-                the complete sequence length.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
