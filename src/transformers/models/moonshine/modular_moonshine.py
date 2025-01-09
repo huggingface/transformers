@@ -644,6 +644,11 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
     main_input_name = "input_values"
 
     def __init__(self, config: MoonshineConfig):
+        config = copy.deepcopy(config)
+        config.num_hidden_layers = config.encoder_num_hidden_layers
+        config.num_attention_heads = config.encoder_num_attention_heads
+        config.num_key_value_heads = config.encoder_num_key_value_heads
+
         super().__init__(config)
         self.config = config
         embed_dim = config.hidden_size
@@ -653,12 +658,10 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
         self.conv3 = nn.Conv1d(2 * embed_dim, embed_dim, kernel_size=3, stride=2)
         self.groupnorm = nn.GroupNorm(num_groups=1, num_channels=embed_dim, eps=1e-5)
 
-        self.rotary_emb = MoonshineRotaryEmbedding(
-            dim=max(config.hidden_size // config.num_attention_heads // 2, config.min_rotary_ndims)
-        )
+        self.rotary_emb = MoonshineRotaryEmbedding(config=config)
 
         self.layers = nn.ModuleList([MoonshineEncoderLayer(config, idx) for idx in range(config.num_hidden_layers)])
-        self.layer_norm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps, bias=False)
+        self.layer_norm = nn.LayerNorm(embed_dim, bias=False)
 
         self.gradient_checkpointing = False
         self.post_init()
@@ -674,20 +677,10 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
     def set_input_embeddings(self, value: nn.Module):
         self.conv1 = value
 
-    def preprocess(self, input_values: torch.FloatTensor):
-        input_values = input_values.unsqueeze(1)
-        inputs_embeds = nn.functional.tanh(self.conv1(input_values))
-        inputs_embeds = self.groupnorm(inputs_embeds)
-        inputs_embeds = nn.functional.gelu(self.conv2(inputs_embeds))
-        inputs_embeds = nn.functional.gelu(self.conv3(inputs_embeds))
-        inputs_embeds = inputs_embeds.permute(0, 2, 1)
-        return inputs_embeds
-
     def forward(
         self,
         input_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -704,11 +697,6 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
             attention_mask (`torch.Tensor`)`, *optional*):
                 Moonshine does not support masking of the `input_values`, this argument is preserved for compatibility,
                 but it is not used.
-            inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Optionally, instead of passing `input_values` you can choose to directly pass an embedded representation, where embedded
-                here refers to preprocessed input values that can be obtained by passing `input_values` to the encoder `preprocess` method.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned (see `past_key_values`).
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
                 tensors for more detail.
@@ -724,15 +712,18 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if (input_values is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_values or inputs_embeds")
+        if input_values is None:
+            raise ValueError("You must specify input_values.")
 
-        if inputs_embeds is None:
-            inputs_embeds = self.preprocess(input_values)
+        # conv downsampling
+        input_values = input_values.unsqueeze(1)
+        hidden_states = nn.functional.tanh(self.conv1(input_values))
+        hidden_states = self.groupnorm(hidden_states)
+        hidden_states = nn.functional.gelu(self.conv2(hidden_states))
+        hidden_states = nn.functional.gelu(self.conv3(hidden_states))
+        hidden_states = hidden_states.permute(0, 2, 1)
 
-        position_ids = torch.arange(0, inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
-
-        hidden_states = inputs_embeds
+        position_ids = torch.arange(0, hidden_states.shape[1], device=hidden_states.device).unsqueeze(0)
 
         # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
