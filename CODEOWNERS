@@ -363,3 +363,6 @@ trainer_utils.py @muellerzr @SunMarc
 
 # Graph models
 /src/transformers/models/graphormer/mod*_graphormer* @clefourrier
+
+# Finally, files with no owners that shouldn't generate pings, usually automatically generated and checked in the CI
+utils/dummy*
