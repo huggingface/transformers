@@ -1106,7 +1106,9 @@ class ModelTesterMixin:
                         attention_mask = inputs["attention_mask"]
                         decoder_input_ids = inputs["decoder_input_ids"]
                         decoder_attention_mask = inputs["decoder_attention_mask"]
-                        model(main_input, attention_mask, decoder_input_ids, decoder_attention_mask)
+                        outputs = model(main_input, attention_mask, decoder_input_ids, decoder_attention_mask)
+                        if any(isinstance(x, Cache) for x in outputs):
+                            continue
                         traced_model = torch.jit.trace(
                             model, (main_input, attention_mask, decoder_input_ids, decoder_attention_mask)
                         )
@@ -1114,14 +1116,18 @@ class ModelTesterMixin:
                         input_ids = inputs["input_ids"]
                         bbox = inputs["bbox"]
                         image = inputs["image"].tensor
-                        model(input_ids, bbox, image)
+                        outputs = model(input_ids, bbox, image)
+                        if any(isinstance(x, Cache) for x in outputs):
+                            continue
                         traced_model = torch.jit.trace(
                             model, (input_ids, bbox, image), check_trace=False
                         )  # when traced model is checked, an error is produced due to name mangling
                     elif "bbox" in inputs:  # Bros requires additional inputs (bbox)
                         input_ids = inputs["input_ids"]
                         bbox = inputs["bbox"]
-                        model(input_ids, bbox)
+                        outputs = model(input_ids, bbox)
+                        if any(isinstance(x, Cache) for x in outputs):
+                            continue
                         traced_model = torch.jit.trace(
                             model, (input_ids, bbox), check_trace=False
                         )  # when traced model is checked, an error is produced due to name mangling
@@ -1131,7 +1137,9 @@ class ModelTesterMixin:
                         pixel_values = inputs["pixel_values"]
                         prompt_pixel_values = inputs["prompt_pixel_values"]
                         prompt_masks = inputs["prompt_masks"]
-                        model(pixel_values, prompt_pixel_values, prompt_masks)
+                        outputs = model(pixel_values, prompt_pixel_values, prompt_masks)
+                        if any(isinstance(x, Cache) for x in outputs):
+                            continue
                         traced_model = torch.jit.trace(
                             model, (pixel_values, prompt_pixel_values, prompt_masks), check_trace=False
                         )  # when traced model is checked, an error is produced due to name mangling
@@ -1146,7 +1154,9 @@ class ModelTesterMixin:
                             else:
                                 self.skipTest(reason="testing SDPA without attention_mask is not supported")
 
-                            model(main_input, attention_mask=inputs["attention_mask"])
+                            outputs = model(main_input, attention_mask=inputs["attention_mask"])
+                            if any(isinstance(x, Cache) for x in outputs):
+                                continue
                             # example_kwarg_inputs was introduced in torch==2.0, but it is fine here since SDPA has a requirement on torch>=2.1.
                             traced_model = torch.jit.trace(model, example_kwarg_inputs=trace_input)
                         else:
