@@ -8,7 +8,6 @@ The model is an enhancement to the original SAM model that produces significantl
 
 ![example image](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-output.png)
 
-## Key Differences from SAM
 
 SAM-HQ introduces several key improvements over the original SAM model:
 
