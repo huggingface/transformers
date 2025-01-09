@@ -1238,7 +1238,7 @@ MOONSHINE_MODEL_INPUTS_DOCSTRING = r"""
             Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
             blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
             returned by the model at a previous stage of decoding, when `use_cache=True` or `config.use_cache=True`.
-:
+            
             Two formats are allowed:
             - a [`~cache_utils.Cache`] instance, see our
             [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache);
