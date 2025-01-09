@@ -241,38 +241,38 @@ trainer.py @muellerzr @SunMarc
 /src/transformers/models/zoedepth/*_modeling* @amyeroberts @qubvel
 
 # Audio models
-/src/transformers/models/audio-spectrogram-transformer/*_modeling* @ylacombe @eustlb
-/src/transformers/models/bark/*_modeling* @ylacombe @eustlb
-/src/transformers/models/clap/*_modeling* @ylacombe @eustlb
-/src/transformers/models/dac/*_modeling* @ylacombe @eustlb
-/src/transformers/models/encodec/*_modeling* @ylacombe @eustlb
-/src/transformers/models/hubert/*_modeling* @ylacombe @eustlb
-/src/transformers/models/mctct/*_modeling* @ylacombe @eustlb
-/src/transformers/models/mimi/*_modeling* @ylacombe @eustlb
-/src/transformers/models/mms/*_modeling* @ylacombe @eustlb
-/src/transformers/models/moshi/*_modeling* @ylacombe @eustlb
-/src/transformers/models/musicgen/*_modeling* @ylacombe @eustlb
-/src/transformers/models/musicgen_melody/*_modeling* @ylacombe @eustlb
-/src/transformers/models/pop2piano/*_modeling* @ylacombe @eustlb
-/src/transformers/models/seamless_m4t/*_modeling* @ylacombe @eustlb
-/src/transformers/models/seamless_m4t_v2/*_modeling* @ylacombe @eustlb
-/src/transformers/models/sew/*_modeling* @ylacombe @eustlb
-/src/transformers/models/sew-d/*_modeling* @ylacombe @eustlb
-/src/transformers/models/speech_to_text/*_modeling* @ylacombe @eustlb
-/src/transformers/models/speech_to_text_2/*_modeling* @ylacombe @eustlb
-/src/transformers/models/speecht5/*_modeling* @ylacombe @eustlb
-/src/transformers/models/unispeech/*_modeling* @ylacombe @eustlb
-/src/transformers/models/unispeech-sat/*_modeling* @ylacombe @eustlb
-/src/transformers/models/univnet/*_modeling* @ylacombe @eustlb
-/src/transformers/models/vits/*_modeling* @ylacombe @eustlb
-/src/transformers/models/wav2vec2/*_modeling* @ylacombe @eustlb
-/src/transformers/models/wav2vec2-bert/*_modeling* @ylacombe @eustlb
-/src/transformers/models/wav2vec2-conformer/*_modeling* @ylacombe @eustlb
-/src/transformers/models/wav2vec2_phoneme/*_modeling* @ylacombe @eustlb
-/src/transformers/models/wavlm/*_modeling* @ylacombe @eustlb
-/src/transformers/models/whisper/*_modeling* @ylacombe @eustlb
-/src/transformers/models/xls_r/*_modeling* @ylacombe @eustlb
-/src/transformers/models/xlsr_wav2vec2/*_modeling* @ylacombe @eustlb
+/src/transformers/models/audio-spectrogram-transformer/*_modeling* @eustlb
+/src/transformers/models/bark/*_modeling* @eustlb
+/src/transformers/models/clap/*_modeling* @eustlb
+/src/transformers/models/dac/*_modeling* @eustlb
+/src/transformers/models/encodec/*_modeling* @eustlb
+/src/transformers/models/hubert/*_modeling* @eustlb
+/src/transformers/models/mctct/*_modeling* @eustlb
+/src/transformers/models/mimi/*_modeling* @eustlb
+/src/transformers/models/mms/*_modeling* @eustlb
+/src/transformers/models/moshi/*_modeling* @eustlb
+/src/transformers/models/musicgen/*_modeling* @eustlb
+/src/transformers/models/musicgen_melody/*_modeling* @eustlb
+/src/transformers/models/pop2piano/*_modeling* @eustlb
+/src/transformers/models/seamless_m4t/*_modeling* @eustlb
+/src/transformers/models/seamless_m4t_v2/*_modeling* @eustlb
+/src/transformers/models/sew/*_modeling* @eustlb
+/src/transformers/models/sew-d/*_modeling* @eustlb
+/src/transformers/models/speech_to_text/*_modeling* @eustlb
+/src/transformers/models/speech_to_text_2/*_modeling* @eustlb
+/src/transformers/models/speecht5/*_modeling* @eustlb
+/src/transformers/models/unispeech/*_modeling* @eustlb
+/src/transformers/models/unispeech-sat/*_modeling* @eustlb
+/src/transformers/models/univnet/*_modeling* @eustlb
+/src/transformers/models/vits/*_modeling* @eustlb
+/src/transformers/models/wav2vec2/*_modeling* @eustlb
+/src/transformers/models/wav2vec2-bert/*_modeling* @eustlb
+/src/transformers/models/wav2vec2-conformer/*_modeling* @eustlb
+/src/transformers/models/wav2vec2_phoneme/*_modeling* @eustlb
+/src/transformers/models/wavlm/*_modeling* @eustlb
+/src/transformers/models/whisper/*_modeling* @eustlb
+/src/transformers/models/xls_r/*_modeling* @eustlb
+/src/transformers/models/xlsr_wav2vec2/*_modeling* @eustlb
 
 # Video models
 /src/transformers/models/timesformer/*_modeling* @Rocketknight1
