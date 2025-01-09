@@ -133,6 +133,11 @@ class MoonshineConfig(PretrainedConfig):
 
     model_type = "moonshine"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {
+        "num_key_value_heads": "encoder_num_key_value_heads",
+        "num_attention_heads": "encoder_num_attention_heads",
+        "num_hidden_layers": "encoder_num_hidden_layers",
+    }
 
     def __init__(
         self,
