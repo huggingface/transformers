@@ -899,8 +899,8 @@ class Idefics3Model(Idefics3PreTrainedModel):
         new_inputs_embeds = inputs_embeds.clone()
         reshaped_image_hidden_states = image_hidden_states.view(-1, vision_hidden_size)
         # cast to the dtype of the input_embeds to support quantized models
-        reshaped_image_hidden_states = reshaped_image_hidden_states.to(device=self.device, dtype=inputs_embeds.dtype)
-        reshaped_image_hidden_states = reshaped_image_hidden_states.to(device=inputs_embeds.device, dtype=inputs_embeds.dtype)
+        reshaped_image_hidden_states = reshaped_image_hidden_states.to(inputs_embeds.device, inputs_embeds.dtype)
+        new_inputs_embeds[special_image_token_mask] = reshaped_image_hidden_states
         return new_inputs_embeds
 
     @add_start_docstrings_to_model_forward(
