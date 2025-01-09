@@ -290,7 +290,7 @@ trainer.py @muellerzr @SunMarc
 /src/transformers/models/clip/*_modeling* @zucchini-nlp
 /src/transformers/models/clipseg/*_modeling* @zucchini-nlp
 /src/transformers/models/clvp/*_modeling* @zucchini-nlp
-/src/transformers/models/colpali/*_modeling* @zucchini-nlp
+/src/transformers/models/colpali/*_modeling* @zucchini-nlp @yonigozlan 
 /src/transformers/models/data2vec/*_modeling* @zucchini-nlp
 /src/transformers/models/deplot/*_modeling* @zucchini-nlp
 /src/transformers/models/donut/*_modeling* @zucchini-nlp
