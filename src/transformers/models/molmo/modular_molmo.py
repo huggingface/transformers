@@ -13,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 from typing import Callable, List, Optional, Tuple, Union
 
 import torch
@@ -31,7 +30,6 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import (
-    is_flash_attn_2_available,
     logging,
 )
 from ..clip.modeling_clip import (
