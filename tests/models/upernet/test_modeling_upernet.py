@@ -82,7 +82,6 @@ class UperNetModelTester:
         self.out_features = out_features
         self.num_labels = num_labels
         self.scope = scope
-        self.num_hidden_layers = num_stages
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])

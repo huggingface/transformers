@@ -167,10 +167,14 @@
     title: AWQ
   - local: quantization/aqlm
     title: AQLM
+  - local: quantization/vptq
+    title: VPTQ
   - local: quantization/quanto
     title: Quanto
   - local: quantization/eetq
     title: EETQ
+  - local: quantization/higgs
+    title: HIGGS
   - local: quantization/hqq
     title: HQQ
   - local: quantization/fbgemm_fp8
@@ -322,6 +326,8 @@
       sections:
       - local: model_doc/albert
         title: ALBERT
+      - local: model_doc/bamba
+        title: Bamba
       - local: model_doc/bart
         title: BART
       - local: model_doc/barthez
@@ -380,6 +386,8 @@
         title: DeBERTa-v2
       - local: model_doc/dialogpt
         title: DialoGPT
+      - local: model_doc/diffllama
+        title: DiffLlama
       - local: model_doc/distilbert
         title: DistilBERT
       - local: model_doc/dpr
@@ -496,6 +504,8 @@
         title: mLUKE
       - local: model_doc/mobilebert
         title: MobileBERT
+      - local: model_doc/modernbert
+        title: ModernBert
       - local: model_doc/mpnet
         title: MPNet
       - local: model_doc/mpt
@@ -647,6 +657,8 @@
         title: DiNAT
       - local: model_doc/dinov2
         title: DINOV2
+      - local: model_doc/dinov2_with_registers
+        title: DINOv2 with Registers
       - local: model_doc/dit
         title: DiT
       - local: model_doc/dpt
@@ -709,6 +721,8 @@
         title: Swin2SR
       - local: model_doc/table-transformer
         title: Table Transformer
+      - local: model_doc/textnet
+        title: TextNet
       - local: model_doc/timm_wrapper
         title: Timm Wrapper
       - local: model_doc/upernet
@@ -727,6 +741,8 @@
         title: ViTMatte
       - local: model_doc/vit_msn
         title: ViTMSN
+      - local: model_doc/vitpose
+        title: ViTPose
       - local: model_doc/yolos
         title: YOLOS
       - local: model_doc/zoedepth
@@ -744,8 +760,6 @@
         title: dac
       - local: model_doc/encodec
         title: EnCodec
-      - local: model_doc/hiera
-        title: Hiera
       - local: model_doc/hubert
         title: Hubert
       - local: model_doc/mctct

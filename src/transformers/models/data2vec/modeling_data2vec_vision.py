@@ -1442,3 +1442,11 @@ class Data2VecVisionForSemanticSegmentation(Data2VecVisionPreTrainedModel):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "Data2VecVisionForImageClassification",
+    "Data2VecVisionForSemanticSegmentation",
+    "Data2VecVisionModel",
+    "Data2VecVisionPreTrainedModel",
+]

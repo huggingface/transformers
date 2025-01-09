@@ -1111,7 +1111,7 @@ class DbrxModel(DbrxPreTrainedModel):
         output_attentions: bool,
     ):
         if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and 0.0 in attention_mask:
+            if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
 
@@ -1374,3 +1374,6 @@ class DbrxForCausalLM(DbrxPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
         )
+
+
+__all__ = ["DbrxForCausalLM", "DbrxModel", "DbrxPreTrainedModel"]

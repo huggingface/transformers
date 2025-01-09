@@ -90,6 +90,9 @@ from transformers.testing_utils import (
     require_torch_multi_accelerator,
     require_torch_multi_gpu,
     require_torch_sdpa,
+    set_config_for_less_flaky_test,
+    set_model_for_less_flaky_test,
+    set_model_tester_for_less_flaky_test,
     slow,
     torch_device,
 )
@@ -220,6 +223,8 @@ class ModelTesterMixin:
     test_missing_keys = True
     test_model_parallel = False
     test_torch_exportable = False
+    # Used in `check_training_gradient_checkpointing` to NOT check all params having gradient (e.g. for some MOE models)
+    test_all_params_have_gradient = True
     is_encoder_decoder = False
     has_attentions = True
     _is_composite = False
@@ -815,7 +820,10 @@ class ModelTesterMixin:
                     ),
                 )
 
+        set_model_tester_for_less_flaky_test(self)
+
         config, batched_input = self.model_tester.prepare_config_and_inputs_for_common()
+        set_config_for_less_flaky_test(config)
         equivalence = get_tensor_equivalence_function(batched_input)
 
         for model_class in self.all_model_classes:
@@ -826,6 +834,7 @@ class ModelTesterMixin:
                 config, batched_input = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
             batched_input_prepared = self._prepare_for_class(batched_input, model_class)
             model = model_class(config).to(torch_device).eval()
+            set_model_for_less_flaky_test(model)
 
             batch_size = self.model_tester.batch_size
             single_row_input = {}
@@ -890,9 +899,10 @@ class ModelTesterMixin:
                 loss.backward()
                 optimizer.step()
 
-                for k, v in model.named_parameters():
-                    if v.requires_grad:
-                        self.assertTrue(v.grad is not None, f"{k} in {model_class.__name__} has no gradient!")
+                if self.test_all_params_have_gradient:
+                    for k, v in model.named_parameters():
+                        if v.requires_grad:
+                            self.assertTrue(v.grad is not None, f"{k} in {model_class.__name__} has no gradient!")
 
     def test_training(self):
         if not self.model_tester.is_training:
@@ -2771,8 +2781,6 @@ class ModelTesterMixin:
                 attributes = tuple([f"{name}_{idx}" for idx in range(len(fx_outputs))])
 
             for fx_output, pt_output, attr in zip(fx_outputs, pt_outputs, attributes):
-                if isinstance(pt_output, DynamicCache):
-                    pt_output = pt_output.to_legacy_cache()
                 self.check_pt_flax_outputs(fx_output, pt_output, model_class, tol=tol, name=attr)
 
         elif isinstance(fx_outputs, jnp.ndarray):
@@ -3062,6 +3070,7 @@ class ModelTesterMixin:
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
+    @require_torch_gpu
     @require_torch_multi_gpu
     def test_model_parallelization(self):
         if not self.test_model_parallel:
@@ -3124,6 +3133,7 @@ class ModelTesterMixin:
             gc.collect()
             torch.cuda.empty_cache()
 
+    @require_torch_gpu
     @require_torch_multi_gpu
     def test_model_parallel_equal_results(self):
         if not self.test_model_parallel:
@@ -3459,6 +3469,8 @@ class ModelTesterMixin:
                 "Data2VecAudioForSequenceClassification",
                 "UniSpeechForSequenceClassification",
                 "PvtForImageClassification",
+                "ModernBertForSequenceClassification",
+                "ModernBertForTokenClassification",
                 "TimmWrapperForImageClassification",
             ]
             special_param_names = [
@@ -3611,34 +3623,6 @@ class ModelTesterMixin:
             assert (
                 num_params < 1000000
             ), f"{model_class} is too big for the common tests ({num_params})! It should have 1M max."
-
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_conversion(self):
-        if not self.has_attentions:
-            self.skipTest(reason="Model architecture does not support attentions")
-
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            if not model_class._supports_flash_attn_2:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
-
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(
-                    tmpdirname, torch_dtype=torch.float16, attn_implementation="flash_attention_2"
-                ).to(torch_device)
-
-                for _, module in model.named_modules():
-                    if "FlashAttention" in module.__class__.__name__:
-                        return
-
-                self.assertTrue(False, "FlashAttention2 modules not found in model")
 
     @require_flash_attn
     @require_torch_gpu
@@ -4006,34 +3990,11 @@ class ModelTesterMixin:
         def get_mean_reldiff(failcase, x, ref, atol, rtol):
             return f"{failcase}: mean relative difference: {((x - ref).abs() / (ref.abs() + 1e-12)).mean():.3e}, torch atol = {atol}, torch rtol = {rtol}"
 
-        if hasattr(self.model_tester, "num_hidden_layers"):
-            self.model_tester.num_hidden_layers = 1
-        if hasattr(self.model_tester, "vision_config") and "num_hidden_layers" in self.model_tester.vision_config:
-            self.model_tester.vision_config = copy.deepcopy(self.model_tester.vision_config)
-            self.model_tester.vision_config["num_hidden_layers"] = 1
-        if hasattr(self.model_tester, "text_config") and "num_hidden_layers" in self.model_tester.text_config:
-            self.model_tester.text_config = copy.deepcopy(self.model_tester.text_config)
-            self.model_tester.text_config["num_hidden_layers"] = 1
+        set_model_tester_for_less_flaky_test(self)
 
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-            config.rms_norm_eps = 1.0
-            config.layer_norm_eps = 1.0
-            config.norm_eps = 1.0
-            config.norm_epsilon = 1.0
-            config.layer_norm_epsilon = 1.0
-
-            # norm layers (layer/group norm, etc.) could cause flaky tests when the tensors have very small variance.
-            # (We don't need the original epsilon values to check eager/sdpa matches)
-            for attr in ["text_config", "vision_config", "text_encoder", "audio_encoder", "decoder"]:
-                if hasattr(config, attr):
-                    getattr(config, attr).rms_norm_eps = 1.0
-                    getattr(config, attr).layer_norm_eps = 1.0
-                    getattr(config, attr).norm_eps = 1.0
-                    getattr(config, attr).norm_epsilon = 1.0
-                    getattr(config, attr).layer_norm_epsilon = 1.0
-
+            set_config_for_less_flaky_test(config)
             model = model_class(config)
             # FIXME: we deactivate boolean mask for models using "use_mask_token" in their constructors.
             # These models support masking only in the case `use_mask_token=True`. Otherwise they cannot consume an input mask.
@@ -4044,7 +4005,12 @@ class ModelTesterMixin:
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model_sdpa = model_class.from_pretrained(tmpdirname, torch_dtype=torch_dtype)
+                try:
+                    model_sdpa = model_class.from_pretrained(
+                        tmpdirname, torch_dtype=torch_dtype, attn_implementation="sdpa"
+                    )
+                except ValueError:
+                    model_sdpa = model_class.from_pretrained(tmpdirname, torch_dtype=torch_dtype)
                 model_sdpa = model_sdpa.eval().to(torch_device, dtype=torch_dtype)
 
                 model_eager = model_class.from_pretrained(
@@ -4054,13 +4020,8 @@ class ModelTesterMixin:
                 )
                 model_eager = model_eager.eval().to(torch_device, dtype=torch_dtype)
 
-                # Another way to make sure norm layers have desired epsilon. (Some models don't set it from its config.)
-                for x in model_eager.modules():
-                    if isinstance(x, (nn.LayerNorm, nn.GroupNorm)):
-                        x.eps = 1.0
-                for x in model_sdpa.modules():
-                    if isinstance(x, (nn.LayerNorm, nn.GroupNorm)):
-                        x.eps = 1.0
+                set_model_for_less_flaky_test(model_eager)
+                set_model_for_less_flaky_test(model_sdpa)
 
                 # We use these for loops instead of parameterized.expand just for the interest of avoiding loading/saving 16 times the model,
                 # but it would be nicer to have an efficient way to use parameterized.expand
@@ -4305,7 +4266,7 @@ class ModelTesterMixin:
                     if isinstance(inp, torch.Tensor) and inp.dtype in [torch.float32, torch.float16]:
                         inputs_dict[name] = inp.to(torch.float16)
 
-                with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
+                with sdpa_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
                     _ = model(**inputs_dict)
 
     @require_non_xpu
@@ -4397,11 +4358,7 @@ class ModelTesterMixin:
                 model_sdpa = model_sdpa.eval()
 
                 with torch.no_grad():
-                    with torch.backends.cuda.sdp_kernel(
-                        enable_flash=False,
-                        enable_math=True,
-                        enable_mem_efficient=False,
-                    ):
+                    with sdpa_kernel(enable_flash=False, enable_math=True, enable_mem_efficient=False):
                         res_eager = model_eager(**inputs_dict, return_dict=False)[0]
                         res_sdpa = model_sdpa(**inputs_dict, return_dict=False)[0]
 

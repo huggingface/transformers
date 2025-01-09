@@ -38,7 +38,6 @@ from ...modeling_outputs import (
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import is_torch_greater_or_equal_than_2_0
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
@@ -111,13 +110,8 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Falcon
 class FalconRotaryEmbedding(nn.Module):
-    def __init__(
-        self,
-        config: FalconConfig,
-        device=None,
-    ):
+    def __init__(self, config: FalconConfig, device=None):
         super().__init__()
-        self.rope_kwargs = {}
         # BC: "rope_type" was originally "type"
         if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
             self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
@@ -129,7 +123,7 @@ class FalconRotaryEmbedding(nn.Module):
         self.config = config
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, **self.rope_kwargs)
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
 
@@ -141,9 +135,7 @@ class FalconRotaryEmbedding(nn.Module):
         """
         seq_len = torch.max(position_ids) + 1
         if seq_len > self.max_seq_len_cached:  # growth
-            inv_freq, self.attention_scaling = self.rope_init_fn(
-                self.config, device, seq_len=seq_len, **self.rope_kwargs
-            )
+            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
             self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
             self.max_seq_len_cached = seq_len
 
@@ -815,14 +807,6 @@ class FalconPreTrainedModel(PreTrainedModel):
     # Adapted from transformers.modeling_utils.PreTrainedModel._check_and_enable_sdpa
     @classmethod
     def _check_and_enable_sdpa(cls, config, hard_check_only: bool = False) -> "PretrainedConfig":
-        # NOTE: Falcon supported SDPA from PyTorch 2.0. We keep it like that for backward compatibility (automatically use SDPA for torch>=2.0).
-        if hard_check_only:
-            if not is_torch_greater_or_equal_than_2_0:
-                raise ImportError("PyTorch SDPA requirements in Transformers are not met. Please install torch>=2.0.")
-
-        if not is_torch_greater_or_equal_than_2_0:
-            return config
-
         _is_bettertransformer = getattr(cls, "use_bettertransformer", False)
         if _is_bettertransformer:
             return config
@@ -1593,3 +1577,13 @@ class FalconForQuestionAnswering(FalconPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "FalconForCausalLM",
+    "FalconModel",
+    "FalconPreTrainedModel",
+    "FalconForSequenceClassification",
+    "FalconForTokenClassification",
+    "FalconForQuestionAnswering",
+]
