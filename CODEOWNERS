@@ -2,10 +2,11 @@
 # the repo. Unless a later match takes precedence,
 # @global-owner1 and @global-owner2 will be requested for
 # review when someone opens a pull request.
-*       @Rocketknight1 # if no one is pinged based on the other rules, he will do the dispatch
+*       @Rocketknight1 @ArthurZucker # if no one is pinged based on the other rules, he will do the dispatch
 **.md @stevhliu
 docs/ @stevhliu
 /benchmark/ @McPatate
+/utils/modular_model_converter.py @Cyrilvallez @ArthurZucker
 /src/transformers/models/*/*processing* @molbap @yonigozlan @qubvel
 /src/transformers/models/*/image_processing* @qubvel
 /src/transformers/models/*/image_processing_*_fast* @yonigozlan
