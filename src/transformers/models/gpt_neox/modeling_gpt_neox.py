@@ -148,6 +148,7 @@ def flash_attention_forward(
     norm_factor,
     attention_dropout,
     training,
+    position_ids=None,
     target_dtype=None,
     **_kwargs,
 ):
@@ -173,6 +174,7 @@ def flash_attention_forward(
         attention_mask,
         query_length,
         dropout=attention_dropout,
+        position_ids=position_ids,
         softmax_scale=norm_factor,
         is_causal=True,
         use_top_left_mask=flash_attn_uses_top_left_mask,
@@ -353,6 +355,7 @@ class GPTNeoXAttention(nn.Module):
             key,
             value,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             head_mask=head_mask,
             norm_factor=self.norm_factor,
             attention_dropout=self.config.attention_dropout,
@@ -488,47 +491,20 @@ class GPTNeoXSdpaAttention(GPTNeoXAttention):
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->GPTNeoX
 class GPTNeoXRotaryEmbedding(nn.Module):
-    def __init__(
-        self,
-        dim=None,
-        max_position_embeddings=2048,
-        base=10000,
-        device=None,
-        scaling_factor=1.0,
-        rope_type="default",
-        config: Optional[GPTNeoXConfig] = None,
-    ):
+    def __init__(self, config: GPTNeoXConfig, device=None):
         super().__init__()
-        # TODO (joao): remove the `if` below, only used for BC
-        self.rope_kwargs = {}
-        if config is None:
-            logger.warning_once(
-                "`GPTNeoXRotaryEmbedding` can now be fully parameterized by passing the model config through the "
-                "`config` argument. All other arguments will be removed in v4.46"
-            )
-            self.rope_kwargs = {
-                "rope_type": rope_type,
-                "factor": scaling_factor,
-                "dim": dim,
-                "base": base,
-                "max_position_embeddings": max_position_embeddings,
-            }
-            self.rope_type = rope_type
-            self.max_seq_len_cached = max_position_embeddings
-            self.original_max_seq_len = max_position_embeddings
+        # BC: "rope_type" was originally "type"
+        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
         else:
-            # BC: "rope_type" was originally "type"
-            if config.rope_scaling is not None:
-                self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-            else:
-                self.rope_type = "default"
-            self.max_seq_len_cached = config.max_position_embeddings
-            self.original_max_seq_len = config.max_position_embeddings
+            self.rope_type = "default"
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, **self.rope_kwargs)
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
 
@@ -540,9 +516,7 @@ class GPTNeoXRotaryEmbedding(nn.Module):
         """
         seq_len = torch.max(position_ids) + 1
         if seq_len > self.max_seq_len_cached:  # growth
-            inv_freq, self.attention_scaling = self.rope_init_fn(
-                self.config, device, seq_len=seq_len, **self.rope_kwargs
-            )
+            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
             self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
             self.max_seq_len_cached = seq_len
 
@@ -953,7 +927,7 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         output_attentions: bool,
     ):
         if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and 0.0 in attention_mask:
+            if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
 
@@ -1484,3 +1458,14 @@ class GPTNeoXForQuestionAnswering(GPTNeoXPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "GPTNeoXForCausalLM",
+    "GPTNeoXForQuestionAnswering",
+    "GPTNeoXForSequenceClassification",
+    "GPTNeoXForTokenClassification",
+    "GPTNeoXLayer",
+    "GPTNeoXModel",
+    "GPTNeoXPreTrainedModel",
+]
