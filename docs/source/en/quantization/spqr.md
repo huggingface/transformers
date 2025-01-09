@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # SpQR
 
-[SpQR](https://github.com/Vahe1994/SpQR) quantization algorithm involves a 16x16 tile, 3-bit configuration, and unstructured sparsity as detailed in [SpQR: A Sparse-Quantized Representation for Near-Lossless LLM Weight Compression](https://arxiv.org/abs/2306.03078).
+[SpQR](https://github.com/Vahe1994/SpQR) quantization algorithm involves a 16x16 tiled bi-level group 3-bit quantization structure, with sparse outliers as detailed in [SpQR: A Sparse-Quantized Representation for Near-Lossless LLM Weight Compression](https://arxiv.org/abs/2306.03078).
 
 To SpQR-quantize a model, refer to the [Vahe1994/SpQR](https://github.com/Vahe1994/SpQR) repository.
 
