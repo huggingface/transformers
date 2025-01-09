@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 from typing import Callable, Optional, Tuple, Union
 
 import torch
@@ -40,9 +39,10 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ..cohere.modeling_cohere import CohereRotaryEmbedding
 from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaModel, eager_attention_forward
+from ..glm.modeling_glm import GlmAttention, GlmRotaryEmbedding, apply_rotary_pos_emb
 from ..whisper.modeling_whisper import WhisperModel, shift_tokens_right
+from .configuration_moonshine import MoonshineConfig
 
 
 logger = logging.get_logger(__name__)
@@ -231,11 +231,9 @@ class MoonshineDecoderLayer(nn.Module):
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
-                position_ids=encoder_position_ids,
                 past_key_value=past_key_value,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
-                position_embeddings=encoder_position_embeddings,
             )
             hidden_states = residual + hidden_states
 
