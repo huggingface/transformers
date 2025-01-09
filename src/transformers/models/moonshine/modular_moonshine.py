@@ -416,8 +416,8 @@ class MoonshineEncoderLayer(LlamaDecoderLayer):
         self.self_attn = MoonshineAttention(config=config, layer_idx=layer_idx, is_causal=False)
 
         self.mlp = MoonshineMLP(config, config.encoder_hidden_act)
-        self.input_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps, bias=False)
-        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps, bias=False)
+        self.input_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
+        self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
 
 
 class MoonshineDecoderLayer(nn.Module):
