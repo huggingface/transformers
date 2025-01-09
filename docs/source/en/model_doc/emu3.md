@@ -31,7 +31,7 @@ Tips:
 
 - We advise users to use `padding_side="left"` when computing batched generation as it leads to more accurate results. Simply make sure to set `processor.tokenizer.padding_side = "left"` before generating.
 
-- Note that the model has been trained with a specific prompt format for chatting. You can use processor's `apply_chat_template` to format your prompts correctly via `processor.apply_chat_tenplate(my_conversation_dict)`.
+- Note that the model has been trained with a specific prompt format for chatting. Use `processor.apply_chat_template(my_conversation_dict)` to correctly format your prompts.
 
 - Emu3 has two different checkpoints for image-generation and text-generation, make sure to use the correct checkpoint when loading the model. To generate image it is advised to use `prefix_constraints` so that the generated tokens are sampled only from possible image tokens. See more below for usage examples.
 
