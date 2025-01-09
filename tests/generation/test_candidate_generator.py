@@ -129,6 +129,12 @@ class MockTokenizer:
     def get_vocab(self):
         return self._vocab
 
+    def __call__(self, text, add_special_tokens=True):
+        # Mock implementation of the __call__ method
+        tokens = text.split()
+        input_ids = [self._vocab.get(token, 0) for token in tokens]
+        return {"input_ids": input_ids}
+
 
 class TestAssistantVocabTranslatorCache(unittest.TestCase):
     def setUp(self):
