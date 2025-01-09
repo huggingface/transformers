@@ -161,6 +161,9 @@ class MoonshineAttention(GlmAttention):
         return attn_output, attn_weights
 
 
+class MoonshineRotaryEmbedding(GlmRotaryEmbedding):
+    pass
+
 class MoonshineEncoderLayer(LlamaDecoderLayer):
     def __init__(self, config: MoonshineConfig, layer_idx: int):
         super().__init__(config, layer_idx)
