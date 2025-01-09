@@ -16,11 +16,11 @@ rendered properly in your Markdown viewer.
 
 # SpQR
 
+[SpQR](https://github.com/Vahe1994/SpQR) quantization algorithm involves a 16x16 tile, 3-bit configuration, and unstructured sparsity as detailed in [SpQR: A Sparse-Quantized Representation for Near-Lossless LLM Weight Compression](https://arxiv.org/abs/2306.03078).
 
-This module contains a single-batch inference kernel for a model quantizated via the SpQR algorithm with a specific 16x16 tile and 3-bit configuration in mind, alsongside unstructured sparsity.
-The compression algorithm is detailed in the research paper "[SpQR: A Sparse-Quantized Representation for Near-Lossless LLM Weight Compression](https://arxiv.org/abs/2306.03078)".
+To SpQR-quantize a model, refer to the [Vahe1994/SpQR](https://github.com/Vahe1994/SpQR) repository.
 
-The instructions on how to quantize models yourself, as well as all the relevant code can be found in the corresponding GitHub [repository](https://github.com/Vahe1994/SpQR). To run SpQR models simply load a model that has been quantized with SpQR:
+Load a pre-SpQR-quantized model in [`~PreTrainedModel.from_pretrained`].
 
 ```python
 from transformers import AutoTokenizer, AutoModelForCausalLM
