@@ -374,7 +374,8 @@ class ChatTemplateKwargs(TypedDict, total=False):
         Number of frames to sample uniformly. If not passed, the whole video is loaded.
     video_load_backend (`str`, *optional*, defaults to `"pyav"`):
         The backend to use when loading the video which will be used only when there are videos in the conversation.
-        Can be any of ["decord", "pyav", "opencv", "torchvision"]. Defaults to "pyav".
+        Can be any of ["decord", "pyav", "opencv", "torchvision"]. Defaults to "pyav" because it is the only backend
+        that supports all types of sources to load from.
     """
 
     tokenize: Optional[bool] = False
