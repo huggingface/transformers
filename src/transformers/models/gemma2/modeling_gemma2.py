@@ -324,13 +324,8 @@ class Gemma2DecoderLayer(nn.Module):
 
 
 class Gemma2RotaryEmbedding(nn.Module):
-    def __init__(
-        self,
-        config: Gemma2Config,
-        device=None,
-    ):
+    def __init__(self, config: Gemma2Config, device=None):
         super().__init__()
-        self.rope_kwargs = {}
         # BC: "rope_type" was originally "type"
         if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
             self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
@@ -342,7 +337,7 @@ class Gemma2RotaryEmbedding(nn.Module):
         self.config = config
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, **self.rope_kwargs)
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
 
@@ -354,9 +349,7 @@ class Gemma2RotaryEmbedding(nn.Module):
         """
         seq_len = torch.max(position_ids) + 1
         if seq_len > self.max_seq_len_cached:  # growth
-            inv_freq, self.attention_scaling = self.rope_init_fn(
-                self.config, device, seq_len=seq_len, **self.rope_kwargs
-            )
+            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
             self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
             self.max_seq_len_cached = seq_len
 
@@ -555,6 +548,7 @@ class Gemma2Model(Gemma2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -640,6 +634,7 @@ class Gemma2Model(Gemma2PreTrainedModel):
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                     cache_position=cache_position,
+                    **flash_attn_kwargs,
                 )
 
             hidden_states = layer_outputs[0]
