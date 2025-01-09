@@ -609,8 +609,8 @@ _import_structure = {
     "models.mobilenet_v2": ["MobileNetV2Config"],
     "models.mobilevit": ["MobileViTConfig"],
     "models.mobilevitv2": ["MobileViTV2Config"],
-    "models.moonshine": ["MoonshineConfig"],
     "models.modernbert": ["ModernBertConfig"],
+    "models.moonshine": ["MoonshineConfig"],
     "models.moshi": [
         "MoshiConfig",
         "MoshiDepthConfig",
@@ -2899,13 +2899,6 @@ else:
             "MobileViTV2PreTrainedModel",
         ]
     )
-    _import_structure["models.moonshine"].extend(
-        [
-            "MoonshineForConditionalGeneration",
-            "MoonshineModel",
-            "MoonshinePreTrainedModel",
-        ]
-    )
     _import_structure["models.modernbert"].extend(
         [
             "ModernBertForMaskedLM",
@@ -2913,6 +2906,13 @@ else:
             "ModernBertForTokenClassification",
             "ModernBertModel",
             "ModernBertPreTrainedModel",
+        ]
+    )
+    _import_structure["models.moonshine"].extend(
+        [
+            "MoonshineForConditionalGeneration",
+            "MoonshineModel",
+            "MoonshinePreTrainedModel",
         ]
     )
     _import_structure["models.moshi"].extend(
