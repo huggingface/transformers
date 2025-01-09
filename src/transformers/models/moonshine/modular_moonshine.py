@@ -82,15 +82,11 @@ class MoonshineDecoderMLP(nn.Module):
         return hidden_states
 
 
-class MoonshineAttention(LlamaAttention):
-    def __init__(self, config: MoonshineConfig, layer_idx: int, is_causal: bool):
+class MoonshineAttention(GlmAttention):
+    def __init__(self, config: MoonshineConfig, layer_idx: int, is_causal: bool, num_attention_heads: int, num_key_value_heads: int):
+        config.update({"num_attention_heads": num_attention_heads, "num_key_value_heads": num_key_value_heads})
         super().__init__(config, layer_idx)
-        self.rotary_ndims = max(config.hidden_size // config.num_attention_heads // 2, 32)
         self.is_causal = is_causal
-        self.num_key_values_heads = config.num_key_value_heads
-
-    def _shape(self, tensor: torch.Tensor, bsz: int, seq_len: int):
-        return tensor.view(bsz, seq_len, self.config.num_key_value_heads, self.head_dim).transpose(1, 2)
 
     def forward(
         self,
@@ -104,7 +100,7 @@ class MoonshineAttention(LlamaAttention):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len = hidden_states.shape[:-1]
 
-        query_states = self._shape(self.q_proj(hidden_states), bsz, q_len)
+        query_states = self.q_proj(hidden_states).view(bsz, q_len, self.config.num_key_value_heads, self.head_dim).transpose(1, 2)
 
         is_cross_attention = key_value_states is not None
         if past_key_value is not None:
@@ -122,8 +118,8 @@ class MoonshineAttention(LlamaAttention):
             key_states = past_key_value.key_cache[self.layer_idx]
             value_states = past_key_value.value_cache[self.layer_idx]
         else:
-            key_states = self._shape(self.k_proj(current_states), bsz, -1)
-            value_states = self._shape(self.v_proj(current_states), bsz, -1)
+            key_states = self.k_proj(current_states).view(bsz, -1, self.config.num_key_value_heads, self.head_dim).transpose(1, 2)
+            value_states = self.v_proj(current_states).view(bsz, -1, self.config.num_key_value_heads, self.head_dim).transpose(1, 2)
             if is_cross_attention and past_key_value is not None:
                 key_states, value_states = past_key_value.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
@@ -131,33 +127,11 @@ class MoonshineAttention(LlamaAttention):
 
         if not is_cross_attention:
             cos, sin = position_embeddings
-
-            # Partial rotary embedding
-            query_rot, query_pass = (
-                query_states[..., : self.rotary_ndims],
-                query_states[..., self.rotary_ndims :],
-            )
-            key_rot, key_pass = (
-                key_states[..., : self.rotary_ndims],
-                key_states[..., self.rotary_ndims :],
-            )
-            # [batch_size, seq_length, num_heads, head_dim // config.partial_rotary_factor]
-            query_rot, key_rot = apply_rotary_pos_emb(query_rot, key_rot, cos, sin)
-
-            # [batch_size, seq_length, num_heads, head_dim]
-            query_states = torch.cat((query_rot, query_pass), dim=-1)
-            key_states = torch.cat((key_rot, key_pass), dim=-1)
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
             if past_key_value is not None:
-                cache_kwargs = {
-                    "sin": sin,
-                    "cos": cos,
-                    "partial_rotation_size": self.rotary_ndims,
-                    "cache_position": cache_position,
-                }
-                key_states, value_states = past_key_value.update(
-                    key_states, value_states, self.layer_idx, cache_kwargs
-                )
+                cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+                key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
