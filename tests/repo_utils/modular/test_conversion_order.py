@@ -2,10 +2,12 @@ import os
 import sys
 import unittest
 
+
 ROOT_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 sys.path.append(os.path.join(ROOT_DIR, "utils"))
 
 import create_dependency_mapping  # noqa: E402
+
 
 # This is equivalent to `all` in the current library state (as of 09/01/2025)
 MODEL_ROOT = os.path.join("src", "transformers", "models")
@@ -44,7 +46,6 @@ def appear_after(model1: str, model2: str, priority_list: list[str]) -> bool:
 
 
 class ConversionOrderTest(unittest.TestCase):
-
     def test_conversion_order(self):
         # Find the order
         priority_list = create_dependency_mapping.find_priority_list(FILES_TO_PARSE)
