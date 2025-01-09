@@ -122,7 +122,7 @@ if is_torch_available():
     from torch import nn
 
     from transformers import MODEL_MAPPING, AdaptiveEmbedding
-    from transformers.cache_utils import DynamicCache
+    from transformers.cache_utils import Cache, DynamicCache
     from transformers.modeling_utils import load_state_dict, no_init_weights
     from transformers.pytorch_utils import id_tensor_storage
 
@@ -1150,7 +1150,9 @@ class ModelTesterMixin:
                             # example_kwarg_inputs was introduced in torch==2.0, but it is fine here since SDPA has a requirement on torch>=2.1.
                             traced_model = torch.jit.trace(model, example_kwarg_inputs=trace_input)
                         else:
-                            model(main_input)
+                            outputs = model(main_input)
+                            if any(isinstance(x, Cache) for x in outputs):
+                                continue
                             traced_model = torch.jit.trace(model, (main_input,))
                 except RuntimeError:
                     self.fail("Couldn't trace module.")
