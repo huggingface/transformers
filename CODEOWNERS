@@ -33,14 +33,14 @@ trainer.py @muellerzr @SunMarc
 /src/transformers/models/barthez/*_modeling* @ArthurZucker
 /src/transformers/models/bartpho/*_modeling* @ArthurZucker
 /src/transformers/models/bert/*_modeling* @ArthurZucker
-/src/transformers/models/bert-generation/*_modeling* @ArthurZucker
-/src/transformers/models/bert-japanese/*_modeling* @ArthurZucker
+/src/transformers/models/bert_generation/*_modeling* @ArthurZucker
+/src/transformers/models/bert_japanese/*_modeling* @ArthurZucker
 /src/transformers/models/bertweet/*_modeling* @ArthurZucker
 /src/transformers/models/big_bird/*_modeling* @ArthurZucker
 /src/transformers/models/bigbird_pegasus/*_modeling* @ArthurZucker
 /src/transformers/models/biogpt/*_modeling* @ArthurZucker
 /src/transformers/models/blenderbot/*_modeling* @ArthurZucker
-/src/transformers/models/blenderbot-small/*_modeling* @ArthurZucker
+/src/transformers/models/blenderbot_small/*_modeling* @ArthurZucker
 /src/transformers/models/bloom/*_modeling* @ArthurZucker
 /src/transformers/models/bort/*_modeling* @ArthurZucker
 /src/transformers/models/byt5/*_modeling* @ArthurZucker
@@ -56,13 +56,13 @@ trainer.py @muellerzr @SunMarc
 /src/transformers/models/ctrl/*_modeling* @ArthurZucker
 /src/transformers/models/dbrx/*_modeling* @ArthurZucker
 /src/transformers/models/deberta/*_modeling* @ArthurZucker
-/src/transformers/models/deberta-v2/*_modeling* @ArthurZucker
+/src/transformers/models/deberta_v2/*_modeling* @ArthurZucker
 /src/transformers/models/dialogpt/*_modeling* @ArthurZucker
 /src/transformers/models/diffllama/*_modeling* @ArthurZucker
 /src/transformers/models/distilbert/*_modeling* @ArthurZucker
 /src/transformers/models/dpr/*_modeling* @ArthurZucker
 /src/transformers/models/electra/*_modeling* @ArthurZucker
-/src/transformers/models/encoder-decoder/*_modeling* @ArthurZucker
+/src/transformers/models/encoder_decoder/*_modeling* @ArthurZucker
 /src/transformers/models/ernie/*_modeling* @ArthurZucker
 /src/transformers/models/ernie_m/*_modeling* @ArthurZucker
 /src/transformers/models/esm/*_modeling* @ArthurZucker
@@ -70,8 +70,8 @@ trainer.py @muellerzr @SunMarc
 /src/transformers/models/falcon3/*_modeling* @ArthurZucker
 /src/transformers/models/falcon_mamba/*_modeling* @ArthurZucker
 /src/transformers/models/fastspeech2_conformer/*_modeling* @ArthurZucker
-/src/transformers/models/flan-t5/*_modeling* @ArthurZucker
-/src/transformers/models/flan-ul2/*_modeling* @ArthurZucker
+/src/transformers/models/flan_t5/*_modeling* @ArthurZucker
+/src/transformers/models/flan_ul2/*_modeling* @ArthurZucker
 /src/transformers/models/flaubert/*_modeling* @ArthurZucker
 /src/transformers/models/fnet/*_modeling* @ArthurZucker
 /src/transformers/models/fsmt/*_modeling* @ArthurZucker
@@ -80,15 +80,15 @@ trainer.py @muellerzr @SunMarc
 /src/transformers/models/gemma/*_modeling* @ArthurZucker
 /src/transformers/models/gemma2/*_modeling* @ArthurZucker
 /src/transformers/models/glm/*_modeling* @ArthurZucker
-/src/transformers/models/openai-gpt/*_modeling* @ArthurZucker
+/src/transformers/models/openai_gpt/*_modeling* @ArthurZucker
 /src/transformers/models/gpt_neo/*_modeling* @ArthurZucker
 /src/transformers/models/gpt_neox/*_modeling* @ArthurZucker
 /src/transformers/models/gpt_neox_japanese/*_modeling* @ArthurZucker
 /src/transformers/models/gptj/*_modeling* @ArthurZucker
 /src/transformers/models/gpt2/*_modeling* @ArthurZucker
 /src/transformers/models/gpt_bigcode/*_modeling* @ArthurZucker
-/src/transformers/models/gptsan-japanese/*_modeling* @ArthurZucker
-/src/transformers/models/gpt-sw3/*_modeling* @ArthurZucker
+/src/transformers/models/gptsan_japanese/*_modeling* @ArthurZucker
+/src/transformers/models/gpt_sw3/*_modeling* @ArthurZucker
 /src/transformers/models/granite/*_modeling* @ArthurZucker
 /src/transformers/models/granitemoe/*_modeling* @ArthurZucker
 /src/transformers/models/herbert/*_modeling* @ArthurZucker
@@ -104,14 +104,14 @@ trainer.py @muellerzr @SunMarc
 /src/transformers/models/longt5/*_modeling* @ArthurZucker
 /src/transformers/models/luke/*_modeling* @ArthurZucker
 /src/transformers/models/m2m_100/*_modeling* @ArthurZucker
-/src/transformers/models/madlad-400/*_modeling* @ArthurZucker
+/src/transformers/models/madlad_400/*_modeling* @ArthurZucker
 /src/transformers/models/mamba/*_modeling* @ArthurZucker
 /src/transformers/models/mamba2/*_modeling* @ArthurZucker
 /src/transformers/models/marian/*_modeling* @ArthurZucker
 /src/transformers/models/markuplm/*_modeling* @ArthurZucker
 /src/transformers/models/mbart/*_modeling* @ArthurZucker
 /src/transformers/models/mega/*_modeling* @ArthurZucker
-/src/transformers/models/megatron-bert/*_modeling* @ArthurZucker
+/src/transformers/models/megatron_bert/*_modeling* @ArthurZucker
 /src/transformers/models/megatron_gpt2/*_modeling* @ArthurZucker
 /src/transformers/models/mistral/*_modeling* @ArthurZucker
 /src/transformers/models/mixtral/*_modeling* @ArthurZucker
@@ -127,12 +127,12 @@ trainer.py @muellerzr @SunMarc
 /src/transformers/models/nemotron/*_modeling* @ArthurZucker
 /src/transformers/models/nezha/*_modeling* @ArthurZucker
 /src/transformers/models/nllb/*_modeling* @ArthurZucker
-/src/transformers/models/nllb-moe/*_modeling* @ArthurZucker
+/src/transformers/models/nllb_moe/*_modeling* @ArthurZucker
 /src/transformers/models/nystromformer/*_modeling* @ArthurZucker
 /src/transformers/models/olmo/*_modeling* @ArthurZucker
 /src/transformers/models/olmo2/*_modeling* @ArthurZucker
 /src/transformers/models/olmoe/*_modeling* @ArthurZucker
-/src/transformers/models/open-llama/*_modeling* @ArthurZucker
+/src/transformers/models/open_llama/*_modeling* @ArthurZucker
 /src/transformers/models/opt/*_modeling* @ArthurZucker
 /src/transformers/models/pegasus/*_modeling* @ArthurZucker
 /src/transformers/models/pegasus_x/*_modeling* @ArthurZucker
@@ -153,7 +153,7 @@ trainer.py @muellerzr @SunMarc
 /src/transformers/models/rembert/*_modeling* @ArthurZucker
 /src/transformers/models/retribert/*_modeling* @ArthurZucker
 /src/transformers/models/roberta/*_modeling* @ArthurZucker
-/src/transformers/models/roberta-prelayernorm/*_modeling* @ArthurZucker
+/src/transformers/models/roberta_prelayernorm/*_modeling* @ArthurZucker
 /src/transformers/models/roc_bert/*_modeling* @ArthurZucker
 /src/transformers/models/roformer/*_modeling* @ArthurZucker
 /src/transformers/models/rwkv/*_modeling* @ArthurZucker
@@ -165,16 +165,16 @@ trainer.py @muellerzr @SunMarc
 /src/transformers/models/t5/*_modeling* @ArthurZucker
 /src/transformers/models/t5v1.1/*_modeling* @ArthurZucker
 /src/transformers/models/tapex/*_modeling* @ArthurZucker
-/src/transformers/models/transfo-xl/*_modeling* @ArthurZucker
+/src/transformers/models/transfo_xl/*_modeling* @ArthurZucker
 /src/transformers/models/ul2/*_modeling* @ArthurZucker
 /src/transformers/models/umt5/*_modeling* @ArthurZucker
 /src/transformers/models/xmod/*_modeling* @ArthurZucker
 /src/transformers/models/xglm/*_modeling* @ArthurZucker
 /src/transformers/models/xlm/*_modeling* @ArthurZucker
-/src/transformers/models/xlm-prophetnet/*_modeling* @ArthurZucker
-/src/transformers/models/xlm-roberta/*_modeling* @ArthurZucker
-/src/transformers/models/xlm-roberta-xl/*_modeling* @ArthurZucker
-/src/transformers/models/xlm-v/*_modeling* @ArthurZucker
+/src/transformers/models/xlm_prophetnet/*_modeling* @ArthurZucker
+/src/transformers/models/xlm_roberta/*_modeling* @ArthurZucker
+/src/transformers/models/xlm_roberta_xl/*_modeling* @ArthurZucker
+/src/transformers/models/xlm_v/*_modeling* @ArthurZucker
 /src/transformers/models/xlnet/*_modeling* @ArthurZucker
 /src/transformers/models/yoso/*_modeling* @ArthurZucker
 /src/transformers/models/zamba/*_modeling* @ArthurZucker
@@ -225,7 +225,7 @@ trainer.py @muellerzr @SunMarc
 /src/transformers/models/swin/*_modeling* @amyeroberts @qubvel
 /src/transformers/models/swinv2/*_modeling* @amyeroberts @qubvel
 /src/transformers/models/swin2sr/*_modeling* @amyeroberts @qubvel
-/src/transformers/models/table-transformer/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/table_transformer/*_modeling* @amyeroberts @qubvel
 /src/transformers/models/textnet/*_modeling* @amyeroberts @qubvel
 /src/transformers/models/timm_wrapper/*_modeling* @amyeroberts @qubvel
 /src/transformers/models/upernet/*_modeling* @amyeroberts @qubvel
@@ -241,7 +241,7 @@ trainer.py @muellerzr @SunMarc
 /src/transformers/models/zoedepth/*_modeling* @amyeroberts @qubvel
 
 # Audio models
-/src/transformers/models/audio-spectrogram-transformer/*_modeling* @eustlb
+/src/transformers/models/audio_spectrogram_transformer/*_modeling* @eustlb
 /src/transformers/models/bark/*_modeling* @eustlb
 /src/transformers/models/clap/*_modeling* @eustlb
 /src/transformers/models/dac/*_modeling* @eustlb
@@ -257,17 +257,17 @@ trainer.py @muellerzr @SunMarc
 /src/transformers/models/seamless_m4t/*_modeling* @eustlb
 /src/transformers/models/seamless_m4t_v2/*_modeling* @eustlb
 /src/transformers/models/sew/*_modeling* @eustlb
-/src/transformers/models/sew-d/*_modeling* @eustlb
+/src/transformers/models/sew_d/*_modeling* @eustlb
 /src/transformers/models/speech_to_text/*_modeling* @eustlb
 /src/transformers/models/speech_to_text_2/*_modeling* @eustlb
 /src/transformers/models/speecht5/*_modeling* @eustlb
 /src/transformers/models/unispeech/*_modeling* @eustlb
-/src/transformers/models/unispeech-sat/*_modeling* @eustlb
+/src/transformers/models/unispeech_sat/*_modeling* @eustlb
 /src/transformers/models/univnet/*_modeling* @eustlb
 /src/transformers/models/vits/*_modeling* @eustlb
 /src/transformers/models/wav2vec2/*_modeling* @eustlb
-/src/transformers/models/wav2vec2-bert/*_modeling* @eustlb
-/src/transformers/models/wav2vec2-conformer/*_modeling* @eustlb
+/src/transformers/models/wav2vec2_bert/*_modeling* @eustlb
+/src/transformers/models/wav2vec2_conformer/*_modeling* @eustlb
 /src/transformers/models/wav2vec2_phoneme/*_modeling* @eustlb
 /src/transformers/models/wavlm/*_modeling* @eustlb
 /src/transformers/models/whisper/*_modeling* @eustlb
@@ -284,7 +284,7 @@ trainer.py @muellerzr @SunMarc
 /src/transformers/models/altclip/*_modeling* @zucchini-nlp
 /src/transformers/models/aria/*_modeling* @zucchini-nlp
 /src/transformers/models/blip/*_modeling* @zucchini-nlp
-/src/transformers/models/blip-2/*_modeling* @zucchini-nlp
+/src/transformers/models/blip_2/*_modeling* @zucchini-nlp
 /src/transformers/models/bridgetower/*_modeling* @zucchini-nlp
 /src/transformers/models/bros/*_modeling* @zucchini-nlp
 /src/transformers/models/chameleon/*_modeling* @zucchini-nlp
@@ -298,18 +298,18 @@ trainer.py @muellerzr @SunMarc
 /src/transformers/models/donut/*_modeling* @zucchini-nlp
 /src/transformers/models/flava/*_modeling* @zucchini-nlp
 /src/transformers/models/git/*_modeling* @zucchini-nlp
-/src/transformers/models/grounding-dino/*_modeling* @zucchini-nlp
+/src/transformers/models/grounding_dino/*_modeling* @zucchini-nlp
 /src/transformers/models/groupvit/*_modeling* @zucchini-nlp
 /src/transformers/models/idefics/*_modeling* @zucchini-nlp
 /src/transformers/models/idefics2/*_modeling* @zucchini-nlp
 /src/transformers/models/idefics3/*_modeling* @zucchini-nlp
 /src/transformers/models/instructblip/*_modeling* @zucchini-nlp
 /src/transformers/models/instructblipvideo/*_modeling* @zucchini-nlp
-/src/transformers/models/kosmos-2/*_modeling* @zucchini-nlp
-/src/transformers/models/layoutlm/*_modeling* @zucchini-nlp
-/src/transformers/models/layoutlmv2/*_modeling* @zucchini-nlp
-/src/transformers/models/layoutlmv3/*_modeling* @zucchini-nlp
-/src/transformers/models/layoutxlm/*_modeling* @zucchini-nlp
+/src/transformers/models/kosmos_2/*_modeling* @zucchini-nlp
+/src/transformers/models/layoutlm/*_modeling* @NielsRogge
+/src/transformers/models/layoutlmv2/*_modeling* @NielsRogge
+/src/transformers/models/layoutlmv3/*_modeling* @NielsRogge
+/src/transformers/models/layoutxlm/*_modeling* @NielsRogge
 /src/transformers/models/lilt/*_modeling* @zucchini-nlp
 /src/transformers/models/llava/*_modeling* @zucchini-nlp
 /src/transformers/models/llava_next/*_modeling* @zucchini-nlp
@@ -317,10 +317,10 @@ trainer.py @muellerzr @SunMarc
 /src/transformers/models/llava_onevision/*_modeling* @zucchini-nlp
 /src/transformers/models/lxmert/*_modeling* @zucchini-nlp
 /src/transformers/models/matcha/*_modeling* @zucchini-nlp
-/src/transformers/models/mgp-str/*_modeling* @zucchini-nlp
+/src/transformers/models/mgp_str/*_modeling* @zucchini-nlp
 /src/transformers/models/mllama/*_modeling* @zucchini-nlp
 /src/transformers/models/nougat/*_modeling* @zucchini-nlp
-/src/transformers/models/omdet-turbo/*_modeling* @zucchini-nlp
+/src/transformers/models/omdet_turbo/*_modeling* @zucchini-nlp
 /src/transformers/models/oneformer/*_modeling* @zucchini-nlp
 /src/transformers/models/owlvit/*_modeling* @zucchini-nlp
 /src/transformers/models/owlv2/*_modeling* @zucchini-nlp
@@ -332,7 +332,7 @@ trainer.py @muellerzr @SunMarc
 /src/transformers/models/qwen2_vl/*_modeling* @zucchini-nlp
 /src/transformers/models/sam/*_modeling* @zucchini-nlp
 /src/transformers/models/siglip/*_modeling* @zucchini-nlp
-/src/transformers/models/speech-encoder-decoder/*_modeling* @zucchini-nlp
+/src/transformers/models/speech_encoder_decoder/*_modeling* @zucchini-nlp
 /src/transformers/models/tapas/*_modeling* @zucchini-nlp
 /src/transformers/models/trocr/*_modeling* @zucchini-nlp
 /src/transformers/models/tvlt/*_modeling* @zucchini-nlp
@@ -341,8 +341,8 @@ trainer.py @muellerzr @SunMarc
 /src/transformers/models/video_llava/*_modeling* @zucchini-nlp
 /src/transformers/models/vilt/*_modeling* @zucchini-nlp
 /src/transformers/models/vipllava/*_modeling* @zucchini-nlp
-/src/transformers/models/vision-encoder-decoder/*_modeling* @zucchini-nlp
-/src/transformers/models/vision-text-dual-encoder/*_modeling* @zucchini-nlp
+/src/transformers/models/vision_encoder_decoder/*_modeling* @Rocketknight1
+/src/transformers/models/vision_text_dual_encoder/*_modeling* @Rocketknight1
 /src/transformers/models/visual_bert/*_modeling* @zucchini-nlp
 /src/transformers/models/xclip/*_modeling* @zucchini-nlp
 
