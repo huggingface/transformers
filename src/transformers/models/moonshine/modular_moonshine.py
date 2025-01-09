@@ -70,24 +70,14 @@ class MoonshineDecoderMLP(nn.Module):
     def __init__(self, config, hidden_act):
         super().__init__()
         self.config = config
-        self.hidden_act = hidden_act
         self.activation_fn = ACT2FN[hidden_act]
-        if hidden_act == "gelu":
-            self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-            self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
-        elif hidden_act == "silu":
-            self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size * 2)
-            self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
-        else:
-            raise ValueError(f"Unsupported activation function: {hidden_act}, please use 'gelu' or 'silu'")
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size * 2)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.fc1(hidden_states)
-        if self.hidden_act == "silu":
-            hidden_states, gate = hidden_states.chunk(2, dim=-1)
-            hidden_states = self.activation_fn(gate) * hidden_states
-        else:
-            hidden_states = self.activation_fn(hidden_states)
+        hidden_states, gate = hidden_states.chunk(2, dim=-1)
+        hidden_states = self.activation_fn(gate) * hidden_states
         hidden_states = self.fc2(hidden_states)
         return hidden_states
 
