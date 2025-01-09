@@ -14,11 +14,11 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# moonshine
+# Moonshine
 
 ## Overview
 
-The moonshine model was proposed in [Moonshine: Speech Recognition for Live Transcription and Voice Commands
+The Moonshine model was proposed in [Moonshine: Speech Recognition for Live Transcription and Voice Commands
 ](https://arxiv.org/abs/2410.15608) by Nat Jeffries, Evan King, Manjunath Kudlur, Guy Nicholson, James Wang, Pete Warden.
 
 The abstract from the paper is the following:
