@@ -327,10 +327,10 @@ trainer.py @muellerzr @SunMarc
 /src/transformers/models/paligemma/*_modeling* @zucchini-nlp @molbap
 /src/transformers/models/perceiver/*_modeling* @zucchini-nlp
 /src/transformers/models/pix2struct/*_modeling* @zucchini-nlp
-/src/transformers/models/pixtral/*_modeling* @zucchini-nlp
-/src/transformers/models/qwen2_audio/*_modeling* @zucchini-nlp
-/src/transformers/models/qwen2_vl/*_modeling* @zucchini-nlp
-/src/transformers/models/sam/*_modeling* @zucchini-nlp
+/src/transformers/models/pixtral/*_modeling* @zucchini-nlp @ArthurZucker 
+/src/transformers/models/qwen2_audio/*_modeling* @zucchini-nlp @ArthurZucker 
+/src/transformers/models/qwen2_vl/*_modeling* @zucchini-nlp @ArthurZucker 
+/src/transformers/models/sam/*_modeling* @zucchini-nlp @ArthurZucker 
 /src/transformers/models/siglip/*_modeling* @zucchini-nlp
 /src/transformers/models/speech_encoder_decoder/*_modeling* @zucchini-nlp
 /src/transformers/models/tapas/*_modeling* @zucchini-nlp
