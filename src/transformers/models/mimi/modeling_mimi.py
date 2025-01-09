@@ -1059,7 +1059,7 @@ class MimiTransformerModel(nn.Module):
             attentions=all_self_attns,
         )
 
-    # Copied from transformers.models.phi3.modeling_phi3.Phi3Model._update_causal_mask
+    # Copied from transformers.models.phi3.modeling_phi3.Phi3Model._update_causal_mask with Phi3->Mimi
     def _update_causal_mask(
         self,
         attention_mask: torch.Tensor,
@@ -1074,7 +1074,7 @@ class MimiTransformerModel(nn.Module):
                 if is_padding_right:
                     raise ValueError(
                         "You are attempting to perform batched generation with padding_side='right'"
-                        " this may lead to unexpected behaviour for Flash Attention version of Phi3. Make sure to "
+                        " this may lead to unexpected behaviour for Flash Attention version of Mimi. Make sure to "
                         " call `tokenizer.padding_side  = 'left'` before tokenizing the input. "
                     )
             if attention_mask is not None and 0.0 in attention_mask:

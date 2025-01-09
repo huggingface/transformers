@@ -1288,7 +1288,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
             attentions=all_self_attns,
         )
 
-    # Copied from transformers.models.phi3.modeling_phi3.Phi3Model._update_causal_mask
+    # Copied from transformers.models.phi3.modeling_phi3.Phi3Model._update_causal_mask with Phi3->Moshi
     def _update_causal_mask(
         self,
         attention_mask: torch.Tensor,
@@ -1303,7 +1303,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
                 if is_padding_right:
                     raise ValueError(
                         "You are attempting to perform batched generation with padding_side='right'"
-                        " this may lead to unexpected behaviour for Flash Attention version of Phi3. Make sure to "
+                        " this may lead to unexpected behaviour for Flash Attention version of Moshi. Make sure to "
                         " call `tokenizer.padding_side  = 'left'` before tokenizing the input. "
                     )
             if attention_mask is not None and 0.0 in attention_mask:
@@ -1600,7 +1600,7 @@ class MoshiModel(MoshiPreTrainedModel):
             attentions=all_self_attns,
         )
 
-    # Copied from transformers.models.phi3.modeling_phi3.Phi3Model._update_causal_mask
+    # Copied from transformers.models.phi3.modeling_phi3.Phi3Model._update_causal_mask with Phi3->Moshi
     def _update_causal_mask(
         self,
         attention_mask: torch.Tensor,
@@ -1615,7 +1615,7 @@ class MoshiModel(MoshiPreTrainedModel):
                 if is_padding_right:
                     raise ValueError(
                         "You are attempting to perform batched generation with padding_side='right'"
-                        " this may lead to unexpected behaviour for Flash Attention version of Phi3. Make sure to "
+                        " this may lead to unexpected behaviour for Flash Attention version of Moshi. Make sure to "
                         " call `tokenizer.padding_side  = 'left'` before tokenizing the input. "
                     )
             if attention_mask is not None and 0.0 in attention_mask:
