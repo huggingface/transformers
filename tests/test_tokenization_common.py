@@ -1265,8 +1265,9 @@ class TokenizerTesterMixin:
                     self.skipTest(reason="No fast tokenizer defined")
 
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name)
-                if not tokenizer_r.pad_token or tokenizer.pad_token_id < 0:
-                    self.skipTest(reason="This tokenizer has no padding token set, or pad_token_id < 0")
+                self._check_no_pad_token_padding(tokenizer_r, conversations)
+
+                tokenizer_r.padding_side = "right"
 
                 # check batched
                 output = tokenizer_r.apply_chat_template(
@@ -1358,7 +1359,7 @@ class TokenizerTesterMixin:
                 )
 
                 self.assertEqual(type(output_pt["assistant_masks"]), torch.Tensor)
-                self.assertEqual(output_pt["assistant_masks"].shape, output_pt["attention_mask"].shape)
+                self.assertEqual(output_pt["assistant_masks"].shape, output_pt["input_ids"].shape)
 
                 chat_string = tokenizer_r.apply_chat_template(
                     conversations[0], tokenize=False, chat_template=dummy_template
