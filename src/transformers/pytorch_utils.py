@@ -362,7 +362,9 @@ def torchdynamo_disable(fn=None, recursive=True):
     if is_torch_greater_or_equal_than_2_1:
         # use public API available since 2.1
         import torch.compiler
+
         return torch.compiler.disable(fn, recursive)
     else:
         import torch._dynamo
+
         return torch._dynamo.disable(fn, recursive)
