@@ -63,11 +63,7 @@ _CONFIG_FOR_DOC = "StableLmConfig"
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->StableLm
 class StableLmRotaryEmbedding(nn.Module):
-    def __init__(
-        self,
-        config: StableLmConfig,
-        device=None,
-    ):
+    def __init__(self, config: StableLmConfig, device=None):
         super().__init__()
         self.rope_kwargs = {}
         # BC: "rope_type" was originally "type"
@@ -938,7 +934,7 @@ class StableLmModel(StableLmPreTrainedModel):
         output_attentions: bool,
     ):
         if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and 0.0 in attention_mask:
+            if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
 
@@ -1380,3 +1376,12 @@ class StableLmForTokenClassification(StableLmPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "StableLmForCausalLM",
+    "StableLmModel",
+    "StableLmPreTrainedModel",
+    "StableLmForSequenceClassification",
+    "StableLmForTokenClassification",
+]

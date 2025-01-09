@@ -274,11 +274,7 @@ class OlmoDecoderLayer(nn.Module):
 
 
 class OlmoRotaryEmbedding(nn.Module):
-    def __init__(
-        self,
-        config: OlmoConfig,
-        device=None,
-    ):
+    def __init__(self, config: OlmoConfig, device=None):
         super().__init__()
         self.rope_kwargs = {}
         # BC: "rope_type" was originally "type"
@@ -608,7 +604,7 @@ class OlmoModel(OlmoPreTrainedModel):
         output_attentions: bool,
     ):
         if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and 0.0 in attention_mask:
+            if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
 

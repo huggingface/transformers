@@ -324,11 +324,7 @@ class Gemma2DecoderLayer(nn.Module):
 
 
 class Gemma2RotaryEmbedding(nn.Module):
-    def __init__(
-        self,
-        config: Gemma2Config,
-        device=None,
-    ):
+    def __init__(self, config: Gemma2Config, device=None):
         super().__init__()
         self.rope_kwargs = {}
         # BC: "rope_type" was originally "type"
