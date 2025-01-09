@@ -168,9 +168,9 @@ class MoonshineEncoderLayer(LlamaDecoderLayer):
     def __init__(self, config: MoonshineConfig, layer_idx: int):
         super().__init__(config, layer_idx)
 
-        self.self_attn = MoonshineAttention(config=config, layer_idx=layer_idx, is_causal=False)
+        self.self_attn = MoonshineAttention(config=config, layer_idx=layer_idx, is_causal=False, num_attention_heads=config.encoder_num_attention_heads, num_key_value_heads=config.encoder_num_key_value_heads)
 
-        self.mlp = MoonshineMLP(config, config.encoder_hidden_act)
+        self.mlp = MoonshineEncoderMLP(config, config.encoder_hidden_act)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
 
@@ -180,10 +180,10 @@ class MoonshineDecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = MoonshineAttention(config=config, layer_idx=layer_idx, is_causal=True)
-        self.encoder_attn = MoonshineAttention(config=config, layer_idx=layer_idx, is_causal=False)
+        self.self_attn = MoonshineAttention(config=config, layer_idx=layer_idx, is_causal=True, num_attention_heads=config.encoder_num_attention_heads, num_key_value_heads=config.encoder_num_key_value_heads)
+        self.encoder_attn = MoonshineAttention(config=config, layer_idx=layer_idx, is_causal=False, num_attention_heads=config.encoder_num_attention_heads, num_key_value_heads=config.encoder_num_key_value_heads)
 
-        self.mlp = MoonshineMLP(config, config.decoder_hidden_act)
+        self.mlp = MoonshineDecoderMLP(config, config.decoder_hidden_act)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
         self.final_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
