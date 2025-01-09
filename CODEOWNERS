@@ -3,7 +3,7 @@
 **.md @stevhliu
 docs/ @stevhliu
 /benchmark/ @McPatate
-/docker @ydshieh @ArthurZucker
+/docker/ @ydshieh @ArthurZucker
 
 # More high-level globs catch cases when specific rules later don't apply
 /src/transformers/models/*/*processing* @molbap @yonigozlan @qubvel
@@ -13,16 +13,17 @@ docs/ @stevhliu
 
 # Owners of subsections of the library
 /src/transformers/generation/ @gante
-/src/transformers/pipeline @Rocketknight1 @yonigozlan
-/src/transformers/integrations @SunMarc @MekkCyber @muellerzr
-/src/transformers/quantizers @SunMarc @MekkCyber
-/src/transformers/tests @ydshieh
-/src/transformers/models/auto @ArthurZucker
-/src/transformers/utils @ArthurZucker @Rocketknight1
+/src/transformers/pipeline/ @Rocketknight1 @yonigozlan
+/src/transformers/integrations/ @SunMarc @MekkCyber @muellerzr
+/src/transformers/quantizers/ @SunMarc @MekkCyber
+/src/transformers/tests/ @ydshieh
+/src/transformers/tests/generation/ @gante
+/src/transformers/models/auto/ @ArthurZucker
+/src/transformers/utils/ @ArthurZucker @Rocketknight1
+/src/transformers/loss/ @ArthurZucker
+/src/transformers/onnx/ @michaelbenayoun
 
 # Specific files come after the sections/globs, so they take priority
-/src/transformers/loss @ArthurZucker
-/src/transformers/onnx @michaelbenayoun
 /.circleci/config.yml @ArthurZucker @ydshieh
 /utils/tests_fetcher.py @ydshieh
 trainer.py @muellerzr @SunMarc
