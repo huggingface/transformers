@@ -221,6 +221,8 @@ class ModelTesterMixin:
     test_mismatched_shapes = True
     test_missing_keys = True
     test_model_parallel = False
+    # Used in `check_training_gradient_checkpointing` to NOT check all params having gradient (e.g. for some MOE models)
+    test_all_params_have_gradient = True
     is_encoder_decoder = False
     has_attentions = True
     _is_composite = False
@@ -816,7 +818,10 @@ class ModelTesterMixin:
                     ),
                 )
 
+        set_model_tester_for_less_flaky_test(self)
+
         config, batched_input = self.model_tester.prepare_config_and_inputs_for_common()
+        set_config_for_less_flaky_test(config)
         equivalence = get_tensor_equivalence_function(batched_input)
 
         for model_class in self.all_model_classes:
@@ -827,6 +832,7 @@ class ModelTesterMixin:
                 config, batched_input = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
             batched_input_prepared = self._prepare_for_class(batched_input, model_class)
             model = model_class(config).to(torch_device).eval()
+            set_model_for_less_flaky_test(model)
 
             batch_size = self.model_tester.batch_size
             single_row_input = {}
@@ -891,9 +897,10 @@ class ModelTesterMixin:
                 loss.backward()
                 optimizer.step()
 
-                for k, v in model.named_parameters():
-                    if v.requires_grad:
-                        self.assertTrue(v.grad is not None, f"{k} in {model_class.__name__} has no gradient!")
+                if self.test_all_params_have_gradient:
+                    for k, v in model.named_parameters():
+                        if v.requires_grad:
+                            self.assertTrue(v.grad is not None, f"{k} in {model_class.__name__} has no gradient!")
 
     def test_training(self):
         if not self.model_tester.is_training:
@@ -3061,6 +3068,7 @@ class ModelTesterMixin:
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
+    @require_torch_gpu
     @require_torch_multi_gpu
     def test_model_parallelization(self):
         if not self.test_model_parallel:
@@ -3123,6 +3131,7 @@ class ModelTesterMixin:
             gc.collect()
             torch.cuda.empty_cache()
 
+    @require_torch_gpu
     @require_torch_multi_gpu
     def test_model_parallel_equal_results(self):
         if not self.test_model_parallel:
@@ -4255,7 +4264,7 @@ class ModelTesterMixin:
                     if isinstance(inp, torch.Tensor) and inp.dtype in [torch.float32, torch.float16]:
                         inputs_dict[name] = inp.to(torch.float16)
 
-                with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
+                with sdpa_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
                     _ = model(**inputs_dict)
 
     @require_non_xpu
@@ -4347,11 +4356,7 @@ class ModelTesterMixin:
                 model_sdpa = model_sdpa.eval()
 
                 with torch.no_grad():
-                    with torch.backends.cuda.sdp_kernel(
-                        enable_flash=False,
-                        enable_math=True,
-                        enable_mem_efficient=False,
-                    ):
+                    with sdpa_kernel(enable_flash=False, enable_math=True, enable_mem_efficient=False):
                         res_eager = model_eager(**inputs_dict, return_dict=False)[0]
                         res_sdpa = model_sdpa(**inputs_dict, return_dict=False)[0]
 
