@@ -4160,7 +4160,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # inside the Layers to the Model
             for buffer in {name for name, _ in model.named_buffers()}:
                 rotary_module = None
-                if "rotary_emb.inv_freq" in buffer and not "layer" in buffer:
+                if "rotary_emb.inv_freq" in buffer and "layer" not in buffer:
                     rotary_module = buffer.replace(".inv_freq", "")
                     break
             if rotary_module is not None and rotary_module not in device_map:
