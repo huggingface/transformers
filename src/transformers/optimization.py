@@ -391,7 +391,6 @@ def _get_wsd_scheduler_lambda(
     current_step: int,
     *,
     num_warmup_steps: int,
-    num_training_steps: int,
     num_stable_steps: int,
     num_decay_steps: int,
     warmup_type: str,
@@ -415,14 +414,10 @@ def _get_wsd_scheduler_lambda(
         factor = factor * (1.0 - min_lr_ratio) + min_lr_ratio
         return max(0.0, factor)
 
-    stable_stage = (
-        num_warmup_steps + num_stable_steps if num_training_steps is None else num_training_steps - num_decay_steps
-    )
-
-    if current_step < stable_stage:
+    if current_step < num_warmup_steps + num_stable_steps:
         return 1.0
 
-    progress = float(current_step - stable_stage) / float(max(1, num_decay_steps))
+    progress = float(current_step - num_warmup_steps - num_stable_steps) / float(max(1, num_decay_steps))
     if decay_type == "linear":
         factor = 1.0 - progress
     elif decay_type == "cosine":
@@ -482,12 +477,14 @@ def get_wsd_schedule(
         raise ValueError("Either num_training_steps or num_stable_steps must be specified.")
 
     if num_training_steps is not None and num_stable_steps is not None:
-        warnings.warn("Both num_training_steps and num_stable_steps are specified. num_training_steps will be used.")
+        warnings.warn("Both num_training_steps and num_stable_steps are specified. num_stable_steps will be used.")
+
+    if num_stable_steps is None:
+        num_stable_steps = num_training_steps - num_warmup_steps - num_decay_steps
 
     lr_lambda = partial(
         _get_wsd_scheduler_lambda,
         num_warmup_steps=num_warmup_steps,
-        num_training_steps=num_training_steps,
         num_stable_steps=num_stable_steps,
         num_decay_steps=num_decay_steps,
         warmup_type=warmup_type,
