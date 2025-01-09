@@ -29,7 +29,7 @@ The abstract from the paper is the following:
 
 Tips:
 
-- We advise users to use `padding_side="left"` when computing batched generation as it leads to more accurate results. Simply make sure to set `processor.tokenizer.padding_side = "left"` before generating.
+- We advise users to set `processor.tokenizer.padding_side = "left"` before batched generation as it leads to more accurate results.
 
 - Note that the model has been trained with a specific prompt format for chatting. Use `processor.apply_chat_template(my_conversation_dict)` to correctly format your prompts.
 
