@@ -20,6 +20,7 @@
 # limitations under the License.
 
 import math
+from contextlib import nullcontext
 from typing import Dict, Optional, Tuple, Union
 
 import torch
@@ -632,12 +633,14 @@ class ModernBertPreTrainedModel(PreTrainedModel):
     ):
         # If the user didn't specify anything, try to use flash_attention_2 if available.
         # Otherwise we fall back to the default SDPA -> Eager from the super() method.
+        # ModernBert's FA2 implementation correctly handles non-fp16/bf16 dtypes, we don't
+        # need the FA2 warning for non-fp16/bf16 dtypes so we set fp16 for the FA2 check.
         if config._attn_implementation_internal is None:
             config._attn_implementation_internal = "flash_attention_2"
             try:
                 return cls._check_and_enable_flash_attn_2(
                     config,
-                    torch_dtype=torch_dtype,
+                    torch_dtype=torch.float16,
                     device_map=device_map,
                     hard_check_only=False,
                     check_device_map=check_device_map,
@@ -647,7 +650,7 @@ class ModernBertPreTrainedModel(PreTrainedModel):
         return super()._autoset_attn_implementation(
             config,
             use_flash_attention_2=use_flash_attention_2,
-            torch_dtype=torch_dtype,
+            torch_dtype=torch.float16,
             device_map=device_map,
             check_device_map=check_device_map,
         )
@@ -668,6 +671,14 @@ class ModernBertPreTrainedModel(PreTrainedModel):
             if self.config.reference_compile:
                 logger.warning_once(
                     "Compiling the model with `torch.compile` and using a `torch.mps` device is not supported. "
+                    "Falling back to non-compiled mode."
+                )
+            self.config.reference_compile = False
+
+        if self.device.type == "cpu":
+            if self.config.reference_compile:
+                logger.warning_once(
+                    "Compiling the model with `torch.compile` and using a `torch.cpu` device is not supported. "
                     "Falling back to non-compiled mode."
                 )
             self.config.reference_compile = False
@@ -763,8 +774,8 @@ def _pad_modernbert_output(
 MODERNBERT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
+            Indices of input sequence tokens in the vocabulary. With Flash Attention 2.0, padding will be ignored
+            by default should you provide it.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
@@ -790,7 +801,7 @@ MODERNBERT_INPUTS_DOCSTRING = r"""
         sliding_window_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding or far-away tokens. In ModernBert, only every few layers
             perform global attention, while the rest perform local attention. This mask is used to avoid attending to
-            far-away tokens in the local attention layers.
+            far-away tokens in the local attention layers when not using Flash Attention.
         position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.n_positions - 1]`.
@@ -805,11 +816,11 @@ MODERNBERT_INPUTS_DOCSTRING = r"""
         cu_seqlens (`torch.Tensor` of shape `(batch + 1,)`, *optional*):
             Cumulative sequence lengths of the input sequences. Used to index the unpadded tensors.
         max_seqlen (`int`, *optional*):
-            Maximum sequence length in the batch. Used to pad the output tensors.
+            Maximum sequence length in the batch excluding padding tokens. Used to unpad input_ids and pad output tensors.
         batch_size (`int`, *optional*):
             Batch size of the input sequences. Used to pad the output tensors.
         seq_len (`int`, *optional*):
-            Sequence length of the input sequences. Used to pad the output tensors.
+            Sequence length of the input sequences including padding tokens. Used to pad the output tensors.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -1128,8 +1139,9 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
             loss = self.loss_function(logits, labels, vocab_size=self.config.vocab_size)
 
         if self.config._attn_implementation == "flash_attention_2":
-            with torch.no_grad():
+            with nullcontext() if self.config.repad_logits_with_grad or labels is None else torch.no_grad():
                 logits = _pad_modernbert_output(inputs=logits, indices=indices, batch=batch_size, seqlen=seq_len)
+
         if not return_dict:
             output = (logits,)
             return ((loss,) + output) if loss is not None else output
