@@ -221,6 +221,8 @@ class ModelTesterMixin:
     test_mismatched_shapes = True
     test_missing_keys = True
     test_model_parallel = False
+    # Used in `check_training_gradient_checkpointing` to NOT check all params having gradient (e.g. for some MOE models)
+    test_all_params_have_gradient = True
     is_encoder_decoder = False
     has_attentions = True
     _is_composite = False
@@ -895,9 +897,10 @@ class ModelTesterMixin:
                 loss.backward()
                 optimizer.step()
 
-                for k, v in model.named_parameters():
-                    if v.requires_grad:
-                        self.assertTrue(v.grad is not None, f"{k} in {model_class.__name__} has no gradient!")
+                if self.test_all_params_have_gradient:
+                    for k, v in model.named_parameters():
+                        if v.requires_grad:
+                            self.assertTrue(v.grad is not None, f"{k} in {model_class.__name__} has no gradient!")
 
     def test_training(self):
         if not self.model_tester.is_training:
