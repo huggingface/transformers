@@ -23,7 +23,7 @@ The moonshine model was proposed in [Moonshine: Speech Recognition for Live Tran
 
 The abstract from the paper is the following:
 
-This paper introduces Moonshine, a family of speech recognition models optimized for live transcription and voice command processing. Moonshine is based on an encoder-decoder transformer architecture and employs Rotary Position Embedding (RoPE) instead of traditional absolute position embeddings. The model is trained on speech segments of various lengths, but without using zero-padding, leading to greater efficiency for the encoder during inference time. When benchmarked against OpenAI's Whisper tiny-en, Moonshine Tiny demonstrates a 5x reduction in compute requirements for transcribing a 10-second speech segment while incurring no increase in word error rates across standard evaluation datasets. These results highlight Moonshine's potential for real-time and resource-constrained applications.
+*This paper introduces Moonshine, a family of speech recognition models optimized for live transcription and voice command processing. Moonshine is based on an encoder-decoder transformer architecture and employs Rotary Position Embedding (RoPE) instead of traditional absolute position embeddings. The model is trained on speech segments of various lengths, but without using zero-padding, leading to greater efficiency for the encoder during inference time. When benchmarked against OpenAI's Whisper tiny-en, Moonshine Tiny demonstrates a 5x reduction in compute requirements for transcribing a 10-second speech segment while incurring no increase in word error rates across standard evaluation datasets. These results highlight Moonshine's potential for real-time and resource-constrained applications.*
 
 Tips:
 
@@ -34,13 +34,13 @@ Tips:
 This model was contributed by [Eustache Le Bihan (eustlb)](https://huggingface.co/eustlb).
 The original code can be found [here](https://github.com/usefulsensors/moonshine).
 
+## Resources
+
+- [Automatic speech recognition task guide](../tasks/asr)
 
 ## MoonshineConfig
 
 [[autodoc]] MoonshineConfig
-
-<frameworkcontent>
-<pt>
 
 ## MoonshineModel
 
@@ -54,5 +54,3 @@ The original code can be found [here](https://github.com/usefulsensors/moonshine
     - forward
     - generate
 
-</pt>
-<tf>
