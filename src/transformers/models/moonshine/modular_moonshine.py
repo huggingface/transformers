@@ -1109,6 +1109,23 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
             encoder_attentions=outputs.encoder_attentions,
         )
 
+    def generate(self, *args, **kwargs):
+        # TODO: @eustlb do it rather with a custom logits processor
+        token_limit_factor = 6.5 / 16000.0  # Maximum of 6.5 tokens per second
+        if kwargs.get("max_new_tokens") is None and kwargs.get("max_length") is None:
+            if kwargs.get("attention_mask") is not None:
+                seq_lens = kwargs["attention_mask"].sum(dim=-1)
+            else:
+                seq_lens = kwargs["input_values"].shape[-1]
+            max_length = int(seq_lens.max().item() * token_limit_factor)
+            logger.warning_once(
+                f"Based on the input length, Moonshine will generate up to {max_length} tokens (ratio of 6.5 tokens/second). "
+                "To specify a different length, set either `max_new_tokens` or `max_length`."
+            )
+            kwargs["max_length"] = max_length
+
+        return super().generate(*args, **kwargs)
+
 
 __all__ = [
     "MoonshineConfig",
