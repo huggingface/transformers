@@ -1396,6 +1396,7 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
         ("textnet", "TextNetBackbone"),
         ("timm_backbone", "TimmBackbone"),
         ("vitdet", "VitDetBackbone"),
+        ("vitpose_backbone", "VitPoseBackbone"),
     ]
 )
 
