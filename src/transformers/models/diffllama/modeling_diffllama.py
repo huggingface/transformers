@@ -612,11 +612,7 @@ class DiffLlamaPreTrainedModel(PreTrainedModel):
 
 
 class DiffLlamaRotaryEmbedding(nn.Module):
-    def __init__(
-        self,
-        config: DiffLlamaConfig,
-        device=None,
-    ):
+    def __init__(self, config: DiffLlamaConfig, device=None):
         super().__init__()
         # BC: "rope_type" was originally "type"
         if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
@@ -898,7 +894,7 @@ class DiffLlamaModel(DiffLlamaPreTrainedModel):
         output_attentions: bool,
     ):
         if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and 0.0 in attention_mask:
+            if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
 
