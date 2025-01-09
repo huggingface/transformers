@@ -277,6 +277,14 @@ class LlamaAttention(nn.Module):
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+            # Advanced cache usage may crop it differently at each layer, we need to modify attention accordingly.
+            # Left-cropping = we drop the attn indexes used in the cache, were we pay attention by default.
+            if (
+                not isinstance(past_key_value, StaticCache)
+                and attention_mask is not None
+                and key_states.shape[-2] < attention_mask.shape[-1]
+            ):
+                attention_mask = attention_mask[..., -key_states.shape[-2]:]
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -657,7 +665,7 @@ class LlamaModel(LlamaPreTrainedModel):
             target_length = (
                 attention_mask.shape[-1]
                 if isinstance(attention_mask, torch.Tensor)
-                else past_seen_tokens + sequence_length + 1
+                else past_seen_tokens + sequence_length
             )
 
         # In case the provided `attention` mask is 2D, we generate a causal mask here (4D).
