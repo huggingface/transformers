@@ -391,3 +391,10 @@ class CohereForCausalLM(LlamaForCausalLM):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "CohereForCausalLM",
+    "CohereModel",
+    "CoherePreTrainedModel",  # noqa: F822
+]

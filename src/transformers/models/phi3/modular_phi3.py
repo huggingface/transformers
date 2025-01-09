@@ -309,3 +309,12 @@ class Phi3ForSequenceClassification(MistralForSequenceClassification):
 
 class Phi3ForTokenClassification(MistralForTokenClassification):
     pass
+
+
+__all__ = [
+    "Phi3PreTrainedModel",
+    "Phi3Model",  # noqa: F822
+    "Phi3ForCausalLM",
+    "Phi3ForSequenceClassification",
+    "Phi3ForTokenClassification",
+]
