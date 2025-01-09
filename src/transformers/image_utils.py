@@ -207,7 +207,7 @@ def make_list_of_images(images, expected_ndims: int = 3) -> List[ImageInput]:
         return images
 
     # Either the input is a single image, in which case we create a list of length 1
-    if isinstance(images, PIL.Image.Image):
+    if is_pil_image(images):
         # PIL images are never batched
         return [images]
 
@@ -250,17 +250,17 @@ def make_flat_list_of_images(
     ):
         return [img for img_list in images for img in img_list]
 
-    elif isinstance(images, (list, tuple)) and is_valid_list_of_images(images):
-        return images
-
-    elif is_pil_image(images):
-        return [images]
-
-    elif is_valid_image(images):
-        if len(images.shape) == 4:
+    if isinstance(images, (list, tuple)) and is_valid_list_of_images(images):
+        if is_pil_image(images[0]) or images[0].ndim == 3:
             return images
-        elif len(images.shape) == 3:
+        if images[0].ndim == 4:
+            return [img for img_list in images for img in img_list]
+
+    if is_valid_image(images):
+        if is_pil_image(images) or images.ndim == 3:
             return [images]
+        if images.ndim == 4:
+            return images
 
     raise ValueError(f"Could not make a flat list of images from {images}")
 
@@ -274,26 +274,34 @@ def make_nested_list_of_images(
         images (`Union[List[ImageInput], ImageInput]`):
             The input image.
     Returns:
-        list: A list of images or a 4d array of images.
+        list: A list of list of images or a list of 4d array of images.
     """
-    # If it's a single image, convert it to a list of lists
-    if is_valid_image(images):
-        output_images = [[images]]
-    # If it's a list of images, it's a single batch, so convert it to a list of lists
-    elif isinstance(images, (list, tuple)) and is_valid_list_of_images(images):
-        output_images = [images]
     # If it's a list of batches, it's already in the right format
-    elif (
+    if (
         isinstance(images, (list, tuple))
         and all(isinstance(images_i, (list, tuple)) for images_i in images)
         and all(is_valid_list_of_images(images_i) for images_i in images)
     ):
-        output_images = images
-    else:
-        raise ValueError(
-            "Invalid input type. Must be a single image, a list of images, or a list of batches of images."
-        )
-    return output_images
+        return images
+
+    # If it's a list of images, it's a single batch, so convert it to a list of lists
+    if isinstance(images, (list, tuple)) and is_valid_list_of_images(images):
+        if is_pil_image(images[0]) or images[0].ndim == 3:
+            return [images]
+        if images[0].ndim == 4:
+            return images
+
+    # If it's a single image, convert it to a list of lists
+    if is_pil_image(images):
+        return [[images]]
+
+    if is_valid_image(images):
+        if is_pil_image(images) or images.ndim == 3:
+            return [[images]]
+        if images.ndim == 4:
+            return [images]
+
+    raise ValueError("Invalid input type. Must be a single image, a list of images, or a list of batches of images.")
 
 
 def make_batched_videos(videos) -> VideoInput:
