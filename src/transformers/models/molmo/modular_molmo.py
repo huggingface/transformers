@@ -14,30 +14,30 @@
 # limitations under the License.
 
 import math
-from typing import List, Optional, Tuple, Union
+from typing import Callable, List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
 from torch import nn
 
 from ...activations import ACT2FN
+from ...cache_utils import Cache
 from ...configuration_utils import PretrainedConfig
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
     BaseModelOutput,
     BaseModelOutputWithPooling,
 )
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...processing_utils import Unpack
 from ...utils import (
     is_flash_attn_2_available,
-    is_flash_attn_greater_or_equal_2_10,
     logging,
 )
 from ..clip.modeling_clip import (
     CLIPMLP,
-    CLIPAttention,
     CLIPEncoder,
     CLIPEncoderLayer,
-    CLIPFlashAttention2,
-    CLIPSdpaAttention,
     CLIPVisionModel,
     CLIPVisionTransformer,
 )
@@ -55,9 +55,6 @@ from ..qwen2.modeling_qwen2 import (
     Qwen2RotaryEmbedding,
 )
 
-
-if is_flash_attn_2_available():
-    from ...modeling_flash_attention_utils import _flash_attention_forward
 
 logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "MolmoConfig"
@@ -754,25 +751,6 @@ class MolmoMultiModalProjector(nn.Module):
 # We have different attention classes for the txt and the image components, they need to be propagated back correctly
 
 
-class MolmoVisionAttention(CLIPAttention):
-    pass
-
-
-class MolmoVisionSdpaAttention(MolmoVisionAttention, CLIPSdpaAttention):
-    pass
-
-
-class MolmoVisionFlashAttention2(MolmoVisionAttention, CLIPFlashAttention2):
-    pass
-
-
-MOLMO_VISION_ATTENTION_CLASSES = {
-    "eager": MolmoVisionAttention,
-    "sdpa": MolmoVisionSdpaAttention,
-    "flash_attention_2": MolmoVisionFlashAttention2,
-}
-
-
 class MolmoVisionEmbeddings(nn.Module):
     def __init__(self, config: MolmoVisionConfig):
         super().__init__()
@@ -806,15 +784,8 @@ class MolmoVisionEmbeddings(nn.Module):
         return embeddings.flatten(0, 1)  # NOTE: DON'T FLATTEN MORE TO MATCH ORIG IMPL
 
 
-class MolmoVisionMLP(CLIPMLP):
-    pass
-
-
 class MolmoVisionEncoderLayer(CLIPEncoderLayer):
-    def __init__(self, config: MolmoVisionConfig):
-        super().__init__()
-        self.self_attn = MOLMO_VISION_ATTENTION_CLASSES[config._attn_implementation](config)
-        self.mlp = MolmoVisionMLP(config)
+    pass
 
 
 class MolmoVisionEncoder(CLIPEncoder):
@@ -884,6 +855,44 @@ class MolmoVisionModel(CLIPVisionModel):
     _no_split_modules = ["MolmoVisionEncoderLayer"]
 
 
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+def pooling_eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+        attn_weights = attn_weights + causal_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
 class MolmoPoolingAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
@@ -893,6 +902,9 @@ class MolmoPoolingAttention(nn.Module):
         self.embed_dim = config.hidden_size
         self.num_heads = config.num_attention_heads
         self.head_dim = config.head_dim
+        self.attention_dropout = config.attention_dropout
+        self.scaling = self.head_dim**0.5
+        self.is_causal = True
 
         self.dropout = config.attention_dropout
 
@@ -905,180 +917,52 @@ class MolmoPoolingAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         key_value_hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-        """Input shape: Batch x Time x Channel"""
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        input_shape = hidden_states.shape[:-1]
+        query_hidden_shape = (*input_shape, -1, self.head_dim)
+        key_value_shape = key_value_hidden_states.shape[:-1]
+        key_value_hidden_shape = (*key_value_shape, -1, self.head_dim)
 
-        bsz, q_len, _ = hidden_states.size()
-        kv_len = key_value_hidden_states.shape[1]
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(key_value_hidden_states)
-        value_states = self.v_proj(key_value_hidden_states)
+        query_states = self.q_proj(hidden_states).view(query_hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(key_value_hidden_states).view(key_value_hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(key_value_hidden_states).view(key_value_hidden_shape).transpose(1, 2)
 
-        query_states = query_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, kv_len, -1, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, kv_len, -1, self.head_dim).transpose(1, 2)
+        if past_key_value is not None:
+            # sin and cos are specific to RoPE models; cache_position needed for the static cache
+            cache_kwargs = {"cache_position": cache_position}
+            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
-
-        # upcast attention to fp32
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-        attn_output = torch.matmul(attn_weights, value_states)
-
-        attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.reshape(bsz, q_len, -1)
-
-        attn_output = self.o_proj(attn_output)
-
-        if not output_attentions:
-            attn_weights = None
-
-        return attn_output, attn_weights
-
-
-class MolmoPoolingSdpaAttention(MolmoPoolingAttention):
-    """
-    SDPA attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
-    `MolmoPoolingAttention` as the weights of the module stays untouched. The only changes are on the forward pass to adapt to
-    SDPA API.
-    """
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        key_value_hidden_states: torch.Tensor,
-        output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-        if output_attentions:
-            # TODO: Improve this warning with e.g. `model.config.attn_implementation = "manual"` once this is implemented.
-            logger.warning_once(
-                "Molmo is using MolmoPoolingSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not "
-                "support `output_attentions=True`. Falling back to the manual attention implementation, but specifying "
-                "the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can "
-                'be removed using the argument `attn_implementation="eager"` when loading the model.'
-            )
-            return super().forward(
-                hidden_states=hidden_states,
-                key_value_hidden_states=key_value_hidden_states,
-                output_attentions=output_attentions,
-            )
-
-        bsz, tgt_len, embed_dim = hidden_states.size()
-
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(key_value_hidden_states)
-        value_states = self.v_proj(key_value_hidden_states)
-
-        query_states = query_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
-
-        attn_output = torch.nn.functional.scaled_dot_product_attention(
-            query_states,
-            key_states,
-            value_states,
-            attn_mask=None,
-            dropout_p=self.dropout if self.training else 0.0,
-        )
-
-        attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(bsz, tgt_len, -1)
-
-        attn_output = self.o_proj(attn_output)
-
-        return attn_output, None
-
-
-class MolmoPoolingFlashAttention2(MolmoPoolingAttention):
-    """
-    MolmoPoolingAttention flash attention module. This module inherits from `MolmoPoolingAttention` as the weights of the module stays
-    untouched. The only required change would be on the forward pass where it needs to correctly call the public API of
-    flash attention and deal with padding tokens in case the input contains any of them.
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
-        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
-        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
-        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        key_value_hidden_states: torch.Tensor,
-        output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-        output_attentions = False
-
-        batch_size, q_len, _ = hidden_states.size()
-
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(key_value_hidden_states)
-        value_states = self.v_proj(key_value_hidden_states)
-
-        # Flash attention requires the input to have the shape
-        # batch_size x seq_length x head_dim x hidden_dim
-        # therefore we just need to keep the original shape
-        query_states = query_states.view(batch_size, q_len, self.num_heads, self.head_dim)
-        key_states = key_states.view(batch_size, -1, self.num_heads, self.head_dim)
-        value_states = value_states.view(batch_size, -1, self.num_heads, self.head_dim)
-
-        dropout_rate = self.dropout if self.training else 0.0
-
-        # In PEFT, usually we cast the layer norms in float32 for training stability reasons
-        # therefore the input hidden states gets silently casted in float32. Hence, we need
-        # cast them back in the correct dtype just to be sure everything works as expected.
-        # This might slowdown training & inference so it is recommended to not cast the LayerNorms
-        # in fp32.
-
-        input_dtype = query_states.dtype
-        if input_dtype == torch.float32:
-            if torch.is_autocast_enabled():
-                target_dtype = torch.get_autocast_gpu_dtype()
-            # Handle the case where the model is quantized
-            elif hasattr(self.config, "_pre_quantization_dtype"):
-                target_dtype = self.config._pre_quantization_dtype
+        attention_interface: Callable = pooling_eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                )
             else:
-                target_dtype = self.q_proj.weight.dtype
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-            logger.warning_once(
-                f"The input hidden states seems to be silently casted in float32, this might be related to"
-                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
-                f" {target_dtype}."
-            )
-
-            query_states = query_states.to(target_dtype)
-            key_states = key_states.to(target_dtype)
-            value_states = value_states.to(target_dtype)
-
-        attn_output = _flash_attention_forward(
+        attn_output, attn_weights = attention_interface(
+            self,
             query_states,
             key_states,
             value_states,
-            None,
-            q_len,
-            dropout=dropout_rate,
-            is_causal=False,
-            use_top_left_mask=self._flash_attn_uses_top_left_mask,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
         )
 
-        attn_output = attn_output.reshape(batch_size, q_len, self.embed_dim).contiguous()
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
-
         if not output_attentions:
             attn_weights = None
-
         return attn_output, attn_weights
-
-
-MOLMO_POOLING_ATTENTION_CLASSES = {
-    "eager": MolmoPoolingAttention,
-    "sdpa": MolmoPoolingSdpaAttention,
-    "flash_attention_2": MolmoPoolingFlashAttention2,
-}
 
 
 class MolmoAdapterModel(MolmoPreTrainedModel):
@@ -1089,8 +973,7 @@ class MolmoAdapterModel(MolmoPreTrainedModel):
         super().__init__(config)
 
         if config.image_pooling_type == "attention_meanq":
-            attention_class = MOLMO_POOLING_ATTENTION_CLASSES[config._attn_implementation]
-            self.image_pooling_2d = attention_class(config)
+            self.image_pooling_2d = MolmoPoolingAttention(config)
         elif config.image_pooling_type is not None:
             raise NotImplementedError(
                 f"Unknown image pooling 2D method: {config.pooling_config.image_pooling_type}, Can be only `attention_meanq`"
@@ -1404,7 +1287,6 @@ __all__ = [
     "MolmoVisionEmbeddings",
     "MolmoVisionModel",
     "MolmoTextAttention",
-    "MolmoVisionAttention",
     "MolmoPoolingAttention",
     "MolmoAdapterModel",
     "MolmoTextModel",
