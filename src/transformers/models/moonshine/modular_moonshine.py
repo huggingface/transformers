@@ -318,11 +318,6 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
     main_input_name = "input_values"
 
     def __init__(self, config: MoonshineConfig):
-        config = copy.deepcopy(config)
-        config.num_hidden_layers = config.encoder_num_hidden_layers
-        config.num_attention_heads = config.encoder_num_attention_heads
-        config.num_key_value_heads = config.encoder_num_key_value_heads
-
         super().__init__(config)
         self.config = config
         embed_dim = config.hidden_size
@@ -334,16 +329,11 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
 
         self.rotary_emb = MoonshineRotaryEmbedding(config=config)
 
-        self.layers = nn.ModuleList([MoonshineEncoderLayer(config, idx) for idx in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList([MoonshineEncoderLayer(config, idx) for idx in range(config.encoder_num_hidden_layers)])
         self.layer_norm = nn.LayerNorm(embed_dim, bias=False)
 
         self.gradient_checkpointing = False
         self.post_init()
-
-    def _freeze_parameters(self):
-        for param in self.parameters():
-            param.requires_grad = False
-        self._requires_grad = False
 
     def get_input_embeddings(self) -> nn.Module:
         return self.conv1
@@ -454,14 +444,9 @@ class MoonshineDecoder(LlamaModel):
     main_input_name = "input_ids"
 
     def __init__(self, config: MoonshineConfig):
-        config = copy.deepcopy(config)
-        config.num_hidden_layers = config.decoder_num_hidden_layers
-        config.num_attention_heads = config.decoder_num_attention_heads
-        config.num_key_value_heads = config.decoder_num_key_value_heads
-
         super().__init__(config)
         self.norm = nn.LayerNorm(config.hidden_size, bias=False)
-        self.rotary_emb = MoonshineRotaryEmbedding(config=config)
+        self.layers = nn.ModuleList([MoonshineDecoderLayer(config, idx) for idx in range(config.decoder_num_hidden_layers)])
 
     def forward(
         self,
@@ -476,7 +461,6 @@ class MoonshineDecoder(LlamaModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_position_ids: Optional[torch.LongTensor] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         """
@@ -484,10 +468,6 @@ class MoonshineDecoder(LlamaModel):
             encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
                 of the decoder.
-            encoder_position_ids (`torch.LongTensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
-                Indices of positions of each encoder input's hidden states in the position embeddings.
-
-                [What are position IDs?](../glossary#position-ids)
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -522,11 +502,6 @@ class MoonshineDecoder(LlamaModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        if encoder_position_ids is None:
-            encoder_position_ids = torch.arange(
-                encoder_hidden_states.shape[1], device=encoder_hidden_states.device
-            ).unsqueeze(0)
-
         causal_mask = self._update_causal_mask(
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
         )
@@ -535,7 +510,6 @@ class MoonshineDecoder(LlamaModel):
 
         # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
-        encoder_position_embeddings = self.rotary_emb(encoder_hidden_states, encoder_position_ids)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -565,13 +539,11 @@ class MoonshineDecoder(LlamaModel):
                     attention_mask=causal_mask,
                     encoder_hidden_states=encoder_hidden_states,
                     position_ids=position_ids,
-                    encoder_position_ids=encoder_position_ids,
                     past_key_value=past_key_values,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                     cache_position=cache_position,
                     position_embeddings=position_embeddings,
-                    encoder_position_embeddings=encoder_position_embeddings,
                     **flash_attn_kwargs,
                 )
 
