@@ -4684,3 +4684,15 @@ class TokenizerTesterMixin:
 
         with self.assertRaises(AttributeError, msg="conflicts with the method"):
             get_tokenizer_func(get_vocab=True)
+
+    @parameterized.expand([(True,), (False,)])
+    def test_rust_tokenizer_add_prefix_space(self, add_prefix_space):
+        if not self.test_rust_tokenizer:
+            self.skipTest(reason="test_rust_tokenizer is set to False")
+
+        for tokenizer, pretrained_name, _ in self.tokenizers_list:
+            fast_tokenizer = tokenizer.from_pretrained(pretrained_name, add_prefix_space=add_prefix_space)
+            self.assertEqual(fast_tokenizer.add_prefix_space, add_prefix_space)
+            # Only the ByteLevel pre-tokenizer has the `add_prefix_space` attribute, we have to ensure that it's set correctly
+            if hasattr(fast_tokenizer.backend_tokenizer.pre_tokenizer, "add_prefix_space"):
+                self.assertEqual(fast_tokenizer.backend_tokenizer.pre_tokenizer.add_prefix_space, add_prefix_space)
