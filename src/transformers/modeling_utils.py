@@ -4158,8 +4158,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         elif device_map is not None:
             # Make sure we correctly place the rotary embedding module by default if not provided, as we moved it from
             # inside the Layers to the Model
-            for buffer in {name for name, _ in model.named_buffers()}:
-                rotary_module = None
+            rotary_module = None
+            for buffer, _ in model.named_buffers():
                 if "rotary_emb.inv_freq" in buffer and "layer" not in buffer:
                     rotary_module = buffer.replace(".inv_freq", "")
                     break
