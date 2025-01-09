@@ -1,6 +1,4 @@
-#!/usr/bin/env python
-"""Converts a Moonshine model in Useful Sensors format to Hugging Face format."""
-# Copyright 2022 The HuggingFace Inc. team and the OpenAI team. All rights reserved.
+# Copyright 2025 Useful Sensors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
