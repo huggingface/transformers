@@ -438,15 +438,12 @@ class TokenizerUtilsTest(unittest.TestCase):
         toy_text_iterator = ("a" for _ in range(1000))
         tokenizer.train_new_from_iterator(text_iterator=toy_text_iterator, length=1000, vocab_size=50)
 
-
         _tokenizer.normalizer = None
         tokenizer = PreTrainedTokenizerFast(tokenizer_object=_tokenizer)
         toy_text_iterator = ("a" for _ in range(1000))
         tokenizer.train_new_from_iterator(text_iterator=toy_text_iterator, length=1000, vocab_size=50)
 
-
         _tokenizer.post_processor = None
         tokenizer = PreTrainedTokenizerFast(tokenizer_object=_tokenizer)
         toy_text_iterator = ("a" for _ in range(1000))
         tokenizer.train_new_from_iterator(text_iterator=toy_text_iterator, length=1000, vocab_size=50)
-
