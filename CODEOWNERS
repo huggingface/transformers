@@ -25,3 +25,337 @@ trainer.py @muellerzr @SunMarc
 /src/transformers/onnx @michaelbenayoun
 /.circleci/config.yml @ArthurZucker @ydshieh
 /utils/tests_fetcher.py @ydshieh
+
+# Text models
+/src/transformers/models/albert/*_modeling* @ArthurZucker
+/src/transformers/models/bamba/*_modeling* @ArthurZucker
+/src/transformers/models/bart/*_modeling* @ArthurZucker
+/src/transformers/models/barthez/*_modeling* @ArthurZucker
+/src/transformers/models/bartpho/*_modeling* @ArthurZucker
+/src/transformers/models/bert/*_modeling* @ArthurZucker
+/src/transformers/models/bert-generation/*_modeling* @ArthurZucker
+/src/transformers/models/bert-japanese/*_modeling* @ArthurZucker
+/src/transformers/models/bertweet/*_modeling* @ArthurZucker
+/src/transformers/models/big_bird/*_modeling* @ArthurZucker
+/src/transformers/models/bigbird_pegasus/*_modeling* @ArthurZucker
+/src/transformers/models/biogpt/*_modeling* @ArthurZucker
+/src/transformers/models/blenderbot/*_modeling* @ArthurZucker
+/src/transformers/models/blenderbot-small/*_modeling* @ArthurZucker
+/src/transformers/models/bloom/*_modeling* @ArthurZucker
+/src/transformers/models/bort/*_modeling* @ArthurZucker
+/src/transformers/models/byt5/*_modeling* @ArthurZucker
+/src/transformers/models/camembert/*_modeling* @ArthurZucker
+/src/transformers/models/canine/*_modeling* @ArthurZucker
+/src/transformers/models/codegen/*_modeling* @ArthurZucker
+/src/transformers/models/code_llama/*_modeling* @ArthurZucker
+/src/transformers/models/cohere/*_modeling* @ArthurZucker
+/src/transformers/models/cohere2/*_modeling* @ArthurZucker
+/src/transformers/models/convbert/*_modeling* @ArthurZucker
+/src/transformers/models/cpm/*_modeling* @ArthurZucker
+/src/transformers/models/cpmant/*_modeling* @ArthurZucker
+/src/transformers/models/ctrl/*_modeling* @ArthurZucker
+/src/transformers/models/dbrx/*_modeling* @ArthurZucker
+/src/transformers/models/deberta/*_modeling* @ArthurZucker
+/src/transformers/models/deberta-v2/*_modeling* @ArthurZucker
+/src/transformers/models/dialogpt/*_modeling* @ArthurZucker
+/src/transformers/models/diffllama/*_modeling* @ArthurZucker
+/src/transformers/models/distilbert/*_modeling* @ArthurZucker
+/src/transformers/models/dpr/*_modeling* @ArthurZucker
+/src/transformers/models/electra/*_modeling* @ArthurZucker
+/src/transformers/models/encoder-decoder/*_modeling* @ArthurZucker
+/src/transformers/models/ernie/*_modeling* @ArthurZucker
+/src/transformers/models/ernie_m/*_modeling* @ArthurZucker
+/src/transformers/models/esm/*_modeling* @ArthurZucker
+/src/transformers/models/falcon/*_modeling* @ArthurZucker
+/src/transformers/models/falcon3/*_modeling* @ArthurZucker
+/src/transformers/models/falcon_mamba/*_modeling* @ArthurZucker
+/src/transformers/models/fastspeech2_conformer/*_modeling* @ArthurZucker
+/src/transformers/models/flan-t5/*_modeling* @ArthurZucker
+/src/transformers/models/flan-ul2/*_modeling* @ArthurZucker
+/src/transformers/models/flaubert/*_modeling* @ArthurZucker
+/src/transformers/models/fnet/*_modeling* @ArthurZucker
+/src/transformers/models/fsmt/*_modeling* @ArthurZucker
+/src/transformers/models/funnel/*_modeling* @ArthurZucker
+/src/transformers/models/fuyu/*_modeling* @ArthurZucker
+/src/transformers/models/gemma/*_modeling* @ArthurZucker
+/src/transformers/models/gemma2/*_modeling* @ArthurZucker
+/src/transformers/models/glm/*_modeling* @ArthurZucker
+/src/transformers/models/openai-gpt/*_modeling* @ArthurZucker
+/src/transformers/models/gpt_neo/*_modeling* @ArthurZucker
+/src/transformers/models/gpt_neox/*_modeling* @ArthurZucker
+/src/transformers/models/gpt_neox_japanese/*_modeling* @ArthurZucker
+/src/transformers/models/gptj/*_modeling* @ArthurZucker
+/src/transformers/models/gpt2/*_modeling* @ArthurZucker
+/src/transformers/models/gpt_bigcode/*_modeling* @ArthurZucker
+/src/transformers/models/gptsan-japanese/*_modeling* @ArthurZucker
+/src/transformers/models/gpt-sw3/*_modeling* @ArthurZucker
+/src/transformers/models/granite/*_modeling* @ArthurZucker
+/src/transformers/models/granitemoe/*_modeling* @ArthurZucker
+/src/transformers/models/herbert/*_modeling* @ArthurZucker
+/src/transformers/models/ibert/*_modeling* @ArthurZucker
+/src/transformers/models/jamba/*_modeling* @ArthurZucker
+/src/transformers/models/jetmoe/*_modeling* @ArthurZucker
+/src/transformers/models/jukebox/*_modeling* @ArthurZucker
+/src/transformers/models/led/*_modeling* @ArthurZucker
+/src/transformers/models/llama/*_modeling* @ArthurZucker
+/src/transformers/models/llama2/*_modeling* @ArthurZucker
+/src/transformers/models/llama3/*_modeling* @ArthurZucker
+/src/transformers/models/longformer/*_modeling* @ArthurZucker
+/src/transformers/models/longt5/*_modeling* @ArthurZucker
+/src/transformers/models/luke/*_modeling* @ArthurZucker
+/src/transformers/models/m2m_100/*_modeling* @ArthurZucker
+/src/transformers/models/madlad-400/*_modeling* @ArthurZucker
+/src/transformers/models/mamba/*_modeling* @ArthurZucker
+/src/transformers/models/mamba2/*_modeling* @ArthurZucker
+/src/transformers/models/marian/*_modeling* @ArthurZucker
+/src/transformers/models/markuplm/*_modeling* @ArthurZucker
+/src/transformers/models/mbart/*_modeling* @ArthurZucker
+/src/transformers/models/mega/*_modeling* @ArthurZucker
+/src/transformers/models/megatron-bert/*_modeling* @ArthurZucker
+/src/transformers/models/megatron_gpt2/*_modeling* @ArthurZucker
+/src/transformers/models/mistral/*_modeling* @ArthurZucker
+/src/transformers/models/mixtral/*_modeling* @ArthurZucker
+/src/transformers/models/mluke/*_modeling* @ArthurZucker
+/src/transformers/models/mobilebert/*_modeling* @ArthurZucker
+/src/transformers/models/modernbert/*_modeling* @ArthurZucker
+/src/transformers/models/mpnet/*_modeling* @ArthurZucker
+/src/transformers/models/mpt/*_modeling* @ArthurZucker
+/src/transformers/models/mra/*_modeling* @ArthurZucker
+/src/transformers/models/mt5/*_modeling* @ArthurZucker
+/src/transformers/models/mvp/*_modeling* @ArthurZucker
+/src/transformers/models/myt5/*_modeling* @ArthurZucker
+/src/transformers/models/nemotron/*_modeling* @ArthurZucker
+/src/transformers/models/nezha/*_modeling* @ArthurZucker
+/src/transformers/models/nllb/*_modeling* @ArthurZucker
+/src/transformers/models/nllb-moe/*_modeling* @ArthurZucker
+/src/transformers/models/nystromformer/*_modeling* @ArthurZucker
+/src/transformers/models/olmo/*_modeling* @ArthurZucker
+/src/transformers/models/olmo2/*_modeling* @ArthurZucker
+/src/transformers/models/olmoe/*_modeling* @ArthurZucker
+/src/transformers/models/open-llama/*_modeling* @ArthurZucker
+/src/transformers/models/opt/*_modeling* @ArthurZucker
+/src/transformers/models/pegasus/*_modeling* @ArthurZucker
+/src/transformers/models/pegasus_x/*_modeling* @ArthurZucker
+/src/transformers/models/persimmon/*_modeling* @ArthurZucker
+/src/transformers/models/phi/*_modeling* @ArthurZucker
+/src/transformers/models/phi3/*_modeling* @ArthurZucker
+/src/transformers/models/phimoe/*_modeling* @ArthurZucker
+/src/transformers/models/phobert/*_modeling* @ArthurZucker
+/src/transformers/models/plbart/*_modeling* @ArthurZucker
+/src/transformers/models/prophetnet/*_modeling* @ArthurZucker
+/src/transformers/models/qdqbert/*_modeling* @ArthurZucker
+/src/transformers/models/qwen2/*_modeling* @ArthurZucker
+/src/transformers/models/qwen2_moe/*_modeling* @ArthurZucker
+/src/transformers/models/rag/*_modeling* @ArthurZucker
+/src/transformers/models/realm/*_modeling* @ArthurZucker
+/src/transformers/models/recurrent_gemma/*_modeling* @ArthurZucker
+/src/transformers/models/reformer/*_modeling* @ArthurZucker
+/src/transformers/models/rembert/*_modeling* @ArthurZucker
+/src/transformers/models/retribert/*_modeling* @ArthurZucker
+/src/transformers/models/roberta/*_modeling* @ArthurZucker
+/src/transformers/models/roberta-prelayernorm/*_modeling* @ArthurZucker
+/src/transformers/models/roc_bert/*_modeling* @ArthurZucker
+/src/transformers/models/roformer/*_modeling* @ArthurZucker
+/src/transformers/models/rwkv/*_modeling* @ArthurZucker
+/src/transformers/models/splinter/*_modeling* @ArthurZucker
+/src/transformers/models/squeezebert/*_modeling* @ArthurZucker
+/src/transformers/models/stablelm/*_modeling* @ArthurZucker
+/src/transformers/models/starcoder2/*_modeling* @ArthurZucker
+/src/transformers/models/switch_transformers/*_modeling* @ArthurZucker
+/src/transformers/models/t5/*_modeling* @ArthurZucker
+/src/transformers/models/t5v1.1/*_modeling* @ArthurZucker
+/src/transformers/models/tapex/*_modeling* @ArthurZucker
+/src/transformers/models/transfo-xl/*_modeling* @ArthurZucker
+/src/transformers/models/ul2/*_modeling* @ArthurZucker
+/src/transformers/models/umt5/*_modeling* @ArthurZucker
+/src/transformers/models/xmod/*_modeling* @ArthurZucker
+/src/transformers/models/xglm/*_modeling* @ArthurZucker
+/src/transformers/models/xlm/*_modeling* @ArthurZucker
+/src/transformers/models/xlm-prophetnet/*_modeling* @ArthurZucker
+/src/transformers/models/xlm-roberta/*_modeling* @ArthurZucker
+/src/transformers/models/xlm-roberta-xl/*_modeling* @ArthurZucker
+/src/transformers/models/xlm-v/*_modeling* @ArthurZucker
+/src/transformers/models/xlnet/*_modeling* @ArthurZucker
+/src/transformers/models/yoso/*_modeling* @ArthurZucker
+/src/transformers/models/zamba/*_modeling* @ArthurZucker
+
+# Vision models
+/src/transformers/models/beit/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/bit/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/conditional_detr/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/convnext/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/convnextv2/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/cvt/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/deformable_detr/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/deit/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/depth_anything/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/depth_anything_v2/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/deta/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/detr/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/dinat/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/dinov2/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/dinov2_with_registers/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/dit/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/dpt/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/efficientformer/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/efficientnet/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/focalnet/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/glpn/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/hiera/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/ijepa/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/imagegpt/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/levit/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/mask2former/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/maskformer/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/mobilenet_v1/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/mobilenet_v2/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/mobilevit/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/mobilevitv2/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/nat/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/poolformer/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/pvt/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/pvt_v2/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/regnet/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/resnet/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/rt_detr/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/segformer/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/seggpt/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/superpoint/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/swiftformer/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/swin/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/swinv2/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/swin2sr/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/table-transformer/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/textnet/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/timm_wrapper/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/upernet/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/van/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/vit/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/vit_hybrid/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/vitdet/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/vit_mae/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/vitmatte/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/vit_msn/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/vitpose/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/yolos/*_modeling* @amyeroberts @qubvel
+/src/transformers/models/zoedepth/*_modeling* @amyeroberts @qubvel
+
+# Audio models
+/src/transformers/models/audio-spectrogram-transformer/*_modeling* @ylacombe @eustlb
+/src/transformers/models/bark/*_modeling* @ylacombe @eustlb
+/src/transformers/models/clap/*_modeling* @ylacombe @eustlb
+/src/transformers/models/dac/*_modeling* @ylacombe @eustlb
+/src/transformers/models/encodec/*_modeling* @ylacombe @eustlb
+/src/transformers/models/hubert/*_modeling* @ylacombe @eustlb
+/src/transformers/models/mctct/*_modeling* @ylacombe @eustlb
+/src/transformers/models/mimi/*_modeling* @ylacombe @eustlb
+/src/transformers/models/mms/*_modeling* @ylacombe @eustlb
+/src/transformers/models/moshi/*_modeling* @ylacombe @eustlb
+/src/transformers/models/musicgen/*_modeling* @ylacombe @eustlb
+/src/transformers/models/musicgen_melody/*_modeling* @ylacombe @eustlb
+/src/transformers/models/pop2piano/*_modeling* @ylacombe @eustlb
+/src/transformers/models/seamless_m4t/*_modeling* @ylacombe @eustlb
+/src/transformers/models/seamless_m4t_v2/*_modeling* @ylacombe @eustlb
+/src/transformers/models/sew/*_modeling* @ylacombe @eustlb
+/src/transformers/models/sew-d/*_modeling* @ylacombe @eustlb
+/src/transformers/models/speech_to_text/*_modeling* @ylacombe @eustlb
+/src/transformers/models/speech_to_text_2/*_modeling* @ylacombe @eustlb
+/src/transformers/models/speecht5/*_modeling* @ylacombe @eustlb
+/src/transformers/models/unispeech/*_modeling* @ylacombe @eustlb
+/src/transformers/models/unispeech-sat/*_modeling* @ylacombe @eustlb
+/src/transformers/models/univnet/*_modeling* @ylacombe @eustlb
+/src/transformers/models/vits/*_modeling* @ylacombe @eustlb
+/src/transformers/models/wav2vec2/*_modeling* @ylacombe @eustlb
+/src/transformers/models/wav2vec2-bert/*_modeling* @ylacombe @eustlb
+/src/transformers/models/wav2vec2-conformer/*_modeling* @ylacombe @eustlb
+/src/transformers/models/wav2vec2_phoneme/*_modeling* @ylacombe @eustlb
+/src/transformers/models/wavlm/*_modeling* @ylacombe @eustlb
+/src/transformers/models/whisper/*_modeling* @ylacombe @eustlb
+/src/transformers/models/xls_r/*_modeling* @ylacombe @eustlb
+/src/transformers/models/xlsr_wav2vec2/*_modeling* @ylacombe @eustlb
+
+# Video models
+/src/transformers/models/timesformer/*_modeling* @Rocketknight1
+/src/transformers/models/videomae/*_modeling* @Rocketknight1
+/src/transformers/models/vivit/*_modeling* @Rocketknight1
+
+# Multimodal models
+/src/transformers/models/align/*_modeling* @zucchini-nlp
+/src/transformers/models/altclip/*_modeling* @zucchini-nlp
+/src/transformers/models/aria/*_modeling* @zucchini-nlp
+/src/transformers/models/blip/*_modeling* @zucchini-nlp
+/src/transformers/models/blip-2/*_modeling* @zucchini-nlp
+/src/transformers/models/bridgetower/*_modeling* @zucchini-nlp
+/src/transformers/models/bros/*_modeling* @zucchini-nlp
+/src/transformers/models/chameleon/*_modeling* @zucchini-nlp
+/src/transformers/models/chinese_clip/*_modeling* @zucchini-nlp
+/src/transformers/models/clip/*_modeling* @zucchini-nlp
+/src/transformers/models/clipseg/*_modeling* @zucchini-nlp
+/src/transformers/models/clvp/*_modeling* @zucchini-nlp
+/src/transformers/models/colpali/*_modeling* @zucchini-nlp
+/src/transformers/models/data2vec/*_modeling* @zucchini-nlp
+/src/transformers/models/deplot/*_modeling* @zucchini-nlp
+/src/transformers/models/donut/*_modeling* @zucchini-nlp
+/src/transformers/models/flava/*_modeling* @zucchini-nlp
+/src/transformers/models/git/*_modeling* @zucchini-nlp
+/src/transformers/models/grounding-dino/*_modeling* @zucchini-nlp
+/src/transformers/models/groupvit/*_modeling* @zucchini-nlp
+/src/transformers/models/idefics/*_modeling* @zucchini-nlp
+/src/transformers/models/idefics2/*_modeling* @zucchini-nlp
+/src/transformers/models/idefics3/*_modeling* @zucchini-nlp
+/src/transformers/models/instructblip/*_modeling* @zucchini-nlp
+/src/transformers/models/instructblipvideo/*_modeling* @zucchini-nlp
+/src/transformers/models/kosmos-2/*_modeling* @zucchini-nlp
+/src/transformers/models/layoutlm/*_modeling* @zucchini-nlp
+/src/transformers/models/layoutlmv2/*_modeling* @zucchini-nlp
+/src/transformers/models/layoutlmv3/*_modeling* @zucchini-nlp
+/src/transformers/models/layoutxlm/*_modeling* @zucchini-nlp
+/src/transformers/models/lilt/*_modeling* @zucchini-nlp
+/src/transformers/models/llava/*_modeling* @zucchini-nlp
+/src/transformers/models/llava_next/*_modeling* @zucchini-nlp
+/src/transformers/models/llava_next_video/*_modeling* @zucchini-nlp
+/src/transformers/models/llava_onevision/*_modeling* @zucchini-nlp
+/src/transformers/models/lxmert/*_modeling* @zucchini-nlp
+/src/transformers/models/matcha/*_modeling* @zucchini-nlp
+/src/transformers/models/mgp-str/*_modeling* @zucchini-nlp
+/src/transformers/models/mllama/*_modeling* @zucchini-nlp
+/src/transformers/models/nougat/*_modeling* @zucchini-nlp
+/src/transformers/models/omdet-turbo/*_modeling* @zucchini-nlp
+/src/transformers/models/oneformer/*_modeling* @zucchini-nlp
+/src/transformers/models/owlvit/*_modeling* @zucchini-nlp
+/src/transformers/models/owlv2/*_modeling* @zucchini-nlp
+/src/transformers/models/paligemma/*_modeling* @zucchini-nlp
+/src/transformers/models/perceiver/*_modeling* @zucchini-nlp
+/src/transformers/models/pix2struct/*_modeling* @zucchini-nlp
+/src/transformers/models/pixtral/*_modeling* @zucchini-nlp
+/src/transformers/models/qwen2_audio/*_modeling* @zucchini-nlp
+/src/transformers/models/qwen2_vl/*_modeling* @zucchini-nlp
+/src/transformers/models/sam/*_modeling* @zucchini-nlp
+/src/transformers/models/siglip/*_modeling* @zucchini-nlp
+/src/transformers/models/speech-encoder-decoder/*_modeling* @zucchini-nlp
+/src/transformers/models/tapas/*_modeling* @zucchini-nlp
+/src/transformers/models/trocr/*_modeling* @zucchini-nlp
+/src/transformers/models/tvlt/*_modeling* @zucchini-nlp
+/src/transformers/models/tvp/*_modeling* @zucchini-nlp
+/src/transformers/models/udop/*_modeling* @zucchini-nlp
+/src/transformers/models/video_llava/*_modeling* @zucchini-nlp
+/src/transformers/models/vilt/*_modeling* @zucchini-nlp
+/src/transformers/models/vipllava/*_modeling* @zucchini-nlp
+/src/transformers/models/vision-encoder-decoder/*_modeling* @zucchini-nlp
+/src/transformers/models/vision-text-dual-encoder/*_modeling* @zucchini-nlp
+/src/transformers/models/visual_bert/*_modeling* @zucchini-nlp
+/src/transformers/models/xclip/*_modeling* @zucchini-nlp
+
+# Reinforcement learning models
+/src/transformers/models/decision_transformer/*_modeling* @Rocketknight1
+/src/transformers/models/trajectory_transformer/*_modeling* @Rocketknight1
+
+# Time series models
+/src/transformers/models/autoformer/*_modeling* @Rocketknight1
+/src/transformers/models/informer/*_modeling* @Rocketknight1
+/src/transformers/models/patchtsmixer/*_modeling* @Rocketknight1
+/src/transformers/models/patchtst/*_modeling* @Rocketknight1
+/src/transformers/models/time_series_transformer/*_modeling* @Rocketknight1
+
+# Graph models
+/src/transformers/models/graphormer/*_modeling* @clefourrier
