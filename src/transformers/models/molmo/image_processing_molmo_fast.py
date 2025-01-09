@@ -216,10 +216,7 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
         output_size = (size["height"], size["width"])
         if input_data_format == ChannelDimension.LAST:
             image = image.permute(2, 0, 1)
-        # mode = pil_torch_interpolation_mapping[resample].value,
-        resized_image = torch.nn.functional.interpolate(
-            image.unsqueeze(0), size=output_size, mode="bilinear", align_corners=False, antialias=True
-        )[0]
+        resized_image = F.resize(image, size=output_size)
         if input_data_format == ChannelDimension.LAST:
             resized_image = resized_image.permute(1, 2, 0)
         return resized_image
@@ -566,15 +563,12 @@ class MolmoImageProcessorFast(BaseImageProcessorFast):
                 global_image, _ = self.pad(
                     image=global_image, size=size, input_data_format=input_data_format, constant_values=0
                 )
-            if do_rescale:
-                image = image * rescale_factor
-                global_image = global_image * rescale_factor
 
-            if do_normalize:
-                image_mean_tensor = torch.tensor(image_mean, device=device).view(-1, 1, 1)
-                image_std_tensor = torch.tensor(image_std, device=device).view(-1, 1, 1)
-                image = (image - image_mean_tensor) / image_std_tensor
-                global_image = (global_image - image_mean_tensor) / image_std_tensor
+            if do_rescale and do_normalize:
+                new_mean = torch.tensor(image_mean, device=device) * (1.0 / rescale_factor)
+                new_std = torch.tensor(image_std, device=device) * (1.0 / rescale_factor)
+                image = F.normalize(image.to(dtype=torch.float32), new_mean, new_std)
+                global_image = F.normalize(global_image.to(dtype=torch.float32), new_mean, new_std)
 
             if do_split_into_crops:
                 crops, patch_orderings, cropped_masks = self.split_image_into_crops(

@@ -2034,6 +2034,7 @@ class MolmoForConditionalGeneration(MolmoPreTrainedModel, GenerationMixin):
         self.language_model = MolmoForCausalLM._from_config(config.text_config)
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.adapter = MolmoAdapterModel._from_config(config.pooling_config)
+
         self.post_init()
 
     def get_input_embeddings(self):
