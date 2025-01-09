@@ -18,12 +18,13 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
-from torch import Tensor, nn
+from torch import nn
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from ..sam.configuration_sam import SamConfig, SamPromptEncoderConfig, SamVisionConfig
 from ..sam.modeling_sam import (
+    SamAttention,
     SamFeedForward,
     SamImageSegmentationOutput,
     SamLayerNorm,
@@ -33,14 +34,13 @@ from ..sam.modeling_sam import (
     SamPositionalEmbedding,
     SamPreTrainedModel,
     SamPromptEncoder,
+    SamTwoWayAttentionBlock,
     SamTwoWayTransformer,
     SamVisionAttention,
     SamVisionEncoder,
     SamVisionEncoderOutput,
     SamVisionLayer,
     SamVisionNeck,
-    SamAttention,
-    SamTwoWayAttentionBlock,
 )
 
 
@@ -199,6 +199,7 @@ class SamHQVisionEncoderOutput(SamVisionEncoderOutput):
         windowed attention. Each element in the list is of shape `(batch_size, sequence_length, hidden_size)`.
         This is specific to SAM-HQ and not present in base SAM.
     """
+
     intermediate_embeddings: Optional[List[torch.FloatTensor]] = None
 
 

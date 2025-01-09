@@ -68,6 +68,7 @@ class SamHQVisionEncoderOutput(ModelOutput):
     last_hidden_state: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
+
     intermediate_embeddings: Optional[List[torch.FloatTensor]] = None
 
 

@@ -26,7 +26,7 @@ from ...test_processing_common import prepare_image_inputs
 if is_vision_available():
     from PIL import Image
 
-    from transformers import AutoProcessor, SamImageProcessor, SamHQProcessor
+    from transformers import AutoProcessor, SamHQProcessor, SamImageProcessor
 
 if is_torch_available():
     import torch
@@ -139,5 +139,3 @@ class SamHQProcessorTest(unittest.TestCase):
         dummy_masks = [[1, 0], [0, 1]]
         with self.assertRaises(ValueError):
             masks = processor.post_process_masks(dummy_masks, np.array(original_sizes), np.array(reshaped_input_size))
-
-

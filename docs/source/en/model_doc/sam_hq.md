@@ -8,6 +8,16 @@ The model is an enhancement to the original SAM model that produces significantl
 
 ![example image](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-output.png)
 
+## Key Differences from SAM
+
+SAM-HQ introduces several key improvements over the original SAM model:
+
+1. High-Quality Output Token: A learnable token injected into SAM's mask decoder for higher quality mask prediction
+2. Global-local Feature Fusion: Combines features from different stages of the model for improved mask details
+3. Training Data: Uses a carefully curated dataset of 44K high-quality masks instead of SA-1B
+4. Efficiency: Adds only 0.5% additional parameters while significantly improving mask quality
+5. Zero-shot Capability: Maintains SAM's strong zero-shot performance while improving accuracy
+
 The abstract from the paper is the following:
 
 *The recent Segment Anything Model (SAM) represents a big leap in scaling up segmentation models, allowing for powerful zero-shot capabilities and flexible prompting. Despite being trained with 1.1 billion masks, SAM's mask prediction quality falls short in many cases, particularly when dealing with objects that have intricate structures. We propose HQ-SAM, equipping SAM with the ability to accurately segment any object, while maintaining SAM's original promptable design, efficiency, and zero-shot generalizability. Our careful design reuses and preserves the pre-trained model weights of SAM, while only introducing minimal additional parameters and computation. We design a learnable High-Quality Output Token, which is injected into SAM's mask decoder and is responsible for predicting the high-quality mask. Instead of only applying it on mask-decoder features, we first fuse them with early and final ViT features for improved mask details. To train our introduced learnable parameters, we compose a dataset of 44K fine-grained masks from several sources. HQ-SAM is only trained on the introduced dataset of 44k masks, which takes only 4 hours on 8 GPUs.*
@@ -79,15 +89,6 @@ masks = processor.image_processor.post_process_masks(
 scores = outputs.iou_scores
 ```
 
-## Key Differences from SAM
-
-SAM-HQ introduces several key improvements over the original SAM model:
-
-1. High-Quality Output Token: A learnable token injected into SAM's mask decoder for higher quality mask prediction
-2. Global-local Feature Fusion: Combines features from different stages of the model for improved mask details
-3. Training Data: Uses a carefully curated dataset of 44K high-quality masks instead of SA-1B
-4. Efficiency: Adds only 0.5% additional parameters while significantly improving mask quality
-5. Zero-shot Capability: Maintains SAM's strong zero-shot performance while improving accuracy
 
 ## Resources
 
