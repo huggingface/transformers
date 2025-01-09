@@ -298,7 +298,7 @@ trainer.py @muellerzr @SunMarc
 /src/transformers/models/donut/*_modeling* @zucchini-nlp
 /src/transformers/models/flava/*_modeling* @zucchini-nlp
 /src/transformers/models/git/*_modeling* @zucchini-nlp
-/src/transformers/models/grounding_dino/*_modeling* @zucchini-nlp
+/src/transformers/models/grounding_dino/*_modeling* @qubvel
 /src/transformers/models/groupvit/*_modeling* @zucchini-nlp
 /src/transformers/models/idefics/*_modeling* @zucchini-nlp
 /src/transformers/models/idefics2/*_modeling* @zucchini-nlp
@@ -320,10 +320,10 @@ trainer.py @muellerzr @SunMarc
 /src/transformers/models/mgp_str/*_modeling* @zucchini-nlp
 /src/transformers/models/mllama/*_modeling* @zucchini-nlp
 /src/transformers/models/nougat/*_modeling* @zucchini-nlp
-/src/transformers/models/omdet_turbo/*_modeling* @zucchini-nlp
+/src/transformers/models/omdet_turbo/*_modeling* @qubvel
 /src/transformers/models/oneformer/*_modeling* @zucchini-nlp
-/src/transformers/models/owlvit/*_modeling* @zucchini-nlp
-/src/transformers/models/owlv2/*_modeling* @zucchini-nlp
+/src/transformers/models/owlvit/*_modeling* @qubvel
+/src/transformers/models/owlv2/*_modeling* @qubvel
 /src/transformers/models/paligemma/*_modeling* @zucchini-nlp
 /src/transformers/models/perceiver/*_modeling* @zucchini-nlp
 /src/transformers/models/pix2struct/*_modeling* @zucchini-nlp
