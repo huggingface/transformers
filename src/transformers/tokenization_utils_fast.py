@@ -102,7 +102,7 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
         fast_tokenizer_file = kwargs.pop("tokenizer_file", None)
         from_slow = kwargs.pop("from_slow", False)
         added_tokens_decoder = kwargs.pop("added_tokens_decoder", {})
-        add_prefix_space = kwargs.get("add_prefix_space", False)
+        self.add_prefix_space = kwargs.get("add_prefix_space", False)
 
         if from_slow and slow_tokenizer is None and self.slow_tokenizer_class is None:
             raise ValueError(
@@ -207,13 +207,12 @@ class PreTrainedTokenizerFast(PreTrainedTokenizerBase):
             if tokens:
                 self.add_tokens(tokens)
 
-        pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
-        if pre_tok_state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
-            pre_tok_class = getattr(pre_tokenizers_fast, pre_tok_state.pop("type"))
-            pre_tok_state["add_prefix_space"] = add_prefix_space
-            self.backend_tokenizer.pre_tokenizer = pre_tok_class(**pre_tok_state)
-
-        self.add_prefix_space = add_prefix_space
+        if self.backend_tokenizer.pre_tokenizer is not None:
+            pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
+            if pre_tok_state.get("add_prefix_space", self.add_prefix_space) != self.add_prefix_space:
+                pre_tok_class = getattr(pre_tokenizers_fast, pre_tok_state.pop("type"))
+                pre_tok_state["add_prefix_space"] = self.add_prefix_space
+                self.backend_tokenizer.pre_tokenizer = pre_tok_class(**pre_tok_state)
 
     @property
     def is_fast(self) -> bool:
