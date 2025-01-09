@@ -491,11 +491,7 @@ class GPTNeoXSdpaAttention(GPTNeoXAttention):
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->GPTNeoX
 class GPTNeoXRotaryEmbedding(nn.Module):
-    def __init__(
-        self,
-        config: GPTNeoXConfig,
-        device=None,
-    ):
+    def __init__(self, config: GPTNeoXConfig, device=None):
         super().__init__()
         self.rope_kwargs = {}
         # BC: "rope_type" was originally "type"
