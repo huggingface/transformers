@@ -460,8 +460,8 @@ class MoonshineModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 @require_torch
 class MoonshineModelIntegrationTests(unittest.TestCase):
     def setUp(self):
-        self.processor_tiny = AutoProcessor.from_pretrained("eustlb/moonshine-tiny")
-        self.processor_base = AutoProcessor.from_pretrained("eustlb/moonshine-base")
+        self.processor_tiny = AutoProcessor.from_pretrained("UsefulSensors/moonshine-tiny")
+        self.processor_base = AutoProcessor.from_pretrained("UsefulSensors/moonshine-base")
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
@@ -475,7 +475,7 @@ class MoonshineModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_tiny_logits_single(self):
-        model = MoonshineForConditionalGeneration.from_pretrained("eustlb/moonshine-tiny")
+        model = MoonshineForConditionalGeneration.from_pretrained("UsefulSensors/moonshine-tiny")
         model.to(torch_device)
 
         inputs = self.processor_tiny(self._load_datasamples(1), return_tensors="pt")
@@ -493,7 +493,7 @@ class MoonshineModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_base_logits_single(self):
-        model = MoonshineForConditionalGeneration.from_pretrained("eustlb/moonshine-base")
+        model = MoonshineForConditionalGeneration.from_pretrained("UsefulSensors/moonshine-base")
         model.to(torch_device)
 
         inputs = self.processor_base(self._load_datasamples(1), return_tensors="pt")
@@ -511,7 +511,7 @@ class MoonshineModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_tiny_logits_batch(self):
-        model = MoonshineForConditionalGeneration.from_pretrained("eustlb/moonshine-tiny")
+        model = MoonshineForConditionalGeneration.from_pretrained("UsefulSensors/moonshine-tiny")
         model.to(torch_device)
 
         inputs = self.processor_tiny(self._load_datasamples(4), return_tensors="pt", padding=True)
@@ -529,7 +529,7 @@ class MoonshineModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_base_logits_batch(self):
-        model = MoonshineForConditionalGeneration.from_pretrained("eustlb/moonshine-base")
+        model = MoonshineForConditionalGeneration.from_pretrained("UsefulSensors/moonshine-base")
         model.to(torch_device)
 
         inputs = self.processor_base(self._load_datasamples(4), return_tensors="pt", padding=True)
@@ -549,7 +549,7 @@ class MoonshineModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_tiny_generation_single(self):
-        model = MoonshineForConditionalGeneration.from_pretrained("eustlb/moonshine-tiny")
+        model = MoonshineForConditionalGeneration.from_pretrained("UsefulSensors/moonshine-tiny")
         model.to(torch_device)
 
         audio_array = self._load_datasamples(1)
@@ -563,7 +563,7 @@ class MoonshineModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_base_generation_single(self):
-        model = MoonshineForConditionalGeneration.from_pretrained("eustlb/moonshine-base")
+        model = MoonshineForConditionalGeneration.from_pretrained("UsefulSensors/moonshine-base")
         model.to(torch_device)
 
         audio_array = self._load_datasamples(1)
@@ -577,7 +577,7 @@ class MoonshineModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_tiny_generation_batch(self):
-        model = MoonshineForConditionalGeneration.from_pretrained("eustlb/moonshine-tiny")
+        model = MoonshineForConditionalGeneration.from_pretrained("UsefulSensors/moonshine-tiny")
         model.to(torch_device)
 
         audio_array = self._load_datasamples(4)
@@ -599,7 +599,7 @@ class MoonshineModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_base_generation_batch(self):
-        model = MoonshineForConditionalGeneration.from_pretrained("eustlb/moonshine-base")
+        model = MoonshineForConditionalGeneration.from_pretrained("UsefulSensors/moonshine-base")
         model.to(torch_device)
 
         audio_array = self._load_datasamples(4)

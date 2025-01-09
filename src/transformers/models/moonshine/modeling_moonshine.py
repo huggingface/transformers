@@ -1349,8 +1349,8 @@ class MoonshineModel(MoonshinePreTrainedModel):
         >>> from transformers import AutoFeatureExtractor, MoonshineModel
         >>> from datasets import load_dataset
 
-        >>> model = MoonshineModel.from_pretrained("eustlb/moonshine-tiny")
-        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("eustlb/moonshine-tiny")
+        >>> model = MoonshineModel.from_pretrained("UsefulSensors/moonshine-tiny")
+        >>> feature_extractor = AutoFeatureExtractor.from_pretrained("UsefulSensors/moonshine-tiny")
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> inputs = feature_extractor(ds[0]["audio"]["array"], return_tensors="pt")
         >>> input_values = inputs.input_values
@@ -1491,8 +1491,8 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
         >>> from transformers import AutoProcessor, MoonshineForConditionalGeneration
         >>> from datasets import load_dataset
 
-        >>> processor = AutoProcessor.from_pretrained("eustlb/moonshine-tiny")
-        >>> model = MoonshineForConditionalGeneration.from_pretrained("eustlb/moonshine-tiny")
+        >>> processor = AutoProcessor.from_pretrained("UsefulSensors/moonshine-tiny")
+        >>> model = MoonshineForConditionalGeneration.from_pretrained("UsefulSensors/moonshine-tiny")
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
