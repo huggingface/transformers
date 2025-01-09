@@ -1282,11 +1282,11 @@ class TokenizerTesterMixin:
                     padding=True,
                     return_assistant_tokens_mask=True,
                     return_dict=True,
-                    return_tensors='pt',
+                    return_tensors="pt",
                 )
 
-                self.assertEqual(type(output_pt['assistant_masks']), torch.Tensor)
-                self.assertEqual(output_pt['assistant_masks'].shape, output_pt['attention_mask'].shape)
+                self.assertEqual(type(output_pt["assistant_masks"]), torch.Tensor)
+                self.assertEqual(output_pt["assistant_masks"].shape, output_pt["input_ids"].shape)
 
                 for i, conv in enumerate(conversations):
                     chat_string = tokenizer_r.apply_chat_template(
@@ -1338,7 +1338,6 @@ class TokenizerTesterMixin:
                         (output_pt["assistant_masks"][i, assistant_end + 1 : assistant_start2] == 0).all(),
                     )
 
-
                 # check not batched
                 output = tokenizer_r.apply_chat_template(
                     conversations[0],
@@ -1353,11 +1352,11 @@ class TokenizerTesterMixin:
                     tokenize=True,
                     return_assistant_tokens_mask=True,
                     return_dict=True,
-                    return_tensors='pt',
+                    return_tensors="pt",
                 )
 
-                self.assertEqual(type(output_pt['assistant_masks']), torch.Tensor)
-                self.assertEqual(output_pt['assistant_masks'].shape, output_pt['attention_mask'].shape)
+                self.assertEqual(type(output_pt["assistant_masks"]), torch.Tensor)
+                self.assertEqual(output_pt["assistant_masks"].shape, output_pt["attention_mask"].shape)
 
                 chat_string = tokenizer_r.apply_chat_template(
                     conversations[0], tokenize=False, chat_template=dummy_template
