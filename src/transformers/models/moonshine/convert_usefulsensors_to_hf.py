@@ -63,8 +63,8 @@ def _convert_layer_names(name, gated_mlp=False):
         count=1,
     )
     if gated_mlp:
-        name = re.sub(r"functional\.layers\.dense\.", "mlp.up_proj.", name)
-        name = re.sub(r"functional\.layers\.dense_1\.", "mlp.down_proj.", name)
+        name = re.sub(r"functional\.layers\.dense\.", "mlp.fc1.", name)
+        name = re.sub(r"functional\.layers\.dense_1\.", "mlp.fc2.", name)
     else:
         name = re.sub(r"functional\.layers\.sequential\.layers\.dense\.", "mlp.fc1.", name)
         name = re.sub(r"functional\.layers\.sequential\.layers\.dense_1\.", "mlp.fc2.", name)
@@ -127,16 +127,16 @@ def convert_usefulsensors_moonshine_to_hf(model_name, pytorch_dump_folder_path):
         loaded_decoder_weights = _read_h5_weights(f, weights={})
 
     encoder_state_dict = {**loaded_encoder_weights, **loaded_preprocessor_weights}
-    encoder_state_dict = _convert_weights(encoder_state_dict)
+    converted_encoder_state_dict = _convert_weights(encoder_state_dict)
 
-    converted_decoder_weights = _convert_weights(loaded_decoder_weights, encoder=False)
-    converted_decoder_weights["embed_tokens.weight"] = converted_decoder_weights["embed_tokens.weight"].T
+    converted_decoder_state_dict = _convert_weights(loaded_decoder_weights, encoder=False)
+    converted_decoder_state_dict["embed_tokens.weight"] = converted_decoder_state_dict["embed_tokens.weight"].T
 
     final_weights = {}
-    for k, v in encoder_state_dict.items():
+    for k, v in converted_encoder_state_dict.items():
         final_weights[f"model.encoder.{k}"] = v
 
-    for k, v in converted_decoder_weights.items():
+    for k, v in converted_decoder_state_dict.items():
         final_weights[f"model.decoder.{k}"] = v
 
     if model_name == "tiny":
@@ -144,13 +144,17 @@ def convert_usefulsensors_moonshine_to_hf(model_name, pytorch_dump_folder_path):
     elif model_name == "base":
         config = MoonshineConfig(
             hidden_size=416,
-            num_hidden_layers=8,
-            num_attention_heads=8,
+            intermediate_size=1664,
+            encoder_num_hidden_layers=8,
+            decoder_num_hidden_layers=8,
+            encoder_num_attention_heads=8,
+            decoder_num_attention_heads=8,
+            partial_rotary_factor=0.62,
         )
     else:
         raise ValueError(f"Unknown model name {model_name}")
 
-    final_weights["proj_out.weight"] = converted_decoder_weights["embed_tokens.weight"]
+    final_weights["proj_out.weight"] = converted_decoder_state_dict["embed_tokens.weight"]
 
     model = MoonshineForConditionalGeneration(config)
     model.load_state_dict(final_weights)
