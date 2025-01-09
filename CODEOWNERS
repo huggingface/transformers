@@ -97,9 +97,7 @@ trainer.py @muellerzr @SunMarc
 /src/transformers/models/jetmoe/*_modeling* @ArthurZucker
 /src/transformers/models/jukebox/*_modeling* @ArthurZucker
 /src/transformers/models/led/*_modeling* @ArthurZucker
-/src/transformers/models/llama/*_modeling* @ArthurZucker
-/src/transformers/models/llama2/*_modeling* @ArthurZucker
-/src/transformers/models/llama3/*_modeling* @ArthurZucker
+/src/transformers/models/llama/*_modeling* @ArthurZucker @Cyrilvallez 
 /src/transformers/models/longformer/*_modeling* @ArthurZucker
 /src/transformers/models/longt5/*_modeling* @ArthurZucker
 /src/transformers/models/luke/*_modeling* @ArthurZucker
