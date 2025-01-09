@@ -18,13 +18,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import copy
 from typing import Callable, Optional, Tuple, Union
 
 import numpy as np
 import torch
 import torch.nn as nn
-from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
@@ -55,118 +53,33 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "MoonshineConfig"
 
 
-class MoonshineRotaryEmbedding(nn.Module):
-    # Note: the forward pass of this RoPE is slightly different from Llama's, resulting in different `sin`/`cos` for
-    # the same parameterization. The differences are highlighted with a comment.
-
-    def __init__(
-        self,
-        dim=None,
-        max_position_embeddings=2048,
-        base=10000,
-        device=None,
-        scaling_factor=1.0,
-        rope_type="default",
-        config: Optional[MoonshineConfig] = None,
-    ):
-        super().__init__()
-        # TODO (joao): remove the `if` below, only used for BC
-        self.rope_kwargs = {}
-        if config is None:
-            logger.warning_once(
-                "`MoonshineRotaryEmbedding` can now be fully parameterized by passing the model config through the "
-                "`config` argument. All other arguments will be removed in v4.46"
-            )
-            self.rope_kwargs = {
-                "rope_type": rope_type,
-                "factor": scaling_factor,
-                "dim": dim,
-                "base": base,
-                "max_position_embeddings": max_position_embeddings,
-            }
-            self.rope_type = rope_type
-            self.max_seq_len_cached = max_position_embeddings
-            self.original_max_seq_len = max_position_embeddings
-        else:
-            # BC: "rope_type" was originally "type"
-            if config.rope_scaling is not None:
-                self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-            else:
-                self.rope_type = "default"
-            self.max_seq_len_cached = config.max_position_embeddings
-            self.original_max_seq_len = config.max_position_embeddings
-
-        self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, **self.rope_kwargs)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
-
-    def _dynamic_frequency_update(self, position_ids, device):
-        """
-        dynamic RoPE layers should recompute `inv_freq` in the following situations:
-        1 - growing beyond the cached sequence length (allow scaling)
-        2 - the current sequence length is in the original scale (avoid losing precision with small sequences)
-        """
-        seq_len = torch.max(position_ids) + 1
-        if seq_len > self.max_seq_len_cached:  # growth
-            inv_freq, self.attention_scaling = self.rope_init_fn(
-                self.config, device, seq_len=seq_len, **self.rope_kwargs
-            )
-            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
-            self.max_seq_len_cached = seq_len
-
-        if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
-            self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
-            self.max_seq_len_cached = self.original_max_seq_len
-
-    @torch.no_grad()
-    def forward(self, x, position_ids):
-        if "dynamic" in self.rope_type:
-            self._dynamic_frequency_update(position_ids, device=x.device)
-
-        # Core RoPE block
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
-        position_ids_expanded = position_ids[:, None, :].float()
-        # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
-        device_type = x.device.type
-        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.repeat_interleave(freqs, 2, dim=-1)  # This line differs from Llama's implementation
-            cos = emb.cos()
-            sin = emb.sin()
-
-        # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
-        cos = cos * self.attention_scaling
-        sin = sin * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-
-class MoonshineMLP(nn.Module):
+class MoonshineEncoderMLP(nn.Module):
     def __init__(self, config, hidden_act):
         super().__init__()
         self.config = config
-        self.hidden_act = hidden_act
         self.activation_fn = ACT2FN[hidden_act]
-        if hidden_act == "gelu":
-            self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
-            self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
-        elif hidden_act == "silu":
-            self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size * 2)
-            self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
-        else:
-            raise ValueError(f"Unsupported activation function: {hidden_act}, please use 'gelu' or 'silu'")
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.fc1(hidden_states)
-        if self.hidden_act == "silu":
-            hidden_states, gate = hidden_states.chunk(2, dim=-1)
-            hidden_states = self.activation_fn(gate) * hidden_states
-        else:
-            hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
+
+
+class MoonshineDecoderMLP(nn.Module):
+    def __init__(self, config, hidden_act):
+        super().__init__()
+        self.config = config
+        self.activation_fn = ACT2FN[hidden_act]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size * 2)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states, gate = hidden_states.chunk(2, dim=-1)
+        hidden_states = self.activation_fn(gate) * hidden_states
         hidden_states = self.fc2(hidden_states)
         return hidden_states
 
@@ -209,20 +122,13 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-# TODO: @eustlb remove this once modular edge case is fixed
-# modular edge case: cannot import from Cohere's modeling file since it is call in the attention that inherits from LlamaAttention
-# should be removed in the future
 def rotate_half(x):
-    # Split and rotate. Note that this function is different from e.g. Llama.
-    x1 = x[..., ::2]
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., 0::2]
     x2 = x[..., 1::2]
-    rot_x = torch.stack([-x2, x1], dim=-1).flatten(-2)
-    return rot_x
+    return torch.stack((-x2, x1), dim=-1).flatten(-2)
 
 
-# TODO: @eustlb remove this once modular edge case is fixed
-# modular edge case: cannot import from Cohere's modeling file since it is call in the attention that inherits from LlamaAttention
-# should be removed in the future
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -243,21 +149,41 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     Returns:
         `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
-    dtype = q.dtype
-    q = q.float()
-    k = k.float()
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed.to(dtype=dtype), k_embed.to(dtype=dtype)
+
+    # Interleave them instead of usual shape
+    cos = cos[..., : cos.shape[-1] // 2].repeat_interleave(2, dim=-1)
+    sin = sin[..., : sin.shape[-1] // 2].repeat_interleave(2, dim=-1)
+
+    # Keep half or full tensor for later concatenation
+    rotary_dim = cos.shape[-1]
+    q_rot, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
+    k_rot, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
+
+    # Apply rotary embeddings on the first half or full tensor
+    q_embed = (q_rot * cos) + (rotate_half(q_rot) * sin)
+    k_embed = (k_rot * cos) + (rotate_half(k_rot) * sin)
+
+    # Concatenate back to full shape
+    q_embed = torch.cat([q_embed, q_pass], dim=-1)
+    k_embed = torch.cat([k_embed, k_pass], dim=-1)
+    return q_embed, k_embed
 
 
 class MoonshineAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: MoonshineConfig, layer_idx: int, is_causal: bool):
+    def __init__(
+        self,
+        config: MoonshineConfig,
+        layer_idx: int,
+        is_causal: bool,
+        num_attention_heads: int,
+        num_key_value_heads: int,
+    ):
         super().__init__()
+        config.update({"num_attention_heads": num_attention_heads, "num_key_value_heads": num_key_value_heads})
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
@@ -275,11 +201,7 @@ class MoonshineAttention(nn.Module):
         self.v_proj = nn.Linear(
             config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
         )
-        self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.attention_bias
-        )
-        self.rotary_ndims = max(config.hidden_size // config.num_attention_heads // 2, 32)
-        self.num_key_values_heads = config.num_key_value_heads
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
 
     def forward(
         self,
@@ -293,7 +215,9 @@ class MoonshineAttention(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len = hidden_states.shape[:-1]
 
-        query_states = self._shape(self.q_proj(hidden_states), bsz, q_len)
+        query_states = (
+            self.q_proj(hidden_states).view(bsz, q_len, self.config.num_key_value_heads, self.head_dim).transpose(1, 2)
+        )
 
         is_cross_attention = key_value_states is not None
         if past_key_value is not None:
@@ -311,8 +235,16 @@ class MoonshineAttention(nn.Module):
             key_states = past_key_value.key_cache[self.layer_idx]
             value_states = past_key_value.value_cache[self.layer_idx]
         else:
-            key_states = self._shape(self.k_proj(current_states), bsz, -1)
-            value_states = self._shape(self.v_proj(current_states), bsz, -1)
+            key_states = (
+                self.k_proj(current_states)
+                .view(bsz, -1, self.config.num_key_value_heads, self.head_dim)
+                .transpose(1, 2)
+            )
+            value_states = (
+                self.v_proj(current_states)
+                .view(bsz, -1, self.config.num_key_value_heads, self.head_dim)
+                .transpose(1, 2)
+            )
             if is_cross_attention and past_key_value is not None:
                 key_states, value_states = past_key_value.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
@@ -320,30 +252,10 @@ class MoonshineAttention(nn.Module):
 
         if not is_cross_attention:
             cos, sin = position_embeddings
-
-            # Partial rotary embedding
-            query_rot, query_pass = (
-                query_states[..., : self.rotary_ndims],
-                query_states[..., self.rotary_ndims :],
-            )
-            key_rot, key_pass = (
-                key_states[..., : self.rotary_ndims],
-                key_states[..., self.rotary_ndims :],
-            )
-            # [batch_size, seq_length, num_heads, head_dim // config.partial_rotary_factor]
-            query_rot, key_rot = apply_rotary_pos_emb(query_rot, key_rot, cos, sin)
-
-            # [batch_size, seq_length, num_heads, head_dim]
-            query_states = torch.cat((query_rot, query_pass), dim=-1)
-            key_states = torch.cat((key_rot, key_pass), dim=-1)
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
             if past_key_value is not None:
-                cache_kwargs = {
-                    "sin": sin,
-                    "cos": cos,
-                    "partial_rotation_size": self.rotary_ndims,
-                    "cache_position": cache_position,
-                }
+                cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
                 key_states, value_states = past_key_value.update(
                     key_states, value_states, self.layer_idx, cache_kwargs
                 )
@@ -375,8 +287,70 @@ class MoonshineAttention(nn.Module):
         attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
-    def _shape(self, tensor: torch.Tensor, bsz: int, seq_len: int):
-        return tensor.view(bsz, seq_len, self.config.num_key_value_heads, self.head_dim).transpose(1, 2)
+
+class MoonshineRotaryEmbedding(nn.Module):
+    def __init__(
+        self,
+        config: MoonshineConfig,
+        device=None,
+    ):
+        super().__init__()
+        self.rope_kwargs = {}
+        # BC: "rope_type" was originally "type"
+        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+        else:
+            self.rope_type = "default"
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
+        self.config = config
+        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, **self.rope_kwargs)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = self.inv_freq
+
+    def _dynamic_frequency_update(self, position_ids, device):
+        """
+        dynamic RoPE layers should recompute `inv_freq` in the following situations:
+        1 - growing beyond the cached sequence length (allow scaling)
+        2 - the current sequence length is in the original scale (avoid losing precision with small sequences)
+        """
+        seq_len = torch.max(position_ids) + 1
+        if seq_len > self.max_seq_len_cached:  # growth
+            inv_freq, self.attention_scaling = self.rope_init_fn(
+                self.config, device, seq_len=seq_len, **self.rope_kwargs
+            )
+            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
+            self.max_seq_len_cached = seq_len
+
+        if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
+            self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
+            self.max_seq_len_cached = self.original_max_seq_len
+
+    @torch.no_grad()
+    def forward(self, x, position_ids):
+        if "dynamic" in self.rope_type:
+            self._dynamic_frequency_update(position_ids, device=x.device)
+
+        # Core RoPE block
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        position_ids_expanded = position_ids[:, None, :].float()
+        # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
+        device_type = x.device.type
+        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos()
+            sin = emb.sin()
+
+        # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
+        cos = cos * self.attention_scaling
+        sin = sin * self.attention_scaling
+
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 class MoonshineEncoderLayer(nn.Module):
@@ -384,9 +358,15 @@ class MoonshineEncoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = MoonshineAttention(config=config, layer_idx=layer_idx, is_causal=False)
+        self.self_attn = MoonshineAttention(
+            config=config,
+            layer_idx=layer_idx,
+            is_causal=False,
+            num_attention_heads=config.encoder_num_attention_heads,
+            num_key_value_heads=config.encoder_num_key_value_heads,
+        )
 
-        self.mlp = MoonshineMLP(config, config.encoder_hidden_act)
+        self.mlp = MoonshineEncoderMLP(config, config.encoder_hidden_act)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
 
@@ -438,10 +418,22 @@ class MoonshineDecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = MoonshineAttention(config=config, layer_idx=layer_idx, is_causal=True)
-        self.encoder_attn = MoonshineAttention(config=config, layer_idx=layer_idx, is_causal=False)
+        self.self_attn = MoonshineAttention(
+            config=config,
+            layer_idx=layer_idx,
+            is_causal=True,
+            num_attention_heads=config.encoder_num_attention_heads,
+            num_key_value_heads=config.encoder_num_key_value_heads,
+        )
+        self.encoder_attn = MoonshineAttention(
+            config=config,
+            layer_idx=layer_idx,
+            is_causal=False,
+            num_attention_heads=config.encoder_num_attention_heads,
+            num_key_value_heads=config.encoder_num_key_value_heads,
+        )
 
-        self.mlp = MoonshineMLP(config, config.decoder_hidden_act)
+        self.mlp = MoonshineDecoderMLP(config, config.decoder_hidden_act)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
         self.final_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
@@ -489,11 +481,9 @@ class MoonshineDecoderLayer(nn.Module):
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
-                position_ids=encoder_position_ids,
                 past_key_value=past_key_value,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
-                position_embeddings=encoder_position_embeddings,
             )
             hidden_states = residual + hidden_states
 
@@ -576,11 +566,6 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
     main_input_name = "input_values"
 
     def __init__(self, config: MoonshineConfig):
-        config = copy.deepcopy(config)
-        config.num_hidden_layers = config.encoder_num_hidden_layers
-        config.num_attention_heads = config.encoder_num_attention_heads
-        config.num_key_value_heads = config.encoder_num_key_value_heads
-
         super().__init__(config)
         self.config = config
         embed_dim = config.hidden_size
@@ -592,16 +577,13 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
 
         self.rotary_emb = MoonshineRotaryEmbedding(config=config)
 
-        self.layers = nn.ModuleList([MoonshineEncoderLayer(config, idx) for idx in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList(
+            [MoonshineEncoderLayer(config, idx) for idx in range(config.encoder_num_hidden_layers)]
+        )
         self.layer_norm = nn.LayerNorm(embed_dim, bias=False)
 
         self.gradient_checkpointing = False
         self.post_init()
-
-    def _freeze_parameters(self):
-        for param in self.parameters():
-            param.requires_grad = False
-        self._requires_grad = False
 
     def get_input_embeddings(self) -> nn.Module:
         return self.conv1
@@ -799,16 +781,12 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
 
     def __init__(self, config: MoonshineConfig):
         super().__init__(config)
-        config = copy.deepcopy(config)
-        config.num_hidden_layers = config.decoder_num_hidden_layers
-        config.num_attention_heads = config.decoder_num_attention_heads
-        config.num_key_value_heads = config.decoder_num_key_value_heads
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [MoonshineDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [MoonshineDecoderLayer(config, idx) for idx in range(config.decoder_num_hidden_layers)]
         )
         self.norm = nn.LayerNorm(config.hidden_size, bias=False)
         self.rotary_emb = MoonshineRotaryEmbedding(config=config)
@@ -837,7 +815,6 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_position_ids: Optional[torch.LongTensor] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         """
@@ -845,10 +822,6 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
             encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
                 Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
                 of the decoder.
-            encoder_position_ids (`torch.LongTensor` of shape `(batch_size, encoder_sequence_length)`, *optional*):
-                Indices of positions of each encoder input's hidden states in the position embeddings.
-
-                [What are position IDs?](../glossary#position-ids)
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -883,11 +856,6 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        if encoder_position_ids is None:
-            encoder_position_ids = torch.arange(
-                encoder_hidden_states.shape[1], device=encoder_hidden_states.device
-            ).unsqueeze(0)
-
         causal_mask = self._update_causal_mask(
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
         )
@@ -896,7 +864,6 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
 
         # create position embeddings to be shared across the decoder layers
         position_embeddings = self.rotary_emb(hidden_states, position_ids)
-        encoder_position_embeddings = self.rotary_emb(encoder_hidden_states, encoder_position_ids)
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -926,13 +893,11 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
                     attention_mask=causal_mask,
                     encoder_hidden_states=encoder_hidden_states,
                     position_ids=position_ids,
-                    encoder_position_ids=encoder_position_ids,
                     past_key_value=past_key_values,
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                     cache_position=cache_position,
                     position_embeddings=position_embeddings,
-                    encoder_position_embeddings=encoder_position_embeddings,
                     **flash_attn_kwargs,
                 )
 
@@ -1569,22 +1534,19 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
             return_dict=return_dict,
             cache_position=cache_position,
         )
-        lm_logits = self.proj_out(outputs[0])
+        logits = self.proj_out(outputs[0])
 
         loss = None
         if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            # move labels to correct device to enable PP
-            labels = labels.to(lm_logits.device)
-            loss = loss_fct(lm_logits.view(-1, self.config.vocab_size), labels.reshape(-1))
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         if not return_dict:
-            output = (lm_logits,) + outputs[1:]
+            output = (logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
         return Seq2SeqLMOutput(
             loss=loss,
-            logits=lm_logits,
+            logits=logits,
             past_key_values=outputs.past_key_values,
             decoder_hidden_states=outputs.decoder_hidden_states,
             decoder_attentions=outputs.decoder_attentions,
