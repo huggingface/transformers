@@ -311,7 +311,7 @@ trainer.py @muellerzr @SunMarc
 /src/transformers/models/layoutlmv3/*_modeling* @NielsRogge
 /src/transformers/models/layoutxlm/*_modeling* @NielsRogge
 /src/transformers/models/lilt/*_modeling* @zucchini-nlp
-/src/transformers/models/llava/*_modeling* @zucchini-nlp
+/src/transformers/models/llava/*_modeling* @zucchini-nlp @arthurzucker
 /src/transformers/models/llava_next/*_modeling* @zucchini-nlp
 /src/transformers/models/llava_next_video/*_modeling* @zucchini-nlp
 /src/transformers/models/llava_onevision/*_modeling* @zucchini-nlp
