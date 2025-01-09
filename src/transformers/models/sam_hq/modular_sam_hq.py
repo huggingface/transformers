@@ -39,6 +39,8 @@ from ..sam.modeling_sam import (
     SamVisionEncoderOutput,
     SamVisionLayer,
     SamVisionNeck,
+    SamAttention,
+    SamTwoWayAttentionBlock,
 )
 
 
@@ -197,7 +199,6 @@ class SamHQVisionEncoderOutput(SamVisionEncoderOutput):
         windowed attention. Each element in the list is of shape `(batch_size, sequence_length, hidden_size)`.
         This is specific to SAM-HQ and not present in base SAM.
     """
-
     intermediate_embeddings: Optional[List[torch.FloatTensor]] = None
 
 
@@ -280,6 +281,7 @@ class SamHQVisionEncoder(SamVisionEncoder):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         hidden_states = self.neck(hidden_states)
+        print(intermediate_embeddings)
 
         if not return_dict:
             outputs = (hidden_states, intermediate_embeddings)
@@ -305,154 +307,12 @@ class SamHQPromptEncoder(SamPromptEncoder):
     pass
 
 
-class SamHQAttention(nn.Module):
-    """
-    SAM_HQ's attention layer that allows for downscaling the size of the embedding after projection to queries, keys, and
-    values.
-    """
-
-    def __init__(self, config, downsample_rate=None):
-        super().__init__()
-        self.hidden_size = config.hidden_size
-
-        downsample_rate = config.attention_downsample_rate if downsample_rate is None else downsample_rate
-
-        self.internal_dim = config.hidden_size // downsample_rate
-        self.num_attention_heads = config.num_attention_heads
-        if self.internal_dim % config.num_attention_heads != 0:
-            raise ValueError("num_attention_heads must divide hidden_size.")
-
-        self.q_proj = nn.Linear(self.hidden_size, self.internal_dim)
-        self.k_proj = nn.Linear(self.hidden_size, self.internal_dim)
-        self.v_proj = nn.Linear(self.hidden_size, self.internal_dim)
-        self.out_proj = nn.Linear(self.internal_dim, self.hidden_size)
-
-    def _separate_heads(self, hidden_states: Tensor, num_attention_heads: int) -> Tensor:
-        batch, point_batch_size, n_tokens, channel = hidden_states.shape
-        c_per_head = channel // num_attention_heads
-        hidden_states = hidden_states.reshape(batch * point_batch_size, n_tokens, num_attention_heads, c_per_head)
-        return hidden_states.transpose(1, 2)
-
-    def _recombine_heads(self, hidden_states: Tensor, point_batch_size: int) -> Tensor:
-        batch, n_heads, n_tokens, c_per_head = hidden_states.shape
-        hidden_states = hidden_states.transpose(1, 2)
-        return hidden_states.reshape(batch // point_batch_size, point_batch_size, n_tokens, n_heads * c_per_head)
-
-    def forward(self, query: Tensor, key: Tensor, value: Tensor, attention_similarity: Tensor = None) -> Tensor:
-        # Input projections
-        query = self.q_proj(query)
-        key = self.k_proj(key)
-        value = self.v_proj(value)
-
-        point_batch_size = query.shape[1]
-        # Separate into heads
-        query = self._separate_heads(query, self.num_attention_heads)
-        key = self._separate_heads(key, self.num_attention_heads)
-        value = self._separate_heads(value, self.num_attention_heads)
-
-        # SamAttention
-        _, _, _, c_per_head = query.shape
-        attn = query @ key.permute(0, 1, 3, 2)  # batch_size * point_batch_size  x N_heads x N_tokens x N_tokens
-        attn = attn / (c_per_head**0.5)
-        attn = torch.softmax(attn, dim=-1)
-
-        if attention_similarity is not None:
-            attn = attn + attention_similarity
-            attn = torch.softmax(attn, dim=-1)
-
-        # Get output
-        out = attn @ value
-        out = self._recombine_heads(out, point_batch_size)
-        out = self.out_proj(out)
-
-        return out
+class SamHQAttention(SamAttention):
+    pass
 
 
-class SamHQTwoWayAttentionBlock(nn.Module):
-    def __init__(self, config, attention_downsample_rate: int = 2, skip_first_layer_pe: bool = False):
-        """
-        A transformer block with four layers:
-            (1) self-attention of sparse inputs (2) cross attention of sparse inputs -> dense inputs (3) mlp block on
-            sparse inputs (4) cross attention of dense inputs -> sparse inputs
-
-        Arguments:
-            config (`SamHQMaskDecoderConfig`):
-                The configuration file used to instantiate the block
-            attention_downsample_rate (*optionalk*, int, defaults to 2):
-                The downsample ratio of the block used to reduce the inner dim of the attention.
-            skip_first_layer_pe (*optional*, bool, defaults to `False`):
-                Whether or not to skip the addition of the query_point_embedding on the first layer.
-        """
-        super().__init__()
-
-        self.hidden_size = config.hidden_size
-        self.layer_norm_eps = config.layer_norm_eps
-
-        self.self_attn = SamHQAttention(config, downsample_rate=1)
-        self.layer_norm1 = nn.LayerNorm(self.hidden_size, eps=self.layer_norm_eps)
-
-        self.cross_attn_token_to_image = SamHQAttention(config, downsample_rate=attention_downsample_rate)
-        self.layer_norm2 = nn.LayerNorm(self.hidden_size, eps=self.layer_norm_eps)
-
-        self.mlp = SamHQMLPBlock(config)
-        self.layer_norm3 = nn.LayerNorm(self.hidden_size, eps=self.layer_norm_eps)
-
-        self.layer_norm4 = nn.LayerNorm(self.hidden_size, eps=self.layer_norm_eps)
-        self.cross_attn_image_to_token = SamHQAttention(config, downsample_rate=attention_downsample_rate)
-
-        self.skip_first_layer_pe = skip_first_layer_pe
-
-    def forward(
-        self,
-        queries: Tensor,
-        keys: Tensor,
-        query_point_embedding: Tensor,
-        key_point_embedding: Tensor,
-        attention_similarity: Tensor,
-        output_attentions: bool = False,
-    ):
-        # Self attention block
-        if self.skip_first_layer_pe:
-            queries = self.self_attn(query=queries, key=queries, value=queries)
-        else:
-            query = queries + query_point_embedding
-            attn_out = self.self_attn(query=query, key=query, value=queries)
-            queries = queries + attn_out
-        queries = self.layer_norm1(queries)
-
-        # Cross attention block, tokens attending to image embedding
-        query = queries + query_point_embedding
-        key = keys + key_point_embedding
-
-        attn_out = self.cross_attn_token_to_image(
-            query=query, key=key, value=keys, attention_similarity=attention_similarity
-        )
-        queries = queries + attn_out
-
-        queries = self.layer_norm2(queries)
-
-        # MLP block
-        mlp_out = self.mlp(queries)
-        queries = queries + mlp_out
-        queries = self.layer_norm3(queries)
-
-        # Cross attention block, image embedding attending to tokens
-        query = queries + query_point_embedding
-        key = keys + key_point_embedding
-
-        attn_out = self.cross_attn_image_to_token(query=key, key=query, value=queries)
-        keys = keys + attn_out
-
-        keys = self.layer_norm4(keys)
-
-        outputs = (queries, keys)
-
-        if output_attentions:
-            outputs = outputs + (attn_out,)
-        else:
-            outputs = outputs + (None,)
-
-        return outputs
+class SamHQTwoWayAttentionBlock(SamTwoWayAttentionBlock):
+    pass
 
 
 class SamHQPositionalEmbedding(SamPositionalEmbedding):

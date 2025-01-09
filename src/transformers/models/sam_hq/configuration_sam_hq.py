@@ -49,6 +49,8 @@ class SamHQPromptEncoderConfig(PretrainedConfig):
             The non-linear activation function in the encoder and pooler.
     """
 
+    base_config_key = "prompt_encoder_config"
+
     def __init__(
         self,
         hidden_size=256,
@@ -122,6 +124,8 @@ class SamHQVisionConfig(PretrainedConfig):
             The dimensionality of the MLP layer in the Transformer encoder. If `None`, defaults to `mlp_ratio *
             hidden_size`.
     """
+
+    base_config_key = "vision_config"
 
     def __init__(
         self,
@@ -254,6 +258,11 @@ class SamHQConfig(PretrainedConfig):
     """
 
     model_type = "sam-hq"
+    sub_configs = {
+        "prompt_encoder_config": SamHQPromptEncoderConfig,
+        "mask_decoder_config": SamHQMaskDecoderConfig,
+        "vision_config": SamHQVisionConfig,
+    }
 
     def __init__(
         self,
