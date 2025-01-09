@@ -278,69 +278,30 @@ class MoonshineRotaryEmbedding(CohereRotaryEmbedding):
     pass
 
 
-class MoonshineNonGatedMLP(PhiMLP):
-    def __init__(self, config: MoonshineConfig, hidden_act: str):
-        config = copy.deepcopy(config)
-        config.hidden_act = hidden_act
-        if config.intermediate_size is None:
-            config.intermediate_size = config.hidden_size * config.ff_mult
-        super().__init__(config)
-
-
-class MoonshineGatedMLP(nn.Module):
-    def __init__(self, config: MoonshineConfig, hidden_act: str):
+class MoonshineMLP(nn.Module):
+    def __init__(self, config, hidden_act):
         super().__init__()
-        config = copy.deepcopy(config)
-        config.hidden_act = hidden_act
-        if config.intermediate_size is None:
-            config.intermediate_size = config.hidden_size * config.ff_mult * 2
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=True)
-        self.down_proj = nn.Linear(self.intermediate_size // 2, self.hidden_size, bias=True)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, hidden_state):
-        hidden_state = self.up_proj(hidden_state)
-        hidden_state, gate = hidden_state.chunk(2, dim=-1)
-        hidden_state = self.act_fn(gate) * hidden_state
-        return self.down_proj(hidden_state)
-
-
-class MoonshineMLP:
-    def __new__(cls, config: MoonshineConfig, hidden_act: str):
+        self.config = config
+        self.hidden_act = hidden_act
+        self.activation_fn = ACT2FN[hidden_act]
         if hidden_act == "gelu":
-            return MoonshineNonGatedMLP(config, hidden_act)
+            self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+            self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
         elif hidden_act == "silu":
-            return MoonshineGatedMLP(config, hidden_act)
+            self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size * 2)
+            self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
         else:
             raise ValueError(f"Unsupported activation function: {hidden_act}, please use 'gelu' or 'silu'")
 
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs,
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        if self.hidden_act == "silu":
+            hidden_states, gate = hidden_states.chunk(2, dim=-1)
+            hidden_states = self.activation_fn(gate) * hidden_states
+        else:
+            hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
 
 
 class MoonshineAttention(LlamaAttention):
