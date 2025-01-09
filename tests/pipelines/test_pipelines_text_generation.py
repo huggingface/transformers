@@ -653,3 +653,17 @@ class TextGenerationPipelineTests(unittest.TestCase):
         with CaptureLogger(logger) as cl:
             _ = text_generator(prompt, max_length=10)
         self.assertNotIn(logger_msg, cl.out)
+
+    @require_torch
+    def test_pipeline_assisted_generation(self):
+        """Tests that we can run assisted generation in the pipeline"""
+        model = "hf-internal-testing/tiny-random-MistralForCausalLM"
+        pipe = pipeline("text-generation", model=model, assistant_model=model)
+
+        # We can run the pipeline
+        prompt = "Hello world"
+        _ = pipe(prompt)
+
+        # It is running assisted generation under the hood (e.g. flags incompatible with assisted gen will crash)
+        with self.assertRaises(ValueError):
+            _ = pipe(prompt, generate_kwargs={"num_beams": 2})

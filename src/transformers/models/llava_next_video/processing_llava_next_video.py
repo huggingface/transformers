@@ -180,6 +180,9 @@ class LlavaNextVideoProcessor(ProcessorMixin):
             for sample in text:
                 while self.image_token in sample:
                     image_size = next(image_sizes)
+                    if not isinstance(image_size, (list, tuple)):
+                        # cast to list to avoid numerical precision errors when calculating unpadding
+                        image_size = image_size.tolist()
                     orig_height, orig_width = image_size
                     num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
                     if self.vision_feature_select_strategy == "default":
@@ -193,6 +196,8 @@ class LlavaNextVideoProcessor(ProcessorMixin):
             one_video = to_numpy_array(videos_inputs.get("pixel_values_videos")[0])
             height, width = get_image_size(one_video[0])
             num_frames = one_video.shape[0]  # frame dim is always after batch dim
+
+            # no `self.num_additional_image_tokens` added because video always has a default feature selection strategy
             num_image_tokens = (height // self.patch_size) * (width // self.patch_size)
             num_video_tokens = num_image_tokens // 4 * num_frames  # divide by 4 needed for avg pooling layer
             prompt_strings = []
