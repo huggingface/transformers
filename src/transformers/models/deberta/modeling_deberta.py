@@ -290,7 +290,6 @@ class DisentangledSelfAttention(nn.Module):
         attention_scores = attention_scores.masked_fill(~(attention_mask), torch.finfo(query_layer.dtype).min)
         # bsz x height x length x dimension
         attention_probs = nn.functional.softmax(attention_scores, dim=-1)
-        attention_probs.masked_fill(attention_mask, 0)
 
         attention_probs = self.dropout(attention_probs)
         if self.head_weights_proj is not None:
@@ -1333,3 +1332,13 @@ class DebertaForQuestionAnswering(DebertaPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "DebertaForMaskedLM",
+    "DebertaForQuestionAnswering",
+    "DebertaForSequenceClassification",
+    "DebertaForTokenClassification",
+    "DebertaModel",
+    "DebertaPreTrainedModel",
+]

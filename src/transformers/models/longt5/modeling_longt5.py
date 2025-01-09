@@ -1600,7 +1600,7 @@ class LongT5Stack(LongT5PreTrainedModel):
         output_attentions: bool,
     ):
         if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and 0.0 in attention_mask:
+            if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
 
@@ -2339,3 +2339,6 @@ class LongT5EncoderModel(LongT5PreTrainedModel):
         )
 
         return encoder_outputs
+
+
+__all__ = ["LongT5EncoderModel", "LongT5ForConditionalGeneration", "LongT5Model", "LongT5PreTrainedModel"]
