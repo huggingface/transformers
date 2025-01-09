@@ -1265,6 +1265,8 @@ class TokenizerTesterMixin:
                     self.skipTest(reason="No fast tokenizer defined")
 
                 tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name)
+                if not tokenizer_r.pad_token or tokenizer.pad_token_id < 0:
+                    self.skipTest(reason="This tokenizer has no padding token set, or pad_token_id < 0")
 
                 # check batched
                 output = tokenizer_r.apply_chat_template(
