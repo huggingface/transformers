@@ -215,6 +215,4 @@ class MoonshineConfig(PretrainedConfig):
         )
 
 
-__all__ = [
-    "MoonshineConfig"
-]
+__all__ = ["MoonshineConfig"]

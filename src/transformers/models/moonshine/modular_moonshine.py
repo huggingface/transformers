@@ -16,11 +16,9 @@ from typing import Callable, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
-from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
-from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
@@ -30,7 +28,6 @@ from ...modeling_outputs import (
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
-from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -39,8 +36,8 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaModel, eager_attention_forward
 from ..glm.modeling_glm import GlmAttention, GlmRotaryEmbedding, apply_rotary_pos_emb
+from ..llama.modeling_llama import LlamaDecoderLayer, LlamaModel, eager_attention_forward
 from ..whisper.modeling_whisper import WhisperModel, shift_tokens_right
 from .configuration_moonshine import MoonshineConfig
 
@@ -83,7 +80,14 @@ class MoonshineDecoderMLP(nn.Module):
 
 
 class MoonshineAttention(GlmAttention):
-    def __init__(self, config: MoonshineConfig, layer_idx: int, is_causal: bool, num_attention_heads: int, num_key_value_heads: int):
+    def __init__(
+        self,
+        config: MoonshineConfig,
+        layer_idx: int,
+        is_causal: bool,
+        num_attention_heads: int,
+        num_key_value_heads: int,
+    ):
         config.update({"num_attention_heads": num_attention_heads, "num_key_value_heads": num_key_value_heads})
         super().__init__(config, layer_idx)
         self.is_causal = is_causal
@@ -100,7 +104,9 @@ class MoonshineAttention(GlmAttention):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         bsz, q_len = hidden_states.shape[:-1]
 
-        query_states = self.q_proj(hidden_states).view(bsz, q_len, self.config.num_key_value_heads, self.head_dim).transpose(1, 2)
+        query_states = (
+            self.q_proj(hidden_states).view(bsz, q_len, self.config.num_key_value_heads, self.head_dim).transpose(1, 2)
+        )
 
         is_cross_attention = key_value_states is not None
         if past_key_value is not None:
@@ -118,8 +124,16 @@ class MoonshineAttention(GlmAttention):
             key_states = past_key_value.key_cache[self.layer_idx]
             value_states = past_key_value.value_cache[self.layer_idx]
         else:
-            key_states = self.k_proj(current_states).view(bsz, -1, self.config.num_key_value_heads, self.head_dim).transpose(1, 2)
-            value_states = self.v_proj(current_states).view(bsz, -1, self.config.num_key_value_heads, self.head_dim).transpose(1, 2)
+            key_states = (
+                self.k_proj(current_states)
+                .view(bsz, -1, self.config.num_key_value_heads, self.head_dim)
+                .transpose(1, 2)
+            )
+            value_states = (
+                self.v_proj(current_states)
+                .view(bsz, -1, self.config.num_key_value_heads, self.head_dim)
+                .transpose(1, 2)
+            )
             if is_cross_attention and past_key_value is not None:
                 key_states, value_states = past_key_value.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
@@ -131,7 +145,9 @@ class MoonshineAttention(GlmAttention):
 
             if past_key_value is not None:
                 cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-                key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+                key_states, value_states = past_key_value.update(
+                    key_states, value_states, self.layer_idx, cache_kwargs
+                )
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -164,11 +180,18 @@ class MoonshineAttention(GlmAttention):
 class MoonshineRotaryEmbedding(GlmRotaryEmbedding):
     pass
 
+
 class MoonshineEncoderLayer(LlamaDecoderLayer):
     def __init__(self, config: MoonshineConfig, layer_idx: int):
         super().__init__(config, layer_idx)
 
-        self.self_attn = MoonshineAttention(config=config, layer_idx=layer_idx, is_causal=False, num_attention_heads=config.encoder_num_attention_heads, num_key_value_heads=config.encoder_num_key_value_heads)
+        self.self_attn = MoonshineAttention(
+            config=config,
+            layer_idx=layer_idx,
+            is_causal=False,
+            num_attention_heads=config.encoder_num_attention_heads,
+            num_key_value_heads=config.encoder_num_key_value_heads,
+        )
 
         self.mlp = MoonshineEncoderMLP(config, config.encoder_hidden_act)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
@@ -180,8 +203,20 @@ class MoonshineDecoderLayer(nn.Module):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        self.self_attn = MoonshineAttention(config=config, layer_idx=layer_idx, is_causal=True, num_attention_heads=config.encoder_num_attention_heads, num_key_value_heads=config.encoder_num_key_value_heads)
-        self.encoder_attn = MoonshineAttention(config=config, layer_idx=layer_idx, is_causal=False, num_attention_heads=config.encoder_num_attention_heads, num_key_value_heads=config.encoder_num_key_value_heads)
+        self.self_attn = MoonshineAttention(
+            config=config,
+            layer_idx=layer_idx,
+            is_causal=True,
+            num_attention_heads=config.encoder_num_attention_heads,
+            num_key_value_heads=config.encoder_num_key_value_heads,
+        )
+        self.encoder_attn = MoonshineAttention(
+            config=config,
+            layer_idx=layer_idx,
+            is_causal=False,
+            num_attention_heads=config.encoder_num_attention_heads,
+            num_key_value_heads=config.encoder_num_key_value_heads,
+        )
 
         self.mlp = MoonshineDecoderMLP(config, config.decoder_hidden_act)
         self.input_layernorm = nn.LayerNorm(config.hidden_size, bias=False)
@@ -327,7 +362,9 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
 
         self.rotary_emb = MoonshineRotaryEmbedding(config=config)
 
-        self.layers = nn.ModuleList([MoonshineEncoderLayer(config, idx) for idx in range(config.encoder_num_hidden_layers)])
+        self.layers = nn.ModuleList(
+            [MoonshineEncoderLayer(config, idx) for idx in range(config.encoder_num_hidden_layers)]
+        )
         self.layer_norm = nn.LayerNorm(embed_dim, bias=False)
 
         self.gradient_checkpointing = False
@@ -444,7 +481,9 @@ class MoonshineDecoder(LlamaModel):
     def __init__(self, config: MoonshineConfig):
         super().__init__(config)
         self.norm = nn.LayerNorm(config.hidden_size, bias=False)
-        self.layers = nn.ModuleList([MoonshineDecoderLayer(config, idx) for idx in range(config.decoder_num_hidden_layers)])
+        self.layers = nn.ModuleList(
+            [MoonshineDecoderLayer(config, idx) for idx in range(config.decoder_num_hidden_layers)]
+        )
 
     def forward(
         self,
@@ -852,7 +891,7 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
 
         loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size)
 
         if not return_dict:
             output = (logits,) + outputs[1:]

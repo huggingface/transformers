@@ -48,7 +48,7 @@ class MoonshineModelTester:
         parent,
         batch_size=3,  # need batch_size != num_hidden_layers
         seq_length=1000,
-        is_training=True,
+        is_training=False,
         use_labels=False,
         vocab_size=147,
         hidden_size=8,
@@ -455,27 +455,6 @@ class MoonshineModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 inputs_dict["decoder_input_ids"].clamp_(max=model_vocab_size - 15 - 1)
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
-
-    # training is not supported yet
-    @unittest.skip(reason="Training is not supported yet")
-    def test_training(self):
-        pass
-
-    @unittest.skip(reason="Training is not supported yet")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
 
 
 @require_torch
