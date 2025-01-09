@@ -110,7 +110,7 @@ class ModernBertConfig(PretrainedConfig):
             shared between devices, and 4) the model is not resized after initialization. If `True`, then the model may
             be faster in some scenarios.
         repad_logits_with_grad (`bool`, *optional*, defaults to `False`):
-            When True, ModernBertForMaskedLM keep track of the logits' gradient when repadding for output. This only
+            When True, ModernBertForMaskedLM keeps track of the logits' gradient when repadding for output. This only
             applies when using Flash Attention 2 with passed labels. Otherwise output logits always have a gradient.
 
     Examples:
