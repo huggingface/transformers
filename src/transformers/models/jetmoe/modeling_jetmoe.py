@@ -386,11 +386,7 @@ class JetMoeRMSNorm(nn.Module):
 
 # Copied from transformers.models.gemma.modeling_gemma.GemmaRotaryEmbedding with Gemma->JetMoe
 class JetMoeRotaryEmbedding(nn.Module):
-    def __init__(
-        self,
-        config: JetMoeConfig,
-        device=None,
-    ):
+    def __init__(self, config: JetMoeConfig, device=None):
         super().__init__()
         self.rope_kwargs = {}
         # BC: "rope_type" was originally "type"
@@ -1481,3 +1477,6 @@ class JetMoeForSequenceClassification(JetMoePreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+
+__all__ = ["JetMoeForCausalLM", "JetMoeModel", "JetMoePreTrainedModel", "JetMoeForSequenceClassification"]
