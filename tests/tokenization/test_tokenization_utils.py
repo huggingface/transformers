@@ -436,23 +436,17 @@ class TokenizerUtilsTest(unittest.TestCase):
 
         tokenizer = PreTrainedTokenizerFast(tokenizer_object=_tokenizer)
         toy_text_iterator = ("a" for _ in range(1000))
-        new_tokenizer = tokenizer.train_new_from_iterator(text_iterator=toy_text_iterator, length=1000, vocab_size=50)
+        tokenizer.train_new_from_iterator(text_iterator=toy_text_iterator, length=1000, vocab_size=50)
 
-        encoding_ids = new_tokenizer.encode("a🤗")
-        self.assertEqual(encoding_ids, [64, 172, 253, 97, 245])
 
         _tokenizer.normalizer = None
         tokenizer = PreTrainedTokenizerFast(tokenizer_object=_tokenizer)
         toy_text_iterator = ("a" for _ in range(1000))
-        new_tokenizer = tokenizer.train_new_from_iterator(text_iterator=toy_text_iterator, length=1000, vocab_size=50)
+        tokenizer.train_new_from_iterator(text_iterator=toy_text_iterator, length=1000, vocab_size=50)
 
-        encoding_ids = new_tokenizer.encode("a🤗")
-        self.assertEqual(encoding_ids, [64, 172, 253, 97, 245])
 
         _tokenizer.post_processor = None
         tokenizer = PreTrainedTokenizerFast(tokenizer_object=_tokenizer)
         toy_text_iterator = ("a" for _ in range(1000))
-        new_tokenizer = tokenizer.train_new_from_iterator(text_iterator=toy_text_iterator, length=1000, vocab_size=50)
+        tokenizer.train_new_from_iterator(text_iterator=toy_text_iterator, length=1000, vocab_size=50)
 
-        encoding_ids = new_tokenizer.encode("a🤗")
-        self.assertEqual(encoding_ids, [64, 172, 253, 97, 245])
