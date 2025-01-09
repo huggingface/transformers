@@ -19,7 +19,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 from dataclasses import dataclass
 from typing import Callable, List, Optional, Tuple, Union
 
@@ -1715,41 +1714,6 @@ class MolmoPoolingAttention(nn.Module):
         self.v_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim)
         self.q_proj = nn.Linear(self.embed_dim, self.num_heads * self.head_dim)
         self.o_proj = nn.Linear(self.num_heads * self.head_dim, self.embed_dim // 2)
-
-    def old_forward(
-        self,
-        hidden_states: torch.Tensor,
-        key_value_hidden_states: torch.Tensor,
-        output_attentions: Optional[bool] = False,
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor]]:
-        """Input shape: Batch x Time x Channel"""
-
-        bsz, q_len, _ = hidden_states.size()
-        kv_len = key_value_hidden_states.shape[1]
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(key_value_hidden_states)
-        value_states = self.v_proj(key_value_hidden_states)
-
-        query_states = query_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(bsz, kv_len, -1, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(bsz, kv_len, -1, self.head_dim).transpose(1, 2)
-
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.head_dim)
-
-        # upcast attention to fp32
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-        attn_output = torch.matmul(attn_weights, value_states)
-
-        attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.reshape(bsz, q_len, -1)
-
-        attn_output = self.o_proj(attn_output)
-
-        if not output_attentions:
-            attn_weights = None
-
-        return attn_output, attn_weights
 
     def forward(
         self,
