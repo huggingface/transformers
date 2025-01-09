@@ -17,6 +17,7 @@ from ...modeling_outputs import (
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
+from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
@@ -26,13 +27,13 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ..cohere.modeling_cohere import CohereRotaryEmbedding
-from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaModel, repeat_kv
-from ..phi.modeling_phi import PhiMLP
+from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer, LlamaModel, eager_attention_forward
 from ..whisper.modeling_whisper import WhisperModel, shift_tokens_right
 
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "eustlb/moonshine-tiny"
 _CONFIG_FOR_DOC = "MoonshineConfig"
 
 
