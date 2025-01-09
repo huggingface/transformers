@@ -110,11 +110,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Falcon
 class FalconRotaryEmbedding(nn.Module):
-    def __init__(
-        self,
-        config: FalconConfig,
-        device=None,
-    ):
+    def __init__(self, config: FalconConfig, device=None):
         super().__init__()
         self.rope_kwargs = {}
         # BC: "rope_type" was originally "type"
@@ -1584,3 +1580,13 @@ class FalconForQuestionAnswering(FalconPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "FalconForCausalLM",
+    "FalconModel",
+    "FalconPreTrainedModel",
+    "FalconForSequenceClassification",
+    "FalconForTokenClassification",
+    "FalconForQuestionAnswering",
+]

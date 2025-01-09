@@ -1319,6 +1319,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
         self.config = config
 
+        # for initialization of the loss
+        loss_type = self.__class__.__name__
+        if loss_type not in LOSS_MAPPING:
+            loss_groups = f"({'|'.join(LOSS_MAPPING)})"
+            loss_type = re.findall(loss_groups, self.__class__.__name__)
+            if len(loss_type) > 0:
+                loss_type = loss_type[0]
+            else:
+                loss_type = None
+        self.loss_type = loss_type
+
         self.name_or_path = config.name_or_path
         self.warnings_issued = {}
         self.generation_config = GenerationConfig.from_model_config(config) if self.can_generate() else None
@@ -3917,7 +3928,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
                 gguf_path = cached_file(pretrained_model_name_or_path, gguf_file, **cached_file_kwargs)
 
-            state_dict = load_gguf_checkpoint(gguf_path, return_tensors=True)["tensors"]
+            # we need a dummy model to help rename state_dict
+            with torch.device("meta"):
+                dummy_model = cls(config)
+            state_dict = load_gguf_checkpoint(gguf_path, return_tensors=True, model_to_load=dummy_model)["tensors"]
 
             resolved_archive_file = None
             is_sharded = False
@@ -4475,6 +4489,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         elif add_prefix_to_model:
             model_buffers = {".".join([prefix, key]) for key in model_buffers}
         unexpected_keys = sorted(unexpected_keys - model_buffers)
+
+        # Clean up buffer for `inv-freq` because RoPE embedding moved under base model (https://github.com/huggingface/transformers/pull/34858)
+        has_inv_freq_buffers = any(buffer.endswith("rotary_emb.inv_freq") for buffer in model_buffers)
+        if has_inv_freq_buffers:
+            unexpected_keys = {k for k in unexpected_keys if "rotary_emb.inv_freq" not in k}
 
         model.tie_weights()
         if device_map is None and not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
@@ -5051,18 +5070,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             logger.warning_once(warn_string)
 
     @property
-    def _is_quantized_training_enabled(self):
-        warnings.warn(
-            "`_is_quantized_training_enabled` is going to be deprecated in transformers 4.39.0. Please use `model.hf_quantizer.is_trainable` instead",
-            FutureWarning,
-        )
-
-        if not hasattr(self, "hf_quantizer"):
-            return False
-
-        return self.hf_quantizer.is_trainable
-
-    @property
     def supports_tp_plan(self):
         """
         Returns whether the model has a tensor parallelism plan.
@@ -5114,18 +5121,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     @property
     def loss_function(self):
-        if getattr(self.config, "loss_type", None) is not None:
-            loss_type = self.config.loss_type
-        else:
-            loss_type = self.__class__.__name__
-            if loss_type not in LOSS_MAPPING:
-                loss_groups = f"({'|'.join(LOSS_MAPPING)})"
-                loss_type = re.findall(loss_groups, self.__class__.__name__)
-                if len(loss_type) > 0:
-                    loss_type = loss_type[0]
-                else:
-                    loss_type = None
-        if loss_type is None or loss_type not in LOSS_MAPPING and getattr(self.config, "loss_type", None) is not None:
+        loss_type = getattr(self, "loss_type", None)
+
+        if loss_type is None or loss_type not in LOSS_MAPPING:
             logger.warning_once(
                 f"`loss_type={loss_type}` was set in the config but it is unrecognised."
                 f"Using the default loss: `ForCausalLMLoss`."
