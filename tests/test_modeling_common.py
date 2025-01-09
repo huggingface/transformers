@@ -4794,11 +4794,15 @@ class ModelTesterMixin:
 
     @slow
     @require_torch_greater_or_equal("2.3")
-    def test_torch_export(self, tolerance=1e-4):
+    def test_torch_export(self, config=None, inputs_dict=None, tolerance=1e-4):
         """
         Test if model can be exported with torch.export.export()
 
         Args:
+            config (PretrainedConfig):
+                Config to use for the model, if None, use default config from model_tester
+            inputs_dict (dict):
+                Inputs to use for the model, if None, use default inputs from model_tester
             tolerance (float):
                 `atol` for torch.allclose(), defined in signature for test overriding
         """
@@ -4821,7 +4825,9 @@ class ModelTesterMixin:
                 return is_tested
             return is_tested
 
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        default_config, default_inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config = config or default_config
+        inputs_dict = inputs_dict or default_inputs_dict
 
         for model_class in self.all_model_classes:
             if model_class.__name__.endswith("ForPreTraining"):
