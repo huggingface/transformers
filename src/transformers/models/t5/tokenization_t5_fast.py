@@ -124,6 +124,7 @@ class T5TokenizerFast(PreTrainedTokenizerFast):
             pad_token=pad_token,
             extra_ids=extra_ids,
             additional_special_tokens=additional_special_tokens,
+            add_prefix_space=add_prefix_space,
             **kwargs,
         )
 
