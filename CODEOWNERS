@@ -324,7 +324,7 @@ trainer.py @muellerzr @SunMarc
 /src/transformers/models/oneformer/*_modeling* @zucchini-nlp
 /src/transformers/models/owlvit/*_modeling* @qubvel
 /src/transformers/models/owlv2/*_modeling* @qubvel
-/src/transformers/models/paligemma/*_modeling* @zucchini-nlp
+/src/transformers/models/paligemma/*_modeling* @zucchini-nlp @molbap
 /src/transformers/models/perceiver/*_modeling* @zucchini-nlp
 /src/transformers/models/pix2struct/*_modeling* @zucchini-nlp
 /src/transformers/models/pixtral/*_modeling* @zucchini-nlp
