@@ -274,10 +274,6 @@ class MobileViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         model = MobileViTModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    @is_flaky(description="is_flaky https://github.com/huggingface/transformers/issues/29516")
-    def test_batching_equivalence(self):
-        super().test_batching_equivalence()
-
 
 # We will verify our results on an image of cute cats
 def prepare_img():
