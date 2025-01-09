@@ -813,7 +813,7 @@ class Emu3VQVAEUpBlock(nn.Module):
             self.up.insert(0, up)
 
     def forward(self, hidden_states: torch.FloatTensor, quant_states: torch.FloatTensor):
-        for i_level, blocks in enumerate(self.up):
+        for i_level, blocks in enumerate(self.up[::-1]):
             for i_block in range(self.num_res_blocks + 1):
                 hidden_states = blocks.block[i_block](hidden_states, quant_states)
                 if len(blocks.attn) > 0:
@@ -826,7 +826,7 @@ class Emu3VQVAEUpBlock(nn.Module):
 
                     hidden_states = hidden_states.reshape(batch_size, height, width, channels).permute(0, 3, 1, 2)
                     hidden_states = residual + hidden_states
-            if i_level != 0:
+            if i_level != len(self.up) - 1:
                 hidden_states = blocks.upsample(hidden_states)
 
         return hidden_states
@@ -963,7 +963,7 @@ class Emu3VQVAEDecoder(nn.Module):
 
         # middle & upsampling
         hidden_states = self.middle_block(hidden_states, quant_states)
-        hidden_states = self.up_block(hidden_states)
+        hidden_states = self.up_block(hidden_states, quant_states)
 
         hidden_states = self.norm_out(hidden_states, quant_states)
         hidden_states *= torch.sigmoid(hidden_states)
