@@ -62,6 +62,9 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             E.g. use 0.0001 to add dithering with a normal distribution centered
             around 0.0 with standard deviation 0.0001 (assuming [-1,+1] range of raw_speech).
             The value 0.0 means no dithering.
+            Dithering has similar effect as `spectrogram(mel_floor=...)`. It reduces
+            the high log_mel_fbank values for signals with hard-zero sections,
+            when VAD cutoff is present in the signal.
     """
 
     model_input_names = ["input_features"]

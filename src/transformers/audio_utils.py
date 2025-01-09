@@ -465,6 +465,8 @@ def spectrogram(
             Adds dithering. In other words, adds a small Gaussian noise to each frame.
             E.g. use 4.0 to add dithering with a normal distribution centered
             around 0.0 with standard deviation 4.0, 0.0 means no dithering.
+            Dithering has similar effect as `mel_floor`. It reduces the high log_mel_fbank
+            values for signals with hard-zero sections, when VAD cutoff is present in the signal.
         preemphasis (`float`, *optional*)
             Coefficient for a low-pass filter that applies pre-emphasis before the DFT.
         mel_filters (`np.ndarray` of shape `(num_freq_bins, num_mel_filters)`, *optional*):

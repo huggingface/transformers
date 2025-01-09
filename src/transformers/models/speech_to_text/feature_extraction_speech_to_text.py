@@ -57,6 +57,8 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
             E.g. use 4.0 to add dithering with a normal distribution centered
             around 0.0 with standard deviation 4.0 (assuming [-32k,+32k] range of kaldi waveform).
             The value 0.0 means no dithering.
+            Dithering has similar effect as `mel_floor`. It reduces the high log_mel_fbank
+            values for signals with hard-zero sections, when VAD cutoff is present in the signal.
         do_ceptral_normalize (`bool`, *optional*, defaults to `True`):
             Whether or not to apply utterance-level cepstral mean and variance normalization to extracted features.
         normalize_means (`bool`, *optional*, defaults to `True`):
