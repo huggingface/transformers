@@ -4164,8 +4164,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     rotary_module = buffer.replace(".inv_freq", "")
                     break
             if rotary_module is not None and rotary_module not in device_map:
-                # Place it on the same device as the embedding if set and exists, else 0
-                device_map[rotary_module] = device_map.get(rotary_module.replace("rotary_emb", "embed_tokens"), 0)
+                devices = {device for device in device_map.values() if not isinstance(device, str)}
+                if len(devices) == 0:
+                    min_device = "cpu"
+                elif isinstance(list(devices)[0], torch.device):
+                    min_device = torch.device(min(device.index for device in devices))
+                else:
+                    min_device = min(devices)
+                # Place it on the same device as the embedding if set and exists, else min_device found
+                device_map[rotary_module] = device_map.get(
+                    rotary_module.replace("rotary_emb", "embed_tokens"), min_device
+                )
             model.tie_weights()
             tied_params = find_tied_parameters(model)
             # check if we don't have tied param in different devices
