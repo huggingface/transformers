@@ -57,11 +57,7 @@ _CONFIG_FOR_DOC = "PersimmonConfig"
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->Persimmon
 class PersimmonRotaryEmbedding(nn.Module):
-    def __init__(
-        self,
-        config: PersimmonConfig,
-        device=None,
-    ):
+    def __init__(self, config: PersimmonConfig, device=None):
         super().__init__()
         self.rope_kwargs = {}
         # BC: "rope_type" was originally "type"
@@ -1124,3 +1120,12 @@ class PersimmonForTokenClassification(PersimmonPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "PersimmonForCausalLM",
+    "PersimmonModel",
+    "PersimmonPreTrainedModel",
+    "PersimmonForSequenceClassification",
+    "PersimmonForTokenClassification",
+]

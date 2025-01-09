@@ -80,11 +80,7 @@ ALL_LAYERNORM_LAYERS.append(LlamaRMSNorm)
 
 
 class LlamaRotaryEmbedding(nn.Module):
-    def __init__(
-        self,
-        config: LlamaConfig,
-        device=None,
-    ):
+    def __init__(self, config: LlamaConfig, device=None):
         super().__init__()
         self.rope_kwargs = {}
         # BC: "rope_type" was originally "type"
@@ -1146,3 +1142,13 @@ class LlamaForTokenClassification(LlamaPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "LlamaForCausalLM",
+    "LlamaModel",
+    "LlamaPreTrainedModel",
+    "LlamaForSequenceClassification",
+    "LlamaForQuestionAnswering",
+    "LlamaForTokenClassification",
+]
