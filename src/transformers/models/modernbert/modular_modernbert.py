@@ -142,9 +142,6 @@ class ModernBertConfig(PretrainedConfig):
             the model will be compiled if 1) `triton` is installed, 2) the model is not on MPS, 3) the model is not
             shared between devices, and 4) the model is not resized after initialization. If `True`, then the model may
             be faster in some scenarios.
-        repad_logits_with_grad (`bool`, *optional*, defaults to `False`):
-            When True, ModernBertForMaskedLM keep track of the logits' gradient when repadding for output. This only
-            applies when using Flash Attention 2 with passed labels. Otherwise output logits always have a gradient.
 
     Examples:
 
@@ -200,7 +197,6 @@ class ModernBertConfig(PretrainedConfig):
         sparse_prediction=False,
         sparse_pred_ignore_index=-100,
         reference_compile=None,
-        repad_logits_with_grad=False,
         **kwargs,
     ):
         super().__init__(
@@ -240,7 +236,6 @@ class ModernBertConfig(PretrainedConfig):
         self.sparse_prediction = sparse_prediction
         self.sparse_pred_ignore_index = sparse_pred_ignore_index
         self.reference_compile = reference_compile
-        self.repad_logits_with_grad = repad_logits_with_grad
 
         if self.classifier_pooling not in ["cls", "mean"]:
             raise ValueError(
@@ -1262,7 +1257,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
             loss = self.loss_function(logits, labels, vocab_size=self.config.vocab_size)
 
         if self.config._attn_implementation == "flash_attention_2":
-            with nullcontext() if self.config.repad_logits_with_grad or labels is None else torch.no_grad():
+            with nullcontext() if self.training or labels is None else torch.no_grad():
                 logits = _pad_modernbert_output(inputs=logits, indices=indices, batch=batch_size, seqlen=seq_len)
 
         if not return_dict:
