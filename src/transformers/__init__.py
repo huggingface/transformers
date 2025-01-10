@@ -698,6 +698,7 @@ _import_structure = {
     "models.plbart": ["PLBartConfig"],
     "models.poolformer": ["PoolFormerConfig"],
     "models.pop2piano": ["Pop2PianoConfig"],
+    "models.propainter": ["ProPainterConfig", "ProPainterProcessor"],
     "models.prophetnet": [
         "ProphetNetConfig",
         "ProphetNetTokenizer",
@@ -1260,6 +1261,7 @@ else:
     _import_structure["models.pix2struct"].extend(["Pix2StructImageProcessor"])
     _import_structure["models.pixtral"].append("PixtralImageProcessor")
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
+    _import_structure["models.propainter"].append("ProPainterVideoProcessor")
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
     _import_structure["models.qwen2_vl"].extend(["Qwen2VLImageProcessor"])
     _import_structure["models.rt_detr"].extend(["RTDetrImageProcessor"])
@@ -3229,6 +3231,12 @@ else:
         [
             "Pop2PianoForConditionalGeneration",
             "Pop2PianoPreTrainedModel",
+        ]
+    )
+    _import_structure["models.propainter"].extend(
+        [
+            "ProPainterModel",
+            "ProPainterPreTrainedModel",
         ]
     )
     _import_structure["models.prophetnet"].extend(
@@ -5761,6 +5769,10 @@ if TYPE_CHECKING:
     from .models.pop2piano import (
         Pop2PianoConfig,
     )
+    from .models.propainter import (
+        ProPainterConfig,
+        ProPainterProcessor,
+    )
     from .models.prophetnet import (
         ProphetNetConfig,
         ProphetNetTokenizer,
@@ -6344,6 +6356,7 @@ if TYPE_CHECKING:
             PoolFormerFeatureExtractor,
             PoolFormerImageProcessor,
         )
+        from .models.propainter import ProPainterVideoProcessor
         from .models.pvt import PvtImageProcessor
         from .models.qwen2_vl import Qwen2VLImageProcessor
         from .models.rt_detr import RTDetrImageProcessor
@@ -7930,6 +7943,10 @@ if TYPE_CHECKING:
         from .models.pop2piano import (
             Pop2PianoForConditionalGeneration,
             Pop2PianoPreTrainedModel,
+        )
+        from .models.propainter import (
+            ProPainterModel,
+            ProPainterPreTrainedModel,
         )
         from .models.prophetnet import (
             ProphetNetDecoder,
