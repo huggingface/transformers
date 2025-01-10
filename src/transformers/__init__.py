@@ -3598,6 +3598,8 @@ else:
             "TeleChat2ForTokenClassification",
             "TeleChat2Model",
             "TeleChat2PreTrainedModel",
+        ]
+    )
     _import_structure["models.textnet"].extend(
         [
             "TextNetBackbone",
@@ -8202,6 +8204,7 @@ if TYPE_CHECKING:
             TeleChat2ForTokenClassification,
             TeleChat2Model,
             TeleChat2PreTrainedModel,
+        )
         from .models.textnet import (
             TextNetBackbone,
             TextNetForImageClassification,
