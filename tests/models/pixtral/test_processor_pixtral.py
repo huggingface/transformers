@@ -274,3 +274,125 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         if batch_size < 1:
             raise ValueError("batch_size must be greater than 0")
         return [[super().prepare_image_inputs()]] * batch_size
+
+    def test_processor_with_batch_of_images_and_text(self):
+        processor = self.processor_class.from_pretrained(self.tmpdirname)
+        prompt_strings = [
+            "USER: [IMG]\nWhat's the content of the image? ASSISTANT:",
+            "USER: [IMG]\nDescribe the image. ASSISTANT:",
+        ]
+
+        # Make small for checking image token expansion
+        processor.image_processor.size = {"longest_edge": 30}
+        processor.image_processor.patch_size = {"height": 2, "width": 2}
+
+        # Test passing in a batch of images and text
+        inputs = processor(text=prompt_strings, images=[[self.image_0], [self.image_1]], return_tensors="pt")
+        self.assertIn("input_ids", inputs)
+        self.assertTrue(len(inputs["input_ids"]) == 2)
+        self.assertIsInstance(inputs["input_ids"], torch.Tensor)
+        self.assertIsInstance(inputs["pixel_values"], list)
+        self.assertTrue(len(inputs["pixel_values"]) == 2)
+        self.assertIsInstance(inputs["pixel_values"][0], list)
+        self.assertTrue(len(inputs["pixel_values"][0]) == 1)
+        self.assertIsInstance(inputs["pixel_values"][0][0], torch.Tensor)
+
+        # fmt: off
+        input_ids = inputs["input_ids"]
+        self.assertEqual(
+            input_ids[0].tolist(),
+            # Equivalent to "USER: [IMG][IMG][IMG_BREAK][IMG][IMG][IMG_END]\nWhat's the content of the image? ASSISTANT:"
+            [21510,  1058,  1032,    10,    10,    12,    10,    10,    13,  1010, 7493,  1681,  1278,  4701,  1307,  1278,  3937,  1063,  1349,  4290, 16002, 41150,  1058]
+        )
+        self.assertEqual(
+            input_ids[1].tolist(),
+            # Equivalent to "USER: [IMG][IMG][IMG_BREAK][IMG][IMG][IMG_END]\nDescribe the image. ASSISTANT:"
+            [21510,  1058,  1032,    10,    10,    12,    10,    10,    13,  1010, 7493,  1681,  1278,  3937,  1063,  1349,  4290, 16002, 41150,  1058]
+        )
+        # fmt: on
+
+    def test_pixtral_processor_batch_outputs(self):
+        processor = self.processor_class.from_pretrained(self.tmpdirname)
+        prompt_strings = [
+            "USER: [IMG]\nWhat's the content of the image? ASSISTANT:",
+            "USER: [IMG]\nDescribe the image. ASSISTANT:",
+            "USER: [IMG]\nWhat is this? ASSISTANT:",
+        ]
+        images = [[self.image_0], [self.image_1], [self.image_2]]
+
+        # Make small for checking image token expansion
+        processor.image_processor.size = {"longest_edge": 30}
+        processor.image_processor.patch_size = {"height": 2, "width": 2}
+
+        # Test passing in a batch of images and text
+        inputs = processor(text=prompt_strings, images=images, return_tensors="pt")
+        self.assertIn("input_ids", inputs)
+        self.assertTrue(len(inputs["input_ids"]) == 3)
+        self.assertIsInstance(inputs["input_ids"], torch.Tensor)
+        self.assertIsInstance(inputs["pixel_values"], list)
+        self.assertTrue(len(inputs["pixel_values"]) == 3)
+        self.assertIsInstance(inputs["pixel_values"][0], list)
+        self.assertTrue(len(inputs["pixel_values"][0]) == 1)
+        self.assertIsInstance(inputs["pixel_values"][0][0], torch.Tensor)
+
+        # fmt: off
+        input_ids = inputs["input_ids"]
+        self.assertEqual(
+            input_ids[0].tolist(),
+            # Equivalent to "USER: [IMG][IMG][IMG_BREAK][IMG][IMG][IMG_END]\nWhat's the content of the image? ASSISTANT:"
+            [21510,  1058,  1032,    10,    10,    12,    10,    10,    13,  1010, 7493,  1681,  1278,  4701,  1307,  1278,  3937,  1063,  1349,  4290, 16002, 41150,  1058]
+        )
+        self.assertEqual(
+            input_ids[1].tolist(),
+            # Equivalent to "USER: [IMG][IMG][IMG_BREAK][IMG][IMG][IMG_END]\nDescribe the image. ASSISTANT:"
+            [21510,  1058,  1032,    10,    10,    12,    10,    10,    13,  1010, 7493,  1681,  1278,  3937,  1063,  1349,  4290, 16002, 41150,  1058]
+        )
+        self.assertEqual(
+            input_ids[2].tolist(),
+            # Equivalent to "USER: [IMG][IMG][IMG_BREAK][IMG][IMG][IMG_END]\nWhat is this? ASSISTANT:"
+            [21510,  1058,  1032,    10,    10,    12,    10,    10,    13,  1010, 7493,  1681,  1278,  3937,  1063,  1349,  4290, 16002, 41150,  1058]
+        )
+        # fmt: on
+
+    def test_pixtral_processor_batch_outputs_all_examples(self):
+        processor = self.processor_class.from_pretrained(self.tmpdirname)
+        prompt_strings = [
+            "USER: [IMG]\nWhat's the content of the image? ASSISTANT:",
+            "USER: [IMG]\nDescribe the image. ASSISTANT:",
+            "USER: [IMG]\nWhat is this? ASSISTANT:",
+        ]
+        images = [[self.image_0], [self.image_1], [self.image_2]]
+
+        # Make small for checking image token expansion
+        processor.image_processor.size = {"longest_edge": 30}
+        processor.image_processor.patch_size = {"height": 2, "width": 2}
+
+        # Test passing in a batch of images and text
+        inputs = processor(text=prompt_strings, images=images, return_tensors="pt")
+        self.assertIn("input_ids", inputs)
+        self.assertTrue(len(inputs["input_ids"]) == 3)
+        self.assertIsInstance(inputs["input_ids"], torch.Tensor)
+        self.assertIsInstance(inputs["pixel_values"], list)
+        self.assertTrue(len(inputs["pixel_values"]) == 3)
+        self.assertIsInstance(inputs["pixel_values"][0], list)
+        self.assertTrue(len(inputs["pixel_values"][0]) == 1)
+        self.assertIsInstance(inputs["pixel_values"][0][0], torch.Tensor)
+
+        # fmt: off
+        input_ids = inputs["input_ids"]
+        self.assertEqual(
+            input_ids[0].tolist(),
+            # Equivalent to "USER: [IMG][IMG][IMG_BREAK][IMG][IMG][IMG_END]\nWhat's the content of the image? ASSISTANT:"
+            [21510,  1058,  1032,    10,    10,    12,    10,    10,    13,  1010, 7493,  1681,  1278,  4701,  1307,  1278,  3937,  1063,  1349,  4290, 16002, 41150,  1058]
+        )
+        self.assertEqual(
+            input_ids[1].tolist(),
+            # Equivalent to "USER: [IMG][IMG][IMG_BREAK][IMG][IMG][IMG_END]\nDescribe the image. ASSISTANT:"
+            [21510,  1058,  1032,    10,    10,    12,    10,    10,    13,  1010, 7493,  1681,  1278,  3937,  1063,  1349,  4290, 16002, 41150,  1058]
+        )
+        self.assertEqual(
+            input_ids[2].tolist(),
+            # Equivalent to "USER: [IMG][IMG][IMG_BREAK][IMG][IMG][IMG_END]\nWhat is this? ASSISTANT:"
+            [21510,  1058,  1032,    10,    10,    12,    10,    10,    13,  1010, 7493,  1681,  1278,  3937,  1063,  1349,  4290, 16002, 41150,  1058]
+        )
+        # fmt: on
