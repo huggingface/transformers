@@ -663,8 +663,7 @@ class JinaBertPooler(BertPooler):
 
 
 class JinaBertLMPredictionHead(BertLMPredictionHead):
-    def _tie_weights(self):
-        raise AttributeError("Not needed for JinaBert")
+    pass
 
 
 class JinaBertOnlyMLMHead(BertOnlyMLMHead):

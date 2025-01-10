@@ -697,7 +697,7 @@ class JinaBertLMPredictionHead(nn.Module):
         self.decoder.bias = self.bias
 
     def _tie_weights(self):
-        raise AttributeError("Not needed for JinaBert")
+        self.decoder.bias = self.bias
 
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
