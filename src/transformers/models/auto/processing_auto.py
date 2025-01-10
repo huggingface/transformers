@@ -335,7 +335,6 @@ class AutoProcessor:
         elif type(config) in PROCESSOR_MAPPING:
             return PROCESSOR_MAPPING[type(config)].from_pretrained(pretrained_model_name_or_path, **kwargs)
 
-        print("BUT WHY", processor_class)
         # At this stage, there doesn't seem to be a `Processor` class available for this model, so let's try a
         # tokenizer.
         try:
