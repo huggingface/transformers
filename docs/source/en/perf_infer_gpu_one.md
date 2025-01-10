@@ -109,6 +109,7 @@ FlashAttention-2 is currently supported for the following architectures:
 * [SigLIP](https://huggingface.co/docs/transformers/model_doc/siglip)
 * [UniSpeech](https://huggingface.co/docs/transformers/v4.39.3/en/model_doc/unispeech#transformers.UniSpeechModel)
 * [unispeech_sat](https://huggingface.co/docs/transformers/v4.39.3/en/model_doc/unispeech-sat#transformers.UniSpeechSatModel)
+* [X-ALMA](https://huggingface.co/docs/transformers/model_doc/xalma#transformers.XALMAModel)
 
 You can request to add FlashAttention-2 support for another model by opening a GitHub Issue or Pull Request.
 
@@ -321,6 +322,7 @@ For now, Transformers supports SDPA inference and training for the following arc
 * [ViViT](https://huggingface.co/docs/transformers/model_doc/vivit#transformers.VivitModel)
 * [wav2vec2](https://huggingface.co/docs/transformers/model_doc/wav2vec2#transformers.Wav2Vec2Model)
 * [Whisper](https://huggingface.co/docs/transformers/model_doc/whisper#transformers.WhisperModel)
+* [X-ALMA](https://huggingface.co/docs/transformers/model_doc/xalma#transformers.XALMAModel)
 * [XLM-RoBERTa](https://huggingface.co/docs/transformers/model_doc/xlm-roberta#transformers.XLMRobertaModel)
 * [XLM-RoBERTa-XL](https://huggingface.co/docs/transformers/model_doc/xlm-roberta-xl#transformers.XLMRobertaXLModel)
 * [YOLOS](https://huggingface.co/docs/transformers/model_doc/yolos#transformers.YolosModel)

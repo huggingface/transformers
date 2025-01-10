@@ -869,6 +869,7 @@ _import_structure = {
         "WhisperProcessor",
         "WhisperTokenizer",
     ],
+    "models.xalma": ["XALMAConfig"],
     "models.x_clip": [
         "XCLIPConfig",
         "XCLIPProcessor",
@@ -3857,6 +3858,16 @@ else:
             "WhisperForConditionalGeneration",
             "WhisperModel",
             "WhisperPreTrainedModel",
+        ]
+    )
+    _import_structure["models.xalma"].extend(
+        [
+            "XALMAForCausalLM",
+            "XALMAForQuestionAnswering",
+            "XALMAForSequenceClassification",
+            "XALMAForTokenClassification",
+            "XALMAModel",
+            "XALMAPreTrainedModel",
         ]
     )
     _import_structure["models.x_clip"].extend(

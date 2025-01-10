@@ -370,6 +370,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                       [Whisper](model_doc/whisper)                       |       ✅        |         ✅         |      ✅      |
 |                        [X-CLIP](model_doc/xclip)                         |       ✅        |         ❌         |      ❌      |
 |                         [X-MOD](model_doc/xmod)                          |       ✅        |         ❌         |      ❌      |
+|                         [XALMA](model_doc/xalma)                         |       ✅        |         ❌         |      ❌      |
 |                          [XGLM](model_doc/xglm)                          |       ✅        |         ✅         |      ✅      |
 |                           [XLM](model_doc/xlm)                           |       ✅        |         ✅         |      ❌      |
 |                [XLM-ProphetNet](model_doc/xlm-prophetnet)                |       ✅        |         ❌         |      ❌      |

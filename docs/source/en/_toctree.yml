@@ -608,6 +608,8 @@
         title: UL2
       - local: model_doc/umt5
         title: UMT5
+      - local: model_doc/xalma
+        title: X-ALMA
       - local: model_doc/xmod
         title: X-MOD
       - local: model_doc/xglm
