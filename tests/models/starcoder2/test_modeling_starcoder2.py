@@ -24,6 +24,7 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -412,7 +413,7 @@ class Starcoder2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
 
 
 @slow
-@require_torch_gpu
+@require_torch_accelerator
 class Starcoder2IntegrationTest(unittest.TestCase):
     def test_starcoder2_batched_generation_sdpa(self):
         EXPECTED_TEXT = [

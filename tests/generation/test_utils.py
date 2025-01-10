@@ -34,6 +34,7 @@ from transformers.testing_utils import (
     require_optimum_quanto,
     require_torch,
     require_torch_gpu,
+    require_torch_accelerator,
     require_torch_multi_accelerator,
     require_torch_multi_gpu,
     require_torch_sdpa,
@@ -2016,7 +2017,7 @@ class GenerationTesterMixin:
         ]
     )
     @pytest.mark.generate
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     def test_generate_compile(self, _, end_to_end):
         """
@@ -3775,10 +3776,10 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         self.assertTrue(input_length <= out.shape[-1] <= input_length + 20)
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_assisted_decoding_model_in_gpu_assistant_in_cpu(self):
         # PT-only test: TF doesn't support assisted decoding yet.
-        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM").to("cuda")
+        model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM").to(torch_device)
         assistant = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-MistralForCausalLM").to(
             "cpu"
         )

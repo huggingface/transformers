@@ -24,6 +24,7 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_torch,
     require_torch_gpu,
+    require_torch_accelerator,
     require_torch_multi_gpu,
     slow,
     torch_device,
@@ -426,7 +427,7 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
 
 
 @require_torch
-@require_torch_gpu
+@require_torch_accelerator
 @slow
 class FalconMambaIntegrationTests(unittest.TestCase):
     def setUp(self):

@@ -27,6 +27,7 @@ from transformers.testing_utils import (
     require_read_token,
     require_torch,
     require_torch_gpu,
+    require_torch_accelerator,
     require_torch_sdpa,
     slow,
     torch_device,
@@ -103,7 +104,7 @@ class NemotronModelTest(GemmaModelTest):
         pass
 
     @require_torch_sdpa
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     def test_sdpa_equivalence(self):
         for model_class in self.all_model_classes:

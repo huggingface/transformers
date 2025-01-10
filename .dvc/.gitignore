@@ -1,0 +1,3 @@
+/config.local
+/tmp
+/cache
