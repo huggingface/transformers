@@ -82,7 +82,7 @@ Use the table below to help you decide which quantization method to use.
 
 <Tip>
 
-**4:** GPTQModel[Intel GPU] via IPEX only supports 4-bit for Intel Datacenter Max + Arc.
+**4:** GPTQModel[Intel GPU] via IPEX only supports 4-bit for Intel Datacenter Max/Arc GPUs.
 
 </Tip>
 
