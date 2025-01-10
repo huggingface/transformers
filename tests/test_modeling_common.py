@@ -4740,10 +4740,10 @@ class ModelTesterMixin:
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             if getattr(config, "sliding_window", 0) is not None and getattr(config, "sliding_window", 0) > 0:
                 self.skipTest(f"{model_class.__name__} with sliding window attention is not supported by this test")
-            model = model_class(config).to(device=torch_device, dtype=torch.float32)
+            model = model_class(config).to(device=torch_device, dtype=torch.float32).eval()
 
             if "position_ids" not in inspect.signature(model.forward).parameters:
-                continue  # doesn't accept position ids and probably has special way to model positions
+                continue  # model doesn't accept position ids and probably has special way to model positions
 
             (
                 input_ids,
