@@ -429,7 +429,7 @@ class PegasusDecoderLayer(nn.Module):
             hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
             # cross_attn cached key/values tuple is at positions 3,4 of present_key_value tuple
-            hidden_states, cross_attn_weights, cross_attn_present_key_value = self.encoder_attn(
+            hidden_states, cross_attn_weights, past_key_value = self.encoder_attn(
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
@@ -1119,6 +1119,9 @@ class PegasusDecoder(PegasusPreTrainedModel):
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
+
+        # important to apply scale outside of `if` in case users pass `embeds`
+        inputs_embeds = inputs_embeds * self.embed_scale
 
         # initialize past_key_values
         return_legacy_cache = False

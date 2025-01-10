@@ -1533,3 +1533,12 @@ class BartStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, un
     @unittest.skip
     def test_save_load_fast_init_from_base(self):
         pass
+
+    # maybe related to https://github.com/pytorch/pytorch/issues/133166
+    @unittest.skip(reason="It fails only when `dynamic=True` with {'tensor' object has no attribute '__pow__'}")
+    def test_sdpa_can_compile_dynamic(self):
+        pass
+
+    @unittest.skip(reason="Encoder-decoder model end-to-end generate compile not yet supported")
+    def test_generate_compile_1_end_to_end(self):
+        pass

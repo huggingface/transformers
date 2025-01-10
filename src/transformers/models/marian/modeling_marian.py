@@ -1071,6 +1071,9 @@ class MarianDecoder(MarianPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
+        # Important to apply outside of the above `if`, in case user passes `embeds`
+        inputs_embeds = inputs_embeds * self.embed_scale
+
         # initialize past_key_values
         return_legacy_cache = False
         return_self_attention_cache = False
