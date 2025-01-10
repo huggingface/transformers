@@ -13,73 +13,21 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import (
-    OptionalDependencyNotAvailable,
-    _LazyModule,
-    is_essentia_available,
-    is_librosa_available,
-    is_pretty_midi_available,
-    is_scipy_available,
-    is_torch_available,
-    is_torchaudio_available,
-)
-
-
-_import_structure = {
-    "configuration_pop2piano": [
-        "Pop2PianoConfig",
-    ],
-}
-
-
-try:
-    if not is_torch_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_pop2piano"] = [
-        "Pop2PianoForConditionalGeneration",
-        "Pop2PianoPreTrainedModel",
-    ]
-
-try:
-    if not (
-        is_librosa_available()
-        and is_essentia_available()
-        and is_scipy_available()
-        and is_torch_available()
-        and is_pretty_midi_available()
-    ):
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["feature_extraction_pop2piano"] = ["Pop2PianoFeatureExtractor"]
-    _import_structure["tokenization_pop2piano"] = ["Pop2PianoTokenizer"]
-    _import_structure["processing_pop2piano"] = ["Pop2PianoProcessor"]
+from ...utils import _LazyModule
+from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
     from .configuration_pop2piano import *
     from .modeling_pop2piano import *
-
-    try:
-        if not (
-            is_librosa_available()
-            and is_essentia_available()
-            and is_scipy_available()
-            and is_torch_available()
-            and is_pretty_midi_available()
-        ):
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .feature_extraction_pop2piano import *
-        from .processing_pop2piano import *
-        from .tokenization_pop2piano import *
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    # _import_structure = {
+    #     "configuration_pop2piano": ["Pop2PianoConfig"],
+    #     "modeling_pop2piano": ["Pop2PianoModel"],
+    #     "feature_extraction_pop2piano": ["Pop2PianoFeatureExtractor"],
+    # }
+
+    _file = globals()["__file__"]
+    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
