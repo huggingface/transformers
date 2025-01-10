@@ -885,7 +885,7 @@ def create_reverse_dependency_map() -> Dict[str, List[str]]:
     example_deps, examples = init_test_examples_dependencies()
     # Add all modules and all tests to all examples
     all_modules = list(PATH_TO_TRANFORMERS.glob("**/*.py")) + list(PATH_TO_TESTS.glob("**/*.py")) + examples
-    all_modules = [str(mod.relative_to(PATH_TO_REPO)) for mod in all_modules]
+    all_modules = [str(mod.relative_to(PATH_TO_REPO)) for mod in all_modules if not ("models" in str(mod.relative_to(PATH_TO_REPO)) and "convert_" in str(mod.relative_to(PATH_TO_REPO)))]
     # Compute the direct dependencies of all modules.
     direct_deps = {m: get_module_dependencies(m, cache=cache) for m in all_modules}
     direct_deps.update(example_deps)
