@@ -5321,10 +5321,6 @@ class JinaBertPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-def load_tf_weights_in_jina_bert(*args, **kwargs):
-    requires_backends(load_tf_weights_in_jina_bert, ["torch"])
-
-
 class Kosmos2ForConditionalGeneration(metaclass=DummyObject):
     _backends = ["torch"]
 
