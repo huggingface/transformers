@@ -167,7 +167,7 @@ class XCLIPVisionEmbeddings(nn.Module):
         batch_size, _, height, width = pixel_values.shape
         if not interpolate_pos_encoding and (height != self.image_size or width != self.image_size):
             raise ValueError(
-                f"Input image size ({height}*{width}) doesn't match model" f" ({self.image_size}*{self.image_size})."
+                f"Input image size ({height}*{width}) doesn't match model ({self.image_size}*{self.image_size})."
             )
         target_dtype = self.patch_embedding.weight.dtype
         patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
@@ -187,7 +187,6 @@ class XCLIPTextEmbeddings(nn.Module):
     def __init__(self, config: XCLIPTextConfig):
         super().__init__()
         embed_dim = config.hidden_size
-        self.max_position_embeddings = config.max_position_embeddings
 
         self.token_embedding = nn.Embedding(config.vocab_size, embed_dim)
         self.position_embedding = nn.Embedding(config.max_position_embeddings, embed_dim)
@@ -203,12 +202,12 @@ class XCLIPTextEmbeddings(nn.Module):
         position_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
     ) -> torch.Tensor:
-        seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
+        max_position_embedding = self.position_embedding.shape[0]
 
-        if seq_length > self.max_position_embeddings:
+        if seq_length > max_position_embedding:
             raise ValueError(
                 f"Sequence length must be less than max_position_embeddings (got `sequence length`: "
-                f"{seq_length} and max_position_embeddings: {self.max_position_embeddings}"
+                f"{seq_length} and max_position_embeddings: {max_position_embedding}"
             )
 
         if position_ids is None:
