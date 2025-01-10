@@ -210,9 +210,6 @@ _import_structure = {
         "BertTokenizer",
         "WordpieceTokenizer",
     ],
-    "models.jina_bert": [
-        "JinaBertConfig",
-    ],
     "models.bert_generation": ["BertGenerationConfig"],
     "models.bert_japanese": [
         "BertJapaneseTokenizer",
@@ -515,6 +512,7 @@ _import_structure = {
     ],
     "models.jamba": ["JambaConfig"],
     "models.jetmoe": ["JetMoeConfig"],
+    "models.jina_bert": ["JinaBertConfig"],
     "models.kosmos2": [
         "Kosmos2Config",
         "Kosmos2Processor",
@@ -1590,20 +1588,6 @@ else:
             "load_tf_weights_in_bert",
         ]
     )
-    _import_structure["models.jina_bert"].extend(
-        [
-            "JinaBertForMaskedLM",
-            "JinaBertForMultipleChoice",
-            "JinaBertForNextSentencePrediction",
-            "JinaBertForPreTraining",
-            "JinaBertForQuestionAnswering",
-            "JinaBertForSequenceClassification",
-            "JinaBertForTokenClassification",
-            "JinaBertLMHeadModel",
-            "JinaBertModel",
-            "JinaBertPreTrainedModel",
-        ]
-    )
     _import_structure["models.bert_generation"].extend(
         [
             "BertGenerationDecoder",
@@ -2576,6 +2560,20 @@ else:
             "JetMoeForSequenceClassification",
             "JetMoeModel",
             "JetMoePreTrainedModel",
+        ]
+    )
+    _import_structure["models.jina_bert"].extend(
+        [
+            "JinaBertForMaskedLM",
+            "JinaBertForMultipleChoice",
+            "JinaBertForNextSentencePrediction",
+            "JinaBertForPreTraining",
+            "JinaBertForQuestionAnswering",
+            "JinaBertForSequenceClassification",
+            "JinaBertForTokenClassification",
+            "JinaBertLMHeadModel",
+            "JinaBertModel",
+            "JinaBertPreTrainedModel",
         ]
     )
     _import_structure["models.kosmos2"].extend(
