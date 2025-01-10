@@ -22,7 +22,6 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_torch_flex_attn_available,
     logging,
     replace_return_docstrings,
 )
@@ -32,10 +31,6 @@ from ..llama.modeling_llama import (
     LlamaRotaryEmbedding,
     rotate_half,
 )
-
-
-if is_torch_flex_attn_available():
-    pass
 
 
 logger = logging.get_logger(__name__)
