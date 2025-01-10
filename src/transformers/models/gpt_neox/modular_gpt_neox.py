@@ -150,8 +150,7 @@ class GPTNeoXAttention(nn.Module):
     def __init__(self, config, layer_idx=None):
         super().__init__()
         self.config = config
-        self.num_attention_heads = config.num_attention_heads
-        self.head_size = self.hidden_size // self.num_attention_heads
+        self.head_size = config.hidden_size // config.num_attention_heads
         self.rotary_ndims = int(self.head_size * config.rotary_pct)
         self.scaling = self.head_size**-0.5
         self.is_causal = True
