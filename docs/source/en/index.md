@@ -137,6 +137,7 @@ Flax), PyTorch, and/or TensorFlow.
 |               [EfficientFormer](model_doc/efficientformer)               |       ✅        |         ✅         |      ❌      |
 |                  [EfficientNet](model_doc/efficientnet)                  |       ✅        |         ❌         |      ❌      |
 |                       [ELECTRA](model_doc/electra)                       |       ✅        |         ✅         |      ✅      |
+|                          [Emu3](model_doc/emu3)                          |       ✅        |         ❌         |      ❌      |
 |                       [EnCodec](model_doc/encodec)                       |       ✅        |         ❌         |      ❌      |
 |               [Encoder decoder](model_doc/encoder-decoder)               |       ✅        |         ✅         |      ✅      |
 |                         [ERNIE](model_doc/ernie)                         |       ✅        |         ❌         |      ❌      |
@@ -235,6 +236,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                     [MobileViT](model_doc/mobilevit)                     |       ✅        |         ✅         |      ❌      |
 |                   [MobileViTV2](model_doc/mobilevitv2)                   |       ✅        |         ❌         |      ❌      |
 |                    [ModernBERT](model_doc/modernbert)                    |       ✅        |         ❌         |      ❌      |
+|                     [Moonshine](model_doc/moonshine)                     |       ✅        |         ❌         |      ❌      |
 |                         [Moshi](model_doc/moshi)                         |       ✅        |         ❌         |      ❌      |
 |                         [MPNet](model_doc/mpnet)                         |       ✅        |         ✅         |      ❌      |
 |                           [MPT](model_doc/mpt)                           |       ✅        |         ❌         |      ❌      |
