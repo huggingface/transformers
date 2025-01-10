@@ -260,7 +260,7 @@ def make_flat_list_of_images(
         if is_pil_image(images) or images.ndim == 3:
             return [images]
         if images.ndim == 4:
-            return images
+            return list(images)
 
     raise ValueError(f"Could not make a flat list of images from {images}")
 
@@ -289,7 +289,7 @@ def make_nested_list_of_images(
         if is_pil_image(images[0]) or images[0].ndim == 3:
             return [images]
         if images[0].ndim == 4:
-            return images
+            return [list(image) for image in images]
 
     # If it's a single image, convert it to a list of lists
     if is_pil_image(images):
@@ -299,7 +299,7 @@ def make_nested_list_of_images(
         if is_pil_image(images) or images.ndim == 3:
             return [[images]]
         if images.ndim == 4:
-            return [images]
+            return [list(images)]
 
     raise ValueError("Invalid input type. Must be a single image, a list of images, or a list of batches of images.")
 
