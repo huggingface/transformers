@@ -218,12 +218,13 @@ class ImageFeatureExtractionTester(unittest.TestCase):
         self.assertTrue(np.array_equal(images_list[0], images))
         self.assertIsInstance(images_list, list)
 
-        # Test a batch of images is unchanged
+        # Test a 4d array of images is changed to a list of images
         images = np.random.randint(0, 256, (4, 16, 32, 3))
-        images_array = make_flat_list_of_images(images)
-        self.assertEqual(len(images_array), 4)
-        self.assertIsInstance(images_array, np.ndarray)
-        self.assertTrue(np.array_equal(images_array, images))
+        images_list = make_flat_list_of_images(images)
+        self.assertEqual(len(images_list), 4)
+        self.assertIsInstance(images_list, list)
+        self.assertIsInstance(images_list[0], np.ndarray)
+        self.assertTrue(np.array_equal(images_list[0], images[0]))
 
         # Test a list of images is not modified
         images = [np.random.randint(0, 256, (16, 32, 3)) for _ in range(4)]
@@ -232,7 +233,7 @@ class ImageFeatureExtractionTester(unittest.TestCase):
         self.assertTrue(np.array_equal(images_list[0], images[0]))
         self.assertIsInstance(images_list, list)
 
-        # Test list of batched images is flattened
+        # Test list of 4d array images is flattened
         images = [np.random.randint(0, 256, (4, 16, 32, 3)) for _ in range(2)]
         images_list = make_flat_list_of_images(images)
         self.assertEqual(len(images_list), 8)
@@ -256,12 +257,13 @@ class ImageFeatureExtractionTester(unittest.TestCase):
         self.assertTrue(np.array_equal(images_list[0], images))
         self.assertIsInstance(images_list, list)
 
-        # Test a batch of images is unchanged
+        # Test a 4d tensors of images is changed to a list of images
         images = torch.randint(0, 256, (4, 16, 32, 3))
-        images_array = make_flat_list_of_images(images)
-        self.assertEqual(len(images_array), 4)
-        self.assertIsInstance(images_array, torch.Tensor)
-        self.assertTrue(np.array_equal(images_array, images))
+        images_list = make_flat_list_of_images(images)
+        self.assertEqual(len(images_list), 4)
+        self.assertIsInstance(images_list, list)
+        self.assertIsInstance(images_list[0], torch.Tensor)
+        self.assertTrue(np.array_equal(images_list[0], images[0]))
 
         # Test a list of images is not modified
         images = [torch.randint(0, 256, (16, 32, 3)) for _ in range(4)]
@@ -270,7 +272,7 @@ class ImageFeatureExtractionTester(unittest.TestCase):
         self.assertTrue(np.array_equal(images_list[0], images[0]))
         self.assertIsInstance(images_list, list)
 
-        # Test list of batched images is flattened
+        # Test list of 4d tensors of imagess is flattened
         images = [torch.randint(0, 256, (4, 16, 32, 3)) for _ in range(2)]
         images_list = make_flat_list_of_images(images)
         self.assertEqual(len(images_list), 8)
@@ -317,11 +319,11 @@ class ImageFeatureExtractionTester(unittest.TestCase):
         self.assertEqual(len(images_list), 1)
         self.assertTrue(np.array_equal(images_list[0][0], images))
 
-        # Test a batch of images is converted to a nested list of images
+        # Test a 4d array of images is converted to a nested list of images
         images = np.random.randint(0, 256, (4, 16, 32, 3))
         images_list = make_nested_list_of_images(images)
-        self.assertIsInstance(images_list, list)
-        self.assertIsInstance(images_list[0], np.ndarray)
+        self.assertIsInstance(images_list[0], list)
+        self.assertIsInstance(images_list[0][0], np.ndarray)
         self.assertEqual(len(images_list), 1)
         self.assertEqual(len(images_list[0]), 4)
         self.assertTrue(np.array_equal(images_list[0][0], images[0]))
@@ -342,6 +344,15 @@ class ImageFeatureExtractionTester(unittest.TestCase):
         self.assertEqual(len(images_list[0]), 2)
         self.assertTrue(np.array_equal(images_list[0][0], images[0][0]))
 
+        # Test a list of 4d array images is converted to a nested list of images
+        images = [np.random.randint(0, 256, (4, 16, 32, 3)) for _ in range(2)]
+        images_list = make_nested_list_of_images(images)
+        self.assertIsInstance(images_list[0], list)
+        self.assertIsInstance(images_list[0][0], np.ndarray)
+        self.assertEqual(len(images_list), 2)
+        self.assertEqual(len(images_list[0]), 4)
+        self.assertTrue(np.array_equal(images_list[0][0], images[0][0]))
+
     @require_torch
     def test_make_nested_list_of_images_torch(self):
         # Test a single image is converted to a nested list of 1 image
@@ -351,11 +362,11 @@ class ImageFeatureExtractionTester(unittest.TestCase):
         self.assertEqual(len(images_list[0]), 1)
         self.assertTrue(np.array_equal(images_list[0][0], images))
 
-        # Test a batch of images is converted to a nested list of images
+        # Test a 4d tensor of images is converted to a nested list of images
         images = torch.randint(0, 256, (4, 16, 32, 3))
         images_list = make_nested_list_of_images(images)
-        self.assertIsInstance(images_list, list)
-        self.assertIsInstance(images_list[0], torch.Tensor)
+        self.assertIsInstance(images_list[0], list)
+        self.assertIsInstance(images_list[0][0], torch.Tensor)
         self.assertEqual(len(images_list), 1)
         self.assertEqual(len(images_list[0]), 4)
         self.assertTrue(np.array_equal(images_list[0][0], images[0]))
@@ -374,6 +385,15 @@ class ImageFeatureExtractionTester(unittest.TestCase):
         self.assertIsInstance(images_list[0], list)
         self.assertEqual(len(images_list), 2)
         self.assertEqual(len(images_list[0]), 2)
+        self.assertTrue(np.array_equal(images_list[0][0], images[0][0]))
+
+        # Test a list of 4d tensor images is converted to a nested list of images
+        images = [torch.randint(0, 256, (4, 16, 32, 3)) for _ in range(2)]
+        images_list = make_nested_list_of_images(images)
+        self.assertIsInstance(images_list[0], list)
+        self.assertIsInstance(images_list[0][0], torch.Tensor)
+        self.assertEqual(len(images_list), 2)
+        self.assertEqual(len(images_list[0]), 4)
         self.assertTrue(np.array_equal(images_list[0][0], images[0][0]))
 
     @require_torch
