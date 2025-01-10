@@ -90,15 +90,15 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
         super().__init__(*args, **kwargs)
 
     @staticmethod
-    def _fix_state_dict_key_on_load(key):
+    def _fix_state_dict_key_on_load(key) -> Tuple[str, bool]:
         """
         Overrides original method that renames `gamma` and `beta` to `weight` and `bias`.
         We don't want this behavior for timm wrapped models. Instead, this method adds a
         "timm_model." prefix to enable loading official timm Hub checkpoints.
         """
         if "timm_model." not in key:
-            return f"timm_model.{key}"
-        return key
+            return f"timm_model.{key}", True
+        return key, False
 
     def _fix_state_dict_key_on_save(self, key):
         """
