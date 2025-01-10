@@ -159,7 +159,7 @@ class GPTNeoXAttention(nn.Module):
         super().__init__()
         self.config = config
         self.head_size = config.hidden_size // config.num_attention_heads
-        self.rotary_ndims = int(self.head_size * config.rotary_pct)
+        self.attention_dropout = config.attention_dropout
         self.scaling = self.head_size**-0.5
         self.is_causal = True
         self.layer_idx = layer_idx
@@ -224,11 +224,7 @@ class GPTNeoXAttention(nn.Module):
             )
             attention_type = "eager"
 
-        elif (
-            self.training
-            and self.config.attention_dropout > 0
-            and self.config._attn_implementation == "flex_attention"
-        ):
+        elif self.training and self.attention_dropout > 0 and self.config._attn_implementation == "flex_attention":
             logger.warning_once(
                 f"Setting `attention_type` to `eager` because `dropout` is not supported in `{attention_type}`."
             )
