@@ -137,6 +137,7 @@ Flax), PyTorch, and/or TensorFlow.
 |               [EfficientFormer](model_doc/efficientformer)               |       ✅        |         ✅         |      ❌      |
 |                  [EfficientNet](model_doc/efficientnet)                  |       ✅        |         ❌         |      ❌      |
 |                       [ELECTRA](model_doc/electra)                       |       ✅        |         ✅         |      ✅      |
+|                          [Emu3](model_doc/emu3)                          |       ✅        |         ❌         |      ❌      |
 |                       [EnCodec](model_doc/encodec)                       |       ✅        |         ❌         |      ❌      |
 |               [Encoder decoder](model_doc/encoder-decoder)               |       ✅        |         ✅         |      ✅      |
 |                         [ERNIE](model_doc/ernie)                         |       ✅        |         ❌         |      ❌      |
