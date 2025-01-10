@@ -26,16 +26,16 @@ Both [GPTQModel](https://github.com/ModelCloud/GPTQModel) and [AutoGPTQ](https:/
 
 [GPTQModel](https://github.com/ModelCloud/GPTQModel) started as a maintained fork of AutoGPTQ but has since differentiated itself with the following major differences.
 
-* Model support: GPTQModel continues to support all of the latest released LLM models.
-* Multi-Modal support: GPTQModel supports accurate quantization of Qwen 2-VL and Ovis 1.6-VL image-to-text models. 
-* Platform support: Linux, MacOS (Apple Silicon), and Windows 11.
-* Hardware support: Nvidia CUDA, AMD ROCm, Apple Silicon M1+ MPS + CPU, Intel/AMD CPU, and Intel Datacenter Max + Arc GPUs.
+* Model support: GPTQModel continues to support all of the latest LLM models.
+* Multimodal support: GPTQModel supports accurate quantization of Qwen 2-VL and Ovis 1.6-VL image-to-text models. 
+* Platform support: Linux, macOS (Apple Silicon), and Windows 11.
+* Hardware support: NVIDIA CUDA, AMD ROCm, Apple Silicon M1/MPS /CPU, Intel/AMD CPU, and Intel Datacenter Max/Arc GPUs.
 * Asymmetric support: Asymmetric quantization can potentially introduce lower quantization errors compared to symmetric quantization. However, it is not backward compatible with AutoGPTQ, and not all kernels, such as Marlin, support asymmetric quantization.
-* IPEX kernel for Intel/AMD accelerated CPU and Intel GPU (Datacenter Max + ARc) support.
-* Updated Marlin kernel from Neural Magic that is optimized for A100 (Ampere)
-* Updated Kernels with auto-padding for legacy model support and models with non-uniform in/out-features. 
-* Faster quantization, lower memory usage, and more accurate default quantization via GPTQModel quantization apis.
-* User and developer friendly apis. 
+* IPEX kernel for Intel/AMD accelerated CPU and Intel GPU (Datacenter Max/Arc GPUs) support.
+* Updated Marlin kernel from Neural Magic optimized for A100 (Ampere).
+* Updated kernels with auto-padding for legacy model support and models with non-uniform in/out-features. 
+* Faster quantization, lower memory usage, and more accurate default quantization via GPTQModel quantization APIs.
+* User and developer friendly APIs. 
 
 
 [AutoGPTQ](https://github.com/PanQiWei/AutoGPTQ) will likely be deprecated in the future due the lack of continued support for new models and features. 
