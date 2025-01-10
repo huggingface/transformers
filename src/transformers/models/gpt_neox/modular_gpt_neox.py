@@ -333,8 +333,8 @@ class GPTNeoXPreTrainedModel(LlamaPreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-GPT_NEOX_START_DOCSTRING = None  # will be created by modular
-GPT_NEOX_INPUTS_DOCSTRING = None  # will be created by modular
+GPT_NEOX_START_DOCSTRING = None  # Will be picked up by modular
+GPT_NEOX_INPUTS_DOCSTRING = None  # Will be picked up by modular
 
 
 class GPTNeoXModel(LlamaModel):
