@@ -52,11 +52,20 @@ class RtDetrV2Config(RTDetrConfig):
         self,
         decoder_n_levels=3,  # default value
         decoder_offset_scale=0.5,  # default value
+        d_model=256,
+        encoder_attention_heads=8,
         **super_kwargs,
     ):
         # init the base RTDetrConfig class with additional parameters
         super().__init__(**super_kwargs)
+        del self.d_model
+        del self.encoder_attention_heads
 
+        if not hasattr(self, "d_model"):
+            self.d_model = d_model
+
+        if not hasattr(self, "encoder_attention_heads"):
+            self.encoder_attention_heads = encoder_attention_heads
         # add the new attributes with the given values or defaults
         self.decoder_n_levels = decoder_n_levels
         self.decoder_offset_scale = decoder_offset_scale
@@ -334,6 +343,7 @@ class RtDetrV2ForObjectDetection(RTDetrForObjectDetection):
 
 __all__ = [
     "RtDetrV2Config",
+    "RtDetrV2ResNetConfig",
     "RtDetrV2Model",
     "RtDetrV2PreTrainedModel",
     "RtDetrV2ForObjectDetection",

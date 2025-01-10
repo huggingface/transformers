@@ -394,7 +394,6 @@ class RtDetrV2Config(PretrainedConfig):
         self.encoder_hidden_dim = encoder_hidden_dim
         self.encoder_in_channels = encoder_in_channels
         self.feat_strides = feat_strides
-        self.encoder_attention_heads = encoder_attention_heads
         self.encoder_ffn_dim = encoder_ffn_dim
         self.dropout = dropout
         self.activation_dropout = activation_dropout
@@ -406,8 +405,6 @@ class RtDetrV2Config(PretrainedConfig):
         self.encoder_activation_function = encoder_activation_function
         self.activation_function = activation_function
         self.hidden_expansion = hidden_expansion
-        # decoder
-        self.d_model = d_model
         self.num_queries = num_queries
         self.decoder_ffn_dim = decoder_ffn_dim
         self.decoder_in_channels = decoder_in_channels
@@ -439,6 +436,11 @@ class RtDetrV2Config(PretrainedConfig):
         self.weight_loss_giou = weight_loss_giou
         self.eos_coefficient = eos_coefficient
 
+        if not hasattr(self, "d_model"):
+            self.d_model = d_model
+
+        if not hasattr(self, "encoder_attention_heads"):
+            self.encoder_attention_heads = encoder_attention_heads
         # add the new attributes with the given values or defaults
         self.decoder_n_levels = decoder_n_levels
         self.decoder_offset_scale = decoder_offset_scale
@@ -469,4 +471,4 @@ class RtDetrV2Config(PretrainedConfig):
         )
 
 
-__all__ = ["RtDetrV2Config"]
+__all__ = ["RtDetrV2Config", "RtDetrV2ResNetConfig"]
