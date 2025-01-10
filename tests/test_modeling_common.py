@@ -4801,7 +4801,7 @@ class ModelTesterMixin:
             self.assertTrue(model.config._attn_implementation == "flex_attention")
 
             # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
-            out = model(inputs_dict["input_ids"].to(torch_device))
+            _ = model(inputs_dict["input_ids"].to(torch_device))
 
 
 global_rng = random.Random()
