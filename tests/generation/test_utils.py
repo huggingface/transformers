@@ -1093,6 +1093,8 @@ class GenerationTesterMixin:
             model = model_class(config).to(torch_device).eval()
             set_model_for_less_flaky_test(model)
 
+            logits_processor_kwargs = self._get_logits_processor_kwargs(config=model.config)
+
             low_output = model.generate(
                 **inputs_dict,
                 max_new_tokens=8,
@@ -1100,6 +1102,7 @@ class GenerationTesterMixin:
                 early_stopping=True,
                 low_memory=True,
                 use_cache=True,
+                **logits_processor_kwargs,
             )
 
             high_output = model.generate(
@@ -1109,6 +1112,7 @@ class GenerationTesterMixin:
                 early_stopping=True,
                 low_memory=False,
                 use_cache=True,
+                **logits_processor_kwargs,
             )
             self.assertListEqual(low_output.tolist(), high_output.tolist())
 
