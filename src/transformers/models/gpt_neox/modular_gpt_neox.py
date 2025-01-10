@@ -1,24 +1,13 @@
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Callable, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
-
-import torch
-import torch.utils.checkpoint
-from torch import nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, StaticCache
-from ...file_utils import (
-    add_code_sample_docstrings,
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    replace_return_docstrings,
-)
+from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
-from ...modeling_attn_mask_utils import AttentionMaskConverter
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -26,6 +15,8 @@ from ...modeling_outputs import (
     SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
 )
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...processing_utils import Unpack
 from ...utils import (
     LossKwargs,
     add_code_sample_docstrings,
@@ -34,30 +25,12 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-
-from ...cache_utils import Cache, SlidingWindowCache, StaticCache
-from ...modeling_attn_mask_utils import AttentionMaskConverter
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import QuestionAnsweringModelOutput
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
-from ...processing_utils import Unpack
-from ...utils import logging
 from ..llama.modeling_llama import (
-    LlamaAttention,
-    LlamaDecoderLayer,
-    LlamaForCausalLM,
-    LlamaForQuestionAnswering,
-    LlamaForSequenceClassification,
-    LlamaForTokenClassification,
-    LlamaMLP,
     LlamaModel,
-    LlamaRotaryEmbedding,
     LlamaPreTrainedModel,
-    apply_rotary_pos_emb,
-    eager_attention_forward,
+    LlamaRotaryEmbedding,
     rotate_half,
 )
-from .configuration_gpt_neox import GPTNeoXConfig
 
 
 logger = logging.get_logger(__name__)
@@ -77,7 +50,7 @@ def eager_attention_forward(
     scaling: float,
     dropout: float = 0.0,
     head_mask: Optional[torch.Tensor] = None,
-    **kwargs
+    **kwargs,
 ):
     # q, k, v: [bs, num_attention_heads, seq_len, attn_head_size]
     batch_size, num_attention_heads, query_length, attn_head_size = query.size()
@@ -241,7 +214,9 @@ class GPTNeoXAttention(nn.Module):
             attention_type = "eager"
 
         attention_interface: Callable = eager_attention_forward
-        attention_interface = ALL_ATTENTION_FUNCTIONS[attention_type] if attention_type != "eager" else attention_interface
+        attention_interface = (
+            ALL_ATTENTION_FUNCTIONS[attention_type] if attention_type != "eager" else attention_interface
+        )
 
         # Compute attention
         attn_output, attn_weights = attention_interface(
@@ -260,7 +235,7 @@ class GPTNeoXAttention(nn.Module):
         attn_output = self.dense(attn_output)
 
         return attn_output, attn_weights
-    
+
 
 class GPTNeoXRotaryEmbedding(LlamaRotaryEmbedding):
     pass
@@ -278,7 +253,7 @@ class GPTNeoXMLP(nn.Module):
         hidden_states = self.act(hidden_states)
         hidden_states = self.dense_4h_to_h(hidden_states)
         return hidden_states
-    
+
 
 class GPTNeoXLayer(nn.Module):
     def __init__(self, config, layer_idx):
@@ -338,7 +313,7 @@ class GPTNeoXLayer(nn.Module):
             outputs += (attn_weights,)
 
         return outputs
-    
+
 
 class GPTNeoXPreTrainedModel(LlamaPreTrainedModel):
     base_model_prefix = "gpt_neox"
