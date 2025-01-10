@@ -405,7 +405,7 @@ class Emu3VQVAEResnetBlock(nn.Module):
         return residual + hidden_states
 
 
-class Emu3VQVAEAttnBlock(SiglipAttention):
+class Emu3VQVAEAttentionBlock(SiglipAttention):
     pass
 
 
