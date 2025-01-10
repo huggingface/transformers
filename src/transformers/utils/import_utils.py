@@ -361,6 +361,9 @@ def is_torch_sdpa_available():
     # NOTE: MLU is OK with non-contiguous inputs.
     if is_torch_mlu_available():
         return version.parse(_torch_version) >= version.parse("2.1.0")
+    # NOTE: NPU can use SDPA in Transformers with torch>=2.1.0.
+    if is_torch_npu_available():
+        return version.parse(_torch_version) >= version.parse("2.1.0")
     # NOTE: We require torch>=2.1.1 to avoid a numerical issue in SDPA with non-contiguous inputs: https://github.com/pytorch/pytorch/issues/112577
     return version.parse(_torch_version) >= version.parse("2.1.1")
 
@@ -1093,8 +1096,7 @@ def is_in_notebook():
         get_ipython = sys.modules["IPython"].get_ipython
         if "IPKernelApp" not in get_ipython().config:
             raise ImportError("console")
-        if "VSCODE_PID" in os.environ:
-            raise ImportError("vscode")
+        # Removed the lines to include VSCode
         if "DATABRICKS_RUNTIME_VERSION" in os.environ and os.environ["DATABRICKS_RUNTIME_VERSION"] < "11.0":
             # Databricks Runtime 11.0 and above uses IPython kernel by default so it should be compatible with Jupyter notebook
             # https://docs.microsoft.com/en-us/azure/databricks/notebooks/ipython-kernel
@@ -1159,7 +1161,7 @@ def is_training_run_on_sagemaker():
     return "SAGEMAKER_JOB_NAME" in os.environ
 
 
-def is_soundfile_availble():
+def is_soundfile_available():
     return _soundfile_available
 
 
