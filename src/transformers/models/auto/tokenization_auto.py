@@ -189,6 +189,13 @@ else:
             ("ernie", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("ernie_m", ("ErnieMTokenizer" if is_sentencepiece_available() else None, None)),
             ("esm", ("EsmTokenizer", None)),
+            (
+                "exaone",
+                (
+                    "GPT2Tokenizer" if is_tokenizers_available() else None,
+                    "GPT2TokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             ("falcon", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
             ("falcon_mamba", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
             (
