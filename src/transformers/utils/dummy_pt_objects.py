@@ -9222,7 +9222,6 @@ class TextNetModel(metaclass=DummyObject):
 
 
 class TextNetPreTrainedModel(metaclass=DummyObject):
-
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
