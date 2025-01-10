@@ -339,20 +339,11 @@ GPT_NEOX_INPUTS_DOCSTRING = None  # Will be picked up by modular
 class GPTNeoXModel(LlamaModel):
     def __init__(self, config):
         super().__init__(config)
-        self.config = config
-
+        del self.norm
+        del self.embed_tokens
         self.embed_in = nn.Embedding(config.vocab_size, config.hidden_size)
         self.emb_dropout = nn.Dropout(config.hidden_dropout)
-        self.layers = nn.ModuleList([GPTNeoXLayer(config, i) for i in range(config.num_hidden_layers)])
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.rotary_emb = GPTNeoXRotaryEmbedding(config=config)
-
-        self._attn_implementation = config._attn_implementation
-
-        self.gradient_checkpointing = False
-
-        # Initialize weights and apply final processing
-        self.post_init()
 
     def get_input_embeddings(self):
         return self.embed_in
