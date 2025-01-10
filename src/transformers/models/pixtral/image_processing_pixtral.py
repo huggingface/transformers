@@ -38,7 +38,7 @@ from ...image_utils import (
     validate_kwargs,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_torch_device, is_torch_dtype, is_vision_available, logging
+from ...utils import TensorType, is_vision_available, logging
 from ...utils.import_utils import requires_backends
 
 
@@ -469,3 +469,6 @@ class PixtralImageProcessor(BaseImageProcessor):
         return BatchFeature(
             data={"pixel_values": pixel_values, "image_sizes": batch_image_sizes}, tensor_type=return_tensors
         )
+
+
+__all__ = ["PixtralImageProcessor"]
