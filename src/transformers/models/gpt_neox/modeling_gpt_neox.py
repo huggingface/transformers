@@ -160,7 +160,7 @@ class GPTNeoXAttention(nn.Module):
         self.config = config
         self.head_size = config.hidden_size // config.num_attention_heads
         self.attention_dropout = config.attention_dropout
-        self.rotary_ndims = config.rotary_pct
+        self.rotary_ndims = int(self.head_size * config.rotary_pct)
         self.scaling = self.head_size**-0.5
         self.is_causal = True
         self.layer_idx = layer_idx
