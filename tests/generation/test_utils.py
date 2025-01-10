@@ -1077,7 +1077,10 @@ class GenerationTesterMixin:
             ):
                 self.skipTest(reason="May fix in the future: need model-specific fixes")
 
+            set_model_tester_for_less_flaky_test(self)
+
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            set_config_for_less_flaky_test(config)
             # batch_size=1 is ok, but batch_size>1 will cause non-identical output
 
             config.use_cache = True
@@ -1085,6 +1088,7 @@ class GenerationTesterMixin:
 
             # test output equality of low versus high memory
             model = model_class(config).to(torch_device).eval()
+            set_model_for_less_flaky_test(model)
 
             low_output = model.generate(
                 **inputs_dict,
