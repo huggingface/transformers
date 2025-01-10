@@ -811,11 +811,11 @@ class MoonshineDecoder(LlamaModel):
 MOONSHINE_MODEL_INPUTS_DOCSTRING = r"""
     Args:
         input_values (`torch.FloatTensor` of shape `(batch_size, audio_length)`):
-                Float values of the raw speech waveform. Raw speech waveform can be
-                obtained by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a
-                `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
-                `input_values`, the [`AutoFeatureExtractor`] should be used for padding
-                and conversion into a tensor of type `torch.FloatTensor`.
+            Float values of the raw speech waveform. Raw speech waveform can be
+            obtained by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a
+            `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
+            `input_values`, the [`AutoFeatureExtractor`] should be used for padding
+            and conversion into a tensor of type `torch.FloatTensor`.
         encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
             Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
             `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
@@ -871,8 +871,8 @@ MOONSHINE_MODEL_INPUTS_DOCSTRING = r"""
             The model will output the same cache format that is fed as input. If no `past_key_values` are passed, the
             legacy cache format will be returned.
 
-            If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that don't
-            have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `input_ids`
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that don't
+            have their past key value states given to this model) of shape `(batch_size, 1)` instead of all `decoder_input_ids`
             of shape `(batch_size, sequence_length)`.
         decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded representation. This
@@ -890,7 +890,7 @@ MOONSHINE_MODEL_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
+            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `decoder_position_ids`,
             this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
             the complete sequence length.
 """
