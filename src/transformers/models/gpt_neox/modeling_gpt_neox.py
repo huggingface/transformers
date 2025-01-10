@@ -241,6 +241,7 @@ class GPTNeoXAttention(nn.Module):
 
         # Compute attention
         attn_output, attn_weights = attention_interface(
+            self,
             query_states,
             key_states,
             value_states,
