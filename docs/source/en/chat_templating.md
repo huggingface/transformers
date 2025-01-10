@@ -149,9 +149,8 @@ messages = [
 processed_chat = processor.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt")
 print(processor.batch_decode(processed_chat["input_ids"][:, :30]))
 ```
-This will yield a string in the input format that LLaVA expects with a bunch of `<image>` tokens at the end.
-The `<image>`tokens are there as a placeholder and each one will be replaced by image embeddings when running the model
-forward call. And the `processed_chat` can be further passed into `model.generate()` to generate text.
+This yields a string in LLaVAs expected input format with many `<image>` tokens at the end.
+The `<image>` tokens are placeholders and each one will be replaced by image embeddings when the mode is run in the forward call. The `processed_chat` can be further passed into [`~GenerationMixin.generate`] to generate text.
 ```text
 '<|im_start|>system 
 You are a friendly chatbot who always responds in the style of a pirate<|im_end|><|im_start|>user <image><image><image><image><image><image><image><image>'
