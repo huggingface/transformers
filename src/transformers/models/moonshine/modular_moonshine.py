@@ -407,15 +407,15 @@ class MoonshineDecoderLayer(nn.Module):
             config=config,
             layer_idx=layer_idx,
             is_causal=True,
-            num_attention_heads=config.encoder_num_attention_heads,
-            num_key_value_heads=config.encoder_num_key_value_heads,
+            num_attention_heads=config.decoder_num_attention_heads,
+            num_key_value_heads=config.decoder_num_key_value_heads,
         )
         self.encoder_attn = MoonshineAttention(
             config=config,
             layer_idx=layer_idx,
             is_causal=False,
-            num_attention_heads=config.encoder_num_attention_heads,
-            num_key_value_heads=config.encoder_num_key_value_heads,
+            num_attention_heads=config.decoder_num_attention_heads,
+            num_key_value_heads=config.decoder_num_key_value_heads,
         )
 
         self.mlp = MoonshineDecoderMLP(config, config.decoder_hidden_act)
