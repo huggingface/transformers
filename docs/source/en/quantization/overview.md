@@ -76,7 +76,7 @@ Use the table below to help you decide which quantization method to use.
 
 <Tip>
 
-**3:** GPTQModel[CPU] supports 4-bit via IPEX on Intel/AMD and full bit range via Torch on Intel/Amd/Apple Silicon.
+**3:** GPTQModel[CPU] supports 4-bit via IPEX on Intel/AMD and full bit range via Torch on Intel/AMD/Apple Silicon.
 
 </Tip>
 
