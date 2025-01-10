@@ -24,6 +24,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
+    is_torch_flex_attn_available,
 )
 from ..llama.modeling_llama import (
     LlamaModel,
@@ -31,6 +32,9 @@ from ..llama.modeling_llama import (
     LlamaRotaryEmbedding,
     rotate_half,
 )
+
+if is_torch_flex_attn_available():
+    from torch.nn.attention.flex_attention import flex_attention
 
 
 logger = logging.get_logger(__name__)
@@ -93,6 +97,47 @@ def eager_attention_forward(
 
     return attn_output, attn_weights
 
+
+def flex_attention_forward(
+    module: torch.nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: Optional[float] = None,
+    head_mask: Optional[torch.Tensor] = None,
+    **kwargs,
+) -> Tuple[torch.Tensor, torch.Tensor]:
+    causal_mask = attention_mask
+    if causal_mask is not None:
+        causal_mask = causal_mask[:, :, :, : key.shape[-2]]
+
+    def causal_mod(score, b, h, q_idx, kv_idx):
+        if causal_mask is not None:
+            score = score + causal_mask[b][0][q_idx][kv_idx]
+        if head_mask is not None:
+            score = score + head_mask[b][h][0][0]
+        return score
+
+    attn_output, attention_weights = flex_attention(
+        query,
+        key,
+        value,
+        score_mod=causal_mod,
+        enable_gqa=True,
+        scale=scaling,
+        # Last time checked on PyTorch == 2.5.1: Flex Attention always computes the lse regardless.
+        # For simplification, we thus always return it as no additional computations are introduced.
+        return_lse=True,
+    )
+    # lse is returned in float32
+    attention_weights = attention_weights.to(value.dtype)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attention_weights
+
+
+ALL_ATTENTION_FUNCTIONS["flex_attention"] = flex_attention_forward
 
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
@@ -237,10 +282,6 @@ class GPTNeoXAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class GPTNeoXRotaryEmbedding(LlamaRotaryEmbedding):
-    pass
-
-
 class GPTNeoXMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -313,6 +354,10 @@ class GPTNeoXLayer(nn.Module):
             outputs += (attn_weights,)
 
         return outputs
+
+
+class GPTNeoXRotaryEmbedding(LlamaRotaryEmbedding):
+    pass
 
 
 class GPTNeoXPreTrainedModel(LlamaPreTrainedModel):
