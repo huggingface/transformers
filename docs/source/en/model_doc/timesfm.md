@@ -30,18 +30,18 @@ This model was contributed by [kashif](https://huggingface.co/kashif).
 The original code can be found [here](https://github.com/google-research/timesfm).
 
 
-## TimesFMConfig
+## TimesFmConfig
 
-[[autodoc]] TimesFMConfig
+[[autodoc]] TimesFmConfig
 
-## TimesFMDecoder
+## TimesFmDecoder
 
-[[autodoc]] TimesFMDecoder
+[[autodoc]] TimesFmDecoder
     - forward
 
-## TimesFMModelForPrediction
+## TimesFmModelForPrediction
 
-[[autodoc]] TimesFMModelForPrediction
+[[autodoc]] TimesFmModelForPrediction
     - forward
 
 </pt>

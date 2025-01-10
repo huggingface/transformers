@@ -6,7 +6,7 @@ import numpy as np
 import timesfm
 import torch
 
-from transformers import TimesFMConfig, TimesFMModelForPrediction
+from transformers import TimesFmConfig, TimesFmModelForPrediction
 
 
 """
@@ -38,7 +38,7 @@ def write_model(model_path, safe_serialization=True, huggingface_repo_id="google
         checkpoint=timesfm.TimesFmCheckpoint(huggingface_repo_id=huggingface_repo_id),
     )
 
-    timesfm_config = TimesFMConfig(
+    timesfm_config = TimesFmConfig(
         patch_len=tfm.hparams.input_patch_len,
         context_len=tfm.hparams.context_len,
         horizon_len=tfm.hparams.horizon_len,
@@ -50,7 +50,7 @@ def write_model(model_path, safe_serialization=True, huggingface_repo_id="google
         use_positional_embedding=tfm.hparams.use_positional_embedding,
     )
     timesfm_config.save_pretrained(tmp_model_path)
-    timesfm_model = TimesFMModelForPrediction(timesfm_config)
+    timesfm_model = TimesFmModelForPrediction(timesfm_config)
 
     # copy the weights from the original model to the new model making
     original_model = tfm._model
@@ -159,7 +159,7 @@ def check_outputs(model_path, huggingface_repo_id):
     )
 
     # Load converted model
-    converted_model = TimesFMModelForPrediction.from_pretrained(
+    converted_model = TimesFmModelForPrediction.from_pretrained(
         model_path,
         torch_dtype=torch.bfloat16,
         attn_implementation="sdpa",

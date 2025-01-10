@@ -17,7 +17,7 @@
 import logging
 import math
 from dataclasses import dataclass
-from typing import List, Sequence, Tuple
+from typing import List, Sequence, Tuple, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -25,23 +25,23 @@ import torch.nn.functional as F
 
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
-from .configuration_timesfm import TimesFMConfig
+from .configuration_timesfm import TimesFmConfig
 
 
 @dataclass
-class TimesFMDecoderOutput(BaseModelOutput):
-    loc: torch.Tensor | None = None
-    scale: torch.Tensor | None = None
+class TimesFmDecoderOutput(BaseModelOutput):
+    loc: Optional[torch.Tensor] = None
+    scale: Optional[torch.Tensor] = None
 
 
 @dataclass
-class TimesFMOutputForPrediction(BaseModelOutput):
-    mean_predictions: torch.Tensor | None = None
-    full_predictions: torch.Tensor | None = None
-    loss: torch.Tensor | float | None = None
+class TimesFmOutputForPrediction(BaseModelOutput):
+    mean_predictions: Optional[torch.Tensor] = None
+    full_predictions: Optional[torch.Tensor] = None
+    loss: Optional[Union[torch.Tensor, float]] = None
 
 
-class TimesFMTransformerMLP(nn.Module):
+class TimesFmTransformerMLP(nn.Module):
     """Pax transformer MLP in pytorch."""
 
     def __init__(
@@ -64,7 +64,7 @@ class TimesFMTransformerMLP(nn.Module):
         return outputs + x
 
 
-class TimesFMResidualBlock(nn.Module):
+class TimesFmResidualBlock(nn.Module):
     """TimesFM residual block."""
 
     def __init__(self, input_dims, hidden_dims, output_dims):
@@ -91,7 +91,7 @@ class TimesFMResidualBlock(nn.Module):
         return output + residual
 
 
-class TimesFMRMSNorm(torch.nn.Module):
+class TimesFmRMSNorm(torch.nn.Module):
     """Pax rms norm in pytorch."""
 
     def __init__(
@@ -117,7 +117,7 @@ class TimesFMRMSNorm(torch.nn.Module):
         return output.type_as(x)
 
 
-class TimesFMPositionalEmbedding(nn.Module):
+class TimesFmPositionalEmbedding(nn.Module):
     """Generates position embedding for a given 1-d sequence.
 
     Attributes:
@@ -172,10 +172,10 @@ class TimesFMPositionalEmbedding(nn.Module):
         return signal
 
 
-class TimesFMAttention(nn.Module):
-    """Implements the attention used in TimesFM. One key diffrence is that there is _per_dim_scaling of the query."""
+class TimesFmAttention(nn.Module):
+    """Implements the attention used in TimesFM. One key difference is that there is _per_dim_scaling of the query."""
 
-    def __init__(self, config: TimesFMConfig):
+    def __init__(self, config: TimesFmConfig):
         super().__init__()
         self.attention_dropout = config.attention_dropout
 
@@ -205,11 +205,11 @@ class TimesFMAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        kv_write_indices: torch.Tensor | None = None,
-        kv_cache: Tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        kv_write_indices: Optional[torch.Tensor] = None,
+        kv_cache: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         output_attentions: bool = False,
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         hidden_states_shape = hidden_states.shape
         assert len(hidden_states_shape) == 3
 
@@ -268,17 +268,17 @@ class TimesFMAttention(nn.Module):
         return output, scores
 
 
-class TimesFMSdpaAttention(TimesFMAttention):
+class TimesFmSdpaAttention(TimesFmAttention):
     """TimesFM attention implementation using torch.nn.functional.scaled_dot_product_attention."""
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        kv_write_indices: torch.Tensor | None = None,
-        kv_cache: Tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        kv_write_indices: Optional[torch.Tensor] = None,
+        kv_cache: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         output_attentions: bool = False,
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         if output_attentions:
             return super().forward(
                 hidden_states=hidden_states,
@@ -330,7 +330,7 @@ class TimesFMSdpaAttention(TimesFMAttention):
         value = value.contiguous()
 
         # Run scaled dot-product attention
-        # Note: attention_mask should already be in the correct format from TimesFMStackedDecoder
+        # Note: attention_mask should already be in the correct format from TimesFmStackedDecoder
         attn_output = F.scaled_dot_product_attention(
             query,
             key,
@@ -349,15 +349,15 @@ class TimesFMSdpaAttention(TimesFMAttention):
 
 
 TIMESFM_ATTENTION_CLASSES = {
-    "eager": TimesFMAttention,
-    "sdpa": TimesFMSdpaAttention,
+    "eager": TimesFmAttention,
+    "sdpa": TimesFmSdpaAttention,
 }
 
 
-class TimesFMDecoderLayer(nn.Module):
+class TimesFmDecoderLayer(nn.Module):
     """Transformer layer."""
 
-    def __init__(self, config: TimesFMConfig):
+    def __init__(self, config: TimesFmConfig):
         super().__init__()
 
         if config._attn_implementation not in TIMESFM_ATTENTION_CLASSES:
@@ -365,16 +365,16 @@ class TimesFMDecoderLayer(nn.Module):
         attention_class = TIMESFM_ATTENTION_CLASSES[config._attn_implementation]
 
         self.self_attn = attention_class(config)
-        self.mlp = TimesFMTransformerMLP(config.model_dim, config.intermediate_size)
-        self.input_layernorm = TimesFMRMSNorm(config.model_dim, eps=config.rms_norm_eps)
+        self.mlp = TimesFmTransformerMLP(config.model_dim, config.intermediate_size)
+        self.input_layernorm = TimesFmRMSNorm(config.model_dim, eps=config.rms_norm_eps)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         paddings: torch.Tensor,
-        kv_write_indices: torch.Tensor | None = None,
-        kv_cache: Tuple[torch.Tensor, torch.Tensor] | None = None,
+        kv_write_indices: Optional[torch.Tensor] = None,
+        kv_cache: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         output_attentions: bool = False,
     ) -> torch.Tensor:
         # Self Attention
@@ -395,20 +395,20 @@ class TimesFMDecoderLayer(nn.Module):
         return scores, hidden_states
 
 
-class TimesFMStackedDecoder(nn.Module):
+class TimesFmStackedDecoder(nn.Module):
     """Stacked transformer layer."""
 
-    def __init__(self, config: TimesFMConfig):
+    def __init__(self, config: TimesFmConfig):
         super().__init__()
 
-        self.layers = nn.ModuleList([TimesFMDecoderLayer(config) for _ in range(config.num_layers)])
+        self.layers = nn.ModuleList([TimesFmDecoderLayer(config) for _ in range(config.num_layers)])
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         paddings: torch.Tensor,
-        kv_write_indices: torch.Tensor | None = None,
-        kv_caches: List[Tuple[torch.Tensor, torch.Tensor]] | None = None,
+        kv_write_indices: Optional[torch.Tensor] = None,
+        kv_caches: Optional[List[Tuple[torch.Tensor, torch.Tensor]]] = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
     ) -> BaseModelOutput:
@@ -613,10 +613,10 @@ def timesfm_merge_masks(a: torch.Tensor, b: torch.Tensor) -> torch.Tensor:
     return torch.minimum(a, b)  # Element-wise minimum, similar to jnp.minimum
 
 
-class TimesFMPreTrainedModel(PreTrainedModel):
+class TimesFmPreTrainedModel(PreTrainedModel):
     """handles the loading for all models."""
 
-    config_class = TimesFMConfig
+    config_class = TimesFmConfig
     base_model_prefix = "timesfm"
     main_input_name = "inputs"
     _supports_sdpa = True
@@ -634,10 +634,10 @@ class TimesFMPreTrainedModel(PreTrainedModel):
             nn.init.ones_(module.weight)
             nn.init.zeros_(module.bias)
 
-        elif isinstance(module, TimesFMRMSNorm):
+        elif isinstance(module, TimesFmRMSNorm):
             nn.init.zeros_(module.weight)
 
-        elif isinstance(module, TimesFMTransformerMLP):
+        elif isinstance(module, TimesFmTransformerMLP):
             # Initialize gate projection
             module.gate_proj.weight.data.normal_(mean=0, std=self.config.initializer_factor)
             if module.gate_proj.bias is not None:
@@ -652,7 +652,7 @@ class TimesFMPreTrainedModel(PreTrainedModel):
             nn.init.ones_(module.layer_norm.weight)
             nn.init.zeros_(module.layer_norm.bias)
 
-        elif isinstance(module, TimesFMAttention):
+        elif isinstance(module, TimesFmAttention):
             # Initialize qkv projection
             module.qkv_proj.weight.data.normal_(mean=0, std=self.config.initializer_factor)
             if module.qkv_proj.bias is not None:
@@ -666,7 +666,7 @@ class TimesFMPreTrainedModel(PreTrainedModel):
             # Initialize scaling parameter
             nn.init.ones_(module.scaling)
 
-        elif isinstance(module, TimesFMResidualBlock):
+        elif isinstance(module, TimesFmResidualBlock):
             # Initialize hidden layer
             module.hidden_layer[0].weight.data.normal_(mean=0, std=self.config.initializer_factor)
             if module.hidden_layer[0].bias is not None:
@@ -682,26 +682,26 @@ class TimesFMPreTrainedModel(PreTrainedModel):
             if module.residual_layer.bias is not None:
                 nn.init.zeros_(module.residual_layer.bias)
 
-        elif isinstance(module, TimesFMPositionalEmbedding):
+        elif isinstance(module, TimesFmPositionalEmbedding):
             pass
 
 
-class TimesFMDecoder(TimesFMPreTrainedModel):
+class TimesFmDecoder(TimesFmPreTrainedModel):
     """Patched time-series decoder without any specific output layer."""
 
-    def __init__(self, config: TimesFMConfig):
+    def __init__(self, config: TimesFmConfig):
         super().__init__(config)
 
         self.config = config
-        self.input_ff_layer = TimesFMResidualBlock(
+        self.input_ff_layer = TimesFmResidualBlock(
             input_dims=2 * config.patch_len,
             output_dims=config.model_dim,
             hidden_dims=config.intermediate_size,
         )
         self.freq_emb = nn.Embedding(num_embeddings=config.freq_size, embedding_dim=config.model_dim)
-        self.stacked_transformer = TimesFMStackedDecoder(config=config)
+        self.stacked_transformer = TimesFmStackedDecoder(config=config)
         if self.config.use_positional_embedding:
-            self.position_emb = TimesFMPositionalEmbedding(
+            self.position_emb = TimesFmPositionalEmbedding(
                 embedding_dims=self.config.model_dim,
             )
 
@@ -772,7 +772,7 @@ class TimesFMDecoder(TimesFMPreTrainedModel):
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
-    ) -> TimesFMDecoderOutput | tuple[torch.Tensor, ...]:
+    ) -> Union[TimesFmDecoderOutput, tuple[torch.Tensor, ...]]:
         model_input, patched_padding, stats, _ = self._preprocess_input(
             input_ts=input_ts,
             input_padding=input_padding,
@@ -792,7 +792,7 @@ class TimesFMDecoder(TimesFMPreTrainedModel):
             all_hidden_states = None
 
         if return_dict:
-            return TimesFMDecoderOutput(
+            return TimesFmDecoderOutput(
                 last_hidden_state=transformer_output.last_hidden_state,
                 hidden_states=all_hidden_states,
                 attentions=transformer_output.attentions if output_attentions else None,
@@ -809,20 +809,20 @@ class TimesFMDecoder(TimesFMPreTrainedModel):
             )
 
 
-class TimesFMModelForPrediction(TimesFMPreTrainedModel):
+class TimesFmModelForPrediction(TimesFmPreTrainedModel):
     """TimesFM model for quantile and mean prediction."""
 
-    def __init__(self, config: TimesFMConfig):
+    def __init__(self, config: TimesFmConfig):
         super().__init__(config)
 
         self.config = config
         self.context_len = config.context_len
         self.horizon_len = config.horizon_len
 
-        self.decoder = TimesFMDecoder(config)
+        self.decoder = TimesFmDecoder(config)
 
         # quantile and mean output
-        self.horizon_ff_layer = TimesFMResidualBlock(
+        self.horizon_ff_layer = TimesFmResidualBlock(
             input_dims=config.model_dim,
             output_dims=config.horizon_len * (1 + len(config.quantiles)),
             hidden_dims=config.intermediate_size,
@@ -899,8 +899,8 @@ class TimesFMModelForPrediction(TimesFMPreTrainedModel):
         paddings: torch.Tensor,
         freq: torch.LongTensor,
         horizon_len: int,
-        output_patch_len: int | None = None,
-        max_len: int | None = None,
+        output_patch_len: Optional[int] = None,
+        max_len: Optional[int] = None,
         return_forecast_on_context: bool = False,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
@@ -1005,16 +1005,16 @@ class TimesFMModelForPrediction(TimesFMPreTrainedModel):
     def forward(
         self,
         inputs: Sequence[torch.Tensor],
-        freq: Sequence[torch.Tensor | int] | None = None,
-        window_size: int | None = None,
-        future_target: torch.Tensor | None = None,
-        forecast_context_len: int | None = None,
+        freq: Optional[Sequence[Union[torch.Tensor,int]]] = None,
+        window_size: Optional[int] = None,
+        future_target: Optional[torch.Tensor] = None,
+        forecast_context_len: Optional[int] = None,
         return_forecast_on_context: bool = False,
         truncate_negative: bool = False,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-    ) -> TimesFMOutputForPrediction | tuple[torch.Tensor, ...]:
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+    ) -> Union[TimesFmOutputForPrediction, tuple[torch.Tensor, ...]]:
         """Forecasts on a list of time series.
 
         Args:
@@ -1032,10 +1032,10 @@ class TimesFMModelForPrediction(TimesFMPreTrainedModel):
             have non-negative values.
           output_attentions: Whether to return the attentions.
           output_hidden_states: Whether to return the hidden states.
-          return_dict: Whether to return a TimesFMOutputForPrediction object.
+          return_dict: Whether to return a TimesFmOutputForPrediction object.
 
         Returns:
-          A TimesFMOutputForPrediction object containing:
+          A TimesFmOutputForPrediction object containing:
           - the mean forecast of size (# inputs, # forecast horizon),
           - the full forecast (mean + quantiles) of size
             (# inputs,  # forecast horizon, 1 + # quantiles).
@@ -1109,7 +1109,7 @@ class TimesFMModelForPrediction(TimesFMPreTrainedModel):
             loss = mse_loss + quantile_loss
 
         if return_dict:
-            return TimesFMOutputForPrediction(
+            return TimesFmOutputForPrediction(
                 last_hidden_state=last_hidden_state,
                 attentions=all_attentions if output_attentions else None,
                 hidden_states=all_hidden_states if output_hidden_states else None,

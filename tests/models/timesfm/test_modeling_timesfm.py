@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 Google TimesFM Authors and HuggingFace Inc. team.
+# Copyright 2024 Google LLC and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -21,7 +21,7 @@ import numpy as np
 import torch
 from huggingface_hub import hf_hub_download
 
-from transformers import TimesFMConfig, is_torch_available
+from transformers import TimesFmConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 from transformers.utils import is_torch_fx_available
 
@@ -33,12 +33,12 @@ if is_torch_fx_available():
     pass
 
 if is_torch_available():
-    from transformers import TimesFMModelForPrediction
+    from transformers import TimesFmModelForPrediction
 
 TOLERANCE = 1e-4
 
 
-class TimesFMModelTester:
+class TimesFmModelTester:
     def __init__(
         self,
         parent,
@@ -84,10 +84,10 @@ class TimesFMModelTester:
         self.hidden_size = model_dim
 
     def get_large_model_config(self):
-        return TimesFMConfig.from_pretrained("google/timesfm-1.0-200m-pytorch")
+        return TimesFmConfig.from_pretrained("google/timesfm-1.0-200m-pytorch")
 
     def get_config(self):
-        return TimesFMConfig(
+        return TimesFmConfig(
             patch_len=self.patch_len,
             context_len=self.context_len,
             horizon_len=self.horizon_len,
@@ -129,9 +129,9 @@ class TimesFMModelTester:
 
 
 @require_torch
-class TimesFMModelTest(ModelTesterMixin, unittest.TestCase):
-    all_model_classes = (TimesFMModelForPrediction,) if is_torch_available() else ()
-    all_generative_model_classes = (TimesFMModelForPrediction,) if is_torch_available() else ()
+class TimesFmModelTest(ModelTesterMixin, unittest.TestCase):
+    all_model_classes = (TimesFmModelForPrediction,) if is_torch_available() else ()
+    all_generative_model_classes = (TimesFmModelForPrediction,) if is_torch_available() else ()
     all_parallelizable_model_classes = ()
     fx_compatible = False
     test_pruning = False
@@ -141,12 +141,12 @@ class TimesFMModelTest(ModelTesterMixin, unittest.TestCase):
     test_inputs_embeds = False
 
     def setUp(self):
-        self.model_tester = TimesFMModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=TimesFMConfig)
+        self.model_tester = TimesFmModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=TimesFmConfig)
 
     def test_create_and_run_model(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        model = TimesFMModelForPrediction(config)
+        model = TimesFmModelForPrediction(config)
         model.to(torch_device)
         model.eval()
         results = model(**inputs_dict)
@@ -162,15 +162,15 @@ class TimesFMModelTest(ModelTesterMixin, unittest.TestCase):
 
     # the main input name is `inputs`
     def test_model_main_input_name(self):
-        model_signature = inspect.signature(getattr(TimesFMModelForPrediction, "forward"))
+        model_signature = inspect.signature(getattr(TimesFmModelForPrediction, "forward"))
         # The main input is the name of the argument after `self`
         observed_main_input_name = list(model_signature.parameters.keys())[1]
-        self.assertEqual(TimesFMModelForPrediction.main_input_name, observed_main_input_name)
+        self.assertEqual(TimesFmModelForPrediction.main_input_name, observed_main_input_name)
 
 
 @require_torch
 @slow
-class TimesFMModelIntegrationTests(unittest.TestCase):
+class TimesFmModelIntegrationTests(unittest.TestCase):
     @classmethod
     def load_batch(cls, filename="train-batch.pt"):
         file = hf_hub_download(
@@ -180,7 +180,7 @@ class TimesFMModelIntegrationTests(unittest.TestCase):
         return batch
 
     def test_inference_no_head(self):
-        model = TimesFMModelForPrediction.from_pretrained("huggingface/timesfm-tourism-monthly").to(torch_device)
+        model = TimesFmModelForPrediction.from_pretrained("huggingface/timesfm-tourism-monthly").to(torch_device)
         batch = self.load_batch()
         with torch.no_grad():
             inputs = batch["past_values"]

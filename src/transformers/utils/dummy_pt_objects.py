@@ -9207,21 +9207,21 @@ class TimeSeriesTransformerPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class TimesFMDecoder(metaclass=DummyObject):
+class TimesFmDecoder(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class TimesFMModelForPrediction(metaclass=DummyObject):
+class TimesFmModelForPrediction(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class TimesFMPreTrainedModel(metaclass=DummyObject):
+class TimesFmPreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
