@@ -22,9 +22,9 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_torch_flex_attn_available,
     logging,
     replace_return_docstrings,
-    is_torch_flex_attn_available,
 )
 from ..llama.modeling_llama import (
     LlamaModel,
@@ -32,6 +32,7 @@ from ..llama.modeling_llama import (
     LlamaRotaryEmbedding,
     rotate_half,
 )
+
 
 if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import flex_attention
@@ -138,6 +139,7 @@ def flex_attention_forward(
 
 
 ALL_ATTENTION_FUNCTIONS["flex_attention"] = flex_attention_forward
+
 
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
