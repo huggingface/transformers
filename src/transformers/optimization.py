@@ -398,11 +398,6 @@ def _get_wsd_scheduler_lambda(
     min_lr_ratio: float,
     num_cycles: float,
 ):
-    if warmup_type not in ["linear", "cosine", "1-sqrt"]:
-        raise ValueError(f"Unknown warmup type: {warmup_type}, expected 'linear', 'cosine' or '1-sqrt'")
-    if decay_type not in ["linear", "cosine", "1-sqrt"]:
-        raise ValueError(f"Unknown decay type: {decay_type}, expected 'linear', 'cosine' or '1-sqrt'")
-
     if current_step < num_warmup_steps:
         progress = float(current_step) / float(max(1, num_warmup_steps))
         if warmup_type == "linear":
@@ -417,23 +412,25 @@ def _get_wsd_scheduler_lambda(
     if current_step < num_warmup_steps + num_stable_steps:
         return 1.0
 
-    progress = float(current_step - num_warmup_steps - num_stable_steps) / float(max(1, num_decay_steps))
-    if decay_type == "linear":
-        factor = 1.0 - progress
-    elif decay_type == "cosine":
-        factor = 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress))
-    elif decay_type == "1-sqrt":
-        factor = 1.0 - math.sqrt(progress)
-    factor = factor * (1.0 - min_lr_ratio) + min_lr_ratio
-    return max(0.0, factor)
+    if current_step < num_warmup_steps + num_stable_steps + num_decay_steps:
+        progress = float(current_step - num_warmup_steps - num_stable_steps) / float(max(1, num_decay_steps))
+        if decay_type == "linear":
+            factor = 1.0 - progress
+        elif decay_type == "cosine":
+            factor = 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress))
+        elif decay_type == "1-sqrt":
+            factor = 1.0 - math.sqrt(progress)
+        factor = factor * (1.0 - min_lr_ratio) + min_lr_ratio
+        return max(0.0, factor)
+    return min_lr_ratio
 
 
 def get_wsd_schedule(
     optimizer: Optimizer,
-    num_warmup_steps: int = None,
-    num_training_steps: int = None,
+    num_warmup_steps: int,
+    num_training_steps: int,
+    num_decay_steps: int,
     num_stable_steps: int = None,
-    num_decay_steps: int = None,
     warmup_type: str = "linear",
     decay_type: str = "linear",
     min_lr_ratio: float = 0,
@@ -452,11 +449,11 @@ def get_wsd_schedule(
         num_warmup_steps (`int`):
             The number of steps for the warmup phase.
         num_training_steps (`int`):
-            The total number of training steps.
-        num_stable_steps (`int`):
-            The number of steps for the stable phase.
+            The total number of training steps. This is the sum of the warmup, stable and decay steps. If `num_stable_steps` is not provided, the stable phase will be `num_training_steps - num_warmup_steps - num_decay_steps`.
         num_decay_steps (`int`):
             The number of steps for the decay phase.
+        num_stable_steps (`int`, *optional*):
+            The number of steps for the stable phase. Please ensure that `num_warmup_steps + num_stable_steps + num_decay_steps` equals `num_training_steps`, otherwise the other steps will default to the minimum learning rate.
         warmup_type (`str`, *optional*, defaults to "linear"):
             The type of warmup to use. Can be 'linear', 'cosine' or '1-sqrt'.
         decay_type (`str`, *optional*, defaults to "linear"):
@@ -478,6 +475,12 @@ def get_wsd_schedule(
 
     if num_training_steps is not None and num_stable_steps is not None:
         warnings.warn("Both num_training_steps and num_stable_steps are specified. num_stable_steps will be used.")
+
+    if warmup_type not in ["linear", "cosine", "1-sqrt"]:
+        raise ValueError(f"Unknown warmup type: {warmup_type}, expected 'linear', 'cosine' or '1-sqrt'")
+
+    if decay_type not in ["linear", "cosine", "1-sqrt"]:
+        raise ValueError(f"Unknown decay type: {decay_type}, expected 'linear', 'cosine' or '1-sqrt'")
 
     if num_stable_steps is None:
         num_stable_steps = num_training_steps - num_warmup_steps - num_decay_steps
