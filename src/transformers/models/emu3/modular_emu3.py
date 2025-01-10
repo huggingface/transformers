@@ -886,6 +886,7 @@ class Emu3PreTrainedModel(ChameleonPreTrainedModel, Emu3VQVAE):
     _no_split_modules = [
         "Emu3DecoderLayer",
     ]
+    _supports_flex_attn = True
 
     def _init_weights(self, module):
         std = self.config.get_text_config().initializer_range

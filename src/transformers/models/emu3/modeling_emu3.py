@@ -1180,6 +1180,7 @@ class Emu3PreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
     _supports_static_cache = True
     _supports_param_buffer_assignment = False
+    _supports_flex_attn = True
 
     def _init_weights(self, module):
         std = self.config.get_text_config().initializer_range
