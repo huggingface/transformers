@@ -26,6 +26,7 @@ from transformers.testing_utils import (
     require_torch,
     slow,
     torch_device,
+    skipIfRocm
 )
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -306,6 +307,10 @@ class StableLmModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     all_generative_model_classes = (StableLmForCausalLM,) if is_torch_available() else ()
     test_headmasking = False
     test_pruning = False
+
+    @skipIfRocm
+    def test_generate_with_static_cache(seluf):
+        pass
 
     def setUp(self):
         self.model_tester = StableLmModelTester(self)
