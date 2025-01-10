@@ -57,10 +57,9 @@ class Chat:
         for message in messages:
             if not ("role" in message and "content" in message):
                 raise ValueError("When passing chat dicts as input, each dict must have a 'role' and 'content' key.")
-        images = retrieve_images_in_messages(messages, images)
+        retrieve_images_in_messages(messages, images)
 
         self.messages = messages
-        self.images = images
 
 
 def retrieve_images_in_messages(
@@ -72,18 +71,16 @@ def retrieve_images_in_messages(
     if images is None:
         images = []
     idx_images = 0
-    retrieved_images = []
     for message in messages:
         for content in message["content"]:
             if isinstance(content, dict):
                 if content.get("type") == "image":
                     for key in ["image", "url", "path", "base64"]:
                         if key in content:
-                            retrieved_images.append(content[key])
                             break
                     else:
                         if idx_images < len(images):
-                            retrieved_images.append(images[idx_images])
+                            content["image"] = images[idx_images]
                             idx_images += 1
                         else:
                             raise ValueError(
@@ -92,7 +89,6 @@ def retrieve_images_in_messages(
                 # Add support for OpenAI/TGI chat format
                 elif content.get("type") == "image_url":
                     if isinstance(content.get("image_url"), dict) and "url" in content["image_url"]:
-                        retrieved_images.append(content["image_url"]["url"])
                         # Rewrite content to be in the Transformers chat format
                         content["type"] = "image"
                         content["image"] = content["image_url"]["url"]
@@ -107,8 +103,6 @@ def retrieve_images_in_messages(
         raise ValueError(
             "The number of images in the chat messages should be the same as the number of images passed to the pipeline."
         )
-
-    return retrieved_images
 
 
 @add_end_docstrings(build_pipeline_init_args(has_processor=True))
@@ -327,14 +321,16 @@ class ImageTextToTextPipeline(Pipeline):
                 # because very few models support multiple separate, consecutive assistant messages
                 if continue_final_message is None:
                     continue_final_message = inputs.messages[-1]["role"] == "assistant"
-                text = self.processor.apply_chat_template(
+                model_inputs = self.processor.apply_chat_template(
                     inputs.messages,
                     add_generation_prompt=not continue_final_message,
                     continue_final_message=continue_final_message,
                     return_tensors=self.framework,
+                    tokenize=True,
+                    return_dict=True,
                 )
-                inputs_text = inputs
-                images = inputs.images
+                model_inputs["text"] = inputs
+                return model_inputs
             else:
                 text = inputs["text"]
                 inputs_text = inputs["text"]
