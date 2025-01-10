@@ -50,6 +50,86 @@ _CHECKPOINT_FOR_DOC = "jinaai/jina-embeddings-v2-base-code"
 
 
 class JinaBertConfig(BertConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`JinaBertModel`]. It is used to
+    instantiate a BERT model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the BERT
+    [bert-base-uncased](https://huggingface.co/bert-base-uncased) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+
+    Args:
+        vocab_size (`int`, *optional*, defaults to 30522):
+            Vocabulary size of the BERT model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`BertModel`] or [`TFBertModel`].
+        hidden_size (`int`, *optional*, defaults to 768):
+            Dimensionality of the encoder layers and the pooler layer.
+        num_hidden_layers (`int`, *optional*, defaults to 12):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 12):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        intermediate_size (`int`, *optional*, defaults to 3072):
+            Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
+        hidden_act (`str` or `Callable`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"silu"` and `"gelu_new"` are supported.
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.1):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.1):
+            The dropout ratio for the attention probabilities.
+        max_position_embeddings (`int`, *optional*, defaults to 512):
+            The maximum sequence length that this model might ever be used with. Typically set this to something large
+            just in case (e.g., 512 or 1024 or 2048).
+        type_vocab_size (`int`, *optional*, defaults to 2):
+            The vocabulary size of the `token_type_ids` passed when calling [`BertModel`] or [`TFBertModel`].
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-12):
+            The epsilon used by the layer normalization layers.
+        position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
+            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
+            positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
+            [Self-Attention with Relative Position Representations (Shaw et al.)](https://arxiv.org/abs/1803.02155).
+            For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
+            with Better Relative Position Embeddings (Huang et al.)](https://arxiv.org/abs/2009.13658).
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether the model is used as a decoder or not. If `False`, the model is used as an encoder.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/values attentions (not used by all models). Only
+            relevant if `config.is_decoder=True`.
+        classifier_dropout (`float`, *optional*):
+            The dropout ratio for the classification head.
+        feed_forward_type (`str`, *optional*, defaults to `"original"`):
+            The type of feed forward layer to use in the bert layers.
+            Can be one of GLU variants, e.g. `"reglu"`, `"geglu"`
+        emb_pooler (`str`, *optional*, defaults to `None`):
+            The function to use for pooling the last layer embeddings to get the sentence embeddings.
+            Should be one of `None`, `"mean"`.
+        attn_implementation (`str`, *optional*, defaults to `"torch"`):
+            The implementation of the self-attention layer. Can be one of:
+            - `None` for the original implementation,
+            - `torch` for the PyTorch SDPA implementation,
+
+    Examples:
+
+    ```python
+    >>> from transformers import JinaBertConfig, JinaBertModel
+
+    >>> # Initializing a JinaBert configuration
+    >>> configuration = JinaBertConfig()
+
+    >>> # Initializing a model (with random weights) from the configuration
+    >>> model = JinaBertModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+
+    >>> # Encode text inputs
+    >>> embeddings = model.encode(text_inputs)
+    ```"""
+
     model_type = "bert"
 
     def __init__(
@@ -614,18 +694,6 @@ class JinaBertPreTrainedModel(BertPreTrainedModel):
 
 
 class JinaBertModel(BertModel):
-    """
-
-    The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
-    cross-attention is added between the self-attention layers, following the architecture described in [Attention is
-    all you need](https://arxiv.org/abs/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
-    Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
-
-    To behave as an decoder the model needs to be initialized with the `is_decoder` argument of the configuration set
-    to `True`. To be used in a Seq2Seq model, the model needs to initialized with both `is_decoder` argument and
-    `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
-    """
-
     def __init__(self, config: JinaBertConfig, add_pooling_layer=True):
         super().__init__(config)
         self.config = config

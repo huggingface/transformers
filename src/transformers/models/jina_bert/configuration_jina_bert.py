@@ -11,10 +11,10 @@ from ...configuration_utils import PretrainedConfig
 
 class JinaBertConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`JinaBertModel`] or a [`TFJinaBertModel`]. It is used to
-    instantiate a JINA_BERT model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the JINA_BERT
-    [google-jina_bert/jina_bert-base-uncased](https://huggingface.co/google-jina_bert/jina_bert-base-uncased) architecture.
+    This is the configuration class to store the configuration of a [`JinaBertModel`]. It is used to
+    instantiate a BERT model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the BERT
+    [bert-base-uncased](https://huggingface.co/bert-base-uncased) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -22,8 +22,8 @@ class JinaBertConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
-            Vocabulary size of the JINA_BERT model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`JinaBertModel`] or [`TFJinaBertModel`].
+            Vocabulary size of the BERT model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`BertModel`] or [`TFBertModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -43,7 +43,7 @@ class JinaBertConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`JinaBertModel`] or [`TFJinaBertModel`].
+            The vocabulary size of the `token_type_ids` passed when calling [`BertModel`] or [`TFBertModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -61,20 +61,33 @@ class JinaBertConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         classifier_dropout (`float`, *optional*):
             The dropout ratio for the classification head.
+        feed_forward_type (`str`, *optional*, defaults to `"original"`):
+            The type of feed forward layer to use in the bert layers.
+            Can be one of GLU variants, e.g. `"reglu"`, `"geglu"`
+        emb_pooler (`str`, *optional*, defaults to `None`):
+            The function to use for pooling the last layer embeddings to get the sentence embeddings.
+            Should be one of `None`, `"mean"`.
+        attn_implementation (`str`, *optional*, defaults to `"torch"`):
+            The implementation of the self-attention layer. Can be one of:
+            - `None` for the original implementation,
+            - `torch` for the PyTorch SDPA implementation,
 
     Examples:
 
     ```python
     >>> from transformers import JinaBertConfig, JinaBertModel
 
-    >>> # Initializing a JINA_BERT google-jina_bert/jina_bert-base-uncased style configuration
+    >>> # Initializing a JinaBert configuration
     >>> configuration = JinaBertConfig()
 
-    >>> # Initializing a model (with random weights) from the google-jina_bert/jina_bert-base-uncased style configuration
+    >>> # Initializing a model (with random weights) from the configuration
     >>> model = JinaBertModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
+
+    >>> # Encode text inputs
+    >>> embeddings = model.encode(text_inputs)
     ```"""
 
     model_type = "bert"
