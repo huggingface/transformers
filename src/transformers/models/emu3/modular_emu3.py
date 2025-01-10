@@ -33,7 +33,6 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_2_available,
-    is_vision_available,
     logging,
     replace_return_docstrings,
 )
@@ -48,10 +47,6 @@ from ..llama.modeling_llama import (
 )
 from ..siglip.modeling_siglip import SiglipAttention
 from .configuration_emu3 import Emu3Config, Emu3TextConfig, Emu3VQVAEConfig
-
-
-if is_vision_available():
-    pass
 
 
 if is_flash_attn_2_available():
@@ -155,11 +150,12 @@ class Emu3VQVAEVectorQuantizer(nn.Module):
         hidden_state_flattened = hidden_state.view(-1, channels)
 
         # distances from z to embeddings e_j (z - e)^2 = z^2 + e^2 - 2 e * z
-        distances = (
-            torch.sum(hidden_state_flattened**2, dim=1, keepdim=True)
-            + torch.sum(self.embedding.weight**2, dim=1)
-            - 2 * torch.einsum("bd,dn->bn", hidden_state_flattened, self.embedding.weight.transpose(0, 1))
-        )
+        hidden_state_sum = torch.sum(hidden_state_flattened**2, dim=1, keepdim=True)
+        embedding_sum = torch.sum(self.embedding.weight**2, dim=1)
+
+        # "bd,dn->bn",
+        distances = 2 * torch.matmul(hidden_state_flattened, self.embedding.weight.transpose(0, 1))
+        distances = hidden_state_sum + embedding_sum - distances
 
         min_encoding_indices = torch.argmin(distances, dim=1)
         min_encoding_indices = min_encoding_indices.view(batch_size, temporal, height, width)
@@ -253,8 +249,6 @@ class Emu3VQVAETemporalUpsample(nn.Module):
         out_channel: int,
     ):
         super().__init__()
-        self.in_channel = in_channel
-        self.out_channel = out_channel
         self.conv = Emu3VQVAEConv3d(
             in_channel,
             out_channel,
@@ -278,9 +272,6 @@ class Emu3VQVAETemporalDownsample(nn.Module):
         out_channel: int,
     ):
         super().__init__()
-        self.in_channel = in_channel
-        self.out_channel = out_channel
-
         self.conv = Emu3VQVAEConv3d(
             in_channel,
             out_channel,
@@ -432,7 +423,7 @@ class Emu3VQVAEMiddleBlock(nn.Module):
             out_channels=in_channels,
             quant_channels=quant_channels,
         )
-        self.attn_1 = Emu3VQVAEAttnBlock(config)
+        self.attn_1 = Emu3VQVAEAttentionBlock(config)
         if quant_channels is None:
             self.attn_norm = Emu3VQVAEGroupNorm(num_channels=in_channels, num_groups=32, eps=1e-6, affine=True)
         else:
@@ -484,7 +475,7 @@ class Emu3VQVAEDownBlock(nn.Module):
                 )
                 block_in = block_out
                 if config.attn_resolutions is not None and i_level in config.attn_resolutions:
-                    attn.append(Emu3VQVAEAttnBlock(config))
+                    attn.append(Emu3VQVAEAttentionBlock(config))
                     attn_norms.append(nn.GroupNorm(num_channels=block_in, num_groups=32, eps=1e-6, affine=True))
 
             down = nn.Module()
@@ -542,7 +533,7 @@ class Emu3VQVAEUpBlock(nn.Module):
                 )
                 block_in = block_out
                 if i_level in config.attn_resolutions:
-                    attn.append(Emu3VQVAEAttnBlock(config))
+                    attn.append(Emu3VQVAEAttentionBlock(config))
                     attn_norms.append(Emu3VQVAESpatialNorm(quant_channels, block_in))
 
             up = nn.Module()
@@ -744,7 +735,7 @@ class Emu3VQVAE(PreTrainedModel):
     main_input_name = "pixel_values"
     _no_split_modules = [
         "Emu3VQVAETemporalResnetBlock",
-        "Emu3VQVAEAttnBlock",
+        "Emu3VQVAEAttentionBlock",
         "Emu3VQVAEResnetBlock",
         "Emu3VQVAEVectorQuantizer",
     ]
