@@ -103,6 +103,7 @@ from .stopping_criteria import (
     StoppingCriteriaList,
     StopStringCriteria,
 )
+from .streamers import MultiBeamBaseStreamer
 
 
 if TYPE_CHECKING:
@@ -2128,10 +2129,17 @@ class GenerationMixin:
         # 8. determine generation mode
         generation_mode = generation_config.get_generation_mode(assistant_model)
 
-        if streamer is not None and (generation_config.num_beams > 1):
-            raise ValueError(
-                "`streamer` cannot be used with beam search (yet!). Make sure that `num_beams` is set to 1."
-            )
+        if streamer is not None and generation_config.num_beams > 1:
+            if not isinstance(streamer, MultiBeamBaseStreamer):
+                raise ValueError(
+                    "When using beam search with num_beams > 1, streamer must be an instance of MultiBeamBaseStreamer. "
+                    f"Got {type(streamer).__name__} instead."
+                )
+            if streamer.num_beams != generation_config.num_beams:
+                raise ValueError(
+                    f"Streamer's num_beams ({streamer.num_beams}) must match generation_config.num_beams "
+                    f"({generation_config.num_beams})."
+                )
 
         if not is_torchdynamo_compiling() and self.device.type != input_ids.device.type:
             warnings.warn(
@@ -2290,6 +2298,7 @@ class GenerationMixin:
                 stopping_criteria=prepared_stopping_criteria,
                 generation_config=generation_config,
                 synced_gpus=synced_gpus,
+                streamer=streamer,
                 **model_kwargs,
             )
 
@@ -3380,6 +3389,7 @@ class GenerationMixin:
         stopping_criteria: StoppingCriteriaList,
         generation_config: GenerationConfig,
         synced_gpus: bool,
+        streamer: Optional["MultiBeamBaseStreamer"] = None,
         **model_kwargs,
     ) -> Union[GenerateBeamOutput, torch.LongTensor]:
         r"""
@@ -3403,6 +3413,11 @@ class GenerationMixin:
             synced_gpus (`bool`):
                 Whether to continue running the while loop until max_length (needed to avoid deadlocking with
                 `FullyShardedDataParallel` and DeepSpeed ZeRO Stage 3).
+            streamer (`MultiBeamBaseStreamer`, *optional*):
+                Streamer object that will be used to stream the generated sequences. Generated tokens are passed
+                through `streamer.put(values, beam_indices)` and the streamer is responsible for any further processing.
+                When using beam search (`num_beams > 1`), the streamer must be an instance of `MultiBeamBaseStreamer`.
+                For beam search generation.
             model_kwargs:
                 Additional model specific kwargs will be forwarded to the `forward` function of the model. If model is
                 an encoder-decoder model the kwargs should include `encoder_outputs`.
@@ -3580,6 +3595,7 @@ class GenerationMixin:
                 eos_token_id=eos_token_id,
                 beam_indices=beam_indices,
                 decoder_prompt_len=decoder_prompt_len,
+                streamer=streamer,
             )
 
             beam_scores = beam_outputs["next_beam_scores"]
@@ -3608,6 +3624,9 @@ class GenerationMixin:
             if beam_scorer.is_done or all(stopping_criteria(input_ids, scores)):
                 this_peer_finished = True
 
+            if streamer is not None:
+                streamer.put(beam_next_tokens.cpu().unsqueeze(1), beam_idx)
+
         sequence_outputs = beam_scorer.finalize(
             input_ids,
             beam_scores,
@@ -3619,6 +3638,9 @@ class GenerationMixin:
             beam_indices=beam_indices,
             decoder_prompt_len=decoder_prompt_len,
         )
+
+        if streamer is not None:
+            streamer.end()
 
         if return_dict_in_generate:
             if not output_scores:
