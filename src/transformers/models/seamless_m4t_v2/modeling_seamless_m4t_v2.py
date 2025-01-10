@@ -3149,7 +3149,7 @@ class SeamlessM4Tv2ForTextToText(SeamlessM4Tv2PreTrainedModel, GenerationMixin):
                 if tgt_lang not in self.generation_config.text_decoder_lang_to_code_id:
                     raise ValueError(
                         f"""`tgt_lang={tgt_lang}` is not supported by this model. Please specify a `tgt_lang` in
-                        {", ".join(self.generation_config.text_decoder_lang_to_code_id.keys())}"""
+                        {', '.join(self.generation_config.text_decoder_lang_to_code_id.keys())}"""
                     )
                 # tgt_lang gets priority over decoder input ids
                 text_tgt_lang_id = self.generation_config.text_decoder_lang_to_code_id.get(tgt_lang)
