@@ -164,7 +164,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         if videos is not None:
             video_inputs = self.video_processor(videos, **output_kwargs["videos_kwargs"])
 
-            one_video = to_numpy_array(video_inputs["pixel_values_videos"][0])
+            one_video = to_numpy_array(video_inputs.get("pixel_values_videos")[0])
             height, width = get_image_size(one_video[0], channel_dim=output_kwargs["images_kwargs"].get("data_format"))
             num_frames = one_video.shape[0]  # frame dim is always after batch dim
             patches_height_width = int(math.sqrt(self.num_image_tokens))
@@ -191,7 +191,8 @@ class LlavaOnevisionProcessor(ProcessorMixin):
                 original_size = image_size_list[0] if num_frames != 1 else image_size_list
                 if not isinstance(original_size, (list, tuple)):
                     # cast to list to avoid numerical precision errors when calculating unpadding
-                    orig_height, orig_width = original_size.tolist()
+                    original_size = original_size.tolist()
+                orig_height, orig_width = original_size
                 num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
                 if self.vision_feature_select_strategy == "default":
                     num_image_tokens -= 1
@@ -313,3 +314,6 @@ class LlavaOnevisionProcessor(ProcessorMixin):
             )
 
         return processor
+
+
+__all__ = ["LlavaOnevisionProcessor"]

@@ -378,3 +378,5 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
         return BatchFeature(
             data={"pixel_values": pixel_values, "image_sizes": batch_image_sizes}, tensor_type=return_tensors
         )
+
+__all__ = ["PixtralImageProcessorFast"]

@@ -22,7 +22,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, _validate_images_text_input_order
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import logging
+from ...utils import is_torch_device, is_torch_dtype, logging, requires_backends
 
 
 logger = logging.get_logger(__name__)
@@ -227,3 +227,6 @@ class PixtralProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+
+__all__ = ["PixtralProcessor"]

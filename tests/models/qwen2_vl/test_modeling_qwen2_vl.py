@@ -47,8 +47,6 @@ from ...test_modeling_common import (
 if is_torch_available():
     import torch
 
-else:
-    is_torch_greater_or_equal_than_2_0 = False
 
 if is_vision_available():
     from PIL import Image
@@ -255,7 +253,7 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         """
         Tests that VLMs through an error with explicit message saying what is wrong
         when number of images don't match number of image tokens in the text.
-        Also we need to test multi-image cases when one prompr has multiple image tokens.
+        Also we need to test multi-image cases when one prompt has multiple image tokens.
         """
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
