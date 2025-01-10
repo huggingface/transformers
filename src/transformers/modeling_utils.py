@@ -4458,7 +4458,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             expected_keys = hf_quantizer.update_expected_keys(model, expected_keys, loaded_keys)
 
         original_loaded_keys = loaded_keys
-        loaded_keys = [cls._fix_state_dict_key_on_load(key) for key in loaded_keys]
+        loaded_keys = [cls._fix_state_dict_key_on_load(key)[0] for key in loaded_keys]
 
         if len(prefix) > 0:
             has_prefix_module = any(s.startswith(prefix) for s in loaded_keys)

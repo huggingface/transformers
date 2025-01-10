@@ -105,7 +105,7 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
         Overrides original method to remove "timm_model." prefix from state_dict keys.
         Makes the saved checkpoint compatible with the `timm` library.
         """
-        return key.replace("timm_model.", "")
+        return key.replace("timm_model.", ""), True
 
     def load_state_dict(self, state_dict, *args, **kwargs):
         """
