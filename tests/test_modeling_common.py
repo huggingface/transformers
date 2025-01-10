@@ -4761,7 +4761,7 @@ class ModelTesterMixin:
                 position_ids_shared_prefix,
             ) = self._get_custom_4d_mask_test_data()
 
-            logits = model.forward(input_ids).logits
+            logits = model.forward(input_ids, position_ids=position_ids).logits
             # logits.shape == torch.Size([3, 4, ...])
 
             logits_shared_prefix = model(
