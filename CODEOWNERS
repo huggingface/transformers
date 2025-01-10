@@ -324,7 +324,7 @@ trainer_utils.py @muellerzr @SunMarc
 /src/transformers/models/matcha/mod*_matcha* @zucchini-nlp
 /src/transformers/models/mgp_str/mod*_mgp_str* @zucchini-nlp
 /src/transformers/models/mllama/mod*_mllama* @zucchini-nlp
-/src/transformers/models/nougat/mod*_nougat* @zucchini-nlp
+/src/transformers/models/nougat/mod*_nougat* @NielsRogge
 /src/transformers/models/omdet_turbo/mod*_omdet_turbo* @qubvel @yonigozlan
 /src/transformers/models/oneformer/mod*_oneformer* @zucchini-nlp
 /src/transformers/models/owlvit/mod*_owlvit* @qubvel
@@ -338,7 +338,7 @@ trainer_utils.py @muellerzr @SunMarc
 /src/transformers/models/sam/mod*_sam* @zucchini-nlp @ArthurZucker 
 /src/transformers/models/siglip/mod*_siglip* @zucchini-nlp
 /src/transformers/models/speech_encoder_decoder/mod*_speech_encoder_decoder* @zucchini-nlp
-/src/transformers/models/tapas/mod*_tapas* @zucchini-nlp
+/src/transformers/models/tapas/mod*_tapas* @NielsRogge
 /src/transformers/models/trocr/mod*_trocr* @zucchini-nlp
 /src/transformers/models/tvlt/mod*_tvlt* @zucchini-nlp
 /src/transformers/models/tvp/mod*_tvp* @zucchini-nlp
