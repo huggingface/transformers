@@ -707,6 +707,11 @@ class EarlyStoppingCallback(TrainerCallback, ExportableState):
             self.early_stopping_patience_counter += 1
 
     def on_train_begin(self, args, state, control, **kwargs):
+        if not args.load_best_model_at_end:
+            logger.warning(
+                "Using EarlyStoppingCallback without load_best_model_at_end=True. "
+                "Once training is finished, the best model will not be loaded automatically."
+            )
         assert (
             args.metric_for_best_model is not None
         ), "EarlyStoppingCallback requires metric_for_best_model to be defined"
