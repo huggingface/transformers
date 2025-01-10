@@ -123,7 +123,7 @@ if is_torch_available():
     from torch import nn
 
     from transformers import MODEL_MAPPING, AdaptiveEmbedding
-    from transformers.cache_utils import DynamicCache
+    from transformers.cache_utils import Cache, DynamicCache
     from transformers.modeling_utils import load_state_dict, no_init_weights
     from transformers.pytorch_utils import id_tensor_storage
 
@@ -1111,7 +1111,14 @@ class ModelTesterMixin:
                         attention_mask = inputs["attention_mask"]
                         decoder_input_ids = inputs["decoder_input_ids"]
                         decoder_attention_mask = inputs["decoder_attention_mask"]
-                        model(main_input, attention_mask, decoder_input_ids, decoder_attention_mask)
+                        outputs = model(main_input, attention_mask, decoder_input_ids, decoder_attention_mask)
+                        # `torchscript` doesn't work with outputs containing `Cache` object. However, #35235 makes
+                        # several models to use `Cache` by default instead of the legacy cache (tuple), and
+                        # their `torchscript` tests are failing. We won't support them anyway, but we still want to keep
+                        # the tests for encoder models like `BERT`. So we skip the checks if the model's output contains
+                        # a `Cache` object.
+                        if any(isinstance(x, Cache) for x in outputs):
+                            continue
                         traced_model = torch.jit.trace(
                             model, (main_input, attention_mask, decoder_input_ids, decoder_attention_mask)
                         )
@@ -1119,14 +1126,18 @@ class ModelTesterMixin:
                         input_ids = inputs["input_ids"]
                         bbox = inputs["bbox"]
                         image = inputs["image"].tensor
-                        model(input_ids, bbox, image)
+                        outputs = model(input_ids, bbox, image)
+                        if any(isinstance(x, Cache) for x in outputs):
+                            continue
                         traced_model = torch.jit.trace(
                             model, (input_ids, bbox, image), check_trace=False
                         )  # when traced model is checked, an error is produced due to name mangling
                     elif "bbox" in inputs:  # Bros requires additional inputs (bbox)
                         input_ids = inputs["input_ids"]
                         bbox = inputs["bbox"]
-                        model(input_ids, bbox)
+                        outputs = model(input_ids, bbox)
+                        if any(isinstance(x, Cache) for x in outputs):
+                            continue
                         traced_model = torch.jit.trace(
                             model, (input_ids, bbox), check_trace=False
                         )  # when traced model is checked, an error is produced due to name mangling
@@ -1136,7 +1147,9 @@ class ModelTesterMixin:
                         pixel_values = inputs["pixel_values"]
                         prompt_pixel_values = inputs["prompt_pixel_values"]
                         prompt_masks = inputs["prompt_masks"]
-                        model(pixel_values, prompt_pixel_values, prompt_masks)
+                        outputs = model(pixel_values, prompt_pixel_values, prompt_masks)
+                        if any(isinstance(x, Cache) for x in outputs):
+                            continue
                         traced_model = torch.jit.trace(
                             model, (pixel_values, prompt_pixel_values, prompt_masks), check_trace=False
                         )  # when traced model is checked, an error is produced due to name mangling
@@ -1151,11 +1164,15 @@ class ModelTesterMixin:
                             else:
                                 self.skipTest(reason="testing SDPA without attention_mask is not supported")
 
-                            model(main_input, attention_mask=inputs["attention_mask"])
+                            outputs = model(main_input, attention_mask=inputs["attention_mask"])
+                            if any(isinstance(x, Cache) for x in outputs):
+                                continue
                             # example_kwarg_inputs was introduced in torch==2.0, but it is fine here since SDPA has a requirement on torch>=2.1.
                             traced_model = torch.jit.trace(model, example_kwarg_inputs=trace_input)
                         else:
-                            model(main_input)
+                            outputs = model(main_input)
+                            if any(isinstance(x, Cache) for x in outputs):
+                                continue
                             traced_model = torch.jit.trace(model, (main_input,))
                 except RuntimeError:
                     self.fail("Couldn't trace module.")
@@ -3879,7 +3896,7 @@ class ModelTesterMixin:
                 for name, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__
                     if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                        raise ValueError("The eager model should not have SDPA attention layers")
+                        raise ValueError(f"The eager model should not have SDPA attention layers but got {class_name}")
 
     @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
@@ -4864,6 +4881,19 @@ class ModelTesterMixin:
                 # In case of outputs are different the error will be rasied in `recursively_check` function.
                 is_tested = recursively_check(eager_outputs, exported_outputs)
                 self.assertTrue(is_tested, msg=f"No outputs were compared for {model_class.__name__}")
+
+    @require_torch_gpu
+    def test_flex_attention_with_grads(self):
+        for model_class in self.all_model_classes:
+            if not model_class._supports_flex_attn:
+                self.skipTest(reason="This model does not support flex attention")
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config._attn_implementation = "flex_attention"
+            model = model_class(config).to(device=torch_device, dtype=torch.float16)
+            self.assertTrue(model.config._attn_implementation == "flex_attention")
+
+            # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
+            _ = model(inputs_dict["input_ids"].to(torch_device))
 
 
 global_rng = random.Random()
