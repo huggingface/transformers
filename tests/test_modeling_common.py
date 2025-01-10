@@ -1107,6 +1107,11 @@ class ModelTesterMixin:
                         decoder_input_ids = inputs["decoder_input_ids"]
                         decoder_attention_mask = inputs["decoder_attention_mask"]
                         outputs = model(main_input, attention_mask, decoder_input_ids, decoder_attention_mask)
+                        # `torchscript` doesn't work with outputs containing `Cache` object. However, #35235 makes
+                        # several models to use `Cache` by default instead of the legacy cache (tuple), and
+                        # their `torchscript` tests are failing. We won't support them anyway, but we still want to keep
+                        # the tests for encoder models like `BERT`. So we skip the checks if the model's output contains
+                        # a `Cache` object.
                         if any(isinstance(x, Cache) for x in outputs):
                             continue
                         traced_model = torch.jit.trace(
