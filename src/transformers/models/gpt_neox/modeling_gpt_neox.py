@@ -515,7 +515,7 @@ class GPTNeoXPreTrainedModel(PreTrainedModel):
     config_class = GPTNeoXConfig
     base_model_prefix = "gpt_neox"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["GPTNeoXDecoderLayer"]
+    _no_split_modules = ["GPTNeoXLayer"]
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True

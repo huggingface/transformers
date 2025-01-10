@@ -314,6 +314,7 @@ class GPTNeoXRotaryEmbedding(LlamaRotaryEmbedding):
 
 class GPTNeoXPreTrainedModel(LlamaPreTrainedModel):
     base_model_prefix = "gpt_neox"
+    _no_split_modules = ["GPTNeoXLayer"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
