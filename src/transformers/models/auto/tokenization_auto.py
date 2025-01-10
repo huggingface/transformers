@@ -186,6 +186,7 @@ else:
                 ),
             ),
             ("electra", ("ElectraTokenizer", "ElectraTokenizerFast" if is_tokenizers_available() else None)),
+            ("emu3", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("ernie", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("ernie_m", ("ErnieMTokenizer" if is_sentencepiece_available() else None, None)),
             ("esm", ("EsmTokenizer", None)),

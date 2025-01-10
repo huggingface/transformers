@@ -3894,7 +3894,7 @@ class ModelTesterMixin:
                 for name, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__
                     if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                        raise ValueError("The eager model should not have SDPA attention layers")
+                        raise ValueError(f"The eager model should not have SDPA attention layers but got {class_name}")
 
     @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
@@ -4806,6 +4806,19 @@ class ModelTesterMixin:
 
             # Assert the last tokens are actually the same (except for the natural fluctuation due to order of FP ops)
             self.assertTrue(torch.allclose(all_logits[:, -1:, :], last_token_logits, atol=1e-5))
+
+    @require_torch_gpu
+    def test_flex_attention_with_grads(self):
+        for model_class in self.all_model_classes:
+            if not model_class._supports_flex_attn:
+                self.skipTest(reason="This model does not support flex attention")
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config._attn_implementation = "flex_attention"
+            model = model_class(config).to(device=torch_device, dtype=torch.float16)
+            self.assertTrue(model.config._attn_implementation == "flex_attention")
+
+            # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
+            _ = model(inputs_dict["input_ids"].to(torch_device))
 
 
 global_rng = random.Random()
