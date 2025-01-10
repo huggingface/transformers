@@ -21,7 +21,7 @@ from ...utils import (
 )
 
 
-_import_structure = {"configuration_timesfm": ["TimesFMConfig", "TimesFMOnnxConfig"]}
+_import_structure = {"configuration_timesfm": ["TimesFmConfig", "TimesFmOnnxConfig"]}
 
 try:
     if not is_torch_available():
@@ -30,13 +30,13 @@ except OptionalDependencyNotAvailable:
     pass
 else:
     _import_structure["modeling_timesfm"] = [
-        "TimesFMModelForPrediction",
-        "TimesFMDecoder",
-        "TimesFMPreTrainedModel",
+        "TimesFmModelForPrediction",
+        "TimesFmDecoder",
+        "TimesFmPreTrainedModel",
     ]
 
 if TYPE_CHECKING:
-    from .configuration_timesfm import TimesFMConfig, TimesFMOnnxConfig
+    from .configuration_timesfm import TimesFmConfig, TimesFmOnnxConfig
 
     try:
         if not is_torch_available():
@@ -44,7 +44,7 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_timesfm import TimesFMDecoder, TimesFMModelForPrediction, TimesFMPreTrainedModel
+        from .modeling_timesfm import TimesFmDecoder, TimesFmModelForPrediction, TimesFmPreTrainedModel
 
 else:
     import sys
