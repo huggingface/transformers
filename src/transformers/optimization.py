@@ -428,11 +428,11 @@ def _get_wsd_scheduler_lambda(
 def get_wsd_schedule(
     optimizer: Optimizer,
     num_warmup_steps: int,
-    num_training_steps: int,
     num_decay_steps: int,
+    num_training_steps: int = None,
     num_stable_steps: int = None,
     warmup_type: str = "linear",
-    decay_type: str = "linear",
+    decay_type: str = "cosine",
     min_lr_ratio: float = 0,
     num_cycles: float = 0.5,
     last_epoch: int = -1,
@@ -448,10 +448,10 @@ def get_wsd_schedule(
             The optimizer for which to schedule the learning rate.
         num_warmup_steps (`int`):
             The number of steps for the warmup phase.
-        num_training_steps (`int`):
-            The total number of training steps. This is the sum of the warmup, stable and decay steps. If `num_stable_steps` is not provided, the stable phase will be `num_training_steps - num_warmup_steps - num_decay_steps`.
         num_decay_steps (`int`):
             The number of steps for the decay phase.
+        num_training_steps (`int`):
+            The total number of training steps. This is the sum of the warmup, stable and decay steps. If `num_stable_steps` is not provided, the stable phase will be `num_training_steps - num_warmup_steps - num_decay_steps`.
         num_stable_steps (`int`, *optional*):
             The number of steps for the stable phase. Please ensure that `num_warmup_steps + num_stable_steps + num_decay_steps` equals `num_training_steps`, otherwise the other steps will default to the minimum learning rate.
         warmup_type (`str`, *optional*, defaults to "linear"):
