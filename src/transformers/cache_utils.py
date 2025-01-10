@@ -1640,9 +1640,9 @@ class HybridCache(Cache):
         )
         self.key_cache: List[torch.Tensor] = []
         self.value_cache: List[torch.Tensor] = []
-        global_cache_shape = (self.batch_size, self.num_key_value_heads, max_cache_len, self.head_dim)
+        global_cache_shape = (self.max_batch_size, self.num_key_value_heads, max_cache_len, self.head_dim)
         sliding_cache_shape = (
-            self.batch_size,
+            self.max_batch_size,
             self.num_key_value_heads,
             min(config.sliding_window, max_cache_len),
             self.head_dim,
