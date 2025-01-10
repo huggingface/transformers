@@ -71,7 +71,7 @@ depending on what type of model you are using. Once you do that,
 you'll get output that's ready to go! When using chat templates as input for model generation, it's also a good idea
 to use `add_generation_prompt=True` to add a [generation prompt](#what-are-generation-prompts). 
 
-# Usage with text-only LLMs
+## Usage with text-only LLMs
 Here's an example of preparing input for `model.generate()`, using `Zephyr` again:
 
 ```python
