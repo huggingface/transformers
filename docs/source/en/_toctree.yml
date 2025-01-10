@@ -860,6 +860,8 @@
         title: DePlot
       - local: model_doc/donut
         title: Donut
+      - local: model_doc/emu3
+        title: Emu3
       - local: model_doc/flava
         title: FLAVA
       - local: model_doc/git
