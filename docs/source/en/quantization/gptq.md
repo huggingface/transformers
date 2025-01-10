@@ -24,7 +24,7 @@ Try GPTQ quantization with PEFT in this [notebook](https://colab.research.google
 
 Both [GPTQModel](https://github.com/ModelCloud/GPTQModel) and [AutoGPTQ](https://github.com/PanQiWei/AutoGPTQ) libraries implement the GPTQ algorithm, a post-training quantization technique where each row of the weight matrix is quantized independently to find a version of the weights that minimizes error. These weights are quantized to int4, stored as int32 (int4 x 8) and dequantized (restored) to fp16 on the fly during inference. This can save memory by almost 4x because the int4 weights are often dequantized in a fused kernel. You can also expect a substantial speedup in inference due to lower bandwidth requirements for lower bitwidth.
 
-[GPTQModel](https://github.com/ModelCloud/GPTQModel) has its origin as a maintained fork of AutoGPTQ but has since differentiated itself with the following major differences:
+[GPTQModel](https://github.com/ModelCloud/GPTQModel) started as a maintained fork of AutoGPTQ but has since differentiated itself with the following major differences.
 
 * Model support: GPTQModel continues to support all of the latest released LLM models.
 * Multi-Modal support: GPTQModel supports accurate quantization of Qwen 2-VL and Ovis 1.6-VL image-to-text models. 
