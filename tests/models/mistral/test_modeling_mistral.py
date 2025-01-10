@@ -15,7 +15,6 @@
 """Testing suite for the PyTorch Mistral model."""
 
 import gc
-import tempfile
 import unittest
 
 import pytest
@@ -24,11 +23,12 @@ from packaging import version
 from transformers import AutoTokenizer, MistralConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
     backend_empty_cache,
-    is_flaky,
+    cleanup,
     require_bitsandbytes,
     require_flash_attn,
     require_read_token,
     require_torch,
+    require_torch_accelerator,
     require_torch_gpu,
     require_torch_sdpa,
     slow,
@@ -46,6 +46,7 @@ if is_torch_available():
 
     from transformers import (
         MistralForCausalLM,
+        MistralForQuestionAnswering,
         MistralForSequenceClassification,
         MistralForTokenClassification,
         MistralModel,
@@ -111,7 +112,7 @@ class MistralModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = torch.tril(torch.ones(self.batch_size, self.seq_length)).to(torch_device)
+            input_mask = torch.tril(torch.ones_like(input_ids).to(torch_device))
 
         token_type_ids = None
         if self.use_token_type_ids:
@@ -290,7 +291,13 @@ class MistralModelTester:
 @require_torch
 class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (MistralModel, MistralForCausalLM, MistralForSequenceClassification, MistralForTokenClassification)
+        (
+            MistralModel,
+            MistralForCausalLM,
+            MistralForSequenceClassification,
+            MistralForTokenClassification,
+            MistralForQuestionAnswering,
+        )
         if is_torch_available()
         else ()
     )
@@ -302,26 +309,27 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             "token-classification": MistralForTokenClassification,
             "text-generation": MistralForCausalLM,
             "zero-shot": MistralForSequenceClassification,
+            "question-answering": MistralForQuestionAnswering,
         }
         if is_torch_available()
         else {}
     )
     test_headmasking = False
     test_pruning = False
-    fx_compatible = True
+    fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
         return True
-
-    # TODO: @Fxmarty
-    @is_flaky(max_attempts=3, description="flaky on some models.")
-    @require_torch_sdpa
-    @slow
-    def test_eager_matches_sdpa_generate(self):
-        super().test_eager_matches_sdpa_generate()
 
     def setUp(self):
         self.model_tester = MistralModelTester(self)
@@ -339,6 +347,9 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         for type in ["absolute", "relative_key", "relative_key_query"]:
             config_and_inputs[0].position_embedding_type = type
             self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_torch_fx_output_loss(self):
+        super().test_torch_fx_output_loss()
 
     def test_Mistral_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -409,85 +420,6 @@ class MistralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     @require_torch_gpu
     @pytest.mark.flash_attn_test
     @slow
-    def test_flash_attn_2_generate_padding_right(self):
-        import torch
-
-        for model_class in self.all_generative_model_classes:
-            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, low_cpu_mem_usage=True).to(
-                    torch_device
-                )
-
-                dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
-                dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [1, 1, 1, 0]]).to(torch_device)
-
-                model.generate(dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False)
-
-                model = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    attn_implementation="flash_attention_2",
-                    low_cpu_mem_usage=True,
-                ).to(torch_device)
-
-                with self.assertRaises(ValueError):
-                    _ = model.generate(
-                        dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=1, do_sample=False
-                    )
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_generate_use_cache(self):
-        import torch
-
-        max_new_tokens = 30
-
-        for model_class in self.all_generative_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-            dummy_input = inputs_dict[model_class.main_input_name]
-            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
-                dummy_input = dummy_input.to(torch.float16)
-
-            # make sure that all models have enough positions for generation
-            if hasattr(config, "max_position_embeddings"):
-                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
-
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-
-                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
-                # NOTE: Mistral apparently does not support right padding + use_cache with FA2.
-                dummy_attention_mask[:, -1] = 1
-
-                model = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    attn_implementation="flash_attention_2",
-                    low_cpu_mem_usage=True,
-                ).to(torch_device)
-
-                # Just test that a large cache works as expected
-                _ = model.generate(
-                    dummy_input,
-                    attention_mask=dummy_attention_mask,
-                    max_new_tokens=max_new_tokens,
-                    do_sample=False,
-                    use_cache=True,
-                )
-
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         self.skipTest(reason="Mistral flash attention does not support right padding")
 
@@ -505,8 +437,7 @@ class MistralIntegrationTest(unittest.TestCase):
             cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
 
     def tearDown(self):
-        torch.cuda.empty_cache()
-        gc.collect()
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     def test_model_7b_logits(self):
@@ -516,7 +447,7 @@ class MistralIntegrationTest(unittest.TestCase):
         )
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
         with torch.no_grad():
-            out = model(input_ids).logits.cpu()
+            out = model(input_ids).logits.float().cpu()
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([[-2.5548, -2.5737, -3.0600, -2.5906, -2.8478, -2.8118, -2.9325, -2.7694]])
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
@@ -576,9 +507,10 @@ class MistralIntegrationTest(unittest.TestCase):
         backend_empty_cache(torch_device)
         gc.collect()
 
+    @require_flash_attn
     @require_bitsandbytes
     @slow
-    @require_flash_attn
+    @pytest.mark.flash_attn_test
     def test_model_7b_long_prompt(self):
         EXPECTED_OUTPUT_TOKEN_IDS = [306, 338]
         # An input with 4097 tokens that is above the size of the sliding window
@@ -675,7 +607,7 @@ class MistralIntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", use_fast=False)
         tokenizer.pad_token = tokenizer.eos_token
         model = MistralForCausalLM.from_pretrained(
-            "mistralai/Mistral-7B-v0.1", device_map="sequential", torch_dtype=torch.float16
+            "mistralai/Mistral-7B-v0.1", device_map=torch_device, torch_dtype=torch.float16
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
@@ -718,14 +650,13 @@ class MistralIntegrationTest(unittest.TestCase):
 
 
 @slow
-@require_torch_gpu
+@require_torch_accelerator
 class Mask4DTestHard(unittest.TestCase):
     model_name = "mistralai/Mistral-7B-v0.1"
     _model = None
 
     def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     @property
     def model(self):

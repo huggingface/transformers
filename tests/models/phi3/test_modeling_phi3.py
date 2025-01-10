@@ -16,10 +16,11 @@
 """Testing suite for the PyTorch Phi-3 model."""
 
 import unittest
+from typing import List
 
 from parameterized import parameterized
 
-from transformers import Phi3Config, is_torch_available, set_seed
+from transformers import Phi3Config, StaticCache, is_torch_available, set_seed
 from transformers.testing_utils import (
     require_torch,
     slow,
@@ -42,6 +43,55 @@ if is_torch_available():
         Phi3ForTokenClassification,
         Phi3Model,
     )
+
+    end_of_text_token = 32000
+
+    class Phi3MiniWithStaticCache(torch.nn.Module):
+        def __init__(self, model: Phi3ForCausalLM, batch_size: int, max_seq_len: int):
+            super().__init__()
+            self.model = model
+            self.cache = StaticCache(
+                config=model.config,
+                batch_size=batch_size,
+                max_cache_len=max_seq_len,
+                device=self.model.device,
+                dtype=self.model.dtype,
+            )
+
+        def forward(
+            self,
+            input_ids: torch.LongTensor = None,
+        ) -> torch.FloatTensor:
+            return self.model.forward(
+                input_ids=input_ids,
+                use_cache=True,
+                return_dict=True,
+                past_key_values=self.cache,
+            ).logits
+
+        @staticmethod
+        def generate(model: Phi3ForCausalLM, prompt_tokens: torch.LongTensor, max_seq_len: int) -> List[int]:
+            model = Phi3MiniWithStaticCache(model, 1, max_seq_len + prompt_tokens.shape[-1])
+
+            response_tokens = []
+
+            for input_pos in range(prompt_tokens.shape[-1]):
+                result = model.forward(
+                    input_ids=prompt_tokens[:, input_pos : input_pos + 1],
+                )
+                response_tokens.append(prompt_tokens[0][input_pos].item())
+
+            current_token = torch.argmax(result[:, -1, :], dim=-1).item()
+            response_tokens.append(current_token)
+
+            while current_token != end_of_text_token and len(response_tokens) < max_seq_len:
+                result = model.forward(
+                    input_ids=torch.tensor([[current_token]], dtype=torch.long),
+                )
+                current_token = torch.argmax(result[:, -1, :], dim=-1).item()
+                response_tokens.append(current_token)
+
+            return response_tokens
 
 
 class Phi3ModelTester:
@@ -101,7 +151,7 @@ class Phi3ModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = torch.tril(torch.ones(self.batch_size, self.seq_length)).to(torch_device)
+            input_mask = torch.tril(torch.ones_like(input_ids).to(torch_device))
 
         token_type_ids = None
         if self.use_token_type_ids:
@@ -301,7 +351,14 @@ class Phi3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79292/workflows/fa2ba644-8953-44a6-8f67-ccd69ca6a476/jobs/1012905
     def is_pipeline_test_to_skip(
-        self, pipeline_test_casse_name, config_class, model_architecture, tokenizer_name, processor_name
+        self,
+        pipeline_test_case_name,
+        config_class,
+        model_architecture,
+        tokenizer_name,
+        image_processor_name,
+        feature_extractor_name,
+        processor_name,
     ):
         return True
 
@@ -392,6 +449,50 @@ class Phi3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
+    @parameterized.expand([("longrope",)])
+    def test_model_rope_scaling_short_long_factor(self, scaling_type):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        n_factors = config.hidden_size // config.num_key_value_heads // 2
+        config.rope_scaling = {
+            "type": scaling_type,
+            "short_factor": [3.0 for _ in range(n_factors)],
+            "long_factor": [5.0 for _ in range(n_factors)],
+        }
+        input_tensor = ids_tensor([1, 4090], config.vocab_size)
+        # Make sure we don't have padding tokens. If this is the case, then the actual number of "true" tokens may be shorter
+        # than `config.original_max_position_embeddings + 5`, invalidating this test
+        input_tensor[input_tensor == config.pad_token_id] += 1
+        model = Phi3ForCausalLM(config)
+        model.to(torch_device)
+        model.eval()
+        generation_args_short = {
+            "max_length": config.original_max_position_embeddings,
+            "temperature": 0.0,
+            "use_cache": True,
+            "do_sample": False,
+            "return_dict_in_generate": True,
+        }
+        output_with_short_factor = model.generate(input_tensor, **generation_args_short)
+        keys_with_short_factor = output_with_short_factor.past_key_values[0][0]
+        generation_args_long = {
+            "max_length": config.original_max_position_embeddings + 5,
+            "temperature": 0.0,
+            "use_cache": True,
+            "do_sample": False,
+            "return_dict_in_generate": True,
+            "output_logits": True,
+        }
+        output_with_long_factor = model.generate(input_tensor, **generation_args_long)
+        keys_with_long_factor = output_with_long_factor.past_key_values[0][0]
+        last_token_logits = output_with_long_factor.logits[-1][-1]
+        regenerated_last_token_logits = model(output_with_long_factor.sequences[:, :-1]).logits[0][-1]
+        keys_with_long_factor = keys_with_long_factor[:, :, : config.original_max_position_embeddings - 1, :]
+
+        # KV cache is re-computed after reaching the (`config.original_max_position_embeddings`+1)th token position
+        self.assertFalse(torch.allclose(keys_with_short_factor, keys_with_long_factor, atol=1e-2, rtol=1e-2))
+        # Last token generated using long factor
+        self.assertTrue(torch.allclose(last_token_logits, regenerated_last_token_logits, atol=1e-2, rtol=1e-2))
+
 
 @slow
 @require_torch
@@ -429,7 +530,30 @@ class Phi3IntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(outputs)
 
         EXPECTED_OUTPUT = [
-            "<s><|system|> You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.<|end|><|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> Absolutely! Bananas and dragonfruits are both delicious fruits that can be combined in various ways to create tasty and nutrit"
+            "<|system|> You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.<|end|><|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> Certainly! Bananas and dragonfruits can be combined in various delicious ways. Here are some ideas for incorporating these fruits into your"
+        ]
+
+        self.assertListEqual(output_text, EXPECTED_OUTPUT)
+
+    def test_phi3_mini_4k_instruct_with_static_cache(self):
+        model = Phi3ForCausalLM.from_pretrained("microsoft/phi-3-mini-4k-instruct")
+        tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-3-mini-4k-instruct")
+
+        messages = [
+            {
+                "role": "system",
+                "content": "You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.",
+            },
+            {"role": "user", "content": "Can you provide ways to eat combinations of bananas and dragonfruits?"},
+        ]
+        inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
+
+        response_tokens = Phi3MiniWithStaticCache.generate(model, inputs, 64)
+
+        output_text = tokenizer.batch_decode(torch.tensor([response_tokens], dtype=torch.long, device=torch_device))
+
+        EXPECTED_OUTPUT = [
+            "<|system|> You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.<|end|><|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> Certainly! Bananas and dragonfruits can be combined in various delicious ways. Here are some"
         ]
 
         self.assertListEqual(output_text, EXPECTED_OUTPUT)
@@ -467,7 +591,120 @@ class Phi3IntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(outputs)
 
         EXPECTED_OUTPUT = [
-            "<s><|system|> You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.<|end|><|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> Certainly! Bananas and dragonfruits can be combined in various delicious and healthy ways. Here are some ideas:\n\n1."
+            "<|system|> You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.<|end|><|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> Certainly! Bananas and dragonfruits can be combined in various delicious and nutritious ways. Here are some creative and healthy"
+        ]
+
+        self.assertListEqual(output_text, EXPECTED_OUTPUT)
+
+    def test_phi3_mini_128k_instruct_with_static_cache(self):
+        model = Phi3ForCausalLM.from_pretrained("microsoft/phi-3-mini-128k-instruct")
+        tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-3-mini-128k-instruct")
+
+        messages = [
+            {
+                "role": "system",
+                "content": "You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.",
+            },
+            {"role": "user", "content": "Can you provide ways to eat combinations of bananas and dragonfruits?"},
+        ]
+        inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
+
+        response_tokens = Phi3MiniWithStaticCache.generate(model, inputs, 64)
+
+        output_text = tokenizer.batch_decode(torch.tensor([response_tokens], dtype=torch.long, device=torch_device))
+
+        EXPECTED_OUTPUT = [
+            "<|system|> You are a helpful digital assistant. Please provide safe, ethical and accurate information to the user.<|end|><|user|> Can you provide ways to eat combinations of bananas and dragonfruits?<|end|><|assistant|> Certainly! Bananas and dragonfruits can be combined in various delicious and nutritious ways"
+        ]
+
+        self.assertListEqual(output_text, EXPECTED_OUTPUT)
+
+    def test_phi3_mini_4k_sliding_window(self):
+        """
+        This tests that Phi3 doesn't deteriorate in quality for long context generations. Since Phi3 has
+        sliding window attention, the test is tailored so that (context + max_new_tokens > sliding_window).
+        See #33586 for more
+        """
+        model = Phi3ForCausalLM.from_pretrained(
+            "microsoft/Phi-3-mini-4k-instruct", device_map=torch_device, torch_dtype=torch.bfloat16
+        )
+        tokenizer = AutoTokenizer.from_pretrained("microsoft/Phi-3-mini-4k-instruct")
+
+        input_text = """
+            <|user|>
+            Tell me about Paris, France.<|end|>
+            <|assistant|>
+            Paris, the capital city of France, is renowned for its rich history, iconic landmarks, and vibrant culture. Known as "The City of Light," Paris is situated in the north-central part of the country along the Seine River.
+
+            Here are some key aspects of Paris:
+
+            1. Landmarks: Paris is home to numerous famous landmarks, including the Eiffel Tower, the Louvre Museum, Notre-Dame Cathedral, and the Champs-Élysées. The Eiffel Tower, built in 1889, is an iconic symbol of Paris and attracts millions of tourists each year. The Louvre Museum, the world's largest art museum, houses thousands of works of art, including the Mona Lisa and the Venus de Milo.
+
+            2. History: Paris has a rich history dating back to the 3rd century BC, when it was founded by a Celtic tribe called the Parisii. Over the centuries, the city has been influenced by various cultures, including the Romans, the Franks, and the Normans. The French Revolution in the late 18th century marked a significant turning point in Paris's history, leading to the establishment of the modern French Republic.
+
+            3. Culture: Paris is a global center for art, fashion, gastronomy, and culture. The city is home to numerous museums, including the Centre Pompidou, Musée d'Orsay, and Musée Rodin. Paris is also known for its fashion industry, with many famous designers having their origins in the city. The city's cuisine is also highly regarded, with a focus on fresh ingredients, and a wide variety of dishes, including French classics like coq au vin, boeuf bourguignon, and crêpes.
+
+            4. Architecture: Parisian architecture is characterized by its diverse styles, ranging from Gothic and Romanesque to Art Nouveau and Art Deco. The city's famous Haussmannian buildings, designed by Baron Haussmann in the mid-19th century, are known for their uniform facades, wrought-iron balconies, and large windows.
+
+            5. Transportation: Paris has an extensive public transportation system, including the Paris Métro, RER (suburban trains), and buses. The city's iconic yellow taxis are also a popular mode of transportation.
+
+            6. Language: The official language of Paris is French, and the city's residents are known for their charm and politeness.
+
+            7. Festivals and Events: Paris hosts numerous festivals and events throughout the year, including the annual Bastille Day celebrations, the Paris Fashion Week, and the famous annual New Year's Eve fireworks on the Eiffel Tower.
+
+            8. Geography: Paris is located in the north-central part of France, with the Seine River running through the city. The city's geography is characterized by rolling hills and picturesque parks, such as the Bois de Boulogne and the Jardin des Tuileries.
+
+            9. Population: As of 2021, Paris has an estimated population of around 2.2 million residents, with the metropolitan area housing over 12 million people.
+
+            In summary, Paris is a city steeped in history, culture, and art, with a unique blend of architectural styles and a vibrant atmosphere that continues to captivate millions of visitors each year.<|end|>
+            <|user|>
+            Please give me a list of 5 architectural landmarks in Paris, France.<|end|>
+            <|assistant|>
+            1. Eiffel Tower: Designed by Gustave Eiffel and completed in 1889, the Eiffel Tower is an iconic symbol of Paris and France. Standing at 324 meters tall, it was the tallest man-made structure in the world until the completion of the Chrysler Building in New York in 1930. The Eiffel Tower is made of wrought iron and offers visitors stunning views of the city from its three levels.
+
+            2. Notre-Dame Cathedral: Located on the Île de la Cité, Notre-Dame Cathedral is a masterpiece of French Gothic architecture. Construction began in the 12th century and continued for over 200 years, with the cathedral's completion in the 14th century. The cathedral is famous for its intricate facade, stained-glass windows, and the iconic gargoyles and chimeras.
+
+            3. Louvre Museum: Originally built as a fortress in the 12th century, the Louvre Museum is now the world's largest art museum and a historic monument in Paris. The museum's most famous landmark is the iconic glass pyramid entrance, designed by architect I. M. Pei in the 1980s. The Louvre houses over 380,000 works of art, including the Mona Lisa and the Venus de Milo.
+
+            4. Sacré-Cœur Basilica: The Sacré-Cœur Basilica, also known as the Basilique du Sacré-Cœur, is a Roman Catholic church and minor basilica located at the summit of the butte Montmartre, the highest point in Paris. The basilica was designed by Paul Abadie and dedicated in 1914. Its white domes and lavender-colored travertine stone make it a distinctive landmark in the Paris skyline.
+
+            5. Arc de Triomphe: The Arc de Triomphe is a monumental structure located at the western end of the Champs-Élysées. Commissioned by Napoleon in 1806, the Arc was designed by Jean-François-Thérèse Chalgrin and completed in 1836. The monument honors those who fought and died for France during the French Revolutionary and Napoleonic Wars. The Arc features sculptural reliefs and inscriptions, and its façade is adorned with the names of 357 generals and 660 soldiers.
+
+            These five architectural landmarks showcase the diverse styles and historical periods of Paris, from Gothic to Neoclassical, and from the 19th to the 20th centuries. Each landmark has its unique features and contributes to the city's rich architectural heritage.<|end|>
+            <|user|>
+            Please give me a list of 10 famous items displayed in the Louvre Museum. Thanks!<|end|>
+            <|assistant|>
+            1. Mona Lisa: The Mona Lisa, painted by Leonardo da Vinci in the early 16th century, is arguably the most famous painting in the world. The portrait is known for its enigmatic smile and masterful use of sfumato, a technique that creates a soft, hazy effect.
+
+            2. Venus de Milo: This ancient Greek statue, believed to have been created around 130-100 BC, is a masterpiece of Hellenistic sculpture. The Venus de Milo is renowned for its graceful beauty and the mystery surrounding its missing arms.
+
+            3. Winged Victory of Samothrace: This Hellenistic sculpture, dating back to the 2nd century BC, depicts the Greek goddess Nike, the personification of victory. The sculpture is celebrated for its dynamic movement and intricate details.
+
+            4. Liberty Leading the People: This iconic painting by Eugène Delacroix, created in 1830, commemorates the July Revolution in France. The artwork depicts a woman personifying Liberty leading a group of revolutionaries over the bodies of the fallen.
+
+            5. The Wedding at Cana: A 1516 painting by Veronese, The Wedding at Cana is a large-scale work that depicts the biblical story of Jesus turning water into wine at a wedding feast. The painting is known for its vibrant colors and intricate details.
+
+            6. The Raft of the Medusa: This 1819 painting by Théodore Géricault is a powerful depiction of the aftermath of the shipwreck of the French frigate Méduse. The painting is famous for its dramatic composition and emotional intensity.
+
+            7. The Coronation of Napoleon: This 1805 painting by Jacques-Louis David portrays the coronation of Napoleon Bonaparte as Emperor of the French. The artwork is a masterpiece of neoclassical style and captures the pomp and ceremony of the event.
+
+            8. The Death of Socrates: A 1914 painting by Pablo Picasso, The Death of Socrates depicts the moment when the ancient Greek philosopher Socrates drinks the poison hemlock, as ordered by the Athenian government. The painting is a powerful expression of the existential themes associated with Socrates' death.
+
+            9. The Turkish Bath: A 1887 painting by Puvis de Chavannes, The Turkish Bath is a large-scale work that depicts a scene of relaxation and leisity in a traditional Turkish bath. The painting is known for its subdued color palette and serene atmosphere.
+
+            10. The Wedding at Cana: A 1901 painting by Giovanni Boldini, The Wedding at Cana is a lively depiction of a festive Italian wedding. The painting is characterized by Boldini's signature flamboyant style and his ability to capture the essence of the subjects with a sense of movement and energy.
+
+            These 10 famous items in the Louvre Museum showcase a diverse range of artistic styles and periods, from ancient Greek and Roman sculptures to Renaissance and 19th-century paintings. The collection at the Louvre is one of the world's largest and most important museums, housing over 800,000 works of art, and these famous items are just a small selection of the museum's vast collection.<|end|>
+            <|user|>
+            Please give me a list of 10 famous French dishes.<|end|>
+            <|assistant|>
+            """
+
+        inputs = tokenizer(input_text, return_tensors="pt").to(device=torch_device)
+        outputs = model.generate(**inputs, max_new_tokens=100)
+        output_text = tokenizer.batch_decode(outputs[:, inputs.input_ids.shape[1] :], skip_special_tokens=True)
+        EXPECTED_OUTPUT = [
+            '1. Coq au Vin: Coq au Vin is a classic French dish that translates to "rooster in wine." The dish consists of chicken braised with wine, lardons, mushrooms, and garlic. It is a hearty and flavorful dish that is often served with potatoes or rice.\n\n            2. Boeuf Bourguignon: Boeuf Bourguignon is a traditional French beef stew that'
         ]
 
         self.assertListEqual(output_text, EXPECTED_OUTPUT)

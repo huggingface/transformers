@@ -153,7 +153,7 @@ def torch_default_data_collator(features: List[InputDataClass]) -> Dict[str, Any
             if isinstance(v, torch.Tensor):
                 batch[k] = torch.stack([f[k] for f in features])
             elif isinstance(v, np.ndarray):
-                batch[k] = torch.tensor(np.stack([f[k] for f in features]))
+                batch[k] = torch.from_numpy(np.stack([f[k] for f in features]))
             else:
                 batch[k] = torch.tensor([f[k] for f in features])
 
@@ -256,7 +256,7 @@ class DataCollatorWithPadding:
             If set will pad the sequence to a multiple of the provided value.
 
             This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability >=
-            7.5 (Volta).
+            7.0 (Volta).
         return_tensors (`str`, *optional*, defaults to `"pt"`):
             The type of Tensor to return. Allowable values are "np", "pt" and "tf".
     """
@@ -308,7 +308,7 @@ class DataCollatorForTokenClassification(DataCollatorMixin):
             If set will pad the sequence to a multiple of the provided value.
 
             This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability >=
-            7.5 (Volta).
+            7.0 (Volta).
         label_pad_token_id (`int`, *optional*, defaults to -100):
             The id to use when padding the labels (-100 will be automatically ignore by PyTorch loss functions).
         return_tensors (`str`, *optional*, defaults to `"pt"`):
@@ -439,10 +439,11 @@ def _torch_collate_batch(examples, tokenizer, pad_to_multiple_of: Optional[int] 
 
     are_tensors_same_length = all(x.size(0) == length_of_first for x in examples)
     if are_tensors_same_length and (pad_to_multiple_of is None or length_of_first % pad_to_multiple_of == 0):
-        return torch.stack(examples, dim=0)
+        if not isinstance(examples, torch.Tensor):
+            return torch.stack(examples, dim=0)
 
     # If yes, check if we have a `pad_token`.
-    if tokenizer._pad_token is None:
+    if tokenizer.pad_token is None:
         raise ValueError(
             "You are attempting to pad samples but the tokenizer you are using"
             f" ({tokenizer.__class__.__name__}) does not have a pad token."
@@ -476,7 +477,7 @@ def _tf_collate_batch(examples, tokenizer, pad_to_multiple_of: Optional[int] = N
         return tf.stack(examples, axis=0)
 
     # If yes, check if we have a `pad_token`.
-    if tokenizer._pad_token is None:
+    if tokenizer.pad_token is None:
         raise ValueError(
             "You are attempting to pad samples but the tokenizer you are using"
             f" ({tokenizer.__class__.__name__}) does not have a pad token."
@@ -512,7 +513,7 @@ def _numpy_collate_batch(examples, tokenizer, pad_to_multiple_of: Optional[int] 
         return np.stack(examples, axis=0)
 
     # If yes, check if we have a `pad_token`.
-    if tokenizer._pad_token is None:
+    if tokenizer.pad_token is None:
         raise ValueError(
             "You are attempting to pad samples but the tokenizer you are using"
             f" ({tokenizer.__class__.__name__}) does not have a pad token."
@@ -567,7 +568,7 @@ class DataCollatorForSeq2Seq:
             If set will pad the sequence to a multiple of the provided value.
 
             This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability >=
-            7.5 (Volta).
+            7.0 (Volta).
         label_pad_token_id (`int`, *optional*, defaults to -100):
             The id to use when padding the labels (-100 will be automatically ignored by PyTorch loss functions).
         return_tensors (`str`, *optional*, defaults to `"pt"`):
@@ -692,6 +693,9 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
             The probability with which to (randomly) mask tokens in the input, when `mlm` is set to `True`.
         pad_to_multiple_of (`int`, *optional*):
             If set will pad the sequence to a multiple of the provided value.
+
+            This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability >=
+            7.0 (Volta).
         return_tensors (`str`):
             The type of Tensor to return. Allowable values are "np", "pt" and "tf".
 
@@ -751,7 +755,7 @@ class DataCollatorForLanguageModeling(DataCollatorMixin):
         inputs = tf.where(indices_replaced, mask_token_id, inputs)
 
         # 10% of the time, we replace masked input tokens with random word
-        indices_random = self.tf_bernoulli(input_shape, 0.1) & masked_indices & ~indices_replaced
+        indices_random = self.tf_bernoulli(input_shape, 0.5) & masked_indices & ~indices_replaced
         random_words = tf.random.uniform(input_shape, maxval=vocab_size, dtype=inputs.dtype)
 
         inputs = tf.where(indices_random, random_words, inputs)
@@ -1089,7 +1093,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
             self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()
         ]
         probability_matrix.masked_fill_(torch.tensor(special_tokens_mask, dtype=torch.bool), value=0.0)
-        if self.tokenizer._pad_token is not None:
+        if self.tokenizer.pad_token is not None:
             padding_mask = labels.eq(self.tokenizer.pad_token_id)
             probability_matrix.masked_fill_(padding_mask, value=0.0)
 
@@ -1130,7 +1134,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
             self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels
         ]
         masked_indices = masked_indices & ~tf.cast(special_tokens_mask, dtype=tf.bool)
-        if self.tokenizer._pad_token is not None:
+        if self.tokenizer.pad_token is not None:
             padding_mask = inputs == self.tokenizer.pad_token_id
             masked_indices = masked_indices & ~padding_mask
 
@@ -1169,7 +1173,7 @@ class DataCollatorForWholeWordMask(DataCollatorForLanguageModeling):
             self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()
         ]
         masked_indices[np.array(special_tokens_mask, dtype=bool)] = 0
-        if self.tokenizer._pad_token is not None:
+        if self.tokenizer.pad_token is not None:
             padding_mask = labels == self.tokenizer.pad_token_id
             masked_indices[padding_mask] = 0
 
@@ -1250,13 +1254,13 @@ class DataCollatorForSOP(DataCollatorForLanguageModeling):
             self.tokenizer.get_special_tokens_mask(val, already_has_special_tokens=True) for val in labels.tolist()
         ]
         probability_matrix.masked_fill_(torch.tensor(special_tokens_mask, dtype=torch.bool), value=0.0)
-        if self.tokenizer._pad_token is not None:
+        if self.tokenizer.pad_token is not None:
             padding_mask = labels.eq(self.tokenizer.pad_token_id)
             probability_matrix.masked_fill_(padding_mask, value=0.0)
         masked_indices = torch.bernoulli(probability_matrix).bool()
         # probability be `1` (masked), however in albert model attention mask `0` means masked, revert the value
         attention_mask = (~masked_indices).float()
-        if self.tokenizer._pad_token is not None:
+        if self.tokenizer.pad_token is not None:
             attention_padding_mask = labels.eq(self.tokenizer.pad_token_id)
             attention_mask.masked_fill_(attention_padding_mask, value=1.0)
         labels[~masked_indices] = -100  # We only compute loss on masked tokens, -100 is default for CE compute
@@ -1366,7 +1370,7 @@ class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
             dtype=torch.bool,
         )
         masked_indices.masked_fill_(special_tokens_mask, value=0.0)
-        if self.tokenizer._pad_token is not None:
+        if self.tokenizer.pad_token is not None:
             padding_mask = labels.eq(self.tokenizer.pad_token_id)
             masked_indices.masked_fill_(padding_mask, value=0.0)
 
@@ -1470,7 +1474,7 @@ class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
         )
         special_tokens_mask = tf.cast(special_tokens_mask, dtype=tf.bool)
         masked_indices = masked_indices & ~special_tokens_mask
-        if self.tokenizer._pad_token is not None:
+        if self.tokenizer.pad_token is not None:
             padding_mask = labels == self.tokenizer.pad_token_id
             masked_indices = masked_indices & ~padding_mask
 
@@ -1570,7 +1574,7 @@ class DataCollatorForPermutationLanguageModeling(DataCollatorMixin):
             dtype=bool,
         )
         masked_indices[special_tokens_mask] = 0
-        if self.tokenizer._pad_token is not None:
+        if self.tokenizer.pad_token is not None:
             padding_mask = labels == self.tokenizer.pad_token_id
             masked_indices[padding_mask] = 0.0
 
@@ -1619,20 +1623,24 @@ class DataCollatorWithFlattening(DefaultDataCollator):
     Data collator used for padding free approach. Does the following:
 
     - concatate the entire mini batch into single long sequence [1, total_tokens]
+    - uses `separator_id` to separate sequences within the concatenated `labels`, default value is -100
     - no padding will be added, returns `input_ids`, `labels` and `position_ids`
     """
 
-    def __init__(self, *args, return_position_ids=True, **kwargs):
+    def __init__(self, *args, return_position_ids=True, separator_id=-100, **kwargs):
         super().__init__(*args, **kwargs)
         self.return_position_ids = return_position_ids
+        self.separator_id = separator_id
         warnings.warn(
             "Using `DataCollatorWithFlattening` will flatten the entire mini batch into single long sequence."
             "Make sure your attention computation is able to handle it!"
         )
 
-    def __call__(self, features, return_tensors=None):
+    def __call__(self, features, return_tensors=None, separator_id=None):
         if return_tensors is None:
             return_tensors = self.return_tensors
+        if separator_id is None:
+            separator_id = self.separator_id
         is_labels_provided = "labels" in features[0]
         ret = {"input_ids": [], "labels": []}
         if self.return_position_ids:
@@ -1640,9 +1648,9 @@ class DataCollatorWithFlattening(DefaultDataCollator):
         for idx in range(0, len(features)):
             ret["input_ids"] += features[idx]["input_ids"]
             if is_labels_provided:
-                ret["labels"] += [-100] + features[idx]["labels"][1:]
+                ret["labels"] += [separator_id] + features[idx]["labels"][1:]
             else:
-                ret["labels"] += [-100] + features[idx]["input_ids"][1:]
+                ret["labels"] += [separator_id] + features[idx]["input_ids"][1:]
             if self.return_position_ids:
                 ret["position_ids"] += list(range(len(features[idx]["input_ids"])))
         return default_data_collator([ret], return_tensors)

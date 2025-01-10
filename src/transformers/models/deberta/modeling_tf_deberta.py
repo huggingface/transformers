@@ -101,8 +101,8 @@ class TFDebertaXSoftmax(keras.layers.Layer):
 
     def call(self, inputs: tf.Tensor, mask: tf.Tensor):
         rmask = tf.logical_not(tf.cast(mask, tf.bool))
-        output = tf.where(rmask, float("-inf"), inputs)
-        output = stable_softmax(output, self.axis)
+        output = tf.where(rmask, tf.cast(float("-inf"), dtype=self.compute_dtype), inputs)
+        output = stable_softmax(tf.cast(output, dtype=tf.float32), self.axis)
         output = tf.where(rmask, 0.0, output)
         return output
 
@@ -129,13 +129,13 @@ class TFDebertaStableDropout(keras.layers.Layer):
             - tf.compat.v1.distributions.Bernoulli(probs=1.0 - self.drop_prob).sample(sample_shape=shape_list(inputs)),
             tf.bool,
         )
-        scale = tf.convert_to_tensor(1.0 / (1 - self.drop_prob), dtype=tf.float32)
+        scale = tf.convert_to_tensor(1.0 / (1 - self.drop_prob), dtype=self.compute_dtype)
         if self.drop_prob > 0:
-            inputs = tf.where(mask, 0.0, inputs) * scale
+            inputs = tf.where(mask, tf.cast(0.0, dtype=self.compute_dtype), inputs) * scale
 
         def grad(upstream):
             if self.drop_prob > 0:
-                return tf.where(mask, 0.0, upstream) * scale
+                return tf.where(mask, tf.cast(0.0, dtype=self.compute_dtype), upstream) * scale
             else:
                 return upstream
 
@@ -669,10 +669,10 @@ class TFDebertaDisentangledSelfAttention(keras.layers.Layer):
                 sequence length in which element [i,j] = *1* means the *i* th token in the input can attend to the *j*
                 th token.
 
-            return_att (`bool`, optional):
+            return_att (`bool`, *optional*):
                 Whether return the attention matrix.
 
-            query_states (`tf.Tensor`, optional):
+            query_states (`tf.Tensor`, *optional*):
                 The *Q* state in *Attention(Q,K,V)*.
 
             relative_pos (`tf.Tensor`):
@@ -701,9 +701,9 @@ class TFDebertaDisentangledSelfAttention(keras.layers.Layer):
             ws = tf.split(
                 tf.transpose(self.in_proj.weight[0]), num_or_size_splits=self.num_attention_heads * 3, axis=0
             )
-            qkvw = tf.TensorArray(dtype=tf.float32, size=3)
+            qkvw = tf.TensorArray(dtype=self.dtype, size=3)
             for k in tf.range(3):
-                qkvw_inside = tf.TensorArray(dtype=tf.float32, size=self.num_attention_heads)
+                qkvw_inside = tf.TensorArray(dtype=self.dtype, size=self.num_attention_heads)
                 for i in tf.range(self.num_attention_heads):
                     qkvw_inside = qkvw_inside.write(i, ws[i * 3 + k])
                 qkvw = qkvw.write(k, qkvw_inside.concat())
@@ -795,7 +795,9 @@ class TFDebertaDisentangledSelfAttention(keras.layers.Layer):
         if "p2c" in self.pos_att_type:
             pos_query_layer = self.pos_q_proj(rel_embeddings)
             pos_query_layer = self.transpose_for_scores(pos_query_layer)
-            pos_query_layer /= tf.math.sqrt(tf.cast(shape_list(pos_query_layer)[-1] * scale_factor, dtype=tf.float32))
+            pos_query_layer /= tf.math.sqrt(
+                tf.cast(shape_list(pos_query_layer)[-1] * scale_factor, dtype=self.compute_dtype)
+            )
             if shape_list(query_layer)[-2] != shape_list(key_layer)[-2]:
                 r_pos = build_relative_position(shape_list(key_layer)[-2], shape_list(key_layer)[-2])
             else:
@@ -923,7 +925,7 @@ class TFDebertaEmbeddings(keras.layers.Layer):
             if len(shape_list(mask)) != len(shape_list(final_embeddings)):
                 if len(shape_list(mask)) == 4:
                     mask = tf.squeeze(tf.squeeze(mask, axis=1), axis=1)
-                mask = tf.cast(tf.expand_dims(mask, axis=2), tf.float32)
+                mask = tf.cast(tf.expand_dims(mask, axis=2), dtype=self.compute_dtype)
 
             final_embeddings = final_embeddings * mask
 
@@ -1638,3 +1640,13 @@ class TFDebertaForQuestionAnswering(TFDebertaPreTrainedModel, TFQuestionAnswerin
         if getattr(self, "qa_outputs", None) is not None:
             with tf.name_scope(self.qa_outputs.name):
                 self.qa_outputs.build([None, None, self.config.hidden_size])
+
+
+__all__ = [
+    "TFDebertaForMaskedLM",
+    "TFDebertaForQuestionAnswering",
+    "TFDebertaForSequenceClassification",
+    "TFDebertaForTokenClassification",
+    "TFDebertaModel",
+    "TFDebertaPreTrainedModel",
+]

@@ -65,6 +65,8 @@ class VivitModelTester:
         layer_norm_eps=1e-06,
         qkv_bias=True,
         scope=None,
+        attn_implementation="eager",
+        mask_ratio=0.5,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -86,12 +88,15 @@ class VivitModelTester:
         self.layer_norm_eps = layer_norm_eps
         self.qkv_bias = qkv_bias
         self.scope = scope
+        self.attn_implementation = attn_implementation
 
         self.seq_length = (
             (self.image_size // self.tubelet_size[2])
             * (self.image_size // self.tubelet_size[1])
             * (self.num_frames // self.tubelet_size[0])
         ) + 1  # CLS token
+        self.mask_ratio = mask_ratio
+        self.num_masks = int(mask_ratio * self.seq_length)
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor(
@@ -122,6 +127,7 @@ class VivitModelTester:
             initializer_range=self.initializer_range,
             layer_norm_eps=self.layer_norm_eps,
             qkv_bias=self.qkv_bias,
+            attn_implementation=self.attn_implementation,
         )
         config.num_labels = self.num_labels
         return config
@@ -359,12 +365,12 @@ class VivitModelIntegrationTest(unittest.TestCase):
         # allowing to interpolate the pre-trained position embeddings in order to use
         # the model on higher resolutions. The DINO model by Facebook AI leverages this
         # to visualize self-attention on higher resolution images.
-        model = VivitModel.from_pretrained("google/vivit-b-16x2").to(torch_device)
+        model = VivitModel.from_pretrained("google/vivit-b-16x2-kinetics400").to(torch_device)
 
-        image_processor = VivitImageProcessor.from_pretrained("google/vivit-b-16x2")
+        image_processor = VivitImageProcessor.from_pretrained("google/vivit-b-16x2-kinetics400")
         video = prepare_video()
         inputs = image_processor(
-            video, size={"shortest_edge": 480}, crop_size={"height": 480, "width": 480}, return_tensors="pt"
+            video, size={"shortest_edge": 480}, crop_size={"height": 232, "width": 232}, return_tensors="pt"
         )
         pixel_values = inputs.pixel_values.to(torch_device)
 

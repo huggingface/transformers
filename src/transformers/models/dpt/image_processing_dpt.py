@@ -15,7 +15,11 @@
 """Image processor class for DPT."""
 
 import math
-from typing import Dict, Iterable, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Tuple, Union
+
+
+if TYPE_CHECKING:
+    from ...modeling_outputs import DepthEstimatorOutput
 
 import numpy as np
 
@@ -35,10 +39,15 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
-    validate_kwargs,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_vision_available, logging
+from ...utils import (
+    TensorType,
+    filter_out_non_signature_kwargs,
+    is_vision_available,
+    logging,
+    requires_backends,
+)
 
 
 if is_torch_available():
@@ -165,24 +174,6 @@ class DPTImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
         self.do_pad = do_pad
         self.size_divisor = size_divisor
-        self._valid_processor_keys = [
-            "images",
-            "do_resize",
-            "size",
-            "keep_aspect_ratio",
-            "ensure_multiple_of",
-            "resample",
-            "do_rescale",
-            "rescale_factor",
-            "do_normalize",
-            "image_mean",
-            "image_std",
-            "do_pad",
-            "size_divisor",
-            "return_tensors",
-            "data_format",
-            "input_data_format",
-        ]
 
     def resize(
         self,
@@ -284,6 +275,7 @@ class DPTImageProcessor(BaseImageProcessor):
 
         return pad(image, ((pad_size_left, pad_size_right), (pad_size_top, pad_size_bottom)), data_format=data_format)
 
+    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: ImageInput,
@@ -302,7 +294,6 @@ class DPTImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -369,8 +360,6 @@ class DPTImageProcessor(BaseImageProcessor):
 
         images = make_list_of_images(images)
 
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
-
         if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
@@ -391,7 +380,7 @@ class DPTImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
-        if is_scaled_image(images[0]) and do_rescale:
+        if do_rescale and is_scaled_image(images[0]):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -482,3 +471,47 @@ class DPTImageProcessor(BaseImageProcessor):
             semantic_segmentation = [semantic_segmentation[i] for i in range(semantic_segmentation.shape[0])]
 
         return semantic_segmentation
+
+    def post_process_depth_estimation(
+        self,
+        outputs: "DepthEstimatorOutput",
+        target_sizes: Optional[Union[TensorType, List[Tuple[int, int]], None]] = None,
+    ) -> List[Dict[str, TensorType]]:
+        """
+        Converts the raw output of [`DepthEstimatorOutput`] into final depth predictions and depth PIL images.
+        Only supports PyTorch.
+
+        Args:
+            outputs ([`DepthEstimatorOutput`]):
+                Raw outputs of the model.
+            target_sizes (`TensorType` or `List[Tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
+                (height, width) of each image in the batch. If left to None, predictions will not be resized.
+
+        Returns:
+            `List[Dict[str, TensorType]]`: A list of dictionaries of tensors representing the processed depth
+            predictions.
+        """
+        requires_backends(self, "torch")
+
+        predicted_depth = outputs.predicted_depth
+
+        if (target_sizes is not None) and (len(predicted_depth) != len(target_sizes)):
+            raise ValueError(
+                "Make sure that you pass in as many target sizes as the batch dimension of the predicted depth"
+            )
+
+        results = []
+        target_sizes = [None] * len(predicted_depth) if target_sizes is None else target_sizes
+        for depth, target_size in zip(predicted_depth, target_sizes):
+            if target_size is not None:
+                depth = torch.nn.functional.interpolate(
+                    depth.unsqueeze(0).unsqueeze(1), size=target_size, mode="bicubic", align_corners=False
+                ).squeeze()
+
+            results.append({"predicted_depth": depth})
+
+        return results
+
+
+__all__ = ["DPTImageProcessor"]

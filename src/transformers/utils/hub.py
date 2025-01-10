@@ -49,6 +49,7 @@ from huggingface_hub.file_download import REGEX_COMMIT_HASH, http_get
 from huggingface_hub.utils import (
     EntryNotFoundError,
     GatedRepoError,
+    HfHubHTTPError,
     HFValidationError,
     LocalEntryNotFoundError,
     OfflineModeIsEnabled,
@@ -369,7 +370,7 @@ def cached_file(
     if os.path.isdir(path_or_repo_id):
         resolved_file = os.path.join(os.path.join(path_or_repo_id, subfolder), filename)
         if not os.path.isfile(resolved_file):
-            if _raise_exceptions_for_missing_entries:
+            if _raise_exceptions_for_missing_entries and filename not in ["config.json", f"{subfolder}/config.json"]:
                 raise EnvironmentError(
                     f"{path_or_repo_id} does not appear to have a file named {full_filename}. Checkout "
                     f"'https://huggingface.co/{path_or_repo_id}/tree/{revision}' for available files."
@@ -453,6 +454,8 @@ def cached_file(
             return None
         if revision is None:
             revision = "main"
+        if filename in ["config.json", f"{subfolder}/config.json"]:
+            return None
         raise EnvironmentError(
             f"{path_or_repo_id} does not appear to have a file named {full_filename}. Checkout "
             f"'https://huggingface.co/{path_or_repo_id}/tree/{revision}' for available files."
@@ -659,7 +662,14 @@ def has_file(
             proxies=proxies,
             timeout=10,
         )
-    except OfflineModeIsEnabled:
+    except (requests.exceptions.SSLError, requests.exceptions.ProxyError):
+        # Actually raise for those subclasses of ConnectionError
+        raise
+    except (
+        requests.exceptions.ConnectionError,
+        requests.exceptions.Timeout,
+        OfflineModeIsEnabled,
+    ):
         return has_file_in_cache
 
     try:
@@ -792,8 +802,17 @@ class PushToHubMixin:
                     CommitOperationAdd(path_or_fileobj=os.path.join(working_dir, file), path_in_repo=file)
                 )
 
-        if revision is not None:
-            create_branch(repo_id=repo_id, branch=revision, token=token, exist_ok=True)
+        if revision is not None and not revision.startswith("refs/pr"):
+            try:
+                create_branch(repo_id=repo_id, branch=revision, token=token, exist_ok=True)
+            except HfHubHTTPError as e:
+                if e.response.status_code == 403 and create_pr:
+                    # If we are creating a PR on a repo we don't have access to, we can't create the branch.
+                    # so let's assume the branch already exists. If it's not the case, an error will be raised when
+                    # calling `create_commit` below.
+                    pass
+                else:
+                    raise
 
         logger.info(f"Uploading the following files to {repo_id}: {','.join(modified_files)}")
         return create_commit(
@@ -834,7 +853,7 @@ class PushToHubMixin:
             commit_message (`str`, *optional*):
                 Message to commit while pushing. Will default to `"Upload {object}"`.
             private (`bool`, *optional*):
-                Whether or not the repository created should be private.
+                Whether to make the repo private. If `None` (default), the repo will be public unless the organization's default is private. This value is ignored if the repo already exists.
             token (`bool` or `str`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
                 when running `huggingface-cli login` (stored in `~/.huggingface`). Will default to `True` if `repo_url`
@@ -1179,6 +1198,9 @@ def create_and_tag_model_card(
         model_card = ModelCard.from_template(card_data, model_description=model_description)
 
     if tags is not None:
+        # Ensure model_card.data.tags is a list and not None
+        if model_card.data.tags is None:
+            model_card.data.tags = []
         for model_tag in tags:
             if model_tag not in model_card.data.tags:
                 model_card.data.tags.append(model_tag)

@@ -15,7 +15,6 @@
 """PyTorch GroupViT model."""
 
 import collections.abc
-import math
 from dataclasses import dataclass
 from typing import Any, Optional, Tuple, Union
 
@@ -34,6 +33,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
+    torch_int,
 )
 from .configuration_groupvit import GroupViTConfig, GroupViTTextConfig, GroupViTVisionConfig
 
@@ -365,39 +365,44 @@ class GroupViTVisionEmbeddings(nn.Module):
         self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches, config.hidden_size))
         self.dropout = nn.Dropout(config.dropout)
         self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.patch_size = config.patch_size
         self.config = config
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
-        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
-        resolution images.
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
+        images. This method is also adapted to support torch.jit tracing and no class embeddings.
 
-        Source:
-        https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174
+        Adapted from:
+        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
+        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
         """
 
-        npatch = embeddings.shape[1]
-        if npatch == self.position_embeddings.shape[1] and height == width:
+        num_patches = embeddings.shape[1]
+        num_positions = self.position_embeddings.shape[1]
+
+        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
+        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
             return self.position_embeddings
+
         patch_pos_embed = self.position_embeddings
-        num_original_pos_embed = patch_pos_embed.shape[1]
+
         dim = embeddings.shape[-1]
-        feat_height = height // self.config.patch_size
-        feat_width = width // self.config.patch_size
-        # we add a small number to avoid floating point error in the interpolation
-        # see discussion at https://github.com/facebookresearch/dino/issues/8
-        feat_height, feat_width = feat_height + 0.1, feat_width + 0.1
-        original_height = original_width = math.sqrt(num_original_pos_embed)
-        reshaped_patch_pos_embed = patch_pos_embed.reshape(1, int(original_height), int(original_width), dim).permute(
-            0, 3, 1, 2
-        )
-        scale_factor = (feat_height / original_height, feat_width / original_width)
+
+        new_height = height // self.patch_size
+        new_width = width // self.patch_size
+
+        sqrt_num_positions = torch_int(num_positions**0.5)
+        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
+        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+
         patch_pos_embed = nn.functional.interpolate(
-            reshaped_patch_pos_embed,
-            scale_factor=scale_factor,
+            patch_pos_embed,
+            size=(new_height, new_width),
             mode="bicubic",
             align_corners=False,
         )
+
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         return patch_pos_embed
 
@@ -1586,3 +1591,6 @@ class GroupViTModel(GroupViTPreTrainedModel):
             text_model_output=text_outputs,
             vision_model_output=vision_outputs,
         )
+
+
+__all__ = ["GroupViTModel", "GroupViTPreTrainedModel", "GroupViTTextModel", "GroupViTVisionModel"]

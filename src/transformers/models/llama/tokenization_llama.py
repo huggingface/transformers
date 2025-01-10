@@ -43,14 +43,12 @@ SPIECE_UNDERLINE = "▁"
 B_INST, E_INST = "[INST]", "[/INST]"
 B_SYS, E_SYS = "<<SYS>>\n", "\n<</SYS>>\n\n"
 
-# fmt: off
 DEFAULT_SYSTEM_PROMPT = """You are a helpful, respectful and honest assistant. Always answer as helpfully as possible, while being safe. Your \
 answers should not include any harmful, unethical, racist, sexist, toxic, dangerous, or illegal content. Please ensure\
  that your responses are socially unbiased and positive in nature.
 
 If a question does not make any sense, or is not factually coherent, explain why instead of answering something not \
-correct. If you don't know the answer to a question, please don't share false information."""
-# fmt: on
+correct. If you don't know the answer to a question, please don't share false information."""  # fmt: skip
 
 
 class LlamaTokenizer(PreTrainedTokenizer):
@@ -216,7 +214,7 @@ class LlamaTokenizer(PreTrainedTokenizer):
         return state
 
     def __setstate__(self, d):
-        self.__dict__ = d
+        self.__dict__.update(d)
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.LoadFromSerializedProto(self.sp_model_proto)
 
@@ -261,9 +259,8 @@ class LlamaTokenizer(PreTrainedTokenizer):
         `unk_token`. Here is an example with `unk_token = "<unk>"` and `unk_token_length = 4`.
         `self.tokenizer.sp_model.encode("<unk> Hey", out_type = str)[4:]`.
         """
-        tokens = self.sp_model.encode(text, out_type=str)
         if self.legacy or not text.startswith((SPIECE_UNDERLINE, " ")):
-            return tokens
+            return self.sp_model.encode(text, out_type=str)
 
         # 1. Encode string + prefix ex: "<unk> Hey"
         tokens = self.sp_model.encode(self.unk_token + text, out_type=str)
@@ -411,3 +408,6 @@ class LlamaTokenizer(PreTrainedTokenizer):
             output += [1] * len(bos_token_id + token_ids_1 + eos_token_id)
 
         return output
+
+
+__all__ = ["LlamaTokenizer"]

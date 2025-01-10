@@ -33,10 +33,9 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
-    validate_kwargs,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_vision_available, logging
+from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 
 
 logger = logging.get_logger(__name__)
@@ -107,22 +106,8 @@ class SiglipImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean
         self.image_std = image_std
         self.do_convert_rgb = do_convert_rgb
-        self._valid_processor_keys = [
-            "images",
-            "do_resize",
-            "size",
-            "resample",
-            "do_rescale",
-            "rescale_factor",
-            "do_normalize",
-            "image_mean",
-            "image_std",
-            "return_tensors",
-            "data_format",
-            "input_data_format",
-            "do_convert_rgb",
-        ]
 
+    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: ImageInput,
@@ -138,7 +123,6 @@ class SiglipImageProcessor(BaseImageProcessor):
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         do_convert_rgb: bool = None,
-        **kwargs,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -199,8 +183,6 @@ class SiglipImageProcessor(BaseImageProcessor):
 
         images = make_list_of_images(images)
 
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
-
         if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
@@ -216,13 +198,13 @@ class SiglipImageProcessor(BaseImageProcessor):
             size=size,
             resample=resample,
         )
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
-
         if do_convert_rgb:
             images = [convert_to_rgb(image) for image in images]
 
-        if is_scaled_image(images[0]) and do_rescale:
+        # All transformations expect numpy arrays.
+        images = [to_numpy_array(image) for image in images]
+
+        if do_rescale and is_scaled_image(images[0]):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -257,3 +239,6 @@ class SiglipImageProcessor(BaseImageProcessor):
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+
+__all__ = ["SiglipImageProcessor"]

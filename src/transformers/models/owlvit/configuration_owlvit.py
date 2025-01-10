@@ -14,9 +14,8 @@
 # limitations under the License.
 """OWL-ViT model configuration"""
 
-import os
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Any, Dict, Mapping, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, Mapping, Optional
 
 
 if TYPE_CHECKING:
@@ -92,6 +91,7 @@ class OwlViTTextConfig(PretrainedConfig):
     ```"""
 
     model_type = "owlvit_text_model"
+    base_config_key = "text_config"
 
     def __init__(
         self,
@@ -124,24 +124,6 @@ class OwlViTTextConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the text config dict if we are loading from OwlViTConfig
-        if config_dict.get("model_type") == "owlvit":
-            config_dict = config_dict["text_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
 
 
 class OwlViTVisionConfig(PretrainedConfig):
@@ -198,6 +180,7 @@ class OwlViTVisionConfig(PretrainedConfig):
     ```"""
 
     model_type = "owlvit_vision_model"
+    base_config_key = "vision_config"
 
     def __init__(
         self,
@@ -230,24 +213,6 @@ class OwlViTVisionConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the vision config dict if we are loading from OwlViTConfig
-        if config_dict.get("model_type") == "owlvit":
-            config_dict = config_dict["vision_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
-
 
 class OwlViTConfig(PretrainedConfig):
     r"""
@@ -276,6 +241,7 @@ class OwlViTConfig(PretrainedConfig):
     """
 
     model_type = "owlvit"
+    sub_configs = {"text_config": OwlViTTextConfig, "vision_config": OwlViTVisionConfig}
 
     def __init__(
         self,
@@ -303,20 +269,6 @@ class OwlViTConfig(PretrainedConfig):
         self.logit_scale_init_value = logit_scale_init_value
         self.return_dict = return_dict
         self.initializer_factor = 1.0
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
 
     @classmethod
     def from_text_vision_configs(cls, text_config: Dict, vision_config: Dict, **kwargs):
@@ -378,3 +330,6 @@ class OwlViTOnnxConfig(OnnxConfig):
     @property
     def default_onnx_opset(self) -> int:
         return 14
+
+
+__all__ = ["OwlViTConfig", "OwlViTOnnxConfig", "OwlViTTextConfig", "OwlViTVisionConfig"]

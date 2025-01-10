@@ -35,10 +35,9 @@ from ...image_utils import (
     is_valid_image,
     to_numpy_array,
     valid_images,
-    validate_kwargs,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_vision_available, logging
+from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 
 
 if is_vision_available():
@@ -58,8 +57,11 @@ def make_batched_videos(videos) -> List[VideoInput]:
         elif len(videos[0].shape) == 4:
             return [list(video) for video in videos]
 
-    elif is_valid_image(videos) and len(videos.shape) == 4:
-        return [list(videos)]
+    elif is_valid_image(videos):
+        if isinstance(videos, PIL.Image.Image):
+            return [[videos]]
+        elif len(videos.shape) == 4:
+            return [list(videos)]
 
     raise ValueError(f"Could not make batched video from {videos}")
 
@@ -128,21 +130,6 @@ class InstructBlipVideoImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else OPENAI_CLIP_MEAN
         self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
         self.do_convert_rgb = do_convert_rgb
-        self._valid_processor_keys = [
-            "images",
-            "do_resize",
-            "size",
-            "resample",
-            "do_rescale",
-            "rescale_factor",
-            "do_normalize",
-            "image_mean",
-            "image_std",
-            "do_convert_rgb",
-            "return_tensors",
-            "data_format",
-            "input_data_format",
-        ]
 
     # Copied from transformers.models.vit.image_processing_vit.ViTImageProcessor.resize with PILImageResampling.BILINEAR->PILImageResampling.BICUBIC
     def resize(
@@ -195,6 +182,7 @@ class InstructBlipVideoImageProcessor(BaseImageProcessor):
         )
 
     # Ignore copy
+    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: VideoInput = None,
@@ -210,7 +198,6 @@ class InstructBlipVideoImageProcessor(BaseImageProcessor):
         do_convert_rgb: bool = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
     ) -> PIL.Image.Image:
         """
         Preprocess a video or batch of images/videos.
@@ -272,7 +259,6 @@ class InstructBlipVideoImageProcessor(BaseImageProcessor):
         size = get_size_dict(size, default_to_square=False)
 
         videos = make_batched_videos(images)
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
         validate_preprocess_arguments(
             do_rescale=do_rescale,
@@ -338,7 +324,7 @@ class InstructBlipVideoImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         image = to_numpy_array(image)
 
-        if is_scaled_image(image) and do_rescale:
+        if do_rescale and is_scaled_image(image):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled video frames. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."

@@ -365,7 +365,7 @@ class GPTSanJapaneseTokenizer(PreTrainedTokenizer):
         )
 
 
-class SubWordJapaneseTokenizer(object):
+class SubWordJapaneseTokenizer:
     """
     This tokenizer is based on GPTNeoXJapaneseTokenizer and has the following modifications
     - Decoding byte0~byte255 tokens correctly

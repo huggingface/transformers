@@ -20,10 +20,16 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
+from packaging import version
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN, gelu
+from ...generation import GenerationMixin
+from ...modeling_attn_mask_utils import (
+    _prepare_4d_attention_mask_for_sdpa,
+    _prepare_4d_causal_attention_mask_for_sdpa,
+)
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
@@ -40,6 +46,7 @@ from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    get_torch_version,
     logging,
     replace_return_docstrings,
 )
@@ -276,6 +283,108 @@ class RobertaSelfAttention(nn.Module):
         return outputs
 
 
+# Copied from transformers.models.bert.modeling_bert.BertSdpaSelfAttention with Bert->Roberta
+class RobertaSdpaSelfAttention(RobertaSelfAttention):
+    def __init__(self, config, position_embedding_type=None):
+        super().__init__(config, position_embedding_type=position_embedding_type)
+        self.dropout_prob = config.attention_probs_dropout_prob
+        self.require_contiguous_qkv = version.parse(get_torch_version()) < version.parse("2.2.0")
+
+    # Adapted from RobertaSelfAttention
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        head_mask: Optional[torch.FloatTensor] = None,
+        encoder_hidden_states: Optional[torch.FloatTensor] = None,
+        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        past_key_value: Optional[Tuple[Tuple[torch.FloatTensor]]] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> Tuple[torch.Tensor]:
+        if self.position_embedding_type != "absolute" or output_attentions or head_mask is not None:
+            # TODO: Improve this warning with e.g. `model.config._attn_implementation = "manual"` once implemented.
+            logger.warning_once(
+                "RobertaSdpaSelfAttention is used but `torch.nn.functional.scaled_dot_product_attention` does not support "
+                "non-absolute `position_embedding_type` or `output_attentions=True` or `head_mask`. Falling back to "
+                "the manual attention implementation, but specifying the manual implementation will be required from "
+                "Transformers version v5.0.0 onwards. This warning can be removed using the argument "
+                '`attn_implementation="eager"` when loading the model.'
+            )
+            return super().forward(
+                hidden_states,
+                attention_mask,
+                head_mask,
+                encoder_hidden_states,
+                encoder_attention_mask,
+                past_key_value,
+                output_attentions,
+            )
+
+        bsz, tgt_len, _ = hidden_states.size()
+
+        query_layer = self.transpose_for_scores(self.query(hidden_states))
+
+        # If this is instantiated as a cross-attention module, the keys and values come from an encoder; the attention
+        # mask needs to be such that the encoder's padding tokens are not attended to.
+        is_cross_attention = encoder_hidden_states is not None
+
+        current_states = encoder_hidden_states if is_cross_attention else hidden_states
+        attention_mask = encoder_attention_mask if is_cross_attention else attention_mask
+
+        # Check `seq_length` of `past_key_value` == `len(current_states)` to support prefix tuning
+        if is_cross_attention and past_key_value and past_key_value[0].shape[2] == current_states.shape[1]:
+            key_layer, value_layer = past_key_value
+        else:
+            key_layer = self.transpose_for_scores(self.key(current_states))
+            value_layer = self.transpose_for_scores(self.value(current_states))
+            if past_key_value is not None and not is_cross_attention:
+                key_layer = torch.cat([past_key_value[0], key_layer], dim=2)
+                value_layer = torch.cat([past_key_value[1], value_layer], dim=2)
+
+        if self.is_decoder:
+            # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
+            # Further calls to cross_attention layer can then reuse all cross-attention
+            # key/value_states (first "if" case)
+            # if uni-directional self-attention (decoder) save Tuple(torch.Tensor, torch.Tensor) of
+            # all previous decoder key/value_states. Further calls to uni-directional self-attention
+            # can concat previous decoder key/value_states to current projected key/value_states (third "elif" case)
+            # if encoder bi-directional self-attention `past_key_value` is always `None`
+            past_key_value = (key_layer, value_layer)
+
+        # SDPA with memory-efficient backend is broken in torch==2.1.2 when using non-contiguous inputs and a custom
+        # attn_mask, so we need to call `.contiguous()` here. This was fixed in torch==2.2.0.
+        # Reference: https://github.com/pytorch/pytorch/issues/112577
+        if self.require_contiguous_qkv and query_layer.device.type == "cuda" and attention_mask is not None:
+            query_layer = query_layer.contiguous()
+            key_layer = key_layer.contiguous()
+            value_layer = value_layer.contiguous()
+
+        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
+        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
+        # The tgt_len > 1 is necessary to match with AttentionMaskConverter.to_causal_4d that does not create
+        # a causal mask in case tgt_len == 1.
+        is_causal = (
+            True if self.is_decoder and not is_cross_attention and attention_mask is None and tgt_len > 1 else False
+        )
+
+        attn_output = torch.nn.functional.scaled_dot_product_attention(
+            query_layer,
+            key_layer,
+            value_layer,
+            attn_mask=attention_mask,
+            dropout_p=self.dropout_prob if self.training else 0.0,
+            is_causal=is_causal,
+        )
+
+        attn_output = attn_output.transpose(1, 2)
+        attn_output = attn_output.reshape(bsz, tgt_len, self.all_head_size)
+
+        outputs = (attn_output,)
+        if self.is_decoder:
+            outputs = outputs + (past_key_value,)
+        return outputs
+
+
 # Copied from transformers.models.bert.modeling_bert.BertSelfOutput
 class RobertaSelfOutput(nn.Module):
     def __init__(self, config):
@@ -293,6 +402,7 @@ class RobertaSelfOutput(nn.Module):
 
 ROBERTA_SELF_ATTENTION_CLASSES = {
     "eager": RobertaSelfAttention,
+    "sdpa": RobertaSdpaSelfAttention,
 }
 
 
@@ -585,7 +695,8 @@ class RobertaPreTrainedModel(PreTrainedModel):
     config_class = RobertaConfig
     base_model_prefix = "roberta"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["RobertaEmbeddings", "RobertaSelfAttention"]
+    _no_split_modules = ["RobertaEmbeddings", "RobertaSelfAttention", "RobertaSdpaSelfAttention"]
+    _supports_sdpa = True
 
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):
@@ -676,23 +787,22 @@ ROBERTA_INPUTS_DOCSTRING = r"""
     "The bare RoBERTa Model transformer outputting raw hidden-states without any specific head on top.",
     ROBERTA_START_DOCSTRING,
 )
+# Copied from transformers.models.bert.modeling_bert.BertModel with Bert->Roberta, BERT->ROBERTA
 class RobertaModel(RobertaPreTrainedModel):
     """
 
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
-    cross-attention is added between the self-attention layers, following the architecture described in *Attention is
-    all you need*_ by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion Jones, Aidan N. Gomez, Lukasz
-    Kaiser and Illia Polosukhin.
+    cross-attention is added between the self-attention layers, following the architecture described in [Attention is
+    all you need](https://arxiv.org/abs/1706.03762) by Ashish Vaswani, Noam Shazeer, Niki Parmar, Jakob Uszkoreit,
+    Llion Jones, Aidan N. Gomez, Lukasz Kaiser and Illia Polosukhin.
 
     To behave as an decoder the model needs to be initialized with the `is_decoder` argument of the configuration set
     to `True`. To be used in a Seq2Seq model, the model needs to initialized with both `is_decoder` argument and
     `add_cross_attention` set to `True`; an `encoder_hidden_states` is then expected as an input to the forward pass.
-
-    .. _*Attention is all you need*: https://arxiv.org/abs/1706.03762
-
     """
 
-    # Copied from transformers.models.clap.modeling_clap.ClapTextModel.__init__ with ClapText->Roberta
+    _no_split_modules = ["RobertaEmbeddings", "RobertaLayer"]
+
     def __init__(self, config, add_pooling_layer=True):
         super().__init__(config)
         self.config = config
@@ -701,6 +811,9 @@ class RobertaModel(RobertaPreTrainedModel):
         self.encoder = RobertaEncoder(config)
 
         self.pooler = RobertaPooler(config) if add_pooling_layer else None
+
+        self.attn_implementation = config._attn_implementation
+        self.position_embedding_type = config.position_embedding_type
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -725,7 +838,6 @@ class RobertaModel(RobertaPreTrainedModel):
         output_type=BaseModelOutputWithPoolingAndCrossAttentions,
         config_class=_CONFIG_FOR_DOC,
     )
-    # Copied from transformers.models.clap.modeling_clap.ClapTextModel.forward
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -746,7 +858,7 @@ class RobertaModel(RobertaPreTrainedModel):
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
             the model is configured as a decoder.
-        encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, target_length)`, *optional*):
             Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
             the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
 
@@ -789,9 +901,6 @@ class RobertaModel(RobertaPreTrainedModel):
         # past_key_values_length
         past_key_values_length = past_key_values[0][0].shape[2] if past_key_values is not None else 0
 
-        if attention_mask is None:
-            attention_mask = torch.ones(((batch_size, seq_length + past_key_values_length)), device=device)
-
         if token_type_ids is None:
             if hasattr(self.embeddings, "token_type_ids"):
                 buffered_token_type_ids = self.embeddings.token_type_ids[:, :seq_length]
@@ -800,9 +909,43 @@ class RobertaModel(RobertaPreTrainedModel):
             else:
                 token_type_ids = torch.zeros(input_shape, dtype=torch.long, device=device)
 
-        # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
-        # ourselves in which case we just need to make it broadcastable to all heads.
-        extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(attention_mask, input_shape)
+        embedding_output = self.embeddings(
+            input_ids=input_ids,
+            position_ids=position_ids,
+            token_type_ids=token_type_ids,
+            inputs_embeds=inputs_embeds,
+            past_key_values_length=past_key_values_length,
+        )
+
+        if attention_mask is None:
+            attention_mask = torch.ones((batch_size, seq_length + past_key_values_length), device=device)
+
+        use_sdpa_attention_masks = (
+            self.attn_implementation == "sdpa"
+            and self.position_embedding_type == "absolute"
+            and head_mask is None
+            and not output_attentions
+        )
+
+        # Expand the attention mask
+        if use_sdpa_attention_masks and attention_mask.dim() == 2:
+            # Expand the attention mask for SDPA.
+            # [bsz, seq_len] -> [bsz, 1, seq_len, seq_len]
+            if self.config.is_decoder:
+                extended_attention_mask = _prepare_4d_causal_attention_mask_for_sdpa(
+                    attention_mask,
+                    input_shape,
+                    embedding_output,
+                    past_key_values_length,
+                )
+            else:
+                extended_attention_mask = _prepare_4d_attention_mask_for_sdpa(
+                    attention_mask, embedding_output.dtype, tgt_len=seq_length
+                )
+        else:
+            # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
+            # ourselves in which case we just need to make it broadcastable to all heads.
+            extended_attention_mask = self.get_extended_attention_mask(attention_mask, input_shape)
 
         # If a 2D or 3D attention mask is provided for the cross-attention
         # we need to make broadcastable to [batch_size, num_heads, seq_length, seq_length]
@@ -811,7 +954,15 @@ class RobertaModel(RobertaPreTrainedModel):
             encoder_hidden_shape = (encoder_batch_size, encoder_sequence_length)
             if encoder_attention_mask is None:
                 encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
-            encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
+
+            if use_sdpa_attention_masks and encoder_attention_mask.dim() == 2:
+                # Expand the attention mask for SDPA.
+                # [bsz, seq_len] -> [bsz, 1, seq_len, seq_len]
+                encoder_extended_attention_mask = _prepare_4d_attention_mask_for_sdpa(
+                    encoder_attention_mask, embedding_output.dtype, tgt_len=seq_length
+                )
+            else:
+                encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
         else:
             encoder_extended_attention_mask = None
 
@@ -822,13 +973,6 @@ class RobertaModel(RobertaPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        embedding_output = self.embeddings(
-            input_ids=input_ids,
-            position_ids=position_ids,
-            token_type_ids=token_type_ids,
-            inputs_embeds=inputs_embeds,
-            past_key_values_length=past_key_values_length,
-        )
         encoder_outputs = self.encoder(
             embedding_output,
             attention_mask=extended_attention_mask,
@@ -860,7 +1004,7 @@ class RobertaModel(RobertaPreTrainedModel):
 @add_start_docstrings(
     """RoBERTa Model with a `language modeling` head on top for CLM fine-tuning.""", ROBERTA_START_DOCSTRING
 )
-class RobertaForCausalLM(RobertaPreTrainedModel):
+class RobertaForCausalLM(RobertaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
     def __init__(self, config):
@@ -989,27 +1133,6 @@ class RobertaForCausalLM(RobertaPreTrainedModel):
             cross_attentions=outputs.cross_attentions,
         )
 
-    def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, **model_kwargs):
-        input_shape = input_ids.shape
-        # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
-        if attention_mask is None:
-            attention_mask = input_ids.new_ones(input_shape)
-
-        # cut decoder_input_ids if past_key_values is used
-        if past_key_values is not None:
-            past_length = past_key_values[0][0].shape[2]
-
-            # Some generation methods already pass only the last input ID
-            if input_ids.shape[1] > past_length:
-                remove_prefix_length = past_length
-            else:
-                # Default to old behavior: keep only final ID
-                remove_prefix_length = input_ids.shape[1] - 1
-
-            input_ids = input_ids[:, remove_prefix_length:]
-
-        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past_key_values}
-
     def _reorder_cache(self, past_key_values, beam_idx):
         reordered_past = ()
         for layer_past in past_key_values:
@@ -1073,7 +1196,7 @@ class RobertaForMaskedLM(RobertaPreTrainedModel):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        kwargs (`Dict[str, any]`, optional, defaults to *{}*):
+        kwargs (`Dict[str, any]`, *optional*, defaults to `{}`):
             Used to hide legacy arguments that have been deprecated.
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
@@ -1557,3 +1680,15 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     mask = input_ids.ne(padding_idx).int()
     incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
     return incremental_indices.long() + padding_idx
+
+
+__all__ = [
+    "RobertaForCausalLM",
+    "RobertaForMaskedLM",
+    "RobertaForMultipleChoice",
+    "RobertaForQuestionAnswering",
+    "RobertaForSequenceClassification",
+    "RobertaForTokenClassification",
+    "RobertaModel",
+    "RobertaPreTrainedModel",
+]

@@ -22,7 +22,9 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
+from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     MoEModelOutput,
@@ -1369,7 +1371,7 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
                         f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for"
                         f" {head_mask.size()[0]}."
                     )
-        deepspeed_zero3_is_enabled = is_deepspeed_zero3_enabled()
+        synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
 
         for idx, decoder_layer in enumerate(self.layers):
             if output_hidden_states:
@@ -1379,13 +1381,13 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
             dropout_probability = torch.rand([])
 
             skip_the_layer = True if self.training and (dropout_probability < self.layerdrop) else False
-            if not skip_the_layer or deepspeed_zero3_is_enabled:
+            if not skip_the_layer or synced_gpus:
                 layer_head_mask = head_mask[idx] if head_mask is not None else None
                 cross_attn_layer_head_mask = cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None
 
                 past_key_value = past_key_values[idx] if past_key_values is not None else None
 
-                # under deepspeed zero3 all gpus must run in sync
+                # under fsdp or deepspeed zero3 all gpus must run in sync
                 if self.gradient_checkpointing and self.training:
                     if use_cache:
                         logger.warning_once(
@@ -1604,7 +1606,7 @@ class NllbMoeModel(NllbMoePreTrainedModel):
 @add_start_docstrings(
     "The NllbMoe Model with a language modeling head. Can be used for summarization.", NLLB_MOE_START_DOCSTRING
 )
-class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
+class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel, GenerationMixin):
     base_model_prefix = "model"
     _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
 
@@ -1760,44 +1762,6 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
         total_expert_indexes = torch.stack(total_expert_indexes, dim=1) if len(total_expert_indexes) > 0 else None
         return total_router_logits, total_expert_indexes
 
-    # Copied from transfomers.models.switch_transformers.SwitchTransformersForConditionalGeneration.prepare_inputs_for_generation
-    def prepare_inputs_for_generation(
-        self,
-        decoder_input_ids,
-        past_key_values=None,
-        attention_mask=None,
-        head_mask=None,
-        decoder_head_mask=None,
-        cross_attn_head_mask=None,
-        use_cache=None,
-        encoder_outputs=None,
-        **kwargs,
-    ):
-        # cut decoder_input_ids if past is used
-        if past_key_values is not None:
-            past_length = past_key_values[0][0].shape[2]
-
-            # Some generation methods already pass only the last input ID
-            if decoder_input_ids.shape[1] > past_length:
-                remove_prefix_length = past_length
-            else:
-                # Default to old behavior: keep only final ID
-                remove_prefix_length = decoder_input_ids.shape[1] - 1
-
-            decoder_input_ids = decoder_input_ids[:, remove_prefix_length:]
-
-        return {
-            "input_ids": None,  # encoder_outputs is defined. input_ids not needed
-            "encoder_outputs": encoder_outputs,
-            "past_key_values": past_key_values,
-            "decoder_input_ids": decoder_input_ids,
-            "attention_mask": attention_mask,
-            "head_mask": head_mask,
-            "decoder_head_mask": decoder_head_mask,
-            "cross_attn_head_mask": cross_attn_head_mask,
-            "use_cache": use_cache,  # change this to avoid caching (presumably for debugging)
-        }
-
     @staticmethod
     def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
@@ -1806,3 +1770,12 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
+
+
+__all__ = [
+    "NllbMoeForConditionalGeneration",
+    "NllbMoeModel",
+    "NllbMoePreTrainedModel",
+    "NllbMoeTop2Router",
+    "NllbMoeSparseMLP",
+]

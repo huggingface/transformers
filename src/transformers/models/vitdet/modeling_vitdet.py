@@ -182,7 +182,7 @@ def add_decomposed_relative_positions(attn, queries, rel_pos_h, rel_pos_w, q_siz
             Relative position embeddings (Lw, num_channels) for width axis.
         q_size (`Tuple[int]`):
             Spatial sequence size of query q with (queries_height, queries_width).
-        k_size (`Tuple[int]`]):
+        k_size (`Tuple[int]`):
             Spatial sequence size of key k with (keys_height, keys_width).
 
     Returns:
@@ -872,3 +872,6 @@ class VitDetBackbone(VitDetPreTrainedModel, BackboneMixin):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )
+
+
+__all__ = ["VitDetModel", "VitDetPreTrainedModel", "VitDetBackbone"]

@@ -56,12 +56,21 @@ def get_dpt_config(model_name):
     else:
         raise NotImplementedError(f"Model not supported: {model_name}")
 
+    if "metric" in model_name:
+        depth_estimation_type = "metric"
+        max_depth = 20 if "indoor" in model_name else 80
+    else:
+        depth_estimation_type = "relative"
+        max_depth = None
+
     config = DepthAnythingConfig(
         reassemble_hidden_size=backbone_config.hidden_size,
         patch_size=backbone_config.patch_size,
         backbone_config=backbone_config,
         fusion_hidden_size=fusion_hidden_size,
         neck_hidden_sizes=neck_hidden_sizes,
+        depth_estimation_type=depth_estimation_type,
+        max_depth=max_depth,
     )
 
     return config
@@ -178,6 +187,12 @@ name_to_checkpoint = {
     "depth-anything-v2-small": "depth_anything_v2_vits.pth",
     "depth-anything-v2-base": "depth_anything_v2_vitb.pth",
     "depth-anything-v2-large": "depth_anything_v2_vitl.pth",
+    "depth-anything-v2-metric-indoor-small": "depth_anything_v2_metric_hypersim_vits.pth",
+    "depth-anything-v2-metric-indoor-base": "depth_anything_v2_metric_hypersim_vitb.pth",
+    "depth-anything-v2-metric-indoor-large": "depth_anything_v2_metric_hypersim_vitl.pth",
+    "depth-anything-v2-metric-outdoor-small": "depth_anything_v2_metric_vkitti_vits.pth",
+    "depth-anything-v2-metric-outdoor-base": "depth_anything_v2_metric_vkitti_vitb.pth",
+    "depth-anything-v2-metric-outdoor-large": "depth_anything_v2_metric_vkitti_vitl.pth",
     # v2-giant pending
 }
 
@@ -198,6 +213,12 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
         "depth-anything-v2-small": "depth-anything/Depth-Anything-V2-Small",
         "depth-anything-v2-base": "depth-anything/Depth-Anything-V2-Base",
         "depth-anything-v2-large": "depth-anything/Depth-Anything-V2-Large",
+        "depth-anything-v2-metric-indoor-small": "depth-anything/Depth-Anything-V2-Metric-Hypersim-Small",
+        "depth-anything-v2-metric-indoor-base": "depth-anything/Depth-Anything-V2-Metric-Hypersim-Base",
+        "depth-anything-v2-metric-indoor-large": "depth-anything/Depth-Anything-V2-Metric-Hypersim-Large",
+        "depth-anything-v2-metric-outdoor-small": "depth-anything/Depth-Anything-V2-Metric-VKITTI-Small",
+        "depth-anything-v2-metric-outdoor-base": "depth-anything/Depth-Anything-V2-Metric-VKITTI-Base",
+        "depth-anything-v2-metric-outdoor-large": "depth-anything/Depth-Anything-V2-Metric-VKITTI-Large",
     }
 
     # load original state_dict
@@ -271,6 +292,30 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
         elif model_name == "depth-anything-v2-large":
             expected_slice = torch.tensor(
                 [[162.2751, 161.8504, 162.8788], [160.3138, 160.8050, 161.9835], [159.3812, 159.9884, 160.0768]]
+            )
+        elif model_name == "depth-anything-v2-metric-indoor-small":
+            expected_slice = torch.tensor(
+                [[1.3349, 1.2946, 1.2801], [1.2793, 1.2337, 1.2899], [1.2629, 1.2218, 1.2476]]
+            )
+        elif model_name == "depth-anything-v2-metric-indoor-base":
+            expected_slice = torch.tensor(
+                [[1.4601, 1.3824, 1.4904], [1.5031, 1.4349, 1.4274], [1.4570, 1.4578, 1.4200]]
+            )
+        elif model_name == "depth-anything-v2-metric-indoor-large":
+            expected_slice = torch.tensor(
+                [[1.5040, 1.5019, 1.5218], [1.5087, 1.5195, 1.5149], [1.5437, 1.5128, 1.5252]]
+            )
+        elif model_name == "depth-anything-v2-metric-outdoor-small":
+            expected_slice = torch.tensor(
+                [[9.5804, 8.0339, 7.7386], [7.9890, 7.2464, 7.7149], [7.7021, 7.2330, 7.3304]]
+            )
+        elif model_name == "depth-anything-v2-metric-outdoor-base":
+            expected_slice = torch.tensor(
+                [[10.2916, 9.0933, 8.8622], [9.1964, 9.3393, 9.0644], [8.9618, 9.4201, 9.2262]]
+            )
+        elif model_name == "depth-anything-v2-metric-outdoor-large":
+            expected_slice = torch.tensor(
+                [[14.0137, 13.3627, 13.1080], [13.2522, 13.3943, 13.3705], [13.0581, 13.4505, 13.3925]]
             )
         else:
             raise ValueError("Not supported")

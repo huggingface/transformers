@@ -41,9 +41,9 @@ class ConvNextConfig(BackboneConfigMixin, PretrainedConfig):
     Args:
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
-        patch_size (`int`, optional, defaults to 4):
+        patch_size (`int`, *optional*, defaults to 4):
             Patch size to use in the patch embedding layer.
-        num_stages (`int`, optional, defaults to 4):
+        num_stages (`int`, *optional*, defaults to 4):
             The number of stages in the model.
         hidden_sizes (`List[int]`, *optional*, defaults to [96, 192, 384, 768]):
             Dimensionality (hidden size) at each stage.
@@ -137,3 +137,6 @@ class ConvNextOnnxConfig(OnnxConfig):
     @property
     def atol_for_validation(self) -> float:
         return 1e-5
+
+
+__all__ = ["ConvNextConfig", "ConvNextOnnxConfig"]

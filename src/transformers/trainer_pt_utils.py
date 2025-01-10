@@ -56,19 +56,8 @@ if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
 if is_torch_available():
-    from .pytorch_utils import is_torch_greater_or_equal_than_2_0
+    from torch.optim.lr_scheduler import LRScheduler
 
-    if is_torch_greater_or_equal_than_2_0:
-        from torch.optim.lr_scheduler import LRScheduler
-    else:
-        from torch.optim.lr_scheduler import _LRScheduler as LRScheduler
-
-
-# this is used to suppress an undesired warning emitted by pytorch versions 1.4.2-1.7.0
-try:
-    from torch.optim.lr_scheduler import SAVE_STATE_WARNING
-except ImportError:
-    SAVE_STATE_WARNING = ""
 
 logger = logging.get_logger(__name__)
 
@@ -134,7 +123,7 @@ def nested_concat(tensors, new_tensors, padding_index=-100):
     """
     if not (isinstance(tensors, torch.Tensor) and isinstance(new_tensors, torch.Tensor)):
         assert (
-            type(tensors) == type(new_tensors)
+            type(tensors) is type(new_tensors)
         ), f"Expected `tensors` and `new_tensors` to have the same type but found {type(tensors)} and {type(new_tensors)}."
     if isinstance(tensors, (list, tuple)):
         return type(tensors)(nested_concat(t, n, padding_index=padding_index) for t, n in zip(tensors, new_tensors))
@@ -251,10 +240,10 @@ def distributed_broadcast_scalars(
 
 
 def reissue_pt_warnings(caught_warnings):
-    # Reissue warnings that are not the SAVE_STATE_WARNING
+    # Reissue warnings
     if len(caught_warnings) > 1:
         for w in caught_warnings:
-            if w.category is not UserWarning or w.message != SAVE_STATE_WARNING:
+            if w.category is not UserWarning:
                 warnings.warn(w.message, w.category)
 
 

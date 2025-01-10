@@ -118,7 +118,7 @@ def select_starts_ends(
         max_answer_len (`int`): Maximum size of the answer to extract from the model's output.
     """
     # Ensure padded tokens & question tokens cannot belong to the set of candidate answers.
-    undesired_tokens = np.abs(p_mask.numpy() - 1)
+    undesired_tokens = np.abs(np.array(p_mask) - 1)
 
     if attention_mask is not None:
         undesired_tokens = undesired_tokens & attention_mask
@@ -183,8 +183,16 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
         # Generic compatibility with sklearn and Keras
         # Batched data
         elif "X" in kwargs:
+            warnings.warn(
+                "Passing the `X` argument to the pipeline is deprecated and will be removed in v5. Inputs should be passed using the `question` and `context` keyword arguments instead.",
+                FutureWarning,
+            )
             inputs = kwargs["X"]
         elif "data" in kwargs:
+            warnings.warn(
+                "Passing the `data` argument to the pipeline is deprecated and will be removed in v5. Inputs should be passed using the `question` and `context` keyword arguments instead.",
+                FutureWarning,
+            )
             inputs = kwargs["data"]
         elif "question" in kwargs and "context" in kwargs:
             if isinstance(kwargs["question"], list) and isinstance(kwargs["context"], str):
@@ -345,22 +353,14 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         Answer the question(s) given as inputs by using the context(s).
 
         Args:
-            args ([`SquadExample`] or a list of [`SquadExample`]):
-                One or several [`SquadExample`] containing the question and context.
-            X ([`SquadExample`] or a list of [`SquadExample`], *optional*):
-                One or several [`SquadExample`] containing the question and context (will be treated the same way as if
-                passed as the first positional argument).
-            data ([`SquadExample`] or a list of [`SquadExample`], *optional*):
-                One or several [`SquadExample`] containing the question and context (will be treated the same way as if
-                passed as the first positional argument).
             question (`str` or `List[str]`):
                 One or several question(s) (must be used in conjunction with the `context` argument).
             context (`str` or `List[str]`):
                 One or several context(s) associated with the question(s) (must be used in conjunction with the
                 `question` argument).
-            topk (`int`, *optional*, defaults to 1):
+            top_k (`int`, *optional*, defaults to 1):
                 The number of answers to return (will be chosen by order of likelihood). Note that we return less than
-                topk answers if there are not enough options available within the context.
+                top_k answers if there are not enough options available within the context.
             doc_stride (`int`, *optional*, defaults to 128):
                 If the context is too long to fit with the question for the model, it will be split in several chunks
                 with some overlap. This argument controls the size of that overlap.
@@ -374,7 +374,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             handle_impossible_answer (`bool`, *optional*, defaults to `False`):
                 Whether or not we accept impossible as an answer.
             align_to_words (`bool`, *optional*, defaults to `True`):
-                Attempts to align the answer to real words. Improves quality on space separated langages. Might hurt on
+                Attempts to align the answer to real words. Improves quality on space separated languages. Might hurt on
                 non-space-separated languages (like Japanese or Chinese)
 
         Return:
@@ -387,6 +387,11 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         """
 
         # Convert inputs to features
+        if args:
+            warnings.warn(
+                "Passing a list of SQuAD examples to the pipeline is deprecated and will be removed in v5. Inputs should be passed using the `question` and `context` keyword arguments instead.",
+                FutureWarning,
+            )
 
         examples = self._args_parser(*args, **kwargs)
         if isinstance(examples, (list, tuple)) and len(examples) == 1:
@@ -535,8 +540,14 @@ class QuestionAnsweringPipeline(ChunkPipeline):
         min_null_score = 1000000  # large and positive
         answers = []
         for output in model_outputs:
-            start_ = output["start"]
-            end_ = output["end"]
+            if self.framework == "pt" and output["start"].dtype == torch.bfloat16:
+                start_ = output["start"].to(torch.float32)
+            else:
+                start_ = output["start"]
+            if self.framework == "pt" and output["start"].dtype == torch.bfloat16:
+                end_ = output["end"].to(torch.float32)
+            else:
+                end_ = output["end"]
             example = output["example"]
             p_mask = output["p_mask"]
             attention_mask = (

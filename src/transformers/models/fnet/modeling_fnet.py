@@ -651,7 +651,7 @@ class FNetForPreTraining(FNetPreTrainedModel):
 
             - 0 indicates sequence B is a continuation of sequence A,
             - 1 indicates sequence B is a random sequence.
-        kwargs (`Dict[str, any]`, optional, defaults to *{}*):
+        kwargs (`Dict[str, any]`, *optional*, defaults to `{}`):
             Used to hide legacy arguments that have been deprecated.
 
         Returns:
@@ -1183,3 +1183,17 @@ class FNetForQuestionAnswering(FNetPreTrainedModel):
         return QuestionAnsweringModelOutput(
             loss=total_loss, start_logits=start_logits, end_logits=end_logits, hidden_states=outputs.hidden_states
         )
+
+
+__all__ = [
+    "FNetForMaskedLM",
+    "FNetForMultipleChoice",
+    "FNetForNextSentencePrediction",
+    "FNetForPreTraining",
+    "FNetForQuestionAnswering",
+    "FNetForSequenceClassification",
+    "FNetForTokenClassification",
+    "FNetLayer",
+    "FNetModel",
+    "FNetPreTrainedModel",
+]

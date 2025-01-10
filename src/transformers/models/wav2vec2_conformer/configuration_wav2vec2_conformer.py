@@ -184,9 +184,9 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
             If `"rotary"` position embeddings are used, defines the size of the embedding base.
         max_source_positions (`int`, *optional*, defaults to 5000):
             if `"relative"` position embeddings are used, defines the maximum source input positions.
-        conv_depthwise_kernel_size (`int`, defaults to 31):
+        conv_depthwise_kernel_size (`int`, *optional*, defaults to 31):
             Kernel size of convolutional depthwise 1D layer in Conformer blocks.
-        conformer_conv_dropout (`float`, defaults to 0.1):
+        conformer_conv_dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for all convolutional layers in Conformer blocks.
 
     Example:
@@ -355,3 +355,6 @@ class Wav2Vec2ConformerConfig(PretrainedConfig):
     @property
     def inputs_to_logits_ratio(self):
         return functools.reduce(operator.mul, self.conv_stride, 1)
+
+
+__all__ = ["Wav2Vec2ConformerConfig"]

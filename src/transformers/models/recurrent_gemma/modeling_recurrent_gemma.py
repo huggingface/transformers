@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import BaseModelOutputWithNoAttention, CausalLMOutput
 from ...modeling_utils import PreTrainedModel
@@ -34,6 +35,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.import_utils import is_torchdynamo_compiling
 from .configuration_recurrent_gemma import RecurrentGemmaConfig
 
 
@@ -59,6 +61,9 @@ class RecurrentGemmaRMSNorm(nn.Module):
         output = output * (1.0 + self.weight.float())
         return output.type_as(x)
 
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.eps}"
+
 
 ALL_LAYERNORM_LAYERS.append(RecurrentGemmaRMSNorm)
 
@@ -72,7 +77,6 @@ class RecurrentGemmaRotaryEmbedding(nn.Module):
         self.register_buffer("inv_freq", tensor=inv_freq, persistent=False)
 
     @torch.no_grad()
-    # Copied from transformers.models.gemma.modeling_gemma.GemmaRotaryEmbedding.forward with Gemma->RecurrentGemma
     def forward(self, x, position_ids, seq_len=None):
         # x: [bs, num_attention_heads, seq_len, head_size]
         self.inv_freq.to(x.device)
@@ -180,7 +184,7 @@ class RecurrentGemmaSdpaAttention(nn.Module):
         key_states = key_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
         value_states = value_states.view(bsz, q_len, self.num_key_value_heads, self.head_dim).transpose(1, 2)
 
-        cos, sin = self.rotary_emb(value_states, position_ids, seq_len=None)
+        cos, sin = self.rotary_emb(value_states, position_ids)
 
         # Partial rotary embedding
         query_rot, query_pass = torch.chunk(query_states, int(1 / self.partial_rotary_factor), dim=-1)
@@ -326,9 +330,7 @@ class RecurrentGemmaRglru(nn.Module):
         # Apply gamma normalization to the input. We need to clip the derivatives of
         # `sqrt` in order to prevent NaNs during training in bfloat16. TODO a bit annoying
         multiplier = 1
-        tracing = isinstance(activations, torch.fx.Proxy) or (
-            hasattr(torch, "_dynamo") and torch._dynamo.is_compiling()
-        )
+        tracing = isinstance(activations, torch.fx.Proxy) or is_torchdynamo_compiling()
         if not torch.jit.is_tracing() and not tracing:
             multiplier = SqrtBoundDerivative.apply(1 - a_square)
         multiplier = reset + ~reset * multiplier
@@ -692,9 +694,7 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError(
-                "You cannot specify both input_ids and inputs_embeds at the same time, and must specify either one"
-            )
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
         if self.gradient_checkpointing and self.training and use_cache:
             logger.warning_once(
@@ -744,10 +744,6 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
             hidden_states=all_hidden_states,
         )
 
-    # TODO: As of torch==2.2.0, the `attention_mask` passed to the model in `generate` is 2D and of dynamic length even when the static
-    # KV cache is used. This is an issue for torch.compile which then recaptures cudagraphs at each decode steps due to the dynamic shapes.
-    # (`recording cudagraph tree for symint key 13`, etc.), which is VERY slow. A workaround is `@torch.compiler.disable`, but this prevents using
-    # `fullgraph=True`. See more context in https://github.com/huggingface/transformers/pull/29114
     # Ignore copy
     def _update_causal_mask(self, attention_mask, input_tensor, cache_position):
         dtype, device = input_tensor.dtype, input_tensor.device
@@ -778,8 +774,8 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
         return causal_mask
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->RECURRENTGEMMA,Llama->RecurrentGemma,llama->gemma
-class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
+# TODO: re-enable check: Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->RECURRENTGEMMA,Llama->RecurrentGemma,llama->gemma
+class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config):
@@ -815,6 +811,7 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -855,6 +852,7 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
         output_hidden_states = True
         outputs = self.model(
             input_ids=input_ids,
+            position_ids=position_ids,
             cache_position=cache_position,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
@@ -871,9 +869,10 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
         cap = self.config.logits_soft_cap
         logits = nn.functional.tanh(logits / cap) * cap
 
-        logits = logits.float()
         loss = None
         if labels is not None:
+            # Upcast to float if we need to compute the loss to avoid potential precision issues
+            logits = logits.float()
             # Shift so that tokens < n predict n
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
@@ -896,39 +895,6 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
         )
 
     # Ignore copy
-    def prepare_inputs_for_generation(
-        self, input_ids, attention_mask=None, inputs_embeds=None, cache_position=None, use_cache=None, **kwargs
-    ):
-        position_ids = kwargs.get("position_ids", None)
-        if attention_mask is not None and position_ids is None:
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-
-        attention_mask = attention_mask[:, -self.config.attention_window_size :]
-
-        past_length = cache_position[0]
-        if past_length > 0:
-            position_ids = position_ids[:, past_length:]
-
-        if inputs_embeds is not None:
-            model_inputs = {"inputs_embeds": inputs_embeds[:, past_length:]}
-        else:
-            model_inputs = {"input_ids": input_ids[:, past_length:].contiguous()}
-
-        if cache_position is not None:
-            cache_position = cache_position[-position_ids.shape[1] :]
-
-        model_inputs.update(
-            {
-                "position_ids": position_ids,
-                "attention_mask": attention_mask,
-                "cache_position": cache_position,
-                "use_cache": use_cache,
-            }
-        )
-        return model_inputs
-
-    # Ignore copy
     def _reorder_cache(self, past_key_values, beam_idx):
         for layer in self.layers:
             if hasattr(layer.temporal_block, "key_states"):
@@ -937,3 +903,6 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel):
                 k_state = k_state.index_select(0, beam_idx.to(k_state.device))
                 v_state = v_state.index_select(0, beam_idx.to(v_state.device))
         return None
+
+
+__all__ = ["RecurrentGemmaForCausalLM", "RecurrentGemmaModel", "RecurrentGemmaPreTrainedModel"]

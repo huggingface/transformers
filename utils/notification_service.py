@@ -520,6 +520,65 @@ class Message:
         if len(new_failure_blocks) > 0:
             blocks.extend(new_failure_blocks)
 
+        # To save the list of new model failures
+        extra_blocks = self.get_new_model_failure_blocks(to_truncate=False)
+        if extra_blocks:
+            failure_text = extra_blocks[-1]["text"]["text"]
+            file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.txt")
+            with open(file_path, "w", encoding="UTF-8") as fp:
+                fp.write(failure_text)
+
+            # upload results to Hub dataset
+            file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.txt")
+            commit_info = api.upload_file(
+                path_or_fileobj=file_path,
+                path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/new_model_failures.txt",
+                repo_id="hf-internal-testing/transformers_daily_ci",
+                repo_type="dataset",
+                token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
+            )
+            url = f"https://huggingface.co/datasets/hf-internal-testing/transformers_daily_ci/raw/{commit_info.oid}/{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/new_model_failures.txt"
+
+            # extra processing to save to json format
+            new_failed_tests = {}
+            for line in failure_text.split():
+                if "https://github.com/huggingface/transformers/actions/runs" in line:
+                    pattern = r"<(https://github.com/huggingface/transformers/actions/runs/.+?/job/.+?)\|(.+?)>"
+                    items = re.findall(pattern, line)
+                elif "tests/models/" in line:
+                    model = line.split("/")[2]
+                    if model not in new_failed_tests:
+                        new_failed_tests[model] = {"single-gpu": [], "multi-gpu": []}
+                    for url, device in items:
+                        new_failed_tests[model][f"{device}-gpu"].append(line)
+            file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.json")
+            with open(file_path, "w", encoding="UTF-8") as fp:
+                json.dump(new_failed_tests, fp, ensure_ascii=False, indent=4)
+
+            # upload results to Hub dataset
+            file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.json")
+            _ = api.upload_file(
+                path_or_fileobj=file_path,
+                path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/new_model_failures.json",
+                repo_id="hf-internal-testing/transformers_daily_ci",
+                repo_type="dataset",
+                token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
+            )
+
+            block = {
+                "type": "section",
+                "text": {
+                    "type": "plain_text",
+                    "text": " ",
+                },
+                "accessory": {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": "Check New model failures"},
+                    "url": url,
+                },
+            }
+            blocks.append(block)
+
         return json.dumps(blocks)
 
     @staticmethod
@@ -764,14 +823,6 @@ class Message:
             )
 
             time.sleep(1)
-
-        # To save the list of new model failures
-        blocks = self.get_new_model_failure_blocks(to_truncate=False)
-        if blocks:
-            failure_text = blocks[-1]["text"]["text"]
-            file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/new_model_failures.txt")
-            with open(file_path, "w", encoding="UTF-8") as fp:
-                fp.write(failure_text)
 
 
 def retrieve_artifact(artifact_path: str, gpu: Optional[str]):
@@ -1025,6 +1076,11 @@ if __name__ == "__main__":
 
                 for line in artifact["summary_short"].split("\n"):
                     if line.startswith("FAILED "):
+                        # Avoid the extra `FAILED` entry given by `run_test_using_subprocess` causing issue when calling
+                        # `stacktraces.pop` below.
+                        # See `run_test_using_subprocess` in `src/transformers/testing_utils.py`
+                        if " - Failed: (subprocess)" in line:
+                            continue
                         line = line[len("FAILED ") :]
                         line = line.split()[0].replace("\n", "")
 
@@ -1135,6 +1191,11 @@ if __name__ == "__main__":
             if failed:
                 for line in artifact["summary_short"].split("\n"):
                     if line.startswith("FAILED "):
+                        # Avoid the extra `FAILED` entry given by `run_test_using_subprocess` causing issue when calling
+                        # `stacktraces.pop` below.
+                        # See `run_test_using_subprocess` in `src/transformers/testing_utils.py`
+                        if " - Failed: (subprocess)" in line:
+                            continue
                         line = line[len("FAILED ") :]
                         line = line.split()[0].replace("\n", "")
 

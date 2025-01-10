@@ -192,7 +192,7 @@ class GPTNeoXJapaneseTokenizer(PreTrainedTokenizer):
         return vocab_file, emoji_file
 
 
-class SubWordJapaneseTokenizer(object):
+class SubWordJapaneseTokenizer:
     """
     https://github.com/tanreinama/Japanese-BPEEncoder_V2 This tokenizer class is under MIT Lisence according to the
     original repository.
@@ -349,3 +349,6 @@ class SubWordJapaneseTokenizer(object):
             words.append(bytearray(byte_tokens).decode("utf-8", errors="replace"))
         text = "".join(words)
         return text
+
+
+__all__ = ["GPTNeoXJapaneseTokenizer"]

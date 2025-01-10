@@ -46,6 +46,7 @@ class GLPNImageProcessingTester(unittest.TestCase):
         size_divisor=32,
         do_rescale=True,
     ):
+        super().__init__()
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels

@@ -55,7 +55,7 @@ from transformers.utils.versions import require_version
 logger = logging.getLogger(__name__)
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.44.0.dev0")
+check_min_version("4.48.0.dev0")
 
 require_version("datasets>=1.8.0", "To fix: pip install -r examples/pytorch/image-classification/requirements.txt")
 
@@ -282,7 +282,6 @@ def main():
             data_args.dataset_name,
             data_args.dataset_config_name,
             cache_dir=model_args.cache_dir,
-            task="image-classification",
             token=model_args.token,
             trust_remote_code=model_args.trust_remote_code,
         )
@@ -296,7 +295,6 @@ def main():
             "imagefolder",
             data_files=data_files,
             cache_dir=model_args.cache_dir,
-            task="image-classification",
         )
     # See more about loading any type of standard or custom dataset (from files, python dict, pandas DataFrame, etc) at
     # https://huggingface.co/docs/datasets/loading_datasets.

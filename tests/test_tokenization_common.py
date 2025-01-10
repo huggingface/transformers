@@ -25,6 +25,7 @@ import traceback
 import unittest
 from collections import OrderedDict
 from itertools import takewhile
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, List, Tuple, Union
 
 from parameterized import parameterized
@@ -1106,14 +1107,34 @@ class TokenizerTesterMixin:
                 tokenizer.apply_chat_template(dummy_conversation, tokenize=True, return_dict=False)
 
                 with tempfile.TemporaryDirectory() as tmp_dir_name:
-                    tokenizer.save_pretrained(tmp_dir_name)
-                    tokenizer = tokenizer.from_pretrained(tmp_dir_name)
+                    save_files = tokenizer.save_pretrained(tmp_dir_name)
+                    # Check we aren't saving a chat_template.jinja file
+                    self.assertFalse(any(file.endswith("chat_template.jinja") for file in save_files))
+                    new_tokenizer = tokenizer.from_pretrained(tmp_dir_name)
 
-                self.assertEqual(tokenizer.chat_template, dummy_template)  # Test template has persisted
-                output = tokenizer.apply_chat_template(dummy_conversation, tokenize=False, return_dict=False)
+                self.assertEqual(new_tokenizer.chat_template, dummy_template)  # Test template has persisted
+                output = new_tokenizer.apply_chat_template(dummy_conversation, tokenize=False, return_dict=False)
                 self.assertEqual(output, expected_output)  # Test output is the same after reloading
                 # Check that no error raised
-                tokenizer.apply_chat_template(dummy_conversation, tokenize=True, return_dict=False)
+                new_tokenizer.apply_chat_template(dummy_conversation, tokenize=True, return_dict=False)
+
+                with tempfile.TemporaryDirectory() as tmp_dir_name:
+                    save_files = tokenizer.save_pretrained(tmp_dir_name, save_raw_chat_template=True)
+                    # Check we are saving a chat_template.jinja file
+                    self.assertTrue(any(file.endswith("chat_template.jinja") for file in save_files))
+                    chat_template_file = Path(tmp_dir_name) / "chat_template.jinja"
+                    self.assertTrue(chat_template_file.is_file())
+                    self.assertEqual(chat_template_file.read_text(), dummy_template)
+                    config_dict = json.loads((Path(tmp_dir_name) / "tokenizer_config.json").read_text())
+                    # Assert the chat template is not in the config when it's saved as a separate file
+                    self.assertNotIn("chat_template", config_dict)
+                    new_tokenizer = tokenizer.from_pretrained(tmp_dir_name)
+
+                self.assertEqual(new_tokenizer.chat_template, dummy_template)  # Test template has persisted
+                output = new_tokenizer.apply_chat_template(dummy_conversation, tokenize=False, return_dict=False)
+                self.assertEqual(output, expected_output)  # Test output is the same after reloading
+                # Check that no error raised
+                new_tokenizer.apply_chat_template(dummy_conversation, tokenize=True, return_dict=False)
 
     @require_jinja
     def test_chat_template_batched(self):
@@ -1152,6 +1173,51 @@ class TokenizerTesterMixin:
                 tokenizer.apply_chat_template(
                     dummy_conversations, chat_template=dummy_template, tokenize=True
                 )  # Check that no error raised
+
+    @require_jinja
+    def test_jinja_loopcontrols(self):
+        break_template = """
+        {%- for message in messages %}
+            {{- message.role + " " + message.content }}
+            {%- if loop.first %}
+                {%- break %}
+            {%- endif %}
+        {%- endfor %}""".strip()
+
+        dummy_conversation = [
+            {"role": "system", "content": "1"},
+            {"role": "user", "content": "2"},
+            {"role": "assistant", "content": "3"},
+        ]
+
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                break_output = tokenizer.apply_chat_template(
+                    dummy_conversation, chat_template=break_template, tokenize=False
+                )
+                self.assertEqual(break_output, "system 1")  # Loop should break after first iter
+
+    @require_jinja
+    def test_jinja_strftime(self):
+        strftime_template = """{{- strftime_now("%Y-%m-%d") }}""".strip()
+
+        dummy_conversation = [
+            {"role": "system", "content": "1"},
+            {"role": "user", "content": "2"},
+            {"role": "assistant", "content": "3"},
+        ]
+
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                strftime_output = tokenizer.apply_chat_template(
+                    dummy_conversation, chat_template=strftime_template, tokenize=False
+                )
+
+                # Assert that we get a date formatted as expected
+                self.assertEqual(len(strftime_output), 10)
+                self.assertEqual(len(strftime_output.split("-")), 3)
 
     @require_jinja
     def test_chat_template_return_assistant_tokens_mask(self):
@@ -1283,6 +1349,172 @@ class TokenizerTesterMixin:
                 )
 
     @require_jinja
+    def test_chat_template_return_assistant_tokens_mask_truncated(self):
+        dummy_template = (
+            "{% for message in messages %}"
+            "{% if (message['role'] != 'assistant') %}"
+            "{{'<|im_start|>' + message['role'] + '\n' + message['content'] + '<|im_end|>' + '\n'}}"
+            "{% elif (message['role'] == 'assistant')%}"
+            "{{'<|im_start|>' + message['role'] + '\n'}}"
+            "{% generation %}"
+            "{{message['content'] + '<|im_end|>'}}"
+            "{% endgeneration %}"
+            "{{'\n'}}"
+            "{% endif %}"
+            "{% endfor %}"
+        )
+        conversations = [
+            [
+                {"role": "system", "content": "system message"},
+                {"role": "user", "content": "user message"},
+                {
+                    "role": "assistant",
+                    "content": (
+                        "start turn assistant. long string to be truncated, long string to be truncated, "
+                        "long string to be truncated, long string to be truncated, long string to be truncated"
+                    ),
+                },
+                {"role": "user", "content": "another user message"},
+            ],
+            [
+                {"role": "system", "content": "system message"},
+                {"role": "user", "content": "user message"},
+                {
+                    "role": "assistant",
+                    "content": (
+                        "start turn assistant. long string to be truncated, long string to be truncated, "
+                        "long string to be truncated, long string to be truncated, long string to be truncated"
+                    ),
+                },
+                {"role": "user", "content": "another user message"},
+            ],
+        ]
+
+        for tokenizer, pretrained_name, _ in self.tokenizers_list:
+            with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
+                if not self.test_rust_tokenizer:
+                    self.skipTest(reason="No fast tokenizer defined")
+
+                tokenizer_r = self.rust_tokenizer_class.from_pretrained(pretrained_name)
+
+                # Find where to truncate, as the amount of tokens is different for different tokenizers and I want the
+                # truncation to happen in the middle of the assistant content.
+                full_encoding = tokenizer_r.apply_chat_template(
+                    conversations[0],
+                    chat_template=dummy_template,
+                    tokenize=True,
+                    return_dict=True,
+                )
+                chat_string = tokenizer_r.apply_chat_template(
+                    conversations[0], tokenize=False, chat_template=dummy_template
+                )
+                truncation_position = full_encoding.char_to_token(chat_string.index(", long string to be truncated,"))
+
+                # check batched
+                output = tokenizer_r.apply_chat_template(
+                    conversations,
+                    chat_template=dummy_template,
+                    tokenize=True,
+                    return_assistant_tokens_mask=True,
+                    max_length=truncation_position,
+                    truncation=True,
+                    return_dict=True,
+                )
+                for i, conv in enumerate(conversations):
+                    chat_string = tokenizer_r.apply_chat_template(conv, tokenize=False, chat_template=dummy_template)
+                    assistant_start = output.char_to_token(i, chat_string.index("start turn assistant"))
+
+                    # assert 1 from assistant_start to the end because the rest is truncated.
+                    self.assertEqual(
+                        output["assistant_masks"][i][assistant_start:],
+                        [1] * (len(output["assistant_masks"][i]) - assistant_start),
+                    )
+
+                # check not batched
+                output = tokenizer_r.apply_chat_template(
+                    conversations[0],
+                    chat_template=dummy_template,
+                    tokenize=True,
+                    return_assistant_tokens_mask=True,
+                    return_dict=True,
+                    max_length=truncation_position,
+                    truncation=True,
+                )
+
+                chat_string = tokenizer_r.apply_chat_template(
+                    conversations[0], tokenize=False, chat_template=dummy_template
+                )
+                assistant_start = output.char_to_token(0, chat_string.index("start turn assistant"))
+
+                # assert 1 from assistant_start to the end because the rest is truncated.
+                self.assertEqual(
+                    output["assistant_masks"][assistant_start:],
+                    [1] * (len(output["assistant_masks"]) - assistant_start),
+                )
+
+    @require_jinja
+    def test_continue_final_message(self):
+        dummy_template = """
+        {%- for message in messages %}
+            {{- "<|im_start|>" + message['role'] + "\n" + message['content'] + "<|im_end|>" + "\n"}}
+        {%- endfor %}"""
+        dummy_conversation = [
+            {"role": "system", "content": "system message"},
+            {"role": "user", "content": "user message"},
+            {"role": "assistant", "content": "assistant message"},
+        ]
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                output = tokenizer.apply_chat_template(
+                    dummy_conversation, chat_template=dummy_template, tokenize=False, continue_final_message=False
+                )
+                self.assertEqual(
+                    output,
+                    "<|im_start|>system\nsystem message<|im_end|>\n<|im_start|>user\nuser message<|im_end|>\n<|im_start|>assistant\nassistant message<|im_end|>\n",
+                )
+                prefill_output = tokenizer.apply_chat_template(
+                    dummy_conversation, chat_template=dummy_template, tokenize=False, continue_final_message=True
+                )
+                # Assert that the final message is unterminated
+                self.assertEqual(
+                    prefill_output,
+                    "<|im_start|>system\nsystem message<|im_end|>\n<|im_start|>user\nuser message<|im_end|>\n<|im_start|>assistant\nassistant message",
+                )
+
+    @require_jinja
+    def test_continue_final_message_with_trim(self):
+        """Regression test for chat templates with trimming: https://github.com/huggingface/transformers/pull/34214"""
+
+        dummy_template = """
+        {%- for message in messages %}
+            {{- "<|im_start|>" + message['role'] + "\n" + message['content'] | trim + "<|im_end|>" + "\n"}}
+        {%- endfor %}"""
+        dummy_conversation = [
+            {"role": "system", "content": "system message"},
+            {"role": "user", "content": "user message"},
+            {"role": "assistant", "content": "assistant message "},  # Note the trailing whitespace
+        ]
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                output = tokenizer.apply_chat_template(
+                    dummy_conversation, chat_template=dummy_template, tokenize=False, continue_final_message=False
+                )
+                self.assertEqual(
+                    output,
+                    "<|im_start|>system\nsystem message<|im_end|>\n<|im_start|>user\nuser message<|im_end|>\n<|im_start|>assistant\nassistant message<|im_end|>\n",
+                )
+                prefill_output = tokenizer.apply_chat_template(
+                    dummy_conversation, chat_template=dummy_template, tokenize=False, continue_final_message=True
+                )
+                # Assert that the final message is unterminated
+                self.assertEqual(
+                    prefill_output,
+                    "<|im_start|>system\nsystem message<|im_end|>\n<|im_start|>user\nuser message<|im_end|>\n<|im_start|>assistant\nassistant message",
+                )
+
+    @require_jinja
     def test_chat_template_dict(self):
         dummy_template_1 = "{{'a'}}"
         dummy_template_2 = "{{'b'}}"
@@ -1315,18 +1547,40 @@ class TokenizerTesterMixin:
         tokenizers = self.get_tokenizers()
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
-                tokenizer.chat_template = {"template1": dummy_template_1, "template2": dummy_template_2}
+                for save_raw_chat_template in (True, False):
+                    tokenizer.chat_template = {"template1": dummy_template_1, "template2": dummy_template_2}
+                    with tempfile.TemporaryDirectory() as tmp_dir_name:
+                        # Test that save_raw_chat_template is ignored when there's a dict of multiple templates
+                        tokenizer.save_pretrained(tmp_dir_name, save_raw_chat_template=save_raw_chat_template)
+                        config_dict = json.load(open(os.path.join(tmp_dir_name, "tokenizer_config.json")))
+                        # Assert that chat templates are correctly serialized as lists of dictionaries
+                        self.assertEqual(
+                            config_dict["chat_template"],
+                            [
+                                {"name": "template1", "template": "{{'a'}}"},
+                                {"name": "template2", "template": "{{'b'}}"},
+                            ],
+                        )
+                        self.assertFalse(os.path.exists(os.path.join(tmp_dir_name, "chat_template.jinja")))
+                        new_tokenizer = tokenizer.from_pretrained(tmp_dir_name)
+                    # Assert that the serialized list is correctly reconstructed as a single dict
+                    self.assertEqual(new_tokenizer.chat_template, tokenizer.chat_template)
+
+    @require_jinja
+    def test_chat_template_file_priority(self):
+        dummy_template1 = "a"
+        dummy_template2 = "b"
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
                 with tempfile.TemporaryDirectory() as tmp_dir_name:
-                    tokenizer.save_pretrained(tmp_dir_name)
-                    config_dict = json.load(open(os.path.join(tmp_dir_name, "tokenizer_config.json")))
-                    # Assert that chat templates are correctly serialized as lists of dictionaries
-                    self.assertEqual(
-                        config_dict["chat_template"],
-                        [{"name": "template1", "template": "{{'a'}}"}, {"name": "template2", "template": "{{'b'}}"}],
-                    )
+                    tokenizer.chat_template = dummy_template1
+                    tokenizer.save_pretrained(tmp_dir_name, save_raw_chat_template=False)
+                    with Path(tmp_dir_name, "chat_template.jinja").open("w") as f:
+                        f.write(dummy_template2)
                     new_tokenizer = tokenizer.from_pretrained(tmp_dir_name)
-                # Assert that the serialized list is correctly reconstructed as a single dict
-                self.assertEqual(new_tokenizer.chat_template, tokenizer.chat_template)
+                # Assert the file template clobbers any template in the config
+                self.assertEqual(new_tokenizer.chat_template, dummy_template2)
 
     def test_number_of_added_tokens(self):
         tokenizers = self.get_tokenizers(do_lower_case=False)
@@ -2150,7 +2404,15 @@ class TokenizerTesterMixin:
                 else:
                     self.assertListEqual(padded_features["attention_mask"], [[1, 1, 1, 1, 1, 0], [0, 0, 0, 1, 1, 0]])
 
-    def test_encode_plus_with_padding(self):
+    @parameterized.expand([(True,), (False,)])
+    def test_encode_plus_with_padding(self, use_padding_as_call_kwarg: bool):
+        """
+        This test checks that padding works as expected when tokenizing a sequence.
+        Padding is expected to have no effect when the input is a single sequence and
+        the padding-strategy is not `max_length`. Otherwise it pads to the specified max-length
+        using tokenizer classes `padding_side` attribute. Also, we check that passing `padding_side`
+        as call time kwarg works same way as when one sets `tokenizer.padding_side` attribute.
+        """
         tokenizers = self.get_tokenizers(do_lower_case=False)
         for tokenizer in tokenizers:
             with self.subTest(f"{tokenizer.__class__.__name__}"):
@@ -2169,8 +2431,6 @@ class TokenizerTesterMixin:
                 sequence_length = len(input_ids)
 
                 # Test 'longest' and 'no_padding' don't do anything
-                tokenizer.padding_side = "right"
-
                 not_padded_sequence = tokenizer.encode_plus(
                     sequence,
                     padding=True,
@@ -2200,14 +2460,18 @@ class TokenizerTesterMixin:
                 self.assertEqual(special_tokens_mask, not_padded_special_tokens_mask)
 
                 # Test right padding
-                tokenizer.padding_side = "right"
+                tokenizer_kwargs_right = {
+                    "max_length": sequence_length + padding_size,
+                    "padding": "max_length",
+                    "return_special_tokens_mask": True,
+                }
 
-                right_padded_sequence = tokenizer.encode_plus(
-                    sequence,
-                    max_length=sequence_length + padding_size,
-                    padding="max_length",
-                    return_special_tokens_mask=True,
-                )
+                if not use_padding_as_call_kwarg:
+                    tokenizer.padding_side = "right"
+                else:
+                    tokenizer_kwargs_right["padding_side"] = "right"
+
+                right_padded_sequence = tokenizer.encode_plus(sequence, **tokenizer_kwargs_right)
                 right_padded_input_ids = right_padded_sequence["input_ids"]
 
                 right_padded_special_tokens_mask = right_padded_sequence["special_tokens_mask"]
@@ -2218,13 +2482,18 @@ class TokenizerTesterMixin:
                 self.assertEqual(special_tokens_mask + [1] * padding_size, right_padded_special_tokens_mask)
 
                 # Test left padding
-                tokenizer.padding_side = "left"
-                left_padded_sequence = tokenizer.encode_plus(
-                    sequence,
-                    max_length=sequence_length + padding_size,
-                    padding="max_length",
-                    return_special_tokens_mask=True,
-                )
+                tokenizer_kwargs_left = {
+                    "max_length": sequence_length + padding_size,
+                    "padding": "max_length",
+                    "return_special_tokens_mask": True,
+                }
+
+                if not use_padding_as_call_kwarg:
+                    tokenizer.padding_side = "left"
+                else:
+                    tokenizer_kwargs_left["padding_side"] = "left"
+
+                left_padded_sequence = tokenizer.encode_plus(sequence, **tokenizer_kwargs_left)
                 left_padded_input_ids = left_padded_sequence["input_ids"]
                 left_padded_special_tokens_mask = left_padded_sequence["special_tokens_mask"]
                 left_padded_sequence_length = len(left_padded_input_ids)
@@ -4066,8 +4335,7 @@ class TokenizerTesterMixin:
         special_tokens_list.remove("additional_special_tokens")
         special_tokens_map = {}
         for token in special_tokens_list:
-            # Get the private one to avoid unnecessary warnings.
-            if getattr(tokenizer, f"_{token}") is not None:
+            if getattr(tokenizer, token) is not None:
                 special_token = getattr(tokenizer, token)
                 special_tokens_map[special_token] = f"{special_token}a"
 
@@ -4079,7 +4347,7 @@ class TokenizerTesterMixin:
         # Check the changes
         for token in special_tokens_list:
             # Get the private one to avoid unnecessary warnings.
-            if getattr(tokenizer, f"_{token}") is None:
+            if getattr(tokenizer, token) is None:
                 continue
             special_token = getattr(tokenizer, token)
             if special_token in special_tokens_map:
@@ -4203,7 +4471,7 @@ class TokenizerTesterMixin:
                     # Load tokenizer from a folder without legacy files
                     tokenizer = self.rust_tokenizer_class.from_pretrained(tmp_dir)
                     training_args = TrainingArguments(output_dir=tmp_dir, do_train=True, no_cuda=True)
-                    trainer = Trainer(model=model, args=training_args, tokenizer=tokenizer)
+                    trainer = Trainer(model=model, args=training_args, processing_class=tokenizer)
 
                     # Should not raise an error
                     trainer.save_model(os.path.join(tmp_dir, "checkpoint"))
@@ -4246,52 +4514,6 @@ class TokenizerTesterMixin:
 
                     # Should not raise an error
                     self.rust_tokenizer_class.from_pretrained(tmp_dir_2)
-
-    # TODO This is ran for all models but only tests bert...
-    def test_clean_up_tokenization_spaces(self):
-        tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
-        assert tokenizer.clean_up_tokenization_spaces is True
-
-        tokens = tokenizer.encode("This shouldn't be! He'll go.")
-        decoded = tokenizer.decode(tokens)
-        assert decoded == "[CLS] this shouldn't be! he'll go. [SEP]"
-
-        tokenizer.clean_up_tokenization_spaces = False
-        decoded = tokenizer.decode(tokens)
-        assert decoded == "[CLS] this shouldn ' t be ! he ' ll go . [SEP]"
-        assert decoded == tokenizer.decode(tokens, clean_up_tokenization_spaces=False)
-
-        # Fast from slow
-        with tempfile.TemporaryDirectory() as tmp_dir_2:
-            tokenizer.save_pretrained(tmp_dir_2)
-            tokenizer_fast = BertTokenizerFast.from_pretrained(tmp_dir_2)
-            del tokenizer
-
-        assert tokenizer_fast.clean_up_tokenization_spaces is False
-        decoded = tokenizer_fast.decode(tokens)
-        # fast and slow don't have the same output when we don't cleanup
-        # tokenization space. Here `be!` vs `be !` and `go.` vs `go .`
-        assert decoded == "[CLS] this shouldn ' t be! he ' ll go. [SEP]"
-
-        tokenizer_fast.clean_up_tokenization_spaces = True
-        assert tokenizer_fast.clean_up_tokenization_spaces is True
-
-        decoded = tokenizer_fast.decode(tokens)
-        assert decoded == "[CLS] this shouldn't be! he'll go. [SEP]"
-
-        # Slow from fast
-        with tempfile.TemporaryDirectory() as tmp_dir_2:
-            tokenizer_fast.clean_up_tokenization_spaces = False
-            tokenizer_fast.save_pretrained(tmp_dir_2)
-            tokenizer = BertTokenizer.from_pretrained(tmp_dir_2)
-
-        assert tokenizer.clean_up_tokenization_spaces is False
-        decoded = tokenizer.decode(tokens)
-        assert decoded == "[CLS] this shouldn ' t be ! he ' ll go . [SEP]"
-
-        tokenizer.clean_up_tokenization_spaces = True
-        decoded = tokenizer.decode(tokens)
-        assert decoded == "[CLS] this shouldn't be! he'll go. [SEP]"
 
     def test_split_special_tokens(self):
         if not self.test_slow_tokenizer:
@@ -4367,7 +4589,7 @@ class TokenizerTesterMixin:
                 tokenizer = self.tokenizer_class.from_pretrained(pretrained_name, eos_token=new_eos)
                 EXPECTED_ADDED_TOKENS_DECODER = tokenizer.added_tokens_decoder
                 with self.subTest("Hub -> Slow: Test loading a slow tokenizer from the hub)"):
-                    self.assertEqual(tokenizer._eos_token, new_eos)
+                    self.assertEqual(tokenizer._special_tokens_map["eos_token"], new_eos)
                     self.assertIn(new_eos, list(tokenizer.added_tokens_decoder.values()))
 
                 with tempfile.TemporaryDirectory() as tmp_dir_2:
@@ -4405,7 +4627,7 @@ class TokenizerTesterMixin:
                 with self.subTest("Hub -> Fast: Test loading a fast tokenizer from the hub)"):
                     if self.rust_tokenizer_class is not None:
                         tokenizer_fast = self.rust_tokenizer_class.from_pretrained(pretrained_name, eos_token=new_eos)
-                        self.assertEqual(tokenizer_fast._eos_token, new_eos)
+                        self.assertEqual(tokenizer_fast._special_tokens_map["eos_token"], new_eos)
                         self.assertIn(new_eos, list(tokenizer_fast.added_tokens_decoder.values()))
                         # We can't test the following because for BC we kept the default rstrip lstrip in slow not fast. Will comment once normalization is alright
                         with self.subTest("Hub -> Fast == Hub -> Slow: make sure slow and fast tokenizer match"):
@@ -4454,3 +4676,23 @@ class TokenizerTesterMixin:
                         replace_additional_special_tokens=False,
                     )
                     self.assertEqual(tokenizer_2.additional_special_tokens, ["<other>", "<another>", "<tok>"])
+
+    def test_tokenizer_initialization_with_conflicting_key(self):
+        get_tokenizer_func = self.get_rust_tokenizer if self.test_rust_tokenizer else self.get_tokenizer
+        with self.assertRaises(AttributeError, msg="conflicts with the method"):
+            get_tokenizer_func(add_special_tokens=True)
+
+        with self.assertRaises(AttributeError, msg="conflicts with the method"):
+            get_tokenizer_func(get_vocab=True)
+
+    @parameterized.expand([(True,), (False,)])
+    def test_rust_tokenizer_add_prefix_space(self, add_prefix_space):
+        if not self.test_rust_tokenizer:
+            self.skipTest(reason="test_rust_tokenizer is set to False")
+
+        for tokenizer, pretrained_name, _ in self.tokenizers_list:
+            fast_tokenizer = tokenizer.from_pretrained(pretrained_name, add_prefix_space=add_prefix_space)
+            self.assertEqual(fast_tokenizer.add_prefix_space, add_prefix_space)
+            # Only the ByteLevel pre-tokenizer has the `add_prefix_space` attribute, we have to ensure that it's set correctly
+            if hasattr(fast_tokenizer.backend_tokenizer.pre_tokenizer, "add_prefix_space"):
+                self.assertEqual(fast_tokenizer.backend_tokenizer.pre_tokenizer.add_prefix_space, add_prefix_space)
