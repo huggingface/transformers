@@ -204,9 +204,8 @@ class GenerationTesterMixin:
                 "vision_start_token_id",
             ]:
                 token_index = getattr(config, key, None)
-                if token_index is None:
-                    if hasattr(self, "model_tester"):
-                        token_index = getattr(self.model_tester, key, None)
+                if token_index is None and hasattr(self, "model_tester"):
+                    token_index = getattr(self.model_tester, key, None)
                 if token_index is not None and token_index < config.get_text_config().vocab_size:
                     logits_processor_kwargs["bad_words_ids"].append([token_index])
 
