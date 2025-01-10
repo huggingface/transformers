@@ -23,11 +23,5 @@ if TYPE_CHECKING:
 else:
     import sys
 
-    # _import_structure = {
-    #     "configuration_pop2piano": ["Pop2PianoConfig"],
-    #     "modeling_pop2piano": ["Pop2PianoModel"],
-    #     "feature_extraction_pop2piano": ["Pop2PianoFeatureExtractor"],
-    # }
-
     _file = globals()["__file__"]
     sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
