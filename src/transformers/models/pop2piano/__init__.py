@@ -62,10 +62,23 @@ else:
 
 if TYPE_CHECKING:
     from .configuration_pop2piano import *
-    from .feature_extraction_pop2piano import *
     from .modeling_pop2piano import *
-    from .processing_pop2piano import *
-    from .tokenization_pop2piano import *
+
+    try:
+        if not (
+            is_librosa_available()
+            and is_essentia_available()
+            and is_scipy_available()
+            and is_torch_available()
+            and is_pretty_midi_available()
+        ):
+            raise OptionalDependencyNotAvailable()
+    except OptionalDependencyNotAvailable:
+        pass
+    else:
+        from .feature_extraction_pop2piano import *
+        from .processing_pop2piano import *
+        from .tokenization_pop2piano import *
 else:
     import sys
 
