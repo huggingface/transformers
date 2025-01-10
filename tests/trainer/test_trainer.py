@@ -1244,10 +1244,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertEqual(len(result.predictions), 2)
 
     def test_training_arguments_are_left_untouched(self):
-        output_dir = self.get_auto_remove_tmp_dir()
-        trainer = get_regression_trainer(output_dir=output_dir)
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        trainer = get_regression_trainer(output_dir=tmp_dir)
         trainer.train()
-        args = TrainingArguments(output_dir, report_to=[])
+        args = TrainingArguments(tmp_dir, report_to=[])
         dict1, dict2 = args.to_dict(), trainer.args.to_dict()
         for key in dict1.keys():
             # Logging dir can be slightly different as they default to something with the time.
@@ -1256,18 +1256,18 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
     def test_number_of_steps_in_training(self):
         # Regular training has n_epochs * len(train_dl) steps
-        output_dir = self.get_auto_remove_tmp_dir()
-        trainer = get_regression_trainer(learning_rate=0.1, output_dir=output_dir)
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        trainer = get_regression_trainer(learning_rate=0.1, output_dir=tmp_dir)
         train_output = trainer.train()
         self.assertEqual(train_output.global_step, self.n_epochs * 64 / self.batch_size)
 
         # Check passing num_train_epochs works (and a float version too):
-        trainer = get_regression_trainer(learning_rate=0.1, num_train_epochs=1.5, output_dir=output_dir)
+        trainer = get_regression_trainer(learning_rate=0.1, num_train_epochs=1.5, output_dir=tmp_dir)
         train_output = trainer.train()
         self.assertEqual(train_output.global_step, int(1.5 * 64 / self.batch_size))
 
         # If we pass a max_steps, num_train_epochs is ignored
-        trainer = get_regression_trainer(learning_rate=0.1, max_steps=10, output_dir=output_dir)
+        trainer = get_regression_trainer(learning_rate=0.1, max_steps=10, output_dir=tmp_dir)
         train_output = trainer.train()
         self.assertEqual(train_output.global_step, 10)
 
@@ -1275,10 +1275,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     @require_intel_extension_for_pytorch
     def test_number_of_steps_in_training_with_ipex(self):
         for mix_bf16 in [True, False]:
-            output_dir = self.get_auto_remove_tmp_dir()
+            tmp_dir = self.get_auto_remove_tmp_dir()
             # Regular training has n_epochs * len(train_dl) steps
             trainer = get_regression_trainer(
-                learning_rate=0.1, use_ipex=True, bf16=mix_bf16, use_cpu=True, output_dir=output_dir
+                learning_rate=0.1, use_ipex=True, bf16=mix_bf16, use_cpu=True, output_dir=tmp_dir
             )
             train_output = trainer.train()
             self.assertEqual(train_output.global_step, self.n_epochs * 64 / trainer.args.train_batch_size)
@@ -1290,14 +1290,14 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 use_ipex=True,
                 bf16=mix_bf16,
                 use_cpu=True,
-                output_dir=output_dir,
+                output_dir=tmp_dir,
             )
             train_output = trainer.train()
             self.assertEqual(train_output.global_step, int(1.5 * 64 / trainer.args.train_batch_size))
 
             # If we pass a max_steps, num_train_epochs is ignored
             trainer = get_regression_trainer(
-                learning_rate=0.1, max_steps=10, use_ipex=True, bf16=mix_bf16, use_cpu=True, output_dir=output_dir
+                learning_rate=0.1, max_steps=10, use_ipex=True, bf16=mix_bf16, use_cpu=True, output_dir=tmp_dir
             )
             train_output = trainer.train()
             self.assertEqual(train_output.global_step, 10)
@@ -1383,9 +1383,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         tokenizer.pad_token = tokenizer.eos_token
 
-        output_dir = self.get_auto_remove_tmp_dir()
+        tmp_dir = self.get_auto_remove_tmp_dir()
         args = TrainingArguments(
-            output_dir,
+            tmp_dir,
             per_device_train_batch_size=1,
             learning_rate=1e-9,
             save_steps=5,
@@ -1402,7 +1402,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # Reinitialize trainer
         trainer = Trainer(tiny_model, args, processing_class=tokenizer, train_dataset=train_dataset)
 
-        checkpoint = os.path.join(output_dir, "checkpoint-5")
+        checkpoint = os.path.join(tmp_dir, "checkpoint-5")
 
         trainer.train(resume_from_checkpoint=checkpoint)
         parameters1 = dict(tiny_model.named_parameters())
@@ -1417,10 +1417,13 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         x = torch.randint(0, 100, (128,))
         train_dataset = RepeatDataset(x)
 
-        output_dir = self.get_auto_remove_tmp_dir()
         # Trainer without inf/nan filter
         args = TrainingArguments(
-            output_dir, learning_rate=1e-9, logging_steps=5, logging_nan_inf_filter=False, optim="rmsprop_bnb"
+            self.get_auto_remove_tmp_dir(),
+            learning_rate=1e-9,
+            logging_steps=5,
+            logging_nan_inf_filter=False,
+            optim="rmsprop_bnb",
         )
         trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
 
@@ -1434,10 +1437,13 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         x = torch.randint(0, 100, (128,))
         train_dataset = RepeatDataset(x)
 
-        output_dir = self.get_auto_remove_tmp_dir()
         # Trainer without inf/nan filter
         args = TrainingArguments(
-            output_dir, learning_rate=1e-9, logging_steps=5, logging_nan_inf_filter=False, optim="ademamix"
+            self.get_auto_remove_tmp_dir(),
+            learning_rate=1e-9,
+            logging_steps=5,
+            logging_nan_inf_filter=False,
+            optim="ademamix",
         )
         trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
 
@@ -1451,10 +1457,13 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         x = torch.randint(0, 100, (128,))
         train_dataset = RepeatDataset(x)
 
-        output_dir = self.get_auto_remove_tmp_dir()
         # Trainer without inf/nan filter
         args = TrainingArguments(
-            output_dir, learning_rate=1e-9, logging_steps=5, logging_nan_inf_filter=False, optim="ademamix_8bit"
+            self.get_auto_remove_tmp_dir(),
+            learning_rate=1e-9,
+            logging_steps=5,
+            logging_nan_inf_filter=False,
+            optim="ademamix_8bit",
         )
         trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
 
@@ -1468,10 +1477,13 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         x = torch.randint(0, 100, (128,))
         train_dataset = RepeatDataset(x)
 
-        output_dir = self.get_auto_remove_tmp_dir()
         # Trainer without inf/nan filter
         args = TrainingArguments(
-            output_dir, learning_rate=1e-9, logging_steps=5, logging_nan_inf_filter=False, optim="rmsprop_bnb_8bit"
+            self.get_auto_remove_tmp_dir(),
+            learning_rate=1e-9,
+            logging_steps=5,
+            logging_nan_inf_filter=False,
+            optim="rmsprop_bnb_8bit",
         )
         trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
 
@@ -1484,10 +1496,13 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         tiny_gpt2 = GPT2LMHeadModel(config)
         x = torch.randint(0, 100, (128,))
         train_dataset = RepeatDataset(x)
-        output_dir = self.get_auto_remove_tmp_dir()
         # Trainer without inf/nan filter
         args = TrainingArguments(
-            output_dir, learning_rate=1e-9, logging_steps=5, logging_nan_inf_filter=False, optim="rmsprop_bnb_32bit"
+            self.get_auto_remove_tmp_dir(),
+            learning_rate=1e-9,
+            logging_steps=5,
+            logging_nan_inf_filter=False,
+            optim="rmsprop_bnb_32bit",
         )
         trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
 
@@ -1501,9 +1516,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         train_dataset = RepeatDataset(x)
 
         # Trainer without inf/nan filter
-        output_dir = self.get_auto_remove_tmp_dir()
         args = TrainingArguments(
-            output_dir,
+            self.get_auto_remove_tmp_dir(),
             learning_rate=1e-9,
             logging_steps=5,
             logging_nan_inf_filter=False,
@@ -1524,9 +1538,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # redefine the model
         tiny_gpt2 = GPT2LMHeadModel(config)
         # Trainer without inf/nan filter
-        output_dir = self.get_auto_remove_tmp_dir()
         args = TrainingArguments(
-            output_dir,
+            self.get_auto_remove_tmp_dir(),
             learning_rate=1e-9,
             logging_steps=5,
             logging_nan_inf_filter=False,
@@ -1557,18 +1570,24 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         train_dataset = RepeatDataset(x)
 
         # Trainer without inf/nan filter
-        output_dir = self.get_auto_remove_tmp_dir()
         args = TrainingArguments(
-            output_dir, learning_rate=1e9, logging_steps=5, logging_nan_inf_filter=False, report_to="none"
+            self.get_auto_remove_tmp_dir(),
+            learning_rate=1e9,
+            logging_steps=5,
+            logging_nan_inf_filter=False,
+            report_to="none",
         )
         trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
         trainer.train()
         log_history_no_filter = trainer.state.log_history
 
         # Trainer with inf/nan filter
-        output_dir = self.get_auto_remove_tmp_dir()
         args = TrainingArguments(
-            output_dir, learning_rate=1e9, logging_steps=5, logging_nan_inf_filter=True, report_to="none"
+            self.get_auto_remove_tmp_dir(),
+            learning_rate=1e9,
+            logging_steps=5,
+            logging_nan_inf_filter=True,
+            report_to="none",
         )
         trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
         trainer.train()
@@ -1587,10 +1606,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         else:
             n_gpu = 1
 
-        output_dir = self.get_auto_remove_tmp_dir()
-        trainer = get_regression_trainer(learning_rate=0.1, per_device_train_batch_size=16, output_dir=output_dir)
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        trainer = get_regression_trainer(learning_rate=0.1, per_device_train_batch_size=16, output_dir=tmp_dir)
         self.assertEqual(trainer.get_train_dataloader().total_batch_size, 16 * n_gpu)
-        trainer = get_regression_trainer(learning_rate=0.1, per_device_eval_batch_size=16, output_dir=output_dir)
+        trainer = get_regression_trainer(learning_rate=0.1, per_device_eval_batch_size=16, output_dir=tmp_dir)
         self.assertEqual(trainer.get_eval_dataloader().total_batch_size, 16 * n_gpu)
 
         # Check drop_last works
@@ -1600,7 +1619,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             learning_rate=0.1,
             per_device_train_batch_size=16,
             per_device_eval_batch_size=32,
-            output_dir=output_dir,
+            output_dir=tmp_dir,
         )
         self.assertEqual(len(trainer.get_train_dataloader()), 66 // (16 * n_gpu) + 1)
         self.assertEqual(len(trainer.get_eval_dataloader()), 74 // (32 * n_gpu) + 1)
@@ -1612,7 +1631,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             per_device_train_batch_size=16,
             per_device_eval_batch_size=32,
             dataloader_drop_last=True,
-            output_dir=output_dir,
+            output_dir=tmp_dir,
         )
         self.assertEqual(len(trainer.get_train_dataloader()), 66 // (16 * n_gpu))
         self.assertEqual(len(trainer.get_eval_dataloader()), 74 // (32 * n_gpu))
@@ -2691,41 +2710,41 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 self.assertNotIn(log_info_string, cl.out)
 
     def test_save_checkpoints(self):
-        output_dir = self.get_auto_remove_tmp_dir()
-        trainer = get_regression_trainer(output_dir=output_dir, save_steps=5)
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        trainer = get_regression_trainer(output_dir=tmp_dir, save_steps=5)
         trainer.train()
-        self.check_saved_checkpoints(output_dir, 5, int(self.n_epochs * 64 / self.batch_size))
+        self.check_saved_checkpoints(tmp_dir, 5, int(self.n_epochs * 64 / self.batch_size))
 
         # With a regular model that is not a PreTrainedModel
-        output_dir = self.get_auto_remove_tmp_dir()
-        trainer = get_regression_trainer(output_dir=output_dir, save_steps=5, pretrained=False)
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        trainer = get_regression_trainer(output_dir=tmp_dir, save_steps=5, pretrained=False)
         trainer.train()
-        self.check_saved_checkpoints(output_dir, 5, int(self.n_epochs * 64 / self.batch_size), False)
+        self.check_saved_checkpoints(tmp_dir, 5, int(self.n_epochs * 64 / self.batch_size), False)
 
     @require_safetensors
     def test_safe_checkpoints(self):
         for save_safetensors in [True, False]:
-            output_dir = self.get_auto_remove_tmp_dir()
-            trainer = get_regression_trainer(output_dir=output_dir, save_steps=5, save_safetensors=save_safetensors)
+            tmp_dir = self.get_auto_remove_tmp_dir()
+            trainer = get_regression_trainer(output_dir=tmp_dir, save_steps=5, save_safetensors=save_safetensors)
             trainer.train()
             self.check_saved_checkpoints(
-                output_dir, 5, int(self.n_epochs * 64 / self.batch_size), safe_weights=save_safetensors
+                tmp_dir, 5, int(self.n_epochs * 64 / self.batch_size), safe_weights=save_safetensors
             )
 
             # With a regular model that is not a PreTrainedModel
-            output_dir = self.get_auto_remove_tmp_dir()
+            tmp_dir = self.get_auto_remove_tmp_dir()
             trainer = get_regression_trainer(
-                output_dir=output_dir, save_steps=5, pretrained=False, save_safetensors=save_safetensors
+                output_dir=tmp_dir, save_steps=5, pretrained=False, save_safetensors=save_safetensors
             )
             trainer.train()
             self.check_saved_checkpoints(
-                output_dir, 5, int(self.n_epochs * 64 / self.batch_size), False, safe_weights=save_safetensors
+                tmp_dir, 5, int(self.n_epochs * 64 / self.batch_size), False, safe_weights=save_safetensors
             )
 
     def test_load_best_model_with_save(self):
-        output_dir = self.get_auto_remove_tmp_dir()
+        tmp_dir = self.get_auto_remove_tmp_dir()
         trainer = get_regression_trainer(
-            output_dir=output_dir,
+            output_dir=tmp_dir,
             save_steps=5,
             evaluation_strategy="steps",
             eval_steps=5,
@@ -2734,19 +2753,19 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         trainer.train()
         # Check that we have the last known step:
         assert os.path.exists(
-            os.path.join(output_dir, f"checkpoint-{trainer.state.max_steps}")
+            os.path.join(tmp_dir, f"checkpoint-{trainer.state.max_steps}")
         ), f"Could not find checkpoint-{trainer.state.max_steps}"
         # And then check the last step
-        assert os.path.exists(os.path.join(output_dir, "checkpoint-9")), "Could not find checkpoint-9"
+        assert os.path.exists(os.path.join(tmp_dir, "checkpoint-9")), "Could not find checkpoint-9"
 
         # Now test that using a limit works
         # Should result in:
         # - save at step 5 (but is deleted)
         # - save at step 10 (loaded in at the end when `load_best_model=True`)
         # - save at step 11
-        output_dir = self.get_auto_remove_tmp_dir()
+        tmp_dir = self.get_auto_remove_tmp_dir()
         trainer = get_regression_trainer(
-            output_dir=output_dir,
+            output_dir=tmp_dir,
             save_steps=5,
             evaluation_strategy="steps",
             eval_steps=5,
@@ -2756,19 +2775,17 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         )
         trainer.train()
         # Check that we have the last known step:
-        assert os.path.exists(os.path.join(output_dir, "checkpoint-11")), "Could not find checkpoint-11"
+        assert os.path.exists(os.path.join(tmp_dir, "checkpoint-11")), "Could not find checkpoint-11"
         # And then check the last multiple
-        assert os.path.exists(os.path.join(output_dir, "checkpoint-10")), "Could not find checkpoint-10"
+        assert os.path.exists(os.path.join(tmp_dir, "checkpoint-10")), "Could not find checkpoint-10"
         # Finally check that we don't have an old one
-        assert not os.path.exists(os.path.join(output_dir, "checkpoint-5")), "Found checkpoint-5, limit not respected"
+        assert not os.path.exists(os.path.join(tmp_dir, "checkpoint-5")), "Found checkpoint-5, limit not respected"
 
         # Finally check that the right model was loaded in, checkpoint-10
         # this goes by the last `eval` step check to do so, so it won't be
         # the last model *saved*
         model_state = trainer.model.state_dict()
-        final_model_weights = safetensors.torch.load_file(
-            os.path.join(output_dir, "checkpoint-10", "model.safetensors")
-        )
+        final_model_weights = safetensors.torch.load_file(os.path.join(tmp_dir, "checkpoint-10", "model.safetensors"))
         for k, v in model_state.items():
             assert torch.allclose(v, final_model_weights[k]), f"{k} is not the same"
 
@@ -2791,9 +2808,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # save_steps, the checkpoint will resume training at epoch 2 or more (so the data seen by the model
         # won't be the same since the training dataloader is shuffled).
 
-        output_dir = self.get_auto_remove_tmp_dir()
+        tmp_dir = self.get_auto_remove_tmp_dir()
         kwargs = {
-            "output_dir": output_dir,
+            "output_dir": tmp_dir,
             "train_len": 128,
             "save_steps": 5,
             "learning_rate": 0.1,
@@ -2804,7 +2821,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         (a, b) = trainer.model.a.item(), trainer.model.b.item()
         state = dataclasses.asdict(trainer.state)
 
-        checkpoint = os.path.join(output_dir, "checkpoint-5")
+        checkpoint = os.path.join(tmp_dir, "checkpoint-5")
 
         # Reinitialize trainer
         trainer = get_regression_trainer(**kwargs)
@@ -2817,7 +2834,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.check_trainer_state_are_the_same(state, state1)
 
         # Now check with a later checkpoint that it also works when we span over one epoch
-        checkpoint = os.path.join(output_dir, "checkpoint-15")
+        checkpoint = os.path.join(tmp_dir, "checkpoint-15")
 
         # Reinitialize trainer and load model
         trainer = get_regression_trainer(**kwargs)
@@ -2830,9 +2847,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.check_trainer_state_are_the_same(state, state1)
 
         # With a regular model that is not a PreTrainedModel
-        output_dir = self.get_auto_remove_tmp_dir()
+        tmp_dir = self.get_auto_remove_tmp_dir()
         kwargs = {
-            "output_dir": output_dir,
+            "output_dir": tmp_dir,
             "train_len": 128,
             "save_steps": 5,
             "learning_rate": 0.1,
@@ -2844,7 +2861,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         (a, b) = trainer.model.a.item(), trainer.model.b.item()
         state = dataclasses.asdict(trainer.state)
 
-        checkpoint = os.path.join(output_dir, "checkpoint-5")
+        checkpoint = os.path.join(tmp_dir, "checkpoint-5")
 
         # Reinitialize trainer and load model
         trainer = get_regression_trainer(**kwargs)
@@ -2857,7 +2874,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.check_trainer_state_are_the_same(state, state1)
 
         # Now check with a later checkpoint that it also works when we span over one epoch
-        checkpoint = os.path.join(output_dir, "checkpoint-15")
+        checkpoint = os.path.join(tmp_dir, "checkpoint-15")
 
         # Reinitialize trainer and load model
         trainer = get_regression_trainer(**kwargs)
@@ -2872,15 +2889,15 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         # Now check failures
 
         # 1. fail to find a bogus checkpoint
-        output_dir = self.get_auto_remove_tmp_dir()
-        trainer = get_regression_trainer(output_dir=output_dir)
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        trainer = get_regression_trainer(output_dir=tmp_dir)
         with self.assertRaises(Exception) as context:
             trainer.train(resume_from_checkpoint=f"{checkpoint}-bogus")
         self.assertTrue("Can't find a valid checkpoint at" in str(context.exception))
 
         # 2. fail to find any checkpoint - due a fresh output_dir
-        output_dir = self.get_auto_remove_tmp_dir()
-        trainer = get_regression_trainer(output_dir=output_dir)
+        tmp_dir = self.get_auto_remove_tmp_dir()
+        trainer = get_regression_trainer(output_dir=tmp_dir)
         with self.assertRaises(Exception) as context:
             trainer.train(resume_from_checkpoint=True)
         self.assertTrue("No valid checkpoint found in output directory" in str(context.exception))
