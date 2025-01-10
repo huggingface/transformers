@@ -3484,6 +3484,23 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             except AssertionError:
                 self.assertEqual(trainer.state.global_step, 0)
 
+        # even if load_best_model_at_end is False, `best_model_checkpoint` should be set
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            trainer = get_regression_trainer(
+                output_dir=tmp_dir,
+                num_train_epochs=20,
+                gradient_accumulation_steps=1,
+                per_device_train_batch_size=16,
+                load_best_model_at_end=False,
+                eval_strategy=IntervalStrategy.EPOCH,
+                save_strategy=IntervalStrategy.EPOCH,
+                compute_metrics=AlmostAccuracy(),
+                metric_for_best_model="accuracy",
+            )
+            trainer.add_callback(EarlyStoppingCallback(1, 0.0001))
+            train_output = trainer.train()
+            self.assertIsNotNone(trainer.state.best_model_checkpoint)
+
     def test_flos_extraction(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(learning_rate=0.1, output_dir=tmp_dir)
