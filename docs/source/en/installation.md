@@ -242,27 +242,27 @@ See the [How to download files from the Hub](https://huggingface.co/docs/hub/how
 
 See below for some of the more common installation issues and how to resolve them.
 
-## a) Error: Python Version Not Supported
-Ensure you are using Python 3.9 or later.
-To check your Python version, run:
+### Unsupported Python version
+
+Ensure you are using Python 3.9 or later. Run the command below to check your Python version.
+
 ```
 python --version
 ```
-## b) Error: Missing Dependencies
 
-Install all required dependencies by running:
+### Missing dependencies
+
+Install all required dependencies by running the following command. Ensure you’re in the project directory before executing the command.
+
 ```
 pip install -r requirements.txt
 ```
-Ensure you’re in the project directory before executing the command.
 
-## c) Windows-Specific Issues
+### Windows-specific
 
-If you encounter issues on Windows, you may need to activate Developer Mode. 
+If you encounter issues on Windows, you may need to activate Developer Mode. Navigate to Windows Settings > For Developers > Developer Mode.
 
-To enable it, navigate to Windows Settings > For Developers > Developer Mode.
-
-Alternatively, create and activate a virtual environment as shown below:
+Alternatively, create and activate a virtual environment as shown below.
 
 ```
 python -m venv env
