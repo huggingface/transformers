@@ -247,13 +247,13 @@ The model itself is a regular [Pytorch `nn.Module`](https://pytorch.org/docs/sta
 
 ## Installation
 
-### 1. With pip
+### With pip
 
 This repository is tested on Python 3.9+, Flax 0.4.1+, PyTorch 2.0+, and TensorFlow 2.6+.
 
 You should install 🤗 Transformers in a [virtual environment](https://docs.python.org/3/library/venv.html). If you're unfamiliar with Python virtual environments, check out the [user guide](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/).
 
-**a) First, create a virtual environment with the version of Python you're going to use and activate it.**
+**First, create a virtual environment with the version of Python you're going to use and activate it.**
 
 **For macOS/Linux:**
 ```python -m venv env
@@ -287,7 +287,7 @@ cd transformers
 pip install
 ```
 
-### 2. With conda
+### With conda
 
 🤗 Transformers can be installed using conda as follows:
 
@@ -301,7 +301,7 @@ Follow the installation pages of Flax, PyTorch or TensorFlow to see how to insta
 
 > **_NOTE:_**  On Windows, you may be prompted to activate Developer Mode in order to benefit from caching. If this is not an option for you, please let us know in [this issue](https://github.com/huggingface/huggingface_hub/issues/1062).
 
-### 3. GPU Setup (Optional)
+### GPU Setup (Optional)
 
 For GPU acceleration, install the appropriate CUDA drivers for your system:
 
@@ -313,7 +313,7 @@ b) TensorFlow GPU Support: (https://www.tensorflow.org/install/pip)
 ```
 nvidia-smi
 ```
-### 4. Troubleshooting
+### Troubleshooting
 **a) Error: Python Version Not Supported:**
 
 Ensure you’re using Python 3.9 or later:
