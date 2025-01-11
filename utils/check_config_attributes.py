@@ -51,6 +51,8 @@ SPECIAL_CASES_TO_ALLOW = {
     # generation configs (TODO joao)
     "Gemma2Config": ["tie_word_embeddings", "cache_implementation"],
     "Cohere2Config": ["cache_implementation"],
+    # Dropout with this value was declared but never used
+    "Phi3Config": ["embd_pdrop"],
     # used to compute the property `self.chunk_length`
     "EncodecConfig": ["overlap"],
     # used to compute the property `self.layers_block_type`
@@ -278,6 +280,10 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
                 f"config.{attribute}" in modeling_source
                 or f'getattr(config, "{attribute}"' in modeling_source
                 or f'getattr(self.config, "{attribute}"' in modeling_source
+                or (
+                    "TextConfig" in config_class.__name__
+                    and f"config.get_text_config().{attribute}" in modeling_source
+                )
             ):
                 attribute_used = True
             # Deal with multi-line cases
@@ -313,6 +319,9 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
         "unk_index",
         "mask_index",
         "image_token_index",  # for VLMs
+        "video_token_index",
+        "image_seq_length",
+        "video_seq_length",
         "image_size",
         "use_cache",
         "out_features",
