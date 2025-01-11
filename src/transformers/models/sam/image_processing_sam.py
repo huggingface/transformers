@@ -1385,7 +1385,7 @@ def _mask_to_rle_pytorch(input_mask: "torch.Tensor"):
             else:  # If mask starts with 0 or is empty, encode as empty mask
                 out.append({"size": [height, width], "counts": [height * width]})
             continue
-            
+
         btw_idxs = cur_idxs[1:] - cur_idxs[:-1]
         counts = [] if input_mask[i, 0] == 0 else [0]
         counts += [cur_idxs[0].item()] + btw_idxs.tolist() + [height * width - cur_idxs[-1]]
@@ -1416,7 +1416,7 @@ def _mask_to_rle_tf(input_mask: "tf.Tensor"):
             else:  # If mask starts with 0 or is empty, encode as empty mask
                 out.append({"size": [height, width], "counts": [height * width]})
             continue
-            
+
         btw_idxs = cur_idxs[1:] - cur_idxs[:-1]
         counts = [] if input_mask[i, 0] == 0 else [0]
         counts += [cur_idxs[0].item()] + btw_idxs.tolist() + [height * width - cur_idxs[-1]]
