@@ -32,7 +32,7 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
-def get_rt_detr_config(model_name: str) -> RtDetrV2Config:
+def get_rt_detr_v2_config(model_name: str) -> RtDetrV2Config:
     config = RtDetrV2Config()
 
     config.num_labels = 80
@@ -536,13 +536,13 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, repo_id):
+def convert_rt_detr_v2_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, repo_id):
     """
     Copy/paste/tweak model's weights to our RTDETR structure.
     """
 
     # load default config
-    config = get_rt_detr_config(model_name)
+    config = get_rt_detr_v2_config(model_name)
 
     # load original model from torch hub
     model_name_to_checkpoint_url = {
@@ -658,14 +658,14 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
         # Upload model, image processor and config to the hub
         logger.info("Uploading PyTorch model and image processor to the hub...")
         config.push_to_hub(
-            repo_id=repo_id, commit_message="Add config from convert_rt_detr_original_pytorch_checkpoint_to_pytorch.py"
+            repo_id=repo_id, commit_message="Add config from convert_rt_detr_v2_original_pytorch_checkpoint_to_pytorch.py"
         )
         model.push_to_hub(
-            repo_id=repo_id, commit_message="Add model from convert_rt_detr_original_pytorch_checkpoint_to_pytorch.py"
+            repo_id=repo_id, commit_message="Add model from convert_rt_detr_v2_original_pytorch_checkpoint_to_pytorch.py"
         )
         image_processor.push_to_hub(
             repo_id=repo_id,
-            commit_message="Add image processor from convert_rt_detr_original_pytorch_checkpoint_to_pytorch.py",
+            commit_message="Add image processor from convert_rt_detr_v2_original_pytorch_checkpoint_to_pytorch.py",
         )
 
 
@@ -687,4 +687,4 @@ if __name__ == "__main__":
         help="repo_id where the model will be pushed to.",
     )
     args = parser.parse_args()
-    convert_rt_detr_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub, args.repo_id)
+    convert_rt_detr_v2_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub, args.repo_id)
