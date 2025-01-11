@@ -238,7 +238,9 @@ See the [How to download files from the Hub](https://huggingface.co/docs/hub/how
 
 </Tip>
 
-# Troubleshooting
+## Troubleshooting
+
+See below for some of the more common installation issues and how to resolve them.
 
 ## a) Error: Python Version Not Supported
 Ensure you are using Python 3.9 or later.
