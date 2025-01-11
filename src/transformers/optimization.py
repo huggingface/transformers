@@ -456,7 +456,7 @@ def get_wsd_schedule(
             The number of steps for the stable phase. Please ensure that `num_warmup_steps + num_stable_steps + num_decay_steps` equals `num_training_steps`, otherwise the other steps will default to the minimum learning rate.
         warmup_type (`str`, *optional*, defaults to "linear"):
             The type of warmup to use. Can be 'linear', 'cosine' or '1-sqrt'.
-        decay_type (`str`, *optional*, defaults to "linear"):
+        decay_type (`str`, *optional*, defaults to "cosine"):
             The type of decay to use. Can be 'linear', 'cosine' or '1-sqrt'.
         min_lr_ratio (`float`, *optional*, defaults to 0):
             The minimum learning rate as a ratio of the initial learning rate.
