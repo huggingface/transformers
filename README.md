@@ -267,7 +267,6 @@ source env/bin/activate
 env\Scripts\activate
 ```
 
-**b) Install a backend framework:**
 To use 🤗 Transformers, you must install at least one of Flax, PyTorch, or TensorFlow. Refer to the official installation guides for platform-specific commands:
 
 [TensorFlow installation page](https://www.tensorflow.org/install/), 
