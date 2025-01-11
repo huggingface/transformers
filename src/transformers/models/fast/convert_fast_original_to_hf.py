@@ -254,8 +254,8 @@ def convert_fast_checkpoint(checkpoint_url, checkpoint_config_filename, pytorch_
     # text_locations[0]["bboxes"][0][:10]
     # assert torch.allclose(output["feature_maps"][-1][0][10][12][:10].detach(), expected_slice_backbone, atol=1e-3)
     #TODO: fix the safetensor sharing problem to use safetensors
-    model.text_detection_head.final.fused_conv.weight = model.text_detection_head.final.fused_conv.weight.clone()
-    model.text_detection_head.final.conv.weight = model.text_detection_head.final.conv.weight.clone()
+    # same to remove it, gonna be reassigned in inference
+    del model.text_detection_head.final.fused_conv.weight
     model.save_pretrained(pytorch_dump_folder_path)
     if save_backbone_separately:
         model.backbone.save_pretrained(pytorch_dump_folder_path + "/textnet/")
@@ -280,12 +280,12 @@ if __name__ == "__main__":
     )
     parser.add_argument(
         "--save_backbone_separately",
-        default=False,
+        default=True,
         type=bool,
         help="whether to assert logits outputs",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the folder to output PyTorch model."
+        "--pytorch_dump_folder_path", default="/home/user/app/transformers/src/transformers/models/fast/output", type=str, help="Path to the folder to output PyTorch model."
     )
     args = parser.parse_args()
 
