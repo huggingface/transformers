@@ -38,6 +38,14 @@ Now you're ready to install 🤗 Transformers with the following command:
 pip install transformers
 ```
 
+For GPU acceleration, install the appropriate CUDA drivers for [PyTorch](https://pytorch.org/get-started/locally) and TensorFlow(https://www.tensorflow.org/install/pip).
+
+Run the command below to check if your system detects an NVIDIA GPU.
+
+```bash
+nvidia-smi
+```
+
 For CPU-support only, you can conveniently install 🤗 Transformers and a deep learning library in one line. For example, install 🤗 Transformers and PyTorch with:
 
 ```bash
@@ -269,16 +277,4 @@ python -m venv env
 .\env\Scripts\activate
 ```
 
-### GPU Setup (Optional)
 
-For GPU acceleration, install the appropriate CUDA drivers for your system:
-
-a) PyTorch CUDA Compatibility: (https://pytorch.org/get-started/locally)  
-b) TensorFlow GPU Support: (https://www.tensorflow.org/install/pip)  
-
-#### Verify GPU availability:
-
-To check if your system detects an NVIDIA GPU, run:
-```bash
-nvidia-smi
-```
