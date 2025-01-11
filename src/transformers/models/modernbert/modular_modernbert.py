@@ -41,7 +41,7 @@ from ...utils import (
     logging,
 )
 from ...utils.import_utils import is_triton_available
-from ..gemma.modeling_gemma import apply_rotary_pos_emb
+from ..gemma.modeling_gemma import GemmaRotaryEmbedding, apply_rotary_pos_emb
 
 
 if is_flash_attn_2_available():
@@ -504,32 +504,10 @@ class ModernBertMLP(nn.Module):
         return self.Wo(self.drop(self.act(input) * gate))
 
 
-class ModernBertRotaryEmbedding(nn.Module):
-    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
-        super().__init__()
-
-        self.dim = dim
-        self.max_position_embeddings = max_position_embeddings
-        self.base = base
-        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float() / self.dim))
-        self.register_buffer("inv_freq", tensor=inv_freq, persistent=False)
-
-    @torch.no_grad()
-    def forward(self, x, position_ids, seq_len=None):
-        # x: [bs, num_attention_heads, seq_len, head_size]
-        self.inv_freq.to(x.device)
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
-        position_ids_expanded = position_ids[:, None, :].float()
-        # Force float32 since bfloat16 loses precision on long contexts
-        # See https://github.com/huggingface/transformers/pull/29285
-        device_type = x.device.type
-        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos()
-            sin = emb.sin()
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+class ModernBertRotaryEmbedding(GemmaRotaryEmbedding):
+    def __init__(self, config: ModernBertConfig, dim: int, base: float, device: Optional[torch.device] = None):
+        super().__init__(self, config=config, device=device)
+        inv_freq, self.attention_scaling = self.rope_init_fn(None, device, dim=dim, base=base)
 
 
 def eager_attention_forward(
@@ -698,9 +676,7 @@ class ModernBertAttention(nn.Module):
                 dim=self.head_dim, max_seqlen=max_position_embeddings, base=rope_theta
             )
         else:
-            self.rotary_emb = ModernBertRotaryEmbedding(
-                dim=self.head_dim, max_position_embeddings=max_position_embeddings, base=rope_theta
-            )
+            self.rotary_emb = ModernBertRotaryEmbedding(config=config, dim=self.head_dim, base=rope_theta)
 
         self.Wo = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
         self.out_drop = nn.Dropout(config.attention_dropout) if config.attention_dropout > 0.0 else nn.Identity()
