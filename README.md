@@ -253,7 +253,7 @@ This repository is tested on Python 3.9+, Flax 0.4.1+, PyTorch 2.0+, and TensorF
 
 You should install 🤗 Transformers in a [virtual environment](https://docs.python.org/3/library/venv.html). If you're unfamiliar with Python virtual environments, check out the [user guide](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/).
 
-**First, create a virtual environment with the version of Python you're going to use and activate it.**
+First, create a virtual environment with the version of Python you're going to use and activate it.
 
 **For macOS/Linux:**
 ```python -m venv env
