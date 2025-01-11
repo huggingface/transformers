@@ -2393,7 +2393,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         mask_labels (`List[torch.Tensor]`, *optional*):
             List of mask labels of shape `(num_labels, height, width)` to be fed to a model
         class_labels (`List[torch.LongTensor]`, *optional*):
-            List of class labels of shape `(num_labels)` to be fed to a model.
+            List of class labels of shape `(labels)` to be fed to a model.
 
         Returns:
             `Mask2FormerUniversalSegmentationOutput`
