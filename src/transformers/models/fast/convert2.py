@@ -25,13 +25,9 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 
 from transformers import AutoConfig, AutoBackbone
-from transformers.models.fast.modeling_textnet import TextNetBackbone
-from transformers.models.fast.configuration_textnet import TextNetConfig
-from transformers.models.fast.image_processing_textnet import TextNetImageProcessor
+from transformers import TextNetConfig
 from transformers import FastConfig, FastForSceneTextRecognition
 from transformers.models.fast.image_processing_fast import FastImageProcessor
-AutoConfig.register("textnet", TextNetConfig)
-AutoBackbone.register(TextNetConfig, TextNetBackbone)
 
 
 

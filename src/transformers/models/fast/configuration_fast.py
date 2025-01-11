@@ -142,10 +142,7 @@ class FastConfig(PretrainedConfig):
                 logger.info(
                     "`backbone_config` is `None`. Initializing the config with the default `TextNet` backbone."
                 )
-                # backbone_config = CONFIG_MAPPING["textnet"](out_features=["stage1", "stage2", "stage3", "stage4"])
-                # TODO: update this
-                from transformers.models.fast.configuration_textnet import TextNetConfig
-                backbone_config = TextNetConfig(out_features=["stage1", "stage2", "stage3", "stage4"])
+                backbone_config = CONFIG_MAPPING["textnet"](out_features=["stage1", "stage2", "stage3", "stage4"])
                 
             elif isinstance(backbone_config, dict):
                 backbone_model_type = backbone_config.get("model_type")
