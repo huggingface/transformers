@@ -280,8 +280,6 @@ pip install transformers
 
 If you'd like to play with the examples or need the bleeding edge of the code and can't wait for a new release, you must [install the library from source](https://huggingface.co/docs/transformers/installation#installing-from-source).
 
-**d) Optional: Install from source for the latest updates:**
-
 ```
 git clone https://github.com/huggingface/transformers.git
 cd transformers
