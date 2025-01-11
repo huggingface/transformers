@@ -658,10 +658,12 @@ def convert_rt_detr_v2_checkpoint(model_name, pytorch_dump_folder_path, push_to_
         # Upload model, image processor and config to the hub
         logger.info("Uploading PyTorch model and image processor to the hub...")
         config.push_to_hub(
-            repo_id=repo_id, commit_message="Add config from convert_rt_detr_v2_original_pytorch_checkpoint_to_pytorch.py"
+            repo_id=repo_id,
+            commit_message="Add config from convert_rt_detr_v2_original_pytorch_checkpoint_to_pytorch.py",
         )
         model.push_to_hub(
-            repo_id=repo_id, commit_message="Add model from convert_rt_detr_v2_original_pytorch_checkpoint_to_pytorch.py"
+            repo_id=repo_id,
+            commit_message="Add model from convert_rt_detr_v2_original_pytorch_checkpoint_to_pytorch.py",
         )
         image_processor.push_to_hub(
             repo_id=repo_id,
