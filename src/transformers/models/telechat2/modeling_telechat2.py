@@ -51,7 +51,6 @@ _CHECKPOINT_FOR_DOC = "TeleAI/TeleChat2-3B"
 _CONFIG_FOR_DOC = "TeleChat2Config"
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->TeleChat2
 class TeleChat2RMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -140,7 +139,6 @@ class TeleChat2RotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-# Copied from transformers.models.llama.modeling_llama.rotate_half
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
@@ -273,9 +271,7 @@ class TeleChat2Attention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
-        use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs,
@@ -998,7 +994,6 @@ SQuAD (a linear layer on top of the hidden-states output to compute `span start 
 class TeleChat2ForQuestionAnswering(TeleChat2PreTrainedModel):
     base_model_prefix = "transformer"
 
-    # Copied from transformers.models.bloom.modeling_bloom.BloomForQuestionAnswering.__init__ with Bloom->TeleChat2
     def __init__(self, config):
         super().__init__(config)
         self.transformer = TeleChat2Model(config)
