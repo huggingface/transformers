@@ -255,13 +255,13 @@ You should install 🤗 Transformers in a [virtual environment](https://docs.pyt
 
 First, create a virtual environment with the version of Python you're going to use and activate it.
 
-**For macOS/Linux**
+**macOS/Linux**
 
 ```python -m venv env
 source env/bin/activate
 ```
 
-**For Windows**
+**Windows**
 
 ``` python -m venv env
 env\Scripts\activate
