@@ -32,23 +32,6 @@ Install 🤗 Transformers for whichever deep learning library you're working wit
 
 You should install 🤗 Transformers in a [virtual environment](https://docs.python.org/3/library/venv.html). If you're unfamiliar with Python virtual environments, take a look at this [guide](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/). A virtual environment makes it easier to manage different projects, and avoid compatibility issues between dependencies.
 
-Start by creating a virtual environment in your project directory:
-
-### Create and Activate a Virtual Environment
-
-To avoid dependency conflicts, it’s recommended to use a virtual environment.
-
-#### For macOS/Linux:
-```
-python3 -m venv env
-source env/bin/activate
-```
-#### For window OS:
-```
-python -m venv env
-.\env\Scripts\activate
-```
-
 Now you're ready to install 🤗 Transformers with the following command:
 
 ```bash
