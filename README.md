@@ -300,18 +300,6 @@ Follow the installation pages of Flax, PyTorch or TensorFlow to see how to insta
 
 > **_NOTE:_**  On Windows, you may be prompted to activate Developer Mode in order to benefit from caching. If this is not an option for you, please let us know in [this issue](https://github.com/huggingface/huggingface_hub/issues/1062).
 
-### GPU Setup (Optional)
-
-For GPU acceleration, install the appropriate CUDA drivers for your system:
-
-a) PyTorch CUDA Compatibility: ( https://pytorch.org/get-started/locally)
-
-b) TensorFlow GPU Support: (https://www.tensorflow.org/install/pip)
-
-**Verify GPU availability:**
-```
-nvidia-smi
-```
 ### Troubleshooting
 **a) Error: Python Version Not Supported:**
 
