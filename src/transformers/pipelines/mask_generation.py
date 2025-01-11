@@ -217,7 +217,7 @@ class MaskGenerationPipeline(ChunkPipeline):
                         "input_boxes": crop_boxes[crop_idx:crop_idx+1],
                         "is_last": is_last,
                         "image_embeddings": image_embeddings[crop_idx:crop_idx+1],
-                        **{k: v[crop_idx:crop_idx+1] if isinstance(v, torch.Tensor) else v 
+                        **{k: v[crop_idx:crop_idx+1] if isinstance(v, torch.Tensor) else v
                            for k, v in model_inputs.items() if k != "image_embeddings"}
                     }
         else:
