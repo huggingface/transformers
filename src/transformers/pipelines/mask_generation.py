@@ -315,3 +315,5 @@ class MaskGenerationPipeline(ChunkPipeline):
             optional["bounding_boxes"] = bounding_boxes
 
         return {"masks": output_masks, "scores": iou_scores, **optional, **extra}
+
+
