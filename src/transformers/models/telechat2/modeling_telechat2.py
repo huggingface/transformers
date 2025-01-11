@@ -32,7 +32,6 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
     LossKwargs,
     add_code_sample_docstrings,
@@ -46,97 +45,44 @@ from .configuration_telechat2 import TeleChat2Config
 
 logger = logging.get_logger(__name__)
 
-
 _CHECKPOINT_FOR_DOC = "TeleAI/TeleChat2-3B"
 _CONFIG_FOR_DOC = "TeleChat2Config"
 
 
-class TeleChat2RMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        TeleChat2RMSNorm is equivalent to T5LayerNorm
-        """
+def dropout_add(x: torch.Tensor, prob: float, training: bool) -> torch.Tensor:
+    """
+    Apply dropout to `x` and add the result to the residual tensor.
+
+    Args:
+        x (`torch.Tensor`): Input tensor.
+        residual (`torch.Tensor`): Residual tensor.
+        prob (`float`): Dropout probability.
+        training (`bool`): Whether in training mode.
+
+    Returns:
+        `torch.Tensor`: Output after dropout and addition.
+    """
+    out = F.dropout(x, p=prob, training=training)
+    return out
+
+
+class TeleChat2MLP(nn.Module):
+    """
+    TeleChat2 MLP block with a gated activation function.
+    """
+
+    def __init__(self, config: TeleChat2Config):
         super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
+        hidden_size = config.hidden_size
+        self.gate_proj = nn.Linear(hidden_size, config.ffn_hidden_size, bias=config.mlp_bias)
+        self.up_proj = nn.Linear(hidden_size, config.ffn_hidden_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(config.ffn_hidden_size, hidden_size, bias=True)
+        self.hidden_dropout = config.hidden_dropout
 
     def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
-ALL_LAYERNORM_LAYERS.append(TeleChat2RMSNorm)
-
-
-class TeleChat2RotaryEmbedding(nn.Module):
-    def __init__(
-        self,
-        config: TeleChat2Config,
-        device=None,
-    ):
-        super().__init__()
-        self.rope_kwargs = {}
-        # BC: "rope_type" was originally "type"
-        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-        else:
-            self.rope_type = "default"
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-
-        self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, **self.rope_kwargs)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
-
-    def _dynamic_frequency_update(self, position_ids, device):
-        """
-        dynamic RoPE layers should recompute `inv_freq` in the following situations:
-        1 - growing beyond the cached sequence length (allow scaling)
-        2 - the current sequence length is in the original scale (avoid losing precision with small sequences)
-        """
-        seq_len = torch.max(position_ids) + 1
-        if seq_len > self.max_seq_len_cached:  # growth
-            inv_freq, self.attention_scaling = self.rope_init_fn(
-                self.config, device, seq_len=seq_len, **self.rope_kwargs
-            )
-            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
-            self.max_seq_len_cached = seq_len
-
-        if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
-            self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
-            self.max_seq_len_cached = self.original_max_seq_len
-
-    @torch.no_grad()
-    def forward(self, x, position_ids):
-        if "dynamic" in self.rope_type:
-            self._dynamic_frequency_update(position_ids, device=x.device)
-
-        # Core RoPE block
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
-        position_ids_expanded = position_ids[:, None, :].float()
-        # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
-        device_type = x.device.type
-        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos()
-            sin = emb.sin()
-
-        # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
-        cos = cos * self.attention_scaling
-        sin = sin * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+        intermediate_output = self.down_proj(F.silu(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
+        output = dropout_add(intermediate_output, self.hidden_dropout, self.training)
+        return output
 
 
 def rotate_half(x):
@@ -171,43 +117,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     q_embed = (q * cos) + (rotate_half(q) * sin)
     k_embed = (k * cos) + (rotate_half(k) * sin)
     return q_embed, k_embed
-
-
-def dropout_add(x: torch.Tensor, residual: torch.Tensor, prob: float, training: bool) -> torch.Tensor:
-    """
-    Apply dropout to `x` and add the result to the residual tensor.
-
-    Args:
-        x (`torch.Tensor`): Input tensor.
-        residual (`torch.Tensor`): Residual tensor.
-        prob (`float`): Dropout probability.
-        training (`bool`): Whether in training mode.
-
-    Returns:
-        `torch.Tensor`: Output after dropout and addition.
-    """
-    out = F.dropout(x, p=prob, training=training)
-    out = residual + out
-    return out
-
-
-class TeleChat2MLP(nn.Module):
-    """
-    TeleChat2 MLP block with a gated activation function.
-    """
-
-    def __init__(self, config: TeleChat2Config):
-        super().__init__()
-        hidden_size = config.hidden_size
-        self.gate_proj = nn.Linear(hidden_size, config.ffn_hidden_size, bias=config.mlp_bias)
-        self.up_proj = nn.Linear(hidden_size, config.ffn_hidden_size, bias=config.mlp_bias)
-        self.down_proj = nn.Linear(config.ffn_hidden_size, hidden_size, bias=True)
-        self.hidden_dropout = config.hidden_dropout
-
-    def forward(self, hidden_states: torch.Tensor, residual: torch.Tensor) -> torch.Tensor:
-        intermediate_output = self.down_proj(F.silu(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
-        output = dropout_add(intermediate_output, residual, self.hidden_dropout, self.training)
-        return output
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -249,9 +158,7 @@ def eager_attention_forward(
 
 
 class TeleChat2Attention(nn.Module):
-    """
-    Multi-headed attention from 'Attention Is All You Need' paper.
-    """
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
 
     def __init__(self, config: TeleChat2Config, layer_idx: int):
         super().__init__()
@@ -275,7 +182,7 @@ class TeleChat2Attention(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor, torch.Tensor]], Optional[torch.Tensor]]:
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -319,6 +226,26 @@ class TeleChat2Attention(nn.Module):
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.dense(attn_output)
         return attn_output, attn_weights
+
+
+class TeleChat2RMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        TeleChat2RMSNorm is equivalent to T5LayerNorm
+        """
+        super().__init__()
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
+
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 class TeleChat2DecoderLayer(nn.Module):
@@ -365,13 +292,72 @@ class TeleChat2DecoderLayer(nn.Module):
         # Fully Connected
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states, residual)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
         if output_attentions:
             outputs += (self_attn_weights,)
 
         return outputs
+
+
+class TeleChat2RotaryEmbedding(nn.Module):
+    def __init__(self, config: TeleChat2Config, device=None):
+        super().__init__()
+        # BC: "rope_type" was originally "type"
+        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+        else:
+            self.rope_type = "default"
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
+        self.config = config
+        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = self.inv_freq
+
+    def _dynamic_frequency_update(self, position_ids, device):
+        """
+        dynamic RoPE layers should recompute `inv_freq` in the following situations:
+        1 - growing beyond the cached sequence length (allow scaling)
+        2 - the current sequence length is in the original scale (avoid losing precision with small sequences)
+        """
+        seq_len = torch.max(position_ids) + 1
+        if seq_len > self.max_seq_len_cached:  # growth
+            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
+            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
+            self.max_seq_len_cached = seq_len
+
+        if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
+            self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
+            self.max_seq_len_cached = self.original_max_seq_len
+
+    @torch.no_grad()
+    def forward(self, x, position_ids):
+        if "dynamic" in self.rope_type:
+            self._dynamic_frequency_update(position_ids, device=x.device)
+
+        # Core RoPE block
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
+        position_ids_expanded = position_ids[:, None, :].float()
+        # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
+        device_type = x.device.type
+        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
+        with torch.autocast(device_type=device_type, enabled=False):
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos()
+            sin = emb.sin()
+
+        # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
+        cos = cos * self.attention_scaling
+        sin = sin * self.attention_scaling
+
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 TELECHAT2_START_DOCSTRING = r"""
@@ -392,7 +378,7 @@ TELECHAT2_START_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare TELECHAT2 Model outputting raw hidden-states without any specific head on top.",
+    "The bare TeleChat2 Model outputting raw hidden-states without any specific head on top.",
     TELECHAT2_START_DOCSTRING,
 )
 class TeleChat2PreTrainedModel(PreTrainedModel):
@@ -403,6 +389,7 @@ class TeleChat2PreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
+    _supports_flex_attn = True
     _supports_cache_class = True
     _supports_quantized_cache = True
     _supports_static_cache = True
@@ -530,7 +517,7 @@ class TeleChat2Model(TeleChat2PreTrainedModel):
     @add_start_docstrings_to_model_forward(TELECHAT2_INPUTS_DOCSTRING)
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
@@ -643,7 +630,7 @@ class TeleChat2Model(TeleChat2PreTrainedModel):
         output_attentions: bool,
     ):
         if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and 0.0 in attention_mask:
+            if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
 
@@ -778,7 +765,7 @@ class TeleChat2ForCausalLM(TeleChat2PreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         self.transformer.word_embeddings = value
 
-    def get_output_embeddings(self) -> nn.Module:
+    def get_output_embeddings(self):
         return self.lm_head
 
     def set_output_embeddings(self, new_embeddings):

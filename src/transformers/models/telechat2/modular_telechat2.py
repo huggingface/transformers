@@ -17,7 +17,6 @@ from ..llama.modeling_llama import (
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
-    LlamaMLP,
     LlamaModel,
     apply_rotary_pos_emb,
     eager_attention_forward,
@@ -27,8 +26,11 @@ from .configuration_telechat2 import TeleChat2Config
 
 logger = logging.get_logger(__name__)
 
+_CHECKPOINT_FOR_DOC = "TeleAI/TeleChat2-3B"
+_CONFIG_FOR_DOC = "TeleChat2Config"
 
-def dropout_add(x: torch.Tensor, residual: torch.Tensor, prob: float, training: bool) -> torch.Tensor:
+
+def dropout_add(x: torch.Tensor, prob: float, training: bool) -> torch.Tensor:
     """
     Apply dropout to `x` and add the result to the residual tensor.
 
@@ -42,11 +44,10 @@ def dropout_add(x: torch.Tensor, residual: torch.Tensor, prob: float, training: 
         `torch.Tensor`: Output after dropout and addition.
     """
     out = F.dropout(x, p=prob, training=training)
-    out = residual + out
     return out
 
 
-class TeleChat2MLP(LlamaMLP):
+class TeleChat2MLP(nn.Module):
     """
     TeleChat2 MLP block with a gated activation function.
     """
@@ -59,9 +60,9 @@ class TeleChat2MLP(LlamaMLP):
         self.down_proj = nn.Linear(config.ffn_hidden_size, hidden_size, bias=True)
         self.hidden_dropout = config.hidden_dropout
 
-    def forward(self, hidden_states: torch.Tensor, residual: torch.Tensor) -> torch.Tensor:
+    def forward(self, hidden_states):
         intermediate_output = self.down_proj(F.silu(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
-        output = dropout_add(intermediate_output, residual, self.hidden_dropout, self.training)
+        output = dropout_add(intermediate_output, self.hidden_dropout, self.training)
         return output
 
 
@@ -88,7 +89,7 @@ class TeleChat2Attention(LlamaAttention):
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.Tensor, Optional[Tuple[torch.Tensor, torch.Tensor]], Optional[torch.Tensor]]:
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
