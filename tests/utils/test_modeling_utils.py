@@ -1591,9 +1591,7 @@ class ModelUtilsTest(TestCasePlus):
             with LoggingLevel(logging.INFO):
                 with CaptureLogger(logger) as cl1:
                     _, loading_info = TestModelGammaBeta.from_pretrained(
-                        tmp_dir,
-                        config=config,
-                        output_loading_info=True
+                        tmp_dir, config=config, output_loading_info=True
                     )
 
         missing_keys = loading_info["missing_keys"]
