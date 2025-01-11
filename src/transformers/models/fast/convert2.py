@@ -253,7 +253,6 @@ def convert_fast_checkpoint(checkpoint_url, checkpoint_config_filename, pytorch_
     #TODO: update assert logic
     # text_locations[0]["bboxes"][0][:10]
     # assert torch.allclose(output["feature_maps"][-1][0][10][12][:10].detach(), expected_slice_backbone, atol=1e-3)
-    breakpoint()
     #TODO: fix the safetensor sharing problem to use safetensors
     model.text_detection_head.final.fused_conv.weight = model.text_detection_head.final.fused_conv.weight.clone()
     model.text_detection_head.final.conv.weight = model.text_detection_head.final.conv.weight.clone()

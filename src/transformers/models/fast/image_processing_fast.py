@@ -421,7 +421,6 @@ class FastImageProcessor(BaseImageProcessor):
 
     def post_process_text_detection(self, output, target_sizes, threshold, bbox_type="rect"):
         scale = 2
-        breakpoint()
         # img_size = (self.size["height"], self.size["width"])
         #TODO: fix resizing bug
         img_size = (640, 864)
