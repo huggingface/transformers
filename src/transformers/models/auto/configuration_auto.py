@@ -252,7 +252,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("rt_detr", "RTDetrConfig"),
         ("rt_detr_resnet", "RTDetrResNetConfig"),
         ("rt_detr_v2", "RtDetrV2Config"),
-        ("rt_detr_v2_resnet", "RtDetrV2ResNetConfig"),
+        ("rt_detr_v2_resnet", "RTDetrResNetConfig"),
         ("rwkv", "RwkvConfig"),
         ("sam", "SamConfig"),
         ("seamless_m4t", "SeamlessM4TConfig"),

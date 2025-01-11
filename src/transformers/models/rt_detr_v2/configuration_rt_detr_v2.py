@@ -107,14 +107,6 @@ class RtDetrV2ResNetConfig(BackboneConfigMixin, PretrainedConfig):
         super().__init__(**kwargs)
         if layer_type not in self.layer_types:
             raise ValueError(f"layer_type={layer_type} is not one of {','.join(self.layer_types)}")
-        self.num_channels = num_channels
-        self.embedding_size = embedding_size
-        self.hidden_sizes = hidden_sizes
-        self.depths = depths
-        self.layer_type = layer_type
-        self.hidden_act = hidden_act
-        self.downsample_in_first_stage = downsample_in_first_stage
-        self.downsample_in_bottleneck = downsample_in_bottleneck
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, len(depths) + 1)]
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(
             out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
@@ -255,8 +247,10 @@ class RtDetrV2Config(PretrainedConfig):
             Relative weight of the generalized IoU loss in the object detection loss.
         eos_coefficient (`float`, *optional*, defaults to 0.0001):
             Relative classification weight of the 'no-object' class in the object detection loss.
-        decoder_n_levels (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
-        decoder_offset_scale (`<fill_type>`, *optional*, defaults to 0.5): <fill_docstring>
+        decoder_n_levels (`int`, *optional*, defaults to 3):
+            The number of feature levels used by the decoder.
+        decoder_offset_scale (`float`, *optional*, defaults to 0.5):
+            Scaling factor applied to the attention offsets in the decoder.
 
     Examples:
 
@@ -272,8 +266,6 @@ class RtDetrV2Config(PretrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```
-    decoder_n_levels (`int`, *optional*, defaults to 3): The number of feature levels used by the decoder.
-    decoder_offset_scale (`float`, *optional*, defaults to 0.5): Scaling factor applied to the attention offsets in the decoder.
     """
 
     model_type = "rt_detr_v2"
@@ -471,4 +463,4 @@ class RtDetrV2Config(PretrainedConfig):
         )
 
 
-__all__ = ["RtDetrV2Config", "RtDetrV2ResNetConfig"]
+__all__ = ["RtDetrV2Config"]
