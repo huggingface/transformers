@@ -274,7 +274,6 @@ To use 🤗 Transformers, you must install at least one of Flax, PyTorch, or Ten
 
 When one of those backends has been installed, 🤗 Transformers can be installed using pip as follows:
 
-**c) Install 🤗 Transformers:**
 ```
 pip install transformers
 ```
