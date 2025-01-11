@@ -658,6 +658,7 @@ _import_structure = {
         "OpenAIGPTConfig",
         "OpenAIGPTTokenizer",
     ],
+    "models.openlm": ["OpenLMConfig"],
     "models.opt": ["OPTConfig"],
     "models.owlv2": [
         "Owlv2Config",
@@ -3081,6 +3082,11 @@ else:
             "OpenAIGPTModel",
             "OpenAIGPTPreTrainedModel",
             "load_tf_weights_in_openai_gpt",
+        ]
+    )
+    _import_structure["models.openlm"].extend(
+        [
+            "OpenLMForCausalLM",
         ]
     )
     _import_structure["models.opt"].extend(
@@ -5706,6 +5712,9 @@ if TYPE_CHECKING:
         OpenAIGPTConfig,
         OpenAIGPTTokenizer,
     )
+    from .models.openlm import (
+        OpenLMConfig,
+    )
     from .models.opt import OPTConfig
     from .models.owlv2 import (
         Owlv2Config,
@@ -7813,6 +7822,9 @@ if TYPE_CHECKING:
             OpenAIGPTModel,
             OpenAIGPTPreTrainedModel,
             load_tf_weights_in_openai_gpt,
+        )
+        from .models.openlm import (
+            OpenLMForCausalLM
         )
         from .models.opt import (
             OPTForCausalLM,

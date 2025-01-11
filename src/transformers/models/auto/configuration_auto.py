@@ -213,6 +213,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("oneformer", "OneFormerConfig"),
         ("open-llama", "OpenLlamaConfig"),
         ("openai-gpt", "OpenAIGPTConfig"),
+        ("openlm", "OpenLMConfig"),
         ("opt", "OPTConfig"),
         ("owlv2", "Owlv2Config"),
         ("owlvit", "OwlViTConfig"),
@@ -546,6 +547,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("oneformer", "OneFormer"),
         ("open-llama", "OpenLlama"),
         ("openai-gpt", "OpenAI GPT"),
+        ("openlm", "OpenLM"),
         ("opt", "OPT"),
         ("owlv2", "OWLv2"),
         ("owlvit", "OWL-ViT"),
@@ -802,8 +804,11 @@ class _LazyConfigMapping(OrderedDict):
         """
         Register a new configuration in this mapping.
         """
-        if key in self._mapping.keys() and not exist_ok:
-            raise ValueError(f"'{key}' is already used by a Transformers config, pick another name.")
+        try:
+            if key in self._mapping.keys() and not exist_ok:
+                raise ValueError(f"'{key}' is already used by a Transformers config, pick another name.")
+        except:
+            breakpoint()
         self._extra_content[key] = value
 
 
