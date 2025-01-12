@@ -14,20 +14,24 @@ specific language governing permissions and limitations under the License.
 
 ## Overview
 
-The VitPose model was proposed in [ViTPose: Simple Vision Transformer Baselines for Human Pose Estimation](https://arxiv.org/abs/2204.12484) by Yufei Xu, Jing Zhang, Qiming Zhang, Dacheng Tao. VitPose employs a standard, non-hierarchical [Vision Transformer](https://arxiv.org/pdf/2010.11929v2) as backbone for the task of keypoint estimation. A simple decoder head is added on top to predict the heatmaps from a given image. Despite its simplicity, the model gets state-of-the-art results on the challenging MS COCO Keypoint Detection benchmark.
+The VitPose model was proposed in [ViTPose: Simple Vision Transformer Baselines for Human Pose Estimation](https://arxiv.org/abs/2204.12484) by Yufei Xu, Jing Zhang, Qiming Zhang, Dacheng Tao. VitPose employs a standard, non-hierarchical [Vision Transformer](vit) as backbone for the task of keypoint estimation. A simple decoder head is added on top to predict the heatmaps from a given image. Despite its simplicity, the model gets state-of-the-art results on the challenging MS COCO Keypoint Detection benchmark. The model was further improved in [ViTPose++: Vision Transformer for Generic Body Pose Estimation](https://arxiv.org/abs/2212.04246) where the authors employ
+a mixture-of-experts (MoE) module in the ViT backbone along with pre-training on more data, which further enhances the performance.
 
 The abstract from the paper is the following:
 
 *Although no specific domain knowledge is considered in the design, plain vision transformers have shown excellent performance in visual recognition tasks. However, little effort has been made to reveal the potential of such simple structures for pose estimation tasks. In this paper, we show the surprisingly good capabilities of plain vision transformers for pose estimation from various aspects, namely simplicity in model structure, scalability in model size, flexibility in training paradigm, and transferability of knowledge between models, through a simple baseline model called ViTPose. Specifically, ViTPose employs plain and non-hierarchical vision transformers as backbones to extract features for a given person instance and a lightweight decoder for pose estimation. It can be scaled up from 100M to 1B parameters by taking the advantages of the scalable model capacity and high parallelism of transformers, setting a new Pareto front between throughput and performance. Besides, ViTPose is very flexible regarding the attention type, input resolution, pre-training and finetuning strategy, as well as dealing with multiple pose tasks. We also empirically demonstrate that the knowledge of large ViTPose models can be easily transferred to small ones via a simple knowledge token. Experimental results show that our basic ViTPose model outperforms representative methods on the challenging MS COCO Keypoint Detection benchmark, while the largest model sets a new state-of-the-art.*
 
-![vitpose-architecture](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/vitpose-architecture.png)
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/vitpose-architecture.png"
+alt="drawing" width="600"/>
+
+<small> ViTPose architecture. Taken from the <a href="https://arxiv.org/abs/2204.12484">original paper.</a> </small>
 
 This model was contributed by [nielsr](https://huggingface.co/nielsr) and [sangbumchoi](https://github.com/SangbumChoi).
 The original code can be found [here](https://github.com/ViTAE-Transformer/ViTPose).
 
 ## Usage Tips
 
-ViTPose is a so-called top-down keypoint detection model. This means that one first uses an object detector, like [RT-DETR](rt_detr.md), to detect people (or other instances) in an image. Next, ViTPose takes the cropped images as input and predicts the keypoints.
+ViTPose is a so-called top-down keypoint detection model. This means that one first uses an object detector, like [RT-DETR](rt_detr.md), to detect people (or other instances) in an image. Next, ViTPose takes the cropped images as input and predicts the keypoints for each of them.
 
 ```py
 import torch
@@ -36,11 +40,7 @@ import numpy as np
 
 from PIL import Image
 
-from transformers import (
-    AutoProcessor,
-    RTDetrForObjectDetection,
-    VitPoseForPoseEstimation,
-)
+from transformers import AutoProcessor, RTDetrForObjectDetection, VitPoseForPoseEstimation
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -51,7 +51,7 @@ image = Image.open(requests.get(url, stream=True).raw)
 # Stage 1. Detect humans on the image
 # ------------------------------------------------------------------------
 
-# You can choose detector by your choice
+# You can choose any detector of your choice
 person_image_processor = AutoProcessor.from_pretrained("PekingU/rtdetr_r50vd_coco_o365")
 person_model = RTDetrForObjectDetection.from_pretrained("PekingU/rtdetr_r50vd_coco_o365", device_map=device)
 
@@ -89,8 +89,37 @@ pose_results = image_processor.post_process_pose_estimation(outputs, boxes=[pers
 image_pose_result = pose_results[0]  # results for first image
 ```
 
+### ViTPose++ models
+
+The best checkpoints are those of the [ViTPose++ paper](https://arxiv.org/abs/2212.04246). ViTPose++ models employ a so-called [Mixture-of-Experts (MoE)](https://huggingface.co/blog/moe) architecture for the ViT backbone, resulting in better performance. The ViTPose++ models require the `dataset_index` argument to be passed in the forward of the model, to indicate which experts to use for each example in the batch. Example usage is shown below:
+
+```python
+image_processor = AutoProcessor.from_pretrained("usyd-community/vitpose-plus-base")
+model = VitPoseForPoseEstimation.from_pretrained("usyd-community/vitpose-plus-base", device=device)
+
+inputs = image_processor(image, boxes=[person_boxes], return_tensors="pt").to(device)
+
+dataset_index = torch.tensor([0], device=device) # must be a tensor of shape (batch_size,)
+
+with torch.no_grad():
+    outputs = model(**inputs, dataset_index=dataset_index)
+```
+
+The ViTPose+ checkpoints use 6 experts, hence 6 different dataset indices can be passed. 
+An overview of the various dataset indices is provided below:
+
+- 0: [COCO validation 2017](https://cocodataset.org/#overview) dataset, using an object detector that gets 56 AP on the "person" class
+- 1: [AiC](https://github.com/fabbrimatteo/AiC-Dataset) dataset
+- 2: [MPII](https://www.mpi-inf.mpg.de/departments/computer-vision-and-machine-learning/software-and-datasets/mpii-human-pose-dataset) dataset
+- 3: [AP-10K](https://github.com/AlexTheBad/AP-10K) dataset
+- 4: [APT-36K](https://github.com/pandorgan/APT-36K) dataset
+- 5: [COCO-WholeBody](https://github.com/jin-s13/COCO-WholeBody) dataset
+
 
 ### Visualization for supervision user
+
+To visualize the various keypoints, the `supervision` [library](https://github.com/roboflow/supervision) can be used (requires `pip install supervision`):
+
 ```py
 import supervision as sv
 
@@ -120,6 +149,9 @@ annotated_frame = vertex_annotator.annotate(
 ```
 
 ### Visualization for advanced user
+
+Alternatively, one can also visualize the keypoints using [OpenCV](https://opencv.org/) (requires `pip install opencv-python`):
+
 ```py
 import math
 import cv2
@@ -223,26 +255,18 @@ pose_image
 ```
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/vitpose-coco.jpg" alt="drawing" width="600"/>
 
-### MoE backbone
+## Resources
 
-To enable MoE (Mixture of Experts) function in the backbone, user has to give appropriate configuration such as `num_experts` and input value `dataset_index` to the backbone model.  However, it is not used in default parameters. Below is the code snippet for usage of MoE function.
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with ViTPose. If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
-```py
->>> from transformers import VitPoseBackboneConfig, VitPoseBackbone
->>> import torch
-
->>> config = VitPoseBackboneConfig(num_experts=3, out_indices=[-1])
->>> model = VitPoseBackbone(config)
-
->>> pixel_values = torch.randn(3, 3, 256, 192)
->>> dataset_index = torch.tensor([1, 2, 3])
->>> outputs = model(pixel_values, dataset_index)
-```
+- A demo of ViTPose on images and video can be found [here](https://huggingface.co/spaces/hysts/ViTPose-transformers).
+- A notebook illustrating inference and visualization can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/ViTPose/Inference_with_ViTPose_for_human_pose_estimation.ipynb).
 
 ## VitPoseImageProcessor
 
 [[autodoc]] VitPoseImageProcessor
     - preprocess
+    - post_process_pose_estimation
 
 ## VitPoseConfig
 

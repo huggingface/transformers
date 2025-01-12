@@ -15,6 +15,8 @@
 """Convert VitPose checkpoints from the original repository.
 
 URL: https://github.com/vitae-transformer/vitpose
+
+Notebook to get the original logits: https://colab.research.google.com/drive/1QDX_2POTpl6JaZAV2WIFjuiqDsDwiqMZ?usp=sharing.
 """
 
 import argparse
@@ -70,7 +72,8 @@ def get_config(model_name):
             part_features = 256
             out_indices = [24]
         elif "huge" in model_name:
-            raise NotImplementedError("Huge VitPose+ model not yet supported")
+            part_features = 320
+            out_indices = [32]
         else:
             raise ValueError(f"Model {model_name} not supported")
     else:
@@ -367,6 +370,17 @@ def write_model(model_name, model_path, push_to_hub, check_logits=True):
                 torch.tensor(0.8746),
                 atol=5e-2,
             )
+        elif model_name == "vitpose-plus-huge":
+            assert torch.allclose(
+                pose_results[1]["keypoints"][0],
+                torch.tensor([398.2079, 181.8026]),
+                atol=5e-2,
+            )
+            assert torch.allclose(
+                pose_results[1]["scores"][0],
+                torch.tensor(0.8693),
+                atol=5e-2,
+            )
         else:
             raise ValueError("Model not supported")
     print("Conversion successfully done.")
@@ -378,8 +392,10 @@ def write_model(model_name, model_path, push_to_hub, check_logits=True):
 
     if push_to_hub:
         print(f"Pushing model and image processor for {model_name} to hub")
-        model.push_to_hub(f"danelcsb/{model_name}")
-        image_processor.push_to_hub(f"danelcsb/{model_name}")
+        # we created a community organization on the hub for this model
+        # maintained by the Transformers team
+        model.push_to_hub(f"usyd-community/{model_name}")
+        image_processor.push_to_hub(f"usyd-community/{model_name}")
 
 
 def main():
@@ -393,7 +409,7 @@ def main():
         help="Name of the VitPose model you'd like to convert.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path", default=None, type=str, help="Path to store the converted model."
     )
     parser.add_argument(
         "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
