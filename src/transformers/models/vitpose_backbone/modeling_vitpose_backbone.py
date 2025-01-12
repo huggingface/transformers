@@ -100,6 +100,9 @@ class VitPoseBackboneEmbeddings(nn.Module):
 
         embeddings = self.dropout(embeddings)
 
+        print("Shape after patch embedding:", embeddings.shape)
+        print("First values after patch embedding:", embeddings[0, :3, :3])
+
         return embeddings
 
 
@@ -363,6 +366,9 @@ class VitPoseBackboneEncoder(nn.Module):
                 )
             else:
                 layer_outputs = layer_module(hidden_states, dataset_index, layer_head_mask, output_attentions)
+                if i == 0:
+                    print("Shape after first Transformer layer: ", layer_outputs[0].shape)
+                    print("First values after first Transformer layer: ", layer_outputs[0][0, :3, :3])
 
             hidden_states = layer_outputs[0]
 
@@ -393,7 +399,7 @@ class VitPoseBackbonePreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["VitPoseBackboneEmbeddings", "VitPoseBackboneLayer"]
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
+    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm, VitPoseBackboneEmbeddings]) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid

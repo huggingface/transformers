@@ -43,34 +43,62 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 }
 
 MODEL_TO_FILE_NAME_MAPPING = {
+    # VitPose models, simple decoder
     "vitpose-base-simple": "vitpose-b-simple.pth",
+    # VitPose models, classic decoder
     "vitpose-base": "vitpose-b.pth",
+    # VitPose models, COCO-AIC-MPII
     "vitpose-base-coco-aic-mpii": "vitpose_base_coco_aic_mpii.pth",
+    # VitPose+ models
+    "vitpose-plus-small": "vitpose+_small.pth",
     "vitpose-plus-base": "vitpose+_base.pth",
+    "vitpose-plus-large": "vitpose+_large.pth",
+    "vitpose-plus-huge": "vitpose+_huge.pth",
 }
 
 
 def get_config(model_name):
-    num_experts = 6 if "plus" in model_name else 1
-    part_features = 192 if "plus" in model_name else 0
+    if "plus" in model_name:
+        num_experts = 6
+        if "small" in model_name:
+            part_features = 96
+            out_indices = [12]
+        elif "base" in model_name:
+            part_features = 192
+            out_indices = [12]
+        elif "large" in model_name:
+            part_features = 256
+            out_indices = [24]
+        elif "huge" in model_name:
+            raise NotImplementedError("Huge VitPose+ model not yet supported")
+        else:
+            raise ValueError(f"Model {model_name} not supported")
+    else:
+        num_experts = 1
+        part_features = 0
 
-    backbone_config = VitPoseBackboneConfig(out_indices=[12], num_experts=num_experts, part_features=part_features)
     # size of the architecture
     if "small" in model_name:
-        backbone_config.hidden_size = 768
-        backbone_config.intermediate_size = 2304
-        backbone_config.num_hidden_layers = 8
-        backbone_config.num_attention_heads = 8
+        hidden_size = 384
+        num_hidden_layers = 12
+        num_attention_heads = 12
     elif "large" in model_name:
-        backbone_config.hidden_size = 1024
-        backbone_config.intermediate_size = 4096
-        backbone_config.num_hidden_layers = 24
-        backbone_config.num_attention_heads = 16
+        hidden_size = 1024
+        num_hidden_layers = 24
+        num_attention_heads = 16
     elif "huge" in model_name:
-        backbone_config.hidden_size = 1280
-        backbone_config.intermediate_size = 5120
-        backbone_config.num_hidden_layers = 32
-        backbone_config.num_attention_heads = 16
+        hidden_size = 1280
+        num_hidden_layers = 32
+        num_attention_heads = 16
+
+    backbone_config = VitPoseBackboneConfig(
+        out_indices=out_indices,
+        hidden_size=hidden_size,
+        num_hidden_layers=num_hidden_layers,
+        num_attention_heads=num_attention_heads,
+        num_experts=num_experts,
+        part_features=part_features,
+    )
 
     use_simple_decoder = "simple" in model_name
 
@@ -155,9 +183,7 @@ def prepare_img():
 
 
 @torch.no_grad()
-def write_model(model_path, model_name, push_to_hub, check_logits=True):
-    os.makedirs(model_path, exist_ok=True)
-
+def write_model(model_name, model_path, push_to_hub, check_logits=True):
     # ------------------------------------------------------------
     # Vision model params and config
     # ------------------------------------------------------------
@@ -236,20 +262,27 @@ def write_model(model_path, model_name, push_to_hub, check_logits=True):
 
     filepath = hf_hub_download(repo_id="nielsr/test-image", filename="vitpose_batch_data.pt", repo_type="dataset")
     original_pixel_values = torch.load(filepath, map_location="cpu")["img"]
+    # we allow for a small difference in the pixel values due to the original repository using cv2
     assert torch.allclose(pixel_values, original_pixel_values, atol=1e-1)
 
     dataset_index = torch.tensor([0])
 
     with torch.no_grad():
+        print("Shape of original_pixel_values: ", original_pixel_values.shape)
+        print("First values of original_pixel_values: ", original_pixel_values[0, 0, :3, :3])
+
         # first forward pass
-        outputs = model(pixel_values, dataset_index=dataset_index)
+        outputs = model(original_pixel_values, dataset_index=dataset_index)
         output_heatmap = outputs.heatmaps
+
+        print("Shape of output_heatmap: ", output_heatmap.shape)
+        print("First values: ", output_heatmap[0, 0, :3, :3])
 
         # second forward pass (flipped)
         # this is done since the model uses `flip_test=True` in its test config
-        pixel_values_flipped = torch.flip(pixel_values, [3])
+        original_pixel_values_flipped = torch.flip(original_pixel_values, [3])
         outputs_flipped = model(
-            pixel_values_flipped,
+            original_pixel_values_flipped,
             dataset_index=dataset_index,
             flip_pairs=torch.tensor([[1, 2], [3, 4], [5, 6], [7, 8], [9, 10], [11, 12], [13, 14], [15, 16]]),
         )
@@ -257,10 +290,14 @@ def write_model(model_path, model_name, push_to_hub, check_logits=True):
 
     outputs.heatmaps = (output_heatmap + output_flipped_heatmap) * 0.5
 
+    print("Shape of averaged heatmap: ", outputs.heatmaps.shape)
+    print("First values of averaged heatmap: ", outputs.heatmaps[0, 0, :3, :3])
+
     # Verify pose_results
     pose_results = image_processor.post_process_pose_estimation(outputs, boxes=boxes)[0]
 
     if check_logits:
+        # Simple decoder checkpoints
         if model_name == "vitpose-base-simple":
             assert torch.allclose(
                 pose_results[1]["keypoints"][0],
@@ -272,6 +309,7 @@ def write_model(model_path, model_name, push_to_hub, check_logits=True):
                 torch.tensor([8.66642594e-01]),
                 atol=5e-2,
             )
+        # Classic decoder checkpoints
         elif model_name == "vitpose-base":
             assert torch.allclose(
                 pose_results[1]["keypoints"][0],
@@ -283,6 +321,7 @@ def write_model(model_path, model_name, push_to_hub, check_logits=True):
                 torch.tensor([8.8235235e-01]),
                 atol=5e-2,
             )
+        # COCO-AIC-MPII checkpoints
         elif model_name == "vitpose-base-coco-aic-mpii":
             assert torch.allclose(
                 pose_results[1]["keypoints"][0],
@@ -292,6 +331,18 @@ def write_model(model_path, model_name, push_to_hub, check_logits=True):
             assert torch.allclose(
                 pose_results[1]["scores"][0],
                 torch.tensor([8.69966745e-01]),
+                atol=5e-2,
+            )
+        # VitPose+ models
+        elif model_name == "vitpose-plus-small":
+            assert torch.allclose(
+                pose_results[1]["keypoints"][0],
+                torch.tensor([398.1597, 181.6902]),
+                atol=5e-2,
+            )
+            assert torch.allclose(
+                pose_results[1]["scores"][0],
+                torch.tensor(0.9051),
                 atol=5e-2,
             )
         elif model_name == "vitpose-plus-base":
@@ -305,13 +356,25 @@ def write_model(model_path, model_name, push_to_hub, check_logits=True):
                 torch.tensor([8.75046968e-01]),
                 atol=5e-2,
             )
+        elif model_name == "vitpose-plus-large":
+            assert torch.allclose(
+                pose_results[1]["keypoints"][0],
+                torch.tensor([398.1409, 181.7412]),
+                atol=5e-2,
+            )
+            assert torch.allclose(
+                pose_results[1]["scores"][0],
+                torch.tensor(0.8746),
+                atol=5e-2,
+            )
         else:
             raise ValueError("Model not supported")
     print("Conversion successfully done.")
 
-    # save the model to a local directory
-    model.save_pretrained(model_path)
-    image_processor.save_pretrained(model_path)
+    if model_path is not None:
+        os.makedirs(model_path, exist_ok=True)
+        model.save_pretrained(model_path)
+        image_processor.save_pretrained(model_path)
 
     if push_to_hub:
         print(f"Pushing model and image processor for {model_name} to hub")
@@ -336,10 +399,7 @@ def main():
         "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
     )
     parser.add_argument(
-        "--push_to_hub",
-        default=True,
-        type=bool,
-        help="Whether to check the logits of public converted model to the 🤗 hub. You can disable when using custom model.",
+        "--check_logits", action="store_false", help="Whether or not to verify the logits of the converted model."
     )
 
     args = parser.parse_args()
