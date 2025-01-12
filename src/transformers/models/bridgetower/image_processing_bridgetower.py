@@ -268,7 +268,7 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
                 The channel dimension format of the input image. If not provided, it will be inferred from the input
                 image.
         """
-        warnings.warn("The center_crop method is deprecated and will be removed in two releases time.")
+        warnings.warn("The center_crop method is deprecated and will be removed in v4.50.0")
         output_size = size["shortest_edge"]
         return center_crop(
             image,
@@ -376,6 +376,8 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         do_pad: Optional[bool] = None,
+        do_center_crop: Optional[bool] = None,
+        crop_size: Dict[str, int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -472,6 +474,8 @@ class BridgeTowerImageProcessor(BaseImageProcessor):
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
             )
 
+        if do_center_crop or crop_size:
+            warnings.warn("The center_crop method is deprecated and will be removed in v4.50.0")
         if do_resize:
             images = [
                 self.resize(
