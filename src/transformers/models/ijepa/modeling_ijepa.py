@@ -527,8 +527,9 @@ IJEPA_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
-_EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
 
+
+_EXPECTED_OUTPUT_SHAPE = [1, 256, 1280]
 
 IJEPA_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
@@ -640,8 +641,7 @@ class IJepaModel(IJepaPreTrainedModel):
         )
 
 
-# Image classification docstring
-_IMAGE_CLASS_CHECKPOINT = "google/ijepa-base-patch16-224"
+_IMAGE_CLASS_CHECKPOINT = "facebook/ijepa_vith14_1k"
 _IMAGE_CLASS_EXPECTED_OUTPUT = "Egyptian cat"
 
 
