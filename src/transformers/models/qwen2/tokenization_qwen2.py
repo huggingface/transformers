@@ -313,6 +313,8 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
         spaces_between_special_tokens: bool = False,
         **kwargs,
     ) -> str:
+        # `spaces_between_special_tokens` defaults to True for _decode in slow tokenizers
+        # and cannot be configured elsewhere, but it should default to False for Qwen2Tokenizer
         if isinstance(token_ids, int):
             tokens = self.convert_ids_to_tokens([token_ids], skip_special_tokens=skip_special_tokens)
             return self.convert_tokens_to_string(tokens)
