@@ -53,6 +53,7 @@ else:
 
 if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import BlockMask, create_block_mask, flex_attention
+
     flex_attention = torch.compile(flex_attention)
     create_block_mask = torch.compile(create_block_mask)
 else:
