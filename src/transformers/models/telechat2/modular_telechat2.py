@@ -66,7 +66,9 @@ class TeleChat2MLP(nn.Module):
         return output
 
 
-class TeleChat2Attention(LlamaAttention):
+class TeleChat2Attention(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
     def __init__(self, config: TeleChat2Config, layer_idx: int):
         super().__init__()
         self.config = config
