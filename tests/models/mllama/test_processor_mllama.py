@@ -110,32 +110,34 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         ]
         input_ids = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True)
         expected_ids = [
-            128000,  # <|begin_of_text|>
-            128006,  # <|start_header_id|>
-            9125,  # "system"
-            128007,  # <|end_of_header|>
-            271,  # "\n\n"
-            2028,
-            374,
-            264,
-            1296,
-            11914,
-            13,  # "This is a test sentence."
-            128009,  # <|eot_id|>
-            128006,  # <|start_header_id|>
-            882,  # "user"
-            128007,  # <|end_of_header|>
-            271,  # "\n\n"
-            2028,
-            374,
-            264,
-            2077,
-            13,  # "This is a response.",
-            128009,  # <|eot_id|>
-            128006,  # <|start_header_id|>
-            78191,  # "assistant"
-            128007,  # <|end_of_header|>
-            271,  # "\n\n"
+            [
+                128000,  # <|begin_of_text|>
+                128006,  # <|start_header_id|>
+                9125,  # "system"
+                128007,  # <|end_of_header|>
+                271,  # "\n\n"
+                2028,
+                374,
+                264,
+                1296,
+                11914,
+                13,  # "This is a test sentence."
+                128009,  # <|eot_id|>
+                128006,  # <|start_header_id|>
+                882,  # "user"
+                128007,  # <|end_of_header|>
+                271,  # "\n\n"
+                2028,
+                374,
+                264,
+                2077,
+                13,  # "This is a response.",
+                128009,  # <|eot_id|>
+                128006,  # <|start_header_id|>
+                78191,  # "assistant"
+                128007,  # <|end_of_header|>
+                271,  # "\n\n"
+            ]
         ]
 
         self.assertEqual(input_ids, expected_ids)
@@ -146,9 +148,9 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                 "role": "user",
                 "content": [
                     {"type": "text", "text": "Describe this image in two sentences"},
-                    {"type": "image"},
+                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
                     {"type": "text", "text": " Test sentence   "},
-                    {"type": "image"},
+                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
                     {"type": "text", "text": "ok\n"},
                 ],
             }
@@ -164,10 +166,10 @@ class MllamaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         input_ids = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True)
         # fmt: off
-        expected_ids = [
+        expected_ids = [[
             128000, 128006, 882, 128007, 271, 75885, 420, 2217, 304, 1403, 23719, 128256,
             3475, 11914, 262, 128256, 564, 198, 128009, 128006, 78191, 128007, 271,
-        ]
+        ]]
         # fmt: on
         self.assertEqual(input_ids, expected_ids)
 
