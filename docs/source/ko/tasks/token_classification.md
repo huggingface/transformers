@@ -107,7 +107,7 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 >>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
-위의 예제 `tokens` 필드를 보면 입력이 이미 토큰화된 것처럼 보입니다. 그러나 실제로 입력은 아직 토큰화되지 않았으므로 단어를 하위 단어로 토큰화하기 위해 `is_split_into_words=True`를 설정해야 합니다. 예제로 확인합니다: 
+위의 예제 `tokens` 필드를 보면 입력이 이미 토큰화된 것처럼 보입니다. 그러나 실제로 입력은 아직 토큰화되지 않았으므로 단어를 하위 단어로 토큰화하기 위해 `is_split_into_words=True`를 설정해야 합니다. 예제로 확인합니다:
 
 ```py
 >>> example = wnut["train"][0]
@@ -294,7 +294,7 @@ Hugging Face 계정에 로그인하여 모델을 업로드하고 커뮤니티에
 ...     args=training_args,
 ...     train_dataset=tokenized_wnut["train"],
 ...     eval_dataset=tokenized_wnut["test"],
-...     tokenizer=tokenizer,
+...     processing_class=tokenizer,
 ...     data_collator=data_collator,
 ...     compute_metrics=compute_metrics,
 ... )
@@ -405,8 +405,8 @@ TensorFlow에서 모델을 파인 튜닝하려면, 먼저 옵티마이저 함수
 
 <Tip>
 
-토큰 분류를 위한 모델을 파인 튜닝하는 자세한 예제는 다음 
-[PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification.ipynb) 
+토큰 분류를 위한 모델을 파인 튜닝하는 자세한 예제는 다음
+[PyTorch notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification.ipynb)
 또는 [TensorFlow notebook](https://colab.research.google.com/github/huggingface/notebooks/blob/main/examples/token_classification-tf.ipynb)를 참조하세요.
 
 </Tip>

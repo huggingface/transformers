@@ -14,6 +14,7 @@
 # limitations under the License.
 import copy
 import glob
+import itertools
 import json
 import os
 import os.path
@@ -23,10 +24,11 @@ import threading
 import unittest
 import unittest.mock as mock
 import uuid
+import warnings
 from pathlib import Path
 
 import requests
-from huggingface_hub import HfApi, HfFolder, delete_repo
+from huggingface_hub import HfApi, HfFolder
 from pytest import mark
 from requests.exceptions import HTTPError
 
@@ -42,9 +44,9 @@ from transformers import (
 )
 from transformers.testing_utils import (
     TOKEN,
-    USER,
     CaptureLogger,
     LoggingLevel,
+    TemporaryHubRepo,
     TestCasePlus,
     is_staging_test,
     require_accelerate,
@@ -89,6 +91,7 @@ if is_torch_available():
         BertConfig,
         BertModel,
         CLIPTextModel,
+        GenerationMixin,
         PreTrainedModel,
         T5Config,
         T5ForConditionalGeneration,
@@ -103,8 +106,8 @@ if is_torch_available():
         _find_disjoint,
         _find_identical,
         dtype_byte_size,
-        shard_checkpoint,
     )
+    from transformers.pytorch_utils import isin_mps_friendly
 
     # Fake pretrained models for tests
     class BaseModel(PreTrainedModel):
@@ -457,6 +460,19 @@ class ModelUtilsTest(TestCasePlus):
         with self.assertRaises(ValueError):
             model = AutoModel.from_pretrained(TINY_T5, torch_dtype="int64")
 
+    @require_torch
+    def test_model_from_pretrained_meta_device(self):
+        def is_on_meta(model_id, dtype):
+            with torch.device("meta"):
+                model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=dtype)
+                return all(value.device.type == "meta" for value in model.state_dict().values())
+
+        model_ids = ("fxmarty/tiny-llama-fast-tokenizer", "fxmarty/small-llama-testing")
+        dtypes = (None, "auto", torch.float16)
+
+        for model_id, dtype in itertools.product(model_ids, dtypes):
+            self.assertTrue(is_on_meta(model_id, dtype))
+
     def test_model_from_pretrained_torch_dtype(self):
         # test that the model can be instantiated with dtype of either
         # 1. explicit from_pretrained's torch_dtype argument
@@ -547,32 +563,17 @@ class ModelUtilsTest(TestCasePlus):
         if is_flash_attn_2_available():
             attn_implementation_available.append("flash_attention_2")
 
-        mistral_attention_classes = {
-            "eager": "MistralAttention",
-            "sdpa": "MistralSdpaAttention",
-            "flash_attention_2": "MistralFlashAttention2",
-        }
         for requested_attn_implementation in attn_implementation_available:
             model = AutoModelForCausalLM.from_pretrained(
                 TINY_MISTRAL, attn_implementation=requested_attn_implementation
             )
             self.assertEqual(model.config._attn_implementation, requested_attn_implementation)
-            for module in model.modules():
-                if "Attention" in module.__class__.__name__:
-                    self.assertEqual(
-                        module.__class__.__name__, mistral_attention_classes[requested_attn_implementation]
-                    )
 
             config = AutoConfig.from_pretrained(TINY_MISTRAL)
             model = AutoModelForCausalLM.from_pretrained(
                 TINY_MISTRAL, config=config, attn_implementation=requested_attn_implementation
             )
             self.assertEqual(model.config._attn_implementation, requested_attn_implementation)
-            for module in model.modules():
-                if "Attention" in module.__class__.__name__:
-                    self.assertEqual(
-                        module.__class__.__name__, mistral_attention_classes[requested_attn_implementation]
-                    )
 
     def test_model_from_config_attn_implementation(self):
         # test that the model can be instantiated with attn_implementation of either
@@ -586,11 +587,6 @@ class ModelUtilsTest(TestCasePlus):
         if is_flash_attn_2_available():
             attn_implementation_available.append("flash_attention_2")
 
-        mistral_attention_classes = {
-            "eager": "MistralAttention",
-            "sdpa": "MistralSdpaAttention",
-            "flash_attention_2": "MistralFlashAttention2",
-        }
         for requested_attn_implementation in attn_implementation_available:
             config = AutoConfig.from_pretrained(TINY_MISTRAL, attn_implementation=requested_attn_implementation)
             # Ensure the config was set correctly
@@ -598,11 +594,6 @@ class ModelUtilsTest(TestCasePlus):
             self.assertEqual(config._attn_implementation_internal, requested_attn_implementation)
             model = AutoModelForCausalLM.from_config(config)
             self.assertEqual(model.config._attn_implementation, requested_attn_implementation)
-            for module in model.modules():
-                if "Attention" in module.__class__.__name__:
-                    self.assertEqual(
-                        module.__class__.__name__, mistral_attention_classes[requested_attn_implementation]
-                    )
 
             config = AutoConfig.from_pretrained(TINY_MISTRAL)
             # When the config is not set, the default is "eager"
@@ -610,11 +601,6 @@ class ModelUtilsTest(TestCasePlus):
             self.assertEqual(config._attn_implementation_internal, None)
             model = AutoModelForCausalLM.from_config(config=config, attn_implementation=requested_attn_implementation)
             self.assertEqual(model.config._attn_implementation, requested_attn_implementation)
-            for module in model.modules():
-                if "Attention" in module.__class__.__name__:
-                    self.assertEqual(
-                        module.__class__.__name__, mistral_attention_classes[requested_attn_implementation]
-                    )
 
             # Set a nonsense attn_implementation in the config, which should be overridden by the explicit argument
             config = AutoConfig.from_pretrained(TINY_MISTRAL, attn_implementation="foo-bar-baz")
@@ -622,11 +608,6 @@ class ModelUtilsTest(TestCasePlus):
             self.assertEqual(config._attn_implementation_internal, "foo-bar-baz")
             model = AutoModelForCausalLM.from_config(config=config, attn_implementation=requested_attn_implementation)
             self.assertEqual(model.config._attn_implementation, requested_attn_implementation)
-            for module in model.modules():
-                if "Attention" in module.__class__.__name__:
-                    self.assertEqual(
-                        module.__class__.__name__, mistral_attention_classes[requested_attn_implementation]
-                    )
 
     def test_torch_dtype_byte_sizes(self):
         torch_dtypes_and_bytes = [
@@ -664,71 +645,6 @@ class ModelUtilsTest(TestCasePlus):
 
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
-
-    def test_shard_checkpoint(self):
-        # This is the model we will use, total size 340,000 bytes.
-        model = torch.nn.Sequential(
-            torch.nn.Linear(100, 200, bias=False),  # size 80,000
-            torch.nn.Linear(200, 200, bias=False),  # size 160,000
-            torch.nn.Linear(200, 100, bias=False),  # size 80,000
-            torch.nn.Linear(100, 50, bias=False),  # size 20,000
-        )
-        state_dict = model.state_dict()
-
-        with self.subTest("No shard when max size is bigger than model size"):
-            shards, index = shard_checkpoint(state_dict)
-            self.assertIsNone(index)
-            self.assertDictEqual(shards, {WEIGHTS_NAME: state_dict})
-
-        with self.subTest("Test sharding, no weights bigger than max size"):
-            shards, index = shard_checkpoint(state_dict, max_shard_size="300kB")
-            # Split is first two layers then last two.
-            self.assertDictEqual(
-                index,
-                {
-                    "metadata": {"total_size": 340000},
-                    "weight_map": {
-                        "0.weight": "pytorch_model-00001-of-00002.bin",
-                        "1.weight": "pytorch_model-00001-of-00002.bin",
-                        "2.weight": "pytorch_model-00002-of-00002.bin",
-                        "3.weight": "pytorch_model-00002-of-00002.bin",
-                    },
-                },
-            )
-
-            shard1 = {"0.weight": state_dict["0.weight"], "1.weight": state_dict["1.weight"]}
-            shard2 = {"2.weight": state_dict["2.weight"], "3.weight": state_dict["3.weight"]}
-            self.assertDictEqual(
-                shards, {"pytorch_model-00001-of-00002.bin": shard1, "pytorch_model-00002-of-00002.bin": shard2}
-            )
-
-        with self.subTest("Test sharding with weights bigger than max size"):
-            shards, index = shard_checkpoint(state_dict, max_shard_size="100kB")
-            # Split is first layer, second layer then last 2.
-            self.assertDictEqual(
-                index,
-                {
-                    "metadata": {"total_size": 340000},
-                    "weight_map": {
-                        "0.weight": "pytorch_model-00001-of-00003.bin",
-                        "1.weight": "pytorch_model-00002-of-00003.bin",
-                        "2.weight": "pytorch_model-00003-of-00003.bin",
-                        "3.weight": "pytorch_model-00003-of-00003.bin",
-                    },
-                },
-            )
-
-            shard1 = {"0.weight": state_dict["0.weight"]}
-            shard2 = {"1.weight": state_dict["1.weight"]}
-            shard3 = {"2.weight": state_dict["2.weight"], "3.weight": state_dict["3.weight"]}
-            self.assertDictEqual(
-                shards,
-                {
-                    "pytorch_model-00001-of-00003.bin": shard1,
-                    "pytorch_model-00002-of-00003.bin": shard2,
-                    "pytorch_model-00003-of-00003.bin": shard3,
-                },
-            )
 
     def test_checkpoint_sharding_local_bin(self):
         model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
@@ -1541,15 +1457,16 @@ class ModelUtilsTest(TestCasePlus):
             self.assertEqual(model.__class__.__name__, model_ref.__class__.__name__)
 
     def test_generation_config_is_loaded_with_model(self):
-        # Note: `TinyLlama/TinyLlama-1.1B-Chat-v1.0` has a `generation_config.json` containing `max_length: 2048`
+        # Note: `hf-internal-testing/tiny-random-MistralForCausalLM` has a `generation_config.json`
+        # containing `bos_token_id: 1`
 
         # 1. Load without further parameters
-        model = AutoModelForCausalLM.from_pretrained("TinyLlama/TinyLlama-1.1B-Chat-v1.0")
-        self.assertEqual(model.generation_config.max_length, 2048)
+        model = AutoModelForCausalLM.from_pretrained(TINY_MISTRAL)
+        self.assertEqual(model.generation_config.bos_token_id, 1)
 
         # 2. Load with `device_map`
-        model = AutoModelForCausalLM.from_pretrained("TinyLlama/TinyLlama-1.1B-Chat-v1.0", device_map="auto")
-        self.assertEqual(model.generation_config.max_length, 2048)
+        model = AutoModelForCausalLM.from_pretrained(TINY_MISTRAL, device_map="auto")
+        self.assertEqual(model.generation_config.bos_token_id, 1)
 
     @require_safetensors
     def test_safetensors_torch_from_torch(self):
@@ -1599,14 +1516,30 @@ class ModelUtilsTest(TestCasePlus):
         for p1, p2 in zip(model.parameters(), new_model.parameters()):
             self.assertTrue(torch.equal(p1, p2))
 
-    def test_modifying_model_config_causes_warning_saving_generation_config(self):
+    def test_modifying_model_config_gets_moved_to_generation_config(self):
+        """
+        Calling `model.save_pretrained` should move the changes made to `generate` parameterization in the model config
+        to the generation config.
+        """
         model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
-        model.config.top_k = 1
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            with self.assertLogs("transformers.modeling_utils", level="WARNING") as logs:
+        # Initially, the repetition penalty has its default value in `model.config`. The `model.generation_config` will
+        # have the exact same default
+        self.assertTrue(model.config.repetition_penalty == 1.0)
+        self.assertTrue(model.generation_config.repetition_penalty == 1.0)
+        # If the user attempts to save a custom generation parameter:
+        model.config.repetition_penalty = 3.0
+        with warnings.catch_warnings(record=True) as warning_list:
+            with tempfile.TemporaryDirectory() as tmp_dir:
                 model.save_pretrained(tmp_dir)
-            self.assertEqual(len(logs.output), 1)
-            self.assertIn("Your generation config was originally created from the model config", logs.output[0])
+                # 1 - That parameter will be removed from `model.config`. We don't want to use `model.config` to store
+                # generative parameters, and the old default (1.0) would no longer relect the user's wishes.
+                self.assertTrue(model.config.repetition_penalty is None)
+                # 2 - That parameter will be set in `model.generation_config` instead.
+                self.assertTrue(model.generation_config.repetition_penalty == 3.0)
+        # 3 - The user will see a warning regarding the custom parameter that has been moved.
+        self.assertTrue(len(warning_list) == 1)
+        self.assertTrue("Moving the following attributes" in str(warning_list[0].message))
+        self.assertTrue("repetition_penalty" in str(warning_list[0].message))
 
     @require_safetensors
     def test_model_from_pretrained_from_mlx(self):
@@ -1640,17 +1573,18 @@ class ModelUtilsTest(TestCasePlus):
 
         logger = logging.get_logger("transformers.modeling_utils")
         config = PretrainedConfig()
-        warning_msg_gamma = "A parameter name that contains `gamma` will be renamed internally"
+        warning_msg_gamma = "`gamma_param` -> `weight_param`"
         model = TestModelGamma(config)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(tmp_dir)
-            with LoggingLevel(logging.WARNING):
+            with LoggingLevel(logging.INFO):
                 with CaptureLogger(logger) as cl1:
                     _, loading_info = TestModelGamma.from_pretrained(tmp_dir, config=config, output_loading_info=True)
 
         missing_keys = loading_info["missing_keys"]
         unexpected_keys = loading_info["unexpected_keys"]
+        self.assertIn("`TestModelGamma`", cl1.out)
         self.assertIn(warning_msg_gamma, cl1.out)
         self.assertIn("gamma_param", missing_keys)
         self.assertIn("weight_param", unexpected_keys)
@@ -1664,20 +1598,142 @@ class ModelUtilsTest(TestCasePlus):
             def forward(self):
                 return self.beta_param.sum()
 
-        warning_msg_beta = "A parameter name that contains `beta` will be renamed internally"
+        warning_msg_beta = "`beta_param` -> `bias_param`"
         model = TestModelBeta(config)
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(tmp_dir)
-            with LoggingLevel(logging.WARNING):
+            with LoggingLevel(logging.INFO):
                 with CaptureLogger(logger) as cl2:
                     _, loading_info = TestModelBeta.from_pretrained(tmp_dir, config=config, output_loading_info=True)
 
         missing_keys = loading_info["missing_keys"]
         unexpected_keys = loading_info["unexpected_keys"]
+        self.assertIn("`TestModelBeta`", cl2.out)
         self.assertIn(warning_msg_beta, cl2.out)
         self.assertIn("beta_param", missing_keys)
         self.assertIn("bias_param", unexpected_keys)
+
+    def test_isin_mps_friendly(self):
+        """tests that our custom `isin_mps_friendly` matches `torch.isin`"""
+        random_ids = torch.randint(0, 100, (100,))
+        # We can match against an interger
+        random_test_integer = torch.randint(0, 100, (1,)).item()
+        self.assertTrue(
+            torch.equal(
+                torch.isin(random_ids, random_test_integer), isin_mps_friendly(random_ids, random_test_integer)
+            )
+        )
+        # We can match against an 0D tensor
+        random_test_tensor = torch.randint(0, 100, (1,)).squeeze()
+        self.assertTrue(
+            torch.equal(torch.isin(random_ids, random_test_tensor), isin_mps_friendly(random_ids, random_test_tensor))
+        )
+        # We can match against an 1D tensor (with many items)
+        random_test_tensor = torch.randint(0, 100, (10,))
+        self.assertTrue(
+            torch.equal(torch.isin(random_ids, random_test_tensor), isin_mps_friendly(random_ids, random_test_tensor))
+        )
+
+    def test_can_generate(self):
+        """Tests the behavior of `PreTrainedModel.can_generate` method."""
+        logger = logging.get_logger("transformers.modeling_utils")
+        logger.warning_once.cache_clear()
+
+        # 1 - By default, a model CAN'T generate
+        can_generate = BertModel.can_generate()
+        self.assertFalse(can_generate)
+
+        # 2 - The most common case for a model to be able to generate is to inherit from `GenerationMixin` directly
+        class DummyBertWithMixin(BertModel, GenerationMixin):
+            pass
+
+        with CaptureLogger(logger) as cl:
+            can_generate = DummyBertWithMixin.can_generate()
+        self.assertTrue("" == cl.out)
+        self.assertTrue(can_generate)
+
+        # 3 - Alternatively, a model can implement a `generate` method
+        class DummyBertWithGenerate(BertModel):
+            def generate(self):
+                pass
+
+        with CaptureLogger(logger) as cl:
+            can_generate = DummyBertWithGenerate.can_generate()
+        self.assertTrue("" == cl.out)
+        self.assertTrue(can_generate)
+
+        # 4 - Finally, it can inherit from a model that can generate
+        class DummyBertWithParent(DummyBertWithMixin):
+            pass
+
+        with CaptureLogger(logger) as cl:
+            can_generate = DummyBertWithParent.can_generate()
+        self.assertTrue("" == cl.out)
+        self.assertTrue(can_generate)
+
+        # 5 - BC: models with a custom `prepare_inputs_for_generation` can generate (it was assumed they inherited
+        # `GenerationMixin`)
+        class DummyBertWithPrepareInputs(BertModel):
+            def prepare_inputs_for_generation(self):
+                pass
+
+        with CaptureLogger(logger) as cl:
+            can_generate = DummyBertWithPrepareInputs.can_generate()
+        self.assertTrue("it doesn't directly inherit from `GenerationMixin`" in cl.out)
+        self.assertTrue(can_generate)
+
+    def test_save_and_load_config_with_custom_generation(self):
+        """
+        Regression test for the ability to save and load a config with a custom generation kwarg (i.e. a parameter
+        that gets moved to the generation config and reset on the model config)
+        """
+        model = T5ForConditionalGeneration.from_pretrained(TINY_T5)
+
+        # The default for `num_beams` is 1 and `early_stopping` is False
+        self.assertTrue(model.config.num_beams == 1)
+        self.assertTrue(model.config.early_stopping is False)
+
+        # When we save the model, this custom parameter should be moved to the generation config AND the model
+        # config should contain `None`
+        model.config.num_beams = 2
+        model.config.early_stopping = True
+        self.assertTrue(model.generation_config.num_beams == 1)  # unmodified generation config
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            model.save_pretrained(tmp_dir)
+            new_model = T5ForConditionalGeneration.from_pretrained(tmp_dir)
+            # moved to generation config
+            self.assertTrue(new_model.generation_config.num_beams == 2)
+            self.assertTrue(new_model.generation_config.early_stopping is True)
+            # reset in the model config
+            self.assertTrue(new_model.config.num_beams is None)
+            self.assertTrue(new_model.config.early_stopping is None)
+
+            # Sanity check: We can run `generate` with the new model without any warnings
+            random_ids = torch.randint(0, 100, (1, 5))
+            with warnings.catch_warnings(record=True) as w:
+                new_model.generate(random_ids, max_new_tokens=3)
+            self.assertTrue(len(w) == 0)
+
+    def test_load_model_with_state_dict_only(self):
+        model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+        state_dict = model.state_dict()
+        config = model.config
+
+        model_loaded = BertModel.from_pretrained(
+            pretrained_model_name_or_path=None, config=config, state_dict=state_dict
+        )
+        self.assertTrue(check_models_equal(model, model_loaded))
+
+    def test_load_model_with_state_dict_only_low_cpu_mem_usage(self):
+        model = BertModel.from_pretrained("hf-internal-testing/tiny-random-bert")
+        state_dict = model.state_dict()
+        config = model.config
+
+        model_loaded = BertModel.from_pretrained(
+            pretrained_model_name_or_path=None, config=config, state_dict=state_dict, low_cpu_mem_usage=True
+        )
+        self.assertTrue(check_models_equal(model, model_loaded))
 
 
 @slow
@@ -1892,19 +1948,18 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
             if thread.name == "Thread-autoconversion":
                 thread.join(timeout=10)
 
-        with self.subTest("PR was open with the safetensors account"):
-            discussions = self.api.get_repo_discussions(self.repo_name)
+        discussions = self.api.get_repo_discussions(self.repo_name)
 
-            bot_opened_pr = None
-            bot_opened_pr_title = None
+        bot_opened_pr = None
+        bot_opened_pr_title = None
 
-            for discussion in discussions:
-                if discussion.author == "SFconvertbot":
-                    bot_opened_pr = True
-                    bot_opened_pr_title = discussion.title
+        for discussion in discussions:
+            if discussion.author == "SFconvertbot":
+                bot_opened_pr = True
+                bot_opened_pr_title = discussion.title
 
-            self.assertTrue(bot_opened_pr)
-            self.assertEqual(bot_opened_pr_title, "Adding `safetensors` variant of this model")
+        self.assertTrue(bot_opened_pr)
+        self.assertEqual(bot_opened_pr_title, "Adding `safetensors` variant of this model")
 
     @mock.patch("transformers.safetensors_conversion.spawn_conversion")
     def test_absence_of_safetensors_triggers_conversion_failed(self, spawn_conversion_mock):
@@ -1930,168 +1985,127 @@ class ModelPushToHubTester(unittest.TestCase):
         cls._token = TOKEN
         HfFolder.save_token(TOKEN)
 
-    @staticmethod
-    def _try_delete_repo(repo_id, token):
-        try:
-            # Reset repo
-            delete_repo(repo_id=repo_id, token=token)
-        except:  # noqa E722
-            pass
-
     @unittest.skip(reason="This test is flaky")
     def test_push_to_hub(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            try:
-                tmp_repo = f"{USER}/test-model-{Path(tmp_dir).name}"
-                config = BertConfig(
-                    vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
-                )
-                model = BertModel(config)
-                model.push_to_hub(tmp_repo, token=self._token)
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
+            config = BertConfig(
+                vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+            )
+            model = BertModel(config)
+            model.push_to_hub(tmp_repo.repo_id, token=self._token)
 
-                new_model = BertModel.from_pretrained(tmp_repo)
-                for p1, p2 in zip(model.parameters(), new_model.parameters()):
-                    self.assertTrue(torch.equal(p1, p2))
-            finally:
-                # Always (try to) delete the repo.
-                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
+            new_model = BertModel.from_pretrained(tmp_repo.repo_id)
+            for p1, p2 in zip(model.parameters(), new_model.parameters()):
+                self.assertTrue(torch.equal(p1, p2))
 
     @unittest.skip(reason="This test is flaky")
     def test_push_to_hub_via_save_pretrained(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            try:
-                tmp_repo = f"{USER}/test-model-{Path(tmp_dir).name}"
-                config = BertConfig(
-                    vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
-                )
-                model = BertModel(config)
-                # Push to hub via save_pretrained
-                model.save_pretrained(tmp_dir, repo_id=tmp_repo, push_to_hub=True, token=self._token)
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
+            config = BertConfig(
+                vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+            )
+            model = BertModel(config)
+            # Push to hub via save_pretrained
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                model.save_pretrained(tmp_dir, repo_id=tmp_repo.repo_id, push_to_hub=True, token=self._token)
 
-                new_model = BertModel.from_pretrained(tmp_repo)
-                for p1, p2 in zip(model.parameters(), new_model.parameters()):
-                    self.assertTrue(torch.equal(p1, p2))
-            finally:
-                # Always (try to) delete the repo.
-                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
+            new_model = BertModel.from_pretrained(tmp_repo.repo_id)
+            for p1, p2 in zip(model.parameters(), new_model.parameters()):
+                self.assertTrue(torch.equal(p1, p2))
 
     def test_push_to_hub_with_description(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            try:
-                tmp_repo = f"{USER}/test-model-{Path(tmp_dir).name}"
-                config = BertConfig(
-                    vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
-                )
-                model = BertModel(config)
-                COMMIT_DESCRIPTION = """
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
+            config = BertConfig(
+                vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+            )
+            model = BertModel(config)
+            COMMIT_DESCRIPTION = """
 The commit description supports markdown synthax see:
 ```python
 >>> form transformers import AutoConfig
 >>> config = AutoConfig.from_pretrained("google-bert/bert-base-uncased")
 ```
 """
-                commit_details = model.push_to_hub(
-                    tmp_repo, use_auth_token=self._token, create_pr=True, commit_description=COMMIT_DESCRIPTION
-                )
-                self.assertEqual(commit_details.commit_description, COMMIT_DESCRIPTION)
-            finally:
-                # Always (try to) delete the repo.
-                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
+            commit_details = model.push_to_hub(
+                tmp_repo.repo_id, use_auth_token=self._token, create_pr=True, commit_description=COMMIT_DESCRIPTION
+            )
+            self.assertEqual(commit_details.commit_description, COMMIT_DESCRIPTION)
 
     @unittest.skip(reason="This test is flaky")
     def test_push_to_hub_in_organization(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            try:
-                tmp_repo = f"valid_org/test-model-org-{Path(tmp_dir).name}"
-                config = BertConfig(
-                    vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
-                )
-                model = BertModel(config)
-                model.push_to_hub(tmp_repo, token=self._token)
+        with TemporaryHubRepo(namespace="valid_org", token=self._token) as tmp_repo:
+            config = BertConfig(
+                vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+            )
+            model = BertModel(config)
+            model.push_to_hub(tmp_repo.repo_id, token=self._token)
 
-                new_model = BertModel.from_pretrained(tmp_repo)
-                for p1, p2 in zip(model.parameters(), new_model.parameters()):
-                    self.assertTrue(torch.equal(p1, p2))
-            finally:
-                # Always (try to) delete the repo.
-                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
+            new_model = BertModel.from_pretrained(tmp_repo.repo_id)
+            for p1, p2 in zip(model.parameters(), new_model.parameters()):
+                self.assertTrue(torch.equal(p1, p2))
 
     @unittest.skip(reason="This test is flaky")
     def test_push_to_hub_in_organization_via_save_pretrained(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            try:
-                tmp_repo = f"valid_org/test-model-org-{Path(tmp_dir).name}"
-                config = BertConfig(
-                    vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
-                )
-                model = BertModel(config)
-                # Push to hub via save_pretrained
-                model.save_pretrained(tmp_dir, push_to_hub=True, token=self._token, repo_id=tmp_repo)
+        with TemporaryHubRepo(namespace="valid_org", token=self._token) as tmp_repo:
+            config = BertConfig(
+                vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+            )
+            model = BertModel(config)
+            # Push to hub via save_pretrained
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                model.save_pretrained(tmp_dir, push_to_hub=True, token=self._token, repo_id=tmp_repo.repo_id)
 
-                new_model = BertModel.from_pretrained(tmp_repo)
-                for p1, p2 in zip(model.parameters(), new_model.parameters()):
-                    self.assertTrue(torch.equal(p1, p2))
-            finally:
-                # Always (try to) delete the repo.
-                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
+            new_model = BertModel.from_pretrained(tmp_repo.repo_id)
+            for p1, p2 in zip(model.parameters(), new_model.parameters()):
+                self.assertTrue(torch.equal(p1, p2))
 
     def test_push_to_hub_dynamic_model(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            try:
-                tmp_repo = f"{USER}/test-dynamic-model-{Path(tmp_dir).name}"
-                CustomConfig.register_for_auto_class()
-                CustomModel.register_for_auto_class()
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
+            CustomConfig.register_for_auto_class()
+            CustomModel.register_for_auto_class()
 
-                config = CustomConfig(hidden_size=32)
-                model = CustomModel(config)
+            config = CustomConfig(hidden_size=32)
+            model = CustomModel(config)
 
-                model.push_to_hub(tmp_repo, token=self._token)
-                # checks
-                self.assertDictEqual(
-                    config.auto_map,
-                    {"AutoConfig": "custom_configuration.CustomConfig", "AutoModel": "custom_modeling.CustomModel"},
-                )
+            model.push_to_hub(tmp_repo.repo_id, token=self._token)
+            # checks
+            self.assertDictEqual(
+                config.auto_map,
+                {"AutoConfig": "custom_configuration.CustomConfig", "AutoModel": "custom_modeling.CustomModel"},
+            )
 
-                new_model = AutoModel.from_pretrained(tmp_repo, trust_remote_code=True)
-                # Can't make an isinstance check because the new_model is from the CustomModel class of a dynamic module
-                self.assertEqual(new_model.__class__.__name__, "CustomModel")
-                for p1, p2 in zip(model.parameters(), new_model.parameters()):
-                    self.assertTrue(torch.equal(p1, p2))
+            new_model = AutoModel.from_pretrained(tmp_repo.repo_id, trust_remote_code=True)
+            # Can't make an isinstance check because the new_model is from the CustomModel class of a dynamic module
+            self.assertEqual(new_model.__class__.__name__, "CustomModel")
+            for p1, p2 in zip(model.parameters(), new_model.parameters()):
+                self.assertTrue(torch.equal(p1, p2))
 
-                config = AutoConfig.from_pretrained(tmp_repo, trust_remote_code=True)
-                new_model = AutoModel.from_config(config, trust_remote_code=True)
-                self.assertEqual(new_model.__class__.__name__, "CustomModel")
-            finally:
-                # Always (try to) delete the repo.
-                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
+            config = AutoConfig.from_pretrained(tmp_repo.repo_id, trust_remote_code=True)
+            new_model = AutoModel.from_config(config, trust_remote_code=True)
+            self.assertEqual(new_model.__class__.__name__, "CustomModel")
 
     def test_push_to_hub_with_tags(self):
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            try:
-                tmp_repo = f"{USER}/test-dynamic-model-with-tags-{Path(tmp_dir).name}"
-                from huggingface_hub import ModelCard
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
+            from huggingface_hub import ModelCard
 
-                new_tags = ["tag-1", "tag-2"]
+            new_tags = ["tag-1", "tag-2"]
 
-                CustomConfig.register_for_auto_class()
-                CustomModel.register_for_auto_class()
+            CustomConfig.register_for_auto_class()
+            CustomModel.register_for_auto_class()
 
-                config = CustomConfig(hidden_size=32)
-                model = CustomModel(config)
+            config = CustomConfig(hidden_size=32)
+            model = CustomModel(config)
 
-                self.assertTrue(model.model_tags is None)
+            self.assertTrue(model.model_tags is None)
 
-                model.add_model_tags(new_tags)
+            model.add_model_tags(new_tags)
 
-                self.assertTrue(model.model_tags == new_tags)
+            self.assertTrue(model.model_tags == new_tags)
 
-                model.push_to_hub(tmp_repo, token=self._token)
+            model.push_to_hub(tmp_repo.repo_id, token=self._token)
 
-                loaded_model_card = ModelCard.load(tmp_repo)
-                self.assertEqual(loaded_model_card.data.tags, new_tags)
-            finally:
-                # Always (try to) delete the repo.
-                self._try_delete_repo(repo_id=tmp_repo, token=self._token)
+            loaded_model_card = ModelCard.load(tmp_repo.repo_id)
+            self.assertEqual(loaded_model_card.data.tags, new_tags)
 
 
 @require_torch

@@ -153,11 +153,11 @@ directly.
 
 <Tip warning={true}>
 
-`tranformers.onnx` is no longer maintained, please export models with 🤗 Optimum as described above. This section will be removed in the future versions.
+`transformers.onnx` is no longer maintained, please export models with 🤗 Optimum as described above. This section will be removed in the future versions.
 
 </Tip>
 
-To export a 🤗 Transformers model to ONNX with `tranformers.onnx`, install extra dependencies:
+To export a 🤗 Transformers model to ONNX with `transformers.onnx`, install extra dependencies:
 
 ```bash
 pip install transformers[onnx]

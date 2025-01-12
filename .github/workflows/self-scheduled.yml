@@ -50,8 +50,9 @@ jobs:
     name: Setup
     strategy:
       matrix:
-        machine_type: [single-gpu, multi-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, '${{ inputs.runner }}']
+        machine_type: [aws-g4dn-2xlarge-cache, aws-g4dn-12xlarge-cache]
+    runs-on:
+      group: '${{ matrix.machine_type }}'
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -83,7 +84,7 @@ jobs:
         run: |
           echo "folder_slices=$(python3 ../utils/split_model_tests.py --num_splits ${{ env.NUM_SLICES }})" >> $GITHUB_OUTPUT
           echo "slice_ids=$(python3 -c 'd = list(range(${{ env.NUM_SLICES }})); print(d)')" >> $GITHUB_OUTPUT
-      
+
       - id: set-matrix-quantization
         if: ${{ inputs.job == 'run_quantization_torch_gpu' }}
         name: Identify quantization method to test
@@ -102,7 +103,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [single-gpu, multi-gpu]
+        machine_type: [aws-g4dn-2xlarge-cache, aws-g4dn-12xlarge-cache]
         slice_id: ${{ fromJSON(needs.setup.outputs.slice_ids) }}
     uses: ./.github/workflows/model_jobs.yml
     with:
@@ -119,8 +120,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [single-gpu, multi-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, '${{ inputs.runner }}']
+        machine_type: [aws-g4dn-2xlarge-cache, aws-g4dn-12xlarge-cache]
+    runs-on:
+      group: '${{ matrix.machine_type }}'
     container:
       image: huggingface/transformers-pytorch-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -146,22 +148,39 @@ jobs:
         working-directory: /transformers
         run: pip freeze
 
+      - name: Set `machine_type` for report and artifact names
+        working-directory: /transformers
+        shell: bash
+        run: |
+          echo "${{ matrix.machine_type }}"
+
+          if [ "${{ matrix.machine_type }}" = "aws-g4dn-2xlarge-cache" ]; then
+            machine_type=single-gpu
+          elif [ "${{ matrix.machine_type }}" = "aws-g4dn-12xlarge-cache" ]; then
+            machine_type=multi-gpu
+          else
+            machine_type=${{ matrix.machine_type }}
+          fi
+
+          echo "$machine_type"
+          echo "machine_type=$machine_type" >> $GITHUB_ENV
+
       - name: Run all pipeline tests on GPU
         working-directory: /transformers
         run: |
-          python3 -m pytest -n 1 -v --dist=loadfile --make-reports=${{ matrix.machine_type }}_run_pipelines_torch_gpu_test_reports tests/pipelines
+          python3 -m pytest -n 1 -v --dist=loadfile --make-reports=${{ env.machine_type }}_run_pipelines_torch_gpu_test_reports tests/pipelines
 
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
-        run: cat /transformers/reports/${{ matrix.machine_type }}_run_pipelines_torch_gpu_test_reports/failures_short.txt
+        run: cat /transformers/reports/${{ env.machine_type }}_run_pipelines_torch_gpu_test_reports/failures_short.txt
 
-      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_pipelines_torch_gpu_test_reports"
+      - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_pipelines_torch_gpu_test_reports"
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.machine_type }}_run_pipelines_torch_gpu_test_reports
-          path: /transformers/reports/${{ matrix.machine_type }}_run_pipelines_torch_gpu_test_reports
+          name: ${{ env.machine_type }}_run_pipelines_torch_gpu_test_reports
+          path: /transformers/reports/${{ env.machine_type }}_run_pipelines_torch_gpu_test_reports
 
   run_pipelines_tf_gpu:
     if: ${{ inputs.job == 'run_pipelines_tf_gpu' }}
@@ -169,8 +188,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [single-gpu, multi-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, '${{ inputs.runner }}']
+        machine_type: [aws-g4dn-2xlarge-cache, aws-g4dn-12xlarge-cache]
+    runs-on:
+      group: '${{ matrix.machine_type }}'
     container:
       image: huggingface/transformers-tensorflow-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -197,22 +217,39 @@ jobs:
         working-directory: /transformers
         run: pip freeze
 
+      - name: Set `machine_type` for report and artifact names
+        working-directory: /transformers
+        shell: bash
+        run: |
+          echo "${{ matrix.machine_type }}"
+
+          if [ "${{ matrix.machine_type }}" = "aws-g4dn-2xlarge-cache" ]; then
+            machine_type=single-gpu
+          elif [ "${{ matrix.machine_type }}" = "aws-g4dn-12xlarge-cache" ]; then
+            machine_type=multi-gpu
+          else
+            machine_type=${{ matrix.machine_type }}
+          fi
+
+          echo "$machine_type"
+          echo "machine_type=$machine_type" >> $GITHUB_ENV
+
       - name: Run all pipeline tests on GPU
         working-directory: /transformers
         run: |
-          python3 -m pytest -n 1 -v --dist=loadfile --make-reports=${{ matrix.machine_type }}_run_pipelines_tf_gpu_test_reports tests/pipelines
+          python3 -m pytest -n 1 -v --dist=loadfile --make-reports=${{ env.machine_type }}_run_pipelines_tf_gpu_test_reports tests/pipelines
 
       - name: Failure short reports
         if: ${{ always() }}
         run: |
-          cat /transformers/reports/${{ matrix.machine_type }}_run_pipelines_tf_gpu_test_reports/failures_short.txt
+          cat /transformers/reports/${{ env.machine_type }}_run_pipelines_tf_gpu_test_reports/failures_short.txt
 
-      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_pipelines_tf_gpu_test_reports"
+      - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_pipelines_tf_gpu_test_reports"
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.machine_type }}_run_pipelines_tf_gpu_test_reports
-          path: /transformers/reports/${{ matrix.machine_type }}_run_pipelines_tf_gpu_test_reports
+          name: ${{ env.machine_type }}_run_pipelines_tf_gpu_test_reports
+          path: /transformers/reports/${{ env.machine_type }}_run_pipelines_tf_gpu_test_reports
 
   run_examples_gpu:
     if: ${{ inputs.job == 'run_examples_gpu' }}
@@ -220,8 +257,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [single-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, '${{ inputs.runner }}']
+        machine_type: [aws-g4dn-2xlarge-cache]
+    runs-on:
+      group: '${{ matrix.machine_type }}'
     container:
       image: huggingface/transformers-all-latest-gpu
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -247,23 +285,40 @@ jobs:
         working-directory: /transformers
         run: pip freeze
 
+      - name: Set `machine_type` for report and artifact names
+        working-directory: /transformers
+        shell: bash
+        run: |
+          echo "${{ matrix.machine_type }}"
+
+          if [ "${{ matrix.machine_type }}" = "aws-g4dn-2xlarge-cache" ]; then
+            machine_type=single-gpu
+          elif [ "${{ matrix.machine_type }}" = "aws-g4dn-12xlarge-cache" ]; then
+            machine_type=multi-gpu
+          else
+            machine_type=${{ matrix.machine_type }}
+          fi
+
+          echo "$machine_type"
+          echo "machine_type=$machine_type" >> $GITHUB_ENV
+
       - name: Run examples tests on GPU
         working-directory: /transformers
         run: |
           pip install -r examples/pytorch/_tests_requirements.txt
-          python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_run_examples_gpu_test_reports examples/pytorch
+          python3 -m pytest -v --make-reports=${{ env.machine_type }}_run_examples_gpu_test_reports examples/pytorch
 
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
-        run: cat /transformers/reports/${{ matrix.machine_type }}_run_examples_gpu_test_reports/failures_short.txt
+        run: cat /transformers/reports/${{ env.machine_type }}_run_examples_gpu_test_reports/failures_short.txt
 
-      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_examples_gpu_test_reports"
+      - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_examples_gpu_test_reports"
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.machine_type }}_run_examples_gpu_test_reports
-          path: /transformers/reports/${{ matrix.machine_type }}_run_examples_gpu_test_reports
+          name: ${{ env.machine_type }}_run_examples_gpu_test_reports
+          path: /transformers/reports/${{ env.machine_type }}_run_examples_gpu_test_reports
 
   run_torch_cuda_extensions_gpu:
     if: ${{ inputs.job == 'run_torch_cuda_extensions_gpu' }}
@@ -271,8 +326,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [single-gpu, multi-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, '${{ inputs.runner }}']
+        machine_type: [aws-g4dn-2xlarge-cache, aws-g4dn-12xlarge-cache]
+    runs-on:
+      group: '${{ matrix.machine_type }}'
     container:
       image: ${{ inputs.docker }}
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -326,22 +382,39 @@ jobs:
         working-directory: ${{ inputs.working-directory-prefix }}/transformers
         run: pip freeze
 
+      - name: Set `machine_type` for report and artifact names
+        working-directory: /transformers
+        shell: bash
+        run: |
+          echo "${{ matrix.machine_type }}"
+
+          if [ "${{ matrix.machine_type }}" = "aws-g4dn-2xlarge-cache" ]; then
+            machine_type=single-gpu
+          elif [ "${{ matrix.machine_type }}" = "aws-g4dn-12xlarge-cache" ]; then
+            machine_type=multi-gpu
+          else
+            machine_type=${{ matrix.machine_type }}
+          fi
+
+          echo "$machine_type"
+          echo "machine_type=$machine_type" >> $GITHUB_ENV
+
       - name: Run all tests on GPU
         working-directory: ${{ inputs.working-directory-prefix }}/transformers
         run: |
-          python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports tests/deepspeed tests/extended
+          python3 -m pytest -v --make-reports=${{ env.machine_type }}_run_torch_cuda_extensions_gpu_test_reports tests/deepspeed tests/extended
 
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
-        run: cat ${{ inputs.working-directory-prefix }}/transformers/reports/${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports/failures_short.txt
+        run: cat ${{ inputs.working-directory-prefix }}/transformers/reports/${{ env.machine_type }}_run_torch_cuda_extensions_gpu_test_reports/failures_short.txt
 
-      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports"
+      - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_torch_cuda_extensions_gpu_test_reports"
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports
-          path: ${{ inputs.working-directory-prefix }}/transformers/reports/${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports
+          name: ${{ env.machine_type }}_run_torch_cuda_extensions_gpu_test_reports
+          path: ${{ inputs.working-directory-prefix }}/transformers/reports/${{ env.machine_type }}_run_torch_cuda_extensions_gpu_test_reports
 
   run_quantization_torch_gpu:
     if: ${{ inputs.job == 'run_quantization_torch_gpu' }}
@@ -352,8 +425,9 @@ jobs:
       fail-fast: false
       matrix:
         folders: ${{ fromJson(needs.setup.outputs.quantization_matrix) }}
-        machine_type: [single-gpu, multi-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, '${{ inputs.runner }}']
+        machine_type: [aws-g4dn-2xlarge-cache, aws-g4dn-12xlarge-cache]
+    runs-on:
+      group: '${{ matrix.machine_type }}'
     container:
       image: huggingface/transformers-quantization-latest-gpu
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
@@ -388,22 +462,39 @@ jobs:
         working-directory: /transformers
         run: pip freeze
 
+      - name: Set `machine_type` for report and artifact names
+        working-directory: /transformers
+        shell: bash
+        run: |
+          echo "${{ matrix.machine_type }}"
+
+          if [ "${{ matrix.machine_type }}" = "aws-g4dn-2xlarge-cache" ]; then
+            machine_type=single-gpu
+          elif [ "${{ matrix.machine_type }}" = "aws-g4dn-12xlarge-cache" ]; then
+            machine_type=multi-gpu
+          else
+            machine_type=${{ matrix.machine_type }}
+          fi
+
+          echo "$machine_type"
+          echo "machine_type=$machine_type" >> $GITHUB_ENV
+
       - name: Run quantization tests on GPU
         working-directory: /transformers
         run: |
-          python3 -m pytest -v --make-reports=${{ matrix.machine_type }}_run_quantization_torch_gpu_${{ matrix.folders }}_test_reports tests/${{ matrix.folders }}
+          python3 -m pytest -v --make-reports=${{ env.machine_type }}_run_quantization_torch_gpu_${{ matrix.folders }}_test_reports tests/${{ matrix.folders }}
 
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
-        run: cat /transformers/reports/${{ matrix.machine_type }}_run_quantization_torch_gpu_${{ matrix.folders }}_test_reports/failures_short.txt
+        run: cat /transformers/reports/${{ env.machine_type }}_run_quantization_torch_gpu_${{ matrix.folders }}_test_reports/failures_short.txt
 
-      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_quantization_torch_gpu_${{ env.matrix_folders }}_test_reports"
+      - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_quantization_torch_gpu_${{ env.matrix_folders }}_test_reports"
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.machine_type }}_run_quantization_torch_gpu_${{ env.matrix_folders }}_test_reports
-          path: /transformers/reports/${{ matrix.machine_type }}_run_quantization_torch_gpu_${{ matrix.folders }}_test_reports
+          name: ${{ env.machine_type }}_run_quantization_torch_gpu_${{ env.matrix_folders }}_test_reports
+          path: /transformers/reports/${{ env.machine_type }}_run_quantization_torch_gpu_${{ matrix.folders }}_test_reports
 
   run_extract_warnings:
     # Let's only do this for the job `run_models_gpu` to simplify the (already complex) logic.
@@ -470,4 +561,14 @@ jobs:
       quantization_matrix: ${{ needs.setup.outputs.quantization_matrix }}
       ci_event: ${{ inputs.ci_event }}
 
+    secrets: inherit
+
+  check_new_model_failures:
+    if: ${{ always() && inputs.ci_event == 'Daily CI' && inputs.job == 'run_models_gpu' && needs.send_results.result == 'success' }}
+    name: Check new model failures
+    needs: send_results
+    uses: ./.github/workflows/check_failed_model_tests.yml
+    with:
+      docker: ${{ inputs.docker }}
+      start_sha: ${{ github.sha }}
     secrets: inherit

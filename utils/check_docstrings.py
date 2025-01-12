@@ -214,6 +214,8 @@ OBJECTS_TO_IGNORE = [
     "FlaxBloomForCausalLM",
     "FlaxBloomModel",
     "FlaxCLIPModel",
+    "FlaxDinov2ForImageClassification",
+    "FlaxDinov2Model",
     "FlaxDistilBertForMaskedLM",
     "FlaxDistilBertForMultipleChoice",
     "FlaxDistilBertForQuestionAnswering",
@@ -329,10 +331,12 @@ OBJECTS_TO_IGNORE = [
     "IBertModel",
     "IdeficsConfig",
     "IdeficsProcessor",
+    "IJepaModel",
     "ImageClassificationPipeline",
     "ImageFeatureExtractionPipeline",
     "ImageGPTConfig",
     "ImageSegmentationPipeline",
+    "ImageTextToTextPipeline",
     "ImageToImagePipeline",
     "ImageToTextPipeline",
     "InformerConfig",
@@ -861,9 +865,10 @@ def match_docstring_with_signature(obj: Any) -> Optional[Tuple[str, str]]:
 
     # We went too far by one (perhaps more if there are a lot of new lines)
     idx -= 1
-    while len(obj_doc_lines[idx].strip()) == 0:
-        arguments[current_arg] = arguments[current_arg][:-1]
-        idx -= 1
+    if current_arg:
+        while len(obj_doc_lines[idx].strip()) == 0:
+            arguments[current_arg] = arguments[current_arg][:-1]
+            idx -= 1
     # And we went too far by one again.
     idx += 1
 

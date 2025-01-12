@@ -185,7 +185,7 @@ class ResnetModelForImageClassification(PreTrainedModel):
     def forward(self, tensor, labels=None):
         logits = self.model(tensor)
         if labels is not None:
-            loss = torch.nn.cross_entropy(logits, labels)
+            loss = torch.nn.functional.cross_entropy(logits, labels)
             return {"loss": loss, "logits": logits}
         return {"logits": logits}
 ```

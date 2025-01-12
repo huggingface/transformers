@@ -66,7 +66,15 @@ class VisualQuestionAnsweringPipeline(Pipeline):
             preprocess_params["timeout"] = timeout
         if top_k is not None:
             postprocess_params["top_k"] = top_k
-        return preprocess_params, {}, postprocess_params
+
+        forward_params = {}
+        if self.assistant_model is not None:
+            forward_params["assistant_model"] = self.assistant_model
+        if self.assistant_tokenizer is not None:
+            forward_params["tokenizer"] = self.tokenizer
+            forward_params["assistant_tokenizer"] = self.assistant_tokenizer
+
+        return preprocess_params, forward_params, postprocess_params
 
     def __call__(
         self,
@@ -162,6 +170,10 @@ class VisualQuestionAnsweringPipeline(Pipeline):
 
     def _forward(self, model_inputs, **generate_kwargs):
         if self.model.can_generate():
+            # User-defined `generation_config` passed to the pipeline call take precedence
+            if "generation_config" not in generate_kwargs:
+                generate_kwargs["generation_config"] = self.generation_config
+
             model_outputs = self.model.generate(**model_inputs, **generate_kwargs)
         else:
             model_outputs = self.model(**model_inputs)

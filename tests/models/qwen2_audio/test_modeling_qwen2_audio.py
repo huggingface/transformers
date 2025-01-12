@@ -14,7 +14,7 @@
 # limitations under the License.
 """Testing suite for the PyTorch Qwen2Audio model."""
 
-import gc
+import tempfile
 import unittest
 from io import BytesIO
 from urllib.request import urlopen
@@ -28,7 +28,9 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
+    cleanup,
     require_torch,
+    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -39,8 +41,6 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
-else:
-    is_torch_greater_or_equal_than_2_0 = False
 
 
 class Qwen2AudioModelTester:
@@ -49,7 +49,7 @@ class Qwen2AudioModelTester:
         parent,
         ignore_index=-100,
         audio_token_index=0,
-        seq_length=7,
+        seq_length=25,
         feat_seq_length=60,
         text_config={
             "model_type": "qwen2",
@@ -91,7 +91,7 @@ class Qwen2AudioModelTester:
         self.is_training = is_training
 
         self.batch_size = 3
-        self.encoder_seq_length = audio_config["max_source_positions"] // 2 + seq_length - 1
+        self.encoder_seq_length = seq_length
 
     def get_config(self):
         return Qwen2AudioConfig(
@@ -116,11 +116,13 @@ class Qwen2AudioModelTester:
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, input_features_values, feature_attention_mask = config_and_inputs
+        input_length = (input_features_values.shape[-1] - 1) // 2 + 1
+        num_audio_tokens = (input_length - 2) // 2 + 1
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
         attention_mask[:, :1] = 0
         # we are giving 3 audios let's make sure we pass in 3 audios tokens
-        input_ids[:, 1] = config.audio_token_index
+        input_ids[:, 1 : 1 + num_audio_tokens] = config.audio_token_index
         inputs_dict = {
             "input_features": input_features_values,
             "feature_attention_mask": feature_attention_mask,
@@ -152,6 +154,7 @@ class Qwen2AudioForConditionalGenerationModelTest(ModelTesterMixin, unittest.Tes
     all_model_classes = (Qwen2AudioForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
+    _is_composite = True
 
     def setUp(self):
         self.model_tester = Qwen2AudioModelTester(self)
@@ -165,6 +168,44 @@ class Qwen2AudioForConditionalGenerationModelTest(ModelTesterMixin, unittest.Tes
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
+    @require_torch_sdpa
+    def test_sdpa_can_dispatch_composite_models(self):
+        # overwrite because Qwen2 is audio+text model (not vision+text)
+        if not self.has_attentions:
+            self.skipTest(reason="Model architecture does not support attentions")
+
+        if not self._is_composite:
+            self.skipTest(f"{self.all_model_classes[0].__name__} does not support SDPA")
+
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+                model_sdpa = model_class.from_pretrained(tmpdirname)
+                model_sdpa = model_sdpa.eval().to(torch_device)
+
+                text_attn = "sdpa" if model.language_model._supports_sdpa else "eager"
+                vision_attn = "sdpa" if model.audio_tower._supports_sdpa else "eager"
+
+                # `None` as it is the requested one which will be assigned to each sub-config
+                # Sub-model will dispatch to SDPA if it can (checked below that `SDPA` layers are present)
+                self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
+                self.assertTrue(model.language_model.config._attn_implementation == text_attn)
+                self.assertTrue(model.audio_tower.config._attn_implementation == vision_attn)
+
+                model_eager = model_class.from_pretrained(tmpdirname, attn_implementation="eager")
+                model_eager = model_eager.eval().to(torch_device)
+                self.assertTrue(model_eager.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.language_model.config._attn_implementation == "eager")
+                self.assertTrue(model_eager.audio_tower.config._attn_implementation == "eager")
+
+                for name, submodule in model_eager.named_modules():
+                    class_name = submodule.__class__.__name__
+                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                        raise ValueError("The eager model should not have SDPA attention layers")
+
 
 @require_torch
 class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
@@ -172,8 +213,7 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.processor = AutoProcessor.from_pretrained("Qwen/Qwen2-Audio-7B-Instruct")
 
     def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     def test_small_model_integration_test_single(self):
@@ -199,53 +239,38 @@ class Qwen2AudioForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         output = model.generate(**inputs, max_new_tokens=32)
 
-        EXPECTED_INPUT_IDS = torch.tensor(
-            [
-                [
-                    151644,
-                    8948,
-                    198,
-                    2610,
-                    525,
-                    264,
-                    10950,
-                    17847,
-                    13,
-                    151645,
-                    198,
-                    151644,
-                    872,
-                    198,
-                    14755,
-                    220,
-                    16,
-                    25,
-                    220,
-                    151647,
-                    151646,
-                    151648,
-                    198,
-                    3838,
-                    594,
-                    429,
-                    5112,
-                    30,
-                    151645,
-                    198,
-                    151644,
-                    77091,
-                    198,
-                ]
-            ]
-        )
+        # fmt: off
+        EXPECTED_INPUT_IDS = torch.tensor([[
+            151644, 8948, 198, 2610, 525, 264, 10950, 17847, 13, 151645, 198, 151644, 872, 198, 14755, 220, 16, 25, 220, 151647,
+            *[151646] * 101,
+            151648, 198, 3838, 594, 429, 5112, 30, 151645, 198, 151644, 77091, 198,
+        ]])
+        # fmt: on
         self.assertTrue(torch.equal(inputs["input_ids"], EXPECTED_INPUT_IDS))
 
-        EXPECTED_DECODED_TEXT = "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\nAudio 1: <|audio_bos|><|AUDIO|><|audio_eos|>\nWhat's that sound?<|im_end|>\n<|im_start|>assistant\nIt is the sound of glass breaking.<|im_end|>"
+        EXPECTED_DECODED_TEXT = (
+            "<|im_start|>system\nYou are a helpful assistant.<|im_end|>\n<|im_start|>user\nAudio 1: <|audio_bos|>"
+            + "<|AUDIO|>" * 101
+            + "<|audio_eos|>\nWhat's that sound?<|im_end|>\n<|im_start|>assistant\nIt is the sound of glass breaking.<|im_end|>"
+        )
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=False),
             EXPECTED_DECODED_TEXT,
         )
+
+        # test the error when incorrect number of audio tokens
+        # fmt: off
+        inputs["input_ids"] = torch.tensor([[
+            151644, 8948, 198, 2610, 525, 264, 10950, 17847, 13, 151645, 198, 151644, 872, 198, 14755, 220, 16, 25, 220, 151647,
+            *[151646] * 200,
+            151648, 198, 3838, 594, 429, 5112, 30, 151645, 198, 151644, 77091, 198,
+        ]])
+        # fmt: on
+        with self.assertRaisesRegex(
+            ValueError, "Audio features and audio tokens do not match: tokens: 200, features 101"
+        ):
+            model.generate(**inputs, max_new_tokens=32)
 
     @slow
     def test_small_model_integration_test_batch(self):

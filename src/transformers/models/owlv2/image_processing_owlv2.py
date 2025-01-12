@@ -19,7 +19,7 @@ from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature
+from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
     center_to_corners_format,
     pad,
@@ -399,6 +399,7 @@ class Owlv2ImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
 
         size = size if size is not None else self.size
+        size = get_size_dict(size)  # for BC
 
         images = make_list_of_images(images)
 
@@ -423,7 +424,7 @@ class Owlv2ImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
-        if is_scaled_image(images[0]) and do_rescale:
+        if do_rescale and is_scaled_image(images[0]):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -607,3 +608,6 @@ class Owlv2ImageProcessor(BaseImageProcessor):
             results.append({"scores": box_scores, "labels": None, "boxes": boxes})
 
         return results
+
+
+__all__ = ["Owlv2ImageProcessor"]

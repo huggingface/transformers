@@ -52,15 +52,15 @@ from transformers import (
     SchedulerType,
     default_data_collator,
     get_scheduler,
-    is_deepspeed_zero3_enabled,
     is_torch_tpu_available,
 )
+from transformers.integrations import is_deepspeed_zero3_enabled
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.45.0.dev0")
+check_min_version("4.49.0.dev0")
 
 logger = get_logger(__name__)
 
@@ -838,7 +838,7 @@ def main():
                 completed_steps += 1
 
             if isinstance(checkpointing_steps, int):
-                if completed_steps % checkpointing_steps == 0:
+                if completed_steps % checkpointing_steps == 0 and accelerator.sync_gradients:
                     output_dir = f"step_{completed_steps}"
                     if args.output_dir is not None:
                         output_dir = os.path.join(args.output_dir, output_dir)

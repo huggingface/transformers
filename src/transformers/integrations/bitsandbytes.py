@@ -6,7 +6,15 @@ from inspect import signature
 
 from packaging import version
 
-from ..utils import is_accelerate_available, is_bitsandbytes_available, logging
+from ..utils import (
+    get_available_devices,
+    is_accelerate_available,
+    is_bitsandbytes_available,
+    is_bitsandbytes_multi_backend_available,
+    is_ipex_available,
+    is_torch_available,
+    logging,
+)
 
 
 if is_bitsandbytes_available():
@@ -332,7 +340,7 @@ def get_keys_to_not_convert(model):
 
 
 # Copied from PEFT: https://github.com/huggingface/peft/blob/47b3712898539569c02ec5b3ed4a6c36811331a1/src/peft/utils/integrations.py#L41
-def dequantize_bnb_weight(weight: "torch.nn.Parameter", state=None):
+def dequantize_bnb_weight(weight: "torch.nn.Parameter", dtype: "torch.dtype", state=None):
     """
     Helper function to dequantize 4bit or 8bit bnb weights.
 
@@ -350,18 +358,19 @@ def dequantize_bnb_weight(weight: "torch.nn.Parameter", state=None):
         logger.warning_once(
             f"The model is going to be dequantized in {output_tensor.dtype} - if you want to upcast it to another dtype, make sure to pass the desired dtype when quantizing the model through `bnb_4bit_quant_type` argument of `BitsAndBytesConfig`"
         )
-        return output_tensor
+        return output_tensor.to(dtype)
 
     if state.SCB is None:
         state.SCB = weight.SCB
 
-    im = torch.eye(weight.data.shape[-1]).contiguous().half().to(weight.device)
-    im, imt, SCim, SCimt, coo_tensorim = bnb.functional.double_quant(im)
-    im, Sim = bnb.functional.transform(im, "col32")
-    if state.CxB is None:
-        state.CxB, state.SB = bnb.functional.transform(weight.data, to_order=state.formatB)
-    out32, Sout32 = bnb.functional.igemmlt(im, state.CxB, Sim, state.SB)
-    return bnb.functional.mm_dequant(out32, Sout32, SCim, state.SCB, bias=None).t()
+    if hasattr(bnb.functional, "int8_vectorwise_dequant"):
+        # Use bitsandbytes API if available (requires v0.45.0+)
+        dequantized = bnb.functional.int8_vectorwise_dequant(weight.data, state.SCB)
+    else:
+        # Multiply by (scale/127) to dequantize.
+        dequantized = weight.data * state.SCB.view(-1, 1) * 7.874015718698502e-3
+
+    return dequantized.to(dtype)
 
 
 def _create_accelerate_new_hook(old_hook):
@@ -383,6 +392,7 @@ def _create_accelerate_new_hook(old_hook):
 
 def _dequantize_and_replace(
     model,
+    dtype,
     modules_to_not_convert=None,
     current_key_name=None,
     quantization_config=None,
@@ -422,7 +432,7 @@ def _dequantize_and_replace(
                 else:
                     state = None
 
-                new_module.weight = torch.nn.Parameter(dequantize_bnb_weight(module.weight, state))
+                new_module.weight = torch.nn.Parameter(dequantize_bnb_weight(module.weight, dtype, state))
 
                 if bias is not None:
                     new_module.bias = bias
@@ -437,9 +447,11 @@ def _dequantize_and_replace(
 
                 new_module.to(device)
                 model._modules[name] = new_module
+                has_been_replaced = True
         if len(list(module.children())) > 0:
             _, has_been_replaced = _dequantize_and_replace(
                 module,
+                dtype,
                 modules_to_not_convert,
                 current_key_name,
                 quantization_config,
@@ -457,6 +469,7 @@ def dequantize_and_replace(
 ):
     model, has_been_replaced = _dequantize_and_replace(
         model,
+        model.dtype,
         modules_to_not_convert=modules_to_not_convert,
         quantization_config=quantization_config,
     )
@@ -467,3 +480,80 @@ def dequantize_and_replace(
         )
 
     return model
+
+
+def _validate_bnb_multi_backend_availability(raise_exception):
+    import bitsandbytes as bnb
+
+    bnb_supported_devices = getattr(bnb, "supported_torch_devices", set())
+    available_devices = get_available_devices()
+
+    if available_devices == {"cpu"} and not is_ipex_available():
+        from importlib.util import find_spec
+
+        if find_spec("intel_extension_for_pytorch"):
+            logger.warning(
+                "You have Intel IPEX installed but if you're intending to use it for CPU, it might not have the right version. Be sure to double check that your PyTorch and IPEX installs are compatible."
+            )
+
+        available_devices.discard("cpu")  # Only Intel CPU is supported by BNB at the moment
+
+    if not available_devices.intersection(bnb_supported_devices):
+        if raise_exception:
+            bnb_supported_devices_with_info = set(  # noqa: C401
+                '"cpu" (needs an Intel CPU and intel_extension_for_pytorch installed and compatible with the PyTorch version)'
+                if device == "cpu"
+                else device
+                for device in bnb_supported_devices
+            )
+            err_msg = (
+                f"None of the available devices `available_devices = {available_devices or None}` are supported by the bitsandbytes version you have installed: `bnb_supported_devices = {bnb_supported_devices_with_info}`. "
+                "Please check the docs to see if the backend you intend to use is available and how to install it: https://huggingface.co/docs/bitsandbytes/main/en/installation#multi-backend"
+            )
+
+            logger.error(err_msg)
+            raise RuntimeError(err_msg)
+
+        logger.warning("No supported devices found for bitsandbytes multi-backend.")
+        return False
+
+    logger.debug("Multi-backend validation successful.")
+    return True
+
+
+def _validate_bnb_cuda_backend_availability(raise_exception):
+    if not is_torch_available():
+        return False
+
+    import torch
+
+    if not torch.cuda.is_available():
+        log_msg = (
+            "CUDA is required but not available for bitsandbytes. Please consider installing the multi-platform enabled version of bitsandbytes, which is currently a work in progress. "
+            "Please check currently supported platforms and installation instructions at https://huggingface.co/docs/bitsandbytes/main/en/installation#multi-backend"
+        )
+        if raise_exception:
+            logger.error(log_msg)
+            raise RuntimeError(log_msg)
+
+        logger.warning(log_msg)
+        return False
+
+    logger.debug("CUDA backend validation successful.")
+    return True
+
+
+def validate_bnb_backend_availability(raise_exception=False):
+    """
+    Validates if the available devices are supported by bitsandbytes, optionally raising an exception if not.
+    """
+    if not is_bitsandbytes_available():
+        if importlib.util.find_spec("bitsandbytes") and version.parse(
+            importlib.metadata.version("bitsandbytes")
+        ) < version.parse("0.43.1"):
+            return _validate_bnb_cuda_backend_availability(raise_exception)
+        return False
+
+    if is_bitsandbytes_multi_backend_available():
+        return _validate_bnb_multi_backend_availability(raise_exception)
+    return _validate_bnb_cuda_backend_availability(raise_exception)

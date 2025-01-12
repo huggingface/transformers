@@ -44,7 +44,6 @@ class TranslationToolTester(unittest.TestCase, ToolTesterMixin):
     def test_agent_type_output(self):
         inputs = ["Hey, what's up?", "English", "Spanish"]
         output = self.tool(*inputs)
-
         output_type = AGENT_TYPE_MAPPING[self.tool.output_type]
         self.assertTrue(isinstance(output, output_type))
 

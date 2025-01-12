@@ -22,7 +22,7 @@ rendered properly in your Markdown viewer.
 
 The documentation has been moved to [hf.co/docs/sagemaker](https://huggingface.co/docs/sagemaker). This page will be removed in `transformers` 5.0. 
 
-### Table of Content
+### Table of Contents
 
 - [Train Hugging Face models on Amazon SageMaker with the SageMaker Python SDK](https://huggingface.co/docs/sagemaker/train)
 - [Deploy Hugging Face models to Amazon SageMaker with the SageMaker Python SDK](https://huggingface.co/docs/sagemaker/inference)

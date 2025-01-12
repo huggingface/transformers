@@ -116,7 +116,7 @@ Each new generation provides a faster bandwidth, e.g. here is a quote from [Nvid
 
 So the higher `X` you get in the report of `NVX` in the output of `nvidia-smi topo -m` the better. The generation will depend on your GPU architecture.
 
-Let's compare the execution of an openai-community/gpt2 language model training over a small sample of wikitext.
+Let's compare the execution of an `openai-community/gpt2` language model training over a small sample of wikitext.
 
 The results are:
 

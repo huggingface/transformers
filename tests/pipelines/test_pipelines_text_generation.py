@@ -148,18 +148,16 @@ class TextGenerationPipelineTests(unittest.TestCase):
     @require_torch
     def test_small_chat_model_pt(self):
         text_generator = pipeline(
-            task="text-generation", model="rocketknight1/tiny-gpt2-with-chatml-template", framework="pt"
+            task="text-generation", model="hf-internal-testing/tiny-gpt2-with-chatml-template", framework="pt"
         )
         # Using `do_sample=False` to force deterministic output
         chat1 = [
             {"role": "system", "content": "This is a system message."},
             {"role": "user", "content": "This is a test"},
-            {"role": "assistant", "content": "This is a reply"},
         ]
         chat2 = [
             {"role": "system", "content": "This is a system message."},
             {"role": "user", "content": "This is a second test"},
-            {"role": "assistant", "content": "This is a reply"},
         ]
         outputs = text_generator(chat1, do_sample=False, max_new_tokens=10)
         expected_chat1 = chat1 + [
@@ -179,7 +177,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
         expected_chat2 = chat2 + [
             {
                 "role": "assistant",
-                "content": " factors factors factors factors factors factors factors factors factors factors",
+                "content": " stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs",
             }
         ]
 
@@ -188,6 +186,68 @@ class TextGenerationPipelineTests(unittest.TestCase):
             [
                 [{"generated_text": expected_chat1}],
                 [{"generated_text": expected_chat2}],
+            ],
+        )
+
+    @require_torch
+    def test_small_chat_model_continue_final_message(self):
+        # Here we check that passing a chat that ends in an assistant message is handled correctly
+        # by continuing the final message rather than starting a new one
+        text_generator = pipeline(
+            task="text-generation", model="hf-internal-testing/tiny-gpt2-with-chatml-template", framework="pt"
+        )
+        # Using `do_sample=False` to force deterministic output
+        chat1 = [
+            {"role": "system", "content": "This is a system message."},
+            {"role": "user", "content": "This is a test"},
+            {"role": "assistant", "content": "This is"},
+        ]
+        outputs = text_generator(chat1, do_sample=False, max_new_tokens=10)
+
+        # Assert that we continued the last message and there isn't a sneaky <|im_end|>
+        self.assertEqual(
+            outputs,
+            [
+                {
+                    "generated_text": [
+                        {"role": "system", "content": "This is a system message."},
+                        {"role": "user", "content": "This is a test"},
+                        {
+                            "role": "assistant",
+                            "content": "This is stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs",
+                        },
+                    ]
+                }
+            ],
+        )
+
+    @require_torch
+    def test_small_chat_model_continue_final_message_override(self):
+        # Here we check that passing a chat that ends in an assistant message is handled correctly
+        # by continuing the final message rather than starting a new one
+        text_generator = pipeline(
+            task="text-generation", model="hf-internal-testing/tiny-gpt2-with-chatml-template", framework="pt"
+        )
+        # Using `do_sample=False` to force deterministic output
+        chat1 = [
+            {"role": "system", "content": "This is a system message."},
+            {"role": "user", "content": "This is a test"},
+        ]
+        outputs = text_generator(chat1, do_sample=False, max_new_tokens=10, continue_final_message=True)
+
+        # Assert that we continued the last message and there isn't a sneaky <|im_end|>
+        self.assertEqual(
+            outputs,
+            [
+                {
+                    "generated_text": [
+                        {"role": "system", "content": "This is a system message."},
+                        {
+                            "role": "user",
+                            "content": "This is a test stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs",
+                        },
+                    ]
+                }
             ],
         )
 
@@ -202,7 +262,6 @@ class TextGenerationPipelineTests(unittest.TestCase):
                 [
                     {"role": "system", "content": "This is a system message."},
                     {"role": "user", "content": "This is a test"},
-                    {"role": "assistant", "content": "This is a reply"},
                 ],
             ]
 
@@ -213,7 +272,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
                 return {"text": self.data[i]}
 
         text_generator = pipeline(
-            task="text-generation", model="rocketknight1/tiny-gpt2-with-chatml-template", framework="pt"
+            task="text-generation", model="hf-internal-testing/tiny-gpt2-with-chatml-template", framework="pt"
         )
 
         dataset = MyDataset()
@@ -232,6 +291,50 @@ class TextGenerationPipelineTests(unittest.TestCase):
                     {"generated_text": expected_chat},
                 ],
             )
+
+    @require_torch
+    def test_small_chat_model_with_iterator_pt(self):
+        from transformers.pipelines.pt_utils import PipelineIterator
+
+        text_generator = pipeline(
+            task="text-generation", model="hf-internal-testing/tiny-gpt2-with-chatml-template", framework="pt"
+        )
+
+        # Using `do_sample=False` to force deterministic output
+        chat1 = [
+            {"role": "system", "content": "This is a system message."},
+            {"role": "user", "content": "This is a test"},
+        ]
+        chat2 = [
+            {"role": "system", "content": "This is a system message."},
+            {"role": "user", "content": "This is a second test"},
+        ]
+        expected_chat1 = chat1 + [
+            {
+                "role": "assistant",
+                "content": " factors factors factors factors factors factors factors factors factors factors",
+            }
+        ]
+        expected_chat2 = chat2 + [
+            {
+                "role": "assistant",
+                "content": " stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs",
+            }
+        ]
+
+        def data():
+            yield from [chat1, chat2]
+
+        outputs = text_generator(data(), do_sample=False, max_new_tokens=10)
+        assert isinstance(outputs, PipelineIterator)
+        outputs = list(outputs)
+        self.assertEqual(
+            outputs,
+            [
+                [{"generated_text": expected_chat1}],
+                [{"generated_text": expected_chat2}],
+            ],
+        )
 
     @require_tf
     def test_small_model_tf(self):
@@ -277,18 +380,16 @@ class TextGenerationPipelineTests(unittest.TestCase):
     @require_tf
     def test_small_chat_model_tf(self):
         text_generator = pipeline(
-            task="text-generation", model="rocketknight1/tiny-gpt2-with-chatml-template", framework="tf"
+            task="text-generation", model="hf-internal-testing/tiny-gpt2-with-chatml-template", framework="tf"
         )
         # Using `do_sample=False` to force deterministic output
         chat1 = [
             {"role": "system", "content": "This is a system message."},
             {"role": "user", "content": "This is a test"},
-            {"role": "assistant", "content": "This is a reply"},
         ]
         chat2 = [
             {"role": "system", "content": "This is a system message."},
             {"role": "user", "content": "This is a second test"},
-            {"role": "assistant", "content": "This is a reply"},
         ]
         outputs = text_generator(chat1, do_sample=False, max_new_tokens=10)
         expected_chat1 = chat1 + [
@@ -308,7 +409,7 @@ class TextGenerationPipelineTests(unittest.TestCase):
         expected_chat2 = chat2 + [
             {
                 "role": "assistant",
-                "content": " factors factors factors factors factors factors factors factors factors factors",
+                "content": " stairs stairs stairs stairs stairs stairs stairs stairs stairs stairs",
             }
         ]
 
@@ -320,8 +421,23 @@ class TextGenerationPipelineTests(unittest.TestCase):
             ],
         )
 
-    def get_test_pipeline(self, model, tokenizer, processor, torch_dtype="float32"):
-        text_generator = TextGenerationPipeline(model=model, tokenizer=tokenizer, torch_dtype=torch_dtype)
+    def get_test_pipeline(
+        self,
+        model,
+        tokenizer=None,
+        image_processor=None,
+        feature_extractor=None,
+        processor=None,
+        torch_dtype="float32",
+    ):
+        text_generator = TextGenerationPipeline(
+            model=model,
+            tokenizer=tokenizer,
+            feature_extractor=feature_extractor,
+            image_processor=image_processor,
+            processor=processor,
+            torch_dtype=torch_dtype,
+        )
         return text_generator, ["This is a test", "Another test"]
 
     def test_stop_sequence_stopping_criteria(self):
@@ -412,24 +528,28 @@ class TextGenerationPipelineTests(unittest.TestCase):
             "RwkvForCausalLM",
             "XGLMForCausalLM",
             "GPTNeoXForCausalLM",
+            "GPTNeoXJapaneseForCausalLM",
             "FuyuForCausalLM",
+            "LlamaForCausalLM",
         ]
         if (
             tokenizer.model_max_length < 10000
             and text_generator.model.__class__.__name__ not in EXTRA_MODELS_CAN_HANDLE_LONG_INPUTS
         ):
             # Handling of large generations
-            with self.assertRaises((RuntimeError, IndexError, ValueError, AssertionError)):
-                text_generator("This is a test" * 500, max_new_tokens=20)
+            if str(text_generator.device) == "cpu":
+                with self.assertRaises((RuntimeError, IndexError, ValueError, AssertionError)):
+                    text_generator("This is a test" * 500, max_new_tokens=20)
 
             outputs = text_generator("This is a test" * 500, handle_long_generation="hole", max_new_tokens=20)
             # Hole strategy cannot work
-            with self.assertRaises(ValueError):
-                text_generator(
-                    "This is a test" * 500,
-                    handle_long_generation="hole",
-                    max_new_tokens=tokenizer.model_max_length + 10,
-                )
+            if str(text_generator.device) == "cpu":
+                with self.assertRaises(ValueError):
+                    text_generator(
+                        "This is a test" * 500,
+                        handle_long_generation="hole",
+                        max_new_tokens=tokenizer.model_max_length + 10,
+                    )
 
     @require_torch
     @require_accelerate
@@ -533,3 +653,17 @@ class TextGenerationPipelineTests(unittest.TestCase):
         with CaptureLogger(logger) as cl:
             _ = text_generator(prompt, max_length=10)
         self.assertNotIn(logger_msg, cl.out)
+
+    @require_torch
+    def test_pipeline_assisted_generation(self):
+        """Tests that we can run assisted generation in the pipeline"""
+        model = "hf-internal-testing/tiny-random-MistralForCausalLM"
+        pipe = pipeline("text-generation", model=model, assistant_model=model)
+
+        # We can run the pipeline
+        prompt = "Hello world"
+        _ = pipe(prompt)
+
+        # It is running assisted generation under the hood (e.g. flags incompatible with assisted gen will crash)
+        with self.assertRaises(ValueError):
+            _ = pipe(prompt, generate_kwargs={"num_beams": 2})

@@ -34,6 +34,10 @@ Learn how to quantize models in the [Quantization](../quantization) guide.
 
 [[autodoc]] AqlmConfig
 
+## VptqConfig
+
+[[autodoc]] VptqConfig
+
 ## AwqConfig
 
 [[autodoc]] AwqConfig
@@ -53,6 +57,10 @@ Learn how to quantize models in the [Quantization](../quantization) guide.
 
 [[autodoc]] quantizers.base.HfQuantizer
 
+## HiggsConfig
+
+[[autodoc]] HiggsConfig
+
 ## HqqConfig
 
 [[autodoc]] HqqConfig
@@ -61,7 +69,14 @@ Learn how to quantize models in the [Quantization](../quantization) guide.
 
 [[autodoc]] FbgemmFp8Config
 
+## CompressedTensorsConfig
+
+[[autodoc]] CompressedTensorsConfig
+
 ## TorchAoConfig
 
 [[autodoc]] TorchAoConfig
 
+## BitNetConfig
+
+[[autodoc]] BitNetConfig

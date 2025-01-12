@@ -214,12 +214,6 @@ class FlaxLlamaAttention(nn.Module):
         self.k_proj = dense(self.num_key_value_heads * self.head_dim)
         self.v_proj = dense(self.num_key_value_heads * self.head_dim)
         self.o_proj = dense(self.embed_dim)
-        if (self.head_dim * self.num_heads) != self.embed_dim:
-            raise ValueError(
-                f"hidden_size must be divisible by num_heads (got `hidden_size`: {self.embed_dim}"
-                f" and `num_heads`: {self.num_heads})."
-            )
-
         self.causal_mask = make_causal_mask(jnp.ones((1, config.max_position_embeddings), dtype="bool"), dtype="bool")
         self.rotary_emb = FlaxLlamaRotaryEmbedding(config, dtype=self.dtype)
 
@@ -748,3 +742,6 @@ append_call_sample_docstring(
     _CONFIG_FOR_DOC,
     real_checkpoint=_REAL_CHECKPOINT_FOR_DOC,
 )
+
+
+__all__ = ["FlaxLlamaForCausalLM", "FlaxLlamaModel", "FlaxLlamaPreTrainedModel"]
