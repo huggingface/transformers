@@ -628,7 +628,6 @@ class AssistantToTargetTranslator:
         target_tokenizer: "PreTrainedTokenizerBase",
         assistant_tokenizer: "PreTrainedTokenizerBase",
         assistant_model_device: str = "cpu",
-        default_AssistantToTargetTranslator
         target_vocab_size: Optional[int] = None,
         filter_value: float = -float("Inf"),
         suppress_tokens_id: int = -1,
