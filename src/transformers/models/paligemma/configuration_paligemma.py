@@ -17,7 +17,7 @@ import warnings
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -73,7 +73,7 @@ class PaliGemmaConfig(PretrainedConfig):
     ```"""
 
     model_type = "paligemma"
-    is_composition = False
+    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
 
     def __init__(
         self,
@@ -141,20 +141,10 @@ class PaliGemmaConfig(PretrainedConfig):
     def ignore_index(self, value):
         self._ignore_index = value
 
-    @property
-    def vocab_size(self):
-        warnings.warn(
-            "The `vocab_size` attribute is deprecated and will be removed in v4.44, Please use `text_config.vocab_size` instead.",
-            FutureWarning,
-        )
-        return self._vocab_size
-
-    @vocab_size.setter
-    def vocab_size(self, value):
-        self._vocab_size = value
-
     def to_dict(self):
         output = super().to_dict()
-        output.pop("_vocab_size", None)
         output.pop("_ignore_index", None)
         return output
+
+
+__all__ = ["PaliGemmaConfig"]

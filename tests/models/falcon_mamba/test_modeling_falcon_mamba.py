@@ -43,9 +43,6 @@ if is_torch_available():
         FalconMambaModel,
     )
     from transformers.cache_utils import MambaCache
-    from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_0
-else:
-    is_torch_greater_or_equal_than_2_0 = False
 
 
 # Copied from transformers.tests.models.mamba.MambaModelTester with Mamba->FalconMamba,mamba->falcon_mamba
@@ -101,6 +98,7 @@ class FalconMambaModelTester:
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
     ):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        attention_mask = ids_tensor([self.batch_size, self.seq_length], 1)
 
         sequence_labels = None
         token_labels = None
@@ -119,7 +117,7 @@ class FalconMambaModelTester:
         return (
             config,
             input_ids,
-            None,
+            attention_mask,
             sequence_labels,
             token_labels,
             choice_labels,
@@ -148,23 +146,6 @@ class FalconMambaModelTester:
         config = self.get_config()
         config.vocab_size = 300
         return config
-
-    def prepare_config_and_inputs_for_decoder(self):
-        (
-            config,
-            input_ids,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = self.prepare_config_and_inputs()
-
-        return (
-            config,
-            input_ids,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        )
 
     def create_and_check_falcon_mamba_model(self, config, input_ids, *args):
         config.output_hidden_states = True
@@ -253,18 +234,15 @@ class FalconMambaModelTester:
         (
             config,
             input_ids,
-            _,
+            attention_mask,
             sequence_labels,
             token_labels,
             choice_labels,
         ) = self.prepare_config_and_inputs()
-        inputs_dict = {"input_ids": input_ids}
+        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask}
         return config, inputs_dict
 
 
-@unittest.skipIf(
-    not is_torch_greater_or_equal_than_2_0, reason="See https://github.com/huggingface/transformers/pull/24204"
-)
 @require_torch
 # Copied from transformers.tests.models.mamba.MambaModelTest with Mamba->Falcon,mamba->falcon_mamba,FalconMambaCache->MambaCache
 class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
@@ -491,3 +469,62 @@ class FalconMambaIntegrationTests(unittest.TestCase):
             self.tokenizer.batch_decode(out, skip_special_tokens=False)[0],
             "Hello today I am going to show you how to make a simple and easy to make paper plane.\nStep",
         )
+
+    def test_batched_generation(self):
+        model_id = "tiiuae/falcon-mamba-7b"
+        tok = AutoTokenizer.from_pretrained(model_id)
+        tok.pad_token_id = tok.eos_token_id
+
+        texts = ["Hello today", "Hello my name is Younes and today"]
+
+        EXPECTED_OUTPUT = [
+            "Hello today I'm going to show you how to make a 3D model of a house.\n",
+            "Hello my name is Younes and today I will be talking about the topic of “The importance of the internet in our life”.\n",
+        ]
+
+        inputs = tok(texts, return_tensors="pt", padding=True, return_token_type_ids=False).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(model_id, device_map=0, torch_dtype=torch.bfloat16)
+
+        out = model.generate(**inputs, max_new_tokens=20)
+        out = tok.batch_decode(out, skip_special_tokens=True)
+
+        self.assertListEqual(out, EXPECTED_OUTPUT)
+
+        # We test the same generations with inputs_embeds
+        with torch.no_grad():
+            inputs_embeds = model.get_input_embeddings()(inputs.pop("input_ids"))
+
+        inputs["inputs_embeds"] = inputs_embeds
+        out = model.generate(**inputs, max_new_tokens=20)
+        out = tok.batch_decode(out, skip_special_tokens=True)
+
+        self.assertListEqual(out, EXPECTED_OUTPUT)
+
+    @require_torch_multi_gpu
+    def test_training_kernel(self):
+        model_id = "tiiuae/falcon-mamba-7b"
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", torch_dtype=torch.bfloat16)
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+
+        text = "Hello today"
+
+        inputs = tokenizer(text, return_tensors="pt").to(torch_device)
+
+        with torch.no_grad():
+            logits = torch.argmax(model(**inputs).logits, dim=-1)
+
+        out_no_training = tokenizer.batch_decode(logits)
+
+        model.train()
+        lm_logits = model(**inputs).logits
+        next_token = torch.argmax(lm_logits, dim=-1)
+
+        out_training = tokenizer.batch_decode(next_token)
+
+        # Just verify backward works
+        loss = (1 - lm_logits).mean()
+        loss.backward()
+
+        self.assertEqual(out_training, out_no_training)

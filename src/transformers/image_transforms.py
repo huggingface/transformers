@@ -32,6 +32,7 @@ from .utils.import_utils import (
     is_tf_available,
     is_torch_available,
     is_torchvision_available,
+    is_torchvision_v2_available,
     is_vision_available,
     requires_backends,
 )
@@ -51,7 +52,9 @@ if is_tf_available():
 if is_flax_available():
     import jax.numpy as jnp
 
-if is_torchvision_available():
+if is_torchvision_v2_available():
+    from torchvision.transforms.v2 import functional as F
+elif is_torchvision_available():
     from torchvision.transforms import functional as F
 
 
@@ -123,11 +126,11 @@ def rescale(
     if not isinstance(image, np.ndarray):
         raise TypeError(f"Input image must be of type np.ndarray, got {type(image)}")
 
-    rescaled_image = image * scale
+    rescaled_image = image.astype(np.float64) * scale  # Numpy type promotion has changed, so always upcast first
     if data_format is not None:
         rescaled_image = to_channel_dimension_format(rescaled_image, data_format, input_data_format)
 
-    rescaled_image = rescaled_image.astype(dtype)
+    rescaled_image = rescaled_image.astype(dtype)  # Finally downcast to the desired dtype at the end
 
     return rescaled_image
 
@@ -162,6 +165,7 @@ def _rescale_for_pil_conversion(image):
 def to_pil_image(
     image: Union[np.ndarray, "PIL.Image.Image", "torch.Tensor", "tf.Tensor", "jnp.ndarray"],
     do_rescale: Optional[bool] = None,
+    image_mode: Optional[str] = None,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> "PIL.Image.Image":
     """
@@ -175,6 +179,8 @@ def to_pil_image(
             Whether or not to apply the scaling factor (to make pixel values integers between 0 and 255). Will default
             to `True` if the image type is a floating type and casting to `int` would result in a loss of precision,
             and `False` otherwise.
+        image_mode (`str`, *optional*):
+            The mode to use for the PIL image. If unset, will use the default mode for the input image type.
         input_data_format (`ChannelDimension`, *optional*):
             The channel dimension format of the input image. If unset, will use the inferred format from the input.
 
@@ -207,7 +213,7 @@ def to_pil_image(
         image = rescale(image, 255)
 
     image = image.astype(np.uint8)
-    return PIL.Image.fromarray(image)
+    return PIL.Image.fromarray(image, mode=image_mode)
 
 
 # Logic adapted from torchvision resizing logic: https://github.com/pytorch/vision/blob/511924c1ced4ce0461197e5caa64ce5b9e558aab/torchvision/transforms/functional.py#L366

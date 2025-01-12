@@ -512,7 +512,7 @@ class TFSuppressTokensAtBeginLogitsProcessor(TFLogitsProcessor):
     r"""
     [`TFSuppressTokensAtBeginLogitsProcessor`] suppresses a list of tokens as soon as the `generate` function starts
     generating using `begin_index` tokens. This should ensure that the tokens defined by `begin_suppress_tokens` at not
-    sampled at the begining of the generation.
+    sampled at the beginning of the generation.
     """
 
     def __init__(self, begin_suppress_tokens, begin_index):
@@ -520,15 +520,21 @@ class TFSuppressTokensAtBeginLogitsProcessor(TFLogitsProcessor):
         self.begin_index = begin_index
 
     def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
-        scores = tf.cond(
-            tf.equal(cur_len, self.begin_index),
-            lambda: tf.tensor_scatter_nd_update(
-                scores,
-                indices=[[i, token] for i in range(scores.shape[0]) for token in self.begin_suppress_tokens],
-                updates=[-float("inf") for _ in range(scores.shape[0] * len(self.begin_suppress_tokens))],
-            ),
-            lambda: scores,
-        )
+        suppressed_indices = []
+        for token in self.begin_suppress_tokens:
+            if token < scores.shape[-1]:  # to ensure we don't go beyond the vocab size
+                suppressed_indices.extend([[i, token] for i in range(scores.shape[0])])
+
+        if len(suppressed_indices) > 0:
+            scores = tf.cond(
+                tf.equal(cur_len, self.begin_index),
+                lambda: tf.tensor_scatter_nd_update(
+                    scores,
+                    indices=suppressed_indices,
+                    updates=[-float("inf") for _ in range(scores.shape[0] * len(self.begin_suppress_tokens))],
+                ),
+                lambda: scores,
+            )
         return scores
 
 
@@ -540,11 +546,17 @@ class TFSuppressTokensLogitsProcessor(TFLogitsProcessor):
         self.suppress_tokens = list(suppress_tokens)
 
     def __call__(self, input_ids: tf.Tensor, scores: tf.Tensor, cur_len: int) -> tf.Tensor:
-        scores = tf.tensor_scatter_nd_update(
-            scores,
-            indices=[[i, token] for i in range(scores.shape[0]) for token in self.suppress_tokens],
-            updates=[-float("inf") for _ in range(scores.shape[0] * len(self.suppress_tokens))],
-        )
+        suppressed_indices = []
+        for token in self.suppress_tokens:
+            if token < scores.shape[-1]:  # to ensure we don't go beyond the vocab size
+                suppressed_indices.extend([[i, token] for i in range(scores.shape[0])])
+
+        if len(suppressed_indices) > 0:
+            scores = tf.tensor_scatter_nd_update(
+                scores,
+                indices=[[i, token] for i in range(scores.shape[0]) for token in self.suppress_tokens],
+                updates=[-float("inf") for _ in range(scores.shape[0] * len(self.suppress_tokens))],
+            )
         return scores
 
 
@@ -569,7 +581,7 @@ class TFForceTokensLogitsProcessor(TFLogitsProcessor):
             batch_size = scores.shape[0]
             current_token = self.force_token_array[generation_idx]
 
-            new_scores = tf.ones_like(scores, dtype=scores.dtype) * -float("inf")
+            new_scores = tf.zeros_like(scores, dtype=scores.dtype) + tf.constant([scores.dtype.min])
             indices = tf.stack((tf.range(batch_size), tf.tile([current_token], [batch_size])), axis=1)
             updates = tf.zeros((batch_size,), dtype=scores.dtype)
             new_scores = tf.tensor_scatter_nd_update(new_scores, indices, updates)

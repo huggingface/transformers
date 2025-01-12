@@ -156,7 +156,8 @@ class EvalPrediction:
     Parameters:
         predictions (`np.ndarray`): Predictions of the model.
         label_ids (`np.ndarray`): Targets to be matched.
-        inputs (`np.ndarray`, *optional*):
+        inputs (`np.ndarray`, *optional*): Input data passed to the model.
+        losses (`np.ndarray`, *optional*): Loss values computed during evaluation.
     """
 
     def __init__(
@@ -164,28 +165,25 @@ class EvalPrediction:
         predictions: Union[np.ndarray, Tuple[np.ndarray]],
         label_ids: Union[np.ndarray, Tuple[np.ndarray]],
         inputs: Optional[Union[np.ndarray, Tuple[np.ndarray]]] = None,
+        losses: Optional[Union[np.ndarray, Tuple[np.ndarray]]] = None,
     ):
         self.predictions = predictions
         self.label_ids = label_ids
         self.inputs = inputs
+        self.losses = losses
+        self.elements = (self.predictions, self.label_ids)
+        if self.inputs is not None:
+            self.elements += (self.inputs,)
+        if self.losses is not None:
+            self.elements += (self.losses,)
 
     def __iter__(self):
-        if self.inputs is not None:
-            return iter((self.predictions, self.label_ids, self.inputs))
-        else:
-            return iter((self.predictions, self.label_ids))
+        return iter(self.elements)
 
     def __getitem__(self, idx):
-        if idx < 0 or idx > 2:
+        if idx < 0 or idx >= len(self.elements):
             raise IndexError("tuple index out of range")
-        if idx == 2 and self.inputs is None:
-            raise IndexError("tuple index out of range")
-        if idx == 0:
-            return self.predictions
-        elif idx == 1:
-            return self.label_ids
-        elif idx == 2:
-            return self.inputs
+        return self.elements[idx]
 
 
 class EvalLoopOutput(NamedTuple):
@@ -227,6 +225,13 @@ class IntervalStrategy(ExplicitEnum):
     NO = "no"
     STEPS = "steps"
     EPOCH = "epoch"
+
+
+class SaveStrategy(ExplicitEnum):
+    NO = "no"
+    STEPS = "steps"
+    EPOCH = "epoch"
+    BEST = "best"
 
 
 class EvaluationStrategy(ExplicitEnum):
@@ -411,6 +416,22 @@ def speed_metrics(split, start_time, num_samples=None, num_steps=None, num_token
 
 
 class SchedulerType(ExplicitEnum):
+    """
+    Scheduler names for the parameter `lr_scheduler_type` in [`TrainingArguments`].
+    By default, it uses "linear". Internally, this retrieves `get_linear_schedule_with_warmup` scheduler from [`Trainer`].
+    Scheduler types:
+       - "linear" = get_linear_schedule_with_warmup
+       - "cosine" = get_cosine_schedule_with_warmup
+       - "cosine_with_restarts" = get_cosine_with_hard_restarts_schedule_with_warmup
+       - "polynomial" = get_polynomial_decay_schedule_with_warmup
+       - "constant" =  get_constant_schedule
+       - "constant_with_warmup" = get_constant_schedule_with_warmup
+       - "inverse_sqrt" = get_inverse_sqrt_schedule
+       - "reduce_lr_on_plateau" = get_reduce_on_plateau_schedule
+       - "cosine_with_min_lr" = get_cosine_with_min_lr_schedule_with_warmup
+       - "warmup_stable_decay" = get_wsd_schedule
+    """
+
     LINEAR = "linear"
     COSINE = "cosine"
     COSINE_WITH_RESTARTS = "cosine_with_restarts"

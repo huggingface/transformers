@@ -20,12 +20,14 @@ import re
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 from ...tokenization_utils import PreTrainedTokenizer
-from ...utils import is_phonemizer_available, logging
+from ...utils import is_phonemizer_available, is_uroman_available, logging
 
 
 if is_phonemizer_available():
     import phonemizer
 
+if is_uroman_available():
+    import uroman as ur
 
 logger = logging.get_logger(__name__)
 
@@ -172,11 +174,16 @@ class VitsTokenizer(PreTrainedTokenizer):
         filtered_text = self._preprocess_char(text)
 
         if has_non_roman_characters(filtered_text) and self.is_uroman:
-            logger.warning(
-                "Text to the tokenizer contains non-Roman characters. Ensure the `uroman` Romanizer is "
-                "applied to the text prior to passing it to the tokenizer. See "
-                "`https://github.com/isi-nlp/uroman` for details."
-            )
+            if not is_uroman_available():
+                logger.warning(
+                    "Text to the tokenizer contains non-Roman characters. To apply the `uroman` pre-processing "
+                    "step automatically, ensure the `uroman` Romanizer is installed with: `pip install uroman` "
+                    "Note `uroman` requires python version >= 3.10"
+                    "Otherwise, apply the Romanizer manually as per the instructions: https://github.com/isi-nlp/uroman"
+                )
+            else:
+                uroman = ur.Uroman()
+                filtered_text = uroman.romanize_string(filtered_text)
 
         if self.phonemize:
             if not is_phonemizer_available():
@@ -234,3 +241,6 @@ class VitsTokenizer(PreTrainedTokenizer):
             f.write(json.dumps(self.encoder, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
         return (vocab_file,)
+
+
+__all__ = ["VitsTokenizer"]

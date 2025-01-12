@@ -18,7 +18,6 @@ import shutil
 import tempfile
 import unittest
 
-import numpy as np
 import pytest
 
 from transformers import BertTokenizer, BertTokenizerFast, GroundingDinoProcessor
@@ -35,8 +34,6 @@ if is_torch_available():
     from transformers.models.grounding_dino.modeling_grounding_dino import GroundingDinoObjectDetectionOutput
 
 if is_vision_available():
-    from PIL import Image
-
     from transformers import GroundingDinoImageProcessor
 
 
@@ -95,18 +92,6 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.tearDown
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
-
-    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.prepare_image_inputs
-    def prepare_image_inputs(self):
-        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
-        or a list of PyTorch tensors if one specifies torchify=True.
-        """
-
-        image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
-
-        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
-
-        return image_inputs
 
     def get_fake_grounding_dino_output(self):
         torch.manual_seed(42)

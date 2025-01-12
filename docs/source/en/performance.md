@@ -24,7 +24,7 @@ Training large transformer models and deploying them to production present vario
 During training, the model may require more GPU memory than available or exhibit slow training speed. In the deployment 
 phase, the model can struggle to handle the required throughput in a production environment.
 
-This documentation aims to assist you in overcoming these challenges and finding the optimal setting for your use-case. 
+This documentation aims to assist you in overcoming these challenges and finding the optimal settings for your use-case. 
 The guides are divided into training and inference sections, as each comes with different challenges and solutions. 
 Within each section you'll find separate guides for different hardware configurations, such as single GPU vs. multi-GPU 
 for training or CPU vs. GPU for inference.
@@ -53,7 +53,7 @@ sections we go through the steps to run inference on CPU and single/multi-GPU se
 
 * [Inference on a single CPU](perf_infer_cpu)
 * [Inference on a single GPU](perf_infer_gpu_one)
-* [Multi-GPU inference](perf_infer_gpu_one)
+* [Multi-GPU inference](perf_infer_gpu_multi)
 * [XLA Integration for TensorFlow Models](tf_xla)
 
 

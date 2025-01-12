@@ -104,7 +104,7 @@ for running remotely as well. You can easily customize the example used, command
 and type of compute hardware, and then run the script to automatically launch the example.
 
 You can refer to
-[hardware setup](https://runhouse-docs.readthedocs-hosted.com/en/latest/api/python/cluster.html#hardware-setup)
+[hardware setup](https://www.run.house/docs/tutorials/quick-start-cloud)
 for more information about hardware and dependency setup with Runhouse, or this
 [Colab tutorial](https://colab.research.google.com/drive/1sh_aNQzJX5BKAdNeXthTNGxKz7sM9VPc) for a more in-depth
 walkthrough.

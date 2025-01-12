@@ -14,9 +14,6 @@
 # limitations under the License.
 """X-CLIP model configuration"""
 
-import os
-from typing import Union
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
 
@@ -79,6 +76,7 @@ class XCLIPTextConfig(PretrainedConfig):
     ```"""
 
     model_type = "xclip_text_model"
+    base_config_key = "text_config"
 
     def __init__(
         self,
@@ -111,24 +109,6 @@ class XCLIPTextConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
         self.attention_dropout = attention_dropout
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the text config dict if we are loading from XCLIPConfig
-        if config_dict.get("model_type") == "xclip":
-            config_dict = config_dict["text_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
 
 
 class XCLIPVisionConfig(PretrainedConfig):
@@ -195,6 +175,7 @@ class XCLIPVisionConfig(PretrainedConfig):
     ```"""
 
     model_type = "xclip_vision_model"
+    base_config_key = "vision_config"
 
     def __init__(
         self,
@@ -239,24 +220,6 @@ class XCLIPVisionConfig(PretrainedConfig):
         self.hidden_act = hidden_act
         self.drop_path_rate = drop_path_rate
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the vision config dict if we are loading from XCLIPConfig
-        if config_dict.get("model_type") == "xclip":
-            config_dict = config_dict["vision_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
-
 
 class XCLIPConfig(PretrainedConfig):
     r"""
@@ -295,6 +258,7 @@ class XCLIPConfig(PretrainedConfig):
     """
 
     model_type = "xclip"
+    sub_configs = {"text_config": XCLIPTextConfig, "vision_config": XCLIPVisionConfig}
 
     def __init__(
         self,
@@ -412,3 +376,6 @@ class XCLIPConfig(PretrainedConfig):
         """
 
         return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+
+
+__all__ = ["XCLIPConfig", "XCLIPTextConfig", "XCLIPVisionConfig"]

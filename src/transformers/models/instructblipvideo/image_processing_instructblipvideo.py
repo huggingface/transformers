@@ -57,8 +57,11 @@ def make_batched_videos(videos) -> List[VideoInput]:
         elif len(videos[0].shape) == 4:
             return [list(video) for video in videos]
 
-    elif is_valid_image(videos) and len(videos.shape) == 4:
-        return [list(videos)]
+    elif is_valid_image(videos):
+        if isinstance(videos, PIL.Image.Image):
+            return [[videos]]
+        elif len(videos.shape) == 4:
+            return [list(videos)]
 
     raise ValueError(f"Could not make batched video from {videos}")
 
@@ -321,7 +324,7 @@ class InstructBlipVideoImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         image = to_numpy_array(image)
 
-        if is_scaled_image(image) and do_rescale:
+        if do_rescale and is_scaled_image(image):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled video frames. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."

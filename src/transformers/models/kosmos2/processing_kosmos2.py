@@ -21,10 +21,9 @@ from typing import List, Optional, Tuple, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, is_batched
-from ...processing_utils import ProcessorMixin
+from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils import AddedToken
-from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, TextInput, TruncationStrategy
-from ...utils import TensorType
+from ...tokenization_utils_base import BatchEncoding, TextInput
 
 
 BboxInput = Union[
@@ -33,6 +32,37 @@ BboxInput = Union[
     List[List[Tuple[int, int]]],
     List[List[Tuple[float, float, float]]],
 ]
+
+
+class Kosmos2ImagesKwargs(ImagesKwargs, total=False):
+    bboxes: Optional[List[float]]
+    num_image_tokens: Optional[int]
+    first_image_token_id: Optional[int]
+
+
+class Kosmos2TextKwargs(TextKwargs, total=False):
+    add_eos_token: Optional[bool]
+
+
+class Kosmos2ProcessorKwargs(ProcessingKwargs, total=False):
+    text_kwargs: Kosmos2TextKwargs
+    images_kwargs: Kosmos2ImagesKwargs
+    _defaults = {
+        "text_kwargs": {
+            "add_special_tokens": True,
+            "padding": False,
+            "stride": 0,
+            "return_overflowing_tokens": False,
+            "return_special_tokens_mask": False,
+            "return_offsets_mapping": False,
+            "return_token_type_ids": False,
+            "verbose": True,
+            "add_eos_token": False,
+        },
+        "images_kwargs": {
+            "num_image_tokens": 64,
+        },
+    }
 
 
 class Kosmos2Processor(ProcessorMixin):
@@ -56,7 +86,7 @@ class Kosmos2Processor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer"]
     valid_kwargs = ["num_patch_index_tokens"]
     image_processor_class = "CLIPImageProcessor"
-    tokenizer_class = ("XLMRobertaTokenizer", "XLMRobertaTokenizerFast")
+    tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor, tokenizer, num_patch_index_tokens=1024, *kwargs):
         tokenizer.return_token_type_ids = False
@@ -107,20 +137,9 @@ class Kosmos2Processor(ProcessorMixin):
         self,
         images: ImageInput = None,
         text: Union[TextInput, List[TextInput]] = None,
-        bboxes: BboxInput = None,
-        num_image_tokens: Optional[int] = 64,
-        first_image_token_id: Optional[int] = None,
-        add_special_tokens: bool = True,
-        add_eos_token: bool = False,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: Optional[int] = None,
-        pad_to_multiple_of: Optional[int] = None,
-        return_attention_mask: Optional[bool] = None,
-        return_length: bool = False,
-        verbose: bool = True,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        **kwargs,
+        audio=None,
+        videos=None,
+        **kwargs: Unpack[Kosmos2ProcessorKwargs],
     ) -> BatchFeature:
         """
         This method uses [`CLIPImageProcessor.__call__`] method to prepare image(s) for the model, and
@@ -145,10 +164,25 @@ class Kosmos2Processor(ProcessorMixin):
         if images is None and text is None:
             raise ValueError("You have to specify either images or text.")
 
+        output_kwargs = self._merge_kwargs(
+            Kosmos2ProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+
+        bboxes = output_kwargs["images_kwargs"].pop("bboxes", None)
+        num_image_tokens = output_kwargs["images_kwargs"].pop("num_image_tokens", 64)
+        first_image_token_id = output_kwargs["images_kwargs"].pop("first_image_token_id", None)
+        add_eos_token = output_kwargs["text_kwargs"].pop("add_eos_token", False)
+
+        add_special_tokens = output_kwargs["text_kwargs"]["add_special_tokens"]
+        padding = output_kwargs["text_kwargs"]["padding"]
+        return_tensors = output_kwargs["text_kwargs"].setdefault("return_tensors", None)
+
         encoding = BatchFeature()
 
         if images is not None:
-            image_encoding = self.image_processor(images, return_tensors=return_tensors)
+            image_encoding = self.image_processor(images, **output_kwargs["images_kwargs"])
             encoding.update(image_encoding)
 
         if text is not None:
@@ -159,20 +193,17 @@ class Kosmos2Processor(ProcessorMixin):
                     text = f"{self.tokenizer.bos_token}{text}"
                 elif isinstance(text, list):
                     text = [f"{self.tokenizer.bos_token}{s}" for s in text]
-
-            text_encoding = self.tokenizer(
-                text=text,
-                add_special_tokens=(add_special_tokens and add_eos_token),
-                padding=padding and images is None,
-                truncation=truncation,
-                max_length=max_length,
-                pad_to_multiple_of=pad_to_multiple_of if images is None else pad_to_multiple_of,
-                return_attention_mask=return_attention_mask,
-                verbose=verbose,
-                return_tensors=return_tensors if images is None else None,
-                **kwargs,
+            output_kwargs["text_kwargs"]["add_special_tokens"] = (
+                output_kwargs["text_kwargs"]["add_special_tokens"] and add_eos_token
             )
+            output_kwargs["text_kwargs"]["padding"] = padding if images is None else False
+            output_kwargs["text_kwargs"]["return_tensors"] = return_tensors if images is None else None
+            text_encoding = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
             encoding.update(text_encoding)
+
+        output_kwargs["text_kwargs"]["add_special_tokens"] = add_special_tokens
+        output_kwargs["text_kwargs"]["padding"] = padding
+        output_kwargs["text_kwargs"]["return_tensors"] = return_tensors
 
         if text is not None and images is not None:
             # Use the id of the first token after <unk>
@@ -218,18 +249,12 @@ class Kosmos2Processor(ProcessorMixin):
                 )
                 _, min_len_not_padded = sorted_length[0]
                 idx, _ = sorted_length[-1]
-
-                text_encoding = self.tokenizer(
-                    text=[text[idx]],
-                    add_special_tokens=(add_special_tokens and add_eos_token),
-                    padding=padding,
-                    truncation=truncation,
-                    max_length=max_length,
-                    pad_to_multiple_of=pad_to_multiple_of,
-                    verbose=verbose,
-                    return_tensors=None,
-                    **kwargs,
+                output_kwargs["text_kwargs"]["add_special_tokens"] = (
+                    output_kwargs["text_kwargs"]["add_special_tokens"] and add_eos_token
                 )
+                output_kwargs["text_kwargs"]["return_tensors"] = None
+
+                text_encoding = self.tokenizer(text=[text[idx]], **output_kwargs["text_kwargs"])
                 max_len_padded = len(text_encoding.input_ids[0])
 
                 if min_len_not_padded != max_len_padded:
@@ -402,6 +427,21 @@ class Kosmos2Processor(ProcessorMixin):
         if cleanup_and_extract:
             return clean_text_and_extract_entities_with_bboxes(caption)
         return caption
+
+    def post_process_image_text_to_text(self, generated_outputs):
+        """
+        Post-process the output of the model to decode the text.
+
+        Args:
+            generated_outputs (`torch.Tensor` or `np.ndarray`):
+                The output of the model `generate` function. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
+                or `(sequence_length,)`.
+
+        Returns:
+            `List[str]`: The decoded text.
+        """
+        generated_texts = self.batch_decode(generated_outputs, skip_special_tokens=True)
+        return [self.post_process_generation(text, cleanup_and_extract=False) for text in generated_texts]
 
     @property
     # Copied from transformers.models.blip.processing_blip.BlipProcessor.model_input_names
@@ -665,3 +705,6 @@ def clean_text_and_extract_entities_with_bboxes(text, num_patches_per_side=32):
         entities.append(adjusted_entity + (bboxes_in_coords,))
 
     return _cleanup_spaces(processed_text, entities)
+
+
+__all__ = ["Kosmos2Processor"]

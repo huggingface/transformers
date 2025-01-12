@@ -48,7 +48,7 @@ nbformat==5.0.7
 nest-asyncio==1.4.0
 notebook==6.4.12
 numpy==1.22.0
-opencv-python==4.4.0.42
+opencv-python==4.8.1.78
 packaging==20.3
 pandas==1.1.2
 pandocfilters==1.4.2
@@ -86,7 +86,7 @@ testpath==0.4.4
 tokenizers==0.8.1rc2
 torch==2.2.0
 torchvision==0.7.0
-tornado==6.4.1
+tornado==6.4.2
 tqdm==4.66.3
 traitlets
 git+https://github.com/huggingface/transformers.git

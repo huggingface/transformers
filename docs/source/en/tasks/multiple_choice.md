@@ -270,7 +270,7 @@ At this point, only three steps remain:
 ...     args=training_args,
 ...     train_dataset=tokenized_swag["train"],
 ...     eval_dataset=tokenized_swag["validation"],
-...     tokenizer=tokenizer,
+...     processing_class=tokenizer,
 ...     data_collator=DataCollatorForMultipleChoice(tokenizer=tokenizer),
 ...     compute_metrics=compute_metrics,
 ... )
@@ -399,7 +399,7 @@ Tokenize each prompt and candidate answer pair and return PyTorch tensors. You s
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("my_awesome_swag_model")
+>>> tokenizer = AutoTokenizer.from_pretrained("username/my_awesome_swag_model")
 >>> inputs = tokenizer([[prompt, candidate1], [prompt, candidate2]], return_tensors="pt", padding=True)
 >>> labels = torch.tensor(0).unsqueeze(0)
 ```
@@ -409,7 +409,7 @@ Pass your inputs and labels to the model and return the `logits`:
 ```py
 >>> from transformers import AutoModelForMultipleChoice
 
->>> model = AutoModelForMultipleChoice.from_pretrained("my_awesome_swag_model")
+>>> model = AutoModelForMultipleChoice.from_pretrained("username/my_awesome_swag_model")
 >>> outputs = model(**{k: v.unsqueeze(0) for k, v in inputs.items()}, labels=labels)
 >>> logits = outputs.logits
 ```
@@ -419,7 +419,7 @@ Get the class with the highest probability:
 ```py
 >>> predicted_class = logits.argmax().item()
 >>> predicted_class
-'0'
+0
 ```
 </pt>
 <tf>
@@ -428,7 +428,7 @@ Tokenize each prompt and candidate answer pair and return TensorFlow tensors:
 ```py
 >>> from transformers import AutoTokenizer
 
->>> tokenizer = AutoTokenizer.from_pretrained("my_awesome_swag_model")
+>>> tokenizer = AutoTokenizer.from_pretrained("username/my_awesome_swag_model")
 >>> inputs = tokenizer([[prompt, candidate1], [prompt, candidate2]], return_tensors="tf", padding=True)
 ```
 
@@ -437,7 +437,7 @@ Pass your inputs to the model and return the `logits`:
 ```py
 >>> from transformers import TFAutoModelForMultipleChoice
 
->>> model = TFAutoModelForMultipleChoice.from_pretrained("my_awesome_swag_model")
+>>> model = TFAutoModelForMultipleChoice.from_pretrained("username/my_awesome_swag_model")
 >>> inputs = {k: tf.expand_dims(v, 0) for k, v in inputs.items()}
 >>> outputs = model(inputs)
 >>> logits = outputs.logits
@@ -448,7 +448,7 @@ Get the class with the highest probability:
 ```py
 >>> predicted_class = int(tf.math.argmax(logits, axis=-1)[0])
 >>> predicted_class
-'0'
+0
 ```
 </tf>
 </frameworkcontent>

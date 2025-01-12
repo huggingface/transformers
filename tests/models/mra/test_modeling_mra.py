@@ -42,7 +42,8 @@ class MraModelTester:
         self,
         parent,
         batch_size=2,
-        seq_length=8,
+        # must be [== max_position_embeddings] AND [multiple of block_size (default = 32)] (?)
+        seq_length=64,
         is_training=True,
         use_input_mask=True,
         use_token_type_ids=True,
@@ -55,7 +56,7 @@ class MraModelTester:
         hidden_act="gelu",
         hidden_dropout_prob=0.0,
         attention_probs_dropout_prob=0.0,
-        max_position_embeddings=512,
+        max_position_embeddings=64,
         type_vocab_size=16,
         type_sequence_label_size=2,
         initializer_range=0.02,

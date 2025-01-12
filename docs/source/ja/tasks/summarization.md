@@ -216,7 +216,7 @@ pip install transformers datasets evaluate rouge_score
 ...     args=training_args,
 ...     train_dataset=tokenized_billsum["train"],
 ...     eval_dataset=tokenized_billsum["test"],
-...     tokenizer=tokenizer,
+...     processing_class=tokenizer,
 ...     data_collator=data_collator,
 ...     compute_metrics=compute_metrics,
 ... )

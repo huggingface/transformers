@@ -436,6 +436,7 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             "feature-extraction": BlipModel,
             "image-to-text": BlipForConditionalGeneration,
             "visual-question-answering": BlipForQuestionAnswering,
+            "image-text-to-text": BlipForConditionalGeneration,
         }
         if is_torch_available()
         else {}
@@ -443,15 +444,22 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
-    test_resize_embeddings = False
+    test_resize_embeddings = True
     test_attention_outputs = False
 
     def setUp(self):
         self.model_tester = BlipModelTester(self)
+        common_properties = ["logit_scale_init_value", "image_text_hidden_size", "projection_dim", "label_smoothing"]
+        self.config_tester = ConfigTester(
+            self, config_class=BlipConfig, has_text_modality=False, common_properties=common_properties
+        )
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
@@ -737,7 +745,6 @@ class BlipTextImageModelsModelTester:
         config, input_ids, attention_mask, pixel_values = config_and_inputs
         inputs_dict = {
             "input_ids": input_ids,
-            "labels": input_ids,
             "attention_mask": attention_mask,
             "pixel_values": pixel_values,
         }
@@ -786,10 +793,10 @@ class BlipVQAModelTester:
         config, input_ids, attention_mask, pixel_values = config_and_inputs
         inputs_dict = {
             "input_ids": input_ids,
-            "labels": input_ids,
             "decoder_input_ids": input_ids,
             "attention_mask": attention_mask,
             "pixel_values": pixel_values,
+            "labels": input_ids,
         }
         return config, inputs_dict
 
@@ -801,7 +808,7 @@ class BlipVQAModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
-    test_resize_embeddings = False
+    test_resize_embeddings = True
     test_attention_outputs = False
     test_torchscript = False
 
@@ -810,7 +817,6 @@ class BlipVQAModelTest(ModelTesterMixin, unittest.TestCase):
 
     def _prepare_inputs_for_vqa(self):
         _, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        inputs_dict["labels"] = inputs_dict["input_ids"]
         inputs_dict["decoder_input_ids"] = inputs_dict["input_ids"]
         inputs_dict.pop("return_loss")
         return inputs_dict
@@ -881,7 +887,7 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
-    test_resize_embeddings = False
+    test_resize_embeddings = True
     test_attention_outputs = False
     test_torchscript = False
 
@@ -1109,7 +1115,7 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
     fx_compatible = False
     test_head_masking = False
     test_pruning = False
-    test_resize_embeddings = False
+    test_resize_embeddings = True
     test_attention_outputs = False
     test_torchscript = False
 

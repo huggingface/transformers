@@ -20,7 +20,8 @@ from typing import Dict, List, Tuple
 from parameterized import parameterized
 
 from transformers import AutoTokenizer, Mamba2Config, is_torch_available
-from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
+from transformers.testing_utils import require_read_token, require_torch, require_torch_gpu, slow, torch_device
+from transformers.utils.import_utils import is_causal_conv1d_available, is_mamba_2_ssm_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -35,10 +36,7 @@ if is_torch_available():
         Mamba2ForCausalLM,
         Mamba2Model,
     )
-    from transformers.models.mamba2.modeling_mamba2 import Mamba2Cache
-    from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_0
-else:
-    is_torch_greater_or_equal_than_2_0 = False
+    from transformers.models.mamba2.modeling_mamba2 import Mamba2Cache, Mamba2Mixer
 
 
 class Mamba2ModelTester:
@@ -96,12 +94,16 @@ class Mamba2ModelTester:
         self.tie_word_embeddings = tie_word_embeddings
 
     def get_large_model_config(self):
-        return Mamba2Config.from_pretrained("revision='refs/pr/9'")
+        return Mamba2Config.from_pretrained("mistralai/Mamba-Codestral-7B-v0.1")
 
     def prepare_config_and_inputs(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
     ):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+
+        # Only left padding is valid
+        attention_mask = torch.ones(size=(self.batch_size, self.seq_length), device=input_ids.device, dtype=torch.long)
+        attention_mask[0, :1] = 0
 
         sequence_labels = None
         token_labels = None
@@ -118,7 +120,7 @@ class Mamba2ModelTester:
         return (
             config,
             input_ids,
-            None,
+            attention_mask,
             sequence_labels,
             token_labels,
             choice_labels,
@@ -158,10 +160,57 @@ class Mamba2ModelTester:
         inputs_dict = {"input_ids": input_ids}
         return config, inputs_dict
 
+    def create_and_check_mamba2_caching(self, config, input_ids, attention_mask, *args):
+        model = Mamba2Model(config=config)
+        model.to(torch_device)
+        model.eval()
 
-@unittest.skipIf(
-    not is_torch_greater_or_equal_than_2_0, reason="See https://github.com/huggingface/transformers/pull/24204"
-)
+        output_whole = model(input_ids, attention_mask=attention_mask).last_hidden_state
+
+        outputs = model(
+            input_ids[:, :-1],
+            attention_mask=attention_mask[:, :-1],
+            use_cache=True,
+            cache_position=torch.arange(0, config.conv_kernel, device=input_ids.device),
+        )
+        output_one = outputs.last_hidden_state
+
+        # Using the state computed on the first inputs, we will get the same output
+        outputs = model(
+            input_ids[:, -1:],
+            attention_mask=attention_mask[:, -1:],
+            use_cache=True,
+            cache_params=outputs.cache_params,
+            cache_position=torch.arange(config.conv_kernel, config.conv_kernel + 1, device=input_ids.device),
+        )
+        output_two = outputs.last_hidden_state
+
+        self.parent.assertTrue(
+            torch.allclose(torch.cat([output_one, output_two], dim=1), output_whole, atol=1e-3, rtol=1e-3)
+        )
+
+    def create_and_check_mamba2_slow_vs_fast_forward(self, config, input_ids, *args, gradient_checkpointing=False):
+        model = Mamba2Model(config)
+        model.eval()
+
+        if not (is_mamba_2_ssm_available() and is_causal_conv1d_available()):
+            self.parent.skipTest(
+                "This test needs the Mamba2 fast path. Skipping as the necessary packages have not been found."
+            )
+        if torch_device != "cuda":
+            self.parent.skipTest("This test needs the Mamba2 fast path. Skipping as we need a cuda capable device.")
+
+        model.to(torch_device)
+        if gradient_checkpointing:
+            model.gradient_checkpointing_enable()
+
+        token_emb = model.embeddings(input_ids)
+        outputs_fast = model.layers[0].mixer.cuda_kernels_forward(token_emb)
+        outputs_slow = model.layers[0].mixer.torch_forward(token_emb)
+
+        self.parent.assertTrue(torch.allclose(outputs_fast, outputs_slow, atol=1e-3, rtol=1e-3))
+
+
 @require_torch
 class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Mamba2Model, Mamba2ForCausalLM) if is_torch_available() else ()
@@ -184,6 +233,14 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             self, config_class=Mamba2Config, n_embd=37, common_properties=["hidden_size", "num_hidden_layers"]
         )
 
+    def test_mamba2_caching(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_mamba2_caching(*config_and_inputs)
+
+    def test_mamba2_slow_vs_fast_forward(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_mamba2_slow_vs_fast_forward(*config_and_inputs)
+
     def test_initialization(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -199,32 +256,8 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_tied_weights_keys(self):
         pass
 
-    @unittest.skip(reason="To fix, Mamba 2 cache slicing is interacting with beam search")
-    def test_beam_search_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip(reason="To fix, Mamba 2 cache slicing is interacting with beam search")
-    def test_beam_sample_generate(self):
-        pass
-
-    @unittest.skip(reason="To fix, Mamba 2 cache slicing test case is an edge case")
-    def test_generate_without_input_ids(self):
-        pass
-
-    @unittest.skip(reason="To fix, Mamba 2 cache slicing test case is an edge case")
-    def test_greedy_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip(reason="Initialization of mamba2 fails this")
-    def test_save_load_fast_init_from_base(self):
-        pass
-
     @unittest.skip(reason="A large mamba2 would be necessary (and costly) for that")
     def test_multi_gpu_data_parallel_forward(self):
-        pass
-
-    @unittest.skip(reason="To fix, Mamba 2 cache slicing test case is an edge case")
-    def test_generate_from_inputs_embeds_decoder_only(self):
         pass
 
     def test_model_outputs_equivalence(self):
@@ -286,14 +319,14 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
 @require_torch
 @slow
+@require_read_token
 class Mamba2IntegrationTest(unittest.TestCase):
     def setUp(self):
         self.model_id = "mistralai/Mamba-Codestral-7B-v0.1"
-        self.tokenizer = AutoTokenizer.from_pretrained(
-            self.model_id, revision="refs/pr/9", from_slow=True, legacy=False
-        )
+        self.tokenizer = AutoTokenizer.from_pretrained(self.model_id, from_slow=True, legacy=False)
         self.prompt = ("[INST]Write a hello world program in C++.",)
 
+    @require_read_token
     @parameterized.expand(
         [
             (torch_device,),
@@ -311,7 +344,7 @@ class Mamba2IntegrationTest(unittest.TestCase):
         tokenizer = self.tokenizer
         tokenizer.pad_token_id = tokenizer.eos_token_id
 
-        model = Mamba2ForCausalLM.from_pretrained(self.model_id, revision="refs/pr/9", torch_dtype=torch.bfloat16)
+        model = Mamba2ForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16)
         model.to(device)
         input_ids = tokenizer("[INST]Write a hello world program in C++.[/INST]", return_tensors="pt")["input_ids"].to(
             device
@@ -322,6 +355,7 @@ class Mamba2IntegrationTest(unittest.TestCase):
         ground_truth_sentence = """<s>[INST]Write a hello world program in C++.[/INST] Sure, here is a simple "Hello, World!" program in C++:\n\n```cpp\n#include <iostream>\n\n"""
         self.assertEqual(output_sentence, ground_truth_sentence)
 
+    @require_read_token
     @slow
     @require_torch_gpu
     def test_batched_equivalence_with_cache(self):
@@ -337,9 +371,38 @@ class Mamba2IntegrationTest(unittest.TestCase):
             "[INST] Write a simple Fibonacci number computation function in Rust that does memoization, with comments, in safe Rust.[/INST]",
         ]
 
-        model = Mamba2ForCausalLM.from_pretrained(self.model_id, revision="refs/pr/9", torch_dtype=torch.bfloat16).to(
-            torch_device
-        )
+        model = Mamba2ForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(torch_device)
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+        # batched generation
+        tokenized_prompts = tokenizer(prompt, return_tensors="pt", padding="longest").to(torch_device)
+        batched_gen = model.generate(**tokenized_prompts, max_new_tokens=30, use_cache=True)
+        batched_output = tokenizer.batch_decode(batched_gen, skip_special_tokens=True)
+
+        # individual generation
+
+        for index_gen, individual_prompt in enumerate(prompt):
+            inputs = tokenizer(individual_prompt, return_tensors="pt", padding="longest").to(torch_device)
+            individual_gen = model.generate(**inputs, max_new_tokens=30, use_cache=True)
+            individual_output = tokenizer.batch_decode(individual_gen, skip_special_tokens=True)[0]
+            self.assertEqual(individual_output[:100], batched_output[index_gen][:100])
+
+    @require_read_token
+    @slow
+    @require_torch_gpu
+    def test_batched_equivalence_without_cache(self):
+        """
+        Verifies that batched generation matches individual generation without cache.
+        Important because of the specific caching mechanism + statefulness of mamba model.
+        Depending on precision and devices, differences can be observed from generation to generation.
+        """
+        tokenizer = self.tokenizer
+        prompt = [
+            "[INST]Write C#.[/INST]",
+            "[INST]Write a hello world in C++.[/INST]",
+            "[INST] Write a simple Fibonacci number computation function in Rust that does memoization, with comments, in safe Rust.[/INST]",
+        ]
+
+        model = Mamba2ForCausalLM.from_pretrained(self.model_id, torch_dtype=torch.bfloat16).to(torch_device)
         tokenizer.pad_token_id = tokenizer.eos_token_id
         # batched generation
         tokenized_prompts = tokenizer(prompt, return_tensors="pt", padding="longest").to(torch_device)
@@ -356,32 +419,24 @@ class Mamba2IntegrationTest(unittest.TestCase):
 
     @slow
     @require_torch_gpu
-    def test_batched_equivalence_without_cache(self):
-        """
-        Verifies that batched generation matches individual generation without cache.
-        Important because of the specific caching mechanism + statefulness of mamba model.
-        Depending on precision and devices, differences can be observed from generation to generation.
-        """
-        tokenizer = self.tokenizer
-        prompt = [
-            "[INST]Write C#.[/INST]",
-            "[INST]Write a hello world in C++.[/INST]",
-            "[INST] Write a simple Fibonacci number computation function in Rust that does memoization, with comments, in safe Rust.[/INST]",
-        ]
+    def test_mamba2_mixer_train_vs_eval_equivalence(self):
+        # Based on https://github.com/sustcsonglin/flash-linear-attention/issues/63
+        # Credit to zhixuan-lin
 
-        model = Mamba2ForCausalLM.from_pretrained(self.model_id, revision="refs/pr/9", torch_dtype=torch.bfloat16).to(
-            torch_device
-        )
-        tokenizer.pad_token_id = tokenizer.eos_token_id
-        # batched generation
-        tokenized_prompts = tokenizer(prompt, return_tensors="pt", padding="longest").to(torch_device)
-        batched_gen = model.generate(**tokenized_prompts, max_new_tokens=30, use_cache=True)
-        batched_output = tokenizer.batch_decode(batched_gen, skip_special_tokens=True)
+        B, T, D = 4, 512, 768
+        dtype = torch.bfloat16
+        config = Mamba2Config(num_heads=24, head_dim=64, hidden_size=768, expand=2, n_groups=1)
 
-        # individual generation
+        torch.manual_seed(42)
+        with torch.amp.autocast(device_type="cuda", dtype=dtype):
+            with torch.no_grad():
+                mixer = Mamba2Mixer(config, layer_idx=0).to("cuda")
+                hidden_states = torch.rand(size=(B, T, D), dtype=dtype, device="cuda")
 
-        for index_gen, individual_prompt in enumerate(prompt):
-            inputs = tokenizer(individual_prompt, return_tensors="pt", padding="longest").to(torch_device)
-            individual_gen = model.generate(**inputs, max_new_tokens=30, use_cache=True)
-            individual_output = tokenizer.batch_decode(individual_gen, skip_special_tokens=True)[0]
-            self.assertEqual(individual_output[:100], batched_output[index_gen][:100])
+                mixer.train()
+                out_train = mixer(hidden_states)
+
+                mixer.eval()
+                out_eval = mixer(hidden_states)
+
+                self.assertTrue(torch.allclose(out_train, out_eval, atol=1e-3))

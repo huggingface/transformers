@@ -1,0 +1,129 @@
+name: Process failed tests
+
+on:
+  workflow_call:
+    inputs:
+      docker:
+        required: true
+        type: string
+      start_sha:
+        required: true
+        type: string
+
+
+env:
+  HF_HOME: /mnt/cache
+  TRANSFORMERS_IS_CI: yes
+  OMP_NUM_THREADS: 8
+  MKL_NUM_THREADS: 8
+  RUN_SLOW: yes
+  # For gated repositories, we still need to agree to share information on the Hub repo. page in order to get access.
+  # This token is created under the bot `hf-transformers-bot`.
+  HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+  SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
+  TF_FORCE_GPU_ALLOW_GROWTH: true
+  RUN_PT_TF_CROSS_TESTS: 1
+  CUDA_VISIBLE_DEVICES: 0,1
+
+
+jobs:
+  run_models_gpu:
+    name: " "
+    runs-on:
+      group: aws-g4dn-2xlarge-cache
+    container:
+      image: ${{ inputs.docker }}
+      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: ci_results_run_models_gpu
+          path: /transformers/ci_results_run_models_gpu
+
+      - name: Update clone
+        working-directory: /transformers
+        run: git fetch && git checkout ${{ github.sha }}
+
+      - name: Get target commit
+        working-directory: /transformers/utils
+        run: |
+          echo "END_SHA=$(TOKEN=${{ secrets.ACCESS_REPO_INFO_TOKEN }} python3 -c 'import os; from get_previous_daily_ci import get_last_daily_ci_run_commit; commit=get_last_daily_ci_run_commit(token=os.environ["TOKEN"]); print(commit)')" >> $GITHUB_ENV
+
+      - name: Checkout to `start_sha`
+        working-directory: /transformers
+        run: git fetch && git checkout ${{ inputs.start_sha }}
+
+      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
+        working-directory: /transformers
+        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
+
+      - name: NVIDIA-SMI
+        run: |
+          nvidia-smi
+
+      - name: Environment
+        working-directory: /transformers
+        run: |
+          python3 utils/print_env.py
+
+      - name: Show installed libraries and their versions
+        working-directory: /transformers
+        run: pip freeze
+
+      - name: Check failed tests
+        working-directory: /transformers
+        run: python3 utils/check_bad_commit.py --start_commit ${{ inputs.start_sha }} --end_commit ${{ env.END_SHA }} --file ci_results_run_models_gpu/new_model_failures.json --output_file new_model_failures_with_bad_commit.json
+
+      - name: Show results
+        working-directory: /transformers
+        run: |
+          ls -l new_model_failures_with_bad_commit.json
+          cat new_model_failures_with_bad_commit.json
+
+      - name: Checkout back
+        working-directory: /transformers
+        run: |
+          git checkout ${{ inputs.start_sha }}
+
+      - name: Process report
+        shell: bash
+        working-directory: /transformers
+        env:
+          TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
+        run: |
+          python3 utils/process_bad_commit_report.py
+
+      - name: Process report
+        shell: bash
+        working-directory: /transformers
+        env:
+          TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
+        run: |
+          {
+            echo 'REPORT_TEXT<<EOF'
+            python3 utils/process_bad_commit_report.py
+            echo EOF
+          } >> "$GITHUB_ENV"
+
+      - name: Send processed report
+        if: ${{ !endsWith(env.REPORT_TEXT, '{}') }}
+        uses: slackapi/slack-github-action@6c661ce58804a1a20f6dc5fbee7f0381b469e001
+        with:
+          # Slack channel id, channel name, or user id to post message.
+          # See also: https://api.slack.com/methods/chat.postMessage#channels
+          channel-id: '#transformers-ci-feedback-tests'
+          # For posting a rich message using Block Kit
+          payload: |
+            {
+              "blocks": [
+                {
+                  "type": "section",
+                  "text": {
+                    "type": "mrkdwn",
+                    "text": "${{ env.REPORT_TEXT }}"
+                  }
+                }
+              ]
+            }
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_CIFEEDBACK_BOT_TOKEN }}

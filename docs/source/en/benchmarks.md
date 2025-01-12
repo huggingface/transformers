@@ -35,7 +35,7 @@ The classes [`PyTorchBenchmark`] and [`TensorFlowBenchmark`] allow to flexibly b
 
 <Tip>
 
-Hereby, _inference_ is defined by a single forward pass, and _training_ is defined by a single forward pass and
+Here, _inference_ is defined by a single forward pass, and _training_ is defined by a single forward pass and
 backward pass.
 
 </Tip>
@@ -368,7 +368,7 @@ This section lists a couple of best practices one should be aware of when benchm
   memory measurement it is recommended to run each memory benchmark in a separate process by making sure
   `no_multi_processing` is set to `True`.
 - One should always state the environment information when sharing the results of a model benchmark. Results can vary
-  heavily between different GPU devices, library versions, etc., so that benchmark results on their own are not very
+  heavily between different GPU devices, library versions, etc., as a consequence, benchmark results on their own are not very
   useful for the community.
 
 

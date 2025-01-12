@@ -13,11 +13,11 @@
 # limitations under the License.
 """Image processor class for SuperPoint."""
 
-from typing import Dict, Optional, Union
+from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ... import is_vision_available
+from ... import is_torch_available, is_vision_available
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import resize, to_channel_dimension_format
 from ...image_utils import (
@@ -31,6 +31,12 @@ from ...image_utils import (
 )
 from ...utils import TensorType, logging, requires_backends
 
+
+if is_torch_available():
+    import torch
+
+if TYPE_CHECKING:
+    from .modeling_superpoint import SuperPointKeypointDescriptionOutput
 
 if is_vision_available():
     import PIL
@@ -235,7 +241,7 @@ class SuperPointImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
-        if is_scaled_image(images[0]) and do_rescale:
+        if do_rescale and is_scaled_image(images[0]):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -270,3 +276,55 @@ class SuperPointImageProcessor(BaseImageProcessor):
         data = {"pixel_values": images}
 
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+    def post_process_keypoint_detection(
+        self, outputs: "SuperPointKeypointDescriptionOutput", target_sizes: Union[TensorType, List[Tuple]]
+    ) -> List[Dict[str, "torch.Tensor"]]:
+        """
+        Converts the raw output of [`SuperPointForKeypointDetection`] into lists of keypoints, scores and descriptors
+        with coordinates absolute to the original image sizes.
+
+        Args:
+            outputs ([`SuperPointKeypointDescriptionOutput`]):
+                Raw outputs of the model containing keypoints in a relative (x, y) format, with scores and descriptors.
+            target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
+                `(height, width)` of each image in the batch. This must be the original
+                image size (before any processing).
+        Returns:
+            `List[Dict]`: A list of dictionaries, each dictionary containing the keypoints in absolute format according
+            to target_sizes, scores and descriptors for an image in the batch as predicted by the model.
+        """
+        if len(outputs.mask) != len(target_sizes):
+            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the mask")
+
+        if isinstance(target_sizes, List):
+            image_sizes = torch.tensor(target_sizes)
+        else:
+            if target_sizes.shape[1] != 2:
+                raise ValueError(
+                    "Each element of target_sizes must contain the size (h, w) of each image of the batch"
+                )
+            image_sizes = target_sizes
+
+        # Flip the image sizes to (width, height) and convert keypoints to absolute coordinates
+        image_sizes = torch.flip(image_sizes, [1])
+        masked_keypoints = outputs.keypoints * image_sizes[:, None]
+
+        # Convert masked_keypoints to int
+        masked_keypoints = masked_keypoints.to(torch.int32)
+
+        results = []
+        for image_mask, keypoints, scores, descriptors in zip(
+            outputs.mask, masked_keypoints, outputs.scores, outputs.descriptors
+        ):
+            indices = torch.nonzero(image_mask).squeeze(1)
+            keypoints = keypoints[indices]
+            scores = scores[indices]
+            descriptors = descriptors[indices]
+            results.append({"keypoints": keypoints, "scores": scores, "descriptors": descriptors})
+
+        return results
+
+
+__all__ = ["SuperPointImageProcessor"]
