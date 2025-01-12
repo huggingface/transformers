@@ -356,6 +356,8 @@
         title: BLOOM
       - local: model_doc/bort
         title: BORT
+      - local: model_doc/brand-new-bert
+        title: Brand New BERT
       - local: model_doc/byt5
         title: ByT5
       - local: model_doc/camembert

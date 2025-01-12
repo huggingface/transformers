@@ -31,6 +31,7 @@ TF_MODEL_MAPPING_NAMES = OrderedDict(
         ("albert", "TFAlbertModel"),
         ("bart", "TFBartModel"),
         ("bert", "TFBertModel"),
+        ("brand-new-bert", "TFBrandNewBERTModel"),
         ("blenderbot", "TFBlenderbotModel"),
         ("blenderbot-small", "TFBlenderbotSmallModel"),
         ("blip", "TFBlipModel"),
@@ -105,6 +106,7 @@ TF_MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("albert", "TFAlbertForPreTraining"),
         ("bart", "TFBartForConditionalGeneration"),
         ("bert", "TFBertForPreTraining"),
+        ("brand-new-bert", "TFBrandNewBERTForPreTraining"),
         ("camembert", "TFCamembertForMaskedLM"),
         ("ctrl", "TFCTRLLMHeadModel"),
         ("distilbert", "TFDistilBertForMaskedLM"),
@@ -137,6 +139,7 @@ TF_MODEL_WITH_LM_HEAD_MAPPING_NAMES = OrderedDict(
         ("albert", "TFAlbertForMaskedLM"),
         ("bart", "TFBartForConditionalGeneration"),
         ("bert", "TFBertForMaskedLM"),
+        ("brand-new-bert", "TFBrandNewBERTForMaskedLM"),
         ("camembert", "TFCamembertForMaskedLM"),
         ("convbert", "TFConvBertForMaskedLM"),
         ("ctrl", "TFCTRLLMHeadModel"),
@@ -174,6 +177,7 @@ TF_MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
     [
         # Model for Causal LM mapping
         ("bert", "TFBertLMHeadModel"),
+        ("brand-new-bert", "TFBrandNewBERTLMHeadModel"),
         ("camembert", "TFCamembertForCausalLM"),
         ("ctrl", "TFCTRLLMHeadModel"),
         ("gpt-sw3", "TFGPT2LMHeadModel"),
@@ -254,6 +258,7 @@ TF_MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
         # Model for Masked LM mapping
         ("albert", "TFAlbertForMaskedLM"),
         ("bert", "TFBertForMaskedLM"),
+        ("brand-new-bert", "TFBrandNewBERTForMaskedLM"),
         ("camembert", "TFCamembertForMaskedLM"),
         ("convbert", "TFConvBertForMaskedLM"),
         ("deberta", "TFDebertaForMaskedLM"),
@@ -306,6 +311,7 @@ TF_MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("albert", "TFAlbertForSequenceClassification"),
         ("bart", "TFBartForSequenceClassification"),
         ("bert", "TFBertForSequenceClassification"),
+        ("brand-new-bert", "TFBrandNewBERTForSequenceClassification"),
         ("camembert", "TFCamembertForSequenceClassification"),
         ("convbert", "TFConvBertForSequenceClassification"),
         ("ctrl", "TFCTRLForSequenceClassification"),
@@ -343,6 +349,7 @@ TF_MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         # Model for Question Answering mapping
         ("albert", "TFAlbertForQuestionAnswering"),
         ("bert", "TFBertForQuestionAnswering"),
+        ("brand-new-bert", "TFBrandNewBERTForQuestionAnswering"),
         ("camembert", "TFCamembertForQuestionAnswering"),
         ("convbert", "TFConvBertForQuestionAnswering"),
         ("deberta", "TFDebertaForQuestionAnswering"),
@@ -387,6 +394,7 @@ TF_MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         # Model for Token Classification mapping
         ("albert", "TFAlbertForTokenClassification"),
         ("bert", "TFBertForTokenClassification"),
+        ("brand-new-bert", "TFBrandNewBERTForTokenClassification"),
         ("camembert", "TFCamembertForTokenClassification"),
         ("convbert", "TFConvBertForTokenClassification"),
         ("deberta", "TFDebertaForTokenClassification"),
@@ -416,6 +424,7 @@ TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
         # Model for Multiple Choice mapping
         ("albert", "TFAlbertForMultipleChoice"),
         ("bert", "TFBertForMultipleChoice"),
+        ("brand-new-bert", "TFBrandNewBERTForMultipleChoice"),
         ("camembert", "TFCamembertForMultipleChoice"),
         ("convbert", "TFConvBertForMultipleChoice"),
         ("deberta-v2", "TFDebertaV2ForMultipleChoice"),
@@ -439,6 +448,7 @@ TF_MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
 TF_MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES = OrderedDict(
     [
         ("bert", "TFBertForNextSentencePrediction"),
+        ("brand-new-bert", "TFBrandNewBERTForNextSentencePrediction"),
         ("mobilebert", "TFMobileBertForNextSentencePrediction"),
     ]
 )
@@ -451,6 +461,7 @@ TF_MODEL_FOR_TEXT_ENCODING_MAPPING_NAMES = OrderedDict(
     [
         ("albert", "TFAlbertModel"),
         ("bert", "TFBertModel"),
+        ("brand-new-bert", "TFBrandNewBERTModel"),
         ("convbert", "TFConvBertModel"),
         ("deberta", "TFDebertaModel"),
         ("deberta-v2", "TFDebertaV2Model"),

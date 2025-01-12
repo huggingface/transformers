@@ -212,6 +212,12 @@ _import_structure = {
         "BertTokenizer",
         "WordpieceTokenizer",
     ],
+    "models.brand_new_bert": [
+        "BasicTokenizer",
+        "BrandNewBERTConfig",
+       
+        "WordpieceTokenizer",
+    ],
     "models.bert_generation": ["BertGenerationConfig"],
     "models.bert_japanese": [
         "BertJapaneseTokenizer",
@@ -1612,6 +1618,21 @@ else:
             "BertModel",
             "BertPreTrainedModel",
             "load_tf_weights_in_bert",
+        ]
+    )
+    _import_structure["models.brand_new_bert"].extend(
+        [
+            "BrandNewBERTForMaskedLM",
+            "BrandNewBERTForMultipleChoice",
+            "BrandNewBERTForNextSentencePrediction",
+            "BrandNewBERTForPreTraining",
+            "BrandNewBERTForQuestionAnswering",
+            "BrandNewBERTForSequenceClassification",
+            "BrandNewBERTForTokenClassification",
+            "BrandNewBERTLMHeadModel",
+            "BrandNewBERTModel",
+            "BrandNewBERTPreTrainedModel",
+            "load_tf_weights_in_brand_new_bert",
         ]
     )
     _import_structure["models.bert_generation"].extend(
@@ -4116,6 +4137,21 @@ else:
             "TFBertPreTrainedModel",
         ]
     )
+    _import_structure["models.brand_new_bert"].extend(
+        [
+            "TFBrandNewBERTForMaskedLM",
+            "TFBrandNewBERTForMultipleChoice",
+            "TFBrandNewBERTForNextSentencePrediction",
+            "TFBrandNewBERTForPreTraining",
+            "TFBrandNewBERTForQuestionAnswering",
+            "TFBrandNewBERTForSequenceClassification",
+            "TFBrandNewBERTForTokenClassification",
+            "TFBrandNewBERTLMHeadModel",
+            "TFBrandNewBERTMainLayer",
+            "TFBrandNewBERTModel",
+            "TFBrandNewBERTPreTrainedModel",
+        ]
+    )
     _import_structure["models.blenderbot"].extend(
         [
             "TFBlenderbotForConditionalGeneration",
@@ -4835,6 +4871,20 @@ else:
             "FlaxBertPreTrainedModel",
         ]
     )
+    _import_structure["models.brand_new_bert"].extend(
+        [
+            "FlaxBrandNewBERTForCausalLM",
+            "FlaxBrandNewBERTForMaskedLM",
+            "FlaxBrandNewBERTForMultipleChoice",
+            "FlaxBrandNewBERTForNextSentencePrediction",
+            "FlaxBrandNewBERTForPreTraining",
+            "FlaxBrandNewBERTForQuestionAnswering",
+            "FlaxBrandNewBERTForSequenceClassification",
+            "FlaxBrandNewBERTForTokenClassification",
+            "FlaxBrandNewBERTModel",
+            "FlaxBrandNewBERTPreTrainedModel",
+        ]
+    )
     _import_structure["models.big_bird"].extend(
         [
             "FlaxBigBirdForCausalLM",
@@ -5215,6 +5265,12 @@ if TYPE_CHECKING:
         BasicTokenizer,
         BertConfig,
         BertTokenizer,
+        WordpieceTokenizer,
+    )
+    from .models.brand_new_bert import (
+        BasicTokenizer,
+        BrandNewBERTConfig,
+       
         WordpieceTokenizer,
     )
     from .models.bert_generation import BertGenerationConfig
@@ -6648,6 +6704,19 @@ if TYPE_CHECKING:
             BertModel,
             BertPreTrainedModel,
             load_tf_weights_in_bert,
+        )
+        from .models.brand_new_bert import (
+            BrandNewBERTForMaskedLM,
+            BrandNewBERTForMultipleChoice,
+            BrandNewBERTForNextSentencePrediction,
+            BrandNewBERTForPreTraining,
+            BrandNewBERTForQuestionAnswering,
+            BrandNewBERTForSequenceClassification,
+            BrandNewBERTForTokenClassification,
+            BrandNewBERTLMHeadModel,
+            BrandNewBERTModel,
+            BrandNewBERTPreTrainedModel,
+            load_tf_weights_in_brand_new_bert,
         )
         from .models.bert_generation import (
             BertGenerationDecoder,
@@ -8636,6 +8705,19 @@ if TYPE_CHECKING:
             TFBertModel,
             TFBertPreTrainedModel,
         )
+        from .models.brand_new_bert import (
+            TFBrandNewBERTForMaskedLM,
+            TFBrandNewBERTForMultipleChoice,
+            TFBrandNewBERTForNextSentencePrediction,
+            TFBrandNewBERTForPreTraining,
+            TFBrandNewBERTForQuestionAnswering,
+            TFBrandNewBERTForSequenceClassification,
+            TFBrandNewBERTForTokenClassification,
+            TFBrandNewBERTLMHeadModel,
+            TFBrandNewBERTMainLayer,
+            TFBrandNewBERTModel,
+            TFBrandNewBERTPreTrainedModel,
+        )
         from .models.blenderbot import (
             TFBlenderbotForConditionalGeneration,
             TFBlenderbotModel,
@@ -9214,6 +9296,18 @@ if TYPE_CHECKING:
             FlaxBertForTokenClassification,
             FlaxBertModel,
             FlaxBertPreTrainedModel,
+        )
+        from .models.brand_new_bert import (
+            FlaxBrandNewBERTForCausalLM,
+            FlaxBrandNewBERTForMaskedLM,
+            FlaxBrandNewBERTForMultipleChoice,
+            FlaxBrandNewBERTForNextSentencePrediction,
+            FlaxBrandNewBERTForPreTraining,
+            FlaxBrandNewBERTForQuestionAnswering,
+            FlaxBrandNewBERTForSequenceClassification,
+            FlaxBrandNewBERTForTokenClassification,
+            FlaxBrandNewBERTModel,
+            FlaxBrandNewBERTPreTrainedModel,
         )
         from .models.big_bird import (
             FlaxBigBirdForCausalLM,
