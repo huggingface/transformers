@@ -1143,7 +1143,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
                 attention_mask, output_attentions=output_attentions
             )
         if self.config._attn_implementation == "flex_attention":
-            position_ids = torch.arange(seq_len, device=device).unsqueeze(0)
+            position_ids = torch.arange(cu_seqlens[-1], device=device).unsqueeze(0)
 
         hidden_states = self.embeddings(input_ids=input_ids, inputs_embeds=inputs_embeds)
 
