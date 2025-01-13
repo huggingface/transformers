@@ -1759,7 +1759,7 @@ class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
 
         if not return_dict:
             if auxiliary_outputs is not None:
-                output = (logits, pred_boxes) + auxiliary_outputs + outputs
+                output = (logits, pred_boxes) + (auxiliary_outputs,) + outputs
             else:
                 output = (logits, pred_boxes) + outputs
             return ((loss, loss_dict) + output) if loss is not None else output
@@ -1971,7 +1971,7 @@ class ConditionalDetrForSegmentation(ConditionalDetrPreTrainedModel):
 
         if not return_dict:
             if auxiliary_outputs is not None:
-                output = (logits, pred_boxes, pred_masks) + auxiliary_outputs + decoder_outputs + encoder_outputs
+                output = (logits, pred_boxes, pred_masks) + (auxiliary_outputs,) + decoder_outputs + encoder_outputs
             else:
                 output = (logits, pred_boxes, pred_masks) + decoder_outputs + encoder_outputs
             return ((loss, loss_dict) + output) if loss is not None else output
