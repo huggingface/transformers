@@ -98,13 +98,13 @@ class HeliumIntegrationTest(unittest.TestCase):
             "Hello, today is a great day to start a new project. I have been working on a new project for a while now and I have"
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
+        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, revision="refs/pr/1").to(
             torch_device
         )
-        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        tokenizer = AutoTokenizer.from_pretrained(model_id, revision="refs/pr/1")
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_text = tokenizer.batch_decode(output, skip_special_tokens=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
