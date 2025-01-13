@@ -29,7 +29,6 @@ from ...processing_utils import Unpack
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_flash_attn_greater_or_equal_2_10,
     logging,
 )
 from ...utils.import_utils import (
@@ -37,6 +36,7 @@ from ...utils.import_utils import (
     is_mamba_ssm_available,
 )
 from ..gemma.modeling_gemma import GemmaRotaryEmbedding
+
 # from ..llama.modeling_llama import apply_rotary_pos_emb
 from ..mamba2.modeling_mamba2 import MambaRMSNormGated, pad_tensor_by_size, reshape_into_chunks, segment_sum
 from ..zamba.modeling_zamba import (
@@ -50,7 +50,6 @@ from ..zamba.modeling_zamba import (
     ZambaMLP,
     ZambaModel,
     ZambaRMSNorm,
-    repeat_kv,
     eager_attention_forward,
 )
 
@@ -1039,9 +1038,7 @@ class Zamba2AttentionDecoderLayer(ZambaAttentionDecoderLayer):
         self.block_id = block_id
         num_gs = count_mem_blocks_in_config(config)
         super().__init__(config, layer_idx)
-        self.self_attn = Zamba2Attention(
-            config, layer_idx=-1, num_fwd_mem_blocks=num_gs, block_id=block_id
-        )
+        self.self_attn = Zamba2Attention(config, layer_idx=-1, num_fwd_mem_blocks=num_gs, block_id=block_id)
         self.feed_forward = Zamba2MLP(config, num_fwd_mem_blocks=num_gs, block_id=block_id)
 
     def forward(
