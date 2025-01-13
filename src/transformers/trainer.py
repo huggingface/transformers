@@ -3672,10 +3672,7 @@ class Trainer:
             return loss_mb.reduce_mean().detach().to(self.args.device)
 
         with self.compute_loss_context_manager():
-            if self.model_accepts_loss_kwargs:
-                loss = self.compute_loss(model, inputs)
-            else:
-                loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
+            loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
 
         del inputs
         if (
@@ -3709,7 +3706,7 @@ class Trainer:
                 scaled_loss.backward()
         else:
             # Finally we need to normalize the loss for reporting
-            if num_items_in_batch is None:
+            if not self.model_accepts_loss_kwargs and self.compute_loss_func is None:
                 loss = loss / self.args.gradient_accumulation_steps
 
             self.accelerator.backward(loss, **kwargs)
@@ -5156,10 +5153,6 @@ class Trainer:
                 batch_samples += [next(epoch_iterator)]
             except StopIteration:
                 break
-
-        # Keep default behavior the same
-        if not self.model_accepts_loss_kwargs:
-            return batch_samples, None
 
         if len(batch_samples) > 0 and "labels" in batch_samples[0]:
             # For now we don't support object detection
