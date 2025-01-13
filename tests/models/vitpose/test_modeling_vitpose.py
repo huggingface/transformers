@@ -239,9 +239,7 @@ class VitPoseModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference_pose_estimation(self):
         image_processor = self.default_image_processor
-        model = VitPoseForPoseEstimation.from_pretrained("usyd-community/vitpose-base-simple")
-        model.to(torch_device)
-        model.eval()
+        model = VitPoseForPoseEstimation.from_pretrained("usyd-community/vitpose-base-simple", device_map=torch_device)
 
         image = prepare_img()
         boxes = [[[412.8, 157.61, 53.05, 138.01], [384.43, 172.21, 15.12, 35.74]]]
@@ -284,9 +282,7 @@ class VitPoseModelIntegrationTest(unittest.TestCase):
     @slow
     def test_batched_inference(self):
         image_processor = self.default_image_processor
-        model = VitPoseForPoseEstimation.from_pretrained("usyd-community/vitpose-base-simple")
-        model.to(torch_device)
-        model.eval()
+        model = VitPoseForPoseEstimation.from_pretrained("usyd-community/vitpose-base-simple", device_map=torch_device)
 
         image = prepare_img()
         boxes = [
