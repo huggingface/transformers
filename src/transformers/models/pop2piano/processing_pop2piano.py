@@ -137,3 +137,6 @@ class Pop2PianoProcessor(ProcessorMixin):
     def from_pretrained(cls, pretrained_model_name_or_path, **kwargs):
         args = cls._get_arguments_from_pretrained(pretrained_model_name_or_path, **kwargs)
         return cls(*args)
+
+
+__all__ = ["Pop2PianoProcessor"]

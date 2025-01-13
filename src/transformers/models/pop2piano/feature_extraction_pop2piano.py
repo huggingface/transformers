@@ -448,3 +448,6 @@ class Pop2PianoFeatureExtractor(SequenceFeatureExtractor):
         )
 
         return output
+
+
+__all__ = ["Pop2PianoFeatureExtractor"]
