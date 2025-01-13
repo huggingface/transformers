@@ -641,7 +641,9 @@ class AssistantToTargetTranslator:
             self.target_vocab_size: int = len(self._target_tokenizer.get_vocab())
         self.filter_value: float = filter_value
         self.suppress_tokens_id: int = suppress_tokens_id
-        self._assistant_to_target_input_ids, self.target_to_assistant_input_ids = self._get_assistant_to_target_input_ids()
+        self._assistant_to_target_input_ids, self.target_to_assistant_input_ids = (
+            self._get_assistant_to_target_input_ids()
+        )
         self._suppress_input_ids: list[int] = self._get_suppress_input_ids()
         self.logits_processors: Optional[LogitsProcessorList] = None
         if len(self._suppress_input_ids) > 0:
