@@ -2953,3 +2953,57 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
             The expected mean g-value for watermarked text.
         """
         return coinflip_prob + coinflip_prob * (1 - coinflip_prob) * (1 - (1 / vocab_size))
+
+
+class PerBatchIndexMaxLengthLogitsProcessor(LogitsProcessor):
+
+    def __init__(self, pad_token_id: Union[int, List[int], torch.Tensor], eos_token_id: Union[int, List[int], torch.Tensor], max_lengths: Union[List[int], torch.Tensor], device: str = "cpu"):
+        r"""
+        [`LogitsProcessor`] enforcing a max-length for each batch index.
+
+        Args:
+            pad_token_id (`Union[int, List[int], torch.Tensor]`):
+                The id(s) of the *end-of-sequence* token.
+            eos_token_id (`Union[int, List[int], torch.Tensor]`):
+                The id(s) of the *end-of-sequence* token.
+            max_lengths (`Union[List[int], torch.Tensor]`):
+                The max lengths for each batch index. 
+            device (`str`, *optional*, defaults to `"cpu"`):
+                The device to allocate the tensors.
+        """
+        if not isinstance(pad_token_id, torch.Tensor):
+            if isinstance(pad_token_id, int):
+                pad_token_id = [pad_token_id]
+            pad_token_id = torch.tensor(pad_token_id, device=device)
+        
+        if not isinstance(eos_token_id, torch.Tensor):
+            if isinstance(eos_token_id, int):
+                eos_token_id = [eos_token_id]
+            eos_token_id = torch.tensor(eos_token_id, device=device)
+        
+        if not isinstance(max_lengths, torch.Tensor):
+            max_lengths = torch.tensor(max_lengths, device=device)
+        max_lengths = max_lengths.unsqueeze(-1)
+
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
+        self.max_lengths = max_lengths
+
+    def __call__(self, input_ids: torch.Tensor, scores: torch.Tensor) -> torch.Tensor:
+        if input_ids.shape[0] != self.max_lengths.shape[0]:
+            raise ValueError(f"The number of batch indices ({input_ids.shape[0]}) does not match the number of max lengths ({self.max_lengths.shape[0]}) provided to PerBatchIndexMaxLengthLogitsProcessor.")
+        cur_len = input_ids.shape[-1]
+        scores_processed = scores.clone()
+        reached_max_lengths = cur_len >= self.max_lengths
+        token_mask = reached_max_lengths.expand(-1, scores.shape[-1]).clone()
+        # token mask is (e.g. for idx 0 and 3 that reached their provided max length) 
+        # [[True , ..., True ]
+        #  [False, ..., False]
+        #  [False, ..., False]
+        #  [True , ..., True ]]
+        # we need to reset eos tokens to False to enable its generation
+        token_mask[:, self.eos_token_id] = False
+
+        scores_processed = torch.where(token_mask, -float("Inf"), scores)
+
+        return scores_processed
