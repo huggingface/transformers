@@ -48,6 +48,7 @@ from transformers.testing_utils import (
 
 
 if is_tokenizers_available():
+    import tokenizers
     from tokenizers import Tokenizer
     from tokenizers.models import WordPiece
 
@@ -428,3 +429,21 @@ class TokenizerUtilsTest(unittest.TestCase):
         # Now this will try to import sentencepiece_model_pb2_new.py. This should not fail even if the protobuf
         # was already imported.
         import_protobuf()
+
+    def test_training_new_tokenizer_edge_cases(self):
+        _tokenizer = Tokenizer(tokenizers.models.BPE(vocab={"a": 1, "b": 2, "ab": 3}, merges=[("a", "b")]))
+        _tokenizer.pre_tokenizer = None
+
+        tokenizer = PreTrainedTokenizerFast(tokenizer_object=_tokenizer)
+        toy_text_iterator = ("a" for _ in range(1000))
+        tokenizer.train_new_from_iterator(text_iterator=toy_text_iterator, length=1000, vocab_size=50)
+
+        _tokenizer.normalizer = None
+        tokenizer = PreTrainedTokenizerFast(tokenizer_object=_tokenizer)
+        toy_text_iterator = ("a" for _ in range(1000))
+        tokenizer.train_new_from_iterator(text_iterator=toy_text_iterator, length=1000, vocab_size=50)
+
+        _tokenizer.post_processor = None
+        tokenizer = PreTrainedTokenizerFast(tokenizer_object=_tokenizer)
+        toy_text_iterator = ("a" for _ in range(1000))
+        tokenizer.train_new_from_iterator(text_iterator=toy_text_iterator, length=1000, vocab_size=50)

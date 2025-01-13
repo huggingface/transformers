@@ -22,7 +22,7 @@ from functools import lru_cache
 from typing import List, Optional, Tuple
 
 import numpy as np
-from tokenizers import AddedToken, pre_tokenizers, processors
+from tokenizers import AddedToken, processors
 
 from ...tokenization_utils_base import BatchEncoding
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
@@ -128,19 +128,12 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
 
         self.add_bos_token = kwargs.pop("add_bos_token", False)
 
-        pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
-        if pre_tok_state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
-            pre_tok_class = getattr(pre_tokenizers, pre_tok_state.pop("type"))
-            pre_tok_state["add_prefix_space"] = add_prefix_space
-            self.backend_tokenizer.pre_tokenizer = pre_tok_class(**pre_tok_state)
-
         if normalizer_file is not None:
             with open(normalizer_file, encoding="utf-8") as vocab_handle:
                 self.english_spelling_normalizer = json.load(vocab_handle)
         else:
             self.english_spelling_normalizer = None
 
-        self.add_prefix_space = add_prefix_space
         self.timestamp_pat = re.compile(r"<\|(\d+\.\d+)\|>")
 
         self.language = language
@@ -639,3 +632,6 @@ class WhisperTokenizerFast(PreTrainedTokenizerFast):
         if isinstance(token_ids, np.ndarray):
             token_ids = token_ids.tolist()
         return token_ids
+
+
+__all__ = ["WhisperTokenizerFast"]

@@ -201,7 +201,6 @@ class Cohere2IntegrationTest(unittest.TestCase):
             cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
 
     @require_read_token
-    @unittest.skip("Cohere2 has not been released yet")
     def test_model_bf16(self):
         model_id = "CohereForAI/command-r7b-12-2024"
         EXPECTED_TEXTS = [
@@ -222,7 +221,6 @@ class Cohere2IntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     @require_read_token
-    @unittest.skip("Cohere2 has not been released yet")
     def test_model_fp16(self):
         model_id = "CohereForAI/command-r7b-12-2024"
         EXPECTED_TEXTS = [
@@ -243,7 +241,6 @@ class Cohere2IntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     @require_read_token
-    @unittest.skip("Cohere2 has not been released yet")
     def test_model_pipeline_bf16(self):
         # See https://github.com/huggingface/transformers/pull/31747 -- pipeline was broken for Cohere2 before this PR
         model_id = "CohereForAI/command-r7b-12-2024"
@@ -269,7 +266,6 @@ class Cohere2IntegrationTest(unittest.TestCase):
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
-    @unittest.skip("Cohere2 has not been released yet")
     def test_model_flash_attn(self):
         # See https://github.com/huggingface/transformers/issues/31953 --- flash attn was generating garbage for Gemma2, especially in long context
         model_id = "CohereForAI/command-r7b-12-2024"
@@ -291,7 +287,6 @@ class Cohere2IntegrationTest(unittest.TestCase):
 
     @slow
     @require_read_token
-    @unittest.skip("Cohere2 has not been released yet")
     def test_export_static_cache(self):
         if version.parse(torch.__version__) < version.parse("2.5.0"):
             self.skipTest(reason="This test requires torch >= 2.5 to run.")

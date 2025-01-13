@@ -459,6 +459,9 @@ class Phi3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             "long_factor": [5.0 for _ in range(n_factors)],
         }
         input_tensor = ids_tensor([1, 4090], config.vocab_size)
+        # Make sure we don't have padding tokens. If this is the case, then the actual number of "true" tokens may be shorter
+        # than `config.original_max_position_embeddings + 5`, invalidating this test
+        input_tensor[input_tensor == config.pad_token_id] += 1
         model = Phi3ForCausalLM(config)
         model.to(torch_device)
         model.eval()
