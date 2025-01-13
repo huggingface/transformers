@@ -224,6 +224,10 @@ class HqqConfig(QuantizationConfigMixin):
     ):
         if is_hqq_available():
             from hqq.core.quantize import BaseQuantizeConfig as HQQBaseQuantizeConfig
+        else:
+            class HQQBaseQuantizeConfig:
+                def __init__(self, *args, **kwargs):
+                    pass
 
         for deprecated_key in ["quant_zero", "quant_scale", "offload_meta"]:
             if deprecated_key in kwargs:
