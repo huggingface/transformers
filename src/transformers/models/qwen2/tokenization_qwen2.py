@@ -86,24 +86,18 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
 
     Same with GPT2Tokenizer, this tokenizer has been trained to treat spaces like parts of the tokens so a word will
     be encoded differently whether it is at the beginning of the sentence (without space) or not:
-
     ```python
     >>> from transformers import Qwen2Tokenizer
-
     >>> tokenizer = Qwen2Tokenizer.from_pretrained("Qwen/Qwen-tokenizer")
     >>> tokenizer("Hello world")["input_ids"]
     [9707, 1879]
-
     >>> tokenizer(" Hello world")["input_ids"]
     [21927, 1879]
     ```
     This is expected.
-
     You should not use GPT2Tokenizer instead, because of the different pretokenization rules.
-
     This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
     this superclass for more information regarding those methods.
-
     Args:
         vocab_file (`str`):
             Path to the vocabulary file.
@@ -130,7 +124,6 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
             ['<|endoftext|>`]. Otherwise, if `split_special_tokens=True`, then `tokenizer.tokenize("<|endoftext|>")` will be give `['<',
             '|', 'endo', 'ft', 'ext', '|', '>']`. This argument is only supported for `slow` tokenizers for the moment.
     """
-
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
 
@@ -170,38 +163,47 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
         )
 
         with open(vocab_file, encoding="utf-8") as vocab_handle:
-            self.encoder = json.load(vocab_handle)
+            vocab_data = json.load(vocab_handle)
+            # Build encoder from the model.json vocabulary
+            self.encoder = {}
+            # First add special tokens
+            for token_data in vocab_data.get("added_tokens", []):
+                self.encoder[token_data["content"]] = token_data["id"]
+            # Then add regular vocabulary
+            if "model" in vocab_data:
+                for token, token_id in vocab_data["model"]["vocab"].items():
+                    if token not in self.encoder:
+                        self.encoder[token] = token_id
+            
         self.decoder = {v: k for k, v in self.encoder.items()}
         self.errors = errors  # how to handle errors in decoding
         self.byte_encoder = bytes_to_unicode()
         self.byte_decoder = {v: k for k, v in self.byte_encoder.items()}
-        bpe_merges = []
-        with open(merges_file, encoding="utf-8") as merges_handle:
-            for i, line in enumerate(merges_handle):
-                line = line.strip()
-                if (i == 0 and line.startswith("#version:")) or not line:
-                    continue
-                bpe_merges.append(tuple(line.split()))
-        self.bpe_ranks = dict(zip(bpe_merges, range(len(bpe_merges))))
-        # NOTE: the cache can grow without bound and will get really large for long running processes
-        # (esp. for texts of language that do not use space between word, e.g. Chinese); technically
-        # not a memory leak but appears as one.
-        # GPT2Tokenizer has the same problem, so let's be consistent.
-        self.cache = {}
+        
+        # Load merges
+        self.bpe_ranks = {}
+        if merges_file and os.path.exists(merges_file):
+            with open(merges_file, encoding="utf-8") as merges_handle:
+                for i, line in enumerate(merges_handle):
+                    line = line.strip()
+                    if (i == 0 and line.startswith("#version:")) or not line:
+                        continue
+                    self.bpe_ranks[tuple(line.split())] = i
 
+        self.cache = {}
         self.pat = re.compile(PRETOKENIZE_REGEX)
 
         if kwargs.get("add_prefix_space", False):
             logger.warning_once(
-                f"{self.__class__.__name} does not support `add_prefix_space`, setting it to True has no effect."
+                f"{self.__class__.__name__} does not support `add_prefix_space`, setting it to True has no effect."
             )
-
+            
         super().__init__(
             errors=errors,
+            unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
             pad_token=pad_token,
-            unk_token=unk_token,
             clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             split_special_tokens=split_special_tokens,
             **kwargs,
@@ -283,8 +285,25 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         text = "".join(tokens)
-        text = bytearray([self.byte_decoder[c] for c in text]).decode("utf-8", errors=self.errors)
-        return text
+        if len(tokens) == 1:
+            # For single tokens, try decoding as Latin-1 first
+            try:
+                # Convert to bytes using Latin-1, then decode as UTF-8 if possible
+                byte_val = text.encode('latin-1')
+                try:
+                    # Try UTF-8 first
+                    return byte_val.decode('utf-8')
+                except UnicodeDecodeError:
+                    # Fall back to Latin-1 if UTF-8 fails
+                    return byte_val.decode('latin-1')
+            except Exception:
+                return text
+        # For multiple tokens, use the configured error handling
+        try:
+            byte_val = text.encode('latin-1')
+            return byte_val.decode('utf-8', errors=self.errors)
+        except UnicodeDecodeError:
+            return byte_val.decode('latin-1', errors=self.errors)
 
     def decode(
         self,
@@ -296,6 +315,10 @@ class Qwen2Tokenizer(PreTrainedTokenizer):
     ) -> str:
         # `spaces_between_special_tokens` defaults to True for _decode in slow tokenizers
         # and cannot be configured elsewhere, but it should default to False for Qwen2Tokenizer
+        if isinstance(token_ids, int):
+            tokens = self.convert_ids_to_tokens([token_ids], skip_special_tokens=skip_special_tokens)
+            return self.convert_tokens_to_string(tokens)
+            
         return super().decode(
             token_ids,
             skip_special_tokens=skip_special_tokens,
