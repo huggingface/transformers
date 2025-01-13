@@ -1431,14 +1431,20 @@ def set_model_tester_for_less_flaky_test(test_case):
         and target_num_hidden_layers is not None
     ):
         test_case.model_tester.vision_config = copy.deepcopy(test_case.model_tester.vision_config)
-        test_case.model_tester.vision_config["num_hidden_layers"] = target_num_hidden_layers
+        if isinstance(test_case.model_tester.vision_config, dict):
+            test_case.model_tester.vision_config["num_hidden_layers"] = 1
+        else:
+            test_case.model_tester.vision_config.num_hidden_layers = 1
     if (
         hasattr(test_case.model_tester, "text_config")
         and "num_hidden_layers" in test_case.model_tester.text_config
         and target_num_hidden_layers is not None
     ):
         test_case.model_tester.text_config = copy.deepcopy(test_case.model_tester.text_config)
-        test_case.model_tester.text_config["num_hidden_layers"] = target_num_hidden_layers
+        if isinstance(test_case.model_tester.text_config, dict):
+            test_case.model_tester.text_config["num_hidden_layers"] = 1
+        else:
+            test_case.model_tester.text_config.num_hidden_layers = 1
 
     # A few model class specific handling
 

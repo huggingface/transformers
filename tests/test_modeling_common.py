@@ -4719,13 +4719,17 @@ class ModelTesterMixin:
                 reason="Model architecture has no generative classes, and thus not necessarily supporting 4D masks"
             )
 
+        set_model_tester_for_less_flaky_test(self)
+
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_static_cache:
                 self.skipTest(f"{model_class.__name__} is not guaranteed to work with custom 4D attention masks")
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            set_config_for_less_flaky_test(config)
             if getattr(config, "sliding_window", 0) is not None and getattr(config, "sliding_window", 0) > 0:
                 self.skipTest(f"{model_class.__name__} with sliding window attention is not supported by this test")
             model = model_class(config).to(device=torch_device, dtype=torch.float32)
+            set_model_for_less_flaky_test(model)
 
             (
                 input_ids,
