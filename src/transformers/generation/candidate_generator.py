@@ -677,7 +677,7 @@ class AssistantToTargetTranslator:
 
         max_assistant_index = max(assistant_vocab.values())
         assistant_to_target_input_ids = torch.full((max_assistant_index + 1,), self.suppress_tokens_id, dtype=int)
-        target_to_assistant_input_id: Dict[int, int] = {}
+        target_to_assistant_input_ids: Dict[int, int] = {}
         for tok, assistant_id in assistant_vocab.items():
             target_id = target_vocab.get(tok)
             if target_id is not None:
