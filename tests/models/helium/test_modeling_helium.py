@@ -16,7 +16,6 @@
 
 import unittest
 
-
 from transformers import AutoModelForCausalLM, AutoTokenizer, HeliumConfig, is_torch_available
 from transformers.testing_utils import (
     require_read_token,
@@ -26,8 +25,8 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ..gemma.test_modeling_gemma import GemmaModelTest, GemmaModelTester
 from ...test_configuration_common import ConfigTester
+from ..gemma.test_modeling_gemma import GemmaModelTest, GemmaModelTester
 
 
 if is_torch_available():
@@ -101,7 +100,9 @@ class HeliumIntegrationTest(unittest.TestCase):
             "<pad><pad><bos>Hi today I'm going to be talking about the history of the United States. The United States of America",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
+            torch_device
+        )
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
 
