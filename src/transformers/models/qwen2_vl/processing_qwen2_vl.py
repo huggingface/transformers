@@ -170,7 +170,7 @@ class Qwen2VLProcessor(ProcessorMixin):
         """
         return self.tokenizer.decode(*args, **kwargs)
 
-    def post_process_image_text_to_text(self, generated_outputs):
+    def post_process_image_text_to_text(self, generated_outputs, **kwargs):
         """
         Post-process the output of the model to decode the text.
 
@@ -182,8 +182,13 @@ class Qwen2VLProcessor(ProcessorMixin):
         Returns:
             `List[str]`: The decoded text.
         """
+        skip_special_tokens = kwargs.pop("skip_special_tokens", True)
+        clean_up_tokenization_spaces = kwargs.pop("clean_up_tokenization_spaces", False)
         return self.tokenizer.batch_decode(
-            generated_outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False
+            generated_outputs,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            **kwargs,
         )
 
     @property

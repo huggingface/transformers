@@ -682,7 +682,7 @@ class FuyuProcessor(ProcessorMixin):
 
         return results
 
-    def post_process_image_text_to_text(self, generated_outputs):
+    def post_process_image_text_to_text(self, generated_outputs, **kwargs):
         """
         Post-processes the output of `FuyuForConditionalGeneration` to only return the text output.
 
@@ -706,7 +706,9 @@ class FuyuProcessor(ProcessorMixin):
         for i, seq in enumerate(unpadded_output_sequences):
             padded_output_sequences[i, : len(seq)] = torch.tensor(seq)
 
-        return self.batch_decode(padded_output_sequences, skip_special_tokens=True)
+        skip_special_tokens = kwargs.pop("skip_special_tokens", True)
+
+        return self.batch_decode(padded_output_sequences, skip_special_tokens=skip_special_tokens, **kwargs)
 
     def batch_decode(self, *args, **kwargs):
         """
