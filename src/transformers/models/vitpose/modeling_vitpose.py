@@ -320,9 +320,6 @@ class VitPoseForPoseEstimation(VitPosePreTrainedModel):
             sequence_output.permute(0, 2, 1).reshape(batch_size, -1, patch_height, patch_width).contiguous()
         )
 
-        print("Shape of backbone output: ", sequence_output.shape)
-        print("First values: ", sequence_output[0, 0, :3, :3])
-
         heatmaps = self.head(sequence_output, flip_pairs=flip_pairs)
 
         if not return_dict:
