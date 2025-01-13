@@ -157,6 +157,10 @@ class MoonshineConfig(PretrainedConfig):
             Denotes beginning of sequences token id.
         eos_token_id (`int`, *optional*, defaults to 2):
             Denotes end of sequences token id.
+        tokens_per_second (`float`, *optional*, defaults to 6.5):
+            The number of tokens generated per second. Using this parameter, generation max length will be inferred from the input audio length.
+        frame_rate (`int`, *optional*, defaults to 16000):
+            The frame rate of the expected audio. Using this parameter, generation max length will be inferred from the input audio length.
 
     Example:
 
@@ -206,6 +210,8 @@ class MoonshineConfig(PretrainedConfig):
         attention_dropout=0.0,
         bos_token_id=1,
         eos_token_id=2,
+        tokens_per_second=6.5,
+        frame_rate=16000,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -236,6 +242,8 @@ class MoonshineConfig(PretrainedConfig):
         self.is_encoder_decoder = is_encoder_decoder
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
+        self.tokens_per_second = tokens_per_second
+        self.frame_rate = frame_rate
 
         # Validate the correctness of rotary position embeddings parameters
         rope_config_validation(self)
