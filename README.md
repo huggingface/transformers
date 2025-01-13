@@ -255,16 +255,36 @@ You should install 🤗 Transformers in a [virtual environment](https://docs.pyt
 
 First, create a virtual environment with the version of Python you're going to use and activate it.
 
-Then, you will need to install at least one of Flax, PyTorch, or TensorFlow.
-Please refer to [TensorFlow installation page](https://www.tensorflow.org/install/), [PyTorch installation page](https://pytorch.org/get-started/locally/#start-locally) and/or [Flax](https://github.com/google/flax#quick-install) and [Jax](https://github.com/google/jax#installation) installation pages regarding the specific installation command for your platform.
+**macOS/Linux**
+
+```python -m venv env
+source env/bin/activate
+```
+
+**Windows**
+
+``` python -m venv env
+env\Scripts\activate
+```
+
+To use 🤗 Transformers, you must install at least one of Flax, PyTorch, or TensorFlow. Refer to the official installation guides for platform-specific commands:
+
+[TensorFlow installation page](https://www.tensorflow.org/install/), 
+[PyTorch installation page](https://pytorch.org/get-started/locally/#start-locally) and/or [Flax](https://github.com/google/flax#quick-install) and [Jax](https://github.com/google/jax#installation) 
 
 When one of those backends has been installed, 🤗 Transformers can be installed using pip as follows:
 
-```bash
+```
 pip install transformers
 ```
 
 If you'd like to play with the examples or need the bleeding edge of the code and can't wait for a new release, you must [install the library from source](https://huggingface.co/docs/transformers/installation#installing-from-source).
+
+```
+git clone https://github.com/huggingface/transformers.git
+cd transformers
+pip install
+```
 
 ### With conda
 
@@ -280,6 +300,27 @@ Follow the installation pages of Flax, PyTorch or TensorFlow to see how to insta
 
 > **_NOTE:_**  On Windows, you may be prompted to activate Developer Mode in order to benefit from caching. If this is not an option for you, please let us know in [this issue](https://github.com/huggingface/huggingface_hub/issues/1062).
 
+### Troubleshooting
+**a) Error: Python Version Not Supported:**
+
+Ensure you’re using Python 3.9 or later:
+```
+python --version
+```
+**b) Error: Missing Dependencies:**
+
+Install all required dependencies:
+```
+pip install -r requirements.txt
+```
+**c) Windows-Specific Issues:**
+
+Activate Developer Mode if prompted. Alternatively, use a virtual environment:
+```
+Copy code
+python -m venv env
+env\Scripts\activate
+```
 ## Model architectures
 
 **[All the model checkpoints](https://huggingface.co/models)** provided by 🤗 Transformers are seamlessly integrated from the huggingface.co [model hub](https://huggingface.co/models), where they are uploaded directly by [users](https://huggingface.co/users) and [organizations](https://huggingface.co/organizations).
