@@ -857,6 +857,13 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             # max diff broken should be very off
             self.assertGreater(max(diff_broken), 2, f"Difference {max(diff_broken)} is not greater than 2")
 
+            loss_base = sum(base_loss_callback.losses)
+            loss_broken = sum(broken_loss_callback.losses)
+
+            # mean/sum loss should not vary too much.
+            relative_diff = abs(loss_base - loss_broken) / max(loss_base, loss_broken)
+            self.assertLess(relative_diff, 0.1, f"Relative difference {relative_diff} is not within 0.1")
+
     @slow
     def test_gradient_accumulation_loss_alignment_with_loss_func(self):
         set_seed(42)
