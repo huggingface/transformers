@@ -1066,6 +1066,8 @@ class BlenderbotSmallDecoder(BlenderbotSmallPreTrainedModel):
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
+        inputs_embeds = inputs_embeds * self.embed_scale
+
         # initialize past_key_values
         return_legacy_cache = False
         return_self_attention_cache = False

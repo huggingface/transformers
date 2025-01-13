@@ -788,6 +788,9 @@ class BioGptModel(BioGptPreTrainedModel):
         )
 
         # embed positions
+        if position_ids is None:
+            position_ids = cache_position.unsqueeze(0)
+
         position_ids = self.embed_positions(attention_mask, past_key_values_length, position_ids=position_ids)
 
         hidden_states = inputs_embeds + position_ids

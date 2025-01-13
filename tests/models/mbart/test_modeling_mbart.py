@@ -751,3 +751,8 @@ class MBartStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, u
     @unittest.skip(reason="Decoder cannot retain gradients")
     def test_retain_grad_hidden_states_attentions(self):
         return
+
+    # maybe related to https://github.com/pytorch/pytorch/issues/133166
+    @unittest.skip(reason="It fails only when `dynamic=True` with {'tensor' object has no attribute '__pow__'}")
+    def test_sdpa_can_compile_dynamic(self):
+        pass
