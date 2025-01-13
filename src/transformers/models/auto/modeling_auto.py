@@ -78,6 +78,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("cpmant", "CpmAntModel"),
         ("ctrl", "CTRLModel"),
         ("cvt", "CvtModel"),
+        ("d_fine", "DFineModel"),
+        ("d_fine_resnet", "DFineResNetBackbone"),
         ("dac", "DacModel"),
         ("data2vec-audio", "Data2VecAudioModel"),
         ("data2vec-text", "Data2VecTextModel"),
@@ -883,6 +885,7 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
         ("deta", "DetaForObjectDetection"),
         ("detr", "DetrForObjectDetection"),
         ("rt_detr", "RTDetrForObjectDetection"),
+        ("d_fine", "DFineForObjectDetection"),
         ("table-transformer", "TableTransformerForObjectDetection"),
         ("yolos", "YolosForObjectDetection"),
     ]
