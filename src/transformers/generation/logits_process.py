@@ -2958,7 +2958,6 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
 class PerBatchIndexMaxLengthLogitsProcessor(LogitsProcessor):
     def __init__(
         self,
-        pad_token_id: Union[int, List[int], torch.Tensor],
         eos_token_id: Union[int, List[int], torch.Tensor],
         max_lengths: Union[List[int], torch.Tensor],
         device: str = "cpu",
@@ -2967,8 +2966,6 @@ class PerBatchIndexMaxLengthLogitsProcessor(LogitsProcessor):
         [`LogitsProcessor`] enforcing a max-length for each batch index.
 
         Args:
-            pad_token_id (`Union[int, List[int], torch.Tensor]`):
-                The id(s) of the *end-of-sequence* token.
             eos_token_id (`Union[int, List[int], torch.Tensor]`):
                 The id(s) of the *end-of-sequence* token.
             max_lengths (`Union[List[int], torch.Tensor]`):
@@ -2976,11 +2973,6 @@ class PerBatchIndexMaxLengthLogitsProcessor(LogitsProcessor):
             device (`str`, *optional*, defaults to `"cpu"`):
                 The device to allocate the tensors.
         """
-        if not isinstance(pad_token_id, torch.Tensor):
-            if isinstance(pad_token_id, int):
-                pad_token_id = [pad_token_id]
-            pad_token_id = torch.tensor(pad_token_id, device=device)
-
         if not isinstance(eos_token_id, torch.Tensor):
             if isinstance(eos_token_id, int):
                 eos_token_id = [eos_token_id]
@@ -2990,7 +2982,6 @@ class PerBatchIndexMaxLengthLogitsProcessor(LogitsProcessor):
             max_lengths = torch.tensor(max_lengths, device=device)
         max_lengths = max_lengths.unsqueeze(-1)
 
-        self.pad_token_id = pad_token_id
         self.eos_token_id = eos_token_id
         self.max_lengths = max_lengths
 

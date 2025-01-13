@@ -1183,9 +1183,9 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
             logits_processor = LogitsProcessorList()
             logits_processor.append(
                 PerBatchIndexMaxLengthLogitsProcessor(
-                    pad_token_id=self.config.pad_token_id,
                     eos_token_id=self.config.eos_token_id,
                     max_lengths=batch_idx_max_lengths,
+                    device=input_values.device,
                 )
             )
             generate_kwargs["logits_processor"] = logits_processor
