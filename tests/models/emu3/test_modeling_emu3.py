@@ -176,10 +176,6 @@ class Emu3Text2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
     def test_custom_4d_attention_mask(self):
         pass
 
-    @unittest.skip("Fails with unknown error only on end-to-end compile")  # TODO raushan fixme
-    def test_generate_compile_1_end_to_end(self):
-        pass
-
 
 class Emu3Vision2TextModelTester:
     def __init__(
@@ -396,10 +392,6 @@ class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
 
     @unittest.skip("VQ-VAE module doesn't initialize weights properly")
     def test_initialization(self):
-        pass
-
-    @unittest.skip("End-to-end compilation is not supported due to dynamic control in `prepare_inputs_for_generation`")
-    def test_generate_compile_1_end_to_end(self):
         pass
 
 

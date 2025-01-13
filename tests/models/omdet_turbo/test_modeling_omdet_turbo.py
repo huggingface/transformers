@@ -26,7 +26,7 @@ from transformers.file_utils import cached_property
 from transformers.testing_utils import (
     require_timm,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     require_vision,
     slow,
     torch_device,
@@ -865,7 +865,7 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
         ]
         self.assertListEqual([result["classes"] for result in results], expected_classes)
 
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_inference_object_detection_head_equivalence_cpu_gpu(self):
         processor = self.default_processor
         image = prepare_img()
@@ -878,8 +878,8 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
             cpu_outputs = model(**encoding)
 
         # 2. run model on GPU
-        model.to("cuda")
-        encoding = encoding.to("cuda")
+        model.to(torch_device)
+        encoding = encoding.to(torch_device)
         with torch.no_grad():
             gpu_outputs = model(**encoding)
 

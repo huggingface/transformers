@@ -227,6 +227,7 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
     pipeline_model_mapping = {"image-text-to-text": Qwen2VLForConditionalGeneration}
     test_pruning = False
     test_head_masking = False
+    _is_composite = True
 
     def setUp(self):
         self.model_tester = Qwen2VLVisionText2TextModelTester(self)
@@ -332,7 +333,7 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         pass
 
     @unittest.skip(reason="Can't compile fullgraph due to dynamic control flow in `prepare_inputs_for_generate`")
-    def test_generate_compile_fullgraph(self):
+    def test_generate_compile_model_forward(self):
         pass
 
 
