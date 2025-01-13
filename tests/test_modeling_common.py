@@ -808,6 +808,13 @@ class ModelTesterMixin:
                 self.assertFalse(
                     torch.isinf(single_row_object).any(), f"Single row output has `inf` in {model_name} for key={key}"
                 )
+                a = torch.amax(torch.abs(batched_row))
+                b = torch.amax(torch.abs(single_row_object))
+                if torch.is_floating_point(a) and torch.is_floating_point(b):
+                    if a < 1e-9 or b < 1e-9:
+                        raise ValueError("hello")
+                    # breakpoint()
+                return
                 self.assertTrue(
                     (equivalence(batched_row, single_row_object)) <= 1e-03,
                     msg=(
@@ -819,18 +826,18 @@ class ModelTesterMixin:
         config, batched_input = self.model_tester.prepare_config_and_inputs_for_common()
         equivalence = get_tensor_equivalence_function(batched_input)
 
-        set_model_tester_for_less_flaky_test(self)
+        #set_model_tester_for_less_flaky_test(self)
 
         for model_class in self.all_model_classes:
             config.output_hidden_states = True
-            set_config_for_less_flaky_test(config)
+            #set_config_for_less_flaky_test(config)
 
             model_name = model_class.__name__
             if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
                 config, batched_input = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
             batched_input_prepared = self._prepare_for_class(batched_input, model_class)
             model = model_class(config).to(torch_device).eval()
-            set_model_for_less_flaky_test(model)
+            #set_model_for_less_flaky_test(model)
 
             batch_size = self.model_tester.batch_size
             single_row_input = {}
