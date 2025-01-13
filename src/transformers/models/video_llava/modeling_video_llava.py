@@ -391,23 +391,23 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
         Returns:
             image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
         """
+        if vision_feature_select_strategy not in ["default", "hidden"]:
+            raise ValueError(f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}")
 
         image_outputs = self.image_tower(pixel_values_images, output_hidden_states=True)
 
         # If we have one vision feature layer, return the corresponding hidden states,
         # otherwise, select the hidden states of each feature layer and concatenate them
         if isinstance(vision_feature_layer, int):
-            image_outputs = image_outputs.hidden_states[vision_feature_layer].squeeze(1)
+            image_outputs = image_outputs.hidden_states[vision_feature_layer]
+            if vision_feature_select_strategy == "default":
+                image_outputs = image_outputs[:, 1:]
         else:
             hs_pool = [image_outputs.hidden_states[layer_idx] for layer_idx in vision_feature_layer]
-            image_outputs = torch.cat(hs_pool, dim=-1).squeeze(1)
-
-        if vision_feature_select_strategy == "default":
-            image_outputs = image_outputs[:, 1:]
-        elif vision_feature_select_strategy == "full":
-            image_outputs = image_outputs
-        else:
-            raise ValueError(f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}")
+            # For default; crop CLS from each hidden state in the hidden state pool
+            if vision_feature_select_strategy == "default":
+                hs_pool = [hs[:, 1:] for hs in hs_pool]
+            image_outputs = torch.cat(hs_pool, dim=-1)
 
         image_features = self.multi_modal_projector(image_outputs)
 
@@ -424,9 +424,6 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
         Args:
             pixel_values_videos (`torch.FloatTensor]` of shape `(batch_size, num_frames, channels, height, width)`)
                The tensors corresponding to the input videos.
-            vision_feature_select_strategy (`str`):
-                The feature selection strategy used to select the vision feature from the vision backbone.
-                Can be one of `"default"` or `"full"`
             vision_feature_layer (`Union[int, List[int]]`):
                 The index of the layer to select the vision feature. If multiple indices are provided,
                 the vision feature of the corresponding indices will be concatenated to form the
@@ -443,10 +440,10 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
         # If we have one vision feature layer, return the corresponding hidden states,
         # otherwise, select the hidden states of each feature layer and concatenate them
         if isinstance(vision_feature_layer, int):
-            video_features = video_outputs.hidden_states[vision_feature_layer].squeeze(1)
+            video_features = video_outputs.hidden_states[vision_feature_layer]
         else:
             hs_pool = [video_outputs.hidden_states[layer_idx] for layer_idx in vision_feature_layer]
-            video_features = torch.cat(hs_pool, dim=-1).squeeze(1)
+            video_features = torch.cat(hs_pool, dim=-1)
 
         video_features = self.multi_modal_projector(video_features)
 
