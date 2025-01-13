@@ -419,7 +419,7 @@ class GlmModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
 
 @slow
-@require_torch_accelerator
+@require_torch_large_gpu
 class GlmIntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
     model_id = "THUDM/glm-4-9b"
@@ -434,7 +434,6 @@ class GlmIntegrationTest(unittest.TestCase):
             # 8 is for A100 / A10 and 7 for T4
             cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
 
-    @require_torch_large_gpu
     def test_model_9b_fp16(self):
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",
@@ -453,7 +452,6 @@ class GlmIntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    @require_torch_large_gpu
     def test_model_9b_bf16(self):
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",
@@ -472,7 +470,6 @@ class GlmIntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    @require_torch_large_gpu
     def test_model_9b_eager(self):
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",
@@ -497,7 +494,6 @@ class GlmIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     @require_torch_sdpa
-    @require_torch_large_gpu
     def test_model_9b_sdpa(self):
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",
@@ -523,7 +519,6 @@ class GlmIntegrationTest(unittest.TestCase):
 
     @require_flash_attn
     @pytest.mark.flash_attn_test
-    @require_torch_large_gpu
     def test_model_9b_flash_attn(self):
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",

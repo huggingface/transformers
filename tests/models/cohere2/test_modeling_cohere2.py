@@ -27,6 +27,7 @@ from transformers.testing_utils import (
     require_read_token,
     require_torch,
     require_torch_gpu,
+    require_torch_large_gpu,
     slow,
     torch_device,
 )
@@ -187,7 +188,8 @@ class Cohere2ModelTest(CohereModelTest, unittest.TestCase):
 
 
 @slow
-@require_torch_gpu
+@require_read_token
+@require_torch_large_gpu
 class Cohere2IntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
     # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
@@ -200,12 +202,11 @@ class Cohere2IntegrationTest(unittest.TestCase):
             # 8 is for A100 / A10 and 7 for T4
             cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
 
-    @require_read_token
     def test_model_bf16(self):
         model_id = "CohereForAI/c4ai-command-r7b-12-2024"
         EXPECTED_TEXTS = [
-            "<BOS_TOKEN>Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many",
-            "<PAD><PAD><BOS_TOKEN>Hi today I'm going to be talking about the history of the United States. The United States of America",
+            "<BOS_TOKEN>Hello I am doing a project for a school assignment and I need to create a website for a fictional company. I have",
+            "<PAD><PAD><BOS_TOKEN>Hi today I'm going to show you how to make a simple and easy to make a chocolate cake.\n",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
@@ -220,12 +221,11 @@ class Cohere2IntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    @require_read_token
     def test_model_fp16(self):
         model_id = "CohereForAI/c4ai-command-r7b-12-2024"
         EXPECTED_TEXTS = [
-            "<BOS_TOKEN>Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many",
-            "<PAD><PAD><BOS_TOKEN>Hi today I'm going to be talking about the history of the United States. The United States of America",
+            "<BOS_TOKEN>Hello I am doing a project for a school assignment and I need to create a website for a fictional company. I have",
+            "<PAD><PAD><BOS_TOKEN>Hi today I'm going to show you how to make a simple and easy to make a chocolate cake.\n",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
@@ -240,14 +240,13 @@ class Cohere2IntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    @require_read_token
     def test_model_pipeline_bf16(self):
         # See https://github.com/huggingface/transformers/pull/31747 -- pipeline was broken for Cohere2 before this PR
         model_id = "CohereForAI/c4ai-command-r7b-12-2024"
         # EXPECTED_TEXTS should match the same non-pipeline test, minus the special tokens
         EXPECTED_TEXTS = [
-            "Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many",
-            "Hi today I'm going to be talking about the history of the United States. The United States of America",
+            "Hello I am doing a project for a school assignment and I need to create a website for a fictional company. I have",
+            "Hi today I'm going to show you how to make a simple and easy to make a chocolate cake.\n",
         ]
 
         model = AutoModelForCausalLM.from_pretrained(
@@ -261,11 +260,8 @@ class Cohere2IntegrationTest(unittest.TestCase):
         self.assertEqual(output[0][0]["generated_text"], EXPECTED_TEXTS[0])
         self.assertEqual(output[1][0]["generated_text"], EXPECTED_TEXTS[1])
 
-    @require_read_token
     @require_flash_attn
-    @require_torch_gpu
     @mark.flash_attn_test
-    @slow
     def test_model_flash_attn(self):
         # See https://github.com/huggingface/transformers/issues/31953 --- flash attn was generating garbage for Gemma2, especially in long context
         model_id = "CohereForAI/c4ai-command-r7b-12-2024"
@@ -285,8 +281,6 @@ class Cohere2IntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    @slow
-    @require_read_token
     def test_export_static_cache(self):
         if version.parse(torch.__version__) < version.parse("2.5.0"):
             self.skipTest(reason="This test requires torch >= 2.5 to run.")
