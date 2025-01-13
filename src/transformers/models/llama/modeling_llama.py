@@ -277,14 +277,6 @@ class LlamaAttention(nn.Module):
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
-            # Advanced cache usage may crop it differently at each layer, we need to modify attention accordingly.
-            # Left-cropping = we drop the attn indexes used in the cache, were we pay attention by default.
-            if (
-                not isinstance(past_key_value, StaticCache)
-                and attention_mask is not None
-                and key_states.shape[-2] < attention_mask.shape[-1]
-            ):
-                attention_mask = attention_mask[..., -key_states.shape[-2]:]
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
