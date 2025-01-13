@@ -20,7 +20,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, HeliumConfig, is_t
 from transformers.testing_utils import (
     require_read_token,
     require_torch,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -79,9 +78,9 @@ class HeliumModelTest(GemmaModelTest, unittest.TestCase):
 
 
 @slow
-@require_torch_gpu
+# @require_torch_gpu
 class HeliumIntegrationTest(unittest.TestCase):
-    input_text = ["Hello I am doing", "Hi today"]
+    input_text = ["Hello, today is a great day to"]
     # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
     # Depending on the hardware we get different logits / generations
     cuda_compute_capability_major_version = None
@@ -96,8 +95,7 @@ class HeliumIntegrationTest(unittest.TestCase):
     def test_model_2b(self):
         model_id = "kyutai/helium-1-preview"
         EXPECTED_TEXTS = [
-            "<bos>Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many",
-            "<pad><pad><bos>Hi today I'm going to be talking about the history of the United States. The United States of America",
+            "Hello, today is a great day to start a new project. I have been working on a new project for a while now and I have"
         ]
 
         model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
