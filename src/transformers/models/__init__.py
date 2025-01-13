@@ -297,6 +297,7 @@ from . import (
     xlm_roberta,
     xlm_roberta_xl,
     xlnet,
+    xlstm,
     xmod,
     yolos,
     yoso,
