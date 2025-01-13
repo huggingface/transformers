@@ -152,18 +152,6 @@ if is_accelerate_available():
     from accelerate import Accelerator
     from accelerate.state import AcceleratorState
 
-import contextlib
-import io
-import sys
-
-@contextlib.contextmanager
-def nostdout():
-    save_stdout = sys.stdout
-    sys.stdout = io.BytesIO()
-    yield
-    sys.stdout = save_stdout
-
-
 PATH_SAMPLE_TEXT = f"{get_tests_dir()}/fixtures/sample_text.txt"
 
 
@@ -782,7 +770,6 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         dataset_name = "wikitext"
         dataset_config = "wikitext-2-raw-v1"
         dataset = datasets.load_dataset(dataset_name, dataset_config, split="train[:40]")
-        dataset = dataset.train_test_split(test_size=0.2)
         tokenizer = AutoTokenizer.from_pretrained(model_name)
 
         tokenizer.pad_token = tokenizer.eos_token
@@ -790,7 +777,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         def tokenize_function(examples):
             return tokenizer(examples["text"], max_length=16, padding="max_length", truncation=True)
 
-        tokenized_dataset = dataset.map(tokenize_function, batched=True, remove_columns=dataset["train"].column_names)
+        tokenized_dataset = dataset.map(tokenize_function, batched=True, remove_columns=dataset.column_names)
 
         data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
 
@@ -815,7 +802,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             trainer = Trainer(
                 model,
                 args,
-                train_dataset=tokenized_dataset["train"],
+                train_dataset=tokenized_dataset,
                 callbacks=[base_loss_callback],
                 data_collator=data_collator,
             )
@@ -835,7 +822,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             trainer = Trainer(
                 model,
                 args,
-                train_dataset=tokenized_dataset["train"],
+                train_dataset=tokenized_dataset,
                 callbacks=[grad_accum_loss_callback],
                 data_collator=data_collator,
             )
@@ -847,7 +834,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             trainer = Trainer(
                 model,
                 args,
-                train_dataset=tokenized_dataset["train"],
+                train_dataset=tokenized_dataset,
                 callbacks=[broken_loss_callback],
                 data_collator=data_collator,
             )
@@ -884,7 +871,6 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         dataset_name = "wikitext"
         dataset_config = "wikitext-2-raw-v1"
         dataset = datasets.load_dataset(dataset_name, dataset_config, split="train[:40]")
-        dataset = dataset.train_test_split(test_size=0.2)
         tokenizer = AutoTokenizer.from_pretrained(model_name)
 
         tokenizer.pad_token = tokenizer.eos_token
@@ -892,7 +878,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
         def tokenize_function(examples):
             return tokenizer(examples["text"], max_length=16, padding="max_length", truncation=True)
 
-        tokenized_dataset = dataset.map(tokenize_function, batched=True, remove_columns=dataset["train"].column_names)
+        tokenized_dataset = dataset.map(tokenize_function, batched=True)
 
         tokenizer.pad_token = tokenizer.eos_token
         data_collator = DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False)
@@ -924,7 +910,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             trainer = Trainer(
                 model,
                 args,
-                train_dataset=tokenized_dataset["train"],
+                train_dataset=tokenized_dataset,
                 callbacks=[base_loss_callback],
                 compute_loss_func=loss_fn,
                 data_collator=data_collator,
@@ -944,7 +930,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             trainer = Trainer(
                 model,
                 args,
-                train_dataset=tokenized_dataset["train"],
+                train_dataset=tokenized_dataset,
                 callbacks=[grad_accum_loss_callback],
                 compute_loss_func=loss_fn,
                 data_collator=data_collator,
@@ -958,7 +944,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             trainer = Trainer(
                 model,
                 args,
-                train_dataset=tokenized_dataset["train"],
+                train_dataset=tokenized_dataset,
                 callbacks=[broken_loss_callback],
                 compute_loss_func=loss_fn,
                 data_collator=data_collator,
