@@ -500,10 +500,7 @@ def is_xlstm_available():
     if is_torch_available():
         import torch
 
-        if not torch.cuda.is_available():
-            return False
-        else:
-            return _is_package_available("xlstm")
+        return _is_package_available("xlstm")
     return False
 
 
