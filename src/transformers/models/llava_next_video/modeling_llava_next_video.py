@@ -716,16 +716,18 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
                     self.config.image_grid_pinpoints,
                     self.config.vision_config.image_size,
                 )
-                try:
-                    image_feature = image_feature.view(num_patch_height, num_patch_width, height, width, -1)
-                except RuntimeError as e:
-                    if vision_feature_select_strategy == "default":
-                        logger.warning_once(
-                            "Image feature shape does not line up with the provided patch size. "
-                            "You may be using the `default` vision_feature_select_strategy with a"
-                            " visual encoder that does not have CLS."
-                        )
-                    raise e
+
+                if (
+                    np.prod(image_feature.shape) % (num_patch_height * num_patch_width * height * width) != 0 and
+                    vision_feature_select_strategy == "default"
+                ):
+                    logger.warning_once(
+                        "Image feature shape does not line up with the provided patch size. "
+                        "You may be using the `default` vision_feature_select_strategy with a"
+                        " visual encoder that does not have CLS."
+                    )
+
+                image_feature = image_feature.view(num_patch_height, num_patch_width, height, width, -1)
                 image_feature = image_feature.permute(4, 0, 2, 1, 3).contiguous()
                 image_feature = image_feature.flatten(1, 2).flatten(2, 3)
                 image_feature = unpad_image(image_feature, image_sizes[image_idx])
