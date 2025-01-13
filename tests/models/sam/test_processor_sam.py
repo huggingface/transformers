@@ -36,10 +36,12 @@ if is_vision_available():
 
 if is_torch_available():
     import torch
+
     from transformers.models.sam.image_processing_sam import _mask_to_rle_pytorch
 
 if is_tf_available():
     import tensorflow as tf
+
     from transformers.models.sam.image_processing_sam import _mask_to_rle_tf
 
 
@@ -162,7 +164,7 @@ class SamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         dummy_masks = [[1, 0], [0, 1]]
         with self.assertRaises(ValueError):
             masks = processor.post_process_masks(dummy_masks, np.array(original_sizes), np.array(reshaped_input_size))
-    
+
     def test_all_zeros(self):
         """
         Test that a mask of all zeros returns a single run [height * width].
