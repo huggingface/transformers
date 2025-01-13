@@ -1143,7 +1143,7 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
             max_length = batch_idx_max_lengths.max().item()
             
             logger.warning(
-                f"By default, Moonshine will automatically limit generation to up to {max_length} tokens based on the input audio length ({tokens_per_second} tokens/sec at {frame_rate} Hz). "
+                f"By default, Moonshine will automatically limit generation based on the input audio length (here up to {max_length} tokens at {tokens_per_second} tokens/sec at {frame_rate} Hz). "
                 "To disable this behavior, set `infer_max_length_from_input` to False. "
                 "To adjust this limit, you can modify `tokens_per_second` and `frame_rate` in the model config. "
             )
