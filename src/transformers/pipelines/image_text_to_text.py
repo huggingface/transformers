@@ -347,6 +347,7 @@ class ImageTextToTextPipeline(Pipeline):
                     add_generation_prompt=not continue_final_message,
                     continue_final_message=continue_final_message,
                     return_tensors=self.framework,
+                    **processing_kwargs,
                 )
                 inputs_text = inputs
                 images = inputs.images
