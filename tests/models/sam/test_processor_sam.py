@@ -199,8 +199,7 @@ class SamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # This is shape (1, 2, 2).
         # Flattened in Fortran order -> [0, 1, 1, 1].
         # The RLE for [0,1,1,1] is [1, 3].
-        input_mask = torch.tensor([[[0, 1],
-                                    [1, 1]]], dtype=torch.long)
+        input_mask = torch.tensor([[[0, 1], [1, 1]]], dtype=torch.long)
         rle = _mask_to_rle_pytorch(input_mask)
 
         self.assertEqual(len(rle), 1)
@@ -324,13 +323,13 @@ class TFSamProcessorTest(unittest.TestCase):
         # This is shape (1, 2, 2).
         # Flattened in Fortran order -> [0, 1, 1, 1].
         # The RLE for [0,1,1,1] is [1, 3].
-        input_mask = torch.tensor([[[0, 1],
-                                    [1, 1]]], dtype=torch.long)
+        input_mask = torch.tensor([[[0, 1], [1, 1]]], dtype=torch.long)
         rle = _mask_to_rle_tf(input_mask)
 
         self.assertEqual(len(rle), 1)
         self.assertEqual(rle[0]["size"], [2, 2])
         self.assertEqual(rle[0]["counts"], [1, 3])  # 1 zero, followed by 3 ones
+
 
 @require_vision
 @require_torchvision
