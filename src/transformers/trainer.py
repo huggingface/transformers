@@ -75,7 +75,6 @@ from .optimization import Adafactor, get_scheduler
 from .processing_utils import ProcessorMixin
 from .pytorch_utils import (
     ALL_LAYERNORM_LAYERS,
-    is_torch_greater_or_equal_than_1_13,
     is_torch_greater_or_equal_than_2_3,
 )
 from .tokenization_utils_base import PreTrainedTokenizerBase
@@ -623,7 +622,15 @@ class Trainer:
             else unwrapped_model.get_base_model().forward
         )
         forward_params = inspect.signature(model_forward).parameters
-        self.model_accepts_loss_kwargs = any(k.kind == inspect.Parameter.VAR_KEYWORD for k in forward_params.values())
+
+        # Check if the model has explicit setup for loss kwargs,
+        # if not, check if `**kwargs` are in model.forward
+        if hasattr(model, "accepts_loss_kwargs"):
+            self.model_accepts_loss_kwargs = model.accepts_loss_kwargs
+        else:
+            self.model_accepts_loss_kwargs = any(
+                k.kind == inspect.Parameter.VAR_KEYWORD for k in forward_params.values()
+            )
 
         self.neftune_noise_alpha = args.neftune_noise_alpha
 
@@ -2778,7 +2785,7 @@ class Trainer:
                 )
 
         if os.path.isfile(weights_file) or os.path.isfile(safe_weights_file) or is_fsdp_ckpt:
-            weights_only_kwarg = {"weights_only": True} if is_torch_greater_or_equal_than_1_13 else {}
+            weights_only_kwarg = {"weights_only": True}
             # If the model is on the GPU, it still works!
             if is_sagemaker_mp_enabled():
                 if os.path.isfile(os.path.join(resume_from_checkpoint, "user_content.pt")):
@@ -2899,7 +2906,7 @@ class Trainer:
             or os.path.exists(best_safe_adapter_model_path)
         ):
             has_been_loaded = True
-            weights_only_kwarg = {"weights_only": True} if is_torch_greater_or_equal_than_1_13 else {}
+            weights_only_kwarg = {"weights_only": True}
             if is_sagemaker_mp_enabled():
                 if os.path.isfile(os.path.join(self.state.best_model_checkpoint, "user_content.pt")):
                     # If the 'user_content.pt' file exists, load with the new smp api.
@@ -3149,7 +3156,6 @@ class Trainer:
     def _determine_best_metric(self, metrics, trial):
         """
         Determine if the model should be saved based on the evaluation metrics.
-        If args.metric_for_best_model is not set, the loss is used.
 
         Returns:
             bool: True if a new best metric was found, else False
@@ -3666,7 +3672,10 @@ class Trainer:
             return loss_mb.reduce_mean().detach().to(self.args.device)
 
         with self.compute_loss_context_manager():
-            loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
+            if self.model_accepts_loss_kwargs:
+                loss = self.compute_loss(model, inputs)
+            else:
+                loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
 
         del inputs
         if (
@@ -3699,10 +3708,12 @@ class Trainer:
             with amp.scale_loss(loss, self.optimizer) as scaled_loss:
                 scaled_loss.backward()
         else:
-            self.accelerator.backward(loss, **kwargs)
             # Finally we need to normalize the loss for reporting
             if num_items_in_batch is None:
-                return loss.detach() / self.args.gradient_accumulation_steps
+                loss = loss / self.args.gradient_accumulation_steps
+
+            self.accelerator.backward(loss, **kwargs)
+
             return loss.detach()
 
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
@@ -5146,6 +5157,10 @@ class Trainer:
             except StopIteration:
                 break
 
+        # Keep default behavior the same
+        if not self.model_accepts_loss_kwargs:
+            return batch_samples, None
+
         if len(batch_samples) > 0 and "labels" in batch_samples[0]:
             # For now we don't support object detection
             try:
@@ -5153,7 +5168,7 @@ class Trainer:
             except (TypeError, AttributeError):
                 pass
 
-        if self.args.average_tokens_across_devices:
+        if self.args.average_tokens_across_devices and num_items_in_batch is not None:
             num_items_in_batch = self.accelerator.gather(num_items_in_batch).sum().item()
 
         if torch.is_tensor(num_items_in_batch):

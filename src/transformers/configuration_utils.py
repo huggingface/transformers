@@ -37,10 +37,10 @@ from .utils import (
     download_url,
     extract_commit_hash,
     is_remote_url,
-    is_timm_config_dict,
     is_torch_available,
     logging,
 )
+from .utils.generic import is_timm_config_dict
 
 
 logger = logging.get_logger(__name__)
@@ -994,8 +994,11 @@ class PretrainedConfig(PushToHubMixin):
         converts torch.dtype to a string of just the type. For example, `torch.float32` get converted into *"float32"*
         string, which can then be stored in the json format.
         """
-        if d.get("torch_dtype", None) is not None and not isinstance(d["torch_dtype"], str):
-            d["torch_dtype"] = str(d["torch_dtype"]).split(".")[1]
+        if d.get("torch_dtype", None) is not None:
+            if isinstance(d["torch_dtype"], dict):
+                d["torch_dtype"] = {k: str(v).split(".")[-1] for k, v in d["torch_dtype"].items()}
+            elif not isinstance(d["torch_dtype"], str):
+                d["torch_dtype"] = str(d["torch_dtype"]).split(".")[1]
         for value in d.values():
             if isinstance(value, dict):
                 self.dict_torch_dtype_to_str(value)
