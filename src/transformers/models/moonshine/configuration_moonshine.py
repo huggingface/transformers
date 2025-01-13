@@ -125,6 +125,8 @@ class MoonshineConfig(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        pad_token_id (`int`, *optional*, defaults to 2):
+            The token id of the padding token.
         bos_token_id (`int`, *optional*, defaults to 1):
             Denotes beginning of sequences token id.
         eos_token_id (`int`, *optional*, defaults to 2):
@@ -178,6 +180,7 @@ class MoonshineConfig(PretrainedConfig):
         is_encoder_decoder=True,
         attention_bias=False,
         attention_dropout=0.0,
+        pad_token_id=2,
         bos_token_id=1,
         eos_token_id=2,
         tokens_per_second=6.5,
@@ -217,6 +220,7 @@ class MoonshineConfig(PretrainedConfig):
         rope_config_validation(self)
 
         super().__init__(
+            pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
