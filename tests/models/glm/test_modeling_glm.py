@@ -414,7 +414,7 @@ class GlmModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
             normalized_1 = torch.nn.functional.softmax(out_shared_prefix_last_tokens)
             print(torch.abs(normalized_0 - normalized_1).max())
 
-            torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, rtol=1e-3, atol=1e-3)
+            torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-3)
 
 
 @slow

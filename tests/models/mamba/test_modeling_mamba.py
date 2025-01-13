@@ -473,7 +473,7 @@ class MambaIntegrationTests(unittest.TestCase):
             ]
         ,dtype=torch.float32)  # fmt: skip
 
-        torch.testing.assert_close(logits[0, 0, :40].cpu(), EXPECTED_LOGITS_NO_GRAD, rtol=1e-3, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(logits[0, 0, :40].cpu(), EXPECTED_LOGITS_NO_GRAD, rtol=1e-3, atol=1e-3)
 
     @parameterized.expand([(torch_device,), ("cpu",)])
     def test_simple_generate_cuda_kernels_tiny(self, device):

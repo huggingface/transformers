@@ -2207,8 +2207,8 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
 
         # verify
         expected_scores = torch.Tensor([[0.0238, 0.9762]])
-        torch.testing.assert_close(torch.nn.Softmax()(out_itm[0].cpu()), expected_scores, rtol=1e-3, rtol=1e-3, atol=1e-3)
-        torch.testing.assert_close(out[0].cpu(), torch.Tensor([[0.4406]]), rtol=1e-3, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(torch.nn.Softmax()(out_itm[0].cpu()), expected_scores, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(out[0].cpu(), torch.Tensor([[0.4406]]), rtol=1e-3, atol=1e-3)
 
     @require_torch_gpu
     @require_torch_fp16
@@ -2227,8 +2227,8 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
 
         # verify
         expected_scores = torch.Tensor([[0.0239, 0.9761]])
-        torch.testing.assert_close(torch.nn.Softmax()(out_itm[0].cpu().float()), expected_scores, rtol=1e-3, rtol=1e-3, atol=1e-3)
-        torch.testing.assert_close(out[0].cpu().float(), torch.Tensor([[0.4406]]), rtol=1e-3, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(torch.nn.Softmax()(out_itm[0].cpu().float()), expected_scores, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(out[0].cpu().float(), torch.Tensor([[0.4406]]), rtol=1e-3, atol=1e-3)
 
     @require_torch_gpu
     @require_torch_fp16

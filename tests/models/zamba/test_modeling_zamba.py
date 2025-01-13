@@ -598,7 +598,7 @@ class ZambaModelIntegrationTest(unittest.TestCase):
             ]
             , dtype=torch.float32)  # fmt: skip
 
-        torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD, rtol=1e-3, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD, rtol=1e-3, atol=1e-3)
 
     @slow
     def test_simple_batched_generate_with_padding(self):
@@ -643,5 +643,5 @@ class ZambaModelIntegrationTest(unittest.TestCase):
             ]
             , dtype=torch.float32)  # fmt: skip
 
-        torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_0, rtol=1e-3, rtol=1e-3, atol=1e-3)
-        torch.testing.assert_close(logits[1, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_1, rtol=1e-3, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_0, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(logits[1, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_1, rtol=1e-3, atol=1e-3)

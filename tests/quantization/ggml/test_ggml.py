@@ -553,7 +553,7 @@ class GgufIntegrationTests(unittest.TestCase):
             quantized_state_dict.items(), original_state_dict.items()
         ):
             self.assertTrue(quantized_param.shape == original_param.shape)
-            torch.testing.assert_close(quantized_param, original_param, rtol=5e-04, rtol=5e-04, atol=5e-04)
+            torch.testing.assert_close(quantized_param, original_param, rtol=5e-04, atol=5e-04)
 
     def test_gpt2_q8(self):
         tokenizer = AutoTokenizer.from_pretrained(self.gpt2_model_id, gguf_file=self.q8_gpt2_model_id)

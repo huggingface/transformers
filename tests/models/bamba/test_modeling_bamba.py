@@ -548,7 +548,7 @@ class BambaModelIntegrationTest(unittest.TestCase):
                     148., 147., 147., 147., 146., 146., 148., 148.
                 ], dtype=torch.bfloat16)  # fmt: skip
 
-            torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD, rtol=1e-3, rtol=1, atol=1)
+            torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD, rtol=1e-3, atol=1)
 
     def test_simple_batched_generate_with_padding(self):
         # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
@@ -599,5 +599,5 @@ class BambaModelIntegrationTest(unittest.TestCase):
                     178., 177., 177., 175., 176., 177., 175., 177.
                 ], dtype=torch.bfloat16)  # fmt: skip
 
-            torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_0, rtol=1e-3, rtol=1, atol=1)
-            torch.testing.assert_close(logits[1, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_1, rtol=1e-3, rtol=1, atol=1)
+            torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_0, rtol=1e-3, atol=1)
+            torch.testing.assert_close(logits[1, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_1, rtol=1e-3, atol=1)

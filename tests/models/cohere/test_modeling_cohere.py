@@ -363,4 +363,4 @@ class CohereIntegrationTest(unittest.TestCase):
             output = model(**inputs)
 
         logits = output.logits
-        torch.testing.assert_close(EXPECTED_LOGITS, logits[:, :3, :3], rtol=1e-3, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(EXPECTED_LOGITS, logits[:, :3, :3], rtol=1e-3, atol=1e-3)
