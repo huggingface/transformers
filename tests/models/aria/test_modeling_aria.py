@@ -318,7 +318,9 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = AriaForConditionalGeneration.from_pretrained("rhymes-ai/Aria", load_in_4bit=True)
+        model = AriaForConditionalGeneration.from_pretrained(
+            "rhymes-ai/Aria", revision="6583f58908d092e52f348069485e64fef4867730", load_in_4bit=True
+        )
 
         prompt = "<image>\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT:"
         image_file = "https://aria-vl.github.io/static/images/view.jpg"
@@ -342,9 +344,11 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Let' s make sure we test the preprocessing to replace what is used
         model_id = "rhymes-ai/Aria"
 
-        model = AriaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        model = AriaForConditionalGeneration.from_pretrained(
+            model_id, revision="6583f58908d092e52f348069485e64fef4867730", load_in_4bit=True
+        )
         processor = AutoProcessor.from_pretrained(model_id)
-
+        breakpoint()
         prompt = "USER: <image>\nWhat are the things I should be cautious about when I visit this place? ASSISTANT:"
         image_file = "https://aria-vl.github.io/static/images/view.jpg"
         raw_image = Image.open(requests.get(image_file, stream=True).raw)
@@ -364,7 +368,9 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Let' s make sure we test the preprocessing to replace what is used
         model_id = "rhymes-ai/Aria"
 
-        model = AriaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        model = AriaForConditionalGeneration.from_pretrained(
+            model_id, revision="6583f58908d092e52f348069485e64fef4867730", load_in_4bit=True
+        )
         processor = AutoProcessor.from_pretrained(model_id)
 
         prompts = [
@@ -389,7 +395,9 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
         # Let' s make sure we test the preprocessing to replace what is used
-        model = AriaForConditionalGeneration.from_pretrained("rhymes-ai/Aria", load_in_4bit=True)
+        model = AriaForConditionalGeneration.from_pretrained(
+            "rhymes-ai/Aria", revision="6583f58908d092e52f348069485e64fef4867730", load_in_4bit=True
+        )
         # The first batch is longer in terms of text, but only has 1 image. The second batch will be padded in text, but the first will be padded because images take more space!.
         prompts = [
             "USER: <image>\nWhat are the things I should be cautious about when I visit this place? What should I bring with me?\nASSISTANT:",
@@ -418,7 +426,12 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         model_id = "rhymes-ai/Aria"
 
         # Multi-image & multi-prompt (e.g. 3 images and 2 prompts now fails with SDPA, this tests if "eager" works as before)
-        model = AriaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True, attn_implementation="eager")
+        model = AriaForConditionalGeneration.from_pretrained(
+            model_id,
+            revision="6583f58908d092e52f348069485e64fef4867730",
+            load_in_4bit=True,
+            attn_implementation="eager",
+        )
         processor = AutoProcessor.from_pretrained(model_id, pad_token="<pad>")
 
         prompts = [
@@ -443,7 +456,9 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_torch
     @require_vision
     def test_batched_generation(self):
-        model = AriaForConditionalGeneration.from_pretrained("rhymes-ai/Aria", load_in_4bit=True)
+        model = AriaForConditionalGeneration.from_pretrained(
+            "rhymes-ai/Aria", revision="6583f58908d092e52f348069485e64fef4867730", load_in_4bit=True
+        )
 
         processor = AutoProcessor.from_pretrained("rhymes-ai/Aria")
 
@@ -481,7 +496,9 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         # Please refer to that PR, or specifically https://github.com/huggingface/transformers/pull/28032#issuecomment-1860650043 for
         # more details
         model_id = "rhymes-ai/Aria"
-        model = AriaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        model = AriaForConditionalGeneration.from_pretrained(
+            model_id, revision="6583f58908d092e52f348069485e64fef4867730", load_in_4bit=True
+        )
 
         processor = AutoProcessor.from_pretrained(model_id)
 
@@ -501,7 +518,9 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_aria_merge_inputs_error_bug(self):
         # This is a reproducer of https://github.com/huggingface/transformers/pull/28333 and makes sure it does not happen anymore
         model_id = "rhymes-ai/Aria"
-        model = AriaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        model = AriaForConditionalGeneration.from_pretrained(
+            model_id, revision="6583f58908d092e52f348069485e64fef4867730", load_in_4bit=True
+        )
 
         # Simulate some user inputs
         pixel_values = torch.randn(
@@ -556,7 +575,9 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_generation_no_images(self):
         model_id = "rhymes-ai/Aria"
-        model = AriaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        model = AriaForConditionalGeneration.from_pretrained(
+            model_id, revision="6583f58908d092e52f348069485e64fef4867730", load_in_4bit=True
+        )
         processor = AutoProcessor.from_pretrained(model_id)
 
         # Prepare inputs with no images
@@ -569,7 +590,12 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_generation_siglip_backbone(self):
         model_id = "rhymes-ai/Aria"
-        model = AriaForConditionalGeneration.from_pretrained(model_id, torch_dtype="float16", device_map=torch_device)
+        model = AriaForConditionalGeneration.from_pretrained(
+            model_id,
+            revision="6583f58908d092e52f348069485e64fef4867730",
+            torch_dtype="float16",
+            device_map=torch_device,
+        )
         processor = AutoProcessor.from_pretrained(model_id)
 
         # check processing with expansion of inputs (w/o expansion should work with any backbone)
@@ -594,7 +620,9 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_expansion_in_processing(self):
         model_id = "rhymes-ai/Aria"
-        model = AriaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        model = AriaForConditionalGeneration.from_pretrained(
+            model_id, revision="6583f58908d092e52f348069485e64fef4867730", load_in_4bit=True
+        )
         processor = AutoProcessor.from_pretrained(model_id)
 
         prompt = "USER: <image>\nDescribe the image:\nASSISTANT:"
@@ -624,7 +652,9 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_bitsandbytes
     def test_pixtral(self):
         model_id = "rhymes-ai/Aria"
-        model = AriaForConditionalGeneration.from_pretrained(model_id)
+        model = AriaForConditionalGeneration.from_pretrained(
+            model_id, revision="6583f58908d092e52f348069485e64fef4867730"
+        )
         processor = AutoProcessor.from_pretrained(model_id)
 
         IMG_URLS = [
