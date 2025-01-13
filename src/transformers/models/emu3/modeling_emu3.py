@@ -1788,9 +1788,12 @@ class Emu3ForCausalLM(Emu3PreTrainedModel, GenerationMixin):
 
 
 class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
+    _tied_weights_keys = ["text_model.lm_head.weight"]
+
     def __init__(self, config):
         super().__init__(config)
         self.text_model = Emu3ForCausalLM._from_config(config.text_config)
+
         self.vqmodel = Emu3VQVAE(config.vq_config)
         self.vocabulary_mapping = Emu3ImageVocabularyMapping(config.vocabulary_map)
 
