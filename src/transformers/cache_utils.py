@@ -63,17 +63,6 @@ class Cache(torch.nn.Module):
         # TODO: deprecate this function in favor of `cache_position`
         raise NotImplementedError("Make sure to implement `get_seq_length` in a subclass.")
 
-    # Deprecate in favor of max-cache-shape because we want to be specifc by what we mean with "max_length"
-    # Prev some cache objects didn't have "max_length" (SlidingWindowCache or SinkCache) because the cache object technically handles
-    # infinite amount of tokens. In the codebase what we really need to check is the max capacity of certain cache instances, so
-    # we change naming to be more explicit
-    def get_max_length(self) -> Optional[int]:
-        logger.warning_once(
-            "`get_max_cache()` is deprecated for all Cache classes. Use `get_max_cache_shape()` instead. "
-            "Calling `get_max_cache()` will raise error from v4.48"
-        )
-        return self.get_max_cache_shape()
-
     def get_max_cache_shape(self) -> Optional[int]:
         """Returns the maximum sequence length (i.e. max capacity) of the cache object"""
         raise NotImplementedError("Make sure to implement `get_max_cache_shape` in a subclass.")
