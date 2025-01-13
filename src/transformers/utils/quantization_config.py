@@ -225,6 +225,7 @@ class HqqConfig(QuantizationConfigMixin):
         if is_hqq_available():
             from hqq.core.quantize import BaseQuantizeConfig as HQQBaseQuantizeConfig
         else:
+
             class HQQBaseQuantizeConfig:
                 def __init__(self, *args, **kwargs):
                     pass
