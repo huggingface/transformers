@@ -18,6 +18,8 @@ Processor class for LLaVa-NeXT-Video.
 
 from typing import TYPE_CHECKING, List, Optional, Union
 
+import numpy as np
+
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils import select_best_resolution
 from ...image_utils import ImageInput, VideoInput, get_image_size, to_numpy_array
@@ -193,7 +195,10 @@ class LlavaNextVideoProcessor(ProcessorMixin):
 
         # videos are easier, simply get frames and multiply
         if videos_inputs:
-            one_video = to_numpy_array(videos_inputs.get("pixel_values_videos")[0])
+            if isinstance(videos_inputs.get("pixel_values_videos")[0], (list, tuple)):
+                one_video = np.array(videos_inputs.get("pixel_values_videos")[0])
+            else:
+                one_video = to_numpy_array(videos_inputs.get("pixel_values_videos")[0])
             height, width = get_image_size(one_video[0])
             num_frames = one_video.shape[0]  # frame dim is always after batch dim
 
