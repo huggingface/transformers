@@ -1832,7 +1832,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
     @require_grokadamw
     @require_torch_accelerator
-    def test_grokadamw():
+    def test_grokadamw(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
         x = torch.randint(0, 100, (128,))
