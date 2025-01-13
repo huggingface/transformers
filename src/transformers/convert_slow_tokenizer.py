@@ -1487,7 +1487,7 @@ class HeliumConverter(SpmConverter):
             ]
         )
         tokenizer.add_tokens([AddedToken("\n", normalized=False, special=False)])
-        tokenizer.enable_padding(pad_token ="<pad>", pad_id=3)
+        tokenizer.enable_padding(pad_token="<pad>", pad_id=3)
         return tokenizer
 
     def vocab(self, proto):
@@ -1513,15 +1513,27 @@ class HeliumConverter(SpmConverter):
         return decoders.Sequence(sequence)
 
     def normalizer(self, proto):
-        return normalizers.Sequence([normalizers.Prepend(" "), normalizers.Replace(r" ","▁")]) #, normalizers.Replace("\n", "<0x0A>" )])
+        return normalizers.Sequence(
+            [normalizers.Prepend(" "), normalizers.Replace(r" ", "▁")]
+        )  # , normalizers.Replace("\n", "<0x0A>" )])
 
     def pre_tokenizer(self, replacement, add_prefix_space):
-        return pre_tokenizers.Sequence([pre_tokenizers.Split('\n', "contiguous")]) #(prepend_scheme="always", split=True)])
+        return pre_tokenizers.Sequence(
+            [pre_tokenizers.Split("\n", "contiguous")]
+        )  # (prepend_scheme="always", split=True)])
 
     def post_processor(self):
         return processors.TemplateProcessing(
-            single=["<s>", "$A",],
-            pair=[ "<s>", "$A", "<s>", "$B",],
+            single=[
+                "<s>",
+                "$A",
+            ],
+            pair=[
+                "<s>",
+                "$A",
+                "<s>",
+                "$B",
+            ],
             special_tokens=[
                 ("<s>", 1),
             ],
