@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-Helium was proposed in 
+Helium was proposed in [Announcing Helium-1 Preview](https://kyutai.org/2025/01/13/helium.html) by the Kyutai Team.
 
 
 Helium-1 preview is a lightweight language model with 2B parameters, targeting edge and mobile devices.
