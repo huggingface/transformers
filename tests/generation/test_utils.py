@@ -69,7 +69,7 @@ if is_torch_available():
         SpeechEncoderDecoderModel,
         T5ForConditionalGeneration,
     )
-    from transformers.cache_utils import Cache, DynamicCache, QuantoQuantizedCache, StaticCache
+    from transformers.cache_utils import Cache, DynamicCache, EncoderDecoderCache, QuantoQuantizedCache, StaticCache
     from transformers.generation import (
         BeamSampleDecoderOnlyOutput,
         BeamSampleEncoderDecoderOutput,
@@ -2370,6 +2370,11 @@ class GenerationTesterMixin:
 
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config, num_beam_groups=1):
         self.assertIsInstance(past_key_values, (tuple, Cache))
+
+        # Encoder-decoder models: pull and verify the decoder cache
+        if isinstance(past_key_values, EncoderDecoderCache):
+            past_key_values = past_key_values.self_attention_cache
+
         # (batch, head, seq_length, head_features)
         expected_shape = (
             batch_size * num_beam_groups,
