@@ -66,7 +66,7 @@ RUN python3 -m pip install --no-cache-dir python-Levenshtein
 RUN python3 -m pip install --no-cache-dir g2p-en
 
 # For Some bitsandbytes tests
-RUN python3 -m pip install einops
+RUN python3 -m pip install --no-cache-dir einops
 
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.
