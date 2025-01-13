@@ -293,9 +293,6 @@ def write_model(model_name, model_path, push_to_hub, check_logits=True):
 
     outputs.heatmaps = (output_heatmap + output_flipped_heatmap) * 0.5
 
-    print("Shape of averaged heatmap: ", outputs.heatmaps.shape)
-    print("First values of averaged heatmap: ", outputs.heatmaps[0, 0, :3, :3])
-
     # Verify pose_results
     pose_results = image_processor.post_process_pose_estimation(outputs, boxes=boxes)[0]
 
