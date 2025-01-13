@@ -24,6 +24,7 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
+    require_torch_large_gpu,
     require_torch_sdpa,
     slow,
     torch_device,
@@ -433,7 +434,7 @@ class GlmIntegrationTest(unittest.TestCase):
             # 8 is for A100 / A10 and 7 for T4
             cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
 
-    @unittest.skip(reason="This passes locally on A100, but model is too big for CI.")
+    @require_torch_large_gpu
     def test_model_9b_fp16(self):
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",
@@ -452,7 +453,7 @@ class GlmIntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    @unittest.skip(reason="This passes locally on A100, but model is too big for CI.")
+    @require_torch_large_gpu
     def test_model_9b_bf16(self):
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",
@@ -471,7 +472,7 @@ class GlmIntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    @unittest.skip(reason="This passes locally on A100, but model is too big for CI.")
+    @require_torch_large_gpu
     def test_model_9b_eager(self):
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",
@@ -496,7 +497,7 @@ class GlmIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     @require_torch_sdpa
-    @unittest.skip(reason="This passes locally on A100, but model is too big for CI.")
+    @require_torch_large_gpu
     def test_model_9b_sdpa(self):
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",
@@ -522,7 +523,7 @@ class GlmIntegrationTest(unittest.TestCase):
 
     @require_flash_attn
     @pytest.mark.flash_attn_test
-    @unittest.skip(reason="This passes locally on A100, but model is too big for CI.")
+    @require_torch_large_gpu
     def test_model_9b_flash_attn(self):
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",
