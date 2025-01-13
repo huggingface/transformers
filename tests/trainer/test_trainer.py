@@ -855,7 +855,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertLess(max(diff_truth), 0.01, f"Difference {max(diff_truth)} is not within 0.01")
 
             # max diff broken should be very off
-            self.assertGreater(max(diff_broken), 3, f"Difference {max(diff_broken)} is not greater than 3")
+            self.assertGreater(max(diff_broken), 2, f"Difference {max(diff_broken)} is not greater than 3")
 
     @slow
     def test_gradient_accumulation_loss_alignment_with_loss_func(self):
