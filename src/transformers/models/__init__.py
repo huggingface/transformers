@@ -211,6 +211,7 @@ from . import (
     plbart,
     poolformer,
     pop2piano,
+    prompt_depth_anything,
     prophetnet,
     pvt,
     pvt_v2,
