@@ -26,7 +26,6 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_read_token,
     require_torch,
-    require_torch_gpu,
     require_torch_large_gpu,
     slow,
     torch_device,
@@ -285,7 +284,10 @@ class Cohere2IntegrationTest(unittest.TestCase):
         if version.parse(torch.__version__) < version.parse("2.5.0"):
             self.skipTest(reason="This test requires torch >= 2.5 to run.")
 
-        from transformers.integrations.executorch import TorchExportableModuleWithStaticCache, convert_and_export_with_cache
+        from transformers.integrations.executorch import (
+            TorchExportableModuleWithStaticCache,
+            convert_and_export_with_cache,
+        )
 
         model_id = "CohereForAI/c4ai-command-r7b-12-2024"
         EXPECTED_TEXT_COMPLETION = [
