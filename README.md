@@ -300,27 +300,6 @@ Follow the installation pages of Flax, PyTorch or TensorFlow to see how to insta
 
 > **_NOTE:_**  On Windows, you may be prompted to activate Developer Mode in order to benefit from caching. If this is not an option for you, please let us know in [this issue](https://github.com/huggingface/huggingface_hub/issues/1062).
 
-### Troubleshooting
-**a) Error: Python Version Not Supported:**
-
-Ensure you’re using Python 3.9 or later:
-```
-python --version
-```
-**b) Error: Missing Dependencies:**
-
-Install all required dependencies:
-```
-pip install -r requirements.txt
-```
-**c) Windows-Specific Issues:**
-
-Activate Developer Mode if prompted. Alternatively, use a virtual environment:
-```
-Copy code
-python -m venv env
-env\Scripts\activate
-```
 ## Model architectures
 
 **[All the model checkpoints](https://huggingface.co/models)** provided by 🤗 Transformers are seamlessly integrated from the huggingface.co [model hub](https://huggingface.co/models), where they are uploaded directly by [users](https://huggingface.co/users) and [organizations](https://huggingface.co/organizations).
