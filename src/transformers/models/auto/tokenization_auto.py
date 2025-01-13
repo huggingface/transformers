@@ -256,6 +256,7 @@ else:
                     "XLMRobertaTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            ("internlm3", ("InternLM3Tokenizer", None)),
             ("layoutlm", ("LayoutLMTokenizer", "LayoutLMTokenizerFast" if is_tokenizers_available() else None)),
             ("layoutlmv2", ("LayoutLMv2Tokenizer", "LayoutLMv2TokenizerFast" if is_tokenizers_available() else None)),
             ("layoutlmv3", ("LayoutLMv3Tokenizer", "LayoutLMv3TokenizerFast" if is_tokenizers_available() else None)),
