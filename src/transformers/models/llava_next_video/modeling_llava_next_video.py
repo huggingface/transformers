@@ -718,8 +718,8 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
                 )
 
                 if (
-                    np.prod(image_feature.shape) % (num_patch_height * num_patch_width * height * width) != 0 and
-                    vision_feature_select_strategy == "default"
+                    np.prod(image_feature.shape) % (num_patch_height * num_patch_width * height * width) != 0
+                    and vision_feature_select_strategy == "default"
                 ):
                     logger.warning_once(
                         "Image feature shape does not line up with the provided patch size. "
