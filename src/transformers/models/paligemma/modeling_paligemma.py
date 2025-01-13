@@ -196,7 +196,6 @@ class PaliGemmaPreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
     _supports_quantized_cache = True
     _supports_static_cache = True
-    _supports_cache_class = True
     _supports_flash_attn_2 = True
     _supports_sdpa = True
 
@@ -618,3 +617,6 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
             )
             model_inputs["attention_mask"] = causal_mask
         return model_inputs
+
+
+__all__ = ["PaliGemmaForConditionalGeneration", "PaliGemmaPreTrainedModel"]
