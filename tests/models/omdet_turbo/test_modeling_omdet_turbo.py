@@ -26,7 +26,6 @@ from transformers.file_utils import cached_property
 from transformers.testing_utils import (
     require_timm,
     require_torch,
-    require_torch_gpu,
     require_torch_accelerator,
     require_vision,
     slow,

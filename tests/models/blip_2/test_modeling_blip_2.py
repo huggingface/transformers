@@ -27,9 +27,9 @@ from parameterized import parameterized
 from transformers import CONFIG_MAPPING, Blip2Config, Blip2QFormerConfig, Blip2VisionConfig
 from transformers.testing_utils import (
     require_torch,
+    require_torch_accelerator,
     require_torch_fp16,
     require_torch_gpu,
-    require_torch_accelerator,
     require_torch_multi_accelerator,
     require_torch_sdpa,
     require_vision,
