@@ -266,8 +266,8 @@ class Cohere2IntegrationTest(unittest.TestCase):
         # See https://github.com/huggingface/transformers/issues/31953 --- flash attn was generating garbage for Gemma2, especially in long context
         model_id = "CohereForAI/c4ai-command-r7b-12-2024"
         EXPECTED_TEXTS = [
-            '<BOS_TOKEN>Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many people died in the United States. I have found a few sites that say 500,000 but I am not sure if that is correct. I have also found a site that says 675,000 but I am not sure if that is correct either. I am trying to find out how many people died in the United States. I have found a few',
-            "<PAD><PAD><BOS_TOKEN>Hi today I'm going to be talking about the history of the United States. The United States of America is a country in North America. It is the third largest country in the world by total area and the third most populous country with over 320 million people. The United States is a federal republic consisting of 50 states and a federal district. The 48 contiguous states and the district of Columbia are in central North America between Canada and Mexico. The state of Alaska is in the"
+            '<BOS_TOKEN>Hello I am doing a project for my school and I need to create a website for a fictional company. I have the logo and the name of the company. I need a website that is simple and easy to navigate. I need a home page, about us, services, contact us, and a gallery. I need the website to be responsive and I need it to be able to be hosted on a server. I need the website to be done in a week. I need the website to be done in HTML,',
+            "<PAD><PAD><BOS_TOKEN>Hi today I'm going to show you how to make a simple and easy to make a chocolate cake.\n\nThis recipe is very simple and easy to make.\n\nYou will need:\n\n* 2 cups of flour\n* 1 cup of sugar\n* 1/2 cup of cocoa powder\n* 1 teaspoon of baking powder\n* 1 teaspoon of baking soda\n* 1/2 teaspoon of salt\n* 2 eggs\n* 1 cup of milk\n",
         ]  # fmt: skip
 
         model = AutoModelForCausalLM.from_pretrained(
@@ -285,21 +285,14 @@ class Cohere2IntegrationTest(unittest.TestCase):
         if version.parse(torch.__version__) < version.parse("2.5.0"):
             self.skipTest(reason="This test requires torch >= 2.5 to run.")
 
-        from transformers.integrations.executorch import (
-            TorchExportableModuleWithStaticCache,
-            convert_and_export_with_cache,
-        )
+        from transformers.integrations.executorch import TorchExportableModuleWithStaticCache, convert_and_export_with_cache
 
-        tokenizer = AutoTokenizer.from_pretrained(
-            "CohereForAI/c4ai-command-r7b-12-2024", pad_token="<PAD>", padding_side="right"
-        )
+        model_id = "CohereForAI/c4ai-command-r7b-12-2024"
         EXPECTED_TEXT_COMPLETION = [
-            "Hello I am doing a project for my school and I need to know how to make a program that will take a number",
+            "Hello I am doing a project on the effects of social media on mental health. I have a few questions. 1. What is the relationship",
         ]
-        max_generation_length = tokenizer(EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True)[
-            "input_ids"
-        ].shape[-1]
 
+        tokenizer = AutoTokenizer.from_pretrained(model_id, pad_token="<PAD>", padding_side="right")
         # Load model
         device = "cpu"
         dtype = torch.bfloat16
@@ -314,10 +307,10 @@ class Cohere2IntegrationTest(unittest.TestCase):
             generation_config=GenerationConfig(
                 use_cache=True,
                 cache_implementation=cache_implementation,
-                max_length=max_generation_length,
+                max_length=30,
                 cache_config={
                     "batch_size": batch_size,
-                    "max_cache_len": max_generation_length,
+                    "max_cache_len": 30,
                 },
             ),
         )
@@ -325,7 +318,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
         prompts = ["Hello I am doing"]
         prompt_tokens = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
         prompt_token_ids = prompt_tokens["input_ids"]
-        max_new_tokens = max_generation_length - prompt_token_ids.shape[-1]
+        max_new_tokens = 30 - prompt_token_ids.shape[-1]
 
         # Static Cache + export
         exported_program = convert_and_export_with_cache(model)
