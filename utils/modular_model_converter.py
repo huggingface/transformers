@@ -58,7 +58,7 @@ def get_module_source_from_name(module_name: str) -> str:
 def preserve_case_replace(text, patterns: dict, default_name: str):
     # Create a regex pattern to match all variations
     regex_pattern = "|".join(re.escape(key) for key in patterns.keys())
-    compiled_regex = re.compile(f"({regex_pattern})(.|$)", re.IGNORECASE | re.DOTALL)
+    compiled_regex = re.compile(f"(?<![a-z0-9])({regex_pattern})(.|$)", re.IGNORECASE | re.DOTALL)
 
     def replace(match):
         matched_pattern = match.group(1)
@@ -1059,6 +1059,7 @@ TYPE_TO_FILE_TYPE = {
     "Tokenizer": "tokenization",
     "Processor": "processing",
     "ImageProcessor": "image_processing",
+    "ImageProcessorFast": "image_processing*_fast",  # "*" indicates where to insert the model name before the "_fast" suffix
     "FeatureExtractor": "feature_extractor",
     "ProcessorKwargs": "processing",
     "ImagesKwargs": "processing",
@@ -1658,11 +1659,16 @@ def convert_modular_file(modular_file):
 
 def save_modeling_file(modular_file, converted_file):
     for file_type in converted_file.keys():
+        file_name_prefix = file_type.split("*")[0]
+        file_name_suffix = file_type.split("*")[-1] if "*" in file_type else ""
+        new_file_name = modular_file.replace("modular_", f"{file_name_prefix}_").replace(
+            ".py", f"{file_name_suffix}.py"
+        )
         non_comment_lines = len(
             [line for line in converted_file[file_type][0].strip().split("\n") if not line.strip().startswith("#")]
         )
         if len(converted_file[file_type][0].strip()) > 0 and non_comment_lines > 0:
-            with open(modular_file.replace("modular_", f"{file_type}_"), "w", encoding="utf-8") as f:
+            with open(new_file_name, "w", encoding="utf-8") as f:
                 f.write(converted_file[file_type][0])
         else:
             non_comment_lines = len(
@@ -1670,7 +1676,7 @@ def save_modeling_file(modular_file, converted_file):
             )
             if len(converted_file[file_type][1].strip()) > 0 and non_comment_lines > 0:
                 logger.warning("The modeling code contains errors, it's written without formatting")
-                with open(modular_file.replace("modular_", f"{file_type}_"), "w", encoding="utf-8") as f:
+                with open(new_file_name, "w", encoding="utf-8") as f:
                     f.write(converted_file[file_type][1])
 
 
@@ -1678,16 +1684,20 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--files_to_parse",
-        default=["src/transformers/models/aria/modular_aria.py"],
+        default=["all"],
         nargs="+",
         help="A list of `modular_xxxx` files that should be converted to single model file",
     )
     args = parser.parse_args()
     if args.files_to_parse == ["all"]:
         args.files_to_parse = glob.glob("src/transformers/models/**/modular_*.py", recursive=True)
-        args.files_to_parse += glob.glob("examples/**/modular_*.py", recursive=True)
+    if args.files_to_parse == ["examples"]:
+        args.files_to_parse = glob.glob("examples/**/modular_*.py", recursive=True)
 
-    for file_name in find_priority_list(args.files_to_parse):
+    priority_list = find_priority_list(args.files_to_parse)
+    assert len(priority_list) == len(args.files_to_parse), "Some files will not be converted"
+
+    for file_name in priority_list:
         print(f"Converting {file_name} to a single model single file format")
         module_path = file_name.replace("/", ".").replace(".py", "").replace("src.", "")
         converted_files = convert_modular_file(file_name)

@@ -829,7 +829,8 @@ class MllamaTextMLP(nn.Module):
         self.act_fn = ACT2FN[config.hidden_act]
 
     def forward(self, x):
-        return self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
 
 
 # Modified from transformers.models.llama.modeling_llama.LlamaDecoderLayer
@@ -1075,7 +1076,7 @@ class MllamaPreTrainedModel(PreTrainedModel):
         output_attentions: bool,
     ):
         if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and 0.0 in attention_mask:
+            if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
 
@@ -2227,3 +2228,12 @@ class MllamaForConditionalGeneration(MllamaPreTrainedModel, GenerationMixin):
                 [cross_attention_mask_prev, cross_attention_mask_prev[:, -1:, ...]], dim=1
             )
         return model_kwargs
+
+
+__all__ = [
+    "MllamaForConditionalGeneration",
+    "MllamaForCausalLM",
+    "MllamaTextModel",
+    "MllamaVisionModel",
+    "MllamaPreTrainedModel",
+]

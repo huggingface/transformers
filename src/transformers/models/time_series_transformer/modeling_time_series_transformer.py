@@ -1777,3 +1777,6 @@ class TimeSeriesTransformerForPrediction(TimeSeriesTransformerPreTrainedModel):
                 (-1, num_parallel_samples, self.config.prediction_length) + self.target_shape,
             )
         )
+
+
+__all__ = ["TimeSeriesTransformerForPrediction", "TimeSeriesTransformerModel", "TimeSeriesTransformerPreTrainedModel"]

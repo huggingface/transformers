@@ -2052,3 +2052,6 @@ class InformerForPrediction(InformerPreTrainedModel):
                 (-1, num_parallel_samples, self.config.prediction_length) + self.target_shape,
             )
         )
+
+
+__all__ = ["InformerForPrediction", "InformerModel", "InformerPreTrainedModel"]
