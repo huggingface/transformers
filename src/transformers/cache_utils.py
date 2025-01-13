@@ -1285,8 +1285,8 @@ class StaticCache(Cache):
             The sequence length of the cached state.
         """
         if layer_idx is None:
-            if len(self) > 0:
-                return max([self.get_seq_length(layer_idx) for layer_idx in range(len(self))])
+            if len(self.key_cache) > 0:
+                return max([self.get_seq_length(layer_idx) for layer_idx in range(len(self.key_cache))])
             else:
                 return 0
 
