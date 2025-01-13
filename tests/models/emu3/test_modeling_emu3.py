@@ -177,7 +177,6 @@ class Emu3Text2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
         pass
 
 
-
 class Emu3Vision2TextModelTester:
     def __init__(
         self,
@@ -394,7 +393,6 @@ class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
     @unittest.skip("VQ-VAE module doesn't initialize weights properly")
     def test_initialization(self):
         pass
-
 
 
 @require_torch
