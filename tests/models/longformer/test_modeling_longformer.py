@@ -466,7 +466,9 @@ class LongformerModelIntegrationTest(unittest.TestCase):
         self.assertTrue(padded_hidden_states.shape[-1] == chunked_hidden_states.shape[-1] + window_overlap_size - 1)
 
         # first row => [0.4983,  2.6918, -0.0071,  1.0492, 0.0000,  0.0000,  0.0000]
-        torch.testing.assert_close(padded_hidden_states[0, 0, 0, :4], chunked_hidden_states[0, 0, 0], rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            padded_hidden_states[0, 0, 0, :4], chunked_hidden_states[0, 0, 0], rtol=1e-3, atol=1e-3
+        )
         self.assertTrue(
             torch.allclose(
                 padded_hidden_states[0, 0, 0, 4:],
@@ -475,7 +477,9 @@ class LongformerModelIntegrationTest(unittest.TestCase):
             )
         )
         # last row => [0.0000,  0.0000,  0.0000, 2.0514, -1.1600,  0.5372,  0.2629]
-        torch.testing.assert_close(padded_hidden_states[0, 0, -1, 3:], chunked_hidden_states[0, 0, -1], rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            padded_hidden_states[0, 0, -1, 3:], chunked_hidden_states[0, 0, -1], rtol=1e-3, atol=1e-3
+        )
         self.assertTrue(
             torch.allclose(
                 padded_hidden_states[0, 0, -1, :3],
@@ -494,7 +498,9 @@ class LongformerModelIntegrationTest(unittest.TestCase):
 
         expected_added_dim = torch.zeros((5,), device=torch_device, dtype=torch.float32)
         torch.testing.assert_close(expected_added_dim, padded_hidden_states[0, -1, :], rtol=1e-6, atol=1e-6)
-        torch.testing.assert_close(hidden_states[0, -1, :], padded_hidden_states.view(1, -1)[0, 24:32], rtol=1e-6, atol=1e-6)
+        torch.testing.assert_close(
+            hidden_states[0, -1, :], padded_hidden_states.view(1, -1)[0, 24:32], rtol=1e-6, atol=1e-6
+        )
 
     def test_chunk(self):
         hidden_states = self._get_hidden_states()
@@ -513,7 +519,9 @@ class LongformerModelIntegrationTest(unittest.TestCase):
             [0.4983, -1.8348, -0.7584, 2.0514], device=torch_device, dtype=torch.float32
         )
 
-        torch.testing.assert_close(chunked_hidden_states[0, :, 0, 0], expected_slice_along_seq_length, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            chunked_hidden_states[0, :, 0, 0], expected_slice_along_seq_length, rtol=1e-3, atol=1e-3
+        )
         torch.testing.assert_close(chunked_hidden_states[0, 0, :, 0], expected_slice_along_chunk, rtol=1e-3, atol=1e-3)
         self.assertEqual(chunked_hidden_states.shape, (1, 3, 4, 4))
 

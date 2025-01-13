@@ -523,7 +523,9 @@ class BigBirdPegasusModelIntegrationTests(unittest.TestCase):
         )
 
         # fmt: on
-        torch.testing.assert_close(prediction_logits[0, 4:8, 128:156], expected_prediction_logits_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            prediction_logits[0, 4:8, 128:156], expected_prediction_logits_slice, rtol=1e-4, atol=1e-4
+        )
 
     def test_inference_full_attn(self):
         model = BigBirdPegasusForConditionalGeneration.from_pretrained(MODEL_ID, attention_type="original_full")
@@ -542,7 +544,9 @@ class BigBirdPegasusModelIntegrationTests(unittest.TestCase):
             device=torch_device,
         )
         # fmt: on
-        torch.testing.assert_close(prediction_logits[0, 4:8, 128:156], expected_prediction_logits_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            prediction_logits[0, 4:8, 128:156], expected_prediction_logits_slice, rtol=1e-4, atol=1e-4
+        )
 
     def test_seq_to_seq_generation(self):
         MODEL_ID = "google/bigbird-pegasus-large-arxiv"

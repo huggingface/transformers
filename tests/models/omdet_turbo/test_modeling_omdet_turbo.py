@@ -831,8 +831,12 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
             [[[0.2550, 0.5501, 0.4738]], [[0.2535, 0.6006, 0.0353]], [[0.3742, 0.3337, 0.0666]]]
         ).to(torch_device)
 
-        torch.testing.assert_close(outputs.decoder_class_logits[:, :1, :3], expected_class_logits, rtol=1e-1, atol=1e-1)
-        torch.testing.assert_close(outputs.decoder_coord_logits[:, :1, :3], expected_coord_logits, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            outputs.decoder_class_logits[:, :1, :3], expected_class_logits, rtol=1e-1, atol=1e-1
+        )
+        torch.testing.assert_close(
+            outputs.decoder_coord_logits[:, :1, :3], expected_coord_logits, rtol=1e-3, atol=1e-3
+        )
 
         # verify grounded postprocessing
         results = processor.post_process_grounded_object_detection(
@@ -851,8 +855,12 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
         ).to(torch_device)
 
         self.assertListEqual([len(result["scores"]) for result in results], [4, 4, 6])
-        torch.testing.assert_close(torch.stack([result["scores"][0] for result in results]), expected_scores, rtol=1e-2, atol=1e-2)
-        torch.testing.assert_close(torch.stack([result["boxes"][0, :] for result in results]), expected_slice_boxes, rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(
+            torch.stack([result["scores"][0] for result in results]), expected_scores, rtol=1e-2, atol=1e-2
+        )
+        torch.testing.assert_close(
+            torch.stack([result["boxes"][0, :] for result in results]), expected_slice_boxes, rtol=1e-2, atol=1e-2
+        )
 
         expected_classes = [
             ["remote", "cat", "remote", "cat"],
@@ -885,8 +893,12 @@ class OmDetTurboModelIntegrationTests(unittest.TestCase):
             [[[0.2550, 0.5501, 0.4738, 0.8745], [0.7695, 0.4121, 0.4603, 0.7244], [0.7691, 0.4117, 0.4603, 0.7214]]]
         )
 
-        torch.testing.assert_close(cpu_outputs.decoder_class_logits[:3, :3], expected_class_logits, rtol=1e-1, atol=1e-1)
-        torch.testing.assert_close(cpu_outputs.decoder_coord_logits[:3, :3], expected_coord_logits, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            cpu_outputs.decoder_class_logits[:3, :3], expected_class_logits, rtol=1e-1, atol=1e-1
+        )
+        torch.testing.assert_close(
+            cpu_outputs.decoder_coord_logits[:3, :3], expected_coord_logits, rtol=1e-3, atol=1e-3
+        )
 
         # verify grounded postprocessing
         results_cpu = processor.post_process_grounded_object_detection(

@@ -540,7 +540,9 @@ class SamModelIntegrationTest(unittest.TestCase):
         scores = outputs.iou_scores.squeeze()
         masks = outputs.pred_masks[0, 0, 0, 0, :3]
         torch.testing.assert_close(scores[-1], torch.tensor(0.4515), rtol=2e-4, atol=2e-4)
-        torch.testing.assert_close(masks, torch.tensor([-4.1800, -3.4948, -3.4481]).to(torch_device), rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(
+            masks, torch.tensor([-4.1800, -3.4948, -3.4481]).to(torch_device), rtol=2e-4, atol=2e-4
+        )
 
     def test_inference_mask_generation_one_point_one_bb(self):
         model = SamModel.from_pretrained("facebook/sam-vit-base")
@@ -562,7 +564,9 @@ class SamModelIntegrationTest(unittest.TestCase):
         scores = outputs.iou_scores.squeeze()
         masks = outputs.pred_masks[0, 0, 0, 0, :3]
         torch.testing.assert_close(scores[-1], torch.tensor(0.9566), rtol=2e-4, atol=2e-4)
-        torch.testing.assert_close(masks, torch.tensor([-12.7729, -12.3665, -12.6061]).to(torch_device), rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(
+            masks, torch.tensor([-12.7729, -12.3665, -12.6061]).to(torch_device), rtol=2e-4, atol=2e-4
+        )
 
     def test_inference_mask_generation_batched_points_batched_images(self):
         model = SamModel.from_pretrained("facebook/sam-vit-base")

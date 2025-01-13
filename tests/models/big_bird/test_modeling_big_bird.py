@@ -674,7 +674,9 @@ class BigBirdModelIntegrationTest(unittest.TestCase):
             device=torch_device,
         )
 
-        torch.testing.assert_close(prediction_logits[0, 128:132, 128:132], expected_prediction_logits_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            prediction_logits[0, 128:132, 128:132], expected_prediction_logits_slice, rtol=1e-4, atol=1e-4
+        )
 
         expected_seq_relationship_logits = torch.tensor([[46.9465, 47.9517]], device=torch_device)
         torch.testing.assert_close(seq_relationship_logits, expected_seq_relationship_logits, rtol=1e-4, atol=1e-4)
@@ -701,7 +703,9 @@ class BigBirdModelIntegrationTest(unittest.TestCase):
             ],
             device=torch_device,
         )
-        torch.testing.assert_close(prediction_logits[0, 128:132, 128:132], expected_prediction_logits_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            prediction_logits[0, 128:132, 128:132], expected_prediction_logits_slice, rtol=1e-4, atol=1e-4
+        )
 
         expected_seq_relationship_logits = torch.tensor([[41.4503, 41.2406]], device=torch_device)
         torch.testing.assert_close(seq_relationship_logits, expected_seq_relationship_logits, rtol=1e-4, atol=1e-4)

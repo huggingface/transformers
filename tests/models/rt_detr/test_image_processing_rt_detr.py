@@ -409,9 +409,13 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
         )
         # verify image_id
-        torch.testing.assert_close(encoding_cpu["labels"][0]["image_id"], encoding_gpu["labels"][0]["image_id"].to("cpu"))
+        torch.testing.assert_close(
+            encoding_cpu["labels"][0]["image_id"], encoding_gpu["labels"][0]["image_id"].to("cpu")
+        )
         # verify is_crowd
-        torch.testing.assert_close(encoding_cpu["labels"][0]["iscrowd"], encoding_gpu["labels"][0]["iscrowd"].to("cpu"))
+        torch.testing.assert_close(
+            encoding_cpu["labels"][0]["iscrowd"], encoding_gpu["labels"][0]["iscrowd"].to("cpu")
+        )
         # verify class_labels
         self.assertTrue(
             torch.allclose(
@@ -419,6 +423,8 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             )
         )
         # verify orig_size
-        torch.testing.assert_close(encoding_cpu["labels"][0]["orig_size"], encoding_gpu["labels"][0]["orig_size"].to("cpu"))
+        torch.testing.assert_close(
+            encoding_cpu["labels"][0]["orig_size"], encoding_gpu["labels"][0]["orig_size"].to("cpu")
+        )
         # verify size
         torch.testing.assert_close(encoding_cpu["labels"][0]["size"], encoding_gpu["labels"][0]["size"].to("cpu"))

@@ -608,4 +608,6 @@ class TestSinusoidalPositionalEmbeddings(unittest.TestCase):
         )
         no_cache_pad_zero = emb1(input_ids)[0]
         # XXX: only the 1st line matches the 3rd
-        torch.testing.assert_close(torch.tensor(desired_weights, device=torch_device), no_cache_pad_zero[:3, :5], rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            torch.tensor(desired_weights, device=torch_device), no_cache_pad_zero[:3, :5], rtol=1e-3, atol=1e-3
+        )

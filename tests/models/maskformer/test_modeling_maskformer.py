@@ -580,7 +580,9 @@ class MaskFormerModelIntegrationTest(unittest.TestCase):
                 [1.0766e-04, -7.7630e00, -5.1263e00],
             ]
         ).to(torch_device)
-        torch.testing.assert_close(outputs.class_queries_logits[0, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
+        torch.testing.assert_close(
+            outputs.class_queries_logits[0, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE
+        )
 
     def test_inference_instance_segmentation_head_resnet_backbone(self):
         model = (
@@ -616,7 +618,9 @@ class MaskFormerModelIntegrationTest(unittest.TestCase):
         expected_slice = torch.tensor(
             [[4.7188, -3.2585, -2.8857], [6.6871, -2.9181, -1.2487], [7.2449, -2.2764, -2.1874]]
         ).to(torch_device)
-        torch.testing.assert_close(outputs.class_queries_logits[0, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE)
+        torch.testing.assert_close(
+            outputs.class_queries_logits[0, :3, :3], expected_slice, rtol=TOLERANCE, atol=TOLERANCE
+        )
 
     @require_torch_accelerator
     @require_torch_fp16

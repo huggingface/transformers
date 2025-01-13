@@ -232,7 +232,9 @@ class SegGptImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         )
 
         torch.testing.assert_close(inputs.pixel_values[0, :, :3, :3], expected_pixel_values, rtol=1e-4, atol=1e-4)
-        torch.testing.assert_close(inputs.prompt_pixel_values[0, :, :3, :3], expected_prompt_pixel_values, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            inputs.prompt_pixel_values[0, :, :3, :3], expected_prompt_pixel_values, rtol=1e-4, atol=1e-4
+        )
         torch.testing.assert_close(inputs.prompt_masks[0, :, :3, :3], expected_prompt_masks, rtol=1e-4, atol=1e-4)
 
     def test_prompt_mask_equivalence(self):

@@ -185,7 +185,9 @@ class YolosImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMix
         encoded_images_with_method = image_processing_1.pad(image_inputs, return_tensors="pt")
         encoded_images = image_processing_2(image_inputs, return_tensors="pt")
 
-        torch.testing.assert_close(encoded_images_with_method["pixel_values"], encoded_images["pixel_values"], rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(
+            encoded_images_with_method["pixel_values"], encoded_images["pixel_values"], rtol=1e-4, atol=1e-4
+        )
 
     @parameterized.expand(
         [

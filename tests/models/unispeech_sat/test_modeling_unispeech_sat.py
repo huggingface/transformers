@@ -845,7 +845,9 @@ class UniSpeechSatModelIntegrationTest(unittest.TestCase):
         )
         # fmt: on
 
-        torch.testing.assert_close(outputs.last_hidden_state[:, :2, -2:], expected_hidden_states_slice, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            outputs.last_hidden_state[:, :2, -2:], expected_hidden_states_slice, rtol=1e-3, atol=1e-3
+        )
 
     def test_inference_encoder_large(self):
         model = UniSpeechSatModel.from_pretrained("microsoft/unispeech-sat-large")
@@ -871,7 +873,9 @@ class UniSpeechSatModelIntegrationTest(unittest.TestCase):
         )
         # fmt: on
 
-        torch.testing.assert_close(outputs.last_hidden_state[:, :2, -2:], expected_hidden_states_slice, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            outputs.last_hidden_state[:, :2, -2:], expected_hidden_states_slice, rtol=1e-3, atol=1e-3
+        )
 
     def test_inference_diarization(self):
         model = UniSpeechSatForAudioFrameClassification.from_pretrained("microsoft/unispeech-sat-base-plus-sd").to(

@@ -1224,7 +1224,9 @@ class ReformerIntegrationTests(unittest.TestCase):
         input_ids, _ = self._get_input_ids_and_mask()
         loss = model(input_ids=input_ids, labels=input_ids)[0]
 
-        torch.testing.assert_close(loss, torch.tensor(5.8019, dtype=torch.float, device=torch_device), rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            loss, torch.tensor(5.8019, dtype=torch.float, device=torch_device), rtol=1e-3, atol=1e-3
+        )
         loss.backward()
 
         # check last grads to cover all proable errors
@@ -1264,7 +1266,9 @@ class ReformerIntegrationTests(unittest.TestCase):
         input_ids, _ = self._get_input_ids_and_mask()
         loss = model(input_ids=input_ids, labels=input_ids)[0]
 
-        torch.testing.assert_close(loss, torch.tensor(5.7854, dtype=torch.float, device=torch_device), rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            loss, torch.tensor(5.7854, dtype=torch.float, device=torch_device), rtol=1e-3, atol=1e-3
+        )
         loss.backward()
         # check last grads to cover all proable errors
         grad_slice_word = model.reformer.embeddings.word_embeddings.weight.grad[0, :5]

@@ -3237,7 +3237,10 @@ class ModelTesterMixin:
                 new_output = new_model(**inputs_dict_class)
 
                 if isinstance(base_output[0], tuple) and isinstance(new_output[0], tuple):
-                    [torch.testing.assert_close(a, b, rtol=1e-5, atol=1e-5) for a, b in zip(base_output[0], new_output[0])]
+                    [
+                        torch.testing.assert_close(a, b, rtol=1e-5, atol=1e-5)
+                        for a, b in zip(base_output[0], new_output[0])
+                    ]
                 else:
                     torch.testing.assert_close(base_output[0], new_output[0], rtol=1e-5, atol=1e-5)
 
@@ -3272,7 +3275,10 @@ class ModelTesterMixin:
                 new_output = new_model(**inputs_dict_class)
 
                 if isinstance(base_output[0], tuple) and isinstance(new_output[0], tuple):
-                    torch.testing.assert_close(a, b, rtol=1e-5, atol=1e-5) for a, b in zip(base_output[0], new_output[0])
+                    [
+                        torch.testing.assert_close(a, b, rtol=1e-5, atol=1e-5)
+                        for a, b in zip(base_output[0], new_output[0])
+                    ]
                 else:
                     torch.testing.assert_close(base_output[0], new_output[0], rtol=1e-5, atol=1e-5)
 
@@ -3311,7 +3317,10 @@ class ModelTesterMixin:
                     new_output = new_model(**inputs_dict_class)
 
                     if isinstance(base_output[0], tuple) and isinstance(new_output[0], tuple):
-                        torch.testing.assert_close(a, b, rtol=1e-5, atol=1e-5) for a, b in zip(base_output[0], new_output[0])
+                        [
+                            torch.testing.assert_close(a, b, rtol=1e-5, atol=1e-5)
+                            for a, b in zip(base_output[0], new_output[0])
+                        ]
                     else:
                         torch.testing.assert_close(base_output[0], new_output[0], rtol=1e-5, atol=1e-5)
 
@@ -3349,7 +3358,10 @@ class ModelTesterMixin:
                     new_output = new_model(**inputs_dict_class)
 
                     if isinstance(base_output[0], tuple) and isinstance(new_output[0], tuple):
-                        torch.testing.assert_close(a, b, rtol=1e-5, atol=1e-5) for a, b in zip(base_output[0], new_output[0])
+                        [
+                            torch.testing.assert_close(a, b, rtol=1e-5, atol=1e-5)
+                            for a, b in zip(base_output[0], new_output[0])
+                        ]
                     else:
                         torch.testing.assert_close(base_output[0], new_output[0], rtol=1e-5, atol=1e-5)
 
