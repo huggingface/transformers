@@ -2956,8 +2956,13 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
 
 
 class PerBatchIndexMaxLengthLogitsProcessor(LogitsProcessor):
-
-    def __init__(self, pad_token_id: Union[int, List[int], torch.Tensor], eos_token_id: Union[int, List[int], torch.Tensor], max_lengths: Union[List[int], torch.Tensor], device: str = "cpu"):
+    def __init__(
+        self,
+        pad_token_id: Union[int, List[int], torch.Tensor],
+        eos_token_id: Union[int, List[int], torch.Tensor],
+        max_lengths: Union[List[int], torch.Tensor],
+        device: str = "cpu",
+    ):
         r"""
         [`LogitsProcessor`] enforcing a max-length for each batch index.
 
@@ -2967,7 +2972,7 @@ class PerBatchIndexMaxLengthLogitsProcessor(LogitsProcessor):
             eos_token_id (`Union[int, List[int], torch.Tensor]`):
                 The id(s) of the *end-of-sequence* token.
             max_lengths (`Union[List[int], torch.Tensor]`):
-                The max lengths for each batch index. 
+                The max lengths for each batch index.
             device (`str`, *optional*, defaults to `"cpu"`):
                 The device to allocate the tensors.
         """
@@ -2975,12 +2980,12 @@ class PerBatchIndexMaxLengthLogitsProcessor(LogitsProcessor):
             if isinstance(pad_token_id, int):
                 pad_token_id = [pad_token_id]
             pad_token_id = torch.tensor(pad_token_id, device=device)
-        
+
         if not isinstance(eos_token_id, torch.Tensor):
             if isinstance(eos_token_id, int):
                 eos_token_id = [eos_token_id]
             eos_token_id = torch.tensor(eos_token_id, device=device)
-        
+
         if not isinstance(max_lengths, torch.Tensor):
             max_lengths = torch.tensor(max_lengths, device=device)
         max_lengths = max_lengths.unsqueeze(-1)
@@ -2991,12 +2996,14 @@ class PerBatchIndexMaxLengthLogitsProcessor(LogitsProcessor):
 
     def __call__(self, input_ids: torch.Tensor, scores: torch.Tensor) -> torch.Tensor:
         if input_ids.shape[0] != self.max_lengths.shape[0]:
-            raise ValueError(f"The number of batch indices ({input_ids.shape[0]}) does not match the number of max lengths ({self.max_lengths.shape[0]}) provided to PerBatchIndexMaxLengthLogitsProcessor.")
+            raise ValueError(
+                f"The number of batch indices ({input_ids.shape[0]}) does not match the number of max lengths ({self.max_lengths.shape[0]}) provided to PerBatchIndexMaxLengthLogitsProcessor."
+            )
         cur_len = input_ids.shape[-1]
         scores_processed = scores.clone()
         reached_max_lengths = cur_len >= self.max_lengths
         token_mask = reached_max_lengths.expand(-1, scores.shape[-1]).clone()
-        # token mask is (e.g. for idx 0 and 3 that reached their provided max length) 
+        # token mask is (e.g. for idx 0 and 3 that reached their provided max length)
         # [[True , ..., True ]
         #  [False, ..., False]
         #  [False, ..., False]
