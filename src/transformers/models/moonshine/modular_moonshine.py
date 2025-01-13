@@ -825,10 +825,9 @@ MOONSHINE_MODEL_INPUTS_DOCSTRING = r"""
             `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
             `input_values`, the [`AutoFeatureExtractor`] should be used for padding
             and conversion into a tensor of type `torch.FloatTensor`.
-        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
-            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
-            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
-            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
+        attention_mask (`torch.Tensor`)`, *optional*):
+            Moonshine does not support masking of the `input_values`, this argument is preserved for compatibility,
+            but it is not used.
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
@@ -837,9 +836,6 @@ MOONSHINE_MODEL_INPUTS_DOCSTRING = r"""
             [`PreTrainedTokenizer.__call__`] for details.
 
             [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor`)`, *optional*):
-            Moonshine does not support masking of the `input_values`, this argument is preserved for compatibility,
-            but it is not used.
         decoder_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
 
@@ -860,11 +856,10 @@ MOONSHINE_MODEL_INPUTS_DOCSTRING = r"""
 
             - 1 indicates the head is **not masked**,
             - 0 indicates the head is **masked**.
-        decoder_position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.n_positions - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
+        encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
+            Tuple consists of (`last_hidden_state`, *optional*: `hidden_states`, *optional*: `attentions`)
+            `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)`, *optional*) is a sequence of
+            hidden-states at the output of the last layer of the encoder. Used in the cross-attention of the decoder.
         past_key_values (`Cache` or `tuple(tuple(torch.FloatTensor))`, *optional*):
             Pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
             blocks) that can be used to speed up sequential decoding. This typically consists in the `past_key_values`
@@ -887,6 +882,11 @@ MOONSHINE_MODEL_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing `decoder_input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `decoder_input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
+        decoder_position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.n_positions - 1]`.
+
+            [What are position IDs?](../glossary#position-ids)
         use_cache (`bool`, *optional*):
             If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
             `past_key_values`).
@@ -1050,30 +1050,7 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
             Labels for computing the language modeling loss. Indices should either be in `[0, ..., config.vocab_size]`
             or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored (masked), the loss is
             only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
-
-        Returns:
-
-        Example:
-
-        ```python
-        >>> import torch
-        >>> from transformers import AutoProcessor, MoonshineForConditionalGeneration
-        >>> from datasets import load_dataset
-
-        >>> processor = AutoProcessor.from_pretrained("UsefulSensors/moonshine-tiny")
-        >>> model = MoonshineForConditionalGeneration.from_pretrained("UsefulSensors/moonshine-tiny")
-
-        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-
-        >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="pt")
-        >>> input_values = inputs.input_values
-
-        >>> generated_ids = model.generate(input_values, max_new_tokens=100)
-
-        >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-        >>> transcription
-        'Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.'
-        ```"""
+        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None:
@@ -1118,14 +1095,70 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
             encoder_attentions=outputs.encoder_attentions,
         )
 
-    def generate(self, input_values, infer_max_length_from_input: bool = True, **kwargs):
+    def generate(
+        self,
+        input_values,
+        infer_max_length_from_input: bool = True,
+        tokens_per_second: float = None,
+        **generate_kwargs,
+    ):
+        """
+        Overrides GenerationMixin's [`~generation.GenerationMixin.generate`] method to add PerBatchIndexMaxLengthLogitsProcessor by default.
+        Indeed Moonshine model uses per-batch-index max length that are inferred from the input audio length.
+        Overall behavior, parameters and return type are the same as the original [`~generation.GenerationMixin.generate`] method.
+
+        Parameters:
+            input_values (`torch.FloatTensor` of shape `(batch_size, audio_length)`):
+                Float values of the raw speech waveform. Raw speech waveform can be
+                obtained by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a
+                `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
+                `input_values`, the [`AutoFeatureExtractor`] should be used for padding
+                and conversion into a tensor of type `torch.FloatTensor`.
+            infer_max_length_from_input (bool, *optional*, defaults to True):
+                Whether to infer per-batch-index max length from the input audio length.
+                If set to False, behavior is the same as the original [`~generation.GenerationMixin.generate`] method.
+            tokens_per_second (float, *optional*):
+                The number of tokens per second used to infer the per-batch-index max length.
+                If not provided, it defaults to the model's config `tokens_per_second` attribute.
+            generate_kwargs (Dict[str, Any]):
+                Additional keyword arguments to be passed to the [`~generation.GenerationMixin.generate`] method.
+
+        Returns:
+            [`~utils.ModelOutput`] or `torch.LongTensor`: A [`~utils.ModelOutput`] (if `return_dict_in_generate=True`
+            or when `config.return_dict_in_generate=True`) or a `torch.LongTensor`.
+
+                Same as the original [`~generation.GenerationMixin.generate`] method.
+
+        Example:
+
+        ```python
+        >>> import torch
+        >>> from transformers import AutoProcessor, MoonshineForConditionalGeneration
+        >>> from datasets import load_dataset
+
+        >>> processor = AutoProcessor.from_pretrained("UsefulSensors/moonshine-tiny")
+        >>> model = MoonshineForConditionalGeneration.from_pretrained("UsefulSensors/moonshine-tiny")
+
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+
+        >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="pt")
+        >>> input_values = inputs.input_values
+
+        >>> generated_ids = model.generate(input_values)
+
+        >>> transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+        >>> transcription
+        'Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.'
+        ```
+        """
+
         if infer_max_length_from_input:
-            tokens_per_second = self.config.tokens_per_second
-            frame_rate = self.config.frame_rate
+            tokens_per_second = tokens_per_second if tokens_per_second is not None else self.config.tokens_per_second
+            frame_rate = 16000  # no need to be exposed to the user
             token_limit_factor = tokens_per_second / frame_rate
 
-            if kwargs.get("attention_mask") is not None:
-                seq_lens = kwargs["attention_mask"].sum(dim=-1)
+            if generate_kwargs.get("attention_mask") is not None:
+                seq_lens = generate_kwargs["attention_mask"].sum(dim=-1)
             else:
                 seq_lens = torch.tensor(input_values.shape[-1], device=input_values.device).expand(
                     input_values.shape[0]
@@ -1153,9 +1186,9 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
                     max_lengths=batch_idx_max_lengths,
                 )
             )
-            kwargs["logits_processor"] = logits_processor
+            generate_kwargs["logits_processor"] = logits_processor
 
-        return super().generate(input_values, **kwargs)
+        return super().generate(input_values, **generate_kwargs)
 
 
 __all__ = [
