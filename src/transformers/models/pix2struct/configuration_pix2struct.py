@@ -88,6 +88,10 @@ class Pix2StructTextConfig(PretrainedConfig):
         "hidden_size": "hidden_size",
         "num_attention_heads": "num_heads",
         "num_hidden_layers": "num_layers",
+        "decoder_attention_heads": "num_heads",
+        "encoder_attention_heads": "num_heads",
+        "encoder_layers": "num_layers",
+        "decoder_layers": "num_layers",
     }
 
     def __init__(
@@ -311,6 +315,8 @@ class Pix2StructConfig(PretrainedConfig):
             vision_config = {}
             logger.info("vision_config is None. Initializing the Pix2StructVisionConfig with default values.")
 
+        text_config["is_encoder_decoder"] = is_encoder_decoder
+        text_config["tie_word_embeddings"] = tie_word_embeddings
         self.text_config = Pix2StructTextConfig(**text_config)
         self.vision_config = Pix2StructVisionConfig(**vision_config)
 
@@ -339,3 +345,6 @@ class Pix2StructConfig(PretrainedConfig):
         """
 
         return cls(text_config=text_config.to_dict(), vision_config=vision_config.to_dict(), **kwargs)
+
+
+__all__ = ["Pix2StructConfig", "Pix2StructTextConfig", "Pix2StructVisionConfig"]

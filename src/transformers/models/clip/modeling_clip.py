@@ -277,6 +277,13 @@ class CLIPTextEmbeddings(nn.Module):
         inputs_embeds: Optional[torch.FloatTensor] = None,
     ) -> torch.Tensor:
         seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
+        max_position_embedding = self.position_embedding.weight.shape[0]
+
+        if seq_length > max_position_embedding:
+            raise ValueError(
+                f"Sequence length must be less than max_position_embeddings (got `sequence length`: "
+                f"{seq_length} and max_position_embeddings: {max_position_embedding}"
+            )
 
         if position_ids is None:
             position_ids = self.position_ids[:, :seq_length]
@@ -401,7 +408,6 @@ class CLIPFlashAttention2(CLIPAttention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -1677,3 +1683,14 @@ class CLIPForImageClassification(CLIPPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "CLIPModel",
+    "CLIPPreTrainedModel",
+    "CLIPTextModel",
+    "CLIPTextModelWithProjection",
+    "CLIPVisionModel",
+    "CLIPVisionModelWithProjection",
+    "CLIPForImageClassification",
+]

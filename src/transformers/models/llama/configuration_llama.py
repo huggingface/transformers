@@ -124,7 +124,7 @@ class LlamaConfig(PretrainedConfig):
         mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
         head_dim (`int`, *optional*):
-            The attention head dimension. If None, it will default to hidden_size // num_heads
+            The attention head dimension. If None, it will default to hidden_size // num_attention_heads
 
     ```python
     >>> from transformers import LlamaModel, LlamaConfig
@@ -141,6 +141,16 @@ class LlamaConfig(PretrainedConfig):
 
     model_type = "llama"
     keys_to_ignore_at_inference = ["past_key_values"]
+    # Default tensor parallel plan for base model `LlamaModel`
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
 
     def __init__(
         self,
@@ -204,3 +214,6 @@ class LlamaConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+
+
+__all__ = ["LlamaConfig"]

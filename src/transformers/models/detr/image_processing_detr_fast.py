@@ -72,17 +72,15 @@ if is_torch_available():
 if is_vision_available():
     import PIL
 
+    from ...image_utils import pil_torch_interpolation_mapping
 
-if is_torchvision_available():
+
+if is_torchvision_v2_available():
     from torchvision.io import read_image
-
-    if is_vision_available():
-        from ...image_utils import pil_torch_interpolation_mapping
-
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
+    from torchvision.transforms.v2 import functional as F
+elif is_torchvision_available():
+    from torchvision.io import read_image
+    from torchvision.transforms import functional as F
 
 
 logger = logging.get_logger(__name__)
@@ -416,7 +414,7 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
         """
         Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
-        created using from_dict and kwargs e.g. `DetrImageProcessor.from_pretrained(checkpoint, size=600,
+        created using from_dict and kwargs e.g. `DetrImageProcessorFast.from_pretrained(checkpoint, size=600,
         max_size=800)`
         """
         image_processor_dict = image_processor_dict.copy()
@@ -863,6 +861,7 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
             input_data_format = infer_channel_dimension_format(images[0])
         if input_data_format == ChannelDimension.LAST:
             images = [image.permute(2, 0, 1).contiguous() for image in images]
+            input_data_format = ChannelDimension.FIRST
 
         if do_rescale and do_normalize:
             # fused rescale and normalize
@@ -1494,3 +1493,6 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
 
             results.append({"segmentation": segmentation, "segments_info": segments})
         return results
+
+
+__all__ = ["DetrImageProcessorFast"]

@@ -28,7 +28,7 @@ from collections.abc import Mapping, Sized
 from contextlib import contextmanager
 from dataclasses import dataclass
 from inspect import isfunction
-from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
 from packaging import version
@@ -145,6 +145,7 @@ AudioInput = Union["np.ndarray", "torch.Tensor", List["np.ndarray"], List["torch
 SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
 ADDED_TOKENS_FILE = "added_tokens.json"
 TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
+CHAT_TEMPLATE_FILE = "chat_template.jinja"
 
 # Fast tokenizers (provided by HuggingFace tokenizer's library) can be saved in a single file
 FULL_TOKENIZER_FILE = "tokenizer.json"
@@ -798,12 +799,13 @@ class BatchEncoding(UserDict):
 
         return self
 
-    def to(self, device: Union[str, "torch.device"]) -> "BatchEncoding":
+    def to(self, device: Union[str, "torch.device"], *, non_blocking: bool = False) -> "BatchEncoding":
         """
-        Send all values to device by calling `v.to(device)` (PyTorch only).
+        Send all values to device by calling `v.to(device, non_blocking=non_blocking)` (PyTorch only).
 
         Args:
             device (`str` or `torch.device`): The device to put the tensors on.
+            non_blocking (`bool`): Whether to perform the copy asynchronously.
 
         Returns:
             [`BatchEncoding`]: The same instance after modification.
@@ -815,7 +817,10 @@ class BatchEncoding(UserDict):
         # Otherwise it passes the casts down and casts the LongTensor containing the token idxs
         # into a HalfTensor
         if isinstance(device, str) or is_torch_device(device) or isinstance(device, int):
-            self.data = {k: v.to(device=device) if isinstance(v, torch.Tensor) else v for k, v in self.data.items()}
+            self.data = {
+                k: v.to(device=device, non_blocking=non_blocking) if isinstance(v, torch.Tensor) else v
+                for k, v in self.data.items()
+            }
         else:
             logger.warning(f"Attempting to cast a BatchEncoding to type {str(device)}. This is not supported.")
         return self
@@ -1000,7 +1005,7 @@ class SpecialTokensMixin:
     ) -> int:
         """
         Add a list of new tokens to the tokenizer class. If the new tokens are not in the vocabulary, they are added to
-        it with indices starting from length of the current vocabulary and and will be isolated before the tokenization
+        it with indices starting from length of the current vocabulary and will be isolated before the tokenization
         algorithm is applied. Added tokens and tokens from the vocabulary of the tokenization algorithm are therefore
         not treated in the same way.
 
@@ -1522,7 +1527,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
     def apply_chat_template(
         self,
         conversation: Union[List[Dict[str, str]], List[List[Dict[str, str]]]],
-        tools: Optional[List[Dict]] = None,
+        tools: Optional[List[Union[Dict, Callable]]] = None,
         documents: Optional[List[Dict[str, str]]] = None,
         chat_template: Optional[str] = None,
         add_generation_prompt: bool = False,
@@ -1941,6 +1946,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     "tokenizer_config_file": TOKENIZER_CONFIG_FILE,
                     # tokenizer_file used to initialize a slow from a fast. Properly copy the `addedTokens` instead of adding in random orders
                     "tokenizer_file": FULL_TOKENIZER_FILE,
+                    "chat_template_file": CHAT_TEMPLATE_FILE,
                 }
                 vocab_files = {**cls.vocab_files_names, **additional_files_names}
                 if "tokenizer_file" in vocab_files:
@@ -2096,6 +2102,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         else:
             config_tokenizer_class = None
             init_kwargs = init_configuration
+
+        # If an independent chat template file exists, it takes priority over template entries in the tokenizer config
+        chat_template_file = resolved_vocab_files.pop("chat_template_file", None)
+        if chat_template_file is not None:
+            with open(chat_template_file) as chat_template_handle:
+                init_kwargs["chat_template"] = chat_template_handle.read()  # Clobbers any template in the config
 
         if not _is_local:
             if "auto_map" in init_kwargs:
@@ -2396,6 +2408,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         tokenizer_config_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + TOKENIZER_CONFIG_FILE
         )
+        chat_template_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + CHAT_TEMPLATE_FILE
+        )
 
         tokenizer_config = copy.deepcopy(self.init_kwargs)
 
@@ -2414,11 +2429,21 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             tokenizer_config["extra_special_tokens"] = self.extra_special_tokens
             tokenizer_config.update(self.extra_special_tokens)
 
+        saved_raw_chat_template = False
         if self.chat_template is not None:
             if isinstance(self.chat_template, dict):
                 # Chat template dicts are saved to the config as lists of dicts with fixed key names.
                 # They will be reconstructed as a single dict during loading.
+                # We're trying to discourage chat template dicts, and they are always
+                # saved in the config, never as single files.
                 tokenizer_config["chat_template"] = [{"name": k, "template": v} for k, v in self.chat_template.items()]
+            elif kwargs.get("save_raw_chat_template", False):
+                with open(chat_template_file, "w", encoding="utf-8") as f:
+                    f.write(self.chat_template)
+                saved_raw_chat_template = True
+                logger.info(f"chat template saved in {chat_template_file}")
+                if "chat_template" in tokenizer_config:
+                    tokenizer_config.pop("chat_template")  # To ensure it doesn't somehow end up in the config too
             else:
                 tokenizer_config["chat_template"] = self.chat_template
 
@@ -2475,6 +2500,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         logger.info(f"Special tokens file saved in {special_tokens_map_file}")
 
         file_names = (tokenizer_config_file, special_tokens_map_file)
+        if saved_raw_chat_template:
+            file_names += (chat_template_file,)
 
         save_files = self._save_pretrained(
             save_directory=save_directory,

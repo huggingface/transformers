@@ -20,7 +20,7 @@ To create the package for pypi.
 1. Create the release branch named: v<RELEASE>-release, for example v4.19-release. For a patch release checkout the
    current release branch.
 
-   If releasing on a special branch, copy the updated README.md on the main branch for your the commit you will make
+   If releasing on a special branch, copy the updated README.md on the main branch for the commit you will make
    for the post-release and run `make fix-copies` on the main branch as well.
 
 2. Run `make pre-release` (or `make pre-patch` for a patch release) and commit these changes with the message:
@@ -100,7 +100,7 @@ _deps = [
     "av==9.2.0",  # Latest version of PyAV (10.0.0) has issues with audio stream.
     "beautifulsoup4",
     "blobfile",
-    "codecarbon==1.2.0",
+    "codecarbon>=2.8.1",
     "cookiecutter==1.7.3",
     "dataclasses",
     "datasets!=2.5.0",
@@ -148,6 +148,7 @@ _deps = [
     "pyyaml>=5.1",
     "pydantic",
     "pytest>=7.2.0,<8.0.0",
+    "pytest-asyncio",
     "pytest-timeout",
     "pytest-xdist",
     "python>=3.9.0",
@@ -179,9 +180,9 @@ _deps = [
     "tf2onnx",
     "timeout-decorator",
     "tiktoken",
-    "timm<=0.9.16",
-    "tokenizers>=0.20,<0.21",
-    "torch",
+    "timm<=1.0.11",
+    "tokenizers>=0.21,<0.22",
+    "torch>=2.0",
     "torchaudio",
     "torchvision",
     "pyctcdecode>=0.4.0",
@@ -319,6 +320,7 @@ extras["tiktoken"] = deps_list("tiktoken", "blobfile")
 extras["testing"] = (
     deps_list(
         "pytest",
+        "pytest-asyncio",
         "pytest-rich",
         "pytest-xdist",
         "timeout-decorator",
@@ -435,7 +437,7 @@ install_requires = [
 
 setup(
     name="transformers",
-    version="4.47.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
+    version="4.49.0.dev0",  # expected format is one of x.y.z.dev0, or x.y.z.rc1 or x.y.z (no to dashes, yes to dots)
     author="The Hugging Face team (past and future) with the help of all our contributors (https://github.com/huggingface/transformers/graphs/contributors)",
     author_email="transformers@huggingface.co",
     description="State-of-the-art Machine Learning for JAX, PyTorch and TensorFlow",

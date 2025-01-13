@@ -47,8 +47,6 @@ from ...test_modeling_common import (
 if is_torch_available():
     import torch
 
-else:
-    is_torch_greater_or_equal_than_2_0 = False
 
 if is_vision_available():
     from PIL import Image
@@ -255,7 +253,7 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         """
         Tests that VLMs through an error with explicit message saying what is wrong
         when number of images don't match number of image tokens in the text.
-        Also we need to test multi-image cases when one prompr has multiple image tokens.
+        Also we need to test multi-image cases when one prompt has multiple image tokens.
         """
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
@@ -284,24 +282,6 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
             pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
             image_grid_thw = torch.cat([image_grid_thw, image_grid_thw], dim=0)
             _ = model(input_ids=input_ids, pixel_values=pixel_values, image_grid_thw=image_grid_thw)
-
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
 
     @unittest.skip(reason="Feedforward chunking is not yet supported")
     def test_feed_forward_chunking(self):
@@ -349,6 +329,10 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         reason="VLMs can't generate from inputs embeds and pixels. This can be tested as part of bacbone LM, no need to run the tes for VLMs"
     )
     def test_generate_from_inputs_embeds_with_static_cache(self):
+        pass
+
+    @unittest.skip(reason="Can't compile fullgraph due to dynamic control flow in `prepare_inputs_for_generate`")
+    def test_generate_compile_fullgraph(self):
         pass
 
 

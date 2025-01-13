@@ -62,6 +62,7 @@ class ChameleonProcessor(ProcessorMixin):
 
     attributes = ["image_processor", "tokenizer"]
     tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
+    valid_kwargs = ["image_seq_length", "image_token"]
     image_processor_class = "ChameleonImageProcessor"
 
     def __init__(self, image_processor, tokenizer, image_seq_length: int = 1024, image_token: str = "<image>"):
@@ -168,3 +169,6 @@ class ChameleonProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+
+__all__ = ["ChameleonProcessor"]
