@@ -152,6 +152,7 @@ if is_accelerate_available():
     from accelerate import Accelerator
     from accelerate.state import AcceleratorState
 
+
 PATH_SAMPLE_TEXT = f"{get_tests_dir()}/fixtures/sample_text.txt"
 
 
