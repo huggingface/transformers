@@ -381,7 +381,7 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         result = model(input_ids, attention_mask=attention_mask)
         bs, seqlen = input_ids.shape
         self.assertEqual(result.router_logits[0].shape, (bs * seqlen, config.num_experts))
-        torch.testing.assert_close(result.aux_loss.cpu(), torch.tensor(2, dtype=torch.float32), rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(result.aux_loss.cpu(), torch.tensor(2, dtype=torch.float32), rtol=1e-2, rtol=1e-2, atol=1e-2)
 
         # First, we make sure that adding padding tokens doesn't change the loss
         # loss(input_ids, attention_mask=None) == loss(input_ids + padding, attention_mask=attention_mask_with_padding)
@@ -394,7 +394,7 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         padded_attention_mask = padded_input_ids.ne(config.pad_token_id).to(torch_device)
 
         padded_result = model(padded_input_ids, attention_mask=padded_attention_mask)
-        torch.testing.assert_close(result.aux_loss.cpu(), padded_result.aux_loss.cpu(), rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(result.aux_loss.cpu(), padded_result.aux_loss.cpu(), rtol=1e-4, rtol=1e-4, atol=1e-4)
 
         # We make sure that the loss of including padding tokens != the loss without padding tokens
         # if attention_mask=None --> we don't exclude padding tokens
@@ -416,10 +416,10 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 if param.requires_grad:
                     if "A_log" in name:
                         A = torch.arange(1, config.mamba_d_state + 1, dtype=torch.float32)[None, :]
-                        self.assertTrue(torch.allclose(param.data, torch.log(A), atol=1e-5, rtol=1e-5))
+                        torch.testing.assert_close(param.data, torch.log(A), rtol=1e-5, atol=1e-5)
                     elif "D" in name:
                         # check if it's a ones like
-                        self.assertTrue(torch.allclose(param.data, torch.ones_like(param.data), atol=1e-5, rtol=1e-5))
+                        torch.testing.assert_close(param.data, torch.ones_like(param.data), rtol=1e-5, atol=1e-5)
                     else:
                         self.assertIn(
                             ((param.data.mean() * 1e9).round() / 1e9).item(),
@@ -609,7 +609,7 @@ class JambaModelIntegrationTest(unittest.TestCase):
                 ]
                 , dtype=torch.float32)  # fmt: skip
 
-            torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD, rtol=1e-3, atol=1e-3)
+            torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD, rtol=1e-3, rtol=1e-3, atol=1e-3)
 
     @slow
     def test_simple_batched_generate_with_padding(self):
@@ -668,5 +668,5 @@ class JambaModelIntegrationTest(unittest.TestCase):
                 ]
                 , dtype=torch.float32)  # fmt: skip
 
-            torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_0, rtol=1e-3, atol=1e-3)
-            torch.testing.assert_close(logits[1, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_1, rtol=1e-3, atol=1e-3)
+            torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_0, rtol=1e-3, rtol=1e-3, atol=1e-3)
+            torch.testing.assert_close(logits[1, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_1, rtol=1e-3, rtol=1e-3, atol=1e-3)

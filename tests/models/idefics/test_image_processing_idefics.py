@@ -189,7 +189,7 @@ class IdeficsImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         pixel_values_transform_implied = image_processor(image_inputs, transform=None, return_tensors="pt")
         pixel_values_transform_supplied = image_processor(image_inputs, transform=transform, return_tensors="pt")
 
-        torch.testing.assert_close(pixel_values_transform_implied, pixel_values_transform_supplied, rtol=0.0, atol=0.0)
+        torch.testing.assert_close(pixel_values_transform_implied, pixel_values_transform_supplied, rtol=0.0, rtol=0.0, atol=0.0)
 
     @unittest.skip(reason="not supported")
     def test_call_numpy(self):
