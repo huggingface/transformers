@@ -27,6 +27,7 @@ import torch.nn as nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
 from ...generation import GenerationMixin
+from ...generation.logits_process import LogitsProcessorList, PerBatchIndexMaxLengthLogitsProcessor
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
@@ -46,7 +47,6 @@ from ...utils import (
     replace_return_docstrings,
 )
 from .configuration_moonshine import MoonshineConfig
-from ...generation.logits_process import LogitsProcessorList, PerBatchIndexMaxLengthLogitsProcessor
 
 
 logger = logging.get_logger(__name__)
@@ -1550,28 +1550,8 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
             encoder_attentions=outputs.encoder_attentions,
         )
 
-    def generate(
-        self, 
-        input_values,
-        infer_max_length_from_input: bool = True,
-        **kwargs
-    ): 
+    def generate(self, input_values, infer_max_length_from_input: bool = True, **kwargs):
         if infer_max_length_from_input:
-
-            if kwargs.get("max_new_tokens") is not None:
-                logger.warning("TODO")
-                kwargs.pop("max_new_tokens")
-            
-            # retreive the model default max_length that will be further applied respecting priority order
-            if kwargs.get("max_length") is not None:
-                default_max_length = kwargs.get("max_length")
-            elif kwargs.get("generation_config") is None:
-                default_max_length = self.config.max_length
-            else:
-                generation_config = kwargs.get("generation_config")
-                # TODO: check type ?
-                default_max_length = generation_config.max_length
-
             tokens_per_second = self.config.tokens_per_second
             frame_rate = self.config.frame_rate
             token_limit_factor = tokens_per_second / frame_rate
@@ -1579,7 +1559,9 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
             if kwargs.get("attention_mask") is not None:
                 seq_lens = kwargs["attention_mask"].sum(dim=-1)
             else:
-                seq_lens = torch.tensor(input_values.shape[-1], device=input_values.device).expand(input_values.shape[0])
+                seq_lens = torch.tensor(input_values.shape[-1], device=input_values.device).expand(
+                    input_values.shape[0]
+                )
                 if input_values.shape[0] > 1:
                     logger.warning(
                         "For batched inputs, it is recommended to pass an attention mask to the model to infer the correct audio length."
@@ -1587,34 +1569,22 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
 
             # custom logits processor to limit the number of tokens generated per batch index
             batch_idx_max_lengths = (token_limit_factor * seq_lens).to(torch.int)
-            min_length = batch_idx_max_lengths.min().item()
             max_length = batch_idx_max_lengths.max().item()
 
-            # warn the user if the model default max length is going to supersede the max length infered from the input
-            if default_max_length < min_length:
-                if seq_lens.shape[0] > 1:
-                    logger.warning(
-                        f"Default max length ({default_max_length}) will be used since it is lower than the lowest max length ({max_length}) infered from provided batched input ({tokens_per_second} tokens/sec at {frame_rate} Hz). "
-                        "To adjust this limit, you can modify `max_length`, `tokens_per_second` and `frame_rate` in the model config, or explicitly set `max_new_tokens` or `max_length`."
-                    )
-                else:
-                    logger.warning(
-                        f"Default max length ({default_max_length}) will be used since it is lower than the max length ({max_length}) infered from the provided input ({tokens_per_second} tokens/sec at {frame_rate} Hz). "
-                        "To adjust this limit, you can modify `max_length`, `tokens_per_second` and `frame_rate` in the model config, or explicitly set `max_new_tokens` or `max_length`."
-                    )
-            else:
-                logger.warning(
-                    f"By default, Moonshine will automatically limit generation to up to {max_length} tokens based on the input audio length ({tokens_per_second} tokens/sec at {frame_rate} Hz). "
-                    "To disable this behavior, set `infer_max_length_from_input` to False. "
-                    "To adjust this limit, you can modify `tokens_per_second` and `frame_rate` in the model config."
-                )
-    
+            logger.warning(
+                f"By default, Moonshine will automatically limit generation to up to {max_length} tokens based on the input audio length ({tokens_per_second} tokens/sec at {frame_rate} Hz). "
+                "To disable this behavior, set `infer_max_length_from_input` to False. "
+                "To adjust this limit, you can modify `tokens_per_second` and `frame_rate` in the model config. "
+            )
+
             logits_processor = LogitsProcessorList()
-            logits_processor.append(PerBatchIndexMaxLengthLogitsProcessor(
-                pad_token_id=self.config.pad_token_id,
-                eos_token_id=self.config.eos_token_id,
-                max_lengths=batch_idx_max_lengths    
-            ))
+            logits_processor.append(
+                PerBatchIndexMaxLengthLogitsProcessor(
+                    pad_token_id=self.config.pad_token_id,
+                    eos_token_id=self.config.eos_token_id,
+                    max_lengths=batch_idx_max_lengths,
+                )
+            )
             kwargs["logits_processor"] = logits_processor
 
         return super().generate(input_values, **kwargs)
