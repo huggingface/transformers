@@ -91,7 +91,19 @@ image_pose_result = pose_results[0]  # results for first image
 
 ### ViTPose++ models
 
-The best checkpoints are those of the [ViTPose++ paper](https://arxiv.org/abs/2212.04246). ViTPose++ models employ a so-called [Mixture-of-Experts (MoE)](https://huggingface.co/blog/moe) architecture for the ViT backbone, resulting in better performance. The ViTPose++ models require the `dataset_index` argument to be passed in the forward of the model, to indicate which experts to use for each example in the batch. Example usage is shown below:
+The best checkpoints are those of the [ViTPose++ paper](https://arxiv.org/abs/2212.04246). ViTPose++ models employ a so-called [Mixture-of-Experts (MoE)](https://huggingface.co/blog/moe) architecture for the ViT backbone, resulting in better performance.
+
+The ViTPose+ checkpoints use 6 experts, hence 6 different dataset indices can be passed. 
+An overview of the various dataset indices is provided below:
+
+- 0: [COCO validation 2017](https://cocodataset.org/#overview) dataset, using an object detector that gets 56 AP on the "person" class
+- 1: [AiC](https://github.com/fabbrimatteo/AiC-Dataset) dataset
+- 2: [MPII](https://www.mpi-inf.mpg.de/departments/computer-vision-and-machine-learning/software-and-datasets/mpii-human-pose-dataset) dataset
+- 3: [AP-10K](https://github.com/AlexTheBad/AP-10K) dataset
+- 4: [APT-36K](https://github.com/pandorgan/APT-36K) dataset
+- 5: [COCO-WholeBody](https://github.com/jin-s13/COCO-WholeBody) dataset
+
+Pass the `dataset_index` argument in the forward of the model to indicate which experts to use for each example in the batch. Example usage is shown below:
 
 ```python
 image_processor = AutoProcessor.from_pretrained("usyd-community/vitpose-plus-base")
