@@ -709,6 +709,10 @@ _import_structure = {
         "Qwen2Config",
         "Qwen2Tokenizer",
     ],
+    "models.qwen2_5_vl": [
+        "Qwen2_5_VLConfig",
+        "Qwen2_5_VLProcessor",
+    ],
     "models.qwen2_audio": [
         "Qwen2AudioConfig",
         "Qwen2AudioEncoderConfig",
@@ -1262,6 +1266,7 @@ else:
     _import_structure["models.pixtral"].append("PixtralImageProcessor")
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
+    _import_structure["models.qwen2_5_vl"].extend(["Qwen2_5_VLImageProcessor"])
     _import_structure["models.qwen2_vl"].extend(["Qwen2VLImageProcessor"])
     _import_structure["models.rt_detr"].extend(["RTDetrImageProcessor"])
     _import_structure["models.sam"].extend(["SamImageProcessor"])
@@ -3274,6 +3279,13 @@ else:
             "Qwen2ForTokenClassification",
             "Qwen2Model",
             "Qwen2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.qwen2_5_vl"].extend(
+        [
+            "Qwen2_5_VLForConditionalGeneration",
+            "Qwen2_5_VLModel",
+            "Qwen2_5_VLPreTrainedModel",
         ]
     )
     _import_structure["models.qwen2_audio"].extend(
@@ -5779,6 +5791,10 @@ if TYPE_CHECKING:
     from .models.pvt import PvtConfig
     from .models.pvt_v2 import PvtV2Config
     from .models.qwen2 import Qwen2Config, Qwen2Tokenizer
+    from .models.qwen2_5_vl import (
+        Qwen2_5_VLConfig,
+        Qwen2_5_VLProcessor,
+    )
     from .models.qwen2_audio import (
         Qwen2AudioConfig,
         Qwen2AudioEncoderConfig,
@@ -6356,6 +6372,7 @@ if TYPE_CHECKING:
             PoolFormerImageProcessor,
         )
         from .models.pvt import PvtImageProcessor
+        from .models.qwen2_5_vl import Qwen2_5_VLImageProcessor
         from .models.qwen2_vl import Qwen2VLImageProcessor
         from .models.rt_detr import RTDetrImageProcessor
         from .models.sam import SamImageProcessor
@@ -7975,6 +7992,11 @@ if TYPE_CHECKING:
             Qwen2ForTokenClassification,
             Qwen2Model,
             Qwen2PreTrainedModel,
+        )
+        from .models.qwen2_5_vl import (
+            Qwen2_5_VLForConditionalGeneration,
+            Qwen2_5_VLModel,
+            Qwen2_5_VLPreTrainedModel,
         )
         from .models.qwen2_audio import (
             Qwen2AudioEncoder,
