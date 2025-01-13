@@ -26,7 +26,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ..helium.test_modeling_gemma import HeliumModelTest, HeliumModelTester
+from ..gemma.test_modeling_gemma import GemmaModelTest, GemmaModelTester
 from ...test_configuration_common import ConfigTester
 
 
@@ -41,7 +41,7 @@ if is_torch_available():
     )
 
 
-class HeliumModelTester(HeliumModelTester):
+class HeliumModelTester(GemmaModelTester):
     if is_torch_available():
         config_class = HeliumConfig
         model_class = HeliumModel
@@ -51,7 +51,7 @@ class HeliumModelTester(HeliumModelTester):
 
 
 @require_torch
-class HeliumModelTest(HeliumModelTest, unittest.TestCase):
+class HeliumModelTest(GemmaModelTest, unittest.TestCase):
     all_model_classes = (
         (HeliumModel, HeliumForCausalLM, HeliumForSequenceClassification, HeliumForTokenClassification)
         if is_torch_available()
