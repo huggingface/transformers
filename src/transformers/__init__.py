@@ -7382,6 +7382,13 @@ if TYPE_CHECKING:
             GroupViTTextModel,
             GroupViTVisionModel,
         )
+        from .models.helium import (
+            HeliumForCausalLM,
+            HeliumForSequenceClassification,
+            HeliumForTokenClassification,
+            HeliumModel,
+            HeliumPreTrainedModel,
+        )
         from .models.hiera import (
             HieraBackbone,
             HieraForImageClassification,

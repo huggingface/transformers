@@ -1454,7 +1454,6 @@ class HeliumConverter(SpmConverter):
 
         Converter.__init__(self, vocab_file)
 
-        # from .utils import sentencepiece_model_pb2 as model_pb2
         model_pb2 = import_protobuf()
 
         m = model_pb2.ModelProto()
@@ -1513,14 +1512,10 @@ class HeliumConverter(SpmConverter):
         return decoders.Sequence(sequence)
 
     def normalizer(self, proto):
-        return normalizers.Sequence(
-            [normalizers.Prepend(" "), normalizers.Replace(r" ", "▁")]
-        )  # , normalizers.Replace("\n", "<0x0A>" )])
+        return normalizers.Sequence([normalizers.Prepend(" "), normalizers.Replace(r" ", "▁")])
 
     def pre_tokenizer(self, replacement, add_prefix_space):
-        return pre_tokenizers.Sequence(
-            [pre_tokenizers.Split("\n", "contiguous")]
-        )  # (prepend_scheme="always", split=True)])
+        return pre_tokenizers.Sequence([pre_tokenizers.Split("\n", "contiguous")])
 
     def post_processor(self):
         return processors.TemplateProcessing(
