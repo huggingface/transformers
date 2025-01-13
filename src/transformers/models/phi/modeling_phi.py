@@ -727,7 +727,7 @@ class PhiForCausalLM(PhiPreTrainedModel, GenerationMixin):
         super().__init__(config)
         self.model = PhiModel(config)
         self.vocab_size = config.vocab_size
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=True)
 
         # Initialize weights and apply final processing
         self.post_init()
