@@ -224,7 +224,7 @@ class Gemma2Attention(nn.Module):
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
             # Here we need to slice as we use a static cache by default, but FA2 does not support it
-            if self.config._attn_implementation == "flash_attention_2":
+            if attention_mask is not None and self.config._attn_implementation == "flash_attention_2":
                 seq_len = attention_mask.shape[-1]
                 key_states, value_states = key_states[:, :, :seq_len, :], value_states[:, :, :seq_len, :]
 
