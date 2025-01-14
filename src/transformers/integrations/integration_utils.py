@@ -915,13 +915,13 @@ class WandbCallback(TrainerCallback):
         if not self._initialized:
             self.setup(args, state, model, **kwargs)
 
-    def on_train_end(self, args, state, control, model=None, tokenizer=None, **kwargs):
+    def on_train_end(self, args, state, control, model=None, processing_class=None, **kwargs):
         if self._wandb is None:
             return
         if self._log_model.is_enabled and self._initialized and state.is_world_process_zero:
             from ..trainer import Trainer
 
-            fake_trainer = Trainer(args=args, model=model, processing_class=tokenizer, eval_dataset=["fake"])
+            fake_trainer = Trainer(args=args, model=model, processing_class=processing_class, eval_dataset=["fake"])
             with tempfile.TemporaryDirectory() as temp_dir:
                 fake_trainer.save_model(temp_dir)
                 metadata = (
