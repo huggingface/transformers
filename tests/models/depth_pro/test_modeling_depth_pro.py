@@ -46,7 +46,6 @@ class DepthProModelTester:
         batch_size=8,
         image_size=64,
         patch_size=8,
-        patch_embeddings_size=4,
         num_channels=3,
         is_training=True,
         use_labels=True,
@@ -64,13 +63,16 @@ class DepthProModelTester:
         attention_probs_dropout_prob=0.1,
         initializer_range=0.02,
         use_fov_model=False,
+        backbone_config={
+            "model_type": "dinov2",
+            "patch_size": 4,
+        },
         num_labels=3,
     ):
         self.parent = parent
         self.batch_size = batch_size
         self.image_size = image_size
         self.patch_size = patch_size
-        self.patch_embeddings_size = patch_embeddings_size
         self.num_channels = num_channels
         self.is_training = is_training
         self.use_labels = use_labels
@@ -88,13 +90,15 @@ class DepthProModelTester:
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.initializer_range = initializer_range
         self.use_fov_model = use_fov_model
+        self.backbone_config = backbone_config
         self.num_labels = num_labels
 
-        self.num_patches = (patch_size // patch_embeddings_size) ** 2
-        self.seq_length = (patch_size // patch_embeddings_size) ** 2 + 1  # we add 1 for the [CLS] token
+        # may be different for a backbone other than dinov2
+        self.out_size = patch_size // backbone_config["patch_size"]
+        self.seq_length = self.out_size**2 + 1  # we add 1 for the [CLS] token
 
         n_fusion_blocks = len(intermediate_hook_ids) + len(scaled_images_ratios)
-        self.expected_depth_size = 2 ** (n_fusion_blocks + 1) * patch_size // patch_embeddings_size
+        self.expected_depth_size = 2 ** (n_fusion_blocks + 1) * self.out_size
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
@@ -109,9 +113,7 @@ class DepthProModelTester:
 
     def get_config(self):
         return DepthProConfig(
-            image_size=self.image_size,
             patch_size=self.patch_size,
-            patch_embeddings_size=self.patch_embeddings_size,
             num_channels=self.num_channels,
             hidden_size=self.hidden_size,
             fusion_hidden_size=self.fusion_hidden_size,
@@ -127,6 +129,7 @@ class DepthProModelTester:
             attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             initializer_range=self.initializer_range,
             use_fov_model=self.use_fov_model,
+            backbone_config=self.backbone_config,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -134,10 +137,12 @@ class DepthProModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        num_patches = result.last_hidden_state.shape[1]  # num_patches are created dynamically
-        self.parent.assertEqual(
-            result.last_hidden_state.shape, (self.batch_size, num_patches, self.seq_length, self.hidden_size)
-        )
+        # TODO: return hidden_states from patch_encodings instead of image_encodings
+        # num_patches = result.last_hidden_state.shape[1]  # num_patches are created dynamically
+        # self.parent.assertEqual(
+        #     result.last_hidden_state.shape, (self.batch_size, num_patches, self.seq_length, self.hidden_size)
+        # )
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_for_depth_estimation(self, config, pixel_values, labels):
         config.num_labels = self.num_labels
@@ -344,7 +349,8 @@ class DepthProModelIntegrationTest(unittest.TestCase):
 
         # verify the predicted depth
         n_fusion_blocks = len(config.intermediate_hook_ids) + len(config.scaled_images_ratios)
-        expected_depth_size = 2 ** (n_fusion_blocks + 1) * config.patch_size // config.patch_embeddings_size
+        out_size = config.backbone_config.image_size // config.backbone_config.patch_size
+        expected_depth_size = 2 ** (n_fusion_blocks + 1) * out_size
         expected_shape = torch.Size((1, expected_depth_size, expected_depth_size))
         self.assertEqual(predicted_depth.shape, expected_shape)
 

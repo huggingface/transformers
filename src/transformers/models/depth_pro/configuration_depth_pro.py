@@ -14,8 +14,12 @@
 # limitations under the License.
 """DepthPro model configuration"""
 
+import copy
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ..auto.configuration_auto import CONFIG_MAPPING
+from ..dinov2.configuration_dinov2 import Dinov2Config
 
 
 logger = logging.get_logger(__name__)
@@ -33,40 +37,19 @@ class DepthProConfig(PretrainedConfig):
 
     Args:
         hidden_size (`int`, *optional*, defaults to 1024):
-            Dimensionality of the encoder layers and the pooler layer.
+            Dimensionality of the encoder layers. Should match hidden_size of backbone.
         fusion_hidden_size (`int`, *optional*, defaults to 256):
             The number of channels before fusion.
         num_hidden_layers (`int`, *optional*, defaults to 24):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
-        mlp_ratio (`int`, *optional*, defaults to 4):
-            Ratio of the hidden size of the MLPs relative to the `hidden_size`.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
         patch_size (`int`, *optional*, defaults to 384):
-            The size (resolution) of each patch.
+            The size (resolution) of each patch. This is also the image_size for backbone model.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
-        patch_embeddings_size (`int`, *optional*, defaults to 16):
-            kernel_size and stride for convolution in PatchEmbeddings.
-        qkv_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add a bias to the queries, keys and values.
-        layerscale_value (`float`, *optional*, defaults to 1.0):
-            Initial value to use for layer scale.
-        drop_path_rate (`float`, *optional*, defaults to 0.0):
-            Stochastic depth rate per sample (when applied in the main path of residual layers).
-        use_swiglu_ffn (`bool`, *optional*, defaults to `False`):
-            Whether to use the SwiGLU feedforward neural network.
         intermediate_hook_ids (`List[int]`, *optional*, defaults to `[11, 5]`):
             Indices of the intermediate hidden states from the patch encoder to use for fusion.
         intermediate_feature_dims (`List[int]`, *optional*, defaults to `[256, 256]`):
@@ -77,14 +60,21 @@ class DepthProConfig(PretrainedConfig):
             Overlap ratios between patches for each scaled image in `scaled_images_ratios`.
         scaled_images_feature_dims (`List[int]`, *optional*, defaults to `[1024, 1024, 512]`):
             Hidden state dimensions during upsampling for each scaled image in `scaled_images_ratios`.
+        merge_padding_value (`int`, *optional*, defaults to 3):
+            When merging smaller patches back to the image size, overlapping sections of this size are removed.
         use_batch_norm_in_fusion_residual (`bool`, *optional*, defaults to `False`):
             Whether to use batch normalization in the pre-activate residual units of the fusion blocks.
         use_bias_in_fusion_residual (`bool`, *optional*, defaults to `True`):
             Whether to use bias in the pre-activate residual units of the fusion blocks.
-        use_fov_model (`bool`, *optional*, defaults to `True`):
+        use_fov_model (`bool`, *optional*, defaults to `False`):
             Whether to use `DepthProFOVModel` to generate the field of view.
         num_fov_head_layers (`int`, *optional*, defaults to 2):
             Number of convolution layers in the head of `DepthProFOVModel`.
+        backbone_config (`Union[Dict[str, Any], PretrainedConfig]`, *optional*):
+            The configuration of the backbone model, which is loaded using the [`AutoModel`] API.
+            By default, Dinov2 model is used as backbone.
+        backbone_kwargs (`dict`, *optional*):
+            Keyword arguments to be passed to AutoModel when loading from the backbone_config.
 
     Example:
 
@@ -109,28 +99,21 @@ class DepthProConfig(PretrainedConfig):
         fusion_hidden_size=256,
         num_hidden_layers=24,
         num_attention_heads=16,
-        mlp_ratio=4,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
         initializer_range=0.02,
-        layer_norm_eps=1e-6,
         patch_size=384,
         num_channels=3,
-        patch_embeddings_size=16,
-        qkv_bias=True,
-        layerscale_value=1.0,
-        drop_path_rate=0.0,
-        use_swiglu_ffn=False,
         intermediate_hook_ids=[11, 5],
         intermediate_feature_dims=[256, 256],
         scaled_images_ratios=[0.25, 0.5, 1],
         scaled_images_overlap_ratios=[0.0, 0.5, 0.25],
         scaled_images_feature_dims=[1024, 1024, 512],
+        merge_padding_value=3,
         use_batch_norm_in_fusion_residual=False,
         use_bias_in_fusion_residual=True,
-        use_fov_model=True,
+        use_fov_model=False,
         num_fov_head_layers=2,
+        backbone_config=None,
+        backbone_kwargs=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -139,13 +122,6 @@ class DepthProConfig(PretrainedConfig):
         if scaled_images_ratios != sorted(scaled_images_ratios):
             raise ValueError(
                 f"Values in scaled_images_ratios={scaled_images_ratios} " "should be sorted from low to high"
-            )
-
-        # patch_size should be a divisible by patch_embeddings_size
-        # else it raises an exception in DepthProViTPatchEmbeddings
-        if patch_size % patch_embeddings_size != 0:
-            raise ValueError(
-                f"patch_size={patch_size} should be divisible " f"by patch_embeddings_size={patch_embeddings_size}."
             )
 
         # scaled_images_ratios, scaled_images_overlap_ratios, scaled_images_feature_dims should be consistent
@@ -176,19 +152,9 @@ class DepthProConfig(PretrainedConfig):
         self.fusion_hidden_size = fusion_hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.mlp_ratio = mlp_ratio
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
         self.patch_size = patch_size
         self.num_channels = num_channels
-        self.patch_embeddings_size = patch_embeddings_size
-        self.qkv_bias = qkv_bias
-        self.layerscale_value = layerscale_value
-        self.drop_path_rate = drop_path_rate
-        self.use_swiglu_ffn = use_swiglu_ffn
         self.use_batch_norm_in_fusion_residual = use_batch_norm_in_fusion_residual
         self.use_bias_in_fusion_residual = use_bias_in_fusion_residual
         self.use_fov_model = use_fov_model
@@ -198,6 +164,82 @@ class DepthProConfig(PretrainedConfig):
         self.scaled_images_ratios = scaled_images_ratios
         self.scaled_images_overlap_ratios = scaled_images_overlap_ratios
         self.scaled_images_feature_dims = scaled_images_feature_dims
+        self.merge_padding_value = merge_padding_value
+
+        self.backbone_config = self._create_backbone_config(backbone_config)
+        self.backbone_kwargs = {} if backbone_kwargs is None else backbone_kwargs
+
+    def _create_backbone_config(self, backbone_config=None):
+        """"""
+        # for compatibility between DepthPro and the backbone model
+        # make sure these parameters of backbone model are same as DepthPro
+        matching_config = [
+            "hidden_size",
+            "num_channels",
+            "num_hidden_layers",
+            "num_attention_heads",
+            "_attn_implementation",
+        ]
+        matching_config_dict = {k: getattr(self, k) for k in matching_config}
+
+        if backbone_config is None:
+            # use Dinov2 config by default
+            logger.info("Initializing the config with the default Dinov2 backbone.")
+            backbone_config = Dinov2Config(
+                patch_size=16,
+                image_size=self.patch_size,
+                **matching_config_dict,
+            )
+
+        elif isinstance(backbone_config, dict):
+            assert backbone_config.get("model_type") is not None
+            logger.info(f"Initializing the config with a {backbone_config.get('model_type')} backbone.")
+            backbone_config.update(
+                {
+                    "image_size": self.patch_size,
+                    **matching_config_dict,
+                }
+            )
+            config_class = CONFIG_MAPPING[backbone_config.get("model_type")]
+            backbone_config = config_class.from_dict(backbone_config)
+
+        elif isinstance(backbone_config, PretrainedConfig):
+            backbone_config = backbone_config
+
+        else:
+            raise ValueError(
+                f"backbone_config must be a dictionary or a `PretrainedConfig`, got {backbone_config.__class__}."
+            )
+
+        # validate the config compatibility between DepthPro and the backbone model
+        if self.patch_size != backbone_config.image_size:
+            # patches of input image are created of size patch_size x patch_size
+            # then these patches are given to the backbone model as input images
+            raise ValueError(
+                f"patch_size={self.patch_size} should be equal to backbone_config.image_size={backbone_config.image_size}."
+            )
+        for key in matching_config:
+            config_value = getattr(self, key)
+            backbone_config_value = getattr(backbone_config, key)
+            if config_value != backbone_config_value:
+                raise ValueError(
+                    f"{key}={config_value} should be equal to backbone_config.{key}={backbone_config_value}."
+                )
+
+        return backbone_config
+
+    def to_dict(self):
+        """
+        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`]. Returns:
+            `Dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
+        """
+        output = copy.deepcopy(self.__dict__)
+
+        if output["backbone_config"] is not None:
+            output["backbone_config"] = self.backbone_config.to_dict()
+
+        output["model_type"] = self.__class__.model_type
+        return output
 
 
 __all__ = ["DepthProConfig"]
