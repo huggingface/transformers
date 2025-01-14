@@ -566,9 +566,8 @@ def set_initialized_submodules(model, state_dict_keys):
     Sets the `_is_hf_initialized` flag in all submodules of a given model when all its weights are in the loaded state
     dict.
     """
-    state_dict_keys = sorted(
-        state_dict_keys
-    )  # So we can do binary search on it - this becomes important when it's big
+    # So we can do binary search on it - this becomes important when it's big
+    state_dict_keys = sorted(state_dict_keys)
 
     not_initialized_submodules = {}
     for module_name, module in model.named_modules():
