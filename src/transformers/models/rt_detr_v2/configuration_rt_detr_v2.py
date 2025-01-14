@@ -91,7 +91,7 @@ class RtDetrV2Config(PretrainedConfig):
             The non-linear activation function (function or string) in the general layer. If string, `"gelu"`,
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
         eval_size (`Tuple[int, int]`, *optional*):
-            Height and width used to computes the effective height and width of the position embeddings after taking
+            Height and width used to compute the effective height and width of the position embeddings after taking
             into account the stride.
         normalize_before (`bool`, *optional*, defaults to `False`):
             Determine whether to apply layer normalization in the transformer encoder layer before self-attention and
@@ -147,7 +147,7 @@ class RtDetrV2Config(PretrainedConfig):
         matcher_giou_cost (`float`, *optional*, defaults to 2.0):
             The relative weight of the giou loss of used by the Hungarian Matcher.
         use_focal_loss (`bool`, *optional*, defaults to `True`):
-            Parameter informing if focal focal should be used.
+            Parameter informing if focal loss should be used.
         auxiliary_loss (`bool`, *optional*, defaults to `True`):
             Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
         focal_loss_alpha (`float`, *optional*, defaults to 0.75):
