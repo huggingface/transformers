@@ -5,7 +5,14 @@ import requests
 from get_ci_error_statistics import download_artifact, get_artifacts_links
 
 
-def get_daily_ci_runs(token, num_runs=7):
+
+# This is the id of a workflow (not of a workflow run).
+# From a given workflow run (where we have workflow run id), we can get the workflow id by going to
+# https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}
+# and check the `workflow_id` key.
+DEFAULT_WORKFLOW_ID = "90575235"
+
+def get_daily_ci_runs(token, workflow_id = DEFAULT_WORKFLOW_ID, num_runs=7):
     """Get the workflow runs of the scheduled (daily) CI.
 
     This only selects the runs triggered by the `schedule` event on the `main` branch.
@@ -14,11 +21,6 @@ def get_daily_ci_runs(token, num_runs=7):
     if token is not None:
         headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
 
-    # The id of a workflow (not of a workflow run).
-    # From a given workflow run (where we have workflow run id), we can get the workflow id by going to
-    # https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}
-    # and check the `workflow_id` key.
-    workflow_id = "90575235"
 
     url = f"https://api.github.com/repos/huggingface/transformers/actions/workflows/{workflow_id}/runs"
     # On `main` branch + event being `schedule` + not returning PRs + only `num_runs` results
@@ -29,9 +31,9 @@ def get_daily_ci_runs(token, num_runs=7):
     return result["workflow_runs"]
 
 
-def get_last_daily_ci_runs(token):
+def get_last_daily_ci_runs(token, workflow_id = DEFAULT_WORKFLOW_ID):
     """Get the last completed workflow run id of the scheduled (daily) CI."""
-    workflow_runs = get_daily_ci_runs(token)
+    workflow_runs = get_daily_ci_runs(token, workflow_id)
     workflow_run_id = None
     for workflow_run in workflow_runs:
         if workflow_run["status"] == "completed":
@@ -53,9 +55,9 @@ def get_last_daily_ci_run_commit(token):
     return head_sha
 
 
-def get_last_daily_ci_artifacts(artifact_names, output_dir, token):
+def get_last_daily_ci_artifacts(artifact_names, output_dir, token, workflow_id = DEFAULT_WORKFLOW_ID):
     """Get the artifacts of last completed workflow run id of the scheduled (daily) CI."""
-    workflow_run_id = get_last_daily_ci_runs(token)
+    workflow_run_id = get_last_daily_ci_runs(token, workflow_id)
     if workflow_run_id is not None:
         artifacts_links = get_artifacts_links(worflow_run_id=workflow_run_id, token=token)
         for artifact_name in artifact_names:
@@ -66,9 +68,9 @@ def get_last_daily_ci_artifacts(artifact_names, output_dir, token):
                 )
 
 
-def get_last_daily_ci_reports(artifact_names, output_dir, token):
+def get_last_daily_ci_reports(artifact_names, output_dir, token, workflow_id = DEFAULT_WORKFLOW_ID):
     """Get the artifacts' content of the last completed workflow run id of the scheduled (daily) CI."""
-    get_last_daily_ci_artifacts(artifact_names, output_dir, token)
+    get_last_daily_ci_artifacts(artifact_names, output_dir, token, workflow_id)
 
     results = {}
     for artifact_name in artifact_names:

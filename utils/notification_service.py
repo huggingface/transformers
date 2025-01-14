@@ -926,6 +926,7 @@ if __name__ == "__main__":
     if not REPORT_REPO_ID:
         REPORT_REPO_ID = "hf-internal-testing/transformers_daily_ci"
     UPLOAD_REPORT_SUMMARY = os.environ.get("UPLOAD_REPORT_SUMMARY") == "true"
+    WORKFLOW_ID = "90575235"
 
     # runner_status = os.environ.get("RUNNER_STATUS")
     # runner_env_status = os.environ.get("RUNNER_ENV_STATUS")
@@ -1275,7 +1276,7 @@ if __name__ == "__main__":
             output_dir = os.path.join(os.getcwd(), "previous_reports")
             os.makedirs(output_dir, exist_ok=True)
             prev_ci_artifacts = get_last_daily_ci_reports(
-                artifact_names=artifact_names, output_dir=output_dir, token=os.environ["ACCESS_REPO_INFO_TOKEN"]
+                artifact_names=artifact_names, output_dir=output_dir, token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_id=WORKFLOW_ID
             )
 
     message = Message(
