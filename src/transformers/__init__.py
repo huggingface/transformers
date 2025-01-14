@@ -1297,6 +1297,7 @@ else:
     _import_structure["models.pixtral"].append("PixtralImageProcessorFast")
     _import_structure["models.rt_detr"].append("RTDetrImageProcessorFast")
     _import_structure["models.vit"].append("ViTImageProcessorFast")
+    _import_structure["models.maskformer"].append("MaskFormerImageProcessorFast")
 
 try:
     if not is_torchvision_available() and not is_timm_available():
@@ -6374,6 +6375,7 @@ if TYPE_CHECKING:
         from .image_processing_utils_fast import BaseImageProcessorFast
         from .models.deformable_detr import DeformableDetrImageProcessorFast
         from .models.detr import DetrImageProcessorFast
+        from .models.maskformer import MaskFormerImageProcessorFast
         from .models.pixtral import PixtralImageProcessorFast
         from .models.rt_detr import RTDetrImageProcessorFast
         from .models.vit import ViTImageProcessorFast
