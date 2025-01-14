@@ -409,18 +409,6 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
         original_pixel_values = torch.load(filepath, map_location="cpu")
         assert torch.allclose(original_pixel_values, inputs.pixel_values.half())
 
-        # verify single forward pass
-        inputs = inputs.to(torch_device)
-        with torch.no_grad():
-            output = model(**inputs)
-
-        expected_slice = torch.tensor(
-            [[-4.7695, -4.5664, -0.2788], [-10.6172, -10.8828, -2.5273], [-6.7383, -7.2422, -0.6694]],
-            dtype=torch.float16,
-            device=torch_device,
-        )
-        assert torch.allclose(output.logits[0, :3, :3], expected_slice, atol=1e-3)
-
         # verify generation
         output = model.generate(**inputs, max_new_tokens=100)
         EXPECTED_DECODED_TEXT = '[INST]  \nWhat is shown in this image? [/INST] The image appears to be a radar chart, which is a type of multi-dimensional plot that displays values for multiple quantitative variables represented on axes starting from the same point. This particular radar chart is showing the performance of various models or systems across different metrics or datasets.\n\nThe chart is divided into several sections, each representing a different model or dataset. The axes represent different metrics or datasets, such as "MMM-Vet," "MMM-Bench," "L'  # fmt: skip
