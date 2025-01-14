@@ -682,7 +682,7 @@ class FuyuProcessor(ProcessorMixin):
 
         return results
 
-    def post_process_image_text_to_text(self, generated_outputs, **kwargs):
+    def post_process_image_text_to_text(self, generated_outputs, skip_special_tokens=True, **kwargs):
         """
         Post-processes the output of `FuyuForConditionalGeneration` to only return the text output.
 
@@ -690,6 +690,10 @@ class FuyuProcessor(ProcessorMixin):
             generated_outputs (`torch.Tensor` or `np.ndarray`):
                 The output of the model. The output is expected to be a tensor of shape `(batch_size, sequence_length)`
                 containing the token ids of the generated sequences.
+            skip_special_tokens (`bool`, *optional*, defaults to `True`):
+                Whether or not to remove special tokens in the output. Argument passed to the tokenizer's `batch_decode` method.
+            **kwargs:
+                Additional arguments to be passed to the tokenizer's `batch_decode method`.
 
         Returns:
             `List[str]`: The decoded text output.
@@ -705,8 +709,6 @@ class FuyuProcessor(ProcessorMixin):
         padded_output_sequences = torch.full((len(unpadded_output_sequences), max_len), self.pad_token_id)
         for i, seq in enumerate(unpadded_output_sequences):
             padded_output_sequences[i, : len(seq)] = torch.tensor(seq)
-
-        skip_special_tokens = kwargs.pop("skip_special_tokens", True)
 
         return self.batch_decode(padded_output_sequences, skip_special_tokens=skip_special_tokens, **kwargs)
 
