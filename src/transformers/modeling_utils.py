@@ -583,9 +583,10 @@ def set_initialized_submodules(model, state_dict_keys):
             i += 1
         # This next block is just for debug testing and should be removed before merging
         old_loaded_keys = {
-            k.replace(f"{module_name}.", "") for k in state_dict_keys if k.startswith(f"{module_name}.")
+            k.removeprefix(f"{module_name}.") for k in state_dict_keys if k.startswith(f"{module_name}.")
         }
-        assert old_loaded_keys == loaded_keys
+        if not old_loaded_keys == loaded_keys:
+            breakpoint()
         # When checking if the root module is loaded all state_dict_keys must be used.
         if module_name == "":
             loaded_keys = set(state_dict_keys)
