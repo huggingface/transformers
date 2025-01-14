@@ -4339,21 +4339,25 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     def _fix_state_dict_key_on_load(key) -> Tuple[str, bool]:
         """Replace legacy parameter names with their modern equivalents. E.g. beta -> bias, gamma -> weight."""
 
+        # Rename LayerNorm beta & gamma params for some early models ported from Tensorflow (e.g. Bert)
+        # This rename is logged.
         if key.endswith("LayerNorm.beta"):
             return key.replace("LayerNorm.beta", "LayerNorm.bias"), True
         elif key.endswith("LayerNorm.gamma"):
             return key.replace("LayerNorm.gamma", "LayerNorm.weight"), True
 
-        # to avoid logging parametrized weight norm renaming
+        # Rename weight norm parametrizations to match changes across torch versions.
+        # Impacts a number of speech/wav2vec models. e.g. Hubert, Wav2Vec2, and others.
+        # This rename is not logged.
         if hasattr(nn.utils.parametrizations, "weight_norm"):
-            if "weight_g" in key:
+            if key.endswith("weight_g"):
                 return key.replace("weight_g", "parametrizations.weight.original0"), True
-            if "weight_v" in key:
+            elif key.endswith("weight_v"):
                 return key.replace("weight_v", "parametrizations.weight.original1"), True
         else:
-            if "parametrizations.weight.original0" in key:
+            if key.endswith("parametrizations.weight.original0"):
                 return key.replace("parametrizations.weight.original0", "weight_g"), True
-            if "parametrizations.weight.original1" in key:
+            elif key.endswith("parametrizations.weight.original1"):
                 return key.replace("parametrizations.weight.original1", "weight_v"), True
 
         return key, False
