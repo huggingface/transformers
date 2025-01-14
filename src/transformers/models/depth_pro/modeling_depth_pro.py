@@ -411,6 +411,11 @@ class DepthProEncoder(nn.Module):
         self.scaled_images_feature_dims = config.scaled_images_feature_dims
         self.merge_padding_value = config.merge_padding_value
 
+        # placeholder to avoid
+        # ValueError: The following configuration classes contain unused attributes in the corresponding modeling files
+        self.num_hidden_layers = config.num_hidden_layers
+        self.num_attention_heads = config.num_attention_heads
+
         self.n_scaled_images = len(self.scaled_images_ratios)
         self.n_intermediate_hooks = len(self.intermediate_hook_ids)
 
