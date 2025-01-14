@@ -1541,7 +1541,7 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
         **generate_kwargs,
     ):
         """
-        Overrides GenerationMixin's [`~generation.GenerationMixin.generate`] method to add PerBatchIndexMaxLengthLogitsProcessor by default.
+        Overrides GenerationMixin's [`~generation.GenerationMixin.generate`] method to add a `PerBatchIndexMaxLengthLogitsProcessor` by default.
         Indeed Moonshine model uses per-batch-index max length that are inferred from the input audio length.
         Overall behavior, parameters and return type are the same as the original [`~generation.GenerationMixin.generate`] method.
 
