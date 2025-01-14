@@ -1574,13 +1574,14 @@ def get_class_node_and_dependencies(
     # class, so if a function was explicitly imported from another module in the modular file, we should switch module definition
     # See `examples/modular-tranformers/modular_switch_function.py` for an example
     for node_name, (idx, node) in nodes_to_add.items():
-        # This is a function -> make sure we replace the definition by the one from the correct module,
-        # in case it was added from class dependencies from a module, but explicitly imported from another in the modular
-        # e.g. see `examples/modular-tranformers/modular_switch_function.py`
-        if node_name[0].islower() and node_name in modular_mapper.model_specific_imported_objects.keys():
+        # If we node was explicitly imported in the modular file, we may need to replace it
+        if node_name in modular_mapper.model_specific_imported_objects.keys():
             source_file = modular_mapper.model_specific_imported_objects[node_name]
-            new_node = modular_mapper.visited_modules[source_file].global_nodes[node_name]
-            nodes_to_add[node_name] = (idx, new_node)
+            source_mapper = modular_mapper.visited_modules[source_file]
+            # Final check to ensure we are indeed dealing with a function (not a class or assignment)
+            if node_name in source_mapper.functions.keys():
+                new_node = source_mapper.global_nodes[node_name]
+                nodes_to_add[node_name] = (idx, new_node)
 
     return nodes_to_add, file_type, new_imports
 
