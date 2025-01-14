@@ -3673,9 +3673,9 @@ class Trainer:
 
         with self.compute_loss_context_manager():
             if self.model_accepts_loss_kwargs:
-                loss = self.compute_loss(model, inputs)
-            else:
                 loss = self.compute_loss(model, inputs, num_items_in_batch=num_items_in_batch)
+            else:
+                loss = self.compute_loss(model, inputs)
 
         del inputs
         if (
