@@ -1,22 +1,23 @@
-from typing import Callable, Optional, Tuple
+from typing import Callable, List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 
-from ...cache_utils import Cache
+from ...cache_utils import Cache, DynamicCache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
     SequenceClassifierOutputWithPast,
     TokenClassifierOutput,
 )
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import logging
 from ..llama.modeling_llama import (
+    KwargsForCausalLM,
     LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaForQuestionAnswering,
@@ -24,6 +25,7 @@ from ..llama.modeling_llama import (
     LlamaForTokenClassification,
     LlamaModel,
     LlamaPreTrainedModel,
+    LlamaRMSNorm,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
@@ -141,6 +143,10 @@ class TeleChat2Attention(nn.Module):
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.dense(attn_output)
         return attn_output, attn_weights
+
+
+class TeleChat2RMSNorm(LlamaRMSNorm):
+    pass
 
 
 class TeleChat2DecoderLayer(LlamaDecoderLayer):
