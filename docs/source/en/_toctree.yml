@@ -452,6 +452,8 @@
         title: Granite
       - local: model_doc/granitemoe
         title: GraniteMoe
+      - local: model_doc/helium
+        title: Helium
       - local: model_doc/herbert
         title: HerBERT
       - local: model_doc/ibert
@@ -505,7 +507,9 @@
       - local: model_doc/mobilebert
         title: MobileBERT
       - local: model_doc/modernbert
-        title: ModernBERT
+        title: ModernBert
+      - local: model_doc/moonshine
+        title: moonshine
       - local: model_doc/mpnet
         title: MPNet
       - local: model_doc/mpt
@@ -858,6 +862,8 @@
         title: DePlot
       - local: model_doc/donut
         title: Donut
+      - local: model_doc/emu3
+        title: Emu3
       - local: model_doc/flava
         title: FLAVA
       - local: model_doc/git

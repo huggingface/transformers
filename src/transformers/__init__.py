@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.48.0.dev0"
+__version__ = "4.49.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -428,6 +428,12 @@ _import_structure = {
         "ElectraConfig",
         "ElectraTokenizer",
     ],
+    "models.emu3": [
+        "Emu3Config",
+        "Emu3Processor",
+        "Emu3TextConfig",
+        "Emu3VQVAEConfig",
+    ],
     "models.encodec": [
         "EncodecConfig",
         "EncodecFeatureExtractor",
@@ -492,6 +498,7 @@ _import_structure = {
         "GroupViTTextConfig",
         "GroupViTVisionConfig",
     ],
+    "models.helium": ["HeliumConfig"],
     "models.herbert": ["HerbertTokenizer"],
     "models.hiera": ["HieraConfig"],
     "models.hubert": ["HubertConfig"],
@@ -610,6 +617,7 @@ _import_structure = {
     "models.mobilevit": ["MobileViTConfig"],
     "models.mobilevitv2": ["MobileViTV2Config"],
     "models.modernbert": ["ModernBertConfig"],
+    "models.moonshine": ["MoonshineConfig"],
     "models.moshi": [
         "MoshiConfig",
         "MoshiDepthConfig",
@@ -1221,6 +1229,7 @@ else:
     _import_structure["models.donut"].extend(["DonutFeatureExtractor", "DonutImageProcessor"])
     _import_structure["models.dpt"].extend(["DPTFeatureExtractor", "DPTImageProcessor"])
     _import_structure["models.efficientnet"].append("EfficientNetImageProcessor")
+    _import_structure["models.emu3"].append("Emu3ImageProcessor")
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
     _import_structure["models.fuyu"].extend(["FuyuImageProcessor", "FuyuProcessor"])
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
@@ -2242,6 +2251,15 @@ else:
             "load_tf_weights_in_electra",
         ]
     )
+    _import_structure["models.emu3"].extend(
+        [
+            "Emu3ForCausalLM",
+            "Emu3ForConditionalGeneration",
+            "Emu3PreTrainedModel",
+            "Emu3TextModel",
+            "Emu3VQVAE",
+        ]
+    )
     _import_structure["models.encodec"].extend(
         [
             "EncodecModel",
@@ -2487,6 +2505,15 @@ else:
             "GroupViTPreTrainedModel",
             "GroupViTTextModel",
             "GroupViTVisionModel",
+        ]
+    )
+    _import_structure["models.helium"].extend(
+        [
+            "HeliumForCausalLM",
+            "HeliumForSequenceClassification",
+            "HeliumForTokenClassification",
+            "HeliumModel",
+            "HeliumPreTrainedModel",
         ]
     )
     _import_structure["models.hiera"].extend(
@@ -2905,6 +2932,13 @@ else:
             "ModernBertForTokenClassification",
             "ModernBertModel",
             "ModernBertPreTrainedModel",
+        ]
+    )
+    _import_structure["models.moonshine"].extend(
+        [
+            "MoonshineForConditionalGeneration",
+            "MoonshineModel",
+            "MoonshinePreTrainedModel",
         ]
     )
     _import_structure["models.moshi"].extend(
@@ -5432,6 +5466,12 @@ if TYPE_CHECKING:
         ElectraConfig,
         ElectraTokenizer,
     )
+    from .models.emu3 import (
+        Emu3Config,
+        Emu3Processor,
+        Emu3TextConfig,
+        Emu3VQVAEConfig,
+    )
     from .models.encodec import (
         EncodecConfig,
         EncodecFeatureExtractor,
@@ -5499,6 +5539,7 @@ if TYPE_CHECKING:
         GroupViTTextConfig,
         GroupViTVisionConfig,
     )
+    from .models.helium import HeliumConfig
     from .models.herbert import HerbertTokenizer
     from .models.hiera import HieraConfig
     from .models.hubert import HubertConfig
@@ -5633,6 +5674,7 @@ if TYPE_CHECKING:
         MobileViTV2Config,
     )
     from .models.modernbert import ModernBertConfig
+    from .models.moonshine import MoonshineConfig
     from .models.moshi import (
         MoshiConfig,
         MoshiDepthConfig,
@@ -6261,6 +6303,7 @@ if TYPE_CHECKING:
         from .models.donut import DonutFeatureExtractor, DonutImageProcessor
         from .models.dpt import DPTFeatureExtractor, DPTImageProcessor
         from .models.efficientnet import EfficientNetImageProcessor
+        from .models.emu3 import Emu3ImageProcessor
         from .models.flava import (
             FlavaFeatureExtractor,
             FlavaImageProcessor,
@@ -7130,6 +7173,13 @@ if TYPE_CHECKING:
             ElectraPreTrainedModel,
             load_tf_weights_in_electra,
         )
+        from .models.emu3 import (
+            Emu3ForCausalLM,
+            Emu3ForConditionalGeneration,
+            Emu3PreTrainedModel,
+            Emu3TextModel,
+            Emu3VQVAE,
+        )
         from .models.encodec import (
             EncodecModel,
             EncodecPreTrainedModel,
@@ -7331,6 +7381,13 @@ if TYPE_CHECKING:
             GroupViTPreTrainedModel,
             GroupViTTextModel,
             GroupViTVisionModel,
+        )
+        from .models.helium import (
+            HeliumForCausalLM,
+            HeliumForSequenceClassification,
+            HeliumForTokenClassification,
+            HeliumModel,
+            HeliumPreTrainedModel,
         )
         from .models.hiera import (
             HieraBackbone,
@@ -7651,6 +7708,11 @@ if TYPE_CHECKING:
             ModernBertForTokenClassification,
             ModernBertModel,
             ModernBertPreTrainedModel,
+        )
+        from .models.moonshine import (
+            MoonshineForConditionalGeneration,
+            MoonshineModel,
+            MoonshinePreTrainedModel,
         )
         from .models.moshi import (
             MoshiForCausalLM,
