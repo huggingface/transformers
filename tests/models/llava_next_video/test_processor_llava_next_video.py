@@ -18,6 +18,7 @@ import shutil
 import tempfile
 import unittest
 
+from transformers import AutoProcessor, LlamaTokenizerFast, LlavaNextVideoProcessor
 from transformers.testing_utils import require_av, require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -25,13 +26,7 @@ from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_vision_available():
-    from transformers import (
-        AutoProcessor,
-        LlamaTokenizerFast,
-        LlavaNextImageProcessor,
-        LlavaNextVideoImageProcessor,
-        LlavaNextVideoProcessor,
-    )
+    from transformers import LlavaNextImageProcessor, LlavaNextVideoImageProcessor
 
 if is_torch_available:
     import torch
@@ -66,13 +61,13 @@ class LlavaNextVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return {
             "chat_template": "dummy_template",
             "num_additional_image_tokens": 6,
+            "patch_size": 4,
             "vision_feature_select_strategy": "default",
         }
 
     def test_processor_to_json_string(self):
         processor = self.get_processor()
         obj = json.loads(processor.to_json_string())
-        print(processor)
         for key, value in self.prepare_processor_dict().items():
             # chat_tempalate are tested as a separate test because they are saved in separate files
             if key != "chat_template":
