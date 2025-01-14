@@ -91,7 +91,7 @@ image_pose_result = pose_results[0]  # results for first image
 
 ### ViTPose++ models
 
-The best checkpoints are those of the [ViTPose++ paper](https://arxiv.org/abs/2212.04246). ViTPose++ models employ a so-called [Mixture-of-Experts (MoE)](https://huggingface.co/blog/moe) architecture for the ViT backbone, resulting in better performance.
+The best [checkpoints](https://huggingface.co/collections/usyd-community/vitpose-677fcfd0a0b2b5c8f79c4335) are those of the [ViTPose++ paper](https://arxiv.org/abs/2212.04246). ViTPose++ models employ a so-called [Mixture-of-Experts (MoE)](https://huggingface.co/blog/moe) architecture for the ViT backbone, resulting in better performance.
 
 The ViTPose+ checkpoints use 6 experts, hence 6 different dataset indices can be passed. 
 An overview of the various dataset indices is provided below:
@@ -128,11 +128,11 @@ An overview of the various dataset indices is provided below:
 - 5: [COCO-WholeBody](https://github.com/jin-s13/COCO-WholeBody) dataset
 
 
-### Visualization for supervision user
+### Visualization
 
-To visualize the various keypoints, the `supervision` [library](https://github.com/roboflow/supervision) can be used (requires `pip install supervision`):
+To visualize the various keypoints, one can either leverage the `supervision` [library](https://github.com/roboflow/supervision (requires `pip install supervision`):
 
-```py
+```python
 import supervision as sv
 
 xy = torch.stack([pose_result['keypoints'] for pose_result in image_pose_result]).cpu().numpy()
@@ -160,11 +160,9 @@ annotated_frame = vertex_annotator.annotate(
 )
 ```
 
-### Visualization for advanced user
-
 Alternatively, one can also visualize the keypoints using [OpenCV](https://opencv.org/) (requires `pip install opencv-python`):
 
-```py
+```python
 import math
 import cv2
 
