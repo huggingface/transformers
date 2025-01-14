@@ -405,7 +405,6 @@ class VisionAttention(nn.Module):
         return attn_output
 
 
-# Copied from transformers.models.qwen2_vl.modeling_qwen2_vl.VisionFlashAttention2
 class VisionFlashAttention2(nn.Module):
     def __init__(self, dim: int, num_heads: int = 16) -> None:
         super().__init__()
