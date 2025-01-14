@@ -1143,3 +1143,13 @@ class TeleChat2ForTokenClassification(TeleChat2PreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "TeleChat2ForCausalLM",
+    "TeleChat2ForQuestionAnswering",
+    "TeleChat2ForSequenceClassification",
+    "TeleChat2ForTokenClassification",
+    "TeleChat2Model",
+    "TeleChat2PreTrainedModel",
+]
