@@ -20,17 +20,12 @@ rendered properly in your Markdown viewer.
 
 The TeleChat2 model was proposed in [TELECHAT TECHNICAL REPORT](https://arxiv.org/pdf/2401.03804) by TeleAI.
 
-### Summary
-
 The abstract from the paper is the following:
-
-TeleChat is a series of large language models, offering decoder-based language models in various sizes (3B, 7B, and 12B). For each size, we provide both the base pretrained model and the fine-tuned chat model aligned with human preferences. TeleChat leverages a Transformer architecture with features such as SwiGLU activation, advanced attention mechanisms (QKV bias, group query attention), and support for sliding window attention. The models are optimized for bilingual proficiency (English and Chinese) and include an enhanced tokenizer adaptable to diverse natural languages and coding formats.
-
-## Usage tips
+*TeleChat is a series of large language models, offering decoder-based language models in various sizes (3B, 7B, and 12B). For each size, we provide both the base pretrained model and the fine-tuned chat model aligned with human preferences. TeleChat leverages a Transformer architecture with features such as SwiGLU activation, advanced attention mechanisms (QKV bias, group query attention), and support for sliding window attention. The models are optimized for bilingual proficiency (English and Chinese) and include an enhanced tokenizer adaptable to diverse natural languages and coding formats.*
 
 The original code for telechat2 can be found [here](https://huggingface.co/Tele-AI/TeleChat2-7B).
-
-In the following, we demonstrate how to use `TeleChat2-7B` for the inference. Note that we have used the ChatML format for dialog, in this demo we show how to leverage `apply_chat_template` for this purpose.
+## Tips
+In the following, we demonstrate how to use `TeleChat2-7B` for inference. The example below shows how to use `apply_chat_template` with the ChatML format for dialog.
 
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
