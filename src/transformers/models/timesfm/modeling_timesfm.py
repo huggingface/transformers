@@ -893,107 +893,6 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         mu, sigma = stats
         return outputs * sigma[:, None, None, None] + mu[:, None, None, None]
 
-    def decode(
-        self,
-        input_ts: torch.Tensor,
-        paddings: torch.Tensor,
-        freq: torch.LongTensor,
-        horizon_len: int,
-        output_patch_len: Optional[int] = None,
-        max_len: Optional[int] = None,
-        return_forecast_on_context: bool = False,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-    ) -> tuple[torch.Tensor, ...]:
-        """Auto-regressive decoding without caching.
-
-        Args:
-          input_ts: input time-series and paddings. Time-series shape B x C.
-          paddings: padding shape B x (C + H) where H is the prediction length.
-          freq: frequency shape B x 1
-          horizon_len: prediction length.
-          output_patch_len: output length to be fetched from one step of
-            auto-regressive decoding.
-          max_len: maximum training context length. If None, then we use the length
-            of the initial context as max length.
-          return_forecast_on_context: whether to return the model forecast on the
-            context except the first input patch.
-
-        Returns:
-          Tuple of two forecasting results:
-          - Point (mean) output predictions as a tensor with shape B x H'.
-          - Full predictions (mean and quantiles) as a tensor with shape
-            B x H' x (1 + # quantiles).
-          In particular, if return_forecast_on_context is True, H' is H plus
-          the forecastable context length, i.e. context_len - (first) patch_len.
-
-        Raises:
-          ValueError: If the paddings do not match the input + horizon_len.
-        """
-        final_out = input_ts
-        context_len = final_out.shape[1]
-        full_outputs = []
-
-        if paddings.shape[1] != final_out.shape[1] + horizon_len:
-            raise ValueError(
-                "Length of paddings must match length of input + horizon_len:"
-                f" {paddings.shape[1]} != {final_out.shape[1]} + {horizon_len}"
-            )
-        if output_patch_len is None:
-            output_patch_len = self.config.horizon_len
-        if max_len is None:
-            max_len = context_len
-
-        num_decode_patches = (horizon_len + output_patch_len - 1) // output_patch_len
-        for step_index in range(num_decode_patches):
-            current_padding = paddings[:, 0 : final_out.shape[1]]
-            input_ts = final_out[:, -max_len:]
-            input_padding = current_padding[:, -max_len:]
-            decoder_output = self.decoder(
-                input_ts,
-                input_padding,
-                freq,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-            )
-            fprop_outputs = self._postprocess_output(
-                decoder_output.last_hidden_state,
-                (decoder_output.loc, decoder_output.scale),
-            )
-
-            if return_forecast_on_context and step_index == 0:
-                # For the first decodings step, collect the model forecast on the
-                # context except the unavailable first input batch forecast.
-                new_full_ts = fprop_outputs[:, :-1, : self.config.patch_len, :]
-                # We have to use reshape and not view for non-contiguous memory
-                new_full_ts = new_full_ts.reshape(new_full_ts.size(0), -1, new_full_ts.size(3))
-
-                full_outputs.append(new_full_ts)
-
-            # (full batch, last patch, output_patch_len, index of mean forecast = 0)
-            new_ts = fprop_outputs[:, -1, :output_patch_len, 0]
-            new_full_ts = fprop_outputs[:, -1, :output_patch_len, :]
-            # (full batch, last patch, output_patch_len, all output indices)
-            full_outputs.append(new_full_ts)
-            final_out = torch.concatenate([final_out, new_ts], axis=-1)
-
-        if return_forecast_on_context:
-            # `full_outputs` indexing starts at after the first input patch.
-            full_outputs = torch.concatenate(full_outputs, axis=1)[
-                :, : (context_len - self.config.patch_len + horizon_len), :
-            ]
-        else:
-            # `full_outputs` indexing starts at the forecast horizon.
-            full_outputs = torch.concatenate(full_outputs, axis=1)[:, 0:horizon_len, :]
-
-        return (
-            full_outputs[:, :, 0],
-            full_outputs,
-            decoder_output.last_hidden_state,
-            decoder_output.attentions,
-            decoder_output.hidden_states,
-        )
-
     def _quantile_loss(self, predictions: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
         losses = []
         for i, q in enumerate(self.config.quantiles):
@@ -1083,18 +982,61 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
         input_ts = input_ts.to(device)
         input_padding = input_padding.to(device)
         inp_freq = inp_freq.to(device)
+        
+        final_out = input_ts
+        context_len = final_out.shape[1]
+        full_outputs = []
 
-        mean_outputs, full_outputs, last_hidden_state, all_attentions, all_hidden_states = self.decode(
-            input_ts=input_ts,
-            paddings=input_padding,
-            freq=inp_freq,
-            horizon_len=self.horizon_len,
-            return_forecast_on_context=return_forecast_on_context,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            max_len=fcontext_len,
-        )
+        if input_padding.shape[1] != final_out.shape[1] + self.horizon_len:
+            raise ValueError(
+                "Length of paddings must match length of input + horizon_len:"
+                f" {input_padding.shape[1]} != {final_out.shape[1]} + {self.horizon_len}"
+            )
+        output_patch_len = self.config.horizon_len
 
+        num_decode_patches = (self.horizon_len + output_patch_len - 1) // output_patch_len
+        for step_index in range(num_decode_patches):
+            current_padding = input_padding[:, 0 : final_out.shape[1]]
+            input_ts = final_out[:, -fcontext_len:]
+            input_padding = current_padding[:, -fcontext_len:]
+            decoder_output = self.decoder(
+                input_ts,
+                input_padding,
+                inp_freq,
+                output_attentions=output_attentions,
+                output_hidden_states=output_hidden_states,
+            )
+            fprop_outputs = self._postprocess_output(
+                decoder_output.last_hidden_state,
+                (decoder_output.loc, decoder_output.scale),
+            )
+
+            if return_forecast_on_context and step_index == 0:
+                # For the first decodings step, collect the model forecast on the
+                # context except the unavailable first input batch forecast.
+                new_full_ts = fprop_outputs[:, :-1, : self.config.patch_len, :]
+                # We have to use reshape and not view for non-contiguous memory
+                new_full_ts = new_full_ts.reshape(new_full_ts.size(0), -1, new_full_ts.size(3))
+
+                full_outputs.append(new_full_ts)
+
+            # (full batch, last patch, output_patch_len, index of mean forecast = 0)
+            new_ts = fprop_outputs[:, -1, :output_patch_len, 0]
+            new_full_ts = fprop_outputs[:, -1, :output_patch_len, :]
+            # (full batch, last patch, output_patch_len, all output indices)
+            full_outputs.append(new_full_ts)
+            final_out = torch.concatenate([final_out, new_ts], axis=-1)
+
+        if return_forecast_on_context:
+            # `full_outputs` indexing starts at after the first input patch.
+            full_outputs = torch.concatenate(full_outputs, axis=1)[
+                :, : (context_len - self.config.patch_len + self.horizon_len), :
+            ]
+        else:
+            # `full_outputs` indexing starts at the forecast horizon.
+            full_outputs = torch.concatenate(full_outputs, axis=1)[:, 0:self.horizon_len, :]
+
+        mean_outputs = full_outputs[:, :, 0]
         if window_size is not None:
             mean_outputs = mean_outputs[0::2, ...] + mean_outputs[1::2, ...]
             full_outputs = full_outputs[0::2, ...] + full_outputs[1::2, ...]
@@ -1110,18 +1052,18 @@ class TimesFmModelForPrediction(TimesFmPreTrainedModel):
 
         if return_dict:
             return TimesFmOutputForPrediction(
-                last_hidden_state=last_hidden_state,
-                attentions=all_attentions if output_attentions else None,
-                hidden_states=all_hidden_states if output_hidden_states else None,
+                last_hidden_state=decoder_output.last_hidden_state,
+                attentions=decoder_output.all_attentions if output_attentions else None,
+                hidden_states=decoder_output.all_hidden_states if output_hidden_states else None,
                 mean_predictions=mean_outputs,
                 full_predictions=full_outputs,
                 loss=loss,
             )
         else:
-            return_tuple = [last_hidden_state]
+            return_tuple = [decoder_output.last_hidden_state]
             if output_hidden_states:
-                return_tuple.append(all_hidden_states)
+                return_tuple.append(decoder_output.all_hidden_states)
             if output_attentions:
-                return_tuple.append(all_attentions)
+                return_tuple.append(decoder_output.all_attentions)
             return_tuple += [mean_outputs, full_outputs, loss]
             return tuple(return_tuple)
