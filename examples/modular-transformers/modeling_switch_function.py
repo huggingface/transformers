@@ -4,10 +4,11 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_switch_function.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# Note that llama and cohere have different definitions for rotate_half
 from typing import Callable, Optional, Tuple
 
 import torch
-import torch.nn as nn
+from torch import nn
 
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
