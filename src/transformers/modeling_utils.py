@@ -4343,7 +4343,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # This rename is logged.
         if key.endswith("LayerNorm.beta"):
             return key.replace("LayerNorm.beta", "LayerNorm.bias"), True
-        elif key.endswith("LayerNorm.gamma"):
+        if key.endswith("LayerNorm.gamma"):
             return key.replace("LayerNorm.gamma", "LayerNorm.weight"), True
 
         # Rename weight norm parametrizations to match changes across torch versions.
@@ -4352,12 +4352,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if hasattr(nn.utils.parametrizations, "weight_norm"):
             if key.endswith("weight_g"):
                 return key.replace("weight_g", "parametrizations.weight.original0"), True
-            elif key.endswith("weight_v"):
+            if key.endswith("weight_v"):
                 return key.replace("weight_v", "parametrizations.weight.original1"), True
         else:
             if key.endswith("parametrizations.weight.original0"):
                 return key.replace("parametrizations.weight.original0", "weight_g"), True
-            elif key.endswith("parametrizations.weight.original1"):
+            if key.endswith("parametrizations.weight.original1"):
                 return key.replace("parametrizations.weight.original1", "weight_v"), True
 
         return key, False
