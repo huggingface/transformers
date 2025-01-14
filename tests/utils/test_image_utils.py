@@ -31,6 +31,7 @@ from transformers import is_torch_available, is_vision_available
 from transformers.image_utils import (
     ChannelDimension,
     get_channel_dimension_axis,
+    make_batched_videos,
     make_flat_list_of_images,
     make_list_of_images,
     make_nested_list_of_images,
@@ -395,6 +396,115 @@ class ImageFeatureExtractionTester(unittest.TestCase):
         self.assertEqual(len(images_list), 2)
         self.assertEqual(len(images_list[0]), 4)
         self.assertTrue(np.array_equal(images_list[0][0], images[0][0]))
+
+    def test_make_batched_videos_pil(self):
+        # Test a single image is converted to a list of 1 video with 1 frame
+        pil_image = get_random_image(16, 32)
+        videos_list = make_batched_videos(pil_image)
+        self.assertIsInstance(videos_list[0], list)
+        self.assertEqual(len(videos_list[0]), 1)
+        self.assertIsInstance(videos_list[0][0], PIL.Image.Image)
+
+        # Test a list of images is converted to a list of 1 video
+        images = [get_random_image(16, 32) for _ in range(4)]
+        videos_list = make_batched_videos(images)
+        self.assertIsInstance(videos_list[0], list)
+        self.assertEqual(len(videos_list), 1)
+        self.assertEqual(len(videos_list[0]), 4)
+        self.assertIsInstance(videos_list[0][0], PIL.Image.Image)
+
+        # Test a nested list of images is not modified
+        images = [[get_random_image(16, 32) for _ in range(2)] for _ in range(2)]
+        videos_list = make_nested_list_of_images(images)
+        self.assertIsInstance(videos_list[0], list)
+        self.assertEqual(len(videos_list), 2)
+        self.assertEqual(len(videos_list[0]), 2)
+        self.assertIsInstance(videos_list[0][0], PIL.Image.Image)
+
+    def test_make_batched_videos_numpy(self):
+        # Test a single image is converted to a list of 1 video with 1 frame
+        images = np.random.randint(0, 256, (16, 32, 3))
+        videos_list = make_nested_list_of_images(images)
+        self.assertIsInstance(videos_list[0], list)
+        self.assertEqual(len(videos_list), 1)
+        self.assertTrue(np.array_equal(videos_list[0][0], images))
+
+        # Test a 4d array of images is converted to a a list of 1 video
+        images = np.random.randint(0, 256, (4, 16, 32, 3))
+        videos_list = make_nested_list_of_images(images)
+        self.assertIsInstance(videos_list[0], list)
+        self.assertIsInstance(videos_list[0][0], np.ndarray)
+        self.assertEqual(len(videos_list), 1)
+        self.assertEqual(len(videos_list[0]), 4)
+        self.assertTrue(np.array_equal(videos_list[0][0], images[0]))
+
+        # Test a list of images is converted to a list of videos
+        images = [np.random.randint(0, 256, (16, 32, 3)) for _ in range(4)]
+        videos_list = make_nested_list_of_images(images)
+        self.assertIsInstance(videos_list[0], list)
+        self.assertEqual(len(videos_list), 1)
+        self.assertEqual(len(videos_list[0]), 4)
+        self.assertTrue(np.array_equal(videos_list[0][0], images[0]))
+
+        # Test a nested list of images is left unchanged
+        images = [[np.random.randint(0, 256, (16, 32, 3)) for _ in range(2)] for _ in range(2)]
+        videos_list = make_nested_list_of_images(images)
+        self.assertIsInstance(videos_list[0], list)
+        self.assertEqual(len(videos_list), 2)
+        self.assertEqual(len(videos_list[0]), 2)
+        self.assertTrue(np.array_equal(videos_list[0][0], images[0][0]))
+
+        # Test a list of 4d array images is converted to a list of videos
+        images = [np.random.randint(0, 256, (4, 16, 32, 3)) for _ in range(2)]
+        videos_list = make_nested_list_of_images(images)
+        self.assertIsInstance(videos_list[0], list)
+        self.assertIsInstance(videos_list[0][0], np.ndarray)
+        self.assertEqual(len(videos_list), 2)
+        self.assertEqual(len(videos_list[0]), 4)
+        self.assertTrue(np.array_equal(videos_list[0][0], images[0][0]))
+
+    @require_torch
+    def test_make_batched_videos_torch(self):
+        # Test a single image is converted to a list of 1 video with 1 frame
+        images = torch.randint(0, 256, (16, 32, 3))
+        videos_list = make_nested_list_of_images(images)
+        self.assertIsInstance(videos_list[0], list)
+        self.assertEqual(len(videos_list[0]), 1)
+        self.assertTrue(np.array_equal(videos_list[0][0], images))
+
+        # Test a 4d tensor of images is converted to a list of 1 video
+        images = torch.randint(0, 256, (4, 16, 32, 3))
+        videos_list = make_nested_list_of_images(images)
+        self.assertIsInstance(videos_list[0], list)
+        self.assertIsInstance(videos_list[0][0], torch.Tensor)
+        self.assertEqual(len(videos_list), 1)
+        self.assertEqual(len(videos_list[0]), 4)
+        self.assertTrue(np.array_equal(videos_list[0][0], images[0]))
+
+        # Test a list of images is converted to a list of videos
+        images = [torch.randint(0, 256, (16, 32, 3)) for _ in range(4)]
+        videos_list = make_nested_list_of_images(images)
+        self.assertIsInstance(videos_list[0], list)
+        self.assertEqual(len(videos_list), 1)
+        self.assertEqual(len(videos_list[0]), 4)
+        self.assertTrue(np.array_equal(videos_list[0][0], images[0]))
+
+        # Test a nested list of images is left unchanged
+        images = [[torch.randint(0, 256, (16, 32, 3)) for _ in range(2)] for _ in range(2)]
+        videos_list = make_nested_list_of_images(images)
+        self.assertIsInstance(videos_list[0], list)
+        self.assertEqual(len(videos_list), 2)
+        self.assertEqual(len(videos_list[0]), 2)
+        self.assertTrue(np.array_equal(videos_list[0][0], images[0][0]))
+
+        # Test a list of 4d tensor images is converted to a list of videos
+        images = [torch.randint(0, 256, (4, 16, 32, 3)) for _ in range(2)]
+        videos_list = make_nested_list_of_images(images)
+        self.assertIsInstance(videos_list[0], list)
+        self.assertIsInstance(videos_list[0][0], torch.Tensor)
+        self.assertEqual(len(videos_list), 2)
+        self.assertEqual(len(videos_list[0]), 4)
+        self.assertTrue(np.array_equal(videos_list[0][0], images[0][0]))
 
     @require_torch
     def test_conversion_torch_to_array(self):

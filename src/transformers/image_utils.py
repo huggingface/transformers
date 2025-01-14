@@ -292,9 +292,6 @@ def make_nested_list_of_images(
             return [list(image) for image in images]
 
     # If it's a single image, convert it to a list of lists
-    if is_pil_image(images):
-        return [[images]]
-
     if is_valid_image(images):
         if is_pil_image(images) or images.ndim == 3:
             return [[images]]
@@ -317,15 +314,15 @@ def make_batched_videos(videos) -> VideoInput:
         return videos
 
     elif isinstance(videos, (list, tuple)) and is_valid_image(videos[0]):
-        if is_pil_image(videos[0]):
+        if is_pil_image(videos[0]) or videos[0].ndim == 3:
             return [videos]
-        elif len(videos[0].shape) == 4:
+        elif videos[0].ndim == 4:
             return [list(video) for video in videos]
 
     elif is_valid_image(videos):
-        if is_pil_image(videos):
+        if is_pil_image(videos) or videos.ndim == 3:
             return [[videos]]
-        elif len(videos.shape) == 4:
+        elif videos.ndim == 4:
             return [list(videos)]
 
     raise ValueError(f"Could not make batched video from {videos}")
