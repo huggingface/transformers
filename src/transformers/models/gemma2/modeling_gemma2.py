@@ -220,7 +220,12 @@ class Gemma2Attention(nn.Module):
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
+            cache_kwargs = {
+                "sin": sin,
+                "cos": cos,
+                "cache_position": cache_position,
+                "sliding_window": self.sliding_window,
+            }
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
             # Here we need to slice as we use a static cache by default, but FA2 does not support it
@@ -290,6 +295,9 @@ class Gemma2DecoderLayer(nn.Module):
                     torch.ones_like(attention_mask, dtype=torch.bool), diagonal=-self.sliding_window
                 )
                 attention_mask = torch.where(sliding_window_mask, min_dtype, attention_mask)
+            # If we are not in a state with input larger than the sliding window, we need to slice
+            if cache_position.shape[0] < self.sliding_window:
+                attention_mask = attention_mask[..., -self.sliding_window :]
 
         residual = hidden_states
 

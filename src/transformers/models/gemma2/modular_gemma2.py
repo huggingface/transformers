@@ -256,7 +256,12 @@ class Gemma2Attention(GemmaAttention):
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
-            cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position, "sliding_window": self.sliding_window}
+            cache_kwargs = {
+                "sin": sin,
+                "cos": cos,
+                "cache_position": cache_position,
+                "sliding_window": self.sliding_window,
+            }
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
             # Here we need to slice as we use a static cache by default, but FA2 does not support it
@@ -319,16 +324,16 @@ class Gemma2DecoderLayer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         if self.is_sliding and attention_mask is not None:  # efficient SDPA and no padding
-            mask_len = max(self.sliding_window, cache_position.shape[0])
             # For FA2, the mask is 2D and is of shape [bs, seq_len] (not [bs, fixed_cache_len])
-            if self.config._attn_implementation == "flash_attention_2":
-                attention_mask = attention_mask[:, -mask_len :]
-            else:
+            if self.config._attn_implementation != "flash_attention_2":
                 min_dtype = torch.finfo(hidden_states.dtype).min
                 sliding_window_mask = torch.tril(
                     torch.ones_like(attention_mask, dtype=torch.bool), diagonal=-self.sliding_window
                 )
                 attention_mask = torch.where(sliding_window_mask, min_dtype, attention_mask)
+            # If we are not in a state with input larger than the sliding window, we need to slice
+            if cache_position.shape[0] < self.sliding_window:
+                attention_mask = attention_mask[..., -self.sliding_window :]
 
         residual = hidden_states
 

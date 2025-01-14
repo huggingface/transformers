@@ -356,6 +356,10 @@ class Cohere2DecoderLayer(nn.Module):
                     torch.ones_like(attention_mask, dtype=torch.bool), diagonal=-self.sliding_window
                 )
                 attention_mask = torch.where(sliding_window_mask, min_dtype, attention_mask)
+            # If we are not in a state with input larger than the sliding window, we need to slice
+            # Here we assume this can only happen during prefill
+            if cache_position.shape[0] < self.sliding_window:
+                attention_mask = attention_mask[..., -self.sliding_window :]
 
         residual = hidden_states
 
