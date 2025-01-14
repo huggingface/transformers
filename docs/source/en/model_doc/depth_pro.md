@@ -41,11 +41,10 @@ This model was contributed by [geetu040](https://github.com/geetu040). The origi
 from transformers import DepthProConfig, DepthProForDepthEstimation
 
 config = DepthProConfig()
-model = DPTForDepthEstimation(config=config)
+model = DepthProForDepthEstimation(config=config)
 ```
 
-- By default model takes an input image of size `1536`, this can be changed via config, however the model is compatible with images of different width and height.
-- Input image is scaled with different ratios, as specified in `scaled_images_ratios`, then each of the scaled image is patched to `patch_size` with an overlap ratio of `scaled_images_overlap_ratios`.
+- Input image is scaled with different ratios, as specified in `scaled_images_ratios`, and each of the scaled image is patched to `patch_size` with an overlap ratio of `scaled_images_overlap_ratios`.
 - These patches go through `DinoV2 (ViT)` based encoders and are reassembled via a `DPT` based decoder.
 - `DepthProForDepthEstimation` can also predict the `FOV (Field of View)` if `use_fov_model` is set to `True` in the config.
 - `DepthProImageProcessor` can be used for preprocessing the inputs and postprocessing the outputs. `DepthProImageProcessor.post_process_depth_estimation` interpolates the `predicted_depth` back to match the input image size.
@@ -72,7 +71,6 @@ SDPA is used by default for `torch>=2.1.1` when an implementation is available, 
 ```py
 from transformers import DepthProForDepthEstimation
 model = DepthProForDepthEstimation.from_pretrained("geetu040/DepthPro", attn_implementation="sdpa", torch_dtype=torch.float16)
-...
 ```
 
 For the best speedups, we recommend loading the model in half-precision (e.g. `torch.float16` or `torch.bfloat16`).
