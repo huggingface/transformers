@@ -267,6 +267,10 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
                 f"config.{attribute}" in modeling_source
                 or f'getattr(config, "{attribute}"' in modeling_source
                 or f'getattr(self.config, "{attribute}"' in modeling_source
+                or (
+                    "TextConfig" in config_class.__name__
+                    and f"config.get_text_config().{attribute}" in modeling_source
+                )
             ):
                 attribute_used = True
             # Deal with multi-line cases
