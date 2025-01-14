@@ -922,7 +922,9 @@ def prepare_reports(title, header, reports, to_truncate=True):
 
 if __name__ == "__main__":
     SLACK_REPORT_CHANNEL_ID = os.environ["SLACK_REPORT_CHANNEL"]
-    REPORT_REPO_ID = os.environ.get("REPORT_REPO_ID", "hf-internal-testing/transformers_daily_ci")
+    REPORT_REPO_ID = os.environ.get("REPORT_REPO_ID")
+    if not REPORT_REPO_ID:
+        REPORT_REPO_ID = "hf-internal-testing/transformers_daily_ci"
     UPLOAD_REPORT_SUMMARY = os.environ.get("UPLOAD_REPORT_SUMMARY") == "true"
 
     # runner_status = os.environ.get("RUNNER_STATUS")
@@ -1290,6 +1292,3 @@ if __name__ == "__main__":
     if message.n_failures or (ci_event != "push" and not ci_event.startswith("Push CI (AMD)")):
         message.post()
         message.post_reply()
-
-        # if UPLOAD_REPORT_SUMMARY
-        # message.upload_to_repo()
