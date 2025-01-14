@@ -386,6 +386,7 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
 
     model_input_names = ["pixel_values", "pixel_mask"]
 
+    @deprecate_kwarg("reduce_labels", new_name="do_reduce_labels", version="4.44.0")
     @deprecate_kwarg("size_divisibility", new_name="size_divisor", version="4.41.0")
     @deprecate_kwarg("max_size", version="4.27.0", warn_if_greater_or_equal_version=True)
     @filter_out_non_signature_kwargs(extra=["max_size", *INIT_SERVICE_KWARGS])
@@ -401,6 +402,7 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
         image_mean: Union[float, List[float]] = None,
         image_std: Union[float, List[float]] = None,
         ignore_index: Optional[int] = None,
+        do_reduce_labels: bool = False,
         num_labels: Optional[int] = None,
         pad_size: Optional[Dict[str, int]] = None,
         **kwargs,
@@ -424,6 +426,7 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.ignore_index = ignore_index
+        self.do_reduce_labels = do_reduce_labels
         self.num_labels = num_labels
         self.pad_size = pad_size
         self._valid_processor_keys = [
@@ -439,6 +442,7 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
             "image_mean",
             "image_std",
             "ignore_index",
+            "do_reduce_labels",
             "num_labels",
             "pad_size",
             "format",
@@ -458,6 +462,8 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
             image_processor_dict["max_size"] = kwargs.pop("max_size")
         if "size_divisibility" in kwargs:
             image_processor_dict["size_divisor"] = kwargs.pop("size_divisibility")
+        if "reduce_labels" in image_processor_dict:
+            image_processor_dict["do_reduce_labels"] = image_processor_dict.pop("reduce_labels")
         return super().from_dict(image_processor_dict, **kwargs)
 
     def to_dict(self) -> Dict[str, Any]:
