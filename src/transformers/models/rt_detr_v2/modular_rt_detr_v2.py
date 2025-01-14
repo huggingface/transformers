@@ -102,7 +102,7 @@ class RtDetrV2Config(PretrainedConfig):
             The non-linear activation function (function or string) in the general layer. If string, `"gelu"`,
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
         eval_size (`Tuple[int, int]`, *optional*):
-            Height and width used to computes the effective height and width of the position embeddings after taking
+            Height and width used to compute the effective height and width of the position embeddings after taking
             into account the stride.
         normalize_before (`bool`, *optional*, defaults to `False`):
             Determine whether to apply layer normalization in the transformer encoder layer before self-attention and
