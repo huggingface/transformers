@@ -26,13 +26,13 @@ import re
 import shutil
 import tempfile
 import warnings
+from bisect import bisect_left
 from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial, wraps
 from threading import Thread
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, TypeVar, Union
 from zipfile import is_zipfile
-from bisect import bisect_left, bisect_right
 
 import torch
 from huggingface_hub import split_torch_state_dict_into_shards
@@ -566,7 +566,9 @@ def set_initialized_submodules(model, state_dict_keys):
     Sets the `_is_hf_initialized` flag in all submodules of a given model when all its weights are in the loaded state
     dict.
     """
-    state_dict_keys = sorted(state_dict_keys)  # So we can do binary search on it - this becomes important when it's big
+    state_dict_keys = sorted(
+        state_dict_keys
+    )  # So we can do binary search on it - this becomes important when it's big
 
     not_initialized_submodules = {}
     for module_name, module in model.named_modules():
@@ -580,7 +582,9 @@ def set_initialized_submodules(model, state_dict_keys):
             loaded_keys.add(state_dict_keys[i].removeprefix(prefix))
             i += 1
         # This next block is just for debug testing and should be removed before merging
-        old_loaded_keys = {k.replace(f"{module_name}.", "") for k in state_dict_keys if k.startswith(f"{module_name}.")}
+        old_loaded_keys = {
+            k.replace(f"{module_name}.", "") for k in state_dict_keys if k.startswith(f"{module_name}.")
+        }
         assert old_loaded_keys == loaded_keys
         # When checking if the root module is loaded all state_dict_keys must be used.
         if module_name == "":
