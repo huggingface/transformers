@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import warnings
 from typing import Callable, Optional, Tuple, Union
 
 import torch
@@ -1099,7 +1100,7 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
 
     def generate(
         self,
-        input_values,
+        input_values: Optional[torch.FloatTensor] = None,
         infer_max_length_from_input: bool = True,
         tokens_per_second: float = None,
         **generate_kwargs,
@@ -1110,7 +1111,7 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
         Overall behavior, parameters and return type are the same as the original [`~generation.GenerationMixin.generate`] method.
 
         Parameters:
-            input_values (`torch.FloatTensor` of shape `(batch_size, audio_length)`):
+            input_values (`torch.FloatTensor` of shape `(batch_size, audio_length)`, *optional*):
                 Float values of the raw speech waveform. Raw speech waveform can be
                 obtained by loading a `.flac` or `.wav` audio file into an array of type `List[float]` or a
                 `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
@@ -1153,6 +1154,12 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
         'Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.'
         ```
         """
+        if "inputs" in generate_kwargs:
+            input_values = generate_kwargs.pop("inputs")
+            warnings.warn(
+                "The input name `inputs` is deprecated. Please make sure to use `input_values` instead.",
+                FutureWarning,
+            )
 
         if infer_max_length_from_input:
             tokens_per_second = tokens_per_second if tokens_per_second is not None else self.config.tokens_per_second
