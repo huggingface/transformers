@@ -40,7 +40,6 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_ninja_available,
-    is_timm_available,
     is_torch_cuda_available,
     logging,
     replace_return_docstrings,
@@ -83,10 +82,6 @@ def load_cuda_kernels():
             "-D__CUDA_NO_HALF2_OPERATORS__",
         ],
     )
-
-
-if is_timm_available():
-    pass
 
 
 logger = logging.get_logger(__name__)
