@@ -433,6 +433,7 @@ class DiffLlamaDecoderLayer(LlamaDecoderLayer):
 class DiffLlamaPreTrainedModel(LlamaPreTrainedModel):
     _supports_flex_attn = False
 
+
 class DiffLlamaModel(LlamaModel):
     pass
 
