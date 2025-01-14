@@ -1181,6 +1181,24 @@ class RelationDetrPreTrainedModel(PreTrainedModel):
         std = self.config.init_std
         xavier_gain = self.config.init_xavier_std
 
+        prior_prob = self.config.init_bias_prior_prob or 1 / (self.config.num_labels + 1)
+        bias = float(-math.log((1 - prior_prob) / prior_prob))
+
+        if isinstance(module, RelationDetrDecoder):
+            for layer in module.class_head:
+                nn.init.xavier_uniform_(layer.weight, xavier_gain)
+                nn.init.constant_(layer.bias, bias)
+
+            for layer in module.bbox_head:
+                nn.init.constant_(layer.layers[-1].weight, 0)
+                nn.init.constant_(layer.layers[-1].bias, 0)
+
+        if isinstance(module, RelationDetrModel):
+            nn.init.xavier_uniform_(module.encoder_class_head.weight, xavier_gain)
+            nn.init.constant_(module.encoder_class_head.bias, bias)
+            nn.init.constant_(module.encoder_bbox_head.weight, 0)
+            nn.init.constant_(module.encoder_bbox_head.bias, 0)
+
         if isinstance(module, RelationDetrLearnedPositionEmbedding):
             nn.init.uniform_(module.row_embeddings.weight)
             nn.init.uniform_(module.column_embeddings.weight)
