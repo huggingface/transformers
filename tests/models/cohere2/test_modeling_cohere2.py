@@ -201,7 +201,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
             cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
 
     @require_read_token
-    def test_model_bf16(self): 
+    def test_model_bf16(self):
         model_id = "CohereForAI/c4ai-command-r7b-12-2024"
         EXPECTED_TEXTS = [
             "<BOS_TOKEN>Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many",
