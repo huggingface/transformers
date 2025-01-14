@@ -357,7 +357,7 @@ class Cohere2IntegrationTest(unittest.TestCase):
         inputs = tokenizer(input_text, padding=True, return_tensors="pt").to(torch_device)
 
         model = AutoModelForCausalLM.from_pretrained(
-            model_id, attn_implementation="flash_attention_2", torch_dtype=torch.float15
+            model_id, attn_implementation="flash_attention_2", torch_dtype=torch.float16
         ).to(torch_device)
 
         # Make sure prefill is larger than sliding window
