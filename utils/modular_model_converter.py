@@ -1569,7 +1569,10 @@ def get_class_node_and_dependencies(
     class_idx = max(relative_dependency_order.values()) + 1 if len(relative_dependency_order) > 0 else 0
     nodes_to_add[class_name] = (class_idx, updated_node)
 
-    # Replace functions that were directly imported by their correct source
+    # Replace functions with their correct source, if explicitly different from the one found by class dependency mapping.
+    # Indeed, functions are automatically added as part of following dependencies from a class, from the SAME module as the
+    # class, so if a function was explicitly imported from another module in the modular file, we should switch module definition
+    # See `examples/modular-tranformers/modular_switch_function.py` for an example
     for node_name, (idx, node) in nodes_to_add.items():
         # This is a function -> make sure we replace the definition by the one from the correct module,
         # in case it was added from class dependencies from a module, but explicitly imported from another in the modular
