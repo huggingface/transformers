@@ -20,6 +20,7 @@
 # limitations under the License.
 
 import math
+from contextlib import nullcontext
 from typing import Dict, Optional, Tuple, Union
 
 import torch
@@ -30,6 +31,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import BaseModelOutput, MaskedLMOutput, SequenceClassifierOutput, TokenClassifierOutput
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_code_sample_docstrings,
@@ -240,23 +242,50 @@ class ModernBertMLP(nn.Module):
 
 
 class ModernBertRotaryEmbedding(nn.Module):
-    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
+    def __init__(self, config: ModernBertConfig, dim: int, base: float, device: Optional[torch.device] = None):
         super().__init__()
+        # BC: "rope_type" was originally "type"
+        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+        else:
+            self.rope_type = "default"
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
 
-        self.dim = dim
-        self.max_position_embeddings = max_position_embeddings
-        self.base = base
-        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float() / self.dim))
-        self.register_buffer("inv_freq", tensor=inv_freq, persistent=False)
+        self.config = config
+        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = self.rope_init_fn(None, device, dim=dim, base=base)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = self.inv_freq
+
+    def _dynamic_frequency_update(self, position_ids, device):
+        """
+        dynamic RoPE layers should recompute `inv_freq` in the following situations:
+        1 - growing beyond the cached sequence length (allow scaling)
+        2 - the current sequence length is in the original scale (avoid losing precision with small sequences)
+        """
+        seq_len = torch.max(position_ids) + 1
+        if seq_len > self.max_seq_len_cached:  # growth
+            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
+            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
+            self.max_seq_len_cached = seq_len
+
+        if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
+            # This .to() is needed if the model has been moved to a device after being initialized (because
+            # the buffer is automatically moved, but not the original copy)
+            self.original_inv_freq = self.original_inv_freq.to(device)
+            self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
+            self.max_seq_len_cached = self.original_max_seq_len
 
     @torch.no_grad()
-    def forward(self, x, position_ids, seq_len=None):
-        # x: [bs, num_attention_heads, seq_len, head_size]
-        self.inv_freq.to(x.device)
+    def forward(self, x, position_ids):
+        if "dynamic" in self.rope_type:
+            self._dynamic_frequency_update(position_ids, device=x.device)
+
+        # Core RoPE block
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
-        # Force float32 since bfloat16 loses precision on long contexts
-        # See https://github.com/huggingface/transformers/pull/29285
+        # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
         device_type = x.device.type
         device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
@@ -264,6 +293,11 @@ class ModernBertRotaryEmbedding(nn.Module):
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos()
             sin = emb.sin()
+
+        # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
+        cos = cos * self.attention_scaling
+        sin = sin * self.attention_scaling
+
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
@@ -467,9 +501,7 @@ class ModernBertAttention(nn.Module):
                 dim=self.head_dim, max_seqlen=max_position_embeddings, base=rope_theta
             )
         else:
-            self.rotary_emb = ModernBertRotaryEmbedding(
-                dim=self.head_dim, max_position_embeddings=max_position_embeddings, base=rope_theta
-            )
+            self.rotary_emb = ModernBertRotaryEmbedding(config=config, dim=self.head_dim, base=rope_theta)
 
         self.Wo = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
         self.out_drop = nn.Dropout(config.attention_dropout) if config.attention_dropout > 0.0 else nn.Identity()
@@ -632,12 +664,14 @@ class ModernBertPreTrainedModel(PreTrainedModel):
     ):
         # If the user didn't specify anything, try to use flash_attention_2 if available.
         # Otherwise we fall back to the default SDPA -> Eager from the super() method.
+        # ModernBert's FA2 implementation correctly handles non-fp16/bf16 dtypes, we don't
+        # need the FA2 warning for non-fp16/bf16 dtypes so we set fp16 for the FA2 check.
         if config._attn_implementation_internal is None:
             config._attn_implementation_internal = "flash_attention_2"
             try:
                 return cls._check_and_enable_flash_attn_2(
                     config,
-                    torch_dtype=torch_dtype,
+                    torch_dtype=torch.float16,
                     device_map=device_map,
                     hard_check_only=False,
                     check_device_map=check_device_map,
@@ -647,7 +681,7 @@ class ModernBertPreTrainedModel(PreTrainedModel):
         return super()._autoset_attn_implementation(
             config,
             use_flash_attention_2=use_flash_attention_2,
-            torch_dtype=torch_dtype,
+            torch_dtype=torch.float16,
             device_map=device_map,
             check_device_map=check_device_map,
         )
@@ -668,6 +702,14 @@ class ModernBertPreTrainedModel(PreTrainedModel):
             if self.config.reference_compile:
                 logger.warning_once(
                     "Compiling the model with `torch.compile` and using a `torch.mps` device is not supported. "
+                    "Falling back to non-compiled mode."
+                )
+            self.config.reference_compile = False
+
+        if self.device.type == "cpu":
+            if self.config.reference_compile:
+                logger.warning_once(
+                    "Compiling the model with `torch.compile` and using a `torch.cpu` device is not supported. "
                     "Falling back to non-compiled mode."
                 )
             self.config.reference_compile = False
@@ -763,8 +805,8 @@ def _pad_modernbert_output(
 MODERNBERT_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
+            Indices of input sequence tokens in the vocabulary. With Flash Attention 2.0, padding will be ignored
+            by default should you provide it.
 
             Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
             [`PreTrainedTokenizer.__call__`] for details.
@@ -790,7 +832,7 @@ MODERNBERT_INPUTS_DOCSTRING = r"""
         sliding_window_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding or far-away tokens. In ModernBert, only every few layers
             perform global attention, while the rest perform local attention. This mask is used to avoid attending to
-            far-away tokens in the local attention layers.
+            far-away tokens in the local attention layers when not using Flash Attention.
         position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
             config.n_positions - 1]`.
@@ -805,11 +847,11 @@ MODERNBERT_INPUTS_DOCSTRING = r"""
         cu_seqlens (`torch.Tensor` of shape `(batch + 1,)`, *optional*):
             Cumulative sequence lengths of the input sequences. Used to index the unpadded tensors.
         max_seqlen (`int`, *optional*):
-            Maximum sequence length in the batch. Used to pad the output tensors.
+            Maximum sequence length in the batch excluding padding tokens. Used to unpad input_ids and pad output tensors.
         batch_size (`int`, *optional*):
             Batch size of the input sequences. Used to pad the output tensors.
         seq_len (`int`, *optional*):
-            Sequence length of the input sequences. Used to pad the output tensors.
+            Sequence length of the input sequences including padding tokens. Used to pad the output tensors.
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more detail.
@@ -1128,8 +1170,9 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
             loss = self.loss_function(logits, labels, vocab_size=self.config.vocab_size)
 
         if self.config._attn_implementation == "flash_attention_2":
-            with torch.no_grad():
+            with nullcontext() if self.config.repad_logits_with_grad or labels is None else torch.no_grad():
                 logits = _pad_modernbert_output(inputs=logits, indices=indices, batch=batch_size, seqlen=seq_len)
+
         if not return_dict:
             output = (logits,)
             return ((loss,) + output) if loss is not None else output
