@@ -201,14 +201,15 @@ class OneFormerProcessor(ProcessorMixin):
         )
 
         if hasattr(encoded_inputs, "text_inputs"):
-            text_inputs = [
-                self._preprocess_text(
-                    texts,
-                    max_length=self.max_seq_length,
-                    text_kwargs=output_kwargs["text_kwargs"],
-                ).unsqueeze(0)
-                for texts in encoded_inputs.text_inputs
-            ]
+            text_inputs = []
+            for texts in encoded_inputs.text_inputs:
+                text_inputs.append(
+                    self._preprocess_text(
+                        texts,
+                        max_length=self.max_seq_length,
+                        text_kwargs=output_kwargs["text_kwargs"],
+                    ).unsqueeze(0)
+                )
             encoded_inputs["text_inputs"] = torch.cat(text_inputs, dim=0)
 
         return encoded_inputs
@@ -246,10 +247,15 @@ class OneFormerProcessor(ProcessorMixin):
         )
 
         if hasattr(encoded_inputs, "text_inputs"):
-            text_inputs = [
-                self._preprocess_text(texts, max_length=self.max_seq_length, text_kwargs=text_kwargs).unsqueeze(0)
-                for texts in encoded_inputs.text_inputs
-            ]
+            text_inputs = []
+            for texts in encoded_inputs.text_inputs:
+                text_inputs.append(
+                    self._preprocess_text(
+                        texts,
+                        max_length=self.max_seq_length,
+                        text_kwargs=text_kwargs,
+                    ).unsqueeze(0)
+                )
             encoded_inputs["text_inputs"] = torch.cat(text_inputs, dim=0)
 
         return encoded_inputs
