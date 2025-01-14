@@ -400,9 +400,7 @@ class Emu3IntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_model_generation(self):
-        model = Emu3ForConditionalGeneration.from_pretrained(
-            "Emu3-community/Emu3-Chat-hf", load_in_4bit=True, device_map="auto"
-        )
+        model = Emu3ForConditionalGeneration.from_pretrained("Emu3-community/Emu3-Chat-hf", load_in_4bit=True)
         processor = Emu3Processor.from_pretrained("Emu3-community/Emu3-Chat-hf")
 
         image = Image.open(
@@ -421,9 +419,7 @@ class Emu3IntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_model_generation_batched(self):
-        model = Emu3ForConditionalGeneration.from_pretrained(
-            "Emu3-community/Emu3-Chat-hf", load_in_4bit=True, device_map="auto"
-        )
+        model = Emu3ForConditionalGeneration.from_pretrained("Emu3-community/Emu3-Chat-hf", load_in_4bit=True)
         processor = Emu3Processor.from_pretrained("Emu3-community/Emu3-Chat-hf")
         processor.tokenizer.padding_side = "left"
 
@@ -454,9 +450,7 @@ class Emu3IntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_model_generation_multi_image(self):
-        model = Emu3ForConditionalGeneration.from_pretrained(
-            "Emu3-community/Emu3-Chat-hf", load_in_4bit=True, device_map="auto"
-        )
+        model = Emu3ForConditionalGeneration.from_pretrained("Emu3-community/Emu3-Chat-hf", load_in_4bit=True)
         processor = Emu3Processor.from_pretrained("Emu3-community/Emu3-Chat-hf")
 
         image = Image.open(
@@ -478,9 +472,7 @@ class Emu3IntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
     def test_model_generate_images(self):
-        model = Emu3ForConditionalGeneration.from_pretrained(
-            "Emu3-community/Emu3-Gen-hf", load_in_4bit=True, device_map="auto"
-        )
+        model = Emu3ForConditionalGeneration.from_pretrained("Emu3-community/Emu3-Gen-hf", load_in_4bit=True)
         processor = Emu3Processor.from_pretrained("Emu3-community/Emu3-Chat-hf")
 
         inputs = processor(

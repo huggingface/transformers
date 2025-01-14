@@ -572,7 +572,7 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         video_file = hf_hub_download(
             repo_id="raushan-testing-hf/videos-test", filename="video_demo.npy", repo_type="dataset"
         )
-        video_file = np.load(video_file)
+        video_file = np.load(video_file)[:, :2]  # slice 2 frames only to use less memory
         inputs = self.processor(prompt, videos=video_file, return_tensors="pt").to(torch_device, torch.float16)
 
         # Make sure that the loss is properly computed

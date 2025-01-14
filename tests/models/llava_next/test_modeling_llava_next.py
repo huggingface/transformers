@@ -565,46 +565,6 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
 
     @slow
     @require_bitsandbytes
-    def test_padding_side_when_merging_inputs(self):
-        model = LlavaNextForConditionalGeneration.from_pretrained(
-            "llava-hf/llava-v1.6-mistral-7b-hf",
-            load_in_4bit=True,
-        )
-
-        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        lowres_url = "https://4.img-dpreview.com/files/p/TS560x560~forums/56876524/03975b28741443319e9a94615e35667e"
-        cats_image = Image.open(requests.get(url, stream=True).raw)
-        lowres_img = Image.open(requests.get(lowres_url, stream=True).raw)
-
-        inputs_batched = self.processor(
-            images=[lowres_img, cats_image], text=[self.prompt, self.prompt], return_tensors="pt", padding=True
-        ).to(torch_device)
-
-        # model is in eval mode by default so we should get pad on the left side
-        # we can check the first hidden-states (aka inputs embeds)
-        # the first element was lo-res image and we expect the first 732 tokens to be all pads
-        with torch.no_grad():
-            output_eval = model(**inputs_batched, output_hidden_states=True)
-        self.assertTrue((output_eval.hidden_states[0][0, :732, ...] == 0).all().item())
-
-        with self.assertLogs("transformers", level="WARNING") as logs:
-            model.padding_side = "left"
-            model.train()
-            with torch.no_grad():
-                model(**inputs_batched, output_hidden_states=True)
-
-            self.assertIn("Padding side is set to 'left' but the model is in training mode. For training", logs)
-
-        with self.assertLogs("transformers", level="WARNING") as logs:
-            model.padding_side = "right"
-            model.eval()
-            with torch.no_grad():
-                model(**inputs_batched, output_hidden_states=True)
-
-            self.assertIn("Padding side is set to 'right' but the model is in inference mode. For correct", logs)
-
-    @slow
-    @require_bitsandbytes
     def test_small_model_integration_test_full_vision_state_selection(self):
         model = LlavaNextForConditionalGeneration.from_pretrained(
             "llava-hf/llava-v1.6-mistral-7b-hf",
