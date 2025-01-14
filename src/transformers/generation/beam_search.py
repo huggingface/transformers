@@ -22,6 +22,7 @@ import torch
 
 from ..utils import add_start_docstrings
 from .beam_constraints import Constraint, ConstraintListState
+from .streamers import MultiBeamBaseStreamer
 
 
 PROCESS_INPUTS_DOCSTRING = r"""
@@ -223,6 +224,7 @@ class BeamSearchScorer(BeamScorer):
         beam_indices: Optional[torch.LongTensor] = None,
         group_index: Optional[int] = 0,
         decoder_prompt_len: Optional[int] = 0,
+        streamer: Optional["MultiBeamBaseStreamer"] = None,
     ) -> Dict[str, torch.Tensor]:
         # add up to the length which the next_scores is calculated on (including decoder prompt)
         cur_len = input_ids.shape[-1] + 1
@@ -287,6 +289,10 @@ class BeamSearchScorer(BeamScorer):
                         beam_indices=beam_index,
                         generated_len=cur_len - decoder_prompt_len,
                     )
+
+                    if streamer is not None:
+                        streamer.beam_finished(batch_beam_idx.item())
+
                 else:
                     # add next predicted token since it is not eos_token
                     next_beam_scores[batch_idx, beam_idx] = next_score
