@@ -101,6 +101,7 @@ class RelationDetrModelTester:
         )
         self.decoder_seq_length = self.num_queries
 
+    # Copied from tests.models.rt_detr.test_modeling_rt_detr.RTDetrModelTester.prepare_config_and_inputs
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
@@ -119,6 +120,7 @@ class RelationDetrModelTester:
                 labels.append(target)
 
         config = self.get_config()
+        config.num_labels = self.num_labels
         return config, pixel_values, pixel_mask, labels
 
     def get_config(self):
@@ -153,6 +155,7 @@ class RelationDetrModelTester:
             use_pretrained_backbone=False,
         )
 
+    # Copied from tests.models.deformable_detr.test_modeling_deformable_detr.DeformableDetrModelTester.prepare_config_and_inputs_for_common
     def prepare_config_and_inputs_for_common(self):
         config, pixel_values, pixel_mask, labels = self.prepare_config_and_inputs()
         inputs_dict = {"pixel_values": pixel_values, "pixel_mask": pixel_mask}
@@ -229,6 +232,7 @@ class RelationDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
             common_properties=["d_model", "encoder_attention_heads", "decoder_attention_heads"],
         )
 
+    # Copied from tests.models.deformable_detr.test_modeling_deformable_detr.DeformableDetrModelTest.test_config
     def test_config(self):
         self.config_tester.run_common_tests()
 
@@ -264,6 +268,7 @@ class RelationDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
     def test_feed_forward_chunking(self):
         pass
 
+    # Modified from tests.models.deformable_detr.test_modeling_deformable_detr.DeformableDetrModelTest.test_attention_outputs
     def test_attention_outputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.return_dict = True
@@ -364,6 +369,7 @@ class RelationDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
                 ],
             )
 
+    # Copied from tests.models.deformable_detr.test_modeling_deformable_detr.DeformableDetrModelTest.test_model_outputs_equivalence
     def test_model_outputs_equivalence(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -438,6 +444,7 @@ class RelationDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
                 model, tuple_inputs, dict_inputs, {"output_hidden_states": True, "output_attentions": True}
             )
 
+    # Copied from tests.models.deformable_detr.test_modeling_deformable_detr.DeformableDetrModelTest.test_retain_grad_hidden_states_attentions
     def test_retain_grad_hidden_states_attentions(self):
         # removed retain_grad and grad on decoder_hidden_states, as queries don't require grad
 
@@ -475,6 +482,7 @@ class RelationDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
         self.assertIsNotNone(decoder_attentions.grad)
         self.assertIsNotNone(cross_attentions.grad)
 
+    # Modified from tests.models.deformable_detr.test_modeling_deformable_detr.DeformableDetrModelTest.test_forward_auxiliary_loss
     def test_forward_auxiliary_loss(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         # Relation-DETR always use auxiliary loss
@@ -492,6 +500,7 @@ class RelationDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
             self.assertIsNotNone(outputs.auxiliary_outputs)
             self.assertEqual(len(outputs.auxiliary_outputs), self.model_tester.num_hidden_layers - 1)
 
+    # Copied from tests.models.deformable_detr.test_modeling_deformable_detr.DeformableDetrModelTest.test_forward_signature
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -513,6 +522,7 @@ class RelationDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
                 expected_arg_names = ["pixel_values", "pixel_mask"]
                 self.assertListEqual(arg_names[:1], expected_arg_names)
 
+    # Modified from tests.models.deformable_detr.test_modeling_deformable_detr.DeformableDetrModelTest.test_different_timm_backbone
     def test_different_timm_backbone(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -544,6 +554,7 @@ class RelationDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
 
             self.assertTrue(outputs)
 
+    # Modified from tests.models.deformable_detr.test_modeling_deformable_detr.DeformableDetrModelTest.test_hf_backbone
     def test_hf_backbone(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -576,6 +587,7 @@ class RelationDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
 
             self.assertTrue(outputs)
 
+    # Modified from tests.models.deformable_detr.test_modeling_deformable_detr.DeformableDetrModelTest.test_initialization
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
