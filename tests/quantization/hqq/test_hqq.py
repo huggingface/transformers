@@ -19,11 +19,11 @@ import unittest
 from transformers import AutoModelForCausalLM, AutoTokenizer, HqqConfig
 from transformers.testing_utils import (
     require_accelerate,
+    require_hqq,
     require_torch_gpu,
     require_torch_multi_gpu,
     slow,
     torch_device,
-    require_hqq,
 )
 from transformers.utils import is_hqq_available, is_torch_available
 
