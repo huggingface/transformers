@@ -100,12 +100,9 @@ class OneFormerProcessor(ProcessorMixin):
     ):
         if text_kwargs is None:
             text_kwargs = {}
-        tokens = self.tokenizer(
-            text_list,
-            max_length=text_kwargs.get("max_length") if text_kwargs.get("max_length") is not None else max_length,
-            padding=text_kwargs.get("padding", "max_length"),
-            truncation=text_kwargs.get("truncation", True),
-        )
+        if "max_length" not in text_kwargs:
+            text_kwargs["max_length"] = max_length
+        tokens = self.tokenizer(text_list, **text_kwargs)
 
         attention_masks, input_ids = tokens["attention_mask"], tokens["input_ids"]
 
@@ -238,11 +235,19 @@ class OneFormerProcessor(ProcessorMixin):
         for task in task_inputs:
             task_input = f"the task is {task}"
             task_token_inputs.append(task_input)
-        encoded_inputs["task_inputs"] = self._preprocess_text(task_token_inputs, max_length=self.task_seq_length)
+        text_kwargs = {
+            "padding": "max_length",
+            "truncation": True,
+        }
+        encoded_inputs["task_inputs"] = self._preprocess_text(
+            task_token_inputs,
+            max_length=self.task_seq_length,
+            text_kwargs=text_kwargs,
+        )
 
         if hasattr(encoded_inputs, "text_inputs"):
             text_inputs = [
-                self._preprocess_text(texts, max_length=self.max_seq_length).unsqueeze(0)
+                self._preprocess_text(texts, max_length=self.max_seq_length, text_kwargs=text_kwargs).unsqueeze(0)
                 for texts in encoded_inputs.text_inputs
             ]
             encoded_inputs["text_inputs"] = torch.cat(text_inputs, dim=0)

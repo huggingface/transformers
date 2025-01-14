@@ -204,7 +204,7 @@ class OneFormerProcessingTest(ProcessorTesterMixin, unittest.TestCase):
     def processor_dict(self):
         return self.processing_tester.prepare_processor_dict()
 
-    # START - override commont tests due to mandatory argument task_inputs
+    # START - override common tests due to mandatory argument task_inputs
     def test_image_processor_defaults_preserved_by_image_kwargs(self):
         """
         We use do_rescale=True, rescale_factor=-1 to ensure that image_processor kwargs are preserved in the processor.
