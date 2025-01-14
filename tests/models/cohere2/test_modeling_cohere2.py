@@ -340,3 +340,31 @@ class Cohere2IntegrationTest(unittest.TestCase):
         )
         ep_generated_text = tokenizer.batch_decode(ep_generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)
+
+    @require_read_token
+    def test_long_prefill_flash_attention_2(self):
+        model_id = "CohereForAI/c4ai-command-r7b-12-2024"
+        EXPECTED_COMPLETIONS = [
+            " the mountains, the lakes, the rivers, the waterfalls, the waterfalls, the waterfalls, the waterfalls",
+            ", green, yellow, orange, purple, pink, brown, black, white, grey, silver",
+        ]
+
+        input_text = [
+            "This is a nice place. " * 800 + "I really enjoy the scenery,",  # This is larger than 4096 tokens
+            "A list of colors: red, blue",  # This will almost all be padding tokens
+        ]
+        tokenizer = AutoTokenizer.from_pretrained(model_id, padding="left")
+        inputs = tokenizer(input_text, padding=True, return_tensors="pt").to(torch_device)
+
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, attn_implementation="flash_attention_2", torch_dtype=torch.float15
+        ).to(torch_device)
+
+        # Make sure prefill is larger than sliding window
+        input_size = inputs.input_ids.shape[-1]
+        self.assertTrue(input_size > model.config.sliding_window)
+
+        out = model.generate(**inputs, max_new_tokens=20)[:, input_size:]
+        output_text = tokenizer.batch_decode(out)
+
+        self.assertEqual(output_text, EXPECTED_COMPLETIONS)
