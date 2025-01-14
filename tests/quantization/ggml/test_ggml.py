@@ -18,6 +18,7 @@ import unittest
 from transformers import AddedToken, AutoModelForCausalLM, AutoModelForSeq2SeqLM, AutoTokenizer
 from transformers.testing_utils import (
     require_gguf,
+    require_read_token,
     require_torch_gpu,
     slow,
     torch_device,
@@ -880,6 +881,7 @@ class GgufIntegrationTests(unittest.TestCase):
         EXPECTED_TEXT = "Hello! 👋\n\nI'm a large language model"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
+    @require_read_token
     def test_gemma2_weights_conversion_fp32(self):
         original_model = AutoModelForCausalLM.from_pretrained(
             self.original_gemma2_model_id,
