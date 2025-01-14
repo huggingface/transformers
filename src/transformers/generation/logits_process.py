@@ -1084,7 +1084,7 @@ class SequenceBiasLogitsProcessor(LogitsProcessor):
     The full name of Donald is Donald John Trump Sr.
 
     >>> def get_tokens(word):
-    ...    return tokenizer([word], add_special_tokens=False).input_ids[0]
+    ...     return tokenizer([word], add_special_tokens=False).input_ids[0]
 
     >>> # IMPORTANT: Remember our tip about adding spaces before words to bias them correctly.
     >>> sequence_bias = [[get_tokens("Trump"), -10.0],]  # will fail to apply bias
