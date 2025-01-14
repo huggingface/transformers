@@ -324,16 +324,21 @@ class Gemma2DecoderLayer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         if self.is_sliding and attention_mask is not None:  # efficient SDPA and no padding
-            # For FA2, the mask is 2D and is of shape [bs, seq_len] (not [bs, fixed_cache_len])
-            if self.config._attn_implementation != "flash_attention_2":
+            # In prefill, we may be larger than sliding window
+            effective_seq_len = max(cache_position.shape[0], self.sliding_window)
+            # For FA2, the mask is 2D and is of shape [bs, processed_tokens] (not [bs, max_cache_len]),
+            # thus we must slice from the right (at most `effective_seq_len` elements)
+            if self.config._attn_implementation == "flash_attention_2":
+                attention_mask = attention_mask[:, -effective_seq_len:]
+            # Otherwise, the mask is 4D of shape [bs, 1, query_len, max_cache_len] thus we must slice
+            # from the left
+            else:
                 min_dtype = torch.finfo(hidden_states.dtype).min
                 sliding_window_mask = torch.tril(
                     torch.ones_like(attention_mask, dtype=torch.bool), diagonal=-self.sliding_window
                 )
                 attention_mask = torch.where(sliding_window_mask, min_dtype, attention_mask)
-            # If we are not in a state with input larger than the sliding window, we need to slice
-            if cache_position.shape[0] < self.sliding_window:
-                attention_mask = attention_mask[..., -self.sliding_window :]
+                attention_mask = attention_mask[..., :effective_seq_len]
 
         residual = hidden_states
 
