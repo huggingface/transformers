@@ -1,12 +1,8 @@
-import json
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import sentencepiece as spm
-import torch
-import torch.utils.checkpoint
 from torch import nn
 
-from transformers.utils import logging
 from transformers.models.llama.modeling_llama import (
     LlamaAttention,
     LlamaDecoderLayer,
@@ -15,15 +11,19 @@ from transformers.models.llama.modeling_llama import (
     LlamaModel,
 )
 from transformers.models.llama.tokenization_llama import LlamaTokenizer
+from transformers.tokenization_utils import AddedToken, PreTrainedTokenizer
+from transformers.utils import logging
+
 
 if TYPE_CHECKING:
     from transformers.tokenization_utils_base import TextInput
 
+from .configuration_internlm3 import InternLM3Config
+
+
 VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model"}
 
 SPIECE_UNDERLINE = "▁"
-
-from .configuration_internlm3 import InternLM3Config
 
 
 logger = logging.get_logger(__name__)
@@ -74,9 +74,11 @@ class InternLM3Tokenizer(LlamaTokenizer, PreTrainedTokenizer):
             Whether or not to cleanup spaces after decoding, cleanup consists in removing potential artifacts like
             extra spaces.
         use_default_system_prompt (`bool`, *optional*, defaults to `False`):
-            Whether or not the default system prompt for Llama should be used.
+            Whether or not the default system prompt for InternLM3 should be used.
         spaces_between_special_tokens (`bool`, *optional*, defaults to `False`):
             Whether or not to add spaces between special tokens.
+        spaces_for_interleaved_special_tokens (`bool`, *optional*, defaults to `False`):
+           Whether or not to add spaces between special tokens that are interleaved with normal tokens.
         add_prefix_space (`bool`, *optional*, defaults to `True`):
             Whether or not to add an initial space to the input. This allows to treat the leading word just as any
             other word. Again, this should be set with `from_slow=True` to make sure it's taken into account.
@@ -98,6 +100,7 @@ class InternLM3Tokenizer(LlamaTokenizer, PreTrainedTokenizer):
         clean_up_tokenization_spaces=False,
         use_default_system_prompt=False,
         spaces_between_special_tokens=False,
+        spaces_for_interleaved_special_tokens=False,
         add_prefix_space=True,
         **kwargs,
     ):
@@ -114,6 +117,7 @@ class InternLM3Tokenizer(LlamaTokenizer, PreTrainedTokenizer):
         self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
         self.sp_model.Load(vocab_file)
         self.add_prefix_space = add_prefix_space
+        self.spaces_for_interleaved_special_tokens = spaces_for_interleaved_special_tokens
 
         vocab_size = self.sp_model.get_piece_size()
         self.decoder = {i: self.sp_model.id_to_piece(i) for i in range(vocab_size)}
@@ -131,15 +135,16 @@ class InternLM3Tokenizer(LlamaTokenizer, PreTrainedTokenizer):
             use_default_system_prompt=use_default_system_prompt,
             spaces_between_special_tokens=spaces_between_special_tokens,
             add_prefix_space=add_prefix_space,
+            spaces_for_interleaved_special_tokens=spaces_for_interleaved_special_tokens,
             **kwargs,
         )
-    
+
     def get_spm_processor(self):
         raise AttributeError("Not needed for InternLM3")
-    
+
     def unk_token_length(self):
         raise AttributeError("Not needed for InternLM3")
-    
+
     def tokenize(self, text: "TextInput", **kwargs) -> List[str]:
         """
         Args:
@@ -155,7 +160,7 @@ class InternLM3Tokenizer(LlamaTokenizer, PreTrainedTokenizer):
         Returns a tokenized string. The Gemma tokenizer never adds a prefix space.
         """
         return self.sp_model.encode(text, out_type=str)
-    
+
     def convert_tokens_to_string(self, tokens):
         """Converts a sequence of tokens (string) in a single string."""
         # since we manually add the prefix space, we have to remove it when decoding
@@ -168,22 +173,28 @@ class InternLM3Tokenizer(LlamaTokenizer, PreTrainedTokenizer):
         for i, token in enumerate(tokens):
             # make sure that special tokens are not decoded using sentencepiece model
             if token in self.all_special_tokens:
-                if not prev_is_special and i != 0:
+                if not prev_is_special and i != 0 and self.spaces_for_interleaved_special_tokens:
                     out_string += " "
                 out_string += self.sp_model.decode(current_sub_tokens) + token
                 prev_is_special = True
                 current_sub_tokens = []
             else:
-                if prev_is_special and i == 1 and self.add_prefix_space and not token.startswith(SPIECE_UNDERLINE):
+                if (
+                    prev_is_special
+                    and i == 1
+                    and self.add_prefix_space
+                    and not token.startswith(SPIECE_UNDERLINE)
+                    and self.spaces_for_interleaved_special_tokens
+                ):
                     out_string += " "
                 current_sub_tokens.append(token)
                 prev_is_special = False
         out_string += self.sp_model.decode(current_sub_tokens)
         return out_string
-    
+
     def _convert_id_to_token(self, index):
         """Converts an index (integer) in a token (str) using the vocab."""
-        return self.decoder.get(index, '')
+        return self.decoder.get(index, "")
 
 
 class InternLM3MLP(LlamaMLP):
@@ -197,18 +208,10 @@ class InternLM3MLP(LlamaMLP):
 class InternLM3Attention(LlamaAttention):
     def __init__(self, config: InternLM3Config, layer_idx: int):
         super().__init__()
-        self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias
-        )
-        self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.qkv_bias
-        )
-        self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.qkv_bias
-        )
-        self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.bias
-        )
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.qkv_bias)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.qkv_bias)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.qkv_bias)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.bias)
 
 
 class InternLM3DecoderLayer(LlamaDecoderLayer):

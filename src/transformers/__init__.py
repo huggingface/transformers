@@ -2607,6 +2607,7 @@ else:
         [
             "InternLM3ForCausalLM",
             "InternLM3Model",
+            "InternLM3PreTrainedModel",
         ]
     )
     _import_structure["models.jamba"].extend(
@@ -5563,10 +5564,7 @@ if TYPE_CHECKING:
         InstructBlipVideoQFormerConfig,
         InstructBlipVideoVisionConfig,
     )
-    from .models.internlm3 import (
-        InternLM3Config, 
-        InternLM3Tokenizer
-    )
+    from .models.internlm3 import InternLM3Config, InternLM3Tokenizer
     from .models.jamba import JambaConfig
     from .models.jetmoe import JetMoeConfig
     from .models.kosmos2 import (
@@ -7459,6 +7457,7 @@ if TYPE_CHECKING:
         from .models.internlm3 import (
             InternLM3ForCausalLM,
             InternLM3Model,
+            InternLM3PreTrainedModel,
         )
         from .models.jamba import (
             JambaForCausalLM,

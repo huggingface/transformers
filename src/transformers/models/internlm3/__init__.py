@@ -38,6 +38,7 @@ else:
     _import_structure["modeling_internlm3"] = [
         "InternLM3ForCausalLM",
         "InternLM3Model",
+        "InternLM3PreTrainedModel",
     ]
 
 
@@ -53,7 +54,8 @@ if TYPE_CHECKING:
     else:
         from .modeling_internlm3 import (
             InternLM3ForCausalLM,
-            InternLM3Model
+            InternLM3Model,
+            InternLM3PreTrainedModel,
         )
 
 

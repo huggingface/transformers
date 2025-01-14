@@ -14,7 +14,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" InternLM3 model configuration"""
+"""InternLM3 model configuration"""
 
 from transformers.configuration_utils import PretrainedConfig
 from transformers.modeling_rope_utils import rope_config_validation
@@ -26,21 +26,22 @@ logger = logging.get_logger(__name__)
 
 class InternLM3Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`InternLM2Model`]. It is used to instantiate
-    an InternLM2 model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of the InternLM2-7B.
+    This is the configuration class to store the configuration of a [`InternLM3Model`]. It is used to instantiate
+    an InternLM3 model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the
+    InternLM3-8B [internlm/internlm3-8b-instruct](https://huggingface.co/internlm/internlm3-8b-instruct).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 151936):
+        vocab_size (`int`, *optional*, defaults to 128512):
             Vocabulary size of the InternLM3 model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`InternLM3Model`]
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 22016):
+        intermediate_size (`int`, *optional*, defaults to 11008):
             Dimension of the MLP representations.
         num_hidden_layers (`int`, *optional*, defaults to 32):
             Number of hidden layers in the Transformer encoder.
