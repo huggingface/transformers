@@ -447,7 +447,9 @@ class Gemma2Model(GemmaModel):
             if attention_mask is not None:
                 # In case a 4d mask is passed directly without using `generate`, we have to rely on cache_position
                 # It will break dynamo tracing but there are no way around it (and it should never happen in practice)
-                last_cache_position = attention_mask.shape[-1] if attention_mask.dim() == 2 else cache_position[-1].item()
+                last_cache_position = (
+                    attention_mask.shape[-1] if attention_mask.dim() == 2 else cache_position[-1].item()
+                )
         causal_mask = self._update_causal_mask(
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
         )
