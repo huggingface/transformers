@@ -587,30 +587,52 @@ class RelationDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
 
             self.assertTrue(outputs)
 
-    # Modified from tests.models.deformable_detr.test_modeling_deformable_detr.DeformableDetrModelTest.test_initialization
+    # Modified from tests.models.rt_detr.test_modeling_rt_detr.RtDetrModelTest.test_initialization
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         configs_no_init = _config_zero_init(config)
+        configs_no_init.init_bias_prior_prob = 0.2
+        bias_value = -1.3863  # log_e ((1 - 0.2) / 0.2)
+
         for model_class in self.all_model_classes:
             print("Model class:", model_class)
             model = model_class(config=configs_no_init)
+
+            # Skip the check for the backbone
+            backbone_params = []
+            for name, module in model.named_modules():
+                if module.__class__.__name__ == "RelationDetrConvEncoder":
+                    backbone_params = [f"{name}.{key}" for key in module.state_dict().keys()]
+                    break
+
             for name, param in model.named_parameters():
                 if param.requires_grad:
-                    if param.requires_grad:
-                        if (
-                            "level_embed" in name
-                            or "sampling_offsets.bias" in name
-                            or "value_proj" in name
-                            or "output_proj" in name
-                            or "reference_points" in name
-                        ):
-                            continue
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
+                    if ("class_head" in name and "bias" in name) or "encoder_class_head.bias" in name:
+                        bias_tensor = torch.full_like(param.data, bias_value)
+                        self.assertTrue(
+                            torch.allclose(param.data, bias_tensor, atol=1e-4),
+                            f"Parameter {name} of model {model_class} seems not properly initialized. "
+                            f"Biases should be initialized to {bias_value}, got {param.data}",
+                        )
+
+                    elif (
+                        "level_embed" in name
+                        or "sampling_offsets.bias" in name
+                        or "value_proj" in name
+                        or "output_proj" in name
+                        or "reference_points" in name
+                        or "encoder_class_head.weight" in name
+                        or ("class_head" in name and "weight" in name)
+                        or name in backbone_params
+                    ):
+                        continue
+                    else:
+                        self.assertIn(
+                            ((param.data.mean() * 1e9).round() / 1e9).item(),
+                            [0.0, 1.0],
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
 
     @unittest.skip(reason="No support for low_cpu_mem_usage=True.")
     def test_save_load_low_cpu_mem_usage(self):
