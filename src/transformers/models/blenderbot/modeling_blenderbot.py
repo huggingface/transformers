@@ -498,7 +498,7 @@ class BlenderbotPreTrainedModel(PreTrainedModel):
         cross_attn_head_mask: torch.Tensor,
     ):
         if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and 0.0 in attention_mask:
+            if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
 
@@ -509,7 +509,7 @@ class BlenderbotPreTrainedModel(PreTrainedModel):
         using_static_cache = isinstance(past_key_values, StaticCache)
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        # cross_attn_head_maskis not compatible with SDPA so we fallback to eager
+        # Same for `cross_attn_head_mask`, it is not compatible with SDPA so we fallback to eager
         if (
             self.config._attn_implementation == "sdpa"
             and not using_static_cache
