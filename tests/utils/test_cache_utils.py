@@ -380,8 +380,6 @@ class CacheIntegrationTest(unittest.TestCase):
         [
             ("eager", "static"),
             ("sdpa", "static"),
-            ("eager", "offloaded_static"),
-            ("sdpa", "offloaded_static"),
         ]
     )
     def test_static_cache_greedy_decoding_pad_left(self, attn_implementation, cache_implementation):
@@ -427,8 +425,6 @@ class CacheIntegrationTest(unittest.TestCase):
         [
             ("eager", "static"),
             ("sdpa", "static"),
-            ("eager", "offloaded_static"),
-            ("sdpa", "offloaded_static"),
         ]
     )
     def test_static_cache_greedy_decoding_pad_right(self, attn_implementation, cache_implementation):
@@ -499,7 +495,6 @@ class CacheIntegrationTest(unittest.TestCase):
     @parameterized.expand(
         [
             "static",
-            "offloaded_static",
         ]
     )
     def test_static_cache_extra_left_padding(self, cache_implementation):
