@@ -20,11 +20,13 @@ import math
 import os
 import warnings
 from dataclasses import dataclass
+from functools import lru_cache, wraps
 from pathlib import Path
-from typing import Dict, List, Literal, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
+import torch.utils
 from torch import Tensor, nn
 from torch.autograd import Function
 from torch.autograd.function import once_differentiable
@@ -1470,7 +1472,28 @@ def box_rel_encoding(src_boxes: torch.FloatTensor, tgt_boxes: torch.FloatTensor,
     return pos_embed
 
 
-@functools.lru_cache  # use lru_cache to avoid redundant calculation for dim_t
+def compile_compatible_lru_cache(*lru_args, **lru_kwargs):
+    def decorator(func):
+        @wraps(func)
+        def wrapper(self, *args, **kwargs):
+            if hasattr(torch.compiler, "is_compiling") and not torch.compiler.is_compiling():
+                # Cache the function only if the model is not being compiled
+                # check if the function is already cached, otherwise create it
+                if not hasattr(self, f"_cached_{func.__name__}"):
+                    self.__setattr__(
+                        f"_cached_{func.__name__}", lru_cache(*lru_args, **lru_kwargs)(func.__get__(self))
+                    )
+                return self.__getattribute__(f"_cached_{func.__name__}")(*args, **kwargs)
+            else:
+                # Otherwise, just call the original function
+                return func(self, *args, **kwargs)
+
+        return wrapper
+
+    return decorator
+
+
+@compile_compatible_lru_cache(maxsize=32)
 def get_dim_t(num_pos_feats: int, temperature: int, device: torch.device):
     dim_t = torch.arange(num_pos_feats // 2, dtype=torch.float32, device=device)
     dim_t = temperature ** (dim_t * 2 / num_pos_feats)
