@@ -364,16 +364,14 @@ def merge(patches: torch.Tensor, batch_size: int, padding: int) -> torch.Tensor:
     # make sure padding is not large enough to remove more than half of the patch
     padding = min(out_size // 4, padding)
 
-    # patches.shape (n_patches, hidden_size, out_size, out_size)
+    # patches.shape: (n_patches, hidden_size, out_size, out_size)
 
     merged = patches.reshape(n_patches_per_batch, batch_size, hidden_size, out_size, out_size)
     # (n_patches_per_batch, batch_size, hidden_size, out_size, out_size)
     merged = merged.permute(1, 2, 0, 3, 4)
     # (batch_size, hidden_size, n_patches_per_batch, out_size, out_size)
-
     merged = merged[:, :, : sqrt_n_patches_per_batch**2, :, :]
     # (batch_size, hidden_size, n_patches_per_batch, out_size, out_size)
-
     merged = merged.reshape(
         batch_size, hidden_size, sqrt_n_patches_per_batch, sqrt_n_patches_per_batch, out_size, out_size
     )
@@ -383,16 +381,27 @@ def merge(patches: torch.Tensor, batch_size: int, padding: int) -> torch.Tensor:
     merged = merged.reshape(batch_size, hidden_size, new_out_size, new_out_size)
     # (batch_size, hidden_size, sqrt_n_patches_per_batch * out_size, sqrt_n_patches_per_batch * out_size)
 
-    if padding > 0:
-        padding_mask = torch.ones((new_out_size, new_out_size), dtype=torch.bool)
-        starting_index = torch.arange(start=out_size - padding, end=new_out_size - padding, step=out_size)
-        for index in starting_index:
-            padding_mask[index : index + padding * 2, :] = False
-            padding_mask[:, index : index + padding * 2] = False
+    # merged.shape: (batch_size, hidden_size, new_out_size, new_out_size)
 
-        merged = merged[:, :, padding_mask]
-        final_out_size = int(math.sqrt(merged.shape[-1]))
-        merged = merged.reshape(*merged.shape[:2], final_out_size, final_out_size)
+    if padding > 0:
+        # let out_size = 8, new_out_size = 32, padding = 2
+        # each patch is separated by |
+        # and padding is applied to the merging edges of each patch
+        # 00 01 02 03 04 05 06 07 | 08 09 10 11 12 13 14 15 | 16 17 18 19 20 21 22 23 | 24 25 26 27 28 29 30 31
+        # 00 01 02 03 04 05 -- -- | -- -- 10 11 12 13 -- -- | -- -- 18 19 20 21 -- -- | -- -- 26 27 28 29 30 31
+        # starting_indexes = [2, 10, 18, 26]
+        # valid_indexes = [ 0,  1,  2,  3,  4,  5, 10, 11, 12, 13, 18, 19, 20, 21, 26, 27, 28, 29, 30, 31])
+
+        starting_indexes = torch.arange(start=padding, end=new_out_size , step=out_size)
+        valid_indexes = torch.concat([
+            torch.arange(padding),
+            *[
+                torch.arange(index, index + out_size - padding * 2) for index in starting_indexes
+            ],
+            torch.arange(new_out_size-padding, new_out_size),
+        ])
+        merged = merged[:, :, valid_indexes]
+        merged = merged[:, :, :, valid_indexes]
 
     return merged
 
