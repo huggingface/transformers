@@ -210,20 +210,6 @@ class RelationDetrModelOutput(ModelOutput):
     Base class for outputs of the Relation DETR encoder-decoder model.
 
     Args:
-        init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
-            Initial reference points sent through the Transformer decoder.
-        dec_outputs_class (`torch.FloatTensor` of shape `(batch_size, num_queries, config.num_labels)`):
-            Classification logits (including no-object) for all queries.
-        dec_outputs_coord (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
-            Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
-            values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding).
-        enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`):
-            Predicted bounding boxes scores with top `config.num_queries` scores in the first stage. Output of bounding
-            box binary classification (i.e. foreground and background).
-        enc_outputs_coord (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`):
-            Normalized boxes coordinates for queries with top `config.num_queries` scores in the first stage, represented
-            as (center_x, center_y, width, height). These values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding possible padding).
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the decoder of the model.
         intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
@@ -252,6 +238,12 @@ class RelationDetrModelOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_queries, num_heads, 4, 4)`.
             Attentions weights of the encoder, after the attention softmax, used to compute the weighted average in the
             self-attention heads.
+        hybrid_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, hybrid_queries, hidden_size)`, *optional*, returned only for train mode):
+            Sequence of hidden-states at the output of the last layer of the hybrid branch of the model.
+        hybrid_intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, hybrid_queries, hidden_size)`, *optional*, returned only for train mode):
+            Stacked intermediate hidden states (output of each layer of the hybrid branch).
+        hybrid_intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, hybrid_queries, 4)`, *optional*, returned only for train mode):
+            Stacked intermediate reference points (reference points of each layer of the hybrid branch).
         hybrid_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned only for train mode and when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, hybrid_queries, hidden_size)`. Hidden-states of the hybrid model at the output of each
@@ -275,14 +267,22 @@ class RelationDetrModelOutput(ModelOutput):
         hybrid_enc_outputs_coord (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned only for train mode):
             Normalized boxes coordinates for queries with top `config.hybrid_queries` scores in the first stage, represented
             as (center_x, center_y, width, height). These values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding possible padding).
-
+        init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
+            Initial reference points sent through the Transformer decoder.
+        dec_outputs_class (`torch.FloatTensor` of shape `(batch_size, num_queries, config.num_labels)`):
+            Classification logits (including no-object) for all queries.
+        dec_outputs_coord (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+            Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
+            values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
+            possible padding).
+        enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`):
+            Predicted bounding boxes scores with top `config.num_queries` scores in the first stage. Output of bounding
+            box binary classification (i.e. foreground and background).
+        enc_outputs_coord (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`):
+            Normalized boxes coordinates for queries with top `config.num_queries` scores in the first stage, represented
+            as (center_x, center_y, width, height). These values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding possible padding).
     """
 
-    init_reference_points: torch.FloatTensor = None
-    dec_outputs_class: torch.FloatTensor = None
-    dec_outputs_coord: torch.FloatTensor = None
-    enc_outputs_class: torch.FloatTensor = None
-    enc_outputs_coord: torch.FloatTensor = None
     last_hidden_state: torch.FloatTensor = None
     intermediate_hidden_states: torch.FloatTensor = None
     intermediate_reference_points: torch.FloatTensor = None
@@ -292,6 +292,9 @@ class RelationDetrModelOutput(ModelOutput):
     encoder_last_hidden_state: torch.FloatTensor = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hybrid_last_hidden_state: Optional[torch.FloatTensor] = None
+    hybrid_intermediate_hidden_states: Optional[torch.FloatTensor] = None
+    hybrid_intermediate_reference_points: Optional[torch.FloatTensor] = None
     hybrid_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     hybrid_attentions: Optional[Tuple[torch.FloatTensor]] = None
     hybrid_cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -299,6 +302,11 @@ class RelationDetrModelOutput(ModelOutput):
     hybrid_outputs_coord: Optional[torch.FloatTensor] = None
     hybrid_enc_outputs_class: Optional[torch.FloatTensor] = None
     hybrid_enc_outputs_coord: Optional[torch.FloatTensor] = None
+    init_reference_points: torch.FloatTensor = None
+    dec_outputs_class: torch.FloatTensor = None
+    dec_outputs_coord: torch.FloatTensor = None
+    enc_outputs_class: torch.FloatTensor = None
+    enc_outputs_coord: torch.FloatTensor = None
 
 
 @dataclass
@@ -322,21 +330,6 @@ class RelationDetrObjectDetectionOutput(ModelOutput):
             unnormalized bounding boxes.
         auxiliary_outputs (`list[Dict]`):
             It is a list of dictionaries containing the two above keys (`logits` and `pred_boxes`) for each decoder layer.
-        init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
-            Initial reference points sent through the Transformer decoder.
-        dec_outputs_class (`torch.FloatTensor` of shape `(batch_size, num_queries, config.num_labels)`):
-            Classification logits (including no-object) for all queries.
-        dec_outputs_coord (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
-            Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
-            values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-            possible padding).
-        enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`):
-            Predicted bounding boxes scores with top `config.num_queries` scores in the first stage. Output of bounding
-            box binary classification (i.e. foreground and background).
-        enc_outputs_coord (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`):
-            Normalized boxes coordinates for queries with top `config.num_queries` scores in the first stage, represented
-            as (center_x, center_y, width, height). These values are normalized in [0, 1], relative to the size of each
-            individual image in the batch (disregarding possible padding).
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the decoder of the model.
         intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
@@ -365,6 +358,12 @@ class RelationDetrObjectDetectionOutput(ModelOutput):
             Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, sequence_length, num_heads, 4,
             4)`. Attentions weights of the encoder, after the attention softmax, used to compute the weighted average
             in the self-attention heads.
+        hybrid_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, hybrid_queries, hidden_size)`, *optional*, returned only for train mode):
+            Sequence of hidden-states at the output of the last layer of the hybrid branch of the model.
+        hybrid_intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, hybrid_queries, hidden_size)`, *optional*, returned only for train mode):
+            Stacked intermediate hidden states (output of each layer of the hybrid branch).
+        hybrid_intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, hybrid_queries, 4)`, *optional*, returned only for train mode):
+            Stacked intermediate reference points (reference points of each layer of the hybrid branch).
         hybrid_hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned only for train mode and when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each layer) of
             shape `(batch_size, hybrid_queries, hidden_size)`. Hidden-states of the hybrid model at the output of each
@@ -388,6 +387,21 @@ class RelationDetrObjectDetectionOutput(ModelOutput):
         hybrid_enc_outputs_coord (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned only for train mode):
             Normalized boxes coordinates for queries with top `config.hybrid_queries` scores in the first stage, represented
             as (center_x, center_y, width, height). These values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding possible padding).
+        init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
+            Initial reference points sent through the Transformer decoder.
+        dec_outputs_class (`torch.FloatTensor` of shape `(batch_size, num_queries, config.num_labels)`):
+            Classification logits (including no-object) for all queries.
+        dec_outputs_coord (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+            Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
+            values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
+            possible padding).
+        enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`):
+            Predicted bounding boxes scores with top `config.num_queries` scores in the first stage. Output of bounding
+            box binary classification (i.e. foreground and background).
+        enc_outputs_coord (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`):
+            Normalized boxes coordinates for queries with top `config.num_queries` scores in the first stage, represented
+            as (center_x, center_y, width, height). These values are normalized in [0, 1], relative to the size of each
+            individual image in the batch (disregarding possible padding).
     """
 
     loss: Optional[torch.FloatTensor] = None
@@ -395,11 +409,6 @@ class RelationDetrObjectDetectionOutput(ModelOutput):
     logits: torch.FloatTensor = None
     pred_boxes: torch.FloatTensor = None
     auxiliary_outputs: List[Dict] = None
-    init_reference_points: torch.FloatTensor = None
-    dec_outputs_class: torch.FloatTensor = None
-    dec_outputs_coord: torch.FloatTensor = None
-    enc_outputs_class: torch.FloatTensor = None
-    enc_outputs_coord: torch.FloatTensor = None
     last_hidden_state: torch.FloatTensor = None
     intermediate_hidden_states: Optional[torch.FloatTensor] = None
     intermediate_reference_points: Optional[torch.FloatTensor] = None
@@ -409,6 +418,9 @@ class RelationDetrObjectDetectionOutput(ModelOutput):
     encoder_last_hidden_state: torch.FloatTensor = None
     encoder_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     encoder_attentions: Optional[Tuple[torch.FloatTensor]] = None
+    hybrid_last_hidden_state: Optional[torch.FloatTensor] = None
+    hybrid_intermediate_hidden_states: Optional[torch.FloatTensor] = None
+    hybrid_intermediate_reference_points: Optional[torch.FloatTensor] = None
     hybrid_hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     hybrid_attentions: Optional[Tuple[torch.FloatTensor]] = None
     hybrid_cross_attentions: Optional[Tuple[torch.FloatTensor]] = None
@@ -416,6 +428,11 @@ class RelationDetrObjectDetectionOutput(ModelOutput):
     hybrid_outputs_coord: Optional[torch.FloatTensor] = None
     hybrid_enc_outputs_class: Optional[torch.FloatTensor] = None
     hybrid_enc_outputs_coord: Optional[torch.FloatTensor] = None
+    init_reference_points: torch.FloatTensor = None
+    dec_outputs_class: torch.FloatTensor = None
+    dec_outputs_coord: torch.FloatTensor = None
+    enc_outputs_class: torch.FloatTensor = None
+    enc_outputs_coord: torch.FloatTensor = None
 
 
 # Copied from transformers.models.deformable_detr.modeling_deformable_detr.inverse_sigmoid
@@ -2237,9 +2254,8 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
         if not return_dict:
             decoder_mediate_outputs = decoder_outputs[2:]
             hybrid_mediate_output = hybrid_outputs[2:]
-            # The variable number of outputs from decoder may change the index of some necessary elements,
-            # so put these elements at the start and end of the tuple for correct indexing.
-            # Other optional results are at the middle of the tuple.
+            # We need to reorganize the outputs sequence so that optional outputs will not affect
+            # the indexing of the final outputs
             outputs = (reference_points, outputs_classes, outputs_coords, topk_class, topk_coords)
             hybrid_outputs = tuple(
                 value
@@ -2252,33 +2268,36 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
                 if value is not None
             )
             tuple_outputs = (
-                outputs + decoder_mediate_outputs + encoder_outputs + hybrid_mediate_output + hybrid_outputs
+                decoder_mediate_outputs + encoder_outputs + hybrid_mediate_output + hybrid_outputs + outputs
             )
 
             return tuple_outputs
 
         return RelationDetrModelOutput(
+            last_hidden_state=decoder_outputs.last_hidden_state,
+            intermediate_hidden_states=decoder_outputs.intermediate_hidden_states,
+            intermediate_reference_points=decoder_outputs.intermediate_reference_points,
+            decoder_hidden_states=decoder_outputs.hidden_states,  # optional
+            decoder_attentions=decoder_outputs.attentions,  # optional
+            cross_attentions=decoder_outputs.cross_attentions,  # optional
+            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
+            encoder_hidden_states=encoder_outputs.hidden_states,  # optional
+            encoder_attentions=encoder_outputs.attentions,  # optional
+            hybrid_last_hidden_state=hybrid_outputs.last_hidden_state,
+            hybrid_intermediate_hidden_states=hybrid_outputs.intermediate_hidden_states,  # optional
+            hybrid_intermediate_reference_points=hybrid_outputs.intermediate_reference_points,  # optional
+            hybrid_hidden_states=hybrid_outputs.hidden_states,  # optional
+            hybrid_attentions=hybrid_outputs.attentions,  # optional
+            hybrid_cross_attentions=hybrid_outputs.cross_attentions,  # optional
+            hybrid_outputs_class=hybrid_outputs_classes,
+            hybrid_outputs_coord=hybrid_outputs_coords,
+            hybrid_enc_outputs_class=hybrid_enc_class,
+            hybrid_enc_outputs_coord=hybrid_enc_coord,
             init_reference_points=reference_points,
             dec_outputs_class=outputs_classes,
             dec_outputs_coord=outputs_coords,
             enc_outputs_class=topk_class,
             enc_outputs_coord=topk_coords,
-            last_hidden_state=decoder_outputs.last_hidden_state,
-            intermediate_hidden_states=decoder_outputs.intermediate_hidden_states,
-            intermediate_reference_points=decoder_outputs.intermediate_reference_points,
-            decoder_hidden_states=decoder_outputs.hidden_states,
-            decoder_attentions=decoder_outputs.attentions,
-            cross_attentions=decoder_outputs.cross_attentions,
-            encoder_last_hidden_state=encoder_outputs.last_hidden_state,
-            encoder_hidden_states=encoder_outputs.hidden_states,
-            encoder_attentions=encoder_outputs.attentions,
-            hybrid_hidden_states=hybrid_outputs.hidden_states,
-            hybrid_attentions=hybrid_outputs.attentions,
-            hybrid_cross_attentions=hybrid_outputs.cross_attentions,
-            hybrid_outputs_class=hybrid_outputs_classes,
-            hybrid_outputs_coord=hybrid_outputs_coords,
-            hybrid_enc_outputs_class=hybrid_enc_class,
-            hybrid_enc_outputs_coord=hybrid_enc_coord,
         )
 
 
@@ -2814,8 +2833,8 @@ class RelationDetrForObjectDetection(RelationDetrPreTrainedModel):
             noised_box_query=noised_box_query,
         )
 
-        outputs_class = outputs.dec_outputs_class if return_dict else outputs[1]
-        outputs_coord = outputs.dec_outputs_coord if return_dict else outputs[2]
+        outputs_class = outputs.dec_outputs_class if return_dict else outputs[-4]
+        outputs_coord = outputs.dec_outputs_coord if return_dict else outputs[-3]
 
         # layer is at the second dimension
         logits = outputs_class[:, -1]
@@ -2824,8 +2843,8 @@ class RelationDetrForObjectDetection(RelationDetrPreTrainedModel):
         loss, loss_dict, auxiliary_outputs = None, None, None
         hybrid_loss = hybrid_loss_dict = None
         if labels is not None:
-            enc_topk_logits = outputs.enc_outputs_class if return_dict else outputs[3]
-            enc_topk_coords = outputs.enc_outputs_coord if return_dict else outputs[4]
+            enc_topk_logits = outputs.enc_outputs_class if return_dict else outputs[-2]
+            enc_topk_coords = outputs.enc_outputs_coord if return_dict else outputs[-1]
 
             loss, loss_dict, auxiliary_outputs = self.loss_function(
                 labels=labels,
@@ -2838,10 +2857,10 @@ class RelationDetrForObjectDetection(RelationDetrPreTrainedModel):
             )
 
             if self.training:
-                hybrid_outputs_class = outputs.hybrid_outputs_class if return_dict else outputs[-4]
-                hybrid_outputs_coord = outputs.hybrid_outputs_coord if return_dict else outputs[-3]
-                hybrid_enc_topk_logits = outputs.hybrid_enc_outputs_class if return_dict else outputs[-2]
-                hybrid_enc_topk_coords = outputs.hybrid_enc_outputs_coord if return_dict else outputs[-1]
+                hybrid_outputs_class = outputs.hybrid_outputs_class if return_dict else outputs[-9]
+                hybrid_outputs_coord = outputs.hybrid_outputs_coord if return_dict else outputs[-8]
+                hybrid_enc_topk_logits = outputs.hybrid_enc_outputs_class if return_dict else outputs[-7]
+                hybrid_enc_topk_coords = outputs.hybrid_enc_outputs_coord if return_dict else outputs[-6]
                 hybrid_labels = copy.deepcopy(labels)
                 for label in hybrid_labels:
                     if "boxes" in label:
@@ -2872,11 +2891,6 @@ class RelationDetrForObjectDetection(RelationDetrPreTrainedModel):
             logits=logits,
             pred_boxes=pred_boxes,
             auxiliary_outputs=auxiliary_outputs,
-            init_reference_points=outputs.init_reference_points,
-            dec_outputs_class=outputs.dec_outputs_class,
-            dec_outputs_coord=outputs.dec_outputs_coord,
-            enc_outputs_class=outputs.enc_outputs_class,
-            enc_outputs_coord=outputs.enc_outputs_coord,
             last_hidden_state=outputs.last_hidden_state,
             intermediate_hidden_states=outputs.intermediate_hidden_states,
             intermediate_reference_points=outputs.intermediate_reference_points,
@@ -2886,6 +2900,9 @@ class RelationDetrForObjectDetection(RelationDetrPreTrainedModel):
             encoder_last_hidden_state=outputs.encoder_last_hidden_state,
             encoder_hidden_states=outputs.encoder_hidden_states,
             encoder_attentions=outputs.encoder_attentions,
+            hybrid_last_hidden_state=outputs.hybrid_last_hidden_state,
+            hybrid_intermediate_hidden_states=outputs.hybrid_intermediate_hidden_states,
+            hybrid_intermediate_reference_points=outputs.hybrid_intermediate_reference_points,
             hybrid_hidden_states=outputs.hybrid_hidden_states,
             hybrid_attentions=outputs.hybrid_attentions,
             hybrid_cross_attentions=outputs.hybrid_cross_attentions,
@@ -2893,6 +2910,11 @@ class RelationDetrForObjectDetection(RelationDetrPreTrainedModel):
             hybrid_outputs_coord=outputs.hybrid_outputs_coord,
             hybrid_enc_outputs_class=outputs.hybrid_enc_outputs_class,
             hybrid_enc_outputs_coord=outputs.hybrid_enc_outputs_coord,
+            init_reference_points=outputs.init_reference_points,
+            dec_outputs_class=outputs.dec_outputs_class,
+            dec_outputs_coord=outputs.dec_outputs_coord,
+            enc_outputs_class=outputs.enc_outputs_class,
+            enc_outputs_coord=outputs.enc_outputs_coord,
         )
 
         return dict_outputs
