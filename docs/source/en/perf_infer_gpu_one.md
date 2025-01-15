@@ -47,7 +47,9 @@ FlashAttention-2 is currently supported for the following architectures:
 * [Cohere2](https://huggingface.co/docs/transformers/model_doc/cohere2#transformers.Cohere2Model)
 * [GLM](https://huggingface.co/docs/transformers/model_doc/glm#transformers.GLMModel)
 * [Dbrx](https://huggingface.co/docs/transformers/model_doc/dbrx#transformers.DbrxModel)
+* [DiffLlama](https://huggingface.co/docs/transformers/model_doc/diffllama#transformers.DiffLlamaModel)
 * [DistilBert](https://huggingface.co/docs/transformers/model_doc/distilbert#transformers.DistilBertModel)
+* [Emu3](https://huggingface.co/docs/transformers/model_doc/emu3)
 * [Gemma](https://huggingface.co/docs/transformers/model_doc/gemma#transformers.GemmaModel)
 * [Gemma2](https://huggingface.co/docs/transformers/model_doc/gemma2#transformers.Gemma2Model)
 * [GPT2](https://huggingface.co/docs/transformers/model_doc/gpt2)
@@ -67,6 +69,7 @@ FlashAttention-2 is currently supported for the following architectures:
 * [Llava-NeXT](https://huggingface.co/docs/transformers/model_doc/llava_next)
 * [Llava-NeXT-Video](https://huggingface.co/docs/transformers/model_doc/llava_next_video)
 * [LLaVA-Onevision](https://huggingface.co/docs/transformers/model_doc/llava_onevision)
+* [Moonshine](https://huggingface.co/docs/transformers/model_doc/moonshine#transformers.MoonshineModel)
 * [Mimi](https://huggingface.co/docs/transformers/model_doc/mimi)
 * [VipLlava](https://huggingface.co/docs/transformers/model_doc/vipllava)
 * [VideoLlava](https://huggingface.co/docs/transformers/model_doc/video_llava)
@@ -106,6 +109,7 @@ FlashAttention-2 is currently supported for the following architectures:
 * [SigLIP](https://huggingface.co/docs/transformers/model_doc/siglip)
 * [UniSpeech](https://huggingface.co/docs/transformers/v4.39.3/en/model_doc/unispeech#transformers.UniSpeechModel)
 * [unispeech_sat](https://huggingface.co/docs/transformers/v4.39.3/en/model_doc/unispeech-sat#transformers.UniSpeechSatModel)
+* [helium](https://huggingface.co/docs/transformers/main/en/model_doc/heliumtransformers.HeliumModel)
 
 You can request to add FlashAttention-2 support for another model by opening a GitHub Issue or Pull Request.
 
@@ -237,11 +241,13 @@ For now, Transformers supports SDPA inference and training for the following arc
 * [data2vec_vision](https://huggingface.co/docs/transformers/main/en/model_doc/data2vec#transformers.Data2VecVisionModel)
 * [Dbrx](https://huggingface.co/docs/transformers/model_doc/dbrx#transformers.DbrxModel)
 * [DeiT](https://huggingface.co/docs/transformers/model_doc/deit#transformers.DeiTModel)
+* [DiffLlama](https://huggingface.co/docs/transformers/model_doc/diffllama#transformers.DiffLlamaModel)
 * [Dinov2](https://huggingface.co/docs/transformers/en/model_doc/dinov2)
 * [Dinov2_with_registers](https://huggingface.co/docs/transformers/en/model_doc/dinov2)
 * [DistilBert](https://huggingface.co/docs/transformers/model_doc/distilbert#transformers.DistilBertModel)
 * [Dpr](https://huggingface.co/docs/transformers/model_doc/dpr#transformers.DprReader)
 * [EncoderDecoder](https://huggingface.co/docs/transformers/model_doc/encoder_decoder#transformers.EncoderDecoderModel)
+* [Emu3](https://huggingface.co/docs/transformers/model_doc/emu3)
 * [Falcon](https://huggingface.co/docs/transformers/model_doc/falcon#transformers.FalconModel)
 * [Gemma](https://huggingface.co/docs/transformers/model_doc/gemma#transformers.GemmaModel)
 * [Gemma2](https://huggingface.co/docs/transformers/model_doc/gemma2#transformers.Gemma2Model)
@@ -263,6 +269,7 @@ For now, Transformers supports SDPA inference and training for the following arc
 * [Llava-NeXT-Video](https://huggingface.co/docs/transformers/model_doc/llava_next_video)
 * [LLaVA-Onevision](https://huggingface.co/docs/transformers/model_doc/llava_onevision)
 * [M2M100](https://huggingface.co/docs/transformers/model_doc/m2m_100#transformers.M2M100Model)
+* [Moonshine](https://huggingface.co/docs/transformers/model_doc/moonshine#transformers.MoonshineModel)
 * [Mimi](https://huggingface.co/docs/transformers/model_doc/mimi)
 * [Mistral](https://huggingface.co/docs/transformers/model_doc/mistral#transformers.MistralModel)
 * [Mllama](https://huggingface.co/docs/transformers/model_doc/mllama#transformers.MllamaForConditionalGeneration)
@@ -281,8 +288,8 @@ For now, Transformers supports SDPA inference and training for the following arc
 * [Phi3](https://huggingface.co/docs/transformers/model_doc/phi3#transformers.Phi3Model)
 * [PhiMoE](https://huggingface.co/docs/transformers/model_doc/phimoe#transformers.PhimoeModel)
 * [Idefics](https://huggingface.co/docs/transformers/model_doc/idefics#transformers.IdeficsModel)
-* [Whisper](https://huggingface.co/docs/transformers/model_doc/whisper#transformers.WhisperModel)
 * [mBart](https://huggingface.co/docs/transformers/model_doc/mbart#transformers.MBartModel)
+* [Moonshine](https://huggingface.co/docs/transformers/model_doc/moonshine#transformers.MoonshineModel)
 * [Mistral](https://huggingface.co/docs/transformers/model_doc/mistral#transformers.MistralModel)
 * [Mixtral](https://huggingface.co/docs/transformers/model_doc/mixtral#transformers.MixtralModel)
 * [StableLm](https://huggingface.co/docs/transformers/model_doc/stablelm#transformers.StableLmModel)
@@ -318,6 +325,7 @@ For now, Transformers supports SDPA inference and training for the following arc
 * [XLM-RoBERTa](https://huggingface.co/docs/transformers/model_doc/xlm-roberta#transformers.XLMRobertaModel)
 * [XLM-RoBERTa-XL](https://huggingface.co/docs/transformers/model_doc/xlm-roberta-xl#transformers.XLMRobertaXLModel)
 * [YOLOS](https://huggingface.co/docs/transformers/model_doc/yolos#transformers.YolosModel)
+* [helium](https://huggingface.co/docs/transformers/main/en/model_doc/heliumtransformers.HeliumModel)
 
 <Tip>
 

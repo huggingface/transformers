@@ -1652,17 +1652,18 @@ class GenerationMixin:
                     cache_dtype = self.get_output_embeddings().weight.dtype
 
             def get_layer_device_map(execution_device_map: Optional[dict] = None):
+                num_hidden_layers = self.config.get_text_config().num_hidden_layers
                 if execution_device_map is None:
                     return None
                 elif len(execution_device_map) == 1 and "" in execution_device_map:
-                    return {idx: execution_device_map[""] for idx in range(self.config.num_hidden_layers)}
+                    return {idx: execution_device_map[""] for idx in range(num_hidden_layers)}
                 layer_device_map = {}
                 for layer in execution_device_map:
-                    for idx in range(self.config.num_hidden_layers):
+                    for idx in range(num_hidden_layers):
                         if f".{idx}." in f"{layer}.":
                             layer_device_map[idx] = execution_device_map[layer]
                             break
-                for idx in range(self.config.num_hidden_layers):
+                for idx in range(num_hidden_layers):
                     if idx not in layer_device_map:
                         raise RuntimeError(f"layer {idx} has not been mapped to a device.")
                 return layer_device_map
