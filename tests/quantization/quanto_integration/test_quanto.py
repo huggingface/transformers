@@ -20,7 +20,6 @@ from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, Quanto
 from transformers.testing_utils import (
     require_accelerate,
     require_optimum_quanto,
-    require_read_token,
     require_torch_accelerator,
     require_torch_gpu,
     slow,
@@ -448,7 +447,8 @@ class QuantoKVCacheQuantizationTest(unittest.TestCase):
     @slow
     def test_quantized_cache(self):
         EXPECTED_TEXT_COMPLETION = [
-            'Simply put, the theory of relativity states that ', 'My favorite all time favorite condiment is ketchup. I love it because it is so easy to make and it is so good for you. I love ketchup because it is so good for you. I love ketchup because it is so'
+            "Simply put, the theory of relativity states that ",
+            "My favorite all time favorite condiment is ketchup. I love it because it is so easy to make and it is so good for you. I love ketchup because it is so good for you. I love ketchup because it is so",
         ]
 
         prompts = [
