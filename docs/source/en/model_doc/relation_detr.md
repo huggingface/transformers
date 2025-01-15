@@ -21,7 +21,7 @@ rendered properly in your Markdown viewer.
 
 The Relation-DETR model was proposed in [Relation DETR: Exploring Explicit Position Relation Prior for Object Detection](https://arxiv.org/abs/2407.11699v1) by Xiuquan Hou, Meiqin Liu, Senlin Zhang, Ping Wei, Badong Chen, Xuguang Lan.
 
-Relation DETR is an object detection model that incorporates explicit position relation priors to enhance detection performance. By leveraging the strengths of transformer architectures while integrating spatial relation modeling, Relation DETR achieves superior detection accuracy and fast convergence. This innovative design not only enhances the model's capability to capture complex object interactions but also ensures rapid convergence during training, making it an efficient and high-performance solution for object detection tasks.
+Relation-DETR is an object detection model that incorporates explicit position relation priors to enhance detection performance. By leveraging the strengths of transformer architectures while integrating spatial relation modeling, Relation-DETR achieves superior detection accuracy and fast convergence. This innovative design not only enhances the model's capability to capture complex object interactions but also ensures rapid convergence during training, making it an efficient and high-performance solution for object detection tasks.
 
 The abstract from the paper is the following:
 
