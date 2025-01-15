@@ -1312,11 +1312,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 "`PretrainedConfig`. To create a model from a pretrained model use "
                 f"`model = {self.__class__.__name__}.from_pretrained(PRETRAINED_MODEL_NAME)`"
             )
-        # Save config and origin of the pretrained weights if given in model
         if not getattr(config, "_attn_implementation_autoset", False):
-            config = self._autoset_attn_implementation(
-                config, torch_dtype=torch.get_default_dtype(), check_device_map=False
-            )
+            # config usually has a `torch_dtype` but we need the next line for the `no_super_init` tests
+            dtype = config.torch_dtype if hasattr(config, "torch_dtype") else torch.get_default_dtype()
+            config = self._autoset_attn_implementation(config, torch_dtype=dtype, check_device_map=False)
         self.config = config
 
         # for initialization of the loss
@@ -1411,7 +1410,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # when we init a model from within another model (e.g. VLMs) and dispatch on FA2
         # a warning is raised that dtype should be fp16. Since we never pass dtype from within
         # modeling code, we can try to infer it here same way as done in `from_pretrained`
-        torch_dtype = kwargs.pop("torch_dtype", torch.get_default_dtype())
+        torch_dtype = kwargs.pop("torch_dtype", config.torch_dtype)
+        if isinstance(torch_dtype, str):
+            torch_dtype = getattr(torch, torch_dtype)
+
         use_flash_attention_2 = kwargs.pop("use_flash_attention_2", False)
 
         # override default dtype if needed
@@ -4020,11 +4022,37 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             )
                     elif hasattr(torch, torch_dtype):
                         torch_dtype = getattr(torch, torch_dtype)
-                    else:
-                        raise ValueError(
-                            f'`torch_dtype` can be one of: `torch.dtype`, `"auto"` or a string of a valid `torch.dtype`, but received {torch_dtype}'
-                        )
+                        for sub_config_key in config.sub_configs.keys():
+                            sub_config = getattr(config, sub_config_key)
+                            sub_config.torch_dtype = torch_dtype
+                elif isinstance(torch_dtype, torch.dtype):
+                    pass
+                elif isinstance(torch_dtype, dict):
+                    for key, curr_dtype in torch_dtype.items():
+                        if hasattr(config, key):
+                            value = getattr(config, key)
+                            value.torch_dtype = curr_dtype
+                    # main torch dtype for modules that aren't part of any sub-config
+                    torch_dtype = torch_dtype.get("")
+                    config.torch_dtype = torch_dtype
+                    if isinstance(torch_dtype, str) and hasattr(torch, torch_dtype):
+                        torch_dtype = getattr(torch, torch_dtype)
+                    elif torch_dtype is None:
+                        torch_dtype = torch.float32
+                else:
+                    raise ValueError(
+                        f"`torch_dtype` can be one of: `torch.dtype`, `'auto'`, a string of a valid `torch.dtype` or a `dict` with valid `torch_dtype` "
+                        f"for each sub-config in composite configs, but received {torch_dtype}"
+                    )
+
                 dtype_orig = cls._set_default_torch_dtype(torch_dtype)
+            else:
+                # set fp32 as the default dtype for BC
+                default_dtype = str(torch.get_default_dtype()).split(".")[-1]
+                config.torch_dtype = default_dtype
+                for key in config.sub_configs.keys():
+                    value = getattr(config, key)
+                    value.torch_dtype = default_dtype
 
             # Check if `_keep_in_fp32_modules` is not None
             use_keep_in_fp32_modules = (cls._keep_in_fp32_modules is not None) and (
