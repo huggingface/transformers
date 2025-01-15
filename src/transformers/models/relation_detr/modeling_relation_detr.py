@@ -602,7 +602,15 @@ class RelationDetrConvEncoder(nn.Module):
     def forward(self, pixel_values: torch.Tensor):
         # send pixel_values through the model to get list of feature maps
         features = self.model(pixel_values).feature_maps
-        features = self.features_layer_norm(features)
+        
+        # convert (batch_size, height, width, channels) -> (batch_size, channels, height, width)
+        if self.backbone_features_format == "channels_last":
+            features = [feature.permute(0, 3, 1, 2) for feature in features]
+        
+        # apply layernorm if needed
+        if self.post_layer_norm:
+            features = [self.norms[i](feature) for i, feature in enumerate(features)]
+
         return features
 
 
