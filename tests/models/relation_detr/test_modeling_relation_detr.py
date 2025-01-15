@@ -49,6 +49,9 @@ if is_vision_available():
     from transformers import AutoImageProcessor
 
 
+CHECKPOINT = "xiuqhou/relation-detr-resnet50"
+
+
 class RelationDetrModelTester:
     def __init__(
         self,
@@ -702,10 +705,10 @@ def prepare_img():
 class RelationDetrModelIntegrationTests(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
-        return AutoImageProcessor.from_pretrained("xiuqhou/relation-detr-resnet50") if is_vision_available() else None
+        return AutoImageProcessor.from_pretrained(CHECKPOINT) if is_vision_available() else None
 
     def test_inference_object_detection_head(self):
-        model = RelationDetrForObjectDetection.from_pretrained("xiuqhou/relation-detr-resnet50").to(torch_device)
+        model = RelationDetrForObjectDetection.from_pretrained(CHECKPOINT).to(torch_device)
 
         image_processor = self.default_image_processor
         image = prepare_img()
@@ -754,7 +757,7 @@ class RelationDetrModelIntegrationTests(unittest.TestCase):
         pixel_mask = encoding["pixel_mask"]
 
         # 1. run model on CPU
-        model = RelationDetrForObjectDetection.from_pretrained("xiuqhou/relation-detr-resnet50")
+        model = RelationDetrForObjectDetection.from_pretrained(CHECKPOINT)
 
         with torch.no_grad():
             cpu_outputs = model(pixel_values, pixel_mask)
