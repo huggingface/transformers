@@ -656,6 +656,7 @@ class Gemma2Model(Gemma2PreTrainedModel):
                     output_attentions,
                     use_cache,
                     cache_position,
+                    **flash_attn_kwargs,
                 )
             else:
                 layer_outputs = decoder_layer(
