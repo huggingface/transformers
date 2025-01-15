@@ -55,7 +55,7 @@ if is_torchao_available():
 from .activations import get_activation
 from .configuration_utils import PretrainedConfig
 from .dynamic_module_utils import custom_object_save
-from .generation import CompileConfig, GenerationConfig
+from .generation import CompileConfig, GenerationConfig, ContinuousMixin
 from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
 from .integrations.accelerate import find_tied_parameters, init_empty_weights
 from .integrations.deepspeed import _load_state_dict_into_zero3_model, is_deepspeed_available
@@ -1726,7 +1726,7 @@ class ModuleUtilsMixin:
         return 6 * self.estimate_tokens(input_dict) * self.num_parameters(exclude_embeddings=exclude_embeddings)
 
 
-class PreTrainedModel(nn.Module, ModuleUtilsMixin, PushToHubMixin, PeftAdapterMixin):
+class PreTrainedModel(nn.Module, ModuleUtilsMixin, ContinuousMixin, PushToHubMixin, PeftAdapterMixin):
     r"""
     Base class for all models.
 

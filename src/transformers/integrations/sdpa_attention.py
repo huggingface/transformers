@@ -24,8 +24,13 @@ def sdpa_attention_forward(
     dropout: float = 0.0,
     scaling: Optional[float] = None,
     is_causal: Optional[bool] = None,
+    cache=None,
+    cumulative_seqlens_q=None,
+    cumulative_seqlens_k=None,
     **kwargs,
 ) -> Tuple[torch.Tensor, None]:
+    key, value = cache.update(key, value, module.layer_idx, cumulative_seqlens_k, **kwargs)
+
     if hasattr(module, "num_key_value_groups"):
         key = repeat_kv(key, module.num_key_value_groups)
         value = repeat_kv(value, module.num_key_value_groups)
