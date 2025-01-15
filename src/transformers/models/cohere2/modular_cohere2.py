@@ -383,8 +383,8 @@ class Cohere2DecoderLayer(CohereDecoderLayer):
                 )
                 attention_mask = torch.where(sliding_window_mask, min_dtype, attention_mask)
                 # In case we are beyond the sliding window, we need to correctly offset the mask slicing
-                # `kwargs["current_cache_position"]` is equivalent to `cache_position[-1]` but without breaking dynamo
-                offset = kwargs["current_cache_position"] - effective_seq_len
+                # `kwargs["last_cache_position"]` is equivalent to `cache_position[-1]` but without breaking dynamo
+                offset = kwargs["last_cache_position"] - effective_seq_len
                 # Should only be used when beyond the sliding window (i.e. offset > 0)
                 offset = max(0, offset)
                 attention_mask = attention_mask[:, :, :, offset : offset + effective_seq_len]
@@ -486,6 +486,10 @@ class Cohere2Model(Gemma2Model):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
+        # This is needed to correctly slice the mask without data-dependent slicing later on if using dynamo tracing
+        # (retrieving the same value from `cache_position` later on would crash dynamo)
+        if "last_cache_position" not in flash_attn_kwargs.keys():
+            flash_attn_kwargs["last_cache_position"] = attention_mask.shape[-1] if attention_mask is not None else 0
         causal_mask = self._update_causal_mask(
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
         )
@@ -594,6 +598,10 @@ class Cohere2ForCausalLM(CohereForCausalLM):
         else:
             # The clone here is for the same reason as for `position_ids`.
             model_inputs = {"input_ids": input_ids.clone(memory_format=torch.contiguous_format), "inputs_embeds": None}
+
+        # This is needed to correctly slice the mask without data-dependent slicing later on if using dynamo tracing
+        # (retrieving the same value from `cache_position` later on would crash dynamo)
+        model_inputs["last_cache_position"] = attention_mask.shape[-1] if attention_mask is not None else 0
 
         if (
             isinstance(past_key_values, HybridCache)
