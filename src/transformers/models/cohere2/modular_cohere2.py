@@ -383,10 +383,10 @@ class Cohere2DecoderLayer(CohereDecoderLayer):
                 )
                 attention_mask = torch.where(sliding_window_mask, min_dtype, attention_mask)
                 # In case we are beyond the sliding window, we need to correctly offset the mask slicing
-                offset = cache_position[-1] + 1 - effective_seq_len
+                # `kwargs["current_cache_position"]` is equivalent to `cache_position[-1]` but without breaking dynamo
+                offset = kwargs["current_cache_position"] - effective_seq_len
                 # Should only be used when beyond the sliding window (i.e. offset > 0)
-                # Slightly more efficient to use torch ops compared to simple `max(0, offset)`
-                offset = torch.maximum(torch.zeros_like(offset), offset)
+                offset = max(0, offset)
                 attention_mask = attention_mask[:, :, :, offset : offset + effective_seq_len]
 
         residual = hidden_states
@@ -489,6 +489,10 @@ class Cohere2Model(Gemma2Model):
         causal_mask = self._update_causal_mask(
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
         )
+        # This is needed to correctly slice the mask without data-dependent slicing later on if using dynamo tracing
+        # (retrieving the same value from `cache_position` later on would crash dynamo)
+        flash_attn_kwargs["current_cache_position"] = attention_mask.shape[-1]
+
         hidden_states = inputs_embeds
 
         # create position embeddings to be shared across the decoder layers
