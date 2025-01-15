@@ -508,54 +508,6 @@ def replace_batch_norm(model):
             replace_batch_norm(module)
 
 
-class RelationDetrConvEncoderPostLayerNorm(nn.Module):
-    """Post process for the ConvEncoder. This is used to be compatible with the FocalNet backbone in official repo."""
-
-    def __init__(
-        self,
-        in_channels: int,
-        backbone_features_format: Literal["channels_first", "channels_last"] = "channels_first",
-        post_layer_norm: bool = False,
-        layer_norm_eps: float = 1e-5,
-    ):
-        super().__init__()
-        self.in_channels = in_channels
-        self.post_layer_norm = post_layer_norm
-        self.backbone_features_format = backbone_features_format
-        if self.backbone_features_format not in ["channels_first", "channels_last"]:
-            raise ValueError("`backbone_features_format` should be either 'channels_first' or 'channels_last'")
-        if self.post_layer_norm:
-            self.norms = nn.ModuleList([nn.LayerNorm(channel, eps=layer_norm_eps) for channel in in_channels])
-
-    def forward(self, multi_level_feats: List[Tensor]):
-        # do some check on the input according to backbone_features_format
-        channel_dim = 1 if self.backbone_features_format == "channels_first" else -1
-        for prev_feat, feat in zip(multi_level_feats[:-1], multi_level_feats[1:]):
-            if not (prev_feat.shape[channel_dim] < feat.shape[channel_dim]):
-                raise ValueError(
-                    "Feature maps should be in increasing order of channels, make sure `backbone_features_format` is right"
-                )
-
-        if self.post_layer_norm and self.backbone_features_format == "channels_first":
-            # convert (batch_size, channels, height, width) -> (batch_size, height, width, channels)
-            multi_level_feats = [feat.permute(0, 2, 3, 1) for feat in multi_level_feats]
-
-            for idx, feat in enumerate(multi_level_feats):
-                multi_level_feats[idx] = self.norms[idx](feat)
-
-            # convert (batch_size, height, width, channels) -> (batch_size, channels, height, width)
-            multi_level_feats = [feat.permute(0, 3, 1, 2) for feat in multi_level_feats]
-        elif self.post_layer_norm:
-            for idx, feat in enumerate(multi_level_feats):
-                multi_level_feats[idx] = self.norms[idx](feat)
-
-        # convert (batch_size, height, width, channels) -> (batch_size, channels, height, width)
-        if self.backbone_features_format == "channels_last":
-            multi_level_feats = [feat.permute(0, 3, 1, 2) for feat in multi_level_feats]
-
-        return multi_level_feats
-
-
 class RelationDetrConvEncoder(nn.Module):
     """
     Convolutional backbone, using either the AutoBackbone API or one from the timm library.
@@ -592,24 +544,39 @@ class RelationDetrConvEncoder(nn.Module):
                     if "stage.1" not in name and "stage.2" not in name and "stage.3" not in name:
                         parameter.requires_grad_(False)
 
-        self.features_layer_norm = RelationDetrConvEncoderPostLayerNorm(
-            in_channels=self.intermediate_channel_sizes,
-            backbone_features_format=config.backbone_features_format,
-            post_layer_norm=config.backbone_post_layer_norm,
-            layer_norm_eps=config.layer_norm_eps,
-        )
+        self.backbone_features_format = config.backbone_features_format
+        self.post_layer_norm = config.backbone_post_layer_norm
+
+        if self.post_layer_norm:
+            self.norms = nn.ModuleList(
+                [nn.LayerNorm(channel, eps=config.layer_norm_eps) for channel in self.intermediate_channel_sizes]
+            )
+
+    def check_image_format(self, features):
+        # do some check on the input according to backbone_features_format
+        channel_dim = 1 if self.backbone_features_format == "channels_first" else -1
+        for prev_feat, feat in zip(features[:-1], features[1:]):
+            if not (prev_feat.shape[channel_dim] < feat.shape[channel_dim]):
+                raise ValueError(
+                    "Feature maps should be in increasing order of channels, make sure `backbone_features_format` is right"
+                )
 
     def forward(self, pixel_values: torch.Tensor):
         # send pixel_values through the model to get list of feature maps
         features = self.model(pixel_values).feature_maps
-        
-        # convert (batch_size, height, width, channels) -> (batch_size, channels, height, width)
-        if self.backbone_features_format == "channels_last":
-            features = [feature.permute(0, 3, 1, 2) for feature in features]
-        
-        # apply layernorm if needed
+
+        self.check_image_format(features)
+
+        # convert (batch_size, channels, height, width) -> (batch_size, height, width, channels)
+        if self.backbone_features_format == "channels_first":
+            features = [feature.permute(0, 2, 3, 1) for feature in features]
+
+        # apply layer_norm if needed
         if self.post_layer_norm:
             features = [self.norms[i](feature) for i, feature in enumerate(features)]
+
+        # convert (batch_size, height, width, channels) -> (batch_size, channels, height, width)
+        features = [feature.permute(0, 3, 1, 2) for feature in features]
 
         return features
 
