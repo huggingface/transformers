@@ -956,59 +956,47 @@ class RelationDetrImageProcessor(BaseImageProcessor):
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images[0])
 
-        # prepare (COCO annotations as a list of Dict -> DETR target as a single Dict per image)
-        if annotations is not None:
-            prepared_images = []
-            prepared_annotations = []
-            for image, target in zip(images, annotations):
-                target = self.prepare_annotation(
+        processed_images = []
+        processed_annotations = []
+
+        for i, image in enumerate(images):
+            annotation = annotations[i] if annotations is not None else None
+
+            # prepare (COCO annotations as a list of Dict -> DETR target as a single Dict per image)
+            if annotation is not None:
+                annotation = self.prepare_annotation(
                     image,
-                    target,
+                    annotation,
                     format,
                     input_data_format=input_data_format,
                 )
-                prepared_images.append(image)
-                prepared_annotations.append(target)
-            images = prepared_images
-            annotations = prepared_annotations
-            del prepared_images, prepared_annotations
 
-        # transformations
-        if do_resize:
-            if annotations is not None:
-                resized_images, resized_annotations = [], []
-                for image, target in zip(images, annotations):
+            # transformations
+            if do_resize:
+                if annotation is not None:
                     orig_size = get_image_size(image, input_data_format)
-                    resized_image = self.resize(
-                        image, size=size, resample=resample, input_data_format=input_data_format
+                    image = self.resize(image, size=size, resample=resample, input_data_format=input_data_format)
+                    annotation = self.resize_annotation(
+                        annotation, orig_size, get_image_size(image, input_data_format)
                     )
-                    resized_annotation = self.resize_annotation(
-                        target, orig_size, get_image_size(resized_image, input_data_format)
-                    )
-                    resized_images.append(resized_image)
-                    resized_annotations.append(resized_annotation)
-                images = resized_images
-                annotations = resized_annotations
-                del resized_images, resized_annotations
-            else:
-                images = [
-                    self.resize(image, size=size, resample=resample, input_data_format=input_data_format)
-                    for image in images
-                ]
+                else:
+                    image = self.resize(image, size=size, resample=resample, input_data_format=input_data_format)
 
-        if do_rescale:
-            images = [self.rescale(image, rescale_factor, input_data_format=input_data_format) for image in images]
+            if do_rescale:
+                image = self.rescale(image, rescale_factor, input_data_format=input_data_format)
 
-        if do_normalize:
-            images = [
-                self.normalize(image, image_mean, image_std, input_data_format=input_data_format) for image in images
-            ]
+            if do_normalize:
+                image = self.normalize(image, image_mean, image_std, input_data_format=input_data_format)
 
-        if do_convert_annotations and annotations is not None:
-            annotations = [
-                self.normalize_annotation(annotation, get_image_size(image, input_data_format))
-                for annotation, image in zip(annotations, images)
-            ]
+            if do_convert_annotations and annotation is not None:
+                annotation = self.normalize_annotation(annotation, get_image_size(image, input_data_format))
+
+            processed_images.append(image)
+            processed_annotations.append(annotation)
+
+        images = processed_images
+        annotations = processed_annotations
+        del processed_images, processed_annotations
 
         if do_pad:
             # Pads images and returns their mask: {'pixel_values': ..., 'pixel_mask': ...}
