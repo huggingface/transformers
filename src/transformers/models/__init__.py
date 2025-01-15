@@ -127,6 +127,7 @@ from . import (
     hubert,
     ibert,
     idefics,
+    evolla,
     idefics2,
     idefics3,
     ijepa,

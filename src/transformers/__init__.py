@@ -512,6 +512,7 @@ _import_structure = {
     "models.hubert": ["HubertConfig"],
     "models.ibert": ["IBertConfig"],
     "models.idefics": ["IdeficsConfig"],
+    "models.evolla": ["EvollaConfig"],
     "models.idefics2": ["Idefics2Config"],
     "models.idefics3": ["Idefics3Config"],
     "models.ijepa": ["IJepaConfig"],
@@ -1254,6 +1255,7 @@ else:
     _import_structure["models.got_ocr2"].extend(["GotOcr2ImageProcessor"])
     _import_structure["models.grounding_dino"].extend(["GroundingDinoImageProcessor"])
     _import_structure["models.idefics"].extend(["IdeficsImageProcessor"])
+    _import_structure["models.evolla"].extend(["EvollaProteinProcessor"])
     _import_structure["models.idefics2"].extend(["Idefics2ImageProcessor"])
     _import_structure["models.idefics3"].extend(["Idefics3ImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
@@ -2606,6 +2608,14 @@ else:
             "IdeficsModel",
             "IdeficsPreTrainedModel",
             "IdeficsProcessor",
+        ]
+    )
+    _import_structure["models.evolla"].extend(
+        [
+            "EvollaForVisionText2Text",
+            "EvollaModel",
+            "EvollaPreTrainedModel",
+            "EvollaProcessor",
         ]
     )
     _import_structure["models.idefics2"].extend(
@@ -4455,6 +4465,13 @@ else:
             "TFIdeficsPreTrainedModel",
         ]
     )
+    _import_structure["models.evolla"].extend(
+        [
+            "TFEvollaForVisionText2Text",
+            "TFEvollaModel",
+            "TFEvollaPreTrainedModel",
+        ]
+    )
 
     _import_structure["models.layoutlm"].extend(
         [
@@ -5632,6 +5649,9 @@ if TYPE_CHECKING:
     from .models.idefics import (
         IdeficsConfig,
     )
+    from .models.evolla import (
+        EvollaConfig,
+    )
     from .models.idefics2 import Idefics2Config
     from .models.idefics3 import Idefics3Config
     from .models.ijepa import IJepaConfig
@@ -6409,6 +6429,7 @@ if TYPE_CHECKING:
         from .models.got_ocr2 import GotOcr2ImageProcessor
         from .models.grounding_dino import GroundingDinoImageProcessor
         from .models.idefics import IdeficsImageProcessor
+        from .models.evolla import EvollaProteinProcessor
         from .models.idefics2 import Idefics2ImageProcessor
         from .models.idefics3 import Idefics3ImageProcessor
         from .models.imagegpt import ImageGPTFeatureExtractor, ImageGPTImageProcessor
@@ -7539,6 +7560,12 @@ if TYPE_CHECKING:
             IdeficsModel,
             IdeficsPreTrainedModel,
             IdeficsProcessor,
+        )
+        from .models.evolla import (
+            EvollaForVisionText2Text,
+            EvollaModel,
+            EvollaPreTrainedModel,
+            EvollaProcessor,
         )
         from .models.idefics2 import (
             Idefics2ForConditionalGeneration,
@@ -8984,6 +9011,11 @@ if TYPE_CHECKING:
             TFIdeficsForVisionText2Text,
             TFIdeficsModel,
             TFIdeficsPreTrainedModel,
+        )
+        from .models.evolla import (
+            TFEvollaForVisionText2Text,
+            TFEvollaModel,
+            TFEvollaPreTrainedModel,
         )
         from .models.layoutlm import (
             TFLayoutLMForMaskedLM,

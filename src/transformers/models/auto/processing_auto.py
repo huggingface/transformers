@@ -68,6 +68,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("groupvit", "CLIPProcessor"),
         ("hubert", "Wav2Vec2Processor"),
         ("idefics", "IdeficsProcessor"),
+        ("evolla", "EvollaProcessor"),
         ("idefics2", "Idefics2Processor"),
         ("idefics3", "Idefics3Processor"),
         ("instructblip", "InstructBlipProcessor"),
