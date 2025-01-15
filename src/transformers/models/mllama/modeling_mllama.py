@@ -1537,7 +1537,7 @@ class MllamaVisionModel(MllamaPreTrainedModel):
         aspect_ratio_ids = aspect_ratio_ids.reshape(batch_size * num_concurrent_media, -1)
 
         # Patch embedding
-        patch_embeds = self.patch_embedding(pixel_values.to(self.dtype).to(self.device))
+        patch_embeds = self.patch_embedding(pixel_values)
         hidden_state = patch_embeds.flatten(2).transpose(1, 2)
 
         # Tile embeddings
