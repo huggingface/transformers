@@ -392,14 +392,14 @@ def merge(patches: torch.Tensor, batch_size: int, padding: int) -> torch.Tensor:
         # starting_indexes = [2, 10, 18, 26]
         # valid_indexes = [ 0,  1,  2,  3,  4,  5, 10, 11, 12, 13, 18, 19, 20, 21, 26, 27, 28, 29, 30, 31])
 
-        starting_indexes = torch.arange(start=padding, end=new_out_size , step=out_size)
-        valid_indexes = torch.concat([
-            torch.arange(padding),
-            *[
-                torch.arange(index, index + out_size - padding * 2) for index in starting_indexes
-            ],
-            torch.arange(new_out_size-padding, new_out_size),
-        ])
+        starting_indexes = torch.arange(start=padding, end=new_out_size, step=out_size)
+        valid_indexes = torch.concat(
+            [
+                torch.arange(padding),
+                *[torch.arange(index, index + out_size - padding * 2) for index in starting_indexes],
+                torch.arange(new_out_size - padding, new_out_size),
+            ]
+        )
         merged = merged[:, :, valid_indexes]
         merged = merged[:, :, :, valid_indexes]
 
