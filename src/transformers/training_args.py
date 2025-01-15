@@ -72,7 +72,7 @@ if is_torch_available():
     import torch.distributed as dist
 
 if is_accelerate_available():
-    from accelerate.state import AcceleratorState, PartialState
+    from accelerate.state import PartialState
     from accelerate.utils import DistributedType
 
     from .trainer_pt_utils import AcceleratorConfig
