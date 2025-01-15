@@ -521,9 +521,9 @@ class Trainer:
                 if isinstance(model, PreTrainedModel):
                     # Patch the model with liger kernels. Use the default kernel configurations.
                     _apply_liger_kernel_to_instance(model=model)
-                elif hasattr(model.get_base_model) and isinstance(model.get_base_model(), PreTrainedModel):
+                elif hasattr(model, "get_base_model") and isinstance(model.get_base_model(), PreTrainedModel):
                     # Patch the base model with liger kernels where model is a PeftModel. Use the default kernel configurations.
-                    _apply_liger_kernel_to_instance(model=model.base_model.model)
+                    _apply_liger_kernel_to_instance(model=model.get_base_model())
                 else:
                     logger.warning(
                         "The model is not an instance of PreTrainedModel. No liger kernels will be applied."
