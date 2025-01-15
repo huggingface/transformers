@@ -225,7 +225,7 @@ class PagedAttentionCache:
 class ContinuousBatch:
     eos_token_id = None
     input_tokens = None
-    finished_sequences = None
+    finished_sequences = []
     max_seqlens_q = 0
     max_seqlens_k = 0
 
@@ -326,6 +326,7 @@ class ContinuousBatch:
             del self.cache_index[evict_mask]
             del self.cumulative_seqlens_k[evict_mask]
             del self.cumulative_seqlens_q[evict_mask]
+            self.finished_sequences.append(self.generated_ids[evict_mask])
 
     def __len__(self):
         return len(self.input_tokens)
@@ -382,7 +383,7 @@ class ContinuousMixin:
             # we don't sample for now :)
             generated_ids = torch.argmax(logits, dim=-1)
             current_batch.update(generated_ids[0])
-            if len(current_batch.finished_sequences) > paged_attention_cache.batch_size:
+            if len(current_batch.finished_sequences) >  self.generation_config.batch_size:
                 yield current_batch.finished_sequences
 
         return current_batch.all_generated_sequences
