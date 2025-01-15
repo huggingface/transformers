@@ -37,7 +37,7 @@ The model version was contributed by [xiuqhou](https://github.com/xiuqhou). The 
 
 ## Usage tips
 
-Initially, an image is processed using a pre-trained convolutional neural network, specifically a Resnet variant as referenced in the original code. This network extracts features from the final three layers of the architecture. Following this, a transformer encoder is employed to convert the multi-scale features into a sequential array of image features. Then, a decoder, equipped with auxiliary prediction heads and position relation encoders is used to refine the object queries. This process facilitates the direct generation of bounding boxes, eliminating the need for any additional post-processing to acquire the logits and coordinates for the bounding boxes.
+Initially, an image is processed with a ResNet variant as referenced in the original code. This network extracts features from the final three layers of the architecture. Following this, a transformer encoder is employed to convert the multi-scale features into a sequential array of image features. Then, a decoder, equipped with auxiliary prediction heads and position relation encoders is used to refine the object queries. This process facilitates the direct generation of bounding boxes, eliminating the need for any additional post-processing to acquire the logits and coordinates for the bounding boxes.
 
 ```py
 >>> import torch
