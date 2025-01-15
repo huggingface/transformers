@@ -519,19 +519,18 @@ class RelationDetrConvEncoderPostLayerNorm(nn.Module):
                     "Feature maps should be in increasing order of channels, make sure `backbone_features_format` is right"
                 )
 
-        if self.post_layer_norm:
-            if self.backbone_features_format == "channels_first":
-                # convert (batch_size, channels, height, width) -> (batch_size, height, width, channels)
-                multi_level_feats = [feat.permute(0, 2, 3, 1) for feat in multi_level_feats]
+        if self.post_layer_norm and self.backbone_features_format == "channels_first":
+            # convert (batch_size, channels, height, width) -> (batch_size, height, width, channels)
+            multi_level_feats = [feat.permute(0, 2, 3, 1) for feat in multi_level_feats]
 
-                for idx, feat in enumerate(multi_level_feats):
-                    multi_level_feats[idx] = self.norms[idx](feat)
+            for idx, feat in enumerate(multi_level_feats):
+                multi_level_feats[idx] = self.norms[idx](feat)
 
-                # convert (batch_size, height, width, channels) -> (batch_size, channels, height, width)
-                multi_level_feats = [feat.permute(0, 3, 1, 2) for feat in multi_level_feats]
-            else:
-                for idx, feat in enumerate(multi_level_feats):
-                    multi_level_feats[idx] = self.norms[idx](feat)
+            # convert (batch_size, height, width, channels) -> (batch_size, channels, height, width)
+            multi_level_feats = [feat.permute(0, 3, 1, 2) for feat in multi_level_feats]
+        elif self.post_layer_norm:
+            for idx, feat in enumerate(multi_level_feats):
+                multi_level_feats[idx] = self.norms[idx](feat)
 
         # convert (batch_size, height, width, channels) -> (batch_size, channels, height, width)
         if self.backbone_features_format == "channels_last":
