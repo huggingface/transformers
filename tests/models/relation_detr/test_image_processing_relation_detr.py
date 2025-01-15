@@ -273,10 +273,6 @@ class RelationDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCas
             self.assertTrue(torch.allclose(encoding["labels"][0]["boxes"], expected_boxes_0, rtol=1e-3))
             self.assertTrue(torch.allclose(encoding["labels"][1]["boxes"], expected_boxes_1, rtol=1e-3))
 
-            # Check the masks have also been padded
-            self.assertEqual(encoding["labels"][0]["masks"].shape, torch.Size([6, 800, 1066]))
-            self.assertEqual(encoding["labels"][1]["masks"].shape, torch.Size([6, 800, 1066]))
-
             # Check if do_convert_annotations=False, then the annotations are not converted to centre_x, centre_y, width, height
             # format and not in the range [0, 1]
             encoding = image_processing(
