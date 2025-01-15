@@ -1949,8 +1949,8 @@ class RelationDetrModel(RelationDetrPreTrainedModel):
         self.target_embed = nn.Embedding(config.num_queries, config.d_model)
         self.hybrid_target_embed = nn.Embedding(config.hybrid_queries, config.d_model)
 
-        self.enc_output = nn.Linear(config.d_model, config.d_model)
-        self.enc_output_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
+        self.encoder_output = nn.Linear(config.d_model, config.d_model)
+        self.encoder_output_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
 
         self.encoder_class_head = nn.Linear(config.d_model, config.num_labels)
         self.hybrid_class_head = nn.Linear(config.d_model, config.num_labels)
