@@ -1195,9 +1195,13 @@ class RelationDetrPreTrainedModel(PreTrainedModel):
 
         if isinstance(module, RelationDetrModel):
             nn.init.xavier_uniform_(module.encoder_class_head.weight, xavier_gain)
+            nn.init.xavier_uniform_(module.hybrid_class_head.weight, xavier_gain)
             nn.init.constant_(module.encoder_class_head.bias, bias)
-            nn.init.constant_(module.encoder_bbox_head.weight, 0)
-            nn.init.constant_(module.encoder_bbox_head.bias, 0)
+            nn.init.constant_(module.hybrid_class_head.bias, bias)
+            nn.init.constant_(module.encoder_bbox_head.layers[-1].weight, 0)
+            nn.init.constant_(module.encoder_bbox_head.layers[-1].bias, 0)
+            nn.init.constant_(module.hybrid_bbox_head.layers[-1].weight, 0)
+            nn.init.constant_(module.hybrid_bbox_head.layers[-1].bias, 0)
 
         if isinstance(module, RelationDetrLearnedPositionEmbedding):
             nn.init.uniform_(module.row_embeddings.weight)
