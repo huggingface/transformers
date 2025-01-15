@@ -122,7 +122,7 @@ if is_torch_available():
     from torch import nn
 
     from transformers import MODEL_MAPPING, AdaptiveEmbedding
-    from transformers.cache_utils import DynamicCache
+    from transformers.cache_utils import Cache, DynamicCache
     from transformers.modeling_utils import load_state_dict, no_init_weights
     from transformers.pytorch_utils import id_tensor_storage
 
@@ -221,6 +221,8 @@ class ModelTesterMixin:
     test_mismatched_shapes = True
     test_missing_keys = True
     test_model_parallel = False
+    # Used in `check_training_gradient_checkpointing` to NOT check all params having gradient (e.g. for some MOE models)
+    test_all_params_have_gradient = True
     is_encoder_decoder = False
     has_attentions = True
     _is_composite = False
@@ -816,7 +818,10 @@ class ModelTesterMixin:
                     ),
                 )
 
+        set_model_tester_for_less_flaky_test(self)
+
         config, batched_input = self.model_tester.prepare_config_and_inputs_for_common()
+        set_config_for_less_flaky_test(config)
         equivalence = get_tensor_equivalence_function(batched_input)
 
         for model_class in self.all_model_classes:
@@ -827,6 +832,7 @@ class ModelTesterMixin:
                 config, batched_input = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
             batched_input_prepared = self._prepare_for_class(batched_input, model_class)
             model = model_class(config).to(torch_device).eval()
+            set_model_for_less_flaky_test(model)
 
             batch_size = self.model_tester.batch_size
             single_row_input = {}
@@ -891,9 +897,10 @@ class ModelTesterMixin:
                 loss.backward()
                 optimizer.step()
 
-                for k, v in model.named_parameters():
-                    if v.requires_grad:
-                        self.assertTrue(v.grad is not None, f"{k} in {model_class.__name__} has no gradient!")
+                if self.test_all_params_have_gradient:
+                    for k, v in model.named_parameters():
+                        if v.requires_grad:
+                            self.assertTrue(v.grad is not None, f"{k} in {model_class.__name__} has no gradient!")
 
     def test_training(self):
         if not self.model_tester.is_training:
@@ -1102,7 +1109,14 @@ class ModelTesterMixin:
                         attention_mask = inputs["attention_mask"]
                         decoder_input_ids = inputs["decoder_input_ids"]
                         decoder_attention_mask = inputs["decoder_attention_mask"]
-                        model(main_input, attention_mask, decoder_input_ids, decoder_attention_mask)
+                        outputs = model(main_input, attention_mask, decoder_input_ids, decoder_attention_mask)
+                        # `torchscript` doesn't work with outputs containing `Cache` object. However, #35235 makes
+                        # several models to use `Cache` by default instead of the legacy cache (tuple), and
+                        # their `torchscript` tests are failing. We won't support them anyway, but we still want to keep
+                        # the tests for encoder models like `BERT`. So we skip the checks if the model's output contains
+                        # a `Cache` object.
+                        if any(isinstance(x, Cache) for x in outputs):
+                            continue
                         traced_model = torch.jit.trace(
                             model, (main_input, attention_mask, decoder_input_ids, decoder_attention_mask)
                         )
@@ -1110,14 +1124,18 @@ class ModelTesterMixin:
                         input_ids = inputs["input_ids"]
                         bbox = inputs["bbox"]
                         image = inputs["image"].tensor
-                        model(input_ids, bbox, image)
+                        outputs = model(input_ids, bbox, image)
+                        if any(isinstance(x, Cache) for x in outputs):
+                            continue
                         traced_model = torch.jit.trace(
                             model, (input_ids, bbox, image), check_trace=False
                         )  # when traced model is checked, an error is produced due to name mangling
                     elif "bbox" in inputs:  # Bros requires additional inputs (bbox)
                         input_ids = inputs["input_ids"]
                         bbox = inputs["bbox"]
-                        model(input_ids, bbox)
+                        outputs = model(input_ids, bbox)
+                        if any(isinstance(x, Cache) for x in outputs):
+                            continue
                         traced_model = torch.jit.trace(
                             model, (input_ids, bbox), check_trace=False
                         )  # when traced model is checked, an error is produced due to name mangling
@@ -1127,7 +1145,9 @@ class ModelTesterMixin:
                         pixel_values = inputs["pixel_values"]
                         prompt_pixel_values = inputs["prompt_pixel_values"]
                         prompt_masks = inputs["prompt_masks"]
-                        model(pixel_values, prompt_pixel_values, prompt_masks)
+                        outputs = model(pixel_values, prompt_pixel_values, prompt_masks)
+                        if any(isinstance(x, Cache) for x in outputs):
+                            continue
                         traced_model = torch.jit.trace(
                             model, (pixel_values, prompt_pixel_values, prompt_masks), check_trace=False
                         )  # when traced model is checked, an error is produced due to name mangling
@@ -1142,11 +1162,15 @@ class ModelTesterMixin:
                             else:
                                 self.skipTest(reason="testing SDPA without attention_mask is not supported")
 
-                            model(main_input, attention_mask=inputs["attention_mask"])
+                            outputs = model(main_input, attention_mask=inputs["attention_mask"])
+                            if any(isinstance(x, Cache) for x in outputs):
+                                continue
                             # example_kwarg_inputs was introduced in torch==2.0, but it is fine here since SDPA has a requirement on torch>=2.1.
                             traced_model = torch.jit.trace(model, example_kwarg_inputs=trace_input)
                         else:
-                            model(main_input)
+                            outputs = model(main_input)
+                            if any(isinstance(x, Cache) for x in outputs):
+                                continue
                             traced_model = torch.jit.trace(model, (main_input,))
                 except RuntimeError:
                     self.fail("Couldn't trace module.")
@@ -1838,7 +1862,6 @@ class ModelTesterMixin:
     def test_resize_tokens_embeddings(self):
         if not self.test_resize_embeddings:
             self.skipTest(reason="test_resize_embeddings is set to `False`")
-
         (
             original_config,
             inputs_dict,
@@ -1993,7 +2016,7 @@ class ModelTesterMixin:
             torch.testing.assert_close(old_embeddings_mean, new_embeddings_mean, atol=1e-3, rtol=1e-1)
 
     @require_deepspeed
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_resize_tokens_embeddings_with_deepspeed(self):
         ds_config = {
             "zero_optimization": {
@@ -2099,7 +2122,7 @@ class ModelTesterMixin:
                 model(**self._prepare_for_class(inputs_dict, model_class))
 
     @require_deepspeed
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_resize_embeddings_untied_with_deepspeed(self):
         ds_config = {
             "zero_optimization": {
@@ -2260,7 +2283,7 @@ class ModelTesterMixin:
 
     def test_tied_weights_keys(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        config.tie_word_embeddings = True
+        config.get_text_config().tie_word_embeddings = True
         for model_class in self.all_model_classes:
             model_tied = model_class(config)
 
@@ -3061,6 +3084,7 @@ class ModelTesterMixin:
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
+    @require_torch_gpu
     @require_torch_multi_gpu
     def test_model_parallelization(self):
         if not self.test_model_parallel:
@@ -3123,6 +3147,7 @@ class ModelTesterMixin:
             gc.collect()
             torch.cuda.empty_cache()
 
+    @require_torch_gpu
     @require_torch_multi_gpu
     def test_model_parallel_equal_results(self):
         if not self.test_model_parallel:
@@ -3176,7 +3201,7 @@ class ModelTesterMixin:
 
     @require_accelerate
     @mark.accelerate_tests
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_disk_offload_bin(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -3217,7 +3242,7 @@ class ModelTesterMixin:
 
     @require_accelerate
     @mark.accelerate_tests
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_disk_offload_safetensors(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -3252,7 +3277,7 @@ class ModelTesterMixin:
 
     @require_accelerate
     @mark.accelerate_tests
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_cpu_offload(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -3868,7 +3893,7 @@ class ModelTesterMixin:
                 for name, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__
                     if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                        raise ValueError("The eager model should not have SDPA attention layers")
+                        raise ValueError(f"The eager model should not have SDPA attention layers but got {class_name}")
 
     @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
@@ -4681,13 +4706,17 @@ class ModelTesterMixin:
                 reason="Model architecture has no generative classes, and thus not necessarily supporting 4D masks"
             )
 
+        set_model_tester_for_less_flaky_test(self)
+
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_static_cache:
                 self.skipTest(f"{model_class.__name__} is not guaranteed to work with custom 4D attention masks")
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+            set_config_for_less_flaky_test(config)
             if getattr(config, "sliding_window", 0) is not None and getattr(config, "sliding_window", 0) > 0:
                 self.skipTest(f"{model_class.__name__} with sliding window attention is not supported by this test")
             model = model_class(config).to(device=torch_device, dtype=torch.float32)
+            set_model_for_less_flaky_test(model)
 
             (
                 input_ids,
@@ -4716,7 +4745,7 @@ class ModelTesterMixin:
             torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_torch_compile_for_training(self):
         if version.parse(torch.__version__) < version.parse("2.3"):
             self.skipTest(reason="This test requires torch >= 2.3 to run.")
@@ -4780,6 +4809,19 @@ class ModelTesterMixin:
 
             # Assert the last tokens are actually the same (except for the natural fluctuation due to order of FP ops)
             self.assertTrue(torch.allclose(all_logits[:, -1:, :], last_token_logits, atol=1e-5))
+
+    @require_torch_gpu
+    def test_flex_attention_with_grads(self):
+        for model_class in self.all_model_classes:
+            if not model_class._supports_flex_attn:
+                self.skipTest(reason="This model does not support flex attention")
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config._attn_implementation = "flex_attention"
+            model = model_class(config).to(device=torch_device, dtype=torch.float16)
+            self.assertTrue(model.config._attn_implementation == "flex_attention")
+
+            # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
+            _ = model(inputs_dict["input_ids"].to(torch_device))
 
 
 global_rng = random.Random()
