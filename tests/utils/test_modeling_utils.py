@@ -1790,6 +1790,29 @@ class ModelUtilsTest(TestCasePlus):
         )
         self.assertTrue(check_models_equal(model, model_loaded))
 
+    def test_training_with_cache(self):
+        """
+        Some fine-tuning methods require the use of cache, like prefix tuning in PEFT. This test checks that a cache
+        is used if we request it. Related issue: #35648
+        """
+        model = AutoModelForCausalLM.from_pretrained(TINY_MISTRAL)
+        tokenizer = AutoTokenizer.from_pretrained(TINY_MISTRAL)
+        model_inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
+
+        # By default it is not training, we have to set it
+        self.assertFalse(model.training)
+        model.train()
+
+        # If we set `use_cache=True` while training, then a cache is returned
+        model_outputs = model(**model_inputs, use_cache=True)
+        self.assertTrue(model_outputs.past_key_values is not None)
+        self.assertTrue(model.training)
+
+        # We can also disable the cache to skip a few operations, if the training loop doesn't need cache
+        model_outputs = model(**model_inputs, use_cache=False)
+        self.assertTrue(model_outputs.past_key_values is None)
+        self.assertTrue(model.training)
+
 
 @slow
 @require_torch
