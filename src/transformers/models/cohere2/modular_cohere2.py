@@ -375,14 +375,19 @@ class Cohere2DecoderLayer(CohereDecoderLayer):
             if self.config._attn_implementation == "flash_attention_2":
                 attention_mask = attention_mask[:, -effective_seq_len:]
             # Otherwise, the mask is 4D of shape [bs, 1, query_len, max_cache_len] thus we must slice
-            # from the left
+            # from the left, with an offset if we are beyond the sliding window
             else:
                 min_dtype = torch.finfo(hidden_states.dtype).min
                 sliding_window_mask = torch.tril(
                     torch.ones_like(attention_mask, dtype=torch.bool), diagonal=-self.sliding_window
                 )
                 attention_mask = torch.where(sliding_window_mask, min_dtype, attention_mask)
-                attention_mask = attention_mask[..., :effective_seq_len]
+                # In case we are beyond the sliding window, we need to correctly offset the mask slicing
+                offset = cache_position[-1] + 1 - effective_seq_len
+                # Should only be used when beyond the sliding window (i.e. offset > 0)
+                # Slightly more efficient to use torch ops compared to simple `max(0, offset)`
+                offset = torch.maximum(torch.zeros_like(offset), offset)
+                attention_mask = attention_mask[:, :, :, offset : offset + effective_seq_len]
 
         residual = hidden_states
 
