@@ -1404,9 +1404,6 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.language_model.get_decoder()
 
-    def tie_weights(self):
-        return self.language_model.tie_weights()
-
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
