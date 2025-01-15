@@ -16,6 +16,7 @@
 from argparse import ArgumentParser
 
 from .add_new_model_like import AddNewModelLikeCommand
+from .chat import ChatCommand
 from .convert import ConvertCommand
 from .download import DownloadCommand
 from .env import EnvironmentCommand
@@ -40,6 +41,7 @@ def main():
     AddNewModelLikeCommand.register_subcommand(commands_parser)
     LfsCommands.register_subcommand(commands_parser)
     PTtoTFCommand.register_subcommand(commands_parser)
+    ChatCommand.register_subcommand(commands_parser)
 
     # Let's go
     args = parser.parse_args()
