@@ -86,10 +86,13 @@ class LlavaCausalLMOutputWithPast(ModelOutput):
 class LlavaMultiModalProjector(nn.Module):
     def __init__(self, config: LlavaConfig):
         super().__init__()
-
-        self.linear_1 = nn.Linear(config.vision_config.hidden_size, config.text_config.hidden_size, bias=True)
+        self.linear_1 = nn.Linear(
+            config.vision_config.hidden_size, config.text_config.hidden_size, bias=config.multimodal_projector_bias
+        )
         self.act = ACT2FN[config.projector_hidden_act]
-        self.linear_2 = nn.Linear(config.text_config.hidden_size, config.text_config.hidden_size, bias=True)
+        self.linear_2 = nn.Linear(
+            config.text_config.hidden_size, config.text_config.hidden_size, bias=config.multimodal_projector_bias
+        )
 
     def forward(self, image_features):
         hidden_states = self.linear_1(image_features)
@@ -240,6 +243,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
         self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
+
         self.post_init()
 
     def get_input_embeddings(self):

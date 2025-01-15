@@ -103,6 +103,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("efficientformer", "EfficientFormerConfig"),
         ("efficientnet", "EfficientNetConfig"),
         ("electra", "ElectraConfig"),
+        ("emu3", "Emu3Config"),
         ("encodec", "EncodecConfig"),
         ("encoder-decoder", "EncoderDecoderConfig"),
         ("ernie", "ErnieConfig"),
@@ -136,6 +137,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("graphormer", "GraphormerConfig"),
         ("grounding-dino", "GroundingDinoConfig"),
         ("groupvit", "GroupViTConfig"),
+        ("helium", "HeliumConfig"),
         ("hiera", "HieraConfig"),
         ("hubert", "HubertConfig"),
         ("ibert", "IBertConfig"),
@@ -190,6 +192,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("mobilevit", "MobileViTConfig"),
         ("mobilevitv2", "MobileViTV2Config"),
         ("modernbert", "ModernBertConfig"),
+        ("moonshine", "MoonshineConfig"),
         ("moshi", "MoshiConfig"),
         ("mpnet", "MPNetConfig"),
         ("mpt", "MptConfig"),
@@ -310,6 +313,8 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("vit_msn", "ViTMSNConfig"),
         ("vitdet", "VitDetConfig"),
         ("vitmatte", "VitMatteConfig"),
+        ("vitpose", "VitPoseConfig"),
+        ("vitpose_backbone", "VitPoseBackboneConfig"),
         ("vits", "VitsConfig"),
         ("vivit", "VivitConfig"),
         ("wav2vec2", "Wav2Vec2Config"),
@@ -418,6 +423,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("efficientformer", "EfficientFormer"),
         ("efficientnet", "EfficientNet"),
         ("electra", "ELECTRA"),
+        ("emu3", "Emu3"),
         ("encodec", "EnCodec"),
         ("encoder-decoder", "Encoder decoder"),
         ("ernie", "ERNIE"),
@@ -454,6 +460,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("graphormer", "Graphormer"),
         ("grounding-dino", "Grounding DINO"),
         ("groupvit", "GroupViT"),
+        ("helium", "Helium"),
         ("herbert", "HerBERT"),
         ("hiera", "Hiera"),
         ("hubert", "Hubert"),
@@ -518,6 +525,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("mobilevit", "MobileViT"),
         ("mobilevitv2", "MobileViTV2"),
         ("modernbert", "ModernBERT"),
+        ("moonshine", "Moonshine"),
         ("moshi", "Moshi"),
         ("mpnet", "MPNet"),
         ("mpt", "MPT"),
@@ -644,6 +652,8 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("vit_msn", "ViTMSN"),
         ("vitdet", "VitDet"),
         ("vitmatte", "ViTMatte"),
+        ("vitpose", "VitPose"),
+        ("vitpose_backbone", "VitPoseBackbone"),
         ("vits", "VITS"),
         ("vivit", "ViViT"),
         ("wav2vec2", "Wav2Vec2"),
@@ -1067,7 +1077,12 @@ class AutoConfig:
                 raise ValueError(
                     f"The checkpoint you are trying to load has model type `{config_dict['model_type']}` "
                     "but Transformers does not recognize this architecture. This could be because of an "
-                    "issue with the checkpoint, or because your version of Transformers is out of date."
+                    "issue with the checkpoint, or because your version of Transformers is out of date.\n\n"
+                    "You can update Transformers with the command `pip install --upgrade transformers`. If this "
+                    "does not work, and the checkpoint is very new, then there may not be a release version "
+                    "that supports this model yet. In this case, you can get the most up-to-date code by installing "
+                    "Transformers from source with the command "
+                    "`pip install git+https://github.com/huggingface/transformers.git`"
                 )
             return config_class.from_dict(config_dict, **unused_kwargs)
         else:
