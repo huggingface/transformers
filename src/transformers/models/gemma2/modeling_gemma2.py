@@ -615,7 +615,12 @@ class Gemma2Model(Gemma2PreTrainedModel):
         # This is needed to correctly slice the mask without data-dependent slicing later on if using dynamo tracing
         # (retrieving the same value from `cache_position` later on would crash dynamo)
         if "last_cache_position" not in flash_attn_kwargs.keys():
-            flash_attn_kwargs["last_cache_position"] = attention_mask.shape[-1] if attention_mask is not None else 0
+            last_cache_pos = 0
+            if attention_mask is not None:
+                # In case a 4d mask is passed directly without using `generate`, we have to rely on cache_position
+                # It will break dynamo tracing but there are no way around it (and it should never happen in practice)
+                last_cache_pos = attention_mask.shape[-1] if attention_mask.dim() == 2 else cache_position[-1].item()
+            flash_attn_kwargs["last_cache_position"] = last_cache_pos
         causal_mask = self._update_causal_mask(
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
         )
