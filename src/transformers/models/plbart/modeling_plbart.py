@@ -151,7 +151,7 @@ class PLBartAttention(nn.Module):
         if layer_idx is None and self.is_decoder:
             logger.warning_once(
                 f"Instantiating a decoder {self.__class__.__name__} without passing `layer_idx` is not recommended and "
-                "will to errors during the forward call, if caching is used. Please make sure to provide a `layer_idx` "
+                "will lead to errors during the forward call, if caching is used. Please make sure to provide a `layer_idx` "
                 "when creating this class."
             )
 
