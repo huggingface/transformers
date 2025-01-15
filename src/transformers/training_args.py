@@ -2189,7 +2189,6 @@ class TrainingArguments:
                     "`use_configured_state:False` instead or setup your `Accelerator` or `PartialState` properly."
                 )
         else:
-            AcceleratorState._reset_state(reset_partial_state=True)
             self.distributed_state = None
         if not self.use_ipex and "ACCELERATE_USE_IPEX" not in os.environ:
             os.environ["ACCELERATE_USE_IPEX"] = "false"
