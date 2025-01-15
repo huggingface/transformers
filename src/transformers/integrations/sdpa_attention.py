@@ -30,7 +30,13 @@ def sdpa_attention_forward(
     **kwargs,
 ) -> Tuple[torch.Tensor, None]:
     key, value = cache.update(key, value, module.layer_idx, cumulative_seqlens_k, **kwargs)
-
+    attention_mask_ = torch.full(
+            [1, 1, query.shape[2],query.shape[2]+1], torch.finfo(query.dtype).min, device=query.device, dtype=query.dtype
+    )
+    attention_mask_[..., 0 : cumulative_seqlens_q[0], 0 : cumulative_seqlens_q[0]] = 0
+    for i in range(1, len(cumulative_seqlens_q)):
+        attention_mask_[..., cumulative_seqlens_q[i - 1] : cumulative_seqlens_q[i], cumulative_seqlens_q[i - 1] : cumulative_seqlens_q[i]] = 0
+    attention_mask = (attention_mask != 0 * attention_mask_).to(query.dtype) * torch.finfo(query.dtype).min
     if hasattr(module, "num_key_value_groups"):
         key = repeat_kv(key, module.num_key_value_groups)
         value = repeat_kv(value, module.num_key_value_groups)
