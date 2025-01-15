@@ -26,7 +26,7 @@ from typing import Dict, List, Optional, Union
 
 import requests
 from get_ci_error_statistics import get_jobs
-from get_previous_daily_ci import get_last_daily_ci_reports
+from get_previous_daily_ci import get_last_daily_ci_reports, get_workflow_id
 from huggingface_hub import HfApi
 from slack_sdk import WebClient
 
@@ -1275,8 +1275,14 @@ if __name__ == "__main__":
             artifact_names = [f"ci_results_{job_name}"]
             output_dir = os.path.join(os.getcwd(), "previous_reports")
             os.makedirs(output_dir, exist_ok=True)
+            workflow_id = None
+            token = os.environ["ACCESS_REPO_INFO_TOKEN"]
+            workflow_id = get_workflow_id(token, os.environ["GITHUB_RUN_ID"])
             prev_ci_artifacts = get_last_daily_ci_reports(
-                artifact_names=artifact_names, output_dir=output_dir, token=os.environ["ACCESS_REPO_INFO_TOKEN"], workflow_id=WORKFLOW_ID
+                artifact_names=artifact_names,
+                output_dir=output_dir,
+                token=token,
+                workflow_id=workflow_id,
             )
 
     message = Message(
