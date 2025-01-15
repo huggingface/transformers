@@ -1588,8 +1588,10 @@ class PositionRelationEmbedding(nn.Module):
 
         if tgt_boxes is None:
             tgt_boxes = src_boxes
-        torch._assert(src_boxes.shape[-1] == 4, "src_boxes much have 4 coordinates")
-        torch._assert(tgt_boxes.shape[-1] == 4, "tgt_boxes must have 4 coordinates")
+
+        if src_boxes.shape[-1] != 4 or tgt_boxes.shape[-1] != 4:
+            raise ValueError("src_boxes and tgt_boxes must have 4 coordinates.")
+
         with torch.no_grad():
             pos_embed = box_rel_encoding(src_boxes, tgt_boxes)
             pos_embed = self.pos_func(pos_embed).permute(0, 3, 1, 2)
