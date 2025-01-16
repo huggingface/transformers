@@ -2130,8 +2130,8 @@ class GenerationTesterMixin:
     def test_cache_has_uniform_length(self):
         """
         Delete after v4.52. This test was added to ensure the transition in #35591 [get the max length of the cache,
-        instead of getting the length of layer 0] doesn't break a model. Having a uniform length is not a
-        mandatory property.
+        instead of getting the length of layer 0] doesn't break a model. Having an uniform length is not a
+        mandatory property, but it used to be an implicit assumption.
         """
         for model_class in self.all_generative_model_classes:
             if not model_class._supports_cache_class:
