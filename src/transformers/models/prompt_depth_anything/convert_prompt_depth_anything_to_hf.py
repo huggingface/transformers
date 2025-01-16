@@ -16,6 +16,7 @@
 https://github.com/DepthAnything/PromptDA"""
 
 import argparse
+import re
 from pathlib import Path
 
 import requests
@@ -77,58 +78,6 @@ def get_dpt_config(model_name):
     return config
 
 
-ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
-    r"pretrained.cls_token": r"backbone.embeddings.cls_token",
-    r"pretrained.mask_token": r"backbone.embeddings.mask_token",
-    r"pretrained.pos_embed": r"backbone.embeddings.position_embeddings",
-    r"pretrained.patch_embed.proj.weight": r"backbone.embeddings.patch_embeddings.projection.weight",
-    r"pretrained.patch_embed.proj.bias": r"backbone.embeddings.patch_embeddings.projection.bias",
-    r"pretrained.norm.weight": r"backbone.layernorm.weight",
-    r"pretrained.norm.bias": r"backbone.layernorm.bias",
-    r"depth_head.scratch.output_conv1.weight": r"head.conv1.weight",
-    r"depth_head.scratch.output_conv1.bias": r"head.conv1.bias",
-    r"depth_head.scratch.output_conv2.0.weight": r"head.conv2.weight",
-    r"depth_head.scratch.output_conv2.0.bias": r"head.conv2.bias",
-    r"depth_head.scratch.output_conv2.2.weight": r"head.conv3.weight",
-    r"depth_head.scratch.output_conv2.2.bias": r"head.conv3.bias",
-    r"pretrained.blocks.(\d+).ls1.gamma": r"backbone.encoder.layer.\1.layer_scale1.lambda1",
-    r"pretrained.blocks.(\d+).ls2.gamma": r"backbone.encoder.layer.\1.layer_scale2.lambda1",
-    r"pretrained.blocks.(\d+).norm1.weight": r"backbone.encoder.layer.\1.norm1.weight",
-    r"pretrained.blocks.(\d+).norm1.bias": r"backbone.encoder.layer.\1.norm1.bias",
-    r"pretrained.blocks.(\d+).norm2.weight": r"backbone.encoder.layer.\1.norm2.weight",
-    r"pretrained.blocks.(\d+).norm2.bias": r"backbone.encoder.layer.\1.norm2.bias",
-    r"pretrained.blocks.(\d+).mlp.fc1.weight": r"backbone.encoder.layer.\1.mlp.fc1.weight",
-    r"pretrained.blocks.(\d+).mlp.fc1.bias": r"backbone.encoder.layer.\1.mlp.fc1.bias",
-    r"pretrained.blocks.(\d+).mlp.fc2.weight": r"backbone.encoder.layer.\1.mlp.fc2.weight",
-    r"pretrained.blocks.(\d+).mlp.fc2.bias": r"backbone.encoder.layer.\1.mlp.fc2.bias",
-    r"pretrained.blocks.(\d+).attn.proj.weight": r"backbone.encoder.layer.\1.attention.output.dense.weight",
-    r"pretrained.blocks.(\d+).attn.proj.bias": r"backbone.encoder.layer.\1.attention.output.dense.bias",
-    r"pretrained.blocks.(\d+).attn.qkv.weight": r"qkv_transform_\1",
-    r"pretrained.blocks.(\d+).attn.qkv.bias": r"qkv_transform_bias_\1",
-    r"depth_head.projects.(\d+).weight": r"neck.reassemble_stage.layers.\1.projection.weight",
-    r"depth_head.projects.(\d+).bias": r"neck.reassemble_stage.layers.\1.projection.bias",
-    r"depth_head.scratch.layer(\d+)_rn.weight": r"neck.convs.\0.weight",
-    r"depth_head.resize_layers.(\d+).weight": r"neck.reassemble_stage.layers.\1.resize.weight",
-    r"depth_head.resize_layers.(\d+).bias": r"neck.reassemble_stage.layers.\1.resize.bias",
-    r"depth_head.scratch.refinenet(\d+).out_conv.weight": r"neck.fusion_stage.layers.\0.projection.weight",
-    r"depth_head.scratch.refinenet(\d+).out_conv.bias": r"neck.fusion_stage.layers.\0.projection.bias",
-    r"depth_head.scratch.refinenet(\d+).resConfUnit1.conv1.weight": r"neck.fusion_stage.layers.\0.residual_layer1.convolution1.weight",
-    r"depth_head.scratch.refinenet(\d+).resConfUnit1.conv1.bias": r"neck.fusion_stage.layers.\0.residual_layer1.convolution1.bias",
-    r"depth_head.scratch.refinenet(\d+).resConfUnit1.conv2.weight": r"neck.fusion_stage.layers.\0.residual_layer1.convolution2.weight",
-    r"depth_head.scratch.refinenet(\d+).resConfUnit1.conv2.bias": r"neck.fusion_stage.layers.\0.residual_layer1.convolution2.bias",
-    r"depth_head.scratch.refinenet(\d+).resConfUnit2.conv1.weight": r"neck.fusion_stage.layers.\0.residual_layer2.convolution1.weight",
-    r"depth_head.scratch.refinenet(\d+).resConfUnit2.conv1.bias": r"neck.fusion_stage.layers.\0.residual_layer2.convolution1.bias",
-    r"depth_head.scratch.refinenet(\d+).resConfUnit2.conv2.weight": r"neck.fusion_stage.layers.\0.residual_layer2.convolution2.weight",
-    r"depth_head.scratch.refinenet(\d+).resConfUnit2.conv2.bias": r"neck.fusion_stage.layers.\0.residual_layer2.convolution2.bias",
-    r"depth_head.scratch.refinenet(\d+).resConfUnit_depth.0.weight": r"neck.fusion_stage.layers.\0.prompt_depth_layer.convolution1.weight",
-    r"depth_head.scratch.refinenet(\d+).resConfUnit_depth.0.bias": r"neck.fusion_stage.layers.\0.prompt_depth_layer.convolution1.bias",
-    r"depth_head.scratch.refinenet(\d+).resConfUnit_depth.2.weight": r"neck.fusion_stage.layers.\0.prompt_depth_layer.convolution2.weight",
-    r"depth_head.scratch.refinenet(\d+).resConfUnit_depth.2.bias": r"neck.fusion_stage.layers.\0.prompt_depth_layer.convolution2.bias",
-    r"depth_head.scratch.refinenet(\d+).resConfUnit_depth.4.weight": r"neck.fusion_stage.layers.\0.prompt_depth_layer.convolution3.weight",
-    r"depth_head.scratch.refinenet(\d+).resConfUnit_depth.4.bias": r"neck.fusion_stage.layers.\0.prompt_depth_layer.convolution3.bias",
-}
-
-
 def transform_qkv_weights(key, value, config):
     if not key.startswith("qkv_transform"):
         return value
@@ -136,29 +85,69 @@ def transform_qkv_weights(key, value, config):
     layer_idx = int(key.split("_")[-1])
     hidden_size = config.backbone_config.hidden_size
 
-    if "bias" in key:
-        # Handle bias
-        return {
-            f"backbone.encoder.layer.{layer_idx}.attention.attention.query.bias": value[:hidden_size],
-            f"backbone.encoder.layer.{layer_idx}.attention.attention.key.bias": value[hidden_size : hidden_size * 2],
-            f"backbone.encoder.layer.{layer_idx}.attention.attention.value.bias": value[-hidden_size:],
-        }
-    else:
-        # Handle weights
-        return {
-            f"backbone.encoder.layer.{layer_idx}.attention.attention.query.weight": value[:hidden_size, :],
-            f"backbone.encoder.layer.{layer_idx}.attention.attention.key.weight": value[
-                hidden_size : hidden_size * 2, :
-            ],
-            f"backbone.encoder.layer.{layer_idx}.attention.attention.value.weight": value[-hidden_size:, :],
-        }
+    suffix = "bias" if "bias" in key else "weight"
+    return {
+        f"backbone.encoder.layer.{layer_idx}.attention.attention.query.{suffix}": value[:hidden_size],
+        f"backbone.encoder.layer.{layer_idx}.attention.attention.key.{suffix}": value[hidden_size : hidden_size * 2],
+        f"backbone.encoder.layer.{layer_idx}.attention.attention.value.{suffix}": value[-hidden_size:],
+    }
 
 
-name_to_checkpoint = {
-    "prompt-depth-anything-vits": "model.ckpt",
-    "prompt-depth-anything-vits-transparent": "model.ckpt",
-    "prompt-depth-anything-vitl": "model.ckpt",
+ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
+    # Stem
+    r"pretrained.cls_token": r"backbone.embeddings.cls_token",
+    r"pretrained.mask_token": r"backbone.embeddings.mask_token",
+    r"pretrained.pos_embed": r"backbone.embeddings.position_embeddings",
+    r"pretrained.patch_embed.proj.(weight|bias)": r"backbone.embeddings.patch_embeddings.projection.\1",
+    # Backbone
+    r"pretrained.norm.(weight|bias)": r"backbone.layernorm.\1",
+    # Transformer layers
+    r"pretrained.blocks.(\d+).ls1.gamma": r"backbone.encoder.layer.\1.layer_scale1.lambda1",
+    r"pretrained.blocks.(\d+).ls2.gamma": r"backbone.encoder.layer.\1.layer_scale2.lambda1",
+    r"pretrained.blocks.(\d+).norm1.(weight|bias)": r"backbone.encoder.layer.\1.norm1.\2",
+    r"pretrained.blocks.(\d+).norm2.(weight|bias)": r"backbone.encoder.layer.\1.norm2.\2",
+    r"pretrained.blocks.(\d+).mlp.fc1.(weight|bias)": r"backbone.encoder.layer.\1.mlp.fc1.\2",
+    r"pretrained.blocks.(\d+).mlp.fc2.(weight|bias)": r"backbone.encoder.layer.\1.mlp.fc2.\2",
+    r"pretrained.blocks.(\d+).attn.proj.(weight|bias)": r"backbone.encoder.layer.\1.attention.output.dense.\2",
+    r"pretrained.blocks.(\d+).attn.qkv.(weight|bias)": r"qkv_transform_\2_\1",
+    # Neck
+    r"depth_head.projects.(\d+).(weight|bias)": r"neck.reassemble_stage.layers.\1.projection.\2",
+    r"depth_head.scratch.layer(\d+)_rn.weight": lambda m: f"neck.convs.{int(m.group(1))-1}.weight",
+    r"depth_head.resize_layers.(\d+).(weight|bias)": r"neck.reassemble_stage.layers.\1.resize.\2",
+    # Refinenet (with reversed indices)
+    r"depth_head.scratch.refinenet(\d+).out_conv.(weight|bias)": lambda m: f"neck.fusion_stage.layers.{4-int(m.group(1))}.projection.{m.group(2)}",
+    r"depth_head.scratch.refinenet(\d+).resConfUnit1.conv1.(weight|bias)": lambda m: f"neck.fusion_stage.layers.{4-int(m.group(1))}.residual_layer1.convolution1.{m.group(2)}",
+    r"depth_head.scratch.refinenet(\d+).resConfUnit1.conv2.(weight|bias)": lambda m: f"neck.fusion_stage.layers.{4-int(m.group(1))}.residual_layer1.convolution2.{m.group(2)}",
+    r"depth_head.scratch.refinenet(\d+).resConfUnit2.conv1.(weight|bias)": lambda m: f"neck.fusion_stage.layers.{4-int(m.group(1))}.residual_layer2.convolution1.{m.group(2)}",
+    r"depth_head.scratch.refinenet(\d+).resConfUnit2.conv2.(weight|bias)": lambda m: f"neck.fusion_stage.layers.{4-int(m.group(1))}.residual_layer2.convolution2.{m.group(2)}",
+    r"depth_head.scratch.refinenet(\d+).resConfUnit_depth.0.(weight|bias)": lambda m: f"neck.fusion_stage.layers.{4-int(m.group(1))}.prompt_depth_layer.convolution1.{m.group(2)}",
+    r"depth_head.scratch.refinenet(\d+).resConfUnit_depth.2.(weight|bias)": lambda m: f"neck.fusion_stage.layers.{4-int(m.group(1))}.prompt_depth_layer.convolution2.{m.group(2)}",
+    r"depth_head.scratch.refinenet(\d+).resConfUnit_depth.4.(weight|bias)": lambda m: f"neck.fusion_stage.layers.{4-int(m.group(1))}.prompt_depth_layer.convolution3.{m.group(2)}",
+    # Head
+    r"depth_head.scratch.output_conv1.(weight|bias)": r"head.conv1.\1",
+    r"depth_head.scratch.output_conv2.0.(weight|bias)": r"head.conv2.\1",
+    r"depth_head.scratch.output_conv2.2.(weight|bias)": r"head.conv3.\1",
 }
+
+
+def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
+    """
+    Convert old state dict keys to new keys using regex patterns.
+    """
+    output_dict = {}
+    if state_dict_keys is not None:
+        for old_key in state_dict_keys:
+            new_key = old_key
+            for pattern, replacement in ORIGINAL_TO_CONVERTED_KEY_MAPPING.items():
+                match = re.match(pattern, old_key)
+                if match:
+                    if callable(replacement):
+                        new_key = replacement(match)
+                    else:
+                        new_key = re.sub(pattern, replacement, old_key)
+                    break
+            output_dict[old_key] = new_key
+    return output_dict
 
 
 @torch.no_grad()
@@ -188,15 +177,15 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
     state_dict = {key[9:]: state_dict[key] for key in state_dict}
 
     # Convert state dict using mappings
+    key_mapping = convert_old_keys_to_new_keys(state_dict.keys())
     new_state_dict = {}
     for key, value in state_dict.items():
-        if key in ORIGINAL_TO_CONVERTED_KEY_MAPPING:
-            new_key = ORIGINAL_TO_CONVERTED_KEY_MAPPING[key]
-            transformed_value = transform_qkv_weights(new_key, value, config)
-            if isinstance(transformed_value, dict):
-                new_state_dict.update(transformed_value)
-            else:
-                new_state_dict[new_key] = transformed_value
+        new_key = key_mapping[key]
+        transformed_value = transform_qkv_weights(new_key, value, config)
+        if isinstance(transformed_value, dict):
+            new_state_dict.update(transformed_value)
+        else:
+            new_state_dict[new_key] = transformed_value
 
     # load HuggingFace model
     model = PromptDepthAnythingForDepthEstimation(config)
@@ -262,6 +251,13 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
         print("Pushing model and processor to hub...")
         model.push_to_hub(repo_id=f"{model_name.title()}-hf")
         processor.push_to_hub(repo_id=f"{model_name.title()}-hf")
+
+
+name_to_checkpoint = {
+    "prompt-depth-anything-vits": "model.ckpt",
+    "prompt-depth-anything-vits-transparent": "model.ckpt",
+    "prompt-depth-anything-vitl": "model.ckpt",
+}
 
 
 if __name__ == "__main__":
