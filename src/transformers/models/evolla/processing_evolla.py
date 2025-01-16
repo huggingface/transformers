@@ -191,19 +191,124 @@ def is_url(string):
     result = urlparse(string)
     return all([result.scheme, result.netloc])
 
+PROTEIN_VALID_KEYS = ["aa_seq", "foldseek", "msa"]
 
 class EvollaProcessor(ProcessorMixin):
     r"""
+    """
+    attributes = ["protein_tokenizer", "tokenizer"]
+    valid_kwargs = ["sequence_max_length"]
+    protein_tokenizer_class = "EsmTokenizer"
+    tokenizer_class = "LlamaTokenizerFast"
+
+    def __init__(self, protein_tokenizer, tokenizer=None, sequence_max_length=None, **kwargs):
+        if protein_tokenizer is None:
+            raise ValueError("You need to specify an `protein_tokenizer`.")
+        if tokenizer is None:
+            raise ValueError("You need to specify a `tokenizer`.")
+        
+        super().__init__(protein_tokenizer, tokenizer)
+
+        self.tokenizer.pad_token = "<|reserved_special_token_0|>"
+
+    def process_proteins(self, proteins):
+
+        sa_sequences = []
+        for protein in proteins:
+            print(protein)
+            aa_seq = protein.get("aa_seq")
+            foldseek = protein.get("foldseek")
+            sa_sequence = "".join([s.upper()+f.lower() for s, f in zip(aa_seq, foldseek)])
+            sa_sequences.append(sa_sequence)
+
+        sa_tokens = self.protein_tokenizer.batch_encode_plus(
+            sa_sequences, return_tensors="pt", truncation=True, max_length=1026, padding=True
+        )
+        return sa_tokens
+
+    def process_text(
+            self, 
+            texts,
+            max_length: int = 512,
+        ):
+        prompts = []
+        for messages in texts:
+            prompt = self.tokenizer.apply_chat_template(
+                messages,
+                tokenize=False,
+                add_generation_prompt=True,
+            )
+            prompts.append(prompt)
+        
+        prompt_inputs = self.tokenizer(
+            prompts,
+            add_special_tokens=False,
+            return_tensors="pt",
+            padding="longest",
+            truncation=True,
+            max_length=max_length,
+        )
+        return prompt_inputs
+
+    def __call__(
+        self,
+        proteins: Union[List[dict]] = None,
+        texts: Union[TextInput] = None,
+        **kwargs,
+    ):
+        # TODO: add input check for texts
+        # proteins and texts should be provided
+        if proteins is None or texts is None:
+            raise ValueError("You need to specify `texts` and `proteins`.")
+
+        # proteins should be List[dict]
+        if isinstance(proteins, dict):
+            proteins = [proteins]
+        # # texts should be textsInput
+        # if isinstance(texts, str):
+        #     texts = [texts]
+        # Check if batched proteins are in the correct format
+        if isinstance(proteins, (list, tuple)) and not all(isinstance(p, dict) for p in proteins):
+            raise ValueError(
+                "The proteins should be a list of dictionaries, but not all elements are dictionaries."
+            )
+        if isinstance(proteins, (list, tuple)) and not all(all(k in PROTEIN_VALID_KEYS for k in p.keys()) for p in proteins):
+            raise ValueError(
+                "There should be a list of dictionaries with keys: "
+                f"{', '.join(PROTEIN_VALID_KEYS)} for each protein."
+                f"But got: {proteins}"
+            )
+        # # Check if batched texts is in the correct format
+        # if isinstance(texts, (list, tuple)) and not all(isinstance(t, str) for t in texts):
+        #     raise ValueError(
+        #         "The texts should be a list of strings, but not all elements are strings."
+        #     )
+        
+        sa_tokens = self.process_proteins(proteins)
+
+        text_tokens = self.process_text(texts)
+
+        return BatchFeature(
+            data={
+                "protein_input_ids": sa_tokens["input_ids"],
+                "protein_attention_mask": sa_tokens["attention_mask"],
+                "text_input_ids": text_tokens["input_ids"],
+                "text_attention_mask": text_tokens["attention_mask"],
+            }
+        )
+
+class EvollaProcessor2(ProcessorMixin):
+    r"""
     Constructs a EVOLLA processor which wraps a LLama tokenizer and EVOLLA image processor into a single processor.
 
-    [`EvollaProcessor`] offers all the functionalities of [`EvollaProteinProcessor`] and [`EvollaTokenizer`]. See
+    [`EvollaProcessor`] offers all the functionalities of [`EvollaProteinProcessor`] and [`LlamaTokenizerFast`]. See
     the docstring of [`~EvollaProcessor.__call__`] and [`~EvollaProcessor.decode`] for more information.
 
     Args:
         image_processor (`EvollaProteinProcessor`):
             An instance of [`EvollaProteinProcessor`]. The image processor is a required input.
-        tokenizer (`EvollaTokenizer`):
-            An instance of [`EvollaTokenizer`]. The tokenizer is a required input.
+        tokenizer (`LlamaTokenizerFast`):
+            An instance of [`LlamaTokenizerFast`]. The tokenizer is a required input.
         image_size (`int`, *optional*, defaults to 224):
             Image size (assuming a square image)
         add_end_of_utterance_token (`str`, *optional*):
@@ -213,7 +318,7 @@ class EvollaProcessor(ProcessorMixin):
     attributes = ["image_processor", "tokenizer"]
     valid_kwargs = ["image_size", "add_end_of_utterance_token"]
     image_processor_class = "EvollaProteinProcessor"
-    tokenizer_class = "EvollaTokenizer"
+    tokenizer_class = "LlamaTokenizerFast"
 
     def __init__(self, image_processor, tokenizer=None, image_size=224, add_end_of_utterance_token=None, **kwargs):
         if image_processor is None:

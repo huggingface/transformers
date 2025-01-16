@@ -15,15 +15,17 @@
 import shutil
 import tempfile
 import unittest
+import random
 
 import numpy as np
 
 from transformers import (
     AutoProcessor,
-    EvollaProteinProcessor,
+    EsmTokenizer,
     EvollaProcessor,
-    EvollaTokenizer,
+    LlamaTokenizerFast,
     PreTrainedTokenizerFast,
+    AutoTokenizer
 )
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
@@ -38,16 +40,153 @@ if is_vision_available():
     from PIL import Image
 
 
+EVOLLA_VALID_AA = list("ACDEFGHIKLMNPQRSTVWY#")
+EVOLLA_VALID_FS = list("pynwrqhgdlvtmfsaeikc#")
+
 @require_torch
-@require_vision
 class EvollaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = EvollaProcessor
 
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
 
+        protein_tokenizer = EsmTokenizer.from_pretrained("/zhouxibin/workspaces/ProteinQA/Models/SaProt_35M_AF2")
+        tokenizer = LlamaTokenizerFast.from_pretrained("/zhouxibin/workspaces/ProteinQA/Models/meta-llama_Meta-Llama-3-8B-Instruct")
+        print(type(tokenizer))
+
+        processor = EvollaProcessor(protein_tokenizer, tokenizer)
+
+        processor.save_pretrained(self.tmpdirname)
+
+        self.input_keys = ["protein_input_ids", "protein_attention_mask", "text_input_ids", "text_attention_mask"]
+
+    def get_tokenizer(self, **kwargs):
+        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
+
+    def get_protein_tokenizer(self, **kwargs):
+        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).protein_tokenizer
+
+    def tearDown(self):
+        shutil.rmtree(self.tmpdirname)
+
+    def prepare_inputs_single(self):
+        proteins = {
+                "aa_seq": "".join(random.choices(EVOLLA_VALID_AA, k=100)),
+                "foldseek": "".join(random.choices(EVOLLA_VALID_FS, k=100)),
+            }
+        return proteins
+
+    def prepare_inputs_pair(self):
+        proteins = [
+            {
+                "aa_seq": "".join(random.choices(EVOLLA_VALID_AA, k=100)),
+                "foldseek": "".join(random.choices(EVOLLA_VALID_FS, k=100)),
+            },
+            {
+                "aa_seq": "".join(random.choices(EVOLLA_VALID_AA, k=100)),
+                "foldseek": "".join(random.choices(EVOLLA_VALID_FS, k=100)),
+            },
+        ]
+        return proteins
+
+    def prepare_inputs_long(self):
+        proteins = [
+            {
+                "aa_seq": "".join(random.choices(EVOLLA_VALID_AA, k=100)),
+                "foldseek": "".join(random.choices(EVOLLA_VALID_FS, k=100)),
+            },
+            {
+                "aa_seq": "".join(random.choices(EVOLLA_VALID_AA, k=2000)),
+                "foldseek": "".join(random.choices(EVOLLA_VALID_FS, k=2000)),
+            },
+        ]
+        return proteins
+
+    def prepare_inputs_short(self):
+        proteins = [
+            {
+                "aa_seq": "".join(random.choices(EVOLLA_VALID_AA, k=1)),
+                "foldseek": "".join(random.choices(EVOLLA_VALID_FS, k=1)),
+            },
+            {
+                "aa_seq": "".join(random.choices(EVOLLA_VALID_AA, k=100)),
+                "foldseek": "".join(random.choices(EVOLLA_VALID_FS, k=100)),
+            },
+        ]
+        return proteins
+
+    def prepare_inputs_empty(self):
+        proteins = [
+            {
+                "aa_seq": "",
+                "foldseek": "",
+            },
+            {
+                "aa_seq": "".join(random.choices(EVOLLA_VALID_AA, k=100)),
+                "foldseek": "".join(random.choices(EVOLLA_VALID_FS, k=100)),
+            },
+        ]
+        return proteins
+
+    def prepare_inputs(self, protein_types="pair"):
+        r"""
+        Prepare inputs for the test.
+
+        Args:
+            protein_types (`str`): the types of proteins to prepare.
+                - "single": a single correct protein.
+                - "pair": a pair of correct proteins.
+                - "long": a long sequence of correct proteins and a correct protein.
+                - "short": a short sequence of correct proteins (only have 1 aa) and a correct protein.
+                - "empty": an empty sequence of proteins and a correct protein.
+        """
+        if protein_types == "single":
+            proteins = self.prepare_inputs_single()
+        elif protein_types == "pair":
+            proteins = self.prepare_inputs_pair()
+        elif protein_types == "long":
+            proteins = self.prepare_inputs_long()
+        elif protein_types == "short":
+            proteins = self.prepare_inputs_short()
+        elif protein_types == "empty":
+            proteins = self.prepare_inputs_empty()
+        else:
+            raise ValueError(f"protein_types should be one of 'single', 'pair', 'long','short', 'empty', but got {protein_types}")
+        
+        questions = ["What is the function of the protein?"] * len(proteins)
+        texts = []
+        for question in questions:
+            messages = [
+                {"role": "system", "content": "You are an AI expert that can answer any questions about protein."},
+                {"role": "user", "content": question},
+            ]
+            texts.append(messages)
+        return proteins, texts
+
+    def test_processor(self):
+        protein_tokenizer = self.get_protein_tokenizer()
+        tokenizer = self.get_tokenizer()
+
+        processor = EvollaProcessor(tokenizer=tokenizer, protein_tokenizer=protein_tokenizer)
+
+        proteins, texts = self.prepare_inputs()
+
+        # test that all prompts succeeded
+        input_processor = processor(texts=texts, proteins=proteins, return_tensors="pt", padding="longest")
+        for key in self.input_keys:
+            assert torch.is_tensor(input_processor[key])
+
+
+@require_torch
+@require_vision
+class EvollaProcessorTest2(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = EvollaProcessor
+
+    def setUp(self):
+        self.tmpdirname = tempfile.mkdtemp()
+
         image_processor = EvollaProteinProcessor(return_tensors="pt")
-        tokenizer = EvollaTokenizer.from_pretrained("HuggingFaceM4/tiny-random-evolla")
+        tokenizer = LlamaTokenizerFast.from_pretrained("/zhouxibin/workspaces/ProteinQA/Models/meta-llama_Meta-Llama-3-8B-Instruct")
 
         processor = EvollaProcessor(image_processor, tokenizer)
 
