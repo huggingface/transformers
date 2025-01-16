@@ -1500,8 +1500,17 @@ class GenerationMixin:
         model_input_name,
         input_ids_length,
         inputs_tensor,
+        batch_size,
     ):
         """Prepared max and min length in generation configs to avoid clashes between similar attributes"""
+        if isinstance(generation_config.max_length, int):
+            generation_config.max_length = [generation_config.max_length] * batch_size    
+        if isinstance(generation_config.min_length, int):
+            generation_config.min_length = [generation_config.min_length] * batch_size
+        if isinstance(generation_config.max_new_tokens, int):
+            generation_config.max_new_tokens = [generation_config.max_new_tokens] * batch_size
+        if isinstance(generation_config.min_new_tokens, int):
+            generation_config.min_new_tokens = [generation_config.min_new_tokens] * batch_size
 
         if generation_config.max_new_tokens is not None:
             if not has_default_max_length and generation_config.max_length is not None:
@@ -1511,8 +1520,8 @@ class GenerationMixin:
                     "Please refer to the documentation for more information. "
                     "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
                 )
-            generation_config.max_length = generation_config.max_new_tokens + input_ids_length
-
+            generation_config.max_length = [max_new_tokens + input_ids_length for max_new_tokens in generation_config.max_new_tokens]
+      
         # if both `inputs_embeds` and `input_ids` are passed, we do not correct the length
         # otherwise we need total length [inputs-embeds-len + new-tokens-len] to not go beyond indicated `max_length``
         elif (
@@ -1521,13 +1530,13 @@ class GenerationMixin:
             and input_ids_length != 0
             and not self.config.is_encoder_decoder
         ):
-            generation_config.max_length -= inputs_tensor.shape[1]
+            generation_config.max_length = [max_length - inputs_tensor.shape[1] for max_length in generation_config.max_length]
         elif has_default_max_length:  # by default let's always generate 20 new tokens
-            if generation_config.max_length == GenerationConfig().max_length:
-                generation_config.max_length = generation_config.max_length + input_ids_length
+            if generation_config.max_length == [GenerationConfig().max_length] * batch_size:
+                generation_config.max_length = [max_length + input_ids_length for max_length in generation_config.max_length]
                 max_position_embeddings = getattr(self.config, "max_position_embeddings", None)
                 if max_position_embeddings is not None:
-                    generation_config.max_length = min(generation_config.max_length, max_position_embeddings)
+                    generation_config.max_length = [min(max_length, max_position_embeddings) for max_length in generation_config.max_length]
 
         # same for min length
         if generation_config.min_new_tokens is not None:
@@ -1538,14 +1547,14 @@ class GenerationMixin:
                     "Please refer to the documentation for more information. "
                     "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
                 )
-            generation_config.min_length = generation_config.min_new_tokens + input_ids_length
-
+            generation_config.min_length = [min_new_tokens + input_ids_length for min_new_tokens in generation_config.min_new_tokens]
+    
         elif (
             model_input_name == "inputs_embeds"
             and input_ids_length != inputs_tensor.shape[1]
             and not self.config.is_encoder_decoder
         ):
-            generation_config.min_length = max(generation_config.min_length - inputs_tensor.shape[1], 0)
+            generation_config.min_length = [max(min_length - inputs_tensor.shape[1], 0) for min_length in generation_config.min_length]
 
         return generation_config
 
