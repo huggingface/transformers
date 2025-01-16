@@ -15,7 +15,7 @@ def tokenize_function(examples):
 tokenized_datasets = train_dataset.map(tokenize_function, batched=True)
 
 for batch in model.fast_generate(tokenized_datasets):
-    print("\n|".join([tokenizer.decode(k) for k in batch.values()]))
+    print("|"+  "\n\n|".join([tokenizer.decode(k) for k in batch.values()]))
 
 
 

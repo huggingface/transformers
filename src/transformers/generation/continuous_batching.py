@@ -263,9 +263,10 @@ class ContinuousBatch:
             next_full_cache_position += self.cache_index[k]
             fill_index += [self.cache_index[k][-1]]
 
+        i = len(self.next_ids)
         # how to efficiently select the next block? -> we probably just take the next longest sequence for now!
         while len(self.cumulative_seqlens_q) <= self.batch_size and len(free_block_index) > 0:
-            next_sequence = self.input_tokens.pop(0)
+            next_sequence = self.input_tokens.pop()
             sample_length = len(next_sequence)
             if len(free_block_index) < (sample_length // cache.block_size) + 1:
                 # we have to make sure there are enough free blocks
@@ -301,6 +302,8 @@ class ContinuousBatch:
             max_seqlens_q = max(max_seqlens_q, sample_length)
             max_seqlens_k = max(max_seqlens_k, sample_length)
 
+            self.generated_ids[i] += next_sequence
+            i = i+1
         cache.free_blocks = free_block_index
         self.cache_index = self.cache_index + new_cache_index
         self.max_seqlens_q = max_seqlens_q
@@ -309,8 +312,12 @@ class ContinuousBatch:
         self.cumulative_seqlens_q = torch.tensor(self.cumulative_seqlens_q)
         self.position_ids = position_ids
 
+
+
         position_ids = torch.cat([torch.tensor(k) for k in position_ids])[ None,:]
         new_ids = torch.cat((self.next_ids, torch.tensor(new_ids))).long().reshape(1, -1) # new sequence placed at the end
+
+
         return new_ids, position_ids, torch.tensor(next_full_cache_position), torch.tensor(fill_index)
 
     def update(self, generated_ids, cache:PagedAttentionCache):
@@ -364,7 +371,7 @@ class ContinuousMixin:
         """
         self.generation_config.batch_size = 3
         self.generation_config.max_num_blocks_per_seq = 16
-
+        self.generation_config.eos_token_id = 1
 
         input_tokens = [k["input_ids"] for k in input_tokens]
         paged_attention_cache = PagedAttentionCache(self.config, input_tokens, self.generation_config, self.device) # init with throughput desiered, batch, etc
@@ -386,6 +393,7 @@ class ContinuousMixin:
             ).last_hidden_state
             logits = self.lm_head(out[:,current_batch.cumulative_seqlens_q, :])
             # we don't sample for now :)
+            logits = torch.softmax(logits, dim=-1)
             generated_ids = torch.argmax(logits, dim=-1)
             current_batch.update(generated_ids[0], paged_attention_cache)
             yield current_batch.generated_ids
