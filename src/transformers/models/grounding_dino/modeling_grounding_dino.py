@@ -2104,9 +2104,7 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
             )
 
         # Create text backbone
-        self.text_backbone = AutoModel.from_config(
-            config.text_config, add_pooling_layer=False, attn_implementation=config._attn_implementation
-        )
+        self.text_backbone = AutoModel.from_config(config.text_config, add_pooling_layer=False)
         self.text_projection = nn.Linear(config.text_config.hidden_size, config.d_model)
 
         if config.embedding_init_target or not config.two_stage:
@@ -2671,3 +2669,6 @@ class GroundingDinoForObjectDetection(GroundingDinoPreTrainedModel):
         )
 
         return dict_outputs
+
+
+__all__ = ["GroundingDinoForObjectDetection", "GroundingDinoModel", "GroundingDinoPreTrainedModel"]
