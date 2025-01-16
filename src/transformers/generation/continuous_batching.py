@@ -15,10 +15,9 @@
 # limitations under the License.
 import math
 import statistics
-from typing import TYPE_CHECKING, Dict, List, Optional, Union
-
+from typing import TYPE_CHECKING, Dict, List, Optional, Union, DefaultDict
 import torch
-
+from collections import defaultdict
 if False:
     from flash_attn import flash_attn_varlen_func
 
@@ -180,7 +179,7 @@ class PagedAttentionCache:
             # We determine the best size,
             num_blocks, block_size = compute_optimal_blocks(device, config, input_shapes)
 
-        cache_shape = (num_blocks, block_size,  self.num_key_value_heads, self.head_dim)
+        cache_shape = (  self.num_key_value_heads, num_blocks, block_size, self.head_dim)
 
         self.dtype = dtype
 
@@ -205,14 +204,11 @@ class PagedAttentionCache:
         #       1: [1,2, -1]
         #
 
-    def update(self, key, value, layer_idx, cumulative_seqlens_k, cache_index, **kwargs):
-        key_cache = self.key_cache[layer_idx].view(self.num_blocks * self.block_size, self.num_key_value_heads, self.head_dim)
-        value_cache = self.key_cache[layer_idx].view(self.num_blocks * self.block_size, self.num_key_value_heads, self.head_dim)
-        key_cache[cache_index] = key[0].transpose(0,1)
-        value_cache[cache_index] = value[0].transpose(0,1)
-
-        # TODO we need 2 index, writing index, full index that include prefill?
-        return key_cache[cache_index].transpose(0,1)[None,...], value_cache[cache_index].transpose(0,1)[None,...]
+    def update(self, key, value, layer_idx, cumulative_seqlens_k, cache_index,fill_index, **kwargs):
+        cache_view = (self.num_key_value_heads, self.num_blocks * self.block_size, self.head_dim)
+        self.key_cache[layer_idx].view(cache_view)[:,fill_index, :] = key[0]
+        self.value_cache[layer_idx].view(cache_view)[:,fill_index, :] = value[0]
+        return self.key_cache[layer_idx].view(cache_view)[:,cache_index,:][None,...], self.value_cache[layer_idx].view(cache_view)[:,cache_index,:][None,...]
 
     def get_free_blocks(self):
         """"
@@ -228,6 +224,7 @@ class ContinuousBatch:
     finished_sequences = []
     max_seqlens_q = 0
     max_seqlens_k = 0
+    generated_ids = defaultdict(list)
 
     def __init__(self, input_tokens, generation_config):
         self.eos_token_id = torch.tensor(generation_config.eos_token_id, dtype = torch.int32)
@@ -245,19 +242,26 @@ class ContinuousBatch:
         new_ids = []
         position_ids = []
         new_cache_index = []
+        fill_index = []
         free_block_index = cache.get_free_blocks()
         max_seqlens_q = 0
         max_seqlens_k = 0
         next_full_cache_position = []
         for k in range(len(self.cache_index)):
-            if self.cache_index[k][-1] + 1 % cache.block_size > 1:
+            if (self.cache_index[k][-1] % cache.block_size + 1) // cache.block_size > 0:
+                if len(free_block_index)==0:
+                    print("We can't process seq, because there is not space left. Will wait for a seq to finish")
+                    continue # TODO for now only
                 # we need a new block for a current sequence
                 new_block = free_block_index.pop()
                 self.cache_index[k] += [new_block * cache.block_size]
             else:
                 self.cache_index[k] += [self.cache_index[k][-1] +1]
-            position_ids += torch.tensor([[self.position_ids[k][-1]]])
+            self.cumulative_seqlens_q[k] = k
+            self.cumulative_seqlens_k[k] += k + 1# we added tokens before and after!
+            position_ids += torch.tensor([[self.position_ids[k][-1]+1]])
             next_full_cache_position += self.cache_index[k]
+            fill_index += [self.cache_index[k][-1]]
 
         # how to efficiently select the next block? -> we probably just take the next longest sequence for now!
         while len(self.cumulative_seqlens_q) <= self.batch_size and len(free_block_index) > 0:
@@ -277,8 +281,8 @@ class ContinuousBatch:
                 self.cumulative_seqlens_q.append(self.cumulative_seqlens_q[-1]+sample_length)
                 self.cumulative_seqlens_k.append(self.cumulative_seqlens_k[-1]+sample_length)
             else:
-                self.cumulative_seqlens_q.append(sample_length)
-                self.cumulative_seqlens_k.append(sample_length)
+                self.cumulative_seqlens_q.append(sample_length-1)
+                self.cumulative_seqlens_k.append(sample_length-1)
 
             position_ids += [list(range(sample_length))]
             if sample_length < cache.block_size:
@@ -291,12 +295,13 @@ class ContinuousBatch:
                     current_cache_index += list(range(k* cache.block_size, (k+1)* cache.block_size))
                 current_cache_index += list(range(blocks_to_use[-1] * cache.block_size, (blocks_to_use[-1] * cache.block_size) + (sample_length % cache.block_size)))
             new_cache_index += [current_cache_index]
-
             assert len(current_cache_index) == sample_length
+            fill_index += current_cache_index
             next_full_cache_position += current_cache_index
             max_seqlens_q = max(max_seqlens_q, sample_length)
             max_seqlens_k = max(max_seqlens_k, sample_length)
 
+        cache.free_blocks = free_block_index
         self.cache_index = self.cache_index + new_cache_index
         self.max_seqlens_q = max_seqlens_q
         self.max_seqlens_k = max_seqlens_k
@@ -306,13 +311,13 @@ class ContinuousBatch:
 
         position_ids = torch.cat([torch.tensor(k) for k in position_ids])[ None,:]
         new_ids = torch.cat((self.next_ids, torch.tensor(new_ids))).long().reshape(1, -1) # new sequence placed at the end
-        return new_ids, position_ids, torch.tensor(next_full_cache_position)
+        return new_ids, position_ids, torch.tensor(next_full_cache_position), torch.tensor(fill_index)
 
-    def update(self, generated_ids):
-        for k in self.next_ids:
-            self.generated_ids.append(k) # add the token to the full sequence
+    def update(self, generated_ids, cache:PagedAttentionCache):
+        for i, k in enumerate(self.next_ids):
+            self.generated_ids[i] += [k.detach().item()] # add the token to the full sequence
 
-        evict_mask = generated_ids ==self.eos_token_id
+        evict_mask = generated_ids == self.eos_token_id
         keep_mask = ~evict_mask
         self.next_ids = generated_ids[keep_mask].clone()
         self.cumulative_seqlens_k  = self.cumulative_seqlens_k[keep_mask]
@@ -320,11 +325,12 @@ class ContinuousBatch:
         if evict_mask.sum(-1) > 0:
             evict_mask = torch.where(evict_mask is not False)[0]        # delete the cache positions for these tokens
             evict_mask = evict_mask.tolist()
-
+            cache.free_blocks.append(self.generated_ids[evict_mask].tolist())
             del self.cache_index[evict_mask]
             del self.cumulative_seqlens_k[evict_mask]
             del self.cumulative_seqlens_q[evict_mask]
             self.finished_sequences.append(self.generated_ids[evict_mask])
+            del self.generated_ids[evict_mask]
 
     def __len__(self):
         return len(self.input_tokens)
@@ -365,22 +371,24 @@ class ContinuousMixin:
         current_batch = ContinuousBatch(input_tokens, self.generation_config)
 
         while len(current_batch) > 0:
-            continous_batch, position_ids, cache_index = current_batch.prepare_next_inputs(paged_attention_cache)
+            continous_batch, position_ids, cache_index, fill_index = current_batch.prepare_next_inputs(paged_attention_cache)
             kwargs = {
                 "cumulative_seqlens_q":current_batch.cumulative_seqlens_q,
                 "cumulative_seqlens_k":current_batch.cumulative_seqlens_k,
                 "max_seqlens_q":current_batch.max_seqlens_q,
                 "max_seqlens_k":current_batch.max_seqlens_k,
                 "cache_index": cache_index,
+                "fill_index": fill_index,
                 "cache":paged_attention_cache,
             }
             out = self.model.forward(
                 continous_batch, position_ids=position_ids,  **kwargs
             ).last_hidden_state
-            logits = self.lm_head(out[:,current_batch.cumulative_seqlens_q-1, :])
+            logits = self.lm_head(out[:,current_batch.cumulative_seqlens_q, :])
             # we don't sample for now :)
             generated_ids = torch.argmax(logits, dim=-1)
-            current_batch.update(generated_ids[0])
+            current_batch.update(generated_ids[0], paged_attention_cache)
+            yield current_batch.generated_ids
             if len(current_batch.finished_sequences) >  self.generation_config.batch_size:
                 yield current_batch.finished_sequences
 
