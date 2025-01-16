@@ -4714,6 +4714,9 @@ class ModelTesterMixin:
             model = model_class(config).to(device=torch_device, dtype=torch.float32)
             set_model_for_less_flaky_test(model)
 
+            if "position_ids" not in inspect.signature(model.forward).parameters:
+                continue  # this model doesn't accept position ids as input
+
             (
                 input_ids,
                 position_ids,

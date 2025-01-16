@@ -903,9 +903,13 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
             # They should result in very similar logits
             self.assertTrue(torch.allclose(next_logits_wo_padding, next_logits_with_padding, atol=1e-5))
 
-    @unittest.skip("BLIP2 cannot generate only from input ids, and requires pixel values in all cases to be present")
+    @unittest.skip("BLIP2 can generate only from input ids, and requires pixel values in all cases to be present")
     @parameterized.expand([("greedy", 1), ("beam search", 2)])
     def test_generate_from_inputs_embeds(self, _, num_beams):
+        pass
+
+    @unittest.skip("BLIP2 can generate only from input ids, and requires pixel values in all cases to be present")
+    def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
 

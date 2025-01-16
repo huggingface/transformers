@@ -1966,7 +1966,7 @@ class GenerationTesterMixin:
 
             config.is_decoder = True
             batch_size = main_input.shape[0]
-            seq_length = main_input.shape[-1]
+            seq_length = self.model_tester.seq_length
             max_new_tokens = 20
 
             for dtype in (torch.float32, torch.float16):
