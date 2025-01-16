@@ -1422,8 +1422,11 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
     def get_layers(self, blocks, linear_layers, mamba_layers):
         layers = []
         self._tied_weights_keys = []
+        self.first_transformer_layer_id = 0
         for layer_id, layer_type in enumerate(self.layers_block_type):
             if layer_type == "hybrid":
+                if self.first_transformer_layer_id == 0:
+                    self.first_transformer_layer_id = layer_id
                 block = next(blocks)
                 if self.config.num_mem_blocks * len(layer_type_list(self.config)) > 1:
                     prefix_name = f"layers.{layer_id}."
@@ -1545,7 +1548,15 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
             )
 
         if cache_position is None:
-            cache_position = torch.arange(hidden_states.shape[1], device=hidden_states.device)
+            # cache_position = torch.arange(hidden_states.shape[1], device=hidden_states.device)
+            past_seen_tokens = (
+                past_key_values.get_seq_length(layer_idx=self.first_transformer_layer_id)
+                if past_key_values is not None
+                else 0
+            )
+            cache_position = torch.arange(
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            )
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
