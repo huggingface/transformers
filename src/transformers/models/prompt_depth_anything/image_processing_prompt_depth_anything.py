@@ -57,24 +57,25 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
-def get_resize_output_image_size(
+def _constrain_to_multiple_of(val, multiple, min_val=0, max_val=None):
+    x = round(val / multiple) * multiple
+
+    if max_val is not None and x > max_val:
+        x = math.floor(val / multiple) * multiple
+
+    if x < min_val:
+        x = math.ceil(val / multiple) * multiple
+
+    return x
+
+
+def _get_resize_output_image_size(
     input_image: np.ndarray,
     output_size: Union[int, Iterable[int]],
     keep_aspect_ratio: bool,
     multiple: int,
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ) -> Tuple[int, int]:
-    def constrain_to_multiple_of(val, multiple, min_val=0, max_val=None):
-        x = round(val / multiple) * multiple
-
-        if max_val is not None and x > max_val:
-            x = math.floor(val / multiple) * multiple
-
-        if x < min_val:
-            x = math.ceil(val / multiple) * multiple
-
-        return x
-
     output_size = (output_size, output_size) if isinstance(output_size, int) else output_size
 
     input_height, input_width = get_image_size(input_image, input_data_format)
@@ -93,8 +94,8 @@ def get_resize_output_image_size(
             # fit height
             scale_width = scale_height
 
-    new_height = constrain_to_multiple_of(scale_height * input_height, multiple=multiple)
-    new_width = constrain_to_multiple_of(scale_width * input_width, multiple=multiple)
+    new_height = _constrain_to_multiple_of(scale_height * input_height, multiple=multiple)
+    new_width = _constrain_to_multiple_of(scale_width * input_width, multiple=multiple)
 
     return (new_height, new_width)
 
@@ -158,7 +159,7 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
         size_divisor: int = None,
         prompt_scale_to_meter: float = 0.001,  # default unit is mm
         **kwargs,
-    ) -> None:
+    ):
         super().__init__(**kwargs)
         size = size if size is not None else {"height": 384, "width": 384}
         size = get_size_dict(size)
@@ -215,7 +216,7 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
         if "height" not in size or "width" not in size:
             raise ValueError(f"The size dictionary must contain the keys 'height' and 'width'. Got {size.keys()}")
 
-        output_size = get_resize_output_image_size(
+        output_size = _get_resize_output_image_size(
             image,
             output_size=(size["height"], size["width"]),
             keep_aspect_ratio=keep_aspect_ratio,
@@ -233,7 +234,7 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
 
     def pad_image(
         self,
-        image: np.array,
+        image: np.ndarray,
         size_divisor: int,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -283,23 +284,24 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        prompt_depth: ImageInput = None,
-        do_resize: bool = None,
-        size: int = None,
-        keep_aspect_ratio: bool = None,
-        ensure_multiple_of: int = None,
-        resample: PILImageResampling = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
+        prompt_depth: Optional[ImageInput] = None,
+        do_resize: Optional[bool] = None,
+        size: Optional[int] = None,
+        keep_aspect_ratio: Optional[bool] = None,
+        ensure_multiple_of: Optional[int] = None,
+        resample: Optional[PILImageResampling] = None,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_normalize: Optional[bool] = None,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
-        do_pad: bool = None,
-        size_divisor: int = None,
+        do_pad: Optional[bool] = None,
+        size_divisor: Optional[int] = None,
+        prompt_scale_to_meter: Optional[float] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> PIL.Image.Image:
+    ) -> BatchFeature:
         """
         Preprocess an image or batch of images.
 
@@ -335,6 +337,8 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
                 Image mean.
             image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation.
+            prompt_scale_to_meter (`float`, *optional*, defaults to `self.prompt_scale_to_meter`):
+                Scale factor to convert the prompt depth to meters.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
@@ -399,9 +403,10 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images[0])
 
-        if do_resize:
-            images = [
-                self.resize(
+        preprocessed_images = []
+        for image in images:
+            if do_resize:
+                image = self.resize(
                     image=image,
                     size=size,
                     resample=resample,
@@ -409,43 +414,54 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
                     ensure_multiple_of=ensure_multiple_of,
                     input_data_format=input_data_format,
                 )
-                for image in images
-            ]
+            
+            if do_rescale:
+                image = self.rescale(
+                    image=image,
+                    scale=rescale_factor,
+                    input_data_format=input_data_format
+                )
 
-        if do_rescale:
-            images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
-                for image in images
-            ]
+            if do_normalize:
+                image = self.normalize(
+                    image=image,
+                    mean=image_mean,
+                    std=image_std,
+                    input_data_format=input_data_format
+                )
 
-        if do_normalize:
-            images = [
-                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
-                for image in images
-            ]
+            if do_pad:
+                image = self.pad_image(
+                    image=image,
+                    size_divisor=size_divisor,
+                    input_data_format=input_data_format
+                )
 
-        if do_pad:
-            images = [
-                self.pad_image(image=image, size_divisor=size_divisor, input_data_format=input_data_format)
-                for image in images
-            ]
-
-        images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
-        ]
+            image = to_channel_dimension_format(
+                image,
+                data_format,
+                input_channel_dim=input_data_format
+            )
+            preprocessed_images.append(image)
+            
+        images = preprocessed_images
 
         data = {"pixel_values": images}
         if prompt_depth is not None:
             # prompt_depth is a list of images with shape (height, width)
             # we need to convert it to a list of images with shape (1, height, width)
             prompt_depths = make_list_of_images(prompt_depth)
-            prompt_depths = [to_numpy_array(depth) for depth in prompt_depths]
-            prompt_depths = [depth * self.prompt_scale_to_meter for depth in prompt_depths]
-            prompt_depths = [prompt_depth[..., None].astype(np.float32) for prompt_depth in prompt_depths]
-            prompt_depths = [
-                to_channel_dimension_format(depth, data_format, input_channel_dim=input_data_format)
-                for depth in prompt_depths
-            ]
+            if prompt_scale_to_meter is None:
+                prompt_scale_to_meter = self.prompt_scale_to_meter
+            processed_prompt_depths = []
+            for depth in prompt_depths:
+                depth = to_numpy_array(depth)
+                depth = depth * prompt_scale_to_meter
+                depth = depth[..., None].astype(np.float32)
+                depth = to_channel_dimension_format(depth, data_format, input_channel_dim=input_data_format)
+                
+                processed_prompt_depths.append(depth)
+            prompt_depths = processed_prompt_depths
             data["prompt_depth"] = prompt_depths
         return BatchFeature(data=data, tensor_type=return_tensors)
 
