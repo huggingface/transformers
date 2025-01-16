@@ -203,9 +203,6 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
             ensure_multiple_of (`int`, *optional*, defaults to 1):
                 The image is resized to a size that is a multiple of this value.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
-                Defines the resampling filter to use if resizing the image. Otherwise, the image is resized to size
-                specified in `size`.
-            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
                 Resampling filter to use when resiizing the image.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
@@ -312,7 +309,10 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
             prompt_depth (`ImageInput`, *optional*):
                 Prompt depth to preprocess, which can be sparse depth obtained from multi-view geometry or
                 low-resolution depth from a depth sensor. Generally has shape (height, width), where height
-                and width can be smaller than the images.
+                and width can be smaller than those of the images. It's optional and can be None, which means no prompt depth
+                is used. If it is None, the output depth will be a monocular relative depth.
+                It is recommended to provide a prompt_scale_to_meter value, which is the scale factor to convert the prompt depth
+                to meters. This is useful when the prompt depth is not in meters.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
@@ -436,8 +436,16 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
             # prompt_depth is a list of images with shape (height, width)
             # we need to convert it to a list of images with shape (1, height, width)
             prompt_depths = make_list_of_images(prompt_depth)
+
+            # Validate prompt_depths has same length as images
+            if len(prompt_depths) != len(images):
+                raise ValueError(
+                    f"Number of prompt depth images ({len(prompt_depths)}) does not match number of input images ({len(images)})"
+                )
+
             if prompt_scale_to_meter is None:
                 prompt_scale_to_meter = self.prompt_scale_to_meter
+
             processed_prompt_depths = []
             for depth in prompt_depths:
                 depth = to_numpy_array(depth)
