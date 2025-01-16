@@ -270,7 +270,7 @@ class ContinuousBatch:
             sample_length = len(next_sequence)
             if len(free_block_index) < (sample_length // cache.block_size) + 1:
                 # we have to make sure there are enough free blocks
-                self.input_tokens.insert(-1, next_sequence)
+                self.input_tokens.insert(0, next_sequence)
                 print("not enough memory to process this one, skippi")
                 continue
             new_ids += next_sequence
