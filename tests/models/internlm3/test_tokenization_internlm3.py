@@ -39,7 +39,7 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_sentencepiece
 @require_tokenizers
 class InternLM3TokenizationTest(TokenizerTesterMixin, unittest.TestCase):
-    from_pretrained_id = ["/cpfs01/shared/public/caoweihan/models/20250109095225_hf-080_open_source_hf/"]
+    from_pretrained_id = ["internlm/internlm3-8b-instruct"]
     tokenizer_class = InternLM3Tokenizer
 
     test_rust_tokenizer = False
