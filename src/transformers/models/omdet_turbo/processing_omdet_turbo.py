@@ -69,7 +69,7 @@ class OmDetTurboProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-class _dict_with_warning(dict):
+class DictWithDeprecationWarning(dict):
     message = (
         "The `classes` key is deprecated for `OmDetTurboProcessor.post_process_grounded_object_detection` "
         "output dict and will be removed in a 4.51.0 version. Please use `text_labels` instead."
@@ -397,7 +397,9 @@ class OmDetTurboProcessor(ProcessorMixin):
                 nms_threshold=nms_threshold,
                 max_num_det=max_num_det,
             )
-            result = _dict_with_warning({"boxes": boxes, "scores": scores, "labels": labels, "text_labels": None})
+            result = DictWithDeprecationWarning(
+                {"boxes": boxes, "scores": scores, "labels": labels, "text_labels": None}
+            )
             results.append(result)
 
         # Add text labels
