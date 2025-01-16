@@ -1791,7 +1791,7 @@ class ModelUtilsTest(TestCasePlus):
         )
         self.assertTrue(check_models_equal(model, model_loaded))
 
-    def test_cache_at_train_time(self):
+    def test_cache_when_needed_at_train_time(self):
         """
         Some fine-tuning methods require the use of cache, like prefix tuning in PEFT. This test checks that a cache
         is at train time used if we request it. Related issue: #35648
