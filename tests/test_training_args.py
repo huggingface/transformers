@@ -37,3 +37,5 @@ class TestTrainingArguments(unittest.TestCase):
             args.save_strategy = "steps"
             args.save_steps = 1
             self.assertFalse(os.path.exists(output_dir))  # Still shouldn't exist
+            
+            # Directory should be created when actually needed (e.g. in Trainer) 
