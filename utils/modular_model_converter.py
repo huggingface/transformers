@@ -776,7 +776,7 @@ class ModelFileMapper(ModuleMapper):
                 else:
                     merged_dependencies.append(class_dep)
             # Sort both list according to the order in their respective file
-            original_dependencies = sorted(original_dependencies, key=lambda x: self.start_lines[x])
+            original_dependencies = sorted(original_dependencies, key=lambda x: self.start_lines.get(x, 1e10))
             merged_dependencies = sorted(merged_dependencies, key=lambda x: self.modular_file_start_lines[x])
 
             # Add all original node first, then merged ones
@@ -801,7 +801,7 @@ class ModelFileMapper(ModuleMapper):
             else:
                 original_dependencies.append(dep)
         # Sort both list according to the order in their respective file
-        original_dependencies = sorted(original_dependencies, key=lambda x: self.start_lines[x])
+        original_dependencies = sorted(original_dependencies, key=lambda x: self.start_lines.get(x, 1e10))
         merged_dependencies = sorted(merged_dependencies, key=lambda x: self.modular_file_start_lines[x])
 
         # Add all original node first, then merged ones
@@ -1321,6 +1321,20 @@ class ModularFileMapper(ModuleMapper):
                             self.added_objects_file_mapping[dep] = file
                             self.functions[dep] = visited_module.global_nodes[dep]
 
+                # Add/overwrite the imported functions to other visited modules as well, in case it is absent/different
+                # in he modeling source file of the inherited class. See `examples/modular-tranformers/modular_switch_function.py`
+                # and `examples/modular-tranformers/modular_add_function.py` for examples
+                recursive_dependencies = visited_module.object_recursive_dependency_mapping.get(object_name, set())
+                node_recursive_dependencies_mapping = {
+                    dep: visited_module.global_nodes[dep] for dep in recursive_dependencies
+                }
+                for filename, module_mapper in self.visited_modules.items():
+                    if filename != file:
+                        module_mapper.global_nodes[object_name] = visited_module.functions[object_name]
+                        if len(recursive_dependencies) > 0:
+                            module_mapper.object_recursive_dependency_mapping[object_name] = recursive_dependencies
+                            module_mapper.global_nodes.update(node_recursive_dependencies_mapping)
+
             # Add assignments and their dependencies
             elif object_name in visited_module.assignments and object_name not in self.assignments:
                 self.assignments[object_name] = visited_module.assignments[object_name]
@@ -1568,20 +1582,6 @@ def get_class_node_and_dependencies(
     # Add the class node itself to the nodes to add
     class_idx = max(relative_dependency_order.values()) + 1 if len(relative_dependency_order) > 0 else 0
     nodes_to_add[class_name] = (class_idx, updated_node)
-
-    # Replace functions with their correct source, if explicitly different from the one found by class dependency mapping.
-    # Indeed, functions are automatically added as part of following dependencies from a class, from the SAME module as the
-    # class, so if a function was explicitly imported from another module in the modular file, we should switch module definition
-    # See `examples/modular-tranformers/modular_switch_function.py` for an example
-    for node_name, (idx, node) in nodes_to_add.items():
-        # If we node was explicitly imported in the modular file, we may need to replace it
-        if node_name in modular_mapper.model_specific_imported_objects.keys():
-            source_file = modular_mapper.model_specific_imported_objects[node_name]
-            source_mapper = modular_mapper.visited_modules[source_file]
-            # Final check to ensure we are indeed dealing with a function (not a class or assignment)
-            if node_name in source_mapper.functions.keys():
-                new_node = source_mapper.global_nodes[node_name]
-                nodes_to_add[node_name] = (idx, new_node)
 
     return nodes_to_add, file_type, new_imports
 
