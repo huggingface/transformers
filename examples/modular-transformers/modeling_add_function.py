@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_test.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Note that llama and cohere have different definitions for rotate_half
+# Note that zamba does not have the `apply_rotary_pos_emb` function!
 from typing import Optional, Tuple
 
 import torch
@@ -80,4 +80,4 @@ class TestAttention(nn.Module):
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
 
     def forward(self) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        foo = apply_rotary_pos_emb(1, 1, 1, 1)
+        _ = apply_rotary_pos_emb(1, 1, 1, 1)
