@@ -55,7 +55,6 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
             self.weight_norm = torch.nn.utils.parametrizations.weight_norm
             delattr(torch.nn.utils.parametrizations, "weight_norm")
 
-
     def validate_environment(self, *args, **kwargs):
         if not is_compressed_tensors_available():
             raise ImportError(
@@ -85,7 +84,6 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
             apply_quantization_config(model, ct_quantization_config, run_compressed=True)
         elif not self.is_quantization_compressed:
             apply_quantization_config(model, ct_quantization_config)
-
 
     def _process_model_after_weight_loading(self, model, **kwargs):
         """Decompress loaded model if necessary - need for qat"""
