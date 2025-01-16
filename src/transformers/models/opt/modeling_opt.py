@@ -22,7 +22,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import (
     AttentionMaskConverter,
@@ -160,12 +160,15 @@ class OPTAttention(nn.Module):
         query_states = query_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
 
         if past_key_value is not None:
-            is_updated = past_key_value.is_updated.get(self.layer_idx)
-            if is_cross_attention:
-                # after the first generated id, we can subsequently re-use all key/value_states from cache
-                curr_past_key_value = past_key_value.cross_attention_cache
+            if not isinstance(past_key_value, EncoderDecoderCache):
+                curr_past_key_value = past_key_value
             else:
-                curr_past_key_value = past_key_value.self_attention_cache
+                is_updated = past_key_value.is_updated.get(self.layer_idx)
+                if is_cross_attention:
+                    # after the first generated id, we can subsequently re-use all key/value_states from cache
+                    curr_past_key_value = past_key_value.cross_attention_cache
+                else:
+                    curr_past_key_value = past_key_value.self_attention_cache
 
         current_states = key_value_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_value is not None and is_updated:
@@ -207,14 +210,7 @@ class OPTAttention(nn.Module):
         attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
         attn_output = torch.matmul(attn_probs, value_states)
 
-        if attn_output.size() != (bsz * self.num_heads, tgt_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(bsz, self.num_heads, tgt_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
         attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.view(bsz, -1, self.inner_dim)
 
         # Use the `embed_dim` from the config (stored in the class) rather than `hidden_state` because `attn_output` can be
         # partitioned aross GPUs when using tensor-parallelism.
@@ -262,12 +258,15 @@ class OptFlashAttention2(OPTAttention):
         query_states = query_states.view(bsz, -1, self.num_heads, self.head_dim)
 
         if past_key_value is not None:
-            is_updated = past_key_value.is_updated.get(self.layer_idx)
-            if is_cross_attention:
-                # after the first generated id, we can subsequently re-use all key/value_states from cache
-                curr_past_key_value = past_key_value.cross_attention_cache
+            if not isinstance(past_key_value, EncoderDecoderCache):
+                curr_past_key_value = past_key_value
             else:
-                curr_past_key_value = past_key_value.self_attention_cache
+                is_updated = past_key_value.is_updated.get(self.layer_idx)
+                if is_cross_attention:
+                    # after the first generated id, we can subsequently re-use all key/value_states from cache
+                    curr_past_key_value = past_key_value.cross_attention_cache
+                else:
+                    curr_past_key_value = past_key_value.self_attention_cache
 
         current_states = key_value_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_value is not None and is_updated:
@@ -382,12 +381,15 @@ class OPTSdpaAttention(OPTAttention):
         query_states = query_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
 
         if past_key_value is not None:
-            is_updated = past_key_value.is_updated.get(self.layer_idx)
-            if is_cross_attention:
-                # after the first generated id, we can subsequently re-use all key/value_states from cache
-                curr_past_key_value = past_key_value.cross_attention_cache
+            if not isinstance(past_key_value, EncoderDecoderCache):
+                curr_past_key_value = past_key_value
             else:
-                curr_past_key_value = past_key_value.self_attention_cache
+                is_updated = past_key_value.is_updated.get(self.layer_idx)
+                if is_cross_attention:
+                    # after the first generated id, we can subsequently re-use all key/value_states from cache
+                    curr_past_key_value = past_key_value.cross_attention_cache
+                else:
+                    curr_past_key_value = past_key_value.self_attention_cache
 
         current_states = key_value_states if is_cross_attention else hidden_states
         if is_cross_attention and past_key_value is not None and is_updated:
@@ -931,7 +933,6 @@ class OPTDecoder(OPTPreTrainedModel):
         elif inputs_embeds is not None:
             input_shape = inputs_embeds.size()[:-1]
 
-        input_ids = input_ids.view(-1, input_shape[-1])
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 

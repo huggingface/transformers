@@ -394,6 +394,10 @@ class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
     def test_initialization(self):
         pass
 
+    @unittest.skip("Emu3 has dynamic control flow in unpadding")
+    def test_generate_compile_model_forward(self):
+        pass
+
 
 @require_torch
 class Emu3IntegrationTest(unittest.TestCase):
