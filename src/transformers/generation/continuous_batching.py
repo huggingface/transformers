@@ -373,7 +373,7 @@ class ContinuousMixin:
             NO ASSISTANT MODEL
 
         """
-        self.generation_config.batch_size = 3
+        self.generation_config.batch_size = 8
         self.generation_config.max_num_blocks_per_seq = 16
         self.generation_config.eos_token_id = 1
 

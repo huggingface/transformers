@@ -7,7 +7,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-hf", attn_implementation="eager", torch_dtype=torch.float16)
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", torch_dtype=torch.float16)
 
-train_dataset = datasets.load_dataset('imdb', split='train')
+train_dataset = datasets.load_dataset('imdb', split='test')
 
 def tokenize_function(examples):
     return tokenizer(examples["text"])
