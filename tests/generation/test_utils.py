@@ -503,7 +503,7 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
 
-            if not hasattr(config, "use_cache"):
+            if not hasattr(config.get_text_config(), "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
             if any(model_name in model_class.__name__.lower() for model_name in ["rwkv"]):
                 self.skipTest(reason="Won't fix: model with non-standard dictionary output shapes")
@@ -634,7 +634,7 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
 
-            if not hasattr(config, "use_cache"):
+            if not hasattr(config.get_text_config(), "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
             if any(model_name in model_class.__name__.lower() for model_name in ["rwkv"]):
                 self.skipTest(reason="Won't fix: model with non-standard dictionary output shapes")
@@ -963,7 +963,7 @@ class GenerationTesterMixin:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
 
             # NOTE: contrastive search only works with cache on at the moment.
-            if not hasattr(config, "use_cache"):
+            if not hasattr(config.get_text_config(), "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
             config.is_decoder = True
 
@@ -992,7 +992,7 @@ class GenerationTesterMixin:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
 
             # NOTE: contrastive search only works with cache on at the moment.
-            if not hasattr(config, "use_cache"):
+            if not hasattr(config.get_text_config(), "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
             config.is_decoder = True
 
@@ -1032,7 +1032,7 @@ class GenerationTesterMixin:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
 
             # NOTE: contrastive search only works with cache on at the moment.
-            if not hasattr(config, "use_cache"):
+            if not hasattr(config.get_text_config(), "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
 
             config.is_decoder = True
@@ -1151,6 +1151,10 @@ class GenerationTesterMixin:
                     "prophetnet",
                     "seamlessm4t",
                     "clvp",
+                    "mllama",  # special cache sizes
+                    "blip_2",  # overridden `generate()`
+                    "instructblip",
+                    "instructblipvideo",
                 ]
             ):
                 self.skipTest(reason="May fix in the future: need model-specific fixes")
@@ -1159,7 +1163,7 @@ class GenerationTesterMixin:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
 
             # NOTE: assisted generation only works with cache on at the moment.
-            if not hasattr(config, "use_cache"):
+            if not hasattr(config.get_text_config(), "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
 
             config.is_decoder = True
@@ -1224,6 +1228,10 @@ class GenerationTesterMixin:
                     "seamlessm4t",
                     "clvp",
                     "fuyu",
+                    "mllama",  # special cache sizes
+                    "blip_2",  # overridden `generate()`
+                    "instructblip",
+                    "instructblipvideo",
                 ]
             ):
                 self.skipTest(reason="May fix in the future: need model-specific fixes")
@@ -1232,7 +1240,7 @@ class GenerationTesterMixin:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
 
             # NOTE: assisted generation only works with cache on at the moment.
-            if not hasattr(config, "use_cache"):
+            if not hasattr(config.get_text_config(), "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
 
             config.is_decoder = True
@@ -1338,6 +1346,10 @@ class GenerationTesterMixin:
                     "prophetnet",
                     "seamlessm4t",
                     "clvp",
+                    "mllama",  # special cache sizes
+                    "blip_2",  # overridden `generate()`
+                    "instructblip",
+                    "instructblipvideo",
                 ]
             ):
                 self.skipTest(reason="May fix in the future: need model-specific fixes")
@@ -1346,7 +1358,7 @@ class GenerationTesterMixin:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
 
             # NOTE: assisted generation only works with cache on at the moment.
-            if not hasattr(config, "use_cache"):
+            if not hasattr(config.get_text_config(), "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
 
             config.is_decoder = True
@@ -1538,7 +1550,7 @@ class GenerationTesterMixin:
             config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
 
             # If it doesn't support cache, pass the test
-            if not hasattr(config, "use_cache"):
+            if not hasattr(config.get_text_config(), "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
 
             model = model_class(config).to(torch_device)
@@ -1573,7 +1585,11 @@ class GenerationTesterMixin:
 
             # Encoder-Decoder checks
             if config.is_encoder_decoder:
-                encoder_num_attention_heads = config.encoder_attention_heads
+                encoder_num_attention_heads = (
+                    config.encoder_attention_heads
+                    if hasattr(config, "encoder_attention_heads")
+                    else config.num_attention_heads
+                )
                 encoder_per_head_embed_dim = embed_dim // encoder_num_attention_heads
                 batch_size, seq_length = inputs["decoder_input_ids"].shape
                 for i in range(num_hidden_layers):
@@ -1772,14 +1788,14 @@ class GenerationTesterMixin:
     def test_generate_continue_from_past_key_values(self):
         # Tests that we can continue generating from past key values, returned from a previous `generate` call
         for model_class in self.all_generative_model_classes:
-            if any(model_name in model_class.__name__.lower() for model_name in ["imagegpt"]):
+            if any(model_name in model_class.__name__.lower() for model_name in ["imagegpt", "mllama"]):
                 self.skipTest(reason="Won't fix: old model with unique inputs/caches/other")
             if any(model_name in model_class.__name__.lower() for model_name in ["umt5"]):
                 self.skipTest(reason="TODO: needs modeling or test input preparation fixes for compatibility")
 
             config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
 
-            if not hasattr(config, "use_cache"):
+            if not hasattr(config.get_text_config(), "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
 
             # Let's make it always:
@@ -2129,7 +2145,7 @@ class GenerationTesterMixin:
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=1)
             # NOTE: assisted generation only works with cache on at the moment.
-            if not hasattr(config, "use_cache"):
+            if not hasattr(config.get_text_config(), "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
             config.use_cache = True
             config.is_decoder = True
