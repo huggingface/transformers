@@ -189,8 +189,9 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     test_head_masking = False
     _is_composite = True
 
-    @skipIfRocm
+    @skipIfRocm(arch='gfx1201')
     def test_generate_with_static_cache(self):
+        super().test_generate_with_static_cache()
         pass
 
     def setUp(self):

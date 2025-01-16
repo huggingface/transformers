@@ -40,6 +40,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
     skipIfRocm,
+    rocmUtils
 )
 from transformers.utils import cached_property
 
@@ -530,94 +531,116 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     test_headmasking = False
     test_resize_embeddings = False
     test_torchscript = False
-    torch._dynamo.config.capture_dynamic_output_shape_ops = True
 
-    #@skipIfRocm - solved with torch._dynamo.config.capture_dynamic_output_shape_ops = True
-    #def test_generate_without_input_ids(self):
-    #    pass
+    def test_generate_without_input_ids(self):
+        if rocmUtils.is_rocm_skippable(arch='gfx1201'):
+            torch._dynamo.config.capture_dynamic_output_shape_ops = True
+        super().test_generate_without_input_ids()
+        pass
 
-    @skipIfRocm
+    @skipIfRocm(arch='gfx1201')
     def test_constrained_beam_search_generate_dict_output(self):
+        super().test_constrained_beam_search_generate_dict_output()
         pass
 
-    @skipIfRocm
+    @skipIfRocm(arch='gfx1201')
     def test_constrained_beam_search_generate(self):
+        super().test_constrained_beam_search_generate()
         pass
 
-    @skipIfRocm
+    @skipIfRocm(arch='gfx1201')
     def test_beam_search_low_memory(self):
+        super().test_beam_search_low_memory()
         pass
 
-    @skipIfRocm
+    @skipIfRocm(arch='gfx1201')
     def test_beam_search_generate_dict_outputs_use_cache(self):
+        super().test_beam_search_generate_dict_outputs_use_cache()
         pass
 
-    @skipIfRocm
+    @skipIfRocm(arch='gfx1201')
     def test_beam_search_generate_dict_output(self):
+        super().test_beam_search_generate_dict_output()
         pass
 
-    @skipIfRocm
+    @skipIfRocm(arch='gfx1201')
     def test_beam_search_generate(self):
+        super().test_beam_search_generate()
         pass
 
-    @skipIfRocm
+    @skipIfRocm(arch='gfx1201')
     def test_beam_sample_generate_dict_output(self):
+        super().test_beam_sample_generate_dict_output()
         pass
 
-    @skipIfRocm
+    @skipIfRocm(arch='gfx1201')
     def test_beam_sample_generate(self):
+        super().test_beam_sample_generate()
         pass
 
-    @skipIfRocm
+    @skipIfRocm(arch='gfx1201')
     def test_dola_decoding_sample(self):
+        super().test_dola_decoding_sample()
         pass
 
-    @skipIfRocm
+    @skipIfRocm(arch='gfx1201')
     def test_generate_from_inputs_embeds_0_greedy(self):
+        super().test_generate_from_inputs_embeds_0_greedy()
         pass
 
-    @skipIfRocm
+    @skipIfRocm(arch='gfx1201')
     def test_generate_from_inputs_embeds_1_beam_search(self):
+        super().test_generate_from_inputs_embeds_1_beam_search()
         pass 
 
-    @skipIfRocm
+    @skipIfRocm(arch='gfx1201')
     def test_greedy_generate(self):
+        super().test_greedy_generate()
         pass
 
-    @skipIfRocm
+    @skipIfRocm(arch='gfx1201')
     def test_greedy_generate_dict_outputs(self):
+        super().test_greedy_generate_dict_outputs()
         pass
 
-    @skipIfRocm
+    @skipIfRocm(arch='gfx1201')
     def test_greedy_generate_dict_outputs_use_cache(self):
+        super().test_greedy_generate_dict_outputs_use_cache()
         pass
 
-    @skipIfRocm
+    @skipIfRocm(arch='gfx1201')
     def test_group_beam_search_generate(self):
+        super().test_group_beam_search_generate()
         pass 
 
-    @skipIfRocm
+    @skipIfRocm(arch='gfx1201')
     def test_group_beam_search_generate_dict_output(self):
+        super().test_group_beam_search_generate_dict_output()
         pass
 
-    @skipIfRocm
+    @skipIfRocm(arch='gfx1201')
     def test_new_cache_format_0(self):
+        super().test_new_cache_format_0()
         pass
 
-    @skipIfRocm
+    @skipIfRocm(arch='gfx1201')
     def test_new_cache_format_1(self):
+        super().test_new_cache_format_1()
         pass
 
-    @skipIfRocm
+    @skipIfRocm(arch='gfx1201')
     def test_new_cache_format_2(self):
+        super().test_new_cache_format_2()
         pass
 
-    @skipIfRocm
+    @skipIfRocm(arch='gfx1201')
     def test_sample_generate(self):
+        super().test_sample_generate()
         pass
 
-    @skipIfRocm
+    @skipIfRocm(arch='gfx1201')
     def test_sample_generate_dict_output(self):
+        super().test_sample_generate_dict_output()
         pass
 
     def setUp(self):
@@ -904,7 +927,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 self.assertTrue(torch.allclose(res_eager.audio_sequences, res_sdpa.audio_sequences))
 
     @pytest.mark.generate
-    @skipIfRocm
+    @skipIfRocm(arch='gfx1201')
     def test_generate_without_input_ids(self):
         config, _, _, _ = self._get_input_ids_and_config()
 
@@ -929,7 +952,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @skipIfRocm
+    @skipIfRocm(arch='gfx1201')
     def test_generate_from_input_values(self):
         for model_class in self.all_generative_model_classes:
             config, input_ids, _, _ = self._get_input_ids_and_config()
@@ -959,7 +982,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 torch.allclose(outputs_from_audio_codes.audio_sequences, outputs_from_audio_values.audio_sequences)
             )
 
-    @skipIfRocm
+    @skipIfRocm(arch='gfx1201')
     def test_generate_depth_decoder_kwargs(self):
         # test sampling and beam search
         for model_class in self.all_generative_model_classes:
@@ -973,7 +996,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
                 input_ids, max_new_tokens=5, **input_dict, depth_decoder_do_sample=True, depth_decoder_num_beams=5
             )
 
-    @skipIfRocm
+    @skipIfRocm(arch='gfx1201')
     def test_generate_from_unconditional(self):
         # test sampling and beam search
         for model_class in self.all_generative_model_classes:

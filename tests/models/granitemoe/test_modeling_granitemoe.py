@@ -300,12 +300,14 @@ class GraniteMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     # This is because we are hitting edge cases with the causal_mask buffer
     model_split_percents = [0.5, 0.7, 0.8]
 
-    @skipIfRocm
+    @skipIfRocm(arch='gfx1201')
     def test_generate_with_static_cache(self):
+        super().test_generate_with_static_cache()
         pass
 
-    @skipIfRocm
+    @skipIfRocm(arch='gfx1201')
     def test_generate_from_inputs_embeds_with_static_cache(self):
+        super().test_generate_from_inputs_embeds_with_static_cache()
         pass
 
     def setUp(self):

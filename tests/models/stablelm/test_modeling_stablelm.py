@@ -308,8 +308,9 @@ class StableLmModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     test_headmasking = False
     test_pruning = False
 
-    @skipIfRocm
-    def test_generate_with_static_cache(seluf):
+    @skipIfRocm(arch='gfx1201')
+    def test_generate_with_static_cache(self):
+        super().test_generate_with_static_cache()
         pass
 
     def setUp(self):

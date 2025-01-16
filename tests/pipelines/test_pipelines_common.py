@@ -898,7 +898,7 @@ class CustomPipelineTest(unittest.TestCase):
         self.assertEqual(self.COUNT, 1)
 
     @require_torch
-    @skipIfRocm
+    @skipIfRocm(arch='gfx1201')
     def test_custom_code_with_string_tokenizer(self):
         # This test checks for an edge case - tokenizer loading used to fail when using a custom code model
         # with a separate tokenizer that was passed as a repo name rather than a tokenizer object.

@@ -287,8 +287,9 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     test_model_parallel = False
     test_head_masking = False
 
-    @skipIfRocm
+    @skipIfRocm(arch='gfx1201')
     def test_generate_with_static_cache():
+        super().test_generate_with_static_cache()
         pass
 
     def setUp(self):

@@ -91,7 +91,7 @@ class SummarizationPipelineTests(unittest.TestCase):
         outputs = summarizer("This " * 1000, truncation=TruncationStrategy.ONLY_FIRST)
 
     @require_torch
-    @skipIfRocm
+    @skipIfRocm(arch='gfx1201')
     def test_small_model_pt(self):
         summarizer = pipeline(task="summarization", model="sshleifer/tiny-mbart", framework="pt")
         outputs = summarizer("This is a small test")

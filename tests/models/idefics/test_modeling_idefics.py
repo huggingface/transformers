@@ -602,12 +602,14 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
     all_generative_model_classes = (IdeficsForVisionText2Text,) if is_torch_available() else ()
     
 
-    @skipIfRocm
+    @skipIfRocm(arch='gfx1201')
     def test_generate_from_inputs_embeds_with_static_cache(self):
+        super().test_generate_from_inputs_embeds_with_static_cache()
         pass
 
-    @skipIfRocm
+    @skipIfRocm(arch='gfx1201')
     def test_generate_with_static_cache(self):
+        super().test_generate_with_static_cache()
         pass
 
     def setUp(self):

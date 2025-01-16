@@ -123,7 +123,7 @@ class ImageToTextPipelineTests(unittest.TestCase):
             compare_pipeline_output_to_hub_spec(single_output, ImageToTextOutput)
 
     @require_torch
-    @skipIfRocm
+    @skipIfRocm(arch='gfx1201')
     def test_small_model_pt(self):
         pipe = pipeline("image-to-text", model="hf-internal-testing/tiny-random-vit-gpt2")
         image = "./tests/fixtures/tests_samples/COCO/000000039769.png"
