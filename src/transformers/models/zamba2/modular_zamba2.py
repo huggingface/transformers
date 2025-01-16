@@ -174,9 +174,11 @@ class Zamba2RotaryEmbedding(LlamaRotaryEmbedding):
         config: Zamba2Config,
         device=None,
     ):
-        self.rope_kwargs = {"base": config.rope_theta, "dim": config.attention_head_dim}
         super().__init__(config, device)
-        inv_freq, self.attention_scaling = self.rope_init_fn(config=None, device=device, **self.rope_kwargs)
+        # we cannot use the config here to parameterize because of a factor 2 for the head_dim
+        inv_freq, self.attention_scaling = self.rope_init_fn(
+            device=device, base=config.rope_theta, dim=config.attention_head_dim
+        )
 
 
 class Zamba2Attention(ZambaAttention):

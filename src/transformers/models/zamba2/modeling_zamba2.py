@@ -215,7 +215,6 @@ class Zamba2RotaryEmbedding(nn.Module):
         device=None,
     ):
         super().__init__()
-        self.rope_kwargs = {"base": config.rope_theta, "dim": config.attention_head_dim}
         # BC: "rope_type" was originally "type"
         if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
             self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
@@ -226,7 +225,10 @@ class Zamba2RotaryEmbedding(nn.Module):
 
         self.config = config
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = self.rope_init_fn(config=None, device=device, **self.rope_kwargs)
+        # we cannot use the config here to parameterize because of a factor 2 for the head_dim
+        inv_freq, self.attention_scaling = self.rope_init_fn(
+            device=device, base=config.rope_theta, dim=config.attention_head_dim
+        )
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
 
