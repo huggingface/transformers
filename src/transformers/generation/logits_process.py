@@ -112,8 +112,9 @@ class MinLengthLogitsProcessor(LogitsProcessor):
     like most LLMs, the length includes the prompt.
 
     Args:
-        min_length (`int`):
+        min_length (`Union[int, List[int], torch.Tensor]`):
             The minimum length below which the score of `eos_token_id` is set to `-float("Inf")`.
+            It can be a single value (broadcasted to all batch indices) or a list of values (one per batch index).
         eos_token_id (`Union[int, List[int], torch.Tensor]`):
             The id(s) of the *end-of-sequence* token.
         device (`str`, *optional*, defaults to `"cpu"`):
@@ -145,9 +146,16 @@ class MinLengthLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, min_length: int, eos_token_id: Union[int, List[int], torch.Tensor], device: str = "cpu"):
-        if not isinstance(min_length, int) or min_length < 0:
-            raise ValueError(f"`min_length` has to be a non-negative integer, but is {min_length}")
+    def __init__(self, min_length: Union[int, List[int]], eos_token_id: Union[int, List[int], torch.Tensor], device: str = "cpu"):
+        if isinstance(min_length, int):
+            if min_length < 0:
+                raise ValueError(f"`min_length` has to be a non-negative integer, but is {min_length}")
+            min_length = [min_length]
+        elif isinstance(min_length, list):
+            if min(min_length) < 0:
+                raise ValueError(f"All provided `min_length` values must be greater than 0, but its minimum is {min(min_length)}.")
+        else:
+            raise ValueError(f"`min_length` has to be a non-negative integer or a list of non-negative integers.")
 
         if not isinstance(eos_token_id, torch.Tensor):
             if isinstance(eos_token_id, int):
@@ -159,11 +167,20 @@ class MinLengthLogitsProcessor(LogitsProcessor):
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        if len(self.min_length) == 1:
+            min_length = self.min_length * input_ids.shape[0]
+        elif len(self.min_length) != input_ids.shape[0]:
+            raise ValueError(
+                f"The number of batch indices ({input_ids.shape[0]}) does not match the number of per-batch-index min lengths ({self.max_lengths.shape[0]}) provided to `MinLengthLogitsProcessor`."
+            )
+        else:
+            min_length = self.min_length
         vocab_tensor = torch.arange(scores.shape[-1], device=scores.device)
         eos_token_mask = isin_mps_friendly(vocab_tensor, self.eos_token_id)
         scores_processed = scores.clone()
-        if input_ids.shape[-1] < self.min_length:
-            scores_processed = torch.where(eos_token_mask, -math.inf, scores)
+        for batch_idx, length in enumerate(min_length):
+            if input_ids.shape[-1] < length:
+                scores_processed[batch_idx] = torch.where(eos_token_mask, -math.inf, scores[batch_idx])
         return scores_processed
 
 
