@@ -45,8 +45,8 @@ from ..mistral.modeling_mistral import (
     MistralForSequenceClassification,
     MistralForTokenClassification,
     MistralModel,
-    MistralRMSNorm,
     MistralPreTrainedModel,
+    MistralRMSNorm,
 )
 from .configuration_mixtral import MixtralConfig
 
