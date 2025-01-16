@@ -324,6 +324,15 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
 
+    @unittest.skip("Zamba2 has a hybrid cache")
+    def test_past_key_values_format(self):
+        r"""
+        Zamba2's cache shape depends on whether a given layer is mamba or attention.
+        For mamba layers, the KV cache has shape is empty and has shape [batch_size, 0].
+        The shape checks of this test assume instead that every layer has an attention cache, so we skip it.
+        """
+        pass
+
     def test_config(self):
         self.config_tester.run_common_tests()
 

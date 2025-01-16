@@ -1470,10 +1470,8 @@ class Zamba2Model(Zamba2PreTrainedModel):
         # original_hidden_states: word embedding output that will be concatenated with hidden activations to form the input of the shared transformer layer
 
         if use_cache and past_key_values is None:
-            logger.warning_once(
-                "Zamba2 requires an initialized `Zamba2HybridDynamicCache` to return a cache. None was "
-                "provided, so no cache will be returned."
-            )
+            batch_size = input_ids.shape[0] if input_ids is not None else inputs_embeds.shape[0]
+            past_key_values = Zamba2HybridDynamicCache(self.config, batch_size, dtype=self.dtype, device=self.device)
 
         if cache_position is None:
             # cache_position = torch.arange(hidden_states.shape[1], device=hidden_states.device)
