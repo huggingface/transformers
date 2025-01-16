@@ -331,7 +331,7 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    def test_for_casual_lm(self):
+    def test_for_causal_lm(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
 
@@ -376,12 +376,13 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
 
+    @unittest.skip(reason="Cumbersome and redundant for Zamba2")
     def test_mismatched_shapes_have_properly_initialized_weights(self):
         r"""
         Overriding the test_mismatched_shapes_have_properly_initialized_weights test because A_log and D params of the
         Mamba block are initialized differently and we tested that in test_initialization
         """
-        self.skipTest("Cumbersome and redundant for Zamba2")
+        pass
 
     def test_attention_outputs(self):
         r"""

@@ -35,7 +35,7 @@ from ...utils.import_utils import (
     is_causal_conv1d_available,
     is_mamba_ssm_available,
 )
-from ..gemma.modeling_gemma import GemmaRotaryEmbedding
+from ..llama.modeling_llama import LlamaRotaryEmbedding
 
 # from ..llama.modeling_llama import apply_rotary_pos_emb
 from ..mamba2.modeling_mamba2 import MambaRMSNormGated, pad_tensor_by_size, reshape_into_chunks, segment_sum
@@ -417,7 +417,7 @@ class Zamba2HybridDynamicCache(ZambaHybridDynamicCache):
         self.ssm_states.zero_()
 
 
-class Zamba2RotaryEmbedding(GemmaRotaryEmbedding):
+class Zamba2RotaryEmbedding(LlamaRotaryEmbedding):
     def __init__(
         self,
         config: Zamba2Config,
@@ -514,16 +514,7 @@ class Zamba2Attention(ZambaAttention):
         value_states = value_states.view(hidden_shape).transpose(1, 2)
 
         if self.config.use_mem_rope:
-            if position_embeddings is None:
-                logger.warning_once(
-                    "The attention layers in this model are transitioning from computing the RoPE embeddings internally "
-                    "through `position_ids` (2D tensor with the indexes of the tokens), to using externally computed "
-                    "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.46 `position_ids` will be "
-                    "removed and `position_embeddings` will be mandatory."
-                )
-                cos, sin = self.rotary_emb(value_states, position_ids)
-            else:
-                cos, sin = position_embeddings
+            cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
@@ -991,19 +982,11 @@ class Zamba2MLP(ZambaMLP):
         is tied, un-tied adapter modules (formally same as LoRA, but used in the base model) are added to the up and gate projectors to increase expressivity with a small memory overhead.
         """
         super().__init__(config)
-        self.config = config
         self.num_fwd_mem_blocks = num_fwd_mem_blocks
         self.block_id = block_id
 
-        def gated_act_fn(x):
-            x = torch.chunk(x, 2, dim=-1)
-            return self.act_fn(x[0]) * x[1]
-
-        self.gated_act_fn = gated_act_fn
-
         del self.gate_proj
         del self.up_proj
-        del self.down_proj
         self.gate_up_proj = nn.Linear(self.hidden_size, 2 * self.intermediate_size, bias=config.add_bias_linear)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.add_bias_linear)
 
@@ -1028,7 +1011,8 @@ class Zamba2MLP(ZambaMLP):
             layer_idx = self.layer_dic[layer_idx]
             gate_up_state = gate_up_state + self.gate_up_proj_adapter_list[layer_idx](hidden_state)
 
-        hidden_state = self.gated_act_fn(gate_up_state)
+        gate_up_state = torch.chunk(gate_up_state, 2, dim=-1)
+        hidden_state = self.act_fn(gate_up_state[0]) * gate_up_state[1]
         output = self.down_proj(hidden_state)
         return output
 
@@ -1286,6 +1270,7 @@ class Zamba2PreTrainedModel(PreTrainedModel):
     _no_split_modules = ["Zamba2AttentionDecoderLayer", "Zamba2MambaDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_flex_attn = True
     _supports_sdpa = False
     _supports_cache_class = True  # Note: only supports Zamba2HybridDynamicCache
     _is_stateful = True

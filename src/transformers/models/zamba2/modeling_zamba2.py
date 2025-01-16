@@ -468,16 +468,7 @@ class Zamba2Attention(nn.Module):
         value_states = value_states.view(hidden_shape).transpose(1, 2)
 
         if self.config.use_mem_rope:
-            if position_embeddings is None:
-                logger.warning_once(
-                    "The attention layers in this model are transitioning from computing the RoPE embeddings internally "
-                    "through `position_ids` (2D tensor with the indexes of the tokens), to using externally computed "
-                    "`position_embeddings` (Tuple of tensors, containing cos and sin). In v4.46 `position_ids` will be "
-                    "removed and `position_embeddings` will be mandatory."
-                )
-                cos, sin = self.rotary_emb(value_states, position_ids)
-            else:
-                cos, sin = position_embeddings
+            cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_value is not None:
@@ -1005,17 +996,11 @@ class Zamba2MLP(nn.Module):
         self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.add_bias_linear)
         self.act_fn = ACT2FN[config.hidden_act]
         self.num_fwd_mem_blocks = num_fwd_mem_blocks
         self.block_id = block_id
-
-        def gated_act_fn(x):
-            x = torch.chunk(x, 2, dim=-1)
-            return self.act_fn(x[0]) * x[1]
-
-        self.gated_act_fn = gated_act_fn
         self.gate_up_proj = nn.Linear(self.hidden_size, 2 * self.intermediate_size, bias=config.add_bias_linear)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.add_bias_linear)
 
         if self.config.use_shared_mlp_adapter:
             self.gate_up_proj_adapter_list = nn.ModuleList([])
@@ -1038,7 +1023,8 @@ class Zamba2MLP(nn.Module):
             layer_idx = self.layer_dic[layer_idx]
             gate_up_state = gate_up_state + self.gate_up_proj_adapter_list[layer_idx](hidden_state)
 
-        hidden_state = self.gated_act_fn(gate_up_state)
+        gate_up_state = torch.chunk(gate_up_state, 2, dim=-1)
+        hidden_state = self.act_fn(gate_up_state[0]) * gate_up_state[1]
         output = self.down_proj(hidden_state)
         return output
 
@@ -1311,6 +1297,7 @@ class Zamba2PreTrainedModel(PreTrainedModel):
     _no_split_modules = ["Zamba2AttentionDecoderLayer", "Zamba2MambaDecoderLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
+    _supports_flex_attn = True
     _supports_sdpa = False
     _supports_cache_class = True  # Note: only supports Zamba2HybridDynamicCache
     _is_stateful = True
