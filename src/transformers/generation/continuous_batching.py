@@ -336,7 +336,7 @@ class ContinuousBatch:
             evict_mask = evict_mask.tolist()
             self.cache_index = [self.cache_index[k] for k in range(len(self.cache_index)) if k not in evict_mask]
             for k in evict_mask:
-                cache.free_blocks.append(cache.block_table[k])
+                cache.free_blocks += cache.block_table[k]
                 del cache.block_table[k]
                 self.finished_sequences.append( self.prompts[k] + self.generated_ids[k])
                 del self.generated_ids[k]
