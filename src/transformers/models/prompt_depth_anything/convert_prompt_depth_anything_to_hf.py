@@ -77,92 +77,56 @@ def get_dpt_config(model_name):
     return config
 
 
-KEY_MAPPING = {
-    # Stem
-    "pretrained.cls_token": "backbone.embeddings.cls_token",
-    "pretrained.mask_token": "backbone.embeddings.mask_token",
-    "pretrained.pos_embed": "backbone.embeddings.position_embeddings",
-    "pretrained.patch_embed.proj.weight": "backbone.embeddings.patch_embeddings.projection.weight",
-    "pretrained.patch_embed.proj.bias": "backbone.embeddings.patch_embeddings.projection.bias",
-    # Head
-    "pretrained.norm.weight": "backbone.layernorm.weight",
-    "pretrained.norm.bias": "backbone.layernorm.bias",
-    # Head
-    "depth_head.scratch.output_conv1.weight": "head.conv1.weight",
-    "depth_head.scratch.output_conv1.bias": "head.conv1.bias",
-    "depth_head.scratch.output_conv2.0.weight": "head.conv2.weight",
-    "depth_head.scratch.output_conv2.0.bias": "head.conv2.bias",
-    "depth_head.scratch.output_conv2.2.weight": "head.conv3.weight",
-    "depth_head.scratch.output_conv2.2.bias": "head.conv3.bias",
+ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
+    r"pretrained.cls_token": r"backbone.embeddings.cls_token",
+    r"pretrained.mask_token": r"backbone.embeddings.mask_token",
+    r"pretrained.pos_embed": r"backbone.embeddings.position_embeddings",
+    r"pretrained.patch_embed.proj.weight": r"backbone.embeddings.patch_embeddings.projection.weight",
+    r"pretrained.patch_embed.proj.bias": r"backbone.embeddings.patch_embeddings.projection.bias",
+    r"pretrained.norm.weight": r"backbone.layernorm.weight",
+    r"pretrained.norm.bias": r"backbone.layernorm.bias",
+    r"depth_head.scratch.output_conv1.weight": r"head.conv1.weight",
+    r"depth_head.scratch.output_conv1.bias": r"head.conv1.bias",
+    r"depth_head.scratch.output_conv2.0.weight": r"head.conv2.weight",
+    r"depth_head.scratch.output_conv2.0.bias": r"head.conv2.bias",
+    r"depth_head.scratch.output_conv2.2.weight": r"head.conv3.weight",
+    r"depth_head.scratch.output_conv2.2.bias": r"head.conv3.bias",
+    r"pretrained.blocks.(\d+).ls1.gamma": r"backbone.encoder.layer.\1.layer_scale1.lambda1",
+    r"pretrained.blocks.(\d+).ls2.gamma": r"backbone.encoder.layer.\1.layer_scale2.lambda1",
+    r"pretrained.blocks.(\d+).norm1.weight": r"backbone.encoder.layer.\1.norm1.weight",
+    r"pretrained.blocks.(\d+).norm1.bias": r"backbone.encoder.layer.\1.norm1.bias",
+    r"pretrained.blocks.(\d+).norm2.weight": r"backbone.encoder.layer.\1.norm2.weight",
+    r"pretrained.blocks.(\d+).norm2.bias": r"backbone.encoder.layer.\1.norm2.bias",
+    r"pretrained.blocks.(\d+).mlp.fc1.weight": r"backbone.encoder.layer.\1.mlp.fc1.weight",
+    r"pretrained.blocks.(\d+).mlp.fc1.bias": r"backbone.encoder.layer.\1.mlp.fc1.bias",
+    r"pretrained.blocks.(\d+).mlp.fc2.weight": r"backbone.encoder.layer.\1.mlp.fc2.weight",
+    r"pretrained.blocks.(\d+).mlp.fc2.bias": r"backbone.encoder.layer.\1.mlp.fc2.bias",
+    r"pretrained.blocks.(\d+).attn.proj.weight": r"backbone.encoder.layer.\1.attention.output.dense.weight",
+    r"pretrained.blocks.(\d+).attn.proj.bias": r"backbone.encoder.layer.\1.attention.output.dense.bias",
+    r"pretrained.blocks.(\d+).attn.qkv.weight": r"qkv_transform_\1",
+    r"pretrained.blocks.(\d+).attn.qkv.bias": r"qkv_transform_bias_\1",
+    r"depth_head.projects.(\d+).weight": r"neck.reassemble_stage.layers.\1.projection.weight",
+    r"depth_head.projects.(\d+).bias": r"neck.reassemble_stage.layers.\1.projection.bias",
+    r"depth_head.scratch.layer(\d+)_rn.weight": r"neck.convs.\0.weight",
+    r"depth_head.resize_layers.(\d+).weight": r"neck.reassemble_stage.layers.\1.resize.weight",
+    r"depth_head.resize_layers.(\d+).bias": r"neck.reassemble_stage.layers.\1.resize.bias",
+    r"depth_head.scratch.refinenet(\d+).out_conv.weight": r"neck.fusion_stage.layers.\0.projection.weight",
+    r"depth_head.scratch.refinenet(\d+).out_conv.bias": r"neck.fusion_stage.layers.\0.projection.bias",
+    r"depth_head.scratch.refinenet(\d+).resConfUnit1.conv1.weight": r"neck.fusion_stage.layers.\0.residual_layer1.convolution1.weight",
+    r"depth_head.scratch.refinenet(\d+).resConfUnit1.conv1.bias": r"neck.fusion_stage.layers.\0.residual_layer1.convolution1.bias",
+    r"depth_head.scratch.refinenet(\d+).resConfUnit1.conv2.weight": r"neck.fusion_stage.layers.\0.residual_layer1.convolution2.weight",
+    r"depth_head.scratch.refinenet(\d+).resConfUnit1.conv2.bias": r"neck.fusion_stage.layers.\0.residual_layer1.convolution2.bias",
+    r"depth_head.scratch.refinenet(\d+).resConfUnit2.conv1.weight": r"neck.fusion_stage.layers.\0.residual_layer2.convolution1.weight",
+    r"depth_head.scratch.refinenet(\d+).resConfUnit2.conv1.bias": r"neck.fusion_stage.layers.\0.residual_layer2.convolution1.bias",
+    r"depth_head.scratch.refinenet(\d+).resConfUnit2.conv2.weight": r"neck.fusion_stage.layers.\0.residual_layer2.convolution2.weight",
+    r"depth_head.scratch.refinenet(\d+).resConfUnit2.conv2.bias": r"neck.fusion_stage.layers.\0.residual_layer2.convolution2.bias",
+    r"depth_head.scratch.refinenet(\d+).resConfUnit_depth.0.weight": r"neck.fusion_stage.layers.\0.prompt_depth_layer.convolution1.weight",
+    r"depth_head.scratch.refinenet(\d+).resConfUnit_depth.0.bias": r"neck.fusion_stage.layers.\0.prompt_depth_layer.convolution1.bias",
+    r"depth_head.scratch.refinenet(\d+).resConfUnit_depth.2.weight": r"neck.fusion_stage.layers.\0.prompt_depth_layer.convolution2.weight",
+    r"depth_head.scratch.refinenet(\d+).resConfUnit_depth.2.bias": r"neck.fusion_stage.layers.\0.prompt_depth_layer.convolution2.bias",
+    r"depth_head.scratch.refinenet(\d+).resConfUnit_depth.4.weight": r"neck.fusion_stage.layers.\0.prompt_depth_layer.convolution3.weight",
+    r"depth_head.scratch.refinenet(\d+).resConfUnit_depth.4.bias": r"neck.fusion_stage.layers.\0.prompt_depth_layer.convolution3.bias",
 }
-
-
-def add_transformer_mappings(config):
-    # Transformer encoder mappings
-    for i in range(config.backbone_config.num_hidden_layers):
-        KEY_MAPPING.update(
-            {
-                f"pretrained.blocks.{i}.ls1.gamma": f"backbone.encoder.layer.{i}.layer_scale1.lambda1",
-                f"pretrained.blocks.{i}.ls2.gamma": f"backbone.encoder.layer.{i}.layer_scale2.lambda1",
-                f"pretrained.blocks.{i}.norm1.weight": f"backbone.encoder.layer.{i}.norm1.weight",
-                f"pretrained.blocks.{i}.norm1.bias": f"backbone.encoder.layer.{i}.norm1.bias",
-                f"pretrained.blocks.{i}.norm2.weight": f"backbone.encoder.layer.{i}.norm2.weight",
-                f"pretrained.blocks.{i}.norm2.bias": f"backbone.encoder.layer.{i}.norm2.bias",
-                f"pretrained.blocks.{i}.mlp.fc1.weight": f"backbone.encoder.layer.{i}.mlp.fc1.weight",
-                f"pretrained.blocks.{i}.mlp.fc1.bias": f"backbone.encoder.layer.{i}.mlp.fc1.bias",
-                f"pretrained.blocks.{i}.mlp.fc2.weight": f"backbone.encoder.layer.{i}.mlp.fc2.weight",
-                f"pretrained.blocks.{i}.mlp.fc2.bias": f"backbone.encoder.layer.{i}.mlp.fc2.bias",
-                f"pretrained.blocks.{i}.attn.proj.weight": f"backbone.encoder.layer.{i}.attention.output.dense.weight",
-                f"pretrained.blocks.{i}.attn.proj.bias": f"backbone.encoder.layer.{i}.attention.output.dense.bias",
-                f"pretrained.blocks.{i}.attn.qkv.weight": f"qkv_transform_{i}",
-                f"pretrained.blocks.{i}.attn.qkv.bias": f"qkv_transform_bias_{i}",
-            }
-        )
-
-
-def add_neck_mappings():
-    # Neck mappings
-    for i in range(4):
-        KEY_MAPPING.update(
-            {
-                f"depth_head.projects.{i}.weight": f"neck.reassemble_stage.layers.{i}.projection.weight",
-                f"depth_head.projects.{i}.bias": f"neck.reassemble_stage.layers.{i}.projection.bias",
-                f"depth_head.scratch.layer{i+1}_rn.weight": f"neck.convs.{i}.weight",
-            }
-        )
-
-        if i != 2:
-            KEY_MAPPING.update(
-                {
-                    f"depth_head.resize_layers.{i}.weight": f"neck.reassemble_stage.layers.{i}.resize.weight",
-                    f"depth_head.resize_layers.{i}.bias": f"neck.reassemble_stage.layers.{i}.resize.bias",
-                }
-            )
-
-    # Refinenet mappings
-    mapping = {1: 3, 2: 2, 3: 1, 4: 0}
-    for i in range(1, 5):
-        j = mapping[i]
-        KEY_MAPPING.update(
-            {
-                f"depth_head.scratch.refinenet{i}.out_conv.weight": f"neck.fusion_stage.layers.{j}.projection.weight",
-                f"depth_head.scratch.refinenet{i}.out_conv.bias": f"neck.fusion_stage.layers.{j}.projection.bias",
-                f"depth_head.scratch.refinenet{i}.resConfUnit1.conv1.weight": f"neck.fusion_stage.layers.{j}.residual_layer1.convolution1.weight",
-                f"depth_head.scratch.refinenet{i}.resConfUnit1.conv1.bias": f"neck.fusion_stage.layers.{j}.residual_layer1.convolution1.bias",
-                f"depth_head.scratch.refinenet{i}.resConfUnit1.conv2.weight": f"neck.fusion_stage.layers.{j}.residual_layer1.convolution2.weight",
-                f"depth_head.scratch.refinenet{i}.resConfUnit1.conv2.bias": f"neck.fusion_stage.layers.{j}.residual_layer1.convolution2.bias",
-                f"depth_head.scratch.refinenet{i}.resConfUnit2.conv1.weight": f"neck.fusion_stage.layers.{j}.residual_layer2.convolution1.weight",
-                f"depth_head.scratch.refinenet{i}.resConfUnit2.conv1.bias": f"neck.fusion_stage.layers.{j}.residual_layer2.convolution1.bias",
-                f"depth_head.scratch.refinenet{i}.resConfUnit2.conv2.weight": f"neck.fusion_stage.layers.{j}.residual_layer2.convolution2.weight",
-                f"depth_head.scratch.refinenet{i}.resConfUnit2.conv2.bias": f"neck.fusion_stage.layers.{j}.residual_layer2.convolution2.bias",
-                f"depth_head.scratch.refinenet{i}.resConfUnit_depth.0.weight": f"neck.fusion_stage.layers.{j}.prompt_depth_layer.convolution1.weight",
-                f"depth_head.scratch.refinenet{i}.resConfUnit_depth.0.bias": f"neck.fusion_stage.layers.{j}.prompt_depth_layer.convolution1.bias",
-                f"depth_head.scratch.refinenet{i}.resConfUnit_depth.2.weight": f"neck.fusion_stage.layers.{j}.prompt_depth_layer.convolution2.weight",
-                f"depth_head.scratch.refinenet{i}.resConfUnit_depth.2.bias": f"neck.fusion_stage.layers.{j}.prompt_depth_layer.convolution2.bias",
-                f"depth_head.scratch.refinenet{i}.resConfUnit_depth.4.weight": f"neck.fusion_stage.layers.{j}.prompt_depth_layer.convolution3.weight",
-                f"depth_head.scratch.refinenet{i}.resConfUnit_depth.4.bias": f"neck.fusion_stage.layers.{j}.prompt_depth_layer.convolution3.bias",
-            }
-        )
 
 
 def transform_qkv_weights(key, value, config):
@@ -206,10 +170,6 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
     # define DPT configuration
     config = get_dpt_config(model_name)
 
-    # Add dynamic key mappings
-    add_transformer_mappings(config)
-    add_neck_mappings()
-
     model_name_to_repo = {
         "prompt-depth-anything-vits": "depth-anything/prompt-depth-anything-vits",
         "prompt-depth-anything-vits-transparent": "depth-anything/prompt-depth-anything-vits-transparent",
@@ -230,8 +190,8 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
     # Convert state dict using mappings
     new_state_dict = {}
     for key, value in state_dict.items():
-        if key in KEY_MAPPING:
-            new_key = KEY_MAPPING[key]
+        if key in ORIGINAL_TO_CONVERTED_KEY_MAPPING:
+            new_key = ORIGINAL_TO_CONVERTED_KEY_MAPPING[key]
             transformed_value = transform_qkv_weights(new_key, value, config)
             if isinstance(transformed_value, dict):
                 new_state_dict.update(transformed_value)

@@ -208,7 +208,7 @@ class PromptDepthAnythingDepthEstimationHead(nn.Module):
         self.max_depth = config.max_depth
 
     def forward(self, hidden_states: List[torch.Tensor], patch_height, patch_width) -> torch.Tensor:
-        hidden_states = hidden_states[self.head_in_index]
+        hidden_states = hidden_states[-1]
 
         predicted_depth = self.conv1(hidden_states)
         target_height = torch_int(patch_height * self.patch_size)
@@ -222,7 +222,7 @@ class PromptDepthAnythingDepthEstimationHead(nn.Module):
         predicted_depth = self.conv2(predicted_depth)
         predicted_depth = self.activation1(predicted_depth)
         predicted_depth = self.conv3(predicted_depth)
-        predicted_depth = self.activation2(predicted_depth) * self.max_depth
+        predicted_depth = self.activation2(predicted_depth)
         # (batch_size, 1, height, width) -> (batch_size, height, width), which
         # keeps the same behavior as Depth Anything v1 & v2
         predicted_depth = predicted_depth.squeeze(dim=1)
@@ -258,15 +258,6 @@ class PromptDepthAnythingReassembleLayer(nn.Module):
     def __init__(self, config: PromptDepthAnythingConfig, channels: int, factor: int):
         super().__init__()
         self.projection = nn.Conv2d(in_channels=config.reassemble_hidden_size, out_channels=channels, kernel_size=1)
-
-        # up/down sampling depending on factor
-        if factor > 1:
-            self.resize = nn.ConvTranspose2d(channels, channels, kernel_size=factor, stride=factor, padding=0)
-        elif factor == 1:
-            self.resize = nn.Identity()
-        elif factor < 1:
-            # so should downsample
-            self.resize = nn.Conv2d(channels, channels, kernel_size=3, stride=int(1 / factor), padding=1)
 
         # up/down sampling depending on factor
         if factor > 1:
@@ -505,15 +496,10 @@ class PromptDepthAnythingForDepthEstimation(PromptDepthAnythingPreTrainedModel):
 
         if prompt_depth is not None:
             # normalize prompt depth
-            B = prompt_depth.shape[0]
-            depth_min, depth_max = (
-                torch.min(prompt_depth.reshape(B, -1), dim=1).values,
-                torch.max(prompt_depth.reshape(B, -1), dim=1).values,
-            )
-            invalid_mask = (depth_max - depth_min) <= 0
-            if invalid_mask.any():
-                depth_max[invalid_mask] = depth_min[invalid_mask] + 1e-6
-            depth_min, depth_max = depth_min.view(B, 1, 1, 1), depth_max.view(B, 1, 1, 1)
+            batch_size = prompt_depth.shape[0]
+            depth_min = torch.min(prompt_depth.reshape(batch_size, -1), dim=1).values
+            depth_max = torch.max(prompt_depth.reshape(batch_size, -1), dim=1).values
+            depth_min, depth_max = depth_min.view(batch_size, 1, 1, 1), depth_max.view(batch_size, 1, 1, 1)
             prompt_depth = (prompt_depth - depth_min) / (depth_max - depth_min)
             # normalize done
 

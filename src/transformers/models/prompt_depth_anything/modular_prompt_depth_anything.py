@@ -10,7 +10,6 @@ from transformers.models.depth_anything.modeling_depth_anything import (
     DepthAnythingFeatureFusionStage,
     DepthAnythingForDepthEstimation,
     DepthAnythingNeck,
-    DepthAnythingReassembleLayer,
     DepthAnythingReassembleStage,
 )
 from transformers.utils.generic import torch_int
@@ -131,7 +130,7 @@ class PromptDepthAnythingFeatureFusionStage(DepthAnythingFeatureFusionStage):
 
 class PromptDepthAnythingDepthEstimationHead(DepthAnythingDepthEstimationHead):
     def forward(self, hidden_states: List[torch.Tensor], patch_height, patch_width) -> torch.Tensor:
-        hidden_states = hidden_states[self.head_in_index]
+        hidden_states = hidden_states[-1]
 
         predicted_depth = self.conv1(hidden_states)
         target_height = torch_int(patch_height * self.patch_size)
@@ -145,7 +144,7 @@ class PromptDepthAnythingDepthEstimationHead(DepthAnythingDepthEstimationHead):
         predicted_depth = self.conv2(predicted_depth)
         predicted_depth = self.activation1(predicted_depth)
         predicted_depth = self.conv3(predicted_depth)
-        predicted_depth = self.activation2(predicted_depth) * self.max_depth
+        predicted_depth = self.activation2(predicted_depth)
         # (batch_size, 1, height, width) -> (batch_size, height, width), which
         # keeps the same behavior as Depth Anything v1 & v2
         predicted_depth = predicted_depth.squeeze(dim=1)
@@ -210,9 +209,9 @@ class PromptDepthAnythingPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
 
-class PromptDepthAnythingReassembleLayer(DepthAnythingReassembleLayer):
+class PromptDepthAnythingReassembleLayer(nn.Module):
     def __init__(self, config: PromptDepthAnythingConfig, channels: int, factor: int):
-        super().__init__(config, channels, factor)
+        super().__init__()
         self.projection = nn.Conv2d(in_channels=config.reassemble_hidden_size, out_channels=channels, kernel_size=1)
 
         # up/down sampling depending on factor
@@ -224,6 +223,12 @@ class PromptDepthAnythingReassembleLayer(DepthAnythingReassembleLayer):
             # so should downsample
             stride = torch_int(1 / factor)
             self.resize = nn.Conv2d(channels, channels, kernel_size=3, stride=stride, padding=1)
+
+    def forward(self, hidden_state):
+        hidden_state = self.projection(hidden_state)
+        hidden_state = self.resize(hidden_state)
+
+        return hidden_state
 
 
 class PromptDepthAnythingReassembleStage(DepthAnythingReassembleStage):
@@ -337,15 +342,10 @@ class PromptDepthAnythingForDepthEstimation(DepthAnythingForDepthEstimation):
 
         if prompt_depth is not None:
             # normalize prompt depth
-            B = prompt_depth.shape[0]
-            depth_min, depth_max = (
-                torch.min(prompt_depth.reshape(B, -1), dim=1).values,
-                torch.max(prompt_depth.reshape(B, -1), dim=1).values,
-            )
-            invalid_mask = (depth_max - depth_min) <= 0
-            if invalid_mask.any():
-                depth_max[invalid_mask] = depth_min[invalid_mask] + 1e-6
-            depth_min, depth_max = depth_min.view(B, 1, 1, 1), depth_max.view(B, 1, 1, 1)
+            batch_size = prompt_depth.shape[0]
+            depth_min = torch.min(prompt_depth.reshape(batch_size, -1), dim=1).values
+            depth_max = torch.max(prompt_depth.reshape(batch_size, -1), dim=1).values
+            depth_min, depth_max = depth_min.view(batch_size, 1, 1, 1), depth_max.view(batch_size, 1, 1, 1)
             prompt_depth = (prompt_depth - depth_min) / (depth_max - depth_min)
             # normalize done
 

@@ -450,6 +450,8 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
             for depth in prompt_depths:
                 depth = to_numpy_array(depth)
                 depth = depth * prompt_scale_to_meter
+                if depth.min() == depth.max():
+                    raise ValueError("Prompt depth is invalid, min and max are the same.")
                 depth = depth[..., None].astype(np.float32)
                 depth = to_channel_dimension_format(depth, data_format, input_channel_dim=input_data_format)
 

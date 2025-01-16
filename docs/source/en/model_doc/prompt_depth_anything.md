@@ -49,6 +49,7 @@ The Transformers library allows you to use the model with just a few lines of co
 
 >>> prompt_depth_url = "https://github.com/DepthAnything/PromptDA/blob/main/assets/example_images/arkit_depth.png?raw=true"
 >>> prompt_depth = Image.open(requests.get(prompt_depth_url, stream=True).raw)
+>>> # the prompt depth can be None, and the model will output a monocular relative depth.
 
 >>> # prepare image for the model
 >>> inputs = image_processor(images=image, return_tensors="pt", prompt_depth=prompt_depth)
