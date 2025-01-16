@@ -154,14 +154,14 @@ class EvollaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             raise ValueError(f"protein_types should be one of 'single', 'pair', 'long','short', 'empty', but got {protein_types}")
         
         questions = ["What is the function of the protein?"] * len(proteins)
-        texts = []
+        messages_list = []
         for question in questions:
             messages = [
                 {"role": "system", "content": "You are an AI expert that can answer any questions about protein."},
                 {"role": "user", "content": question},
             ]
-            texts.append(messages)
-        return proteins, texts
+            messages_list.append(messages)
+        return proteins, messages_list
 
     def test_processor(self):
         protein_tokenizer = self.get_protein_tokenizer()
@@ -169,10 +169,10 @@ class EvollaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         processor = EvollaProcessor(tokenizer=tokenizer, protein_tokenizer=protein_tokenizer)
 
-        proteins, texts = self.prepare_inputs()
+        proteins, messages_list = self.prepare_inputs()
 
         # test that all prompts succeeded
-        input_processor = processor(texts=texts, proteins=proteins, return_tensors="pt", padding="longest")
+        input_processor = processor(messages_list=messages_list, proteins=proteins, return_tensors="pt", padding="longest")
         for key in self.input_keys:
             assert torch.is_tensor(input_processor[key])
 

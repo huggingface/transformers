@@ -253,20 +253,19 @@ class EvollaProcessor(ProcessorMixin):
     def __call__(
         self,
         proteins: Union[List[dict]] = None,
-        texts: Union[TextInput] = None,
+        messages_list: Union[List[dict], List[List[dict]]] = None,
         **kwargs,
     ):
-        # TODO: add input check for texts
-        # proteins and texts should be provided
-        if proteins is None or texts is None:
-            raise ValueError("You need to specify `texts` and `proteins`.")
+        # proteins and messages_list should be provided
+        if proteins is None or messages_list is None:
+            raise ValueError("You need to specify `messages_list` and `proteins`.")
 
         # proteins should be List[dict]
         if isinstance(proteins, dict):
             proteins = [proteins]
-        # # texts should be textsInput
-        # if isinstance(texts, str):
-        #     texts = [texts]
+        # messages_list should be List[List[dict]]
+        if isinstance(messages_list, (list, tuple)) and not isinstance(messages_list[0], (list, tuple)):
+            messages_list = [messages_list]
         # Check if batched proteins are in the correct format
         if isinstance(proteins, (list, tuple)) and not all(isinstance(p, dict) for p in proteins):
             raise ValueError(
@@ -278,15 +277,29 @@ class EvollaProcessor(ProcessorMixin):
                 f"{', '.join(PROTEIN_VALID_KEYS)} for each protein."
                 f"But got: {proteins}"
             )
-        # # Check if batched texts is in the correct format
-        # if isinstance(texts, (list, tuple)) and not all(isinstance(t, str) for t in texts):
-        #     raise ValueError(
-        #         "The texts should be a list of strings, but not all elements are strings."
-        #     )
-        
+        # Check if batched messages_list is in the correct format
+        if isinstance(messages_list, (list, tuple)):
+            for messages in messages_list:
+                if not isinstance(messages, (list, tuple)):
+                    raise ValueError(
+                        f"Each messages in messages_list should be a list instead of {type(messages)}."
+                    )
+                if not all(isinstance(m, dict) for m in messages):
+                    raise ValueError(
+                        "Each message in messages_list should be a list of dictionaries, but not all elements are dictionaries."
+                    )
+                if any(len(m.keys()) != 2 for m in messages) or any(set(m.keys()) != {"role", "content"} for m in messages):
+                    raise ValueError(
+                        "Each message in messages_list should be a list of dictionaries with two keys: 'role' and 'content'."
+                        f"But got: {messages}"
+                    )
+        else:
+            raise ValueError(
+                f"The messages_list should be a list of lists of dictionaries, but it's {type(messages_list)}."
+            )
         sa_tokens = self.process_proteins(proteins)
 
-        text_tokens = self.process_text(texts)
+        text_tokens = self.process_text(messages_list)
 
         return BatchFeature(
             data={
