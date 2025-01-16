@@ -36,14 +36,11 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_torchdynamo_compiling,
-    logging,
     replace_return_docstrings,
 )
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_llava_next_video import LlavaNextVideoConfig
 
-
-logger = logging.get_logger(__name__)
 
 _CONFIG_FOR_DOC = "LlavaNextVideoConfig"
 
