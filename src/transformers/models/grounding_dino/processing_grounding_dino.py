@@ -65,27 +65,12 @@ def get_phrases_from_posmap(posmaps, input_ids):
     return token_ids
 
 
-def _is_merged_candidate_labels_text(text: str) -> bool:
-    """
-    Check if the text is a merged candidate labels text. The general rule for constructing
-    candidate labels string is to separate the text labels with a dot. For example, "cat. dog."
-    """
-    if isinstance(text, str) and "." in text:
-        return True
-    return False
-
-
 def _is_list_of_candidate_labels(text) -> bool:
-    """Check that text is list/tuple of strings and each string is a candidate label and not merged candidate labels text."""
+    """Check that text is list/tuple of strings and each string is a candidate label and not merged candidate labels text.
+    Merged candidate labels text is a string with candidate labels separated by a dot.
+    """
     if isinstance(text, (list, tuple)):
-        return all(isinstance(t, str) and not _is_merged_candidate_labels_text(t) for t in text)
-    return False
-
-
-def _is_batched_list_of_candidate_labels(text) -> bool:
-    """Check that text is batch of list/tuple of strings and each string is a candidate label and not merged candidate labels text."""
-    if isinstance(text, (list, tuple)):
-        return all(_is_list_of_candidate_labels(t) for t in text)
+        return all(isinstance(t, str) and "." not in t for t in text)
     return False
 
 
@@ -99,9 +84,9 @@ def _merge_candidate_labels_text(text: List[str]) -> str:
     return merged_labels_str
 
 
-class _dict_with_warning_message(dict):
+class DictWithDeprecationWarning(dict):
     message = (
-        "The key `labels` is will be set to `None` in `GroundingDinoProcessor.post_process_grounded_object_detection` "
+        "The key `labels` is will return integer ids in `GroundingDinoProcessor.post_process_grounded_object_detection` "
         "output since v4.51.0. Use `text_labels` instead to retrieve string object names."
     )
 
@@ -217,13 +202,16 @@ class GroundingDinoProcessor(ProcessorMixin):
     def _preprocess_input_text(self, text):
         """
         Preprocess input text to ensure that labels are in the correct format for the model.
-        If the text is a list of candidate labels, merge the candidate labels into a single string.
-        For example, ["a cat", "a dog"] -> "a cat. a dog.".
+        If the text is a list of candidate labels, merge the candidate labels into a single string,
+        for example, ["a cat", "a dog"] -> "a cat. a dog.". In case candidate labels are already in a form of
+        "a cat. a dog.", the text is returned as is.
         """
 
         if _is_list_of_candidate_labels(text):
             text = _merge_candidate_labels_text(text)
-        elif _is_batched_list_of_candidate_labels(text):
+
+        # for batched input
+        elif isinstance(text, (list, tuple)) and all(_is_list_of_candidate_labels(t) for t in text):
             text = [_merge_candidate_labels_text(sample) for sample in text]
 
         return text
@@ -314,7 +302,7 @@ class GroundingDinoProcessor(ProcessorMixin):
             label_ids = get_phrases_from_posmap(prob > text_threshold, input_ids[idx])
             objects_text_labels = self.batch_decode(label_ids)
 
-            result = _dict_with_warning_message(
+            result = DictWithDeprecationWarning(
                 {
                     "scores": scores,
                     "boxes": boxes,
