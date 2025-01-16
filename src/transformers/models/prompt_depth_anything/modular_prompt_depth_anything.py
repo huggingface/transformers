@@ -26,41 +26,13 @@ from ...modeling_utils import PreTrainedModel
 
 _CONFIG_FOR_DOC = "PromptDepthAnythingConfig"
 
-PROMPT_DEPTH_ANYTHING_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`PromptDepthAnythingConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-PROMPT_DEPTH_ANYTHING_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`DPTImageProcessor.__call__`]
-            for details.
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        prompt_depth (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`, *optional*):
-            Prompt depth.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
-"""
-
 
 class PromptDepthAnythingConfig(DepthAnythingConfig):
     model_type = "prompt_depth_anything"
 
 
 class PromptDepthAnythingLayer(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: PromptDepthAnythingConfig):
         super().__init__()
         self.convolution1 = nn.Conv2d(
             1,
@@ -92,17 +64,16 @@ class PromptDepthAnythingLayer(nn.Module):
         )
 
     def forward(self, prompt_depth: torch.Tensor) -> torch.Tensor:
-        residual = prompt_depth
-        residual = self.convolution1(residual)
-        residual = self.activation1(residual)
-        residual = self.convolution2(residual)
-        residual = self.activation2(residual)
-        residual = self.convolution3(residual)
-        return residual
+        hidden_state = self.convolution1(prompt_depth)
+        hidden_state = self.activation1(hidden_state)
+        hidden_state = self.convolution2(hidden_state)
+        hidden_state = self.activation2(hidden_state)
+        hidden_state = self.convolution3(hidden_state)
+        return hidden_state
 
 
 class PromptDepthAnythingFeatureFusionLayer(DepthAnythingFeatureFusionLayer):
-    def __init__(self, config):
+    def __init__(self, config: PromptDepthAnythingConfig):
         super().__init__(config)
         self.prompt_depth_layer = PromptDepthAnythingLayer(config)
 
@@ -110,7 +81,7 @@ class PromptDepthAnythingFeatureFusionLayer(DepthAnythingFeatureFusionLayer):
         if residual is not None:
             if hidden_state.shape != residual.shape:
                 residual = nn.functional.interpolate(
-                    residual, size=(hidden_state.shape[2], hidden_state.shape[3]), mode="bilinear", align_corners=False
+                    residual, size=hidden_state.shape[2:], mode="bilinear", align_corners=False
                 )
             hidden_state = hidden_state + self.residual_layer1(residual)
 
@@ -118,7 +89,7 @@ class PromptDepthAnythingFeatureFusionLayer(DepthAnythingFeatureFusionLayer):
 
         if prompt_depth is not None:
             prompt_depth = nn.functional.interpolate(
-                prompt_depth, hidden_state.shape[2:], mode="bilinear", align_corners=False
+                prompt_depth, size=hidden_state.shape[2:], mode="bilinear", align_corners=False
             )
             res = self.prompt_depth_layer(prompt_depth)
             hidden_state = hidden_state + res
@@ -175,9 +146,44 @@ class PromptDepthAnythingDepthEstimationHead(DepthAnythingDepthEstimationHead):
         predicted_depth = self.activation1(predicted_depth)
         predicted_depth = self.conv3(predicted_depth)
         predicted_depth = self.activation2(predicted_depth) * self.max_depth
-        predicted_depth = predicted_depth.squeeze(dim=1)  # shape (batch_size, height, width)
+        # (batch_size, 1, height, width) -> (batch_size, height, width), which
+        # keeps the same behavior as Depth Anything v1 & v2
+        predicted_depth = predicted_depth.squeeze(dim=1)
 
         return predicted_depth
+
+
+PROMPT_DEPTH_ANYTHING_START_DOCSTRING = r"""
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
+    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
+
+    Parameters:
+        config ([`PromptDepthAnythingConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+PROMPT_DEPTH_ANYTHING_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`DPTImageProcessor.__call__`]
+            for details.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        prompt_depth (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`, *optional*):
+            Prompt depth is the sparse or low-resolution depth obtained from multi-view geometry or a
+            low-resolution depth sensor. It generally has shape (height, width), where height
+            and width can be smaller than those of the images. It is optional and can be None, which means no prompt depth
+            will be used. If it is None, the output will be a monocular relative depth.
+            The values are recommended to be in meters, but this is not necessary.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+"""
 
 
 class PromptDepthAnythingPreTrainedModel(PreTrainedModel):
@@ -205,7 +211,7 @@ class PromptDepthAnythingPreTrainedModel(PreTrainedModel):
 
 
 class PromptDepthAnythingReassembleLayer(DepthAnythingReassembleLayer):
-    def __init__(self, config, channels, factor):
+    def __init__(self, config: PromptDepthAnythingConfig, channels: int, factor: int):
         super().__init__(config, channels, factor)
         self.projection = nn.Conv2d(in_channels=config.reassemble_hidden_size, out_channels=channels, kernel_size=1)
 
@@ -216,7 +222,8 @@ class PromptDepthAnythingReassembleLayer(DepthAnythingReassembleLayer):
             self.resize = nn.Identity()
         elif factor < 1:
             # so should downsample
-            self.resize = nn.Conv2d(channels, channels, kernel_size=3, stride=torch_int(1 / factor), padding=1)
+            stride = torch_int(1 / factor)
+            self.resize = nn.Conv2d(channels, channels, kernel_size=3, stride=stride, padding=1)
 
 
 class PromptDepthAnythingReassembleStage(DepthAnythingReassembleStage):

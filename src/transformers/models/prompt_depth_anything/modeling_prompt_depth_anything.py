@@ -23,7 +23,7 @@ _CONFIG_FOR_DOC = "PromptDepthAnythingConfig"
 
 
 class PromptDepthAnythingLayer(nn.Module):
-    def __init__(self, config):
+    def __init__(self, config: PromptDepthAnythingConfig):
         super().__init__()
         self.convolution1 = nn.Conv2d(
             1,
@@ -55,13 +55,12 @@ class PromptDepthAnythingLayer(nn.Module):
         )
 
     def forward(self, prompt_depth: torch.Tensor) -> torch.Tensor:
-        residual = prompt_depth
-        residual = self.convolution1(residual)
-        residual = self.activation1(residual)
-        residual = self.convolution2(residual)
-        residual = self.activation2(residual)
-        residual = self.convolution3(residual)
-        return residual
+        hidden_state = self.convolution1(prompt_depth)
+        hidden_state = self.activation1(hidden_state)
+        hidden_state = self.convolution2(hidden_state)
+        hidden_state = self.activation2(hidden_state)
+        hidden_state = self.convolution3(hidden_state)
+        return hidden_state
 
 
 class PromptDepthAnythingPreActResidualLayer(nn.Module):
@@ -114,7 +113,7 @@ class PromptDepthAnythingFeatureFusionLayer(nn.Module):
             Model configuration class defining the model architecture.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: PromptDepthAnythingConfig):
         super().__init__()
 
         self.projection = nn.Conv2d(config.fusion_hidden_size, config.fusion_hidden_size, kernel_size=1, bias=True)
@@ -127,7 +126,7 @@ class PromptDepthAnythingFeatureFusionLayer(nn.Module):
         if residual is not None:
             if hidden_state.shape != residual.shape:
                 residual = nn.functional.interpolate(
-                    residual, size=(hidden_state.shape[2], hidden_state.shape[3]), mode="bilinear", align_corners=False
+                    residual, size=hidden_state.shape[2:], mode="bilinear", align_corners=False
                 )
             hidden_state = hidden_state + self.residual_layer1(residual)
 
@@ -135,7 +134,7 @@ class PromptDepthAnythingFeatureFusionLayer(nn.Module):
 
         if prompt_depth is not None:
             prompt_depth = nn.functional.interpolate(
-                prompt_depth, hidden_state.shape[2:], mode="bilinear", align_corners=False
+                prompt_depth, size=hidden_state.shape[2:], mode="bilinear", align_corners=False
             )
             res = self.prompt_depth_layer(prompt_depth)
             hidden_state = hidden_state + res
@@ -224,7 +223,9 @@ class PromptDepthAnythingDepthEstimationHead(nn.Module):
         predicted_depth = self.activation1(predicted_depth)
         predicted_depth = self.conv3(predicted_depth)
         predicted_depth = self.activation2(predicted_depth) * self.max_depth
-        predicted_depth = predicted_depth.squeeze(dim=1)  # shape (batch_size, height, width)
+        # (batch_size, 1, height, width) -> (batch_size, height, width), which
+        # keeps the same behavior as Depth Anything v1 & v2
+        predicted_depth = predicted_depth.squeeze(dim=1)
 
         return predicted_depth
 
@@ -254,7 +255,7 @@ class PromptDepthAnythingPreTrainedModel(PreTrainedModel):
 
 
 class PromptDepthAnythingReassembleLayer(nn.Module):
-    def __init__(self, config, channels, factor):
+    def __init__(self, config: PromptDepthAnythingConfig, channels: int, factor: int):
         super().__init__()
         self.projection = nn.Conv2d(in_channels=config.reassemble_hidden_size, out_channels=channels, kernel_size=1)
 
@@ -274,7 +275,8 @@ class PromptDepthAnythingReassembleLayer(nn.Module):
             self.resize = nn.Identity()
         elif factor < 1:
             # so should downsample
-            self.resize = nn.Conv2d(channels, channels, kernel_size=3, stride=torch_int(1 / factor), padding=1)
+            stride = torch_int(1 / factor)
+            self.resize = nn.Conv2d(channels, channels, kernel_size=3, stride=stride, padding=1)
 
     def forward(self, hidden_state):
         hidden_state = self.projection(hidden_state)
