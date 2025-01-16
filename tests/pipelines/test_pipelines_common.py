@@ -865,6 +865,7 @@ class CustomPipelineTest(unittest.TestCase):
         )
 
     @require_torch_or_tf
+    @skipIfRocm
     def test_cached_pipeline_has_minimum_calls_to_head(self):
         # Make sure we have cached the pipeline.
         _ = pipeline("text-classification", model="hf-internal-testing/tiny-random-bert")
