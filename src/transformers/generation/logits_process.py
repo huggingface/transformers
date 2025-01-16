@@ -1585,8 +1585,9 @@ class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
     [`LogitsProcessor`] that enforces the specified token as the last generated token when `max_length` is reached.
 
     Args:
-        max_length (`int`):
+        max_length (`Union[int, List[int]]`):
             The maximum length of the sequence to be generated.
+            It can be a single value (broadcasted to all batch indices) or a list of values (one per batch index).
         eos_token_id (`Union[int, List[int], torch.Tensor]`):
             The id(s) of the *end-of-sequence* token.
         device (`str`, *optional*, defaults to `"cpu"`):
@@ -1614,7 +1615,9 @@ class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
     ```
     """
 
-    def __init__(self, max_length: int, eos_token_id: Union[int, List[int], torch.Tensor], device: str = "cpu"):
+    def __init__(self, max_length: Union[int, List[int]], eos_token_id: Union[int, List[int], torch.Tensor], device: str = "cpu"):
+        if isinstance(max_length, int):
+            max_length = [max_length]
         self.max_length = max_length
 
         if not isinstance(eos_token_id, torch.Tensor):
@@ -1628,11 +1631,20 @@ class ForcedEOSTokenLogitsProcessor(LogitsProcessor):
 
     @add_start_docstrings(LOGITS_PROCESSOR_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        if len(self.max_length) == 1:
+            max_length = self.max_length * input_ids.shape[0]
+        elif len(self.max_length) != input_ids.shape[0]:
+            raise ValueError(
+                f"The number of batch indices ({input_ids.shape[0]}) does not match the number of per-batch-index max lengths ({len(self.max_length)}) provided to `ForcedEOSTokenLogitsProcessor`."
+            )
+        else:
+            max_length = self.max_length
         cur_len = input_ids.shape[-1]
         scores_processed = scores
-        if cur_len == self.max_length - 1:
-            scores_processed = torch.full_like(scores, -math.inf)
-            scores_processed[:, self.eos_token_id] = 0
+        for batch_idx, length in enumerate(max_length):
+            if cur_len == length - 1:
+                scores_processed[batch_idx] = torch.full_like(scores[batch_idx], -math.inf)
+                scores_processed[batch_idx, self.eos_token_id] = 0
         return scores_processed
 
 
