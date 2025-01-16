@@ -600,8 +600,14 @@ class GenerationConfig(PushToHubMixin):
         # Validation of individual attributes
         if self.early_stopping not in {True, False, "never"}:
             raise ValueError(f"`early_stopping` must be a boolean or 'never', but is {self.early_stopping}.")
-        if self.max_new_tokens is not None and self.max_new_tokens <= 0:
-            raise ValueError(f"`max_new_tokens` must be greater than 0, but is {self.max_new_tokens}.")
+        if self.max_new_tokens is not None:
+            if isinstance(self.max_new_tokens, list): 
+                if min(self.max_new_tokens) <= 0:
+                    raise ValueError(
+                        f"All provided `max_new_tokens` values must be greater than 0, but its minimum is {min(self.max_new_tokens)}."
+                    )
+            elif self.max_new_tokens <= 0:
+                raise ValueError(f"`max_new_tokens` must be greater than 0, but is {self.max_new_tokens}.")
         if self.pad_token_id is not None and self.pad_token_id < 0:
             warnings.warn(
                 f"`pad_token_id` should be positive but got {self.pad_token_id}. This will cause errors when batch "

@@ -63,25 +63,38 @@ class MaxLengthCriteria(StoppingCriteria):
     Args:
         max_length (`int`):
             The maximum length that the output sequence can have in number of tokens.
+
         max_position_embeddings (`int`, *optional*):
             The maximum model length, as defined by the model's `config.max_position_embeddings` attribute.
     """
 
-    def __init__(self, max_length: int, max_position_embeddings: Optional[int] = None):
+    def __init__(self, max_length: Union[int, List[int]], max_position_embeddings: Optional[int] = None):
         self.max_length = max_length
         self.max_position_embeddings = max_position_embeddings
 
     @add_start_docstrings(STOPPING_CRITERIA_INPUTS_DOCSTRING)
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor, **kwargs) -> torch.BoolTensor:
+        if isinstance(self.max_length, int):
+            batch_idx_max_lengths = [self.max_length] * input_ids.shape[0]
+        else:
+            batch_idx_max_lengths = self.max_length
+
+        if input_ids.shape[0] != len(batch_idx_max_lengths):
+            raise ValueError(
+                f"Batch size ({input_ids.shape[0]}) does not match the number of provided max lengths ({len(batch_idx_max_lengths)}). "
+                "Please set `max_length` to an integer to provide a unique max length for the entire batch, "
+                "or to a list of integers to provide a max length for each batch index."
+            )
+        
         cur_len = input_ids.shape[-1]
-        is_done = cur_len >= self.max_length
+        is_done = [cur_len >= max_length for max_length in batch_idx_max_lengths]
         if self.max_position_embeddings is not None and not is_done and cur_len >= self.max_position_embeddings:
             logger.warning_once(
                 "This is a friendly reminder - the current text generation call will exceed the model's predefined "
                 f"maximum length ({self.max_position_embeddings}). Depending on the model, you may observe "
                 "exceptions, performance degradation, or nothing at all."
             )
-        return torch.full((input_ids.shape[0],), is_done, device=input_ids.device, dtype=torch.bool)
+        return torch.tensor(is_done, device=input_ids.device, dtype=torch.bool)
 
 
 class MaxTimeCriteria(StoppingCriteria):

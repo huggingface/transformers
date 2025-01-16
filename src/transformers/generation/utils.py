@@ -954,7 +954,7 @@ class GenerationMixin:
         if (
             generation_config.min_length is not None
             and generation_config._eos_token_tensor is not None
-            and generation_config.min_length > 0
+            and min(generation_config.min_length) > 0
         ):
             processors.append(
                 MinLengthLogitsProcessor(
@@ -1390,7 +1390,7 @@ class GenerationMixin:
                 " generate arguments will also show up in this list)"
             )
 
-    def _validate_generated_length(self, generation_config, input_ids_length, has_default_max_length):
+    def _validate_generated_length(self, generation_config, input_ids_length, has_default_max_length, batch_size):
         """Performs validation related to the resulting generated length"""
 
         # Can't throw warnings/exceptions during compilation
@@ -1398,19 +1398,27 @@ class GenerationMixin:
             return
 
         # 1. Max length warnings related to poor parameterization
-        if has_default_max_length and generation_config.max_new_tokens is None and generation_config.max_length == 20:
+        is_unique_max_length = len(set(generation_config.max_length)) == 1
+        if has_default_max_length and generation_config.max_new_tokens is None and generation_config.max_length == [20] * batch_size:
             # 20 is the default max_length of the generation config
             warnings.warn(
-                f"Using the model-agnostic default `max_length` (={generation_config.max_length}) to control the "
+                f"Using the model-agnostic default `max_length` (={generation_config.max_length[0]}) to control the "
                 "generation length. We recommend setting `max_new_tokens` to control the maximum length of the "
                 "generation.",
                 UserWarning,
             )
-        if input_ids_length >= generation_config.max_length:
+        if len(generation_config.max_length) != batch_size:
+            raise ValueError(
+                f"Batch size ({batch_size}) does not match the number of provided max lengths ({len(generation_config.max_length)}). "
+                "Please set `max_length` to an integer to provide a unique max length for the entire batch, "
+                "or to a list of integers to provide a max length for each batch index."
+            )
+        if input_ids_length >= min(generation_config.max_length):
             input_ids_string = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
+            max_length_string = generation_config.max_length[0] if is_unique_max_length else generation_config.max_length
             raise ValueError(
                 f"Input length of {input_ids_string} is {input_ids_length}, but `max_length` is set to"
-                f" {generation_config.max_length}. This can lead to unexpected behavior. You should consider"
+                f" {max_length_string}. This can lead to unexpected behavior. You should consider"
                 " increasing `max_length` or, better yet, setting `max_new_tokens`."
             )
 
@@ -1419,23 +1427,68 @@ class GenerationMixin:
             " Generation will stop at the defined maximum length. You should decrease the minimum length and/or "
             "increase the maximum length."
         )
+        
         if has_default_max_length:
             min_length_error_suffix += (
-                f" Note that `max_length` is set to {generation_config.max_length}, its default value."
+                f" Note that `max_length` is set to {generation_config.max_length[0]}, its default value."
             )
-        if generation_config.min_length is not None and generation_config.min_length > generation_config.max_length:
+        if generation_config.min_length is not None and any([min_length > max_length for min_length, max_length in zip(generation_config.min_length, generation_config.max_length)]):
+            # Construct error message based on whether min/max lengths are unique across batch
+            is_unique_min_length = len(set(generation_config.min_length)) == 1
+            if is_unique_min_length and is_unique_max_length:
+                error_msg = (
+                    f"Unfeasible length constraints: `min_length` ({generation_config.min_length[0]}) is larger than "
+                    f"the maximum possible length ({generation_config.max_length[0]})."
+                )
+            elif is_unique_min_length:
+                error_msg = (
+                    f"Unfeasible length constraints: `min_length` ({generation_config.min_length[0]}) is larger than "
+                    f"one of the per batch index maximum possible lengths provided in `max_length`."
+                )
+            elif is_unique_max_length:
+                error_msg = (
+                    f"Unfeasible length constraints: one of the per batch index `min_length` values provided in `min_length` is larger than "
+                    f"the maximum possible length ({generation_config.max_length[0]})."
+                )
+            else:
+                error_msg = (
+                    f"Unfeasible length constraints: one of the per batch index `min_length` values provided in `min_length` is larger than "
+                    f"one of the corresponding per batch index maximum possible lengths provided in `max_length`."
+                )
             warnings.warn(
-                f"Unfeasible length constraints: `min_length` ({generation_config.min_length}) is larger than"
-                f" the maximum possible length ({generation_config.max_length})." + min_length_error_suffix,
+                error_msg + min_length_error_suffix,
                 UserWarning,
             )
         if generation_config.min_new_tokens is not None:
-            min_length = generation_config.min_new_tokens + input_ids_length
-            if min_length > generation_config.max_length:
+            is_unique_min_new_tokens = len(set(generation_config.min_new_tokens)) == 1
+            per_batch_idx_min_length = [min_new_tokens + input_ids_length for min_new_tokens in generation_config.min_new_tokens]
+            if any([min_length > max_length for min_length, max_length in zip(per_batch_idx_min_length, generation_config.max_length)]):
+                if is_unique_min_new_tokens and is_unique_max_length:
+                    error_msg = (
+                        f"Unfeasible length constraints: `min_new_tokens` ({generation_config.min_new_tokens[0]}), when"
+                        f"added to the prompt length ({input_ids_length}), is larger than"
+                        f"the maximum possible length ({generation_config.max_length[0]})."
+                    )
+                elif is_unique_min_new_tokens:
+                    error_msg = (
+                        f"Unfeasible length constraints: `min_new_tokens` ({generation_config.min_new_tokens[0]}), when"
+                        f"added to the prompt length ({input_ids_length}), is larger than"
+                        f"one of the per batch index maximum possible lengths provided in `max_length`."
+                    )
+                elif is_unique_max_length:
+                    error_msg = (
+                        f"Unfeasible length constraints: one of the per batch index `min_new_tokens` values provided in `min_new_tokens`, when"
+                        f"added to the prompt length ({input_ids_length}), is larger than"
+                        f"the maximum possible length ({generation_config.max_length[0]})."
+                    )
+                else:
+                    error_msg = (
+                        f"Unfeasible length constraints: one of the per batch index `min_new_tokens` values provided in `min_new_tokens`, when"
+                        f"added to the prompt length ({input_ids_length}), is larger than"
+                        f"one of the corresponding per batch index maximum possible lengths provided in `max_length`."
+                    )
                 warnings.warn(
-                    f"Unfeasible length constraints: `min_new_tokens` ({generation_config.min_new_tokens}), when "
-                    f"added to the prompt length ({input_ids_length}), is larger than"
-                    f" the maximum possible length ({generation_config.max_length})." + min_length_error_suffix,
+                    error_msg + min_length_error_suffix,
                     UserWarning,
                 )
 
@@ -1447,8 +1500,17 @@ class GenerationMixin:
         model_input_name,
         input_ids_length,
         inputs_tensor,
+        batch_size,
     ):
         """Prepared max and min length in generation configs to avoid clashes between similar attributes"""
+        if isinstance(generation_config.max_length, int):
+            generation_config.max_length = [generation_config.max_length] * batch_size    
+        if isinstance(generation_config.min_length, int):
+            generation_config.min_length = [generation_config.min_length] * batch_size
+        if isinstance(generation_config.max_new_tokens, int):
+            generation_config.max_new_tokens = [generation_config.max_new_tokens] * batch_size
+        if isinstance(generation_config.min_new_tokens, int):
+            generation_config.min_new_tokens = [generation_config.min_new_tokens] * batch_size
 
         if generation_config.max_new_tokens is not None:
             if not has_default_max_length and generation_config.max_length is not None:
@@ -1458,8 +1520,8 @@ class GenerationMixin:
                     "Please refer to the documentation for more information. "
                     "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
                 )
-            generation_config.max_length = generation_config.max_new_tokens + input_ids_length
-
+            generation_config.max_length = [max_new_tokens + input_ids_length for max_new_tokens in generation_config.max_new_tokens]
+      
         # if both `inputs_embeds` and `input_ids` are passed, we do not correct the length
         # otherwise we need total length [inputs-embeds-len + new-tokens-len] to not go beyond indicated `max_length``
         elif (
@@ -1468,13 +1530,13 @@ class GenerationMixin:
             and input_ids_length != 0
             and not self.config.is_encoder_decoder
         ):
-            generation_config.max_length -= inputs_tensor.shape[1]
+            generation_config.max_length = [max_length - inputs_tensor.shape[1] for max_length in generation_config.max_length]
         elif has_default_max_length:  # by default let's always generate 20 new tokens
-            if generation_config.max_length == GenerationConfig().max_length:
-                generation_config.max_length = generation_config.max_length + input_ids_length
+            if generation_config.max_length == [GenerationConfig().max_length] * batch_size:
+                generation_config.max_length = [max_length + input_ids_length for max_length in generation_config.max_length]
                 max_position_embeddings = getattr(self.config, "max_position_embeddings", None)
                 if max_position_embeddings is not None:
-                    generation_config.max_length = min(generation_config.max_length, max_position_embeddings)
+                    generation_config.max_length = [min(max_length, max_position_embeddings) for max_length in generation_config.max_length]
 
         # same for min length
         if generation_config.min_new_tokens is not None:
@@ -1485,14 +1547,14 @@ class GenerationMixin:
                     "Please refer to the documentation for more information. "
                     "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
                 )
-            generation_config.min_length = generation_config.min_new_tokens + input_ids_length
-
+            generation_config.min_length = [min_new_tokens + input_ids_length for min_new_tokens in generation_config.min_new_tokens]
+    
         elif (
             model_input_name == "inputs_embeds"
             and input_ids_length != inputs_tensor.shape[1]
             and not self.config.is_encoder_decoder
         ):
-            generation_config.min_length = max(generation_config.min_length - inputs_tensor.shape[1], 0)
+            generation_config.min_length = [max(min_length - inputs_tensor.shape[1], 0) for min_length in generation_config.min_length]
 
         return generation_config
 
@@ -2097,6 +2159,7 @@ class GenerationMixin:
             model_input_name=model_input_name,
             inputs_tensor=inputs_tensor,
             input_ids_length=input_ids_length,
+            batch_size=batch_size,
         )
 
         # If the model supports `num_logits_to_keep` in forward(), set it to 1 to avoid computing the whole
@@ -2105,7 +2168,7 @@ class GenerationMixin:
         if self._supports_num_logits_to_keep() and "num_logits_to_keep" not in model_kwargs:
             model_kwargs["num_logits_to_keep"] = 1
 
-        self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
+        self._validate_generated_length(generation_config, input_ids_length, has_default_max_length, batch_size)
 
         # 7. Prepare the cache.
         # - `model_kwargs` may be updated in place with a cache as defined by the parameters in `generation_config`.
@@ -2114,7 +2177,7 @@ class GenerationMixin:
         # TODO (joao): remove `user_defined_cache` after v4.47 (remove default conversion to legacy format)
         cache_name = "past_key_values" if "mamba" not in self.__class__.__name__.lower() else "cache_params"
         user_defined_cache = model_kwargs.get(cache_name)
-        max_cache_length = generation_config.max_length
+        max_cache_length = max(generation_config.max_length)
         if (
             inputs_tensor.shape[1] != input_ids_length
             and model_input_name == "inputs_embeds"
@@ -3208,7 +3271,7 @@ class GenerationMixin:
         output_scores = generation_config.output_scores
         output_logits = generation_config.output_logits
         return_dict_in_generate = generation_config.return_dict_in_generate
-        max_length = generation_config.max_length
+        max_length = max(generation_config.max_length)
         has_eos_stopping_criteria = any(hasattr(criteria, "eos_token_id") for criteria in stopping_criteria)
         do_sample = generation_config.do_sample
 
