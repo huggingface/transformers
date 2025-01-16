@@ -954,7 +954,7 @@ class GenerationMixin:
         if (
             generation_config.min_length is not None
             and generation_config._eos_token_tensor is not None
-            and generation_config.min_length > 0
+            and min(generation_config.min_length) > 0
         ):
             processors.append(
                 MinLengthLogitsProcessor(
@@ -2159,6 +2159,7 @@ class GenerationMixin:
             model_input_name=model_input_name,
             inputs_tensor=inputs_tensor,
             input_ids_length=input_ids_length,
+            batch_size=batch_size,
         )
 
         # If the model supports `num_logits_to_keep` in forward(), set it to 1 to avoid computing the whole
@@ -2167,7 +2168,7 @@ class GenerationMixin:
         if self._supports_num_logits_to_keep() and "num_logits_to_keep" not in model_kwargs:
             model_kwargs["num_logits_to_keep"] = 1
 
-        self._validate_generated_length(generation_config, input_ids_length, has_default_max_length)
+        self._validate_generated_length(generation_config, input_ids_length, has_default_max_length, batch_size)
 
         # 7. Prepare the cache.
         # - `model_kwargs` may be updated in place with a cache as defined by the parameters in `generation_config`.
@@ -2176,7 +2177,7 @@ class GenerationMixin:
         # TODO (joao): remove `user_defined_cache` after v4.47 (remove default conversion to legacy format)
         cache_name = "past_key_values" if "mamba" not in self.__class__.__name__.lower() else "cache_params"
         user_defined_cache = model_kwargs.get(cache_name)
-        max_cache_length = generation_config.max_length
+        max_cache_length = max(generation_config.max_length)
         if (
             inputs_tensor.shape[1] != input_ids_length
             and model_input_name == "inputs_embeds"
@@ -3270,7 +3271,7 @@ class GenerationMixin:
         output_scores = generation_config.output_scores
         output_logits = generation_config.output_logits
         return_dict_in_generate = generation_config.return_dict_in_generate
-        max_length = generation_config.max_length
+        max_length = max(generation_config.max_length)
         has_eos_stopping_criteria = any(hasattr(criteria, "eos_token_id") for criteria in stopping_criteria)
         do_sample = generation_config.do_sample
 
