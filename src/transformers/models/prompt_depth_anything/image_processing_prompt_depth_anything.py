@@ -51,7 +51,7 @@ if is_torch_available():
     import torch
 
 if is_vision_available():
-    import PIL
+    pass
 
 
 logger = logging.get_logger(__name__)
@@ -414,36 +414,21 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
                     ensure_multiple_of=ensure_multiple_of,
                     input_data_format=input_data_format,
                 )
-            
+
             if do_rescale:
-                image = self.rescale(
-                    image=image,
-                    scale=rescale_factor,
-                    input_data_format=input_data_format
-                )
+                image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
 
             if do_normalize:
                 image = self.normalize(
-                    image=image,
-                    mean=image_mean,
-                    std=image_std,
-                    input_data_format=input_data_format
+                    image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
                 )
 
             if do_pad:
-                image = self.pad_image(
-                    image=image,
-                    size_divisor=size_divisor,
-                    input_data_format=input_data_format
-                )
+                image = self.pad_image(image=image, size_divisor=size_divisor, input_data_format=input_data_format)
 
-            image = to_channel_dimension_format(
-                image,
-                data_format,
-                input_channel_dim=input_data_format
-            )
+            image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
             preprocessed_images.append(image)
-            
+
         images = preprocessed_images
 
         data = {"pixel_values": images}
@@ -459,7 +444,7 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
                 depth = depth * prompt_scale_to_meter
                 depth = depth[..., None].astype(np.float32)
                 depth = to_channel_dimension_format(depth, data_format, input_channel_dim=input_data_format)
-                
+
                 processed_prompt_depths.append(depth)
             prompt_depths = processed_prompt_depths
             data["prompt_depth"] = prompt_depths
