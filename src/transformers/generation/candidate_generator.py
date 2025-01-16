@@ -14,7 +14,7 @@
 # limitations under the License.
 
 import copy
-from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Optional, Tuple, Union, List
 
 import numpy as np
 import torch
@@ -277,11 +277,22 @@ class AssistedCandidateGenerator(CandidateGenerator):
 
                 self.assistant_model.generation_config.assistant_confidence_threshold = best_threshold
 
-    def _calculate_new_tokens(self, input_ids: torch.LongTensor) -> Tuple[int, int]:
+    def _calculate_new_tokens(self, input_ids: torch.LongTensor) -> Union[Tuple[int, int], Tuple[List[int], List[int]]]:
         """Calculate the minimum and maximum number of new tokens to generate."""
         new_cur_len = input_ids.shape[-1]
-        max_new_tokens = min(int(self.num_assistant_tokens), self.generation_config.max_length - new_cur_len - 1)
-        min_new_tokens = max(min(max_new_tokens, self.main_model_min_length - new_cur_len), 0)
+
+        max_length = self.generation_config.max_length
+        if isinstance(max_length, list):
+            max_new_tokens = [min(int(self.num_assistant_tokens), length - new_cur_len - 1) for length in max_length]
+        else:
+            max_new_tokens = min(int(self.num_assistant_tokens), max_length - new_cur_len - 1)
+        
+        min_length = self.main_model_min_length
+        if isinstance(min_length, list):
+            min_new_tokens = [max(min(max_new_tokens[i], length - new_cur_len - 1), 0) for i, length in enumerate(min_length)]
+        else:
+            min_new_tokens = max(min(max_new_tokens, min_length - new_cur_len), 0)
+
         return min_new_tokens, max_new_tokens
 
     def _update_past_and_masks(self, input_ids: torch.LongTensor, remove_from_pkv: int = 0) -> bool:
@@ -604,7 +615,15 @@ class AssistedCandidateGeneratorDifferentTokenizers(AssistedCandidateGenerator):
             new_target_ids = torch.cat([new_target_ids, new_target_ids_from_window], dim=-1)
 
         if hasattr(self.generation_config, "max_length"):
-            new_target_ids = new_target_ids[:, : self.generation_config.max_length]
+            if isinstance(self.generation_config.max_length, list):
+                pad_token_id = self.generation_config._pad_token_tensor
+                for batch_idx, length in enumerate(self.generation_config.max_length):
+                    new_target_ids[batch_idx] = torch.cat(
+                        new_target_ids[batch_idx, : length],
+                        torch.full((new_target_ids[batch_idx].shape[1] - length,), pad_token_id, device=new_target_ids.device.device),
+                    )
+            else:
+                new_target_ids = new_target_ids[:, : self.generation_config.max_length]
 
         return new_target_ids
 
@@ -620,9 +639,10 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
             The maximum ngram size to be considered for matching in the prompt
         num_output_tokens (`int`):
             The number of tokens to be output as candidate tokens.
-        max_length (`int`):
+        max_length (`Union[int, List[int]]`):
             The number of total maximum tokens that can be generated. For decoder-only models that includes the prompt length.
             Defaults to 20, which is the max length used as default in generation config.
+            It can be a single value (broadcasted to all batch indices) or a list of values (one per batch index).
     """
 
     def __init__(
@@ -630,11 +650,15 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
         eos_token_id: torch.Tensor = None,
         num_output_tokens: int = 10,
         max_matching_ngram_size: int = None,
-        max_length: int = 20,
+        max_length: Union[int, List[int]] = 20,
     ):
         self.num_output_tokens = num_output_tokens
         self.max_matching_ngram_size = max_matching_ngram_size if max_matching_ngram_size else 2
-        self.max_length = max_length
+
+        if isinstance(max_length, int):
+            self.max_length = [max_length]
+        else:
+            self.max_length = max_length
         self.eos_token_id = eos_token_id
 
         if self.max_matching_ngram_size <= 0 or self.num_output_tokens <= 0:
@@ -653,46 +677,58 @@ class PromptLookupCandidateGenerator(CandidateGenerator):
         """
         input_length = input_ids.size(1)
 
-        # Don't generate more than `max_length - 1` candidates since the target model generates one extra token.
-        if self.max_length == input_length + 1:
-            return input_ids, None
+        if len(self.max_length) == 1:
+            max_length = self.max_length * input_ids.shape[0]
+        elif len(self.max_length) != input_ids.shape[0]:
+            raise ValueError(
+                f"The number of batch indices ({input_ids.shape[0]}) does not match the number of per-batch-index max lengths ({len(self.max_length)}) provided to `PromptLookupCandidateGenerator`."
+            )
+        else:
+            max_length = self.max_length
 
-        chosen_ids = None
-        match_found = False
-        for ngram_size in range(min(self.max_matching_ngram_size, input_length - 1), 0, -1):
-            # Create sliding windows of size ngram_size
-            windows = input_ids.unfold(dimension=1, size=ngram_size, step=1)
+        batch_idx_chosen_ids = []
+        for batch_idx, length in enumerate(max_length):
+            # Don't generate more than `max_length - 1` candidates since the target model generates one extra token.
+            if length == input_length + 1:
+                batch_idx_chosen_ids.append(batch_idx)
+                return input_ids, None
 
-            # Convert ngram to a tensor for comparison
-            ngram_tensor = input_ids[0, -ngram_size:]
+            chosen_ids = None
+            match_found = False
+            for ngram_size in range(min(self.max_matching_ngram_size, input_length - 1), 0, -1):
+                # Create sliding windows of size ngram_size
+                windows = input_ids.unfold(dimension=1, size=ngram_size, step=1)
 
-            # Find where the windows match the ngram
-            matches = (windows == ngram_tensor).all(dim=2)
+                # Convert ngram to a tensor for comparison
+                ngram_tensor = input_ids[0, -ngram_size:]
 
-            # Get the indices of matches
-            match_indices = matches.nonzero(as_tuple=True)[1]
+                # Find where the windows match the ngram
+                matches = (windows == ngram_tensor).all(dim=2)
 
-            # Iterate through match indices to find a valid continuation
-            for idx in match_indices:
-                start_idx = idx + ngram_size
-                end_idx = start_idx + self.num_output_tokens
-                end_idx = min(end_idx, input_length, self.max_length)
+                # Get the indices of matches
+                match_indices = matches.nonzero(as_tuple=True)[1]
 
-                if start_idx < end_idx:
-                    chosen_ids = input_ids[0, start_idx:end_idx]
-                    match_found = True
+                # Iterate through match indices to find a valid continuation
+                for idx in match_indices:
+                    start_idx = idx + ngram_size
+                    end_idx = start_idx + self.num_output_tokens
+                    end_idx = min(end_idx, input_length, self.max_length)
 
-                    # remove remaining candidate ids if an "eos" token is found, otherwise the target model may
-                    # accept eos and the rest as valid, thus not stopping generation after "eos"
-                    # NOTE: below code is written based on the fact that assisted decoding supports only bs=1
-                    mask = isin_mps_friendly(chosen_ids, self.eos_token_id)
-                    match_indices_eos = torch.nonzero(mask)
-                    if match_indices_eos.numel() > 0:
-                        first_eos_index = match_indices_eos[0].item()
-                        chosen_ids = chosen_ids[:first_eos_index]
+                    if start_idx < end_idx:
+                        chosen_ids = input_ids[0, start_idx:end_idx]
+                        match_found = True
+
+                        # remove remaining candidate ids if an "eos" token is found, otherwise the target model may
+                        # accept eos and the rest as valid, thus not stopping generation after "eos"
+                        # NOTE: below code is written based on the fact that assisted decoding supports only bs=1
+                        mask = isin_mps_friendly(chosen_ids, self.eos_token_id)
+                        match_indices_eos = torch.nonzero(mask)
+                        if match_indices_eos.numel() > 0:
+                            first_eos_index = match_indices_eos[0].item()
+                            chosen_ids = chosen_ids[:first_eos_index]
+                        break
+                if match_found:
                     break
-            if match_found:
-                break
 
         if chosen_ids is None or len(chosen_ids) == 0:
             # In case we didn't find a match return the input sequence unchanged, reverts back to autoregressive decoding
