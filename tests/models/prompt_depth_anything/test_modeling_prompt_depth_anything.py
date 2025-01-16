@@ -306,11 +306,12 @@ class PromptDepthAnythingModelIntegrationTest(unittest.TestCase):
                 )
                 image_processor = AutoImageProcessor.from_pretrained("depth-anything/prompt-depth-anything-vits-hf")
                 image = prepare_img()
-                inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
+                prompt_depth = prepare_prompt_depth()
+                inputs = image_processor(images=image, prompt_depth=prompt_depth, return_tensors="pt").to(torch_device)
 
                 exported_program = torch.export.export(
                     model,
-                    args=(inputs["pixel_values"],),
+                    args=(inputs["pixel_values"], inputs["prompt_depth"]),
                     strict=strict,
                 )
                 with torch.no_grad():
