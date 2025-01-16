@@ -740,7 +740,7 @@ class BloomModel(BloomPreTrainedModel):
         output_attentions: bool,
     ):
         if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and 0.0 in attention_mask:
+            if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
 
@@ -1362,3 +1362,13 @@ class BloomForQuestionAnswering(BloomPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "BloomForCausalLM",
+    "BloomModel",
+    "BloomPreTrainedModel",
+    "BloomForSequenceClassification",
+    "BloomForTokenClassification",
+    "BloomForQuestionAnswering",
+]
