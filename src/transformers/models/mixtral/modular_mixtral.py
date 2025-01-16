@@ -46,6 +46,7 @@ from ..mistral.modeling_mistral import (
     MistralForTokenClassification,
     MistralModel,
     MistralRMSNorm,
+    MistralPreTrainedModel,
 )
 from .configuration_mixtral import MixtralConfig
 
@@ -311,6 +312,10 @@ class MixtralDecoderLayer(nn.Module):
             outputs += (router_logits,)
 
         return outputs
+
+
+class MixtralPreTrainedModel(MistralPreTrainedModel):
+    _supports_static_cache = False
 
 
 class MixtralModel(MistralModel):

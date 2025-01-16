@@ -4254,10 +4254,6 @@ class ModelTesterMixin:
 
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
             inputs_dict = self._prepare_for_class(inputs_dict, model_class)
-            if config.model_type in ["llava", "llava_next", "vipllava", "video_llava"]:
-                self.skipTest(
-                    reason="Llava-like models currently (transformers==4.39.1) requires an attention_mask input"
-                )
             if config.model_type in ["paligemma"]:
                 self.skipTest(
                     "PaliGemma-like models currently (transformers==4.41.0) requires an attention_mask input"

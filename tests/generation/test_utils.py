@@ -2061,11 +2061,17 @@ class GenerationTesterMixin:
             model = model_class(config).to(torch_device)
             model.eval()  # otherwise `self.training` is `True` -- this flag is used at attn mask creation time
 
-            input_ids = inputs_dict["input_ids"].to(torch_device)
             # creates two sets of *different* inputs with the same shape
-            half_batch_size = input_ids.shape[0] // 2
-            input_ids_sets = [input_ids[:half_batch_size, :], input_ids[half_batch_size : half_batch_size * 2, :]]
-            self.assertTrue(input_ids_sets[0].shape == input_ids_sets[1].shape)
+            half_batch_size = self.model_tester.batch_size // 2
+            inputs_dict_1 = {k: v[:half_batch_size, ...] for k, v in inputs_dict.items() if "head_mask" not in k}
+            inputs_dict_2 = {
+                k: v[half_batch_size : half_batch_size * 2, ...]
+                for k, v in inputs_dict.items()
+                if "head_mask" not in k
+            }
+            self.assertTrue(
+                inputs_dict_1[model_class.main_input_name].shape == inputs_dict_2[model_class.main_input_name].shape
+            )
 
             generation_kwargs = {
                 "do_sample": False,
@@ -2077,8 +2083,8 @@ class GenerationTesterMixin:
 
             # get eager + dynamic cache results for future comparison
             dynamic_outputs = []
-            for model_inputs in input_ids_sets:
-                dynamic_outputs.append(model.generate(model_inputs, **generation_kwargs))
+            for model_inputs in [inputs_dict_1, inputs_dict_2]:
+                dynamic_outputs.append(model.generate(**model_inputs, **generation_kwargs))
 
             # get compiled results
             generation_config = copy.deepcopy(model.generation_config)
@@ -2088,8 +2094,8 @@ class GenerationTesterMixin:
             model.forward = torch.compile(model.forward, fullgraph=True, mode="reduce-overhead")
 
             compiled_outputs = []
-            for model_inputs in input_ids_sets:
-                compiled_outputs.append(model.generate(model_inputs, generation_config=generation_config))
+            for model_inputs in [inputs_dict_1, inputs_dict_2]:
+                compiled_outputs.append(model.generate(**model_inputs, generation_config=generation_config))
 
             for dynamic_result, compiled_result in zip(dynamic_outputs, compiled_outputs):
                 self._check_similar_generate_outputs(dynamic_result, compiled_result)
