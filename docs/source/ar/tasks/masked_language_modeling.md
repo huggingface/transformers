@@ -97,7 +97,7 @@ pip install transformers datasets evaluate
 >>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilroberta-base")
 ```
 
-ستلاحظ من المثال أعلاه، أن حقل `text` موجود بالفعل داخل `answers`. هذا يعني أنك ستحتاج إلى استخراج حقل `text` الفرعي من بنيته المضمنة باستخدام طريقة [`flatten`](https://huggingface.co/docs/datasets/process#flatten):
+ستلاحظ من المثال أعلاه، أن حقل `text` موجود بالفعل داخل `answers`. هذا يعني أنك ستحتاج إلى استخراج حقل `text` الفرعي من بنيته المضمنة باستخدام الدالة [`flatten`](https://huggingface.co/docs/datasets/process#flatten):
 
 ```py
 >>> eli5 = eli5.flatten()
