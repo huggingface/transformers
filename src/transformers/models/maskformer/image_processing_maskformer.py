@@ -963,6 +963,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
                 If set, will return tensors instead of NumPy arrays. If set to `'pt'`, return PyTorch `torch.Tensor`
                 objects.
+
             pad_size (`Dict[str, int]`, *optional*):
                 The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
                 provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest

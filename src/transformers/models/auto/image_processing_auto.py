@@ -105,7 +105,7 @@ else:
             ("llava_next", ("LlavaNextImageProcessor",)),
             ("llava_next_video", ("LlavaNextVideoImageProcessor",)),
             ("llava_onevision", ("LlavaOnevisionImageProcessor",)),
-            ("mask2former", ("Mask2FormerImageProcessor",)),
+            ("mask2former", ("Mask2FormerImageProcessor", "Mask2FormerImageProcessorFast")),
             ("maskformer", ("MaskFormerImageProcessor", "MaskFormerImageProcessorFast")),
             ("mgp-str", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("mllama", ("MllamaImageProcessor",)),

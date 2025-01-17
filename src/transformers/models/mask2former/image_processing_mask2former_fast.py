@@ -298,6 +298,10 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
             The background label will be replaced by `ignore_index`.
         num_labels (`int`, *optional*):
             The number of labels in the segmentation map.
+        pad_size (`Dict[str, int]`, *optional*):
+            The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
+            provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
+            height and width in the batch.
     """
 
     model_input_names = ["pixel_values", "pixel_mask"]
@@ -320,6 +324,7 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
         ignore_index: Optional[int] = None,
         do_reduce_labels: bool = False,
         num_labels: Optional[int] = None,
+        pad_size: Optional[Dict[str, int]] = None,
         **kwargs,
     ):
         # We make max_size a private attribute so we can pass it as a default value in the preprocess method whilst
@@ -342,6 +347,43 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
         self.ignore_index = ignore_index
         self.do_reduce_labels = do_reduce_labels
         self.num_labels = num_labels
+        self.pad_size = pad_size
+
+        self._valid_processor_keys = [
+            "images",
+            "segmentation_maps",
+            "instance_id_to_semantic_id",
+            "do_resize",
+            "size",
+            "size_divisor",
+            "resample",
+            "do_rescale",
+            "rescale_factor",
+            "do_normalize",
+            "image_mean",
+            "image_std",
+            "ignore_index",
+            "do_reduce_labels",
+            "pad_size",
+            "return_tensors",
+            "data_format",
+            "input_data_format",
+        ]
+
+    @classmethod
+    def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
+        """
+        Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
+        created using from_dict and kwargs e.g. `Mask2FormerImageProcessor.from_pretrained(checkpoint, max_size=800)`
+        """
+        image_processor_dict = image_processor_dict.copy()
+        if "max_size" in kwargs:
+            image_processor_dict["max_size"] = kwargs.pop("max_size")
+        if "size_divisibility" in kwargs:
+            image_processor_dict["size_divisor"] = kwargs.pop("size_divisibility")
+        if "reduce_labels" in image_processor_dict:
+            image_processor_dict["do_reduce_labels"] = image_processor_dict.pop("reduce_labels")
+        return super().from_dict(image_processor_dict, **kwargs)
 
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -443,7 +485,6 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
             image = F.normalize(image, image_mean, image_std)
         return image
 
-    @filter_out_non_signature_kwargs(extra=["device"])
     def preprocess(
         self,
         images: ImageInput,
@@ -950,13 +991,13 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
         return results
 
     def post_process():
-        raise NotImplementedError("Post-processing is not implemented for RT-DETR yet.")
+        raise NotImplementedError("Post-processing is not implemented for Mask2Former yet.")
 
     def post_process_instance():
-        raise NotImplementedError("Instance post-processing is not implemented for RT-DETR yet.")
+        raise NotImplementedError("Instance post-processing is not implemented for Mask2Former yet.")
 
     def post_process_panoptic():
-        raise NotImplementedError("Panoptic post-processing is not implemented for RT-DETR yet.")
+        raise NotImplementedError("Panoptic post-processing is not implemented for Mask2Former yet.")
 
 
 __all__ = ["Mask2FormerImageProcessorFast"]
