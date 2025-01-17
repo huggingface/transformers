@@ -205,15 +205,23 @@ class EvollaProcessor(ProcessorMixin):
             An instance of [`EsmTokenizer`]. The protein tokenizer is a required input.
         tokenizer (`LlamaTokenizerFast`):
             An instance of [`LlamaTokenizerFast`]. The tokenizer is a required input.
-        sequence_max_length (`int`, *optional*, defaults to 1024):
+        protein_max_length (`int`, *optional*, defaults to 1024):
             The maximum length of the sequence to be generated.
+        text_max_length (`int`, *optional*, defaults to 512):
+            The maximum length of the text to be generated.
     """
     attributes = ["protein_tokenizer", "tokenizer"]
     valid_kwargs = ["sequence_max_length"]
     protein_tokenizer_class = "EsmTokenizer"
     tokenizer_class = "LlamaTokenizerFast"
 
-    def __init__(self, protein_tokenizer, tokenizer=None, sequence_max_length=None, **kwargs):
+    def __init__(
+            self, 
+            protein_tokenizer, 
+            tokenizer=None, 
+            protein_max_length=1024, 
+            text_max_length=512,
+            **kwargs):
         if protein_tokenizer is None:
             raise ValueError("You need to specify an `protein_tokenizer`.")
         if tokenizer is None:
@@ -222,8 +230,10 @@ class EvollaProcessor(ProcessorMixin):
         super().__init__(protein_tokenizer, tokenizer)
 
         self.tokenizer.pad_token = "<|reserved_special_token_0|>"
+        self.protein_max_length = protein_max_length
+        self.text_max_length = text_max_length
 
-    def process_proteins(self, proteins):
+    def process_proteins(self, proteins, protein_max_length=1024):
 
         sa_sequences = []
         for protein in proteins:
@@ -234,14 +244,14 @@ class EvollaProcessor(ProcessorMixin):
             sa_sequences.append(sa_sequence)
 
         sa_tokens = self.protein_tokenizer.batch_encode_plus(
-            sa_sequences, return_tensors="pt", truncation=True, max_length=1026, padding=True
+            sa_sequences, return_tensors="pt", truncation=True, max_length=protein_max_length, padding=True
         )
         return sa_tokens
 
     def process_text(
             self, 
             texts,
-            max_length: int = 512,
+            text_max_length: int = 512,
         ):
         prompts = []
         for messages in texts:
@@ -258,7 +268,7 @@ class EvollaProcessor(ProcessorMixin):
             return_tensors="pt",
             padding="longest",
             truncation=True,
-            max_length=max_length,
+            max_length=text_max_length,
         )
         return prompt_inputs
 
@@ -266,6 +276,8 @@ class EvollaProcessor(ProcessorMixin):
         self,
         proteins: Union[List[dict], dict] = None,
         messages_list: Union[List[List[dict]], List[dict]] = None,
+        protein_max_length: int = None,
+        text_max_length: int = None,
         **kwargs,
     ):
         r"""This method takes batched or non-batched proteins and messages_list and converts them into format that can be used by
@@ -280,6 +292,10 @@ class EvollaProcessor(ProcessorMixin):
                 A list of lists of dictionaries or a list of dictionaries containing the following keys:
                     - `"role"` (`str`) -- The role of the message.
                     - `"content"` (`str`) -- The content of the message.
+            protein_max_length (`int`, *optional*, defaults to 1024):
+                The maximum length of the sequence to be generated.
+            text_max_length (`int`, *optional*, defaults to 512):
+                The maximum length of the text.
         
         Return:
             a dict with following keys:
@@ -291,6 +307,9 @@ class EvollaProcessor(ProcessorMixin):
         # proteins and messages_list should be provided
         if proteins is None or messages_list is None:
             raise ValueError("You need to specify `messages_list` and `proteins`.")
+        
+        protein_max_length = protein_max_length if protein_max_length is not None else self.protein_max_length
+        text_max_length = text_max_length if text_max_length is not None else self.text_max_length
 
         # proteins should be List[dict]
         if isinstance(proteins, dict):
@@ -329,9 +348,9 @@ class EvollaProcessor(ProcessorMixin):
             raise ValueError(
                 f"The messages_list should be a list of lists of dictionaries, but it's {type(messages_list)}."
             )
-        sa_tokens = self.process_proteins(proteins)
+        sa_tokens = self.process_proteins(proteins, protein_max_length)
 
-        text_tokens = self.process_text(messages_list)
+        text_tokens = self.process_text(messages_list, text_max_length)
 
         return BatchFeature(
             data={
@@ -341,6 +360,19 @@ class EvollaProcessor(ProcessorMixin):
                 "text_attention_mask": text_tokens["attention_mask"],
             }
         )
+    
+    def batch_decode(self, *args, **kwargs):
+        return self.tokenizer.batch_decode(*args, **kwargs)
+    
+    def decode(self, *args, **kwargs):
+        return self.tokenizer.decode(*args, **kwargs)
+    
+    def protein_batch_decode(self, *args, **kwargs):
+        return self.protein_tokenizer.batch_decode(*args, **kwargs)
+    
+    def protein_decode(self, *args, **kwargs):
+        return self.protein_tokenizer.decode(*args, **kwargs)
+    
 
 class EvollaProcessor2(ProcessorMixin):
     r"""
