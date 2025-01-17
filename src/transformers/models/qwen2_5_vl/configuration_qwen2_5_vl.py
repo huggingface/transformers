@@ -34,7 +34,6 @@ class Qwen25VisionConfig(PretrainedConfig):
     def __init__(
         self,
         depth=32,
-        embed_dim=1280,
         hidden_size=3584,
         hidden_act="silu",
         intermediate_size=3420,
@@ -52,7 +51,6 @@ class Qwen25VisionConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
         self.depth = depth
-        self.embed_dim = embed_dim
         self.hidden_size = hidden_size
         self.hidden_act = hidden_act
         self.intermediate_size = intermediate_size
