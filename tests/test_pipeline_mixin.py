@@ -29,6 +29,7 @@ from huggingface_hub import (
     AudioClassificationInput,
     AutomaticSpeechRecognitionInput,
     DepthEstimationInput,
+    DocumentQuestionAnsweringInput,
     ImageClassificationInput,
     ImageSegmentationInput,
     ImageToTextInput,
@@ -43,6 +44,7 @@ from transformers.pipelines import (
     AudioClassificationPipeline,
     AutomaticSpeechRecognitionPipeline,
     DepthEstimationPipeline,
+    DocumentQuestionAnsweringPipeline,
     ImageClassificationPipeline,
     ImageSegmentationPipeline,
     ImageToTextPipeline,
@@ -131,6 +133,7 @@ task_to_pipeline_and_spec_mapping = {
     "audio-classification": (AudioClassificationPipeline, AudioClassificationInput),
     "automatic-speech-recognition": (AutomaticSpeechRecognitionPipeline, AutomaticSpeechRecognitionInput),
     "depth-estimation": (DepthEstimationPipeline, DepthEstimationInput),
+    "document-question-answering": (DocumentQuestionAnsweringPipeline, DocumentQuestionAnsweringInput),
     "image-classification": (ImageClassificationPipeline, ImageClassificationInput),
     "image-segmentation": (ImageSegmentationPipeline, ImageSegmentationInput),
     "image-to-text": (ImageToTextPipeline, ImageToTextInput),
@@ -930,7 +933,7 @@ def parse_args_from_docstring_by_indentation(docstring):
 
 
 def compare_pipeline_args_to_hub_spec(pipeline_class, hub_spec):
-    ALLOWED_TRANSFORMERS_ONLY_ARGS = ["timeout"]
+    ALLOWED_TRANSFORMERS_ONLY_ARGS = ["timeout", "tesseract_config"]
 
     docstring = inspect.getdoc(pipeline_class.__call__).strip()
     docstring_args = set(parse_args_from_docstring_by_indentation(docstring))

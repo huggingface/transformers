@@ -267,7 +267,6 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
             - **end** (`int`) -- The end word index of the answer (in the OCR'd version of the input or provided
               `word_boxes`).
             - **answer** (`str`) -- The answer to the question.
-            - **words** (`list[int]`) -- The index of each word/box pair that is in the answer
         """
         if isinstance(question, str):
             inputs = {"question": question, "image": image}

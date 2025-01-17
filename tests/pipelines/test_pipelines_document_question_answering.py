@@ -14,10 +14,13 @@
 
 import unittest
 
+from huggingface_hub import DocumentQuestionAnsweringOutputElement
+
 from transformers import MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING, AutoTokenizer, is_vision_available
 from transformers.pipelines import DocumentQuestionAnsweringPipeline, pipeline
 from transformers.pipelines.document_question_answering import apply_tesseract
 from transformers.testing_utils import (
+    compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
     nested_simplify,
     require_detectron2,
@@ -111,6 +114,9 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
             ]
             * 3,
         )
+        for output in outputs:
+            for single_output in output:
+                compare_pipeline_output_to_hub_spec(single_output, DocumentQuestionAnsweringOutputElement)
 
     @require_torch
     @require_detectron2
@@ -128,9 +134,13 @@ class DocumentQuestionAnsweringPipelineTests(unittest.TestCase):
         ]
         outputs = dqa_pipeline(image=image, question=question, top_k=2)
         self.assertEqual(nested_simplify(outputs, decimals=4), expected_output)
+        for single_output in outputs:
+            compare_pipeline_output_to_hub_spec(single_output, DocumentQuestionAnsweringOutputElement)
 
         outputs = dqa_pipeline({"image": image, "question": question}, top_k=2)
         self.assertEqual(nested_simplify(outputs, decimals=4), expected_output)
+        for single_output in outputs:
+            compare_pipeline_output_to_hub_spec(single_output, DocumentQuestionAnsweringOutputElement)
 
         # This image does not detect ANY text in it, meaning layoutlmv2 should fail.
         # Empty answer probably
