@@ -41,8 +41,8 @@
       title: الإجابة على الأسئلة
 #     - local: tasks/language_modeling
 #       title: نمذجة اللغة السببية
-#     - local: tasks/masked_language_modeling
-#       title: نمذجة اللغة المقنعة
+    - local: tasks/masked_language_modeling
+      title: نمذجة اللغة المقنعة
     - local: tasks/translation
       title: الترجمة
     - local: tasks/summarization
