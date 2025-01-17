@@ -103,11 +103,6 @@ class Cohere2ModelTest(CohereModelTest, unittest.TestCase):
     def test_dola_decoding_sample(self):
         pass
 
-    @parameterized.expand([(1, False), (1, True), (4, False)])
-    @unittest.skip("Cohere2 has HybridCache and doesn't support old tuple format at all")
-    def test_new_cache_format(self, num_beams, do_sample):
-        pass
-
     @unittest.skip("Cohere2 has HybridCache and doesn't support continue from past kv")
     def test_generate_continue_from_past_key_values(self):
         pass
