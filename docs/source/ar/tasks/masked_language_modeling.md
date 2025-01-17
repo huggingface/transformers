@@ -1,17 +1,12 @@
-<!-- حقوق النشر 2023 فريق HuggingFace. جميع الحقوق محفوظة.
-
-مرخص بموجب رخصة أباتشي، الإصدار 2.0 (الرخصة)؛ لا يجوز لك استخدام هذا الملف إلا بالتوافق مع
-الرخصة. يمكنك الحصول على نسخة من الرخصة على
-
+<!--Copyright 2022 The HuggingFace Team. All rights reserved.
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
+the License. You may obtain a copy of the License at
 http://www.apache.org/licenses/LICENSE-2.0
-
-ما لم يتطلب القانون المعمول به أو يتم الاتفاق عليه كتابيًا، يتم توزيع البرامج الموزعة بموجب الرخصة على
-أساس "كما هي" دون أي ضمانات أو شروط من أي نوع، سواء كانت صريحة أو ضمنية. راجع الرخصة للحصول على
-اللغة المحددة التي تحكم الأذونات والقيود بموجب الرخصة.
-
-⚠️ لاحظ أن هذا الملف هو في Markdown ولكنه يحتوي على بناء جملة محدد لمُنشئ المستندات لدينا (يشبه MDX) والذي قد لا يتم
-تصييره بشكل صحيح في عارض Markdown الخاص بك.
-
+Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on
+an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the
+specific language governing permissions and limitations under the License.
+⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be
+rendered properly in your Markdown viewer.
 -->
 
 # نمذجة اللغة المقنعة (Masked language modeling)
