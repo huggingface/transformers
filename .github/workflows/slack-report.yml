@@ -21,13 +21,6 @@ on:
       ci_event:
         required: true
         type: string
-      report_repo_id:
-        required: false
-        type: string
-      upload_report_summary:
-        required: false
-        type: boolean
-        default: false
 
 env:
   TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN: ${{ secrets.TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN }}
@@ -54,8 +47,6 @@ jobs:
           CI_SLACK_CHANNEL_ID_DAILY: ${{ secrets.CI_SLACK_CHANNEL_ID_DAILY }}
           CI_SLACK_CHANNEL_DUMMY_TESTS: ${{ secrets.CI_SLACK_CHANNEL_DUMMY_TESTS }}
           SLACK_REPORT_CHANNEL: ${{ inputs.slack_report_channel }}
-          REPORT_REPO_ID: ${{ inputs.report_repo_id }}
-          UPLOAD_REPORT_SUMMARY: ${{ inputs.upload_report_summary }}
           ACCESS_REPO_INFO_TOKEN: ${{ secrets.ACCESS_REPO_INFO_TOKEN }}
           CI_EVENT: ${{ inputs.ci_event }}
           CI_SHA: ${{ github.sha }}

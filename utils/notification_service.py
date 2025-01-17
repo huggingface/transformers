@@ -26,7 +26,7 @@ from typing import Dict, List, Optional, Union
 
 import requests
 from get_ci_error_statistics import get_jobs
-from get_previous_daily_ci import get_last_daily_ci_reports, get_workflow_id
+from get_previous_daily_ci import get_last_daily_ci_reports
 from huggingface_hub import HfApi
 from slack_sdk import WebClient
 
@@ -108,13 +108,11 @@ class Message:
         ci_title: str,
         model_results: Dict,
         additional_results: Dict,
-        repo_id: str = "hf-internal-testing/transformers_daily_ci",
-        selected_warnings: Union[List, None] = None,
+        selected_warnings: List = None,
         prev_ci_artifacts=None,
     ):
         self.title = title
         self.ci_title = ci_title
-        self.repo_id = repo_id
 
         # Failures and success of the modeling tests
         self.n_model_success = sum(r["success"] for r in model_results.values())
@@ -535,11 +533,11 @@ class Message:
             commit_info = api.upload_file(
                 path_or_fileobj=file_path,
                 path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/new_model_failures.txt",
-                repo_id=self.repo_id,
+                repo_id="hf-internal-testing/transformers_daily_ci",
                 repo_type="dataset",
                 token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
             )
-            url = f"https://huggingface.co/datasets/{self.repo_id}/raw/{commit_info.oid}/{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/new_model_failures.txt"
+            url = f"https://huggingface.co/datasets/hf-internal-testing/transformers_daily_ci/raw/{commit_info.oid}/{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/new_model_failures.txt"
 
             # extra processing to save to json format
             new_failed_tests = {}
@@ -562,7 +560,7 @@ class Message:
             _ = api.upload_file(
                 path_or_fileobj=file_path,
                 path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/new_model_failures.json",
-                repo_id=self.repo_id,
+                repo_id="hf-internal-testing/transformers_daily_ci",
                 repo_type="dataset",
                 token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
             )
@@ -922,11 +920,6 @@ def prepare_reports(title, header, reports, to_truncate=True):
 
 if __name__ == "__main__":
     SLACK_REPORT_CHANNEL_ID = os.environ["SLACK_REPORT_CHANNEL"]
-    REPORT_REPO_ID = os.environ.get("REPORT_REPO_ID")
-    if not REPORT_REPO_ID:
-        REPORT_REPO_ID = "hf-internal-testing/transformers_daily_ci"
-    UPLOAD_REPORT_SUMMARY = os.environ.get("UPLOAD_REPORT_SUMMARY") == "true"
-    WORKFLOW_ID = "90575235"
 
     # runner_status = os.environ.get("RUNNER_STATUS")
     # runner_env_status = os.environ.get("RUNNER_ENV_STATUS")
@@ -1227,8 +1220,7 @@ if __name__ == "__main__":
         os.makedirs(os.path.join(os.getcwd(), f"ci_results_{job_name}"))
 
     target_workflow = "huggingface/transformers/.github/workflows/self-scheduled-caller.yml@refs/heads/main"
-    amd_target_workflow = "huggingface/transformers/.github/workflows/self-scheduled-amd-caller.yml@refs/heads/main"
-    is_scheduled_ci_run = os.environ.get("CI_WORKFLOW_REF") in [target_workflow, amd_target_workflow]
+    is_scheduled_ci_run = os.environ.get("CI_WORKFLOW_REF") == target_workflow
 
     # Only the model testing job is concerned: this condition is to avoid other jobs to upload the empty list as
     # results.
@@ -1241,7 +1233,7 @@ if __name__ == "__main__":
             api.upload_file(
                 path_or_fileobj=f"ci_results_{job_name}/model_results.json",
                 path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/model_results.json",
-                repo_id=REPORT_REPO_ID,
+                repo_id="hf-internal-testing/transformers_daily_ci",
                 repo_type="dataset",
                 token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
             )
@@ -1263,7 +1255,7 @@ if __name__ == "__main__":
             api.upload_file(
                 path_or_fileobj=f"ci_results_{job_name}/{test_to_result_name[job]}_results.json",
                 path_in_repo=f"{datetime.datetime.today().strftime('%Y-%m-%d')}/ci_results_{job_name}/{test_to_result_name[job]}_results.json",
-                repo_id=REPORT_REPO_ID,
+                repo_id="hf-internal-testing/transformers_daily_ci",
                 repo_type="dataset",
                 token=os.environ.get("TRANSFORMERS_CI_RESULTS_UPLOAD_TOKEN", None),
             )
@@ -1275,13 +1267,8 @@ if __name__ == "__main__":
             artifact_names = [f"ci_results_{job_name}"]
             output_dir = os.path.join(os.getcwd(), "previous_reports")
             os.makedirs(output_dir, exist_ok=True)
-            token = os.environ["ACCESS_REPO_INFO_TOKEN"]
-            workflow_id = get_workflow_id(token, os.environ["GITHUB_RUN_ID"])
             prev_ci_artifacts = get_last_daily_ci_reports(
-                artifact_names=artifact_names,
-                output_dir=output_dir,
-                token=token,
-                workflow_id=workflow_id,
+                artifact_names=artifact_names, output_dir=output_dir, token=os.environ["ACCESS_REPO_INFO_TOKEN"]
             )
 
     message = Message(
@@ -1289,7 +1276,6 @@ if __name__ == "__main__":
         ci_title,
         model_results,
         additional_results,
-        repo_id=REPORT_REPO_ID,
         selected_warnings=selected_warnings,
         prev_ci_artifacts=prev_ci_artifacts,
     )
