@@ -195,6 +195,18 @@ PROTEIN_VALID_KEYS = ["aa_seq", "foldseek", "msa"]
 
 class EvollaProcessor(ProcessorMixin):
     r"""
+    Constructs a EVOLLA processor which wraps a LLama tokenizer and SaProt tokenizer (EsmTokenizer) into a single processor.
+
+    [`EvollaProcessor`] offers all the functionalities of [`EsmTokenizer`] and [`LlamaTokenizerFast`]. See the
+    docstring of [`~EvollaProcessor.__call__`] and [`~EvollaProcessor.decode`] for more information.
+
+    Args:
+        protein_tokenizer (`EsmTokenizer`):
+            An instance of [`EsmTokenizer`]. The protein tokenizer is a required input.
+        tokenizer (`LlamaTokenizerFast`):
+            An instance of [`LlamaTokenizerFast`]. The tokenizer is a required input.
+        sequence_max_length (`int`, *optional*, defaults to 1024):
+            The maximum length of the sequence to be generated.
     """
     attributes = ["protein_tokenizer", "tokenizer"]
     valid_kwargs = ["sequence_max_length"]
@@ -252,10 +264,30 @@ class EvollaProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        proteins: Union[List[dict]] = None,
-        messages_list: Union[List[dict], List[List[dict]]] = None,
+        proteins: Union[List[dict], dict] = None,
+        messages_list: Union[List[List[dict]], List[dict]] = None,
         **kwargs,
     ):
+        r"""This method takes batched or non-batched proteins and messages_list and converts them into format that can be used by
+        the model.
+
+        Args:
+            proteins (`Union[List[dict], dict]`):
+                A list of dictionaries or a single dictionary containing the following keys:
+                    - `"aa_seq"` (`str`) -- The amino acid sequence of the protein.
+                    - `"foldseek"` (`str`) -- The foldseek string of the protein.
+            messages_list (`Union[List[List[dict]], List[dict]]`):
+                A list of lists of dictionaries or a list of dictionaries containing the following keys:
+                    - `"role"` (`str`) -- The role of the message.
+                    - `"content"` (`str`) -- The content of the message.
+        
+        Return:
+            a dict with following keys:
+                - `protein_input_ids` (`torch.Tensor` of shape `(batch_size, sequence_length)`) -- The input IDs for the protein sequence.
+                - `protein_attention_mask` (`torch.Tensor` of shape `(batch_size, sequence_length)`) -- The attention mask for the protein sequence.
+                - `text_input_ids` (`torch.Tensor` of shape `(batch_size, sequence_length)`) -- The input IDs for the text sequence.
+                - `text_attention_mask` (`torch.Tensor` of shape `(batch_size, sequence_length)`) -- The attention mask for the text sequence.
+        """
         # proteins and messages_list should be provided
         if proteins is None or messages_list is None:
             raise ValueError("You need to specify `messages_list` and `proteins`.")
