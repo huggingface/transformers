@@ -386,10 +386,16 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
         ignore_index (`int`, *optional*):
             Label to be assigned to background pixels in segmentation maps. If provided, segmentation map pixels
             denoted with 0 (background) will be replaced with `ignore_index`.
-        do_reduce_labels (`bool`, *optional*, defaults to `False`): <fill_docstring>
+        do_reduce_labels (`bool`, *optional*, defaults to `False`):
+            Whether or not to decrement all label values of segmentation maps by 1. Usually used for datasets where 0
+            is used for background, and background itself is not included in all classes of a dataset (e.g. ADE20k).
+            The background label will be replaced by `ignore_index`.
         num_labels (`int`, *optional*):
             The number of labels in the segmentation map.
-        pad_size (`Optional`, *optional*): <fill_docstring>
+        pad_size (`Dict[str, int]`, *optional*):
+            The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
+            provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
+            height and width in the batch.
 
     """
 

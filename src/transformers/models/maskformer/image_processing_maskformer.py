@@ -436,7 +436,10 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             The background label will be replaced by `ignore_index`.
         num_labels (`int`, *optional*):
             The number of labels in the segmentation map.
-        pad_size (`Optional`, *optional*): <fill_docstring>
+        pad_size (`Dict[str, int]`, *optional*):
+            The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
+            provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
+            height and width in the batch.
 
     """
 
