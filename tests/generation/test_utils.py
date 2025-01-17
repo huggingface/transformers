@@ -1229,7 +1229,7 @@ class GenerationTesterMixin:
                     "clvp",
                     "fuyu",
                     "mllama",  # special cache sizes
-                    "blip_2",  # overridden `generate()`
+                    "blip2",  # overridden `generate()`
                     "instructblip",
                     "instructblipvideo",
                 ]
@@ -1347,7 +1347,7 @@ class GenerationTesterMixin:
                     "seamlessm4t",
                     "clvp",
                     "mllama",  # special cache sizes
-                    "blip_2",  # overridden `generate()`
+                    "blip2",  # overridden `generate()`
                     "instructblip",
                     "instructblipvideo",
                 ]
@@ -1585,6 +1585,9 @@ class GenerationTesterMixin:
 
             # Encoder-Decoder checks
             if config.is_encoder_decoder:
+                # encoder-decoder models usually don't have text config
+                # below is needed only for Pix2Struct which we cannot modify now due to BC
+                config = config.get_text_config()
                 encoder_num_attention_heads = (
                     config.encoder_attention_heads
                     if hasattr(config, "encoder_attention_heads")
