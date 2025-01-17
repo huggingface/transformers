@@ -65,7 +65,7 @@ def chunk_iter(inputs, feature_extractor, chunk_len, stride_left, stride_right, 
         chunk_end_idx = chunk_start_idx + chunk_len
         chunk = inputs[chunk_start_idx:chunk_end_idx]
         processed = feature_extractor(
-            inputs,
+            chunk,
             sampling_rate=feature_extractor.sampling_rate,
             return_tensors="pt",
             return_attention_mask=True,
