@@ -180,7 +180,7 @@ class Zamba2HybridDynamicCache(DynamicCache):
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         # take any layer that contains cache and not empty tensor
         layer_idx = self.transformer_layers[0] if layer_idx not in self.transformer_layers else layer_idx
-        if len(self.key_cache) <= layer_idx:
+        if len(self.key_cache) <= layer_idx or self.key_cache[layer_idx].numel() == 0:
             return 0
         return self.key_cache[layer_idx].shape[-2]
 
@@ -1474,7 +1474,6 @@ class Zamba2Model(Zamba2PreTrainedModel):
             past_key_values = Zamba2HybridDynamicCache(self.config, batch_size, dtype=self.dtype, device=self.device)
 
         if cache_position is None:
-            # cache_position = torch.arange(hidden_states.shape[1], device=hidden_states.device)
             past_seen_tokens = (
                 past_key_values.get_seq_length(layer_idx=self.first_transformer_layer_id)
                 if past_key_values is not None
