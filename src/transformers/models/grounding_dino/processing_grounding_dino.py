@@ -271,7 +271,7 @@ class GroundingDinoProcessor(ProcessorMixin):
                 from the `input_ids` tensor provided in `outputs`.
 
         Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the 
+            `List[Dict]`: A list of dictionaries, each dictionary containing the
                 - **scores**: tensor of confidence scores for detected objects
                 - **boxes**: tensor of bounding boxes in [x0, y0, x1, y1] format
                 - **labels**: list of text labels for each detected object (will be replaced with integer ids in v4.51.0)
