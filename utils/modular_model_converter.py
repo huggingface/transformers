@@ -520,6 +520,12 @@ ASSIGNMENTS_TO_KEEP = {
     "_CHECKPOINT_FOR_DOC",
 }
 
+# Similar to the above list, but for regex patterns
+ASSIGNMENTS_REGEX_TO_KEEP = [
+    r"_CHECKPOINT_",
+    r"_EXPECTED_",
+    r"DOCSTRING",
+]
 
 class ClassDependencyMapper(CSTVisitor):
     """A visitor which is designed to analyze a single class node to get all its dependencies that are shared with the set of
@@ -833,7 +839,11 @@ class ModelFileMapper(ModuleMapper):
         big docstrings.
         """
         for assignment, node in assignments.items():
-            if assignment in ASSIGNMENTS_TO_KEEP or assignment not in self.assignments:
+            should_keep = assignment in ASSIGNMENTS_TO_KEEP or any(
+                re.search(pattern, assignment) for pattern in ASSIGNMENTS_REGEX_TO_KEEP
+            )
+
+            if should_keep or assignment not in self.assignments:
                 self.assignments[assignment] = node
                 if assignment in object_mapping:
                     self.object_dependency_mapping[assignment] = object_mapping[assignment]
