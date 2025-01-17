@@ -85,8 +85,10 @@ from .utils import (
     is_g2p_en_available,
     is_galore_torch_available,
     is_gguf_available,
+    is_gptqmodel_available,
     is_grokadamw_available,
     is_hadamard_available,
+    is_hqq_available,
     is_ipex_available,
     is_jieba_available,
     is_jinja_available,
@@ -1206,11 +1208,20 @@ def require_tensorboard(test_case):
     return unittest.skipUnless(is_tensorboard_available(), "test requires tensorboard")
 
 
-def require_auto_gptq(test_case):
+def require_gptq(test_case):
     """
     Decorator for auto_gptq dependency
     """
-    return unittest.skipUnless(is_auto_gptq_available(), "test requires auto-gptq")(test_case)
+    return unittest.skipUnless(
+        is_gptqmodel_available() or is_auto_gptq_available(), "test requires gptqmodel or auto-gptq"
+    )(test_case)
+
+
+def require_hqq(test_case):
+    """
+    Decorator for hqq dependency
+    """
+    return unittest.skipUnless(is_hqq_available(), "test requires hqq")(test_case)
 
 
 def require_auto_awq(test_case):
@@ -1431,14 +1442,20 @@ def set_model_tester_for_less_flaky_test(test_case):
         and target_num_hidden_layers is not None
     ):
         test_case.model_tester.vision_config = copy.deepcopy(test_case.model_tester.vision_config)
-        test_case.model_tester.vision_config["num_hidden_layers"] = target_num_hidden_layers
+        if isinstance(test_case.model_tester.vision_config, dict):
+            test_case.model_tester.vision_config["num_hidden_layers"] = 1
+        else:
+            test_case.model_tester.vision_config.num_hidden_layers = 1
     if (
         hasattr(test_case.model_tester, "text_config")
         and "num_hidden_layers" in test_case.model_tester.text_config
         and target_num_hidden_layers is not None
     ):
         test_case.model_tester.text_config = copy.deepcopy(test_case.model_tester.text_config)
-        test_case.model_tester.text_config["num_hidden_layers"] = target_num_hidden_layers
+        if isinstance(test_case.model_tester.text_config, dict):
+            test_case.model_tester.text_config["num_hidden_layers"] = 1
+        else:
+            test_case.model_tester.text_config.num_hidden_layers = 1
 
     # A few model class specific handling
 
