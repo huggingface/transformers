@@ -388,6 +388,8 @@ class Olmo2ForCausalLM(OlmoForCausalLM):
 
 As for the `RMSNorm`, it is exactly similar to the parent's in logic, so we do not have anything to do, the linter will all figure it out by itself. Almost disappointing, no?
 
+
+<a id="dependencies"></a>
 ### But... What about the MLP, RotaryEmbedding and PreTrainedModel classes?
 
 Indeed, if you inspect the file [modeling_olmo2.py](https://github.com/huggingface/transformers/blob/main/src/transformers/models/olmo2/modeling_olmo2.py) which is created by running the linter on `modular_olmo2.py`, you will notice that it also creates `Olmo2MLP`, `Olmo2RotaryEmbedding`, and `Olmo2PreTrainedModel` classes, that we did not define explicitly in `modular_olmo2.py`.  
@@ -592,7 +594,7 @@ However, we want to make it clear that the `**super_kwargs` syntax is not a repl
 
 ### The DOCSTRING variables
 
-Usually, if whatever object is defned both in the modular file and the modeling file from which we inherit, then the definition of the modular takes precedence. However, this is not the case for assignments containing the pattern `DOCSTRING`. Indeed, we usually have variables defined as `MODEL_START_DOCSTRING` and `MODEL_INPUT_DOCSTRING` in the modeling files. These are just very big blocks of, well, docstrings... But they are (almost) always exactly the same up to the model name! And modular automatically rewrite the names everywhere! For this reason, assignments containing the pattern will _always_ use the definition found in the source file instead of the modular file. This is extremely handy if we need the variable reference somewhere (e.g. to redefine a decorator) but we do not want to clutter the modular file with 100 lines of docstrings which are always the same. It allows to do the following (taken from [modular_starcoder2.py](LINK HERE))
+Usually, if whatever object is defned both in the modular file and the modeling file from which we inherit, then the definition of the modular takes precedence. However, this is not the case for assignments containing the pattern `DOCSTRING`. Indeed, we usually have variables defined as `MODEL_START_DOCSTRING` and `MODEL_INPUT_DOCSTRING` in the modeling files. These are just very big blocks of, well, docstrings... But they are (almost) always exactly the same up to the model name! And modular automatically rewrite the names everywhere! For this reason, assignments containing the pattern will _always_ use the definition found in the source file instead of the modular file. This is extremely handy if we need the variable reference somewhere (e.g. to redefine a decorator) but we do not want to clutter the modular file with 100 lines of docstrings which are always the same. It allows to do the following (taken from [modular_starcoder2.py](https://github.com/huggingface/transformers/blob/main/src/transformers/models/starcoder2/modular_starcoder2.py#L146))
 
 ```py
 STARCODER2_INPUTS_DOCSTRING = None  # will be automatically redefined
@@ -625,7 +627,7 @@ class MyModelDecoderLayer(LlamaDecoderLayer):
 
 is not recommended, first because it breaks standards in the library and we do not like it, and second because the linter will not know how to rename potential high-order dependencies (should we use `MyModelIncredible`, or `MyModel`?).
 
-If there are no dependencies to grab implicitly however (as was the case in section LINK SECTION HERE), local renaming (for a single class) will not be an issue and the linter will not complain. But make sure to explicitly redefine every other mentions of the class with the new name pattern! For example in the example above, all mentions of `LlamaMLP` in other modules inherited should be explicitly replaced by mentions to `MyModelIncredibleMLP`, otherwise the linter may add a new and unwanted `MyModelMLP` class!
+If there are no dependencies to grab implicitly however (see [this section](#dependencies) to understand implicit dependencies), local renaming (for a single class) will not be an issue and the linter will not complain. But make sure to explicitly redefine every other mentions of the class with the new name pattern! For example in the example above, all mentions of `LlamaMLP` in other modules inherited should be explicitly replaced by mentions to `MyModelIncredibleMLP`, otherwise the linter may add a new and unwanted `MyModelMLP` class!
 
 In any way, if there is an ambiguous case detected, the linter will raise a warning such as
 
