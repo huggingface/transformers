@@ -176,6 +176,30 @@ class EvollaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         for key in self.input_keys:
             assert torch.is_tensor(input_processor[key])
 
+    def test_tokenizer_decode(self):
+        protein_tokenizer = self.get_protein_tokenizer()
+        tokenizer = self.get_tokenizer()
+
+        processor = EvollaProcessor(tokenizer=tokenizer, protein_tokenizer=protein_tokenizer, return_tensors="pt")
+
+        predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
+
+        decoded_processor = processor.batch_decode(predicted_ids)
+        decoded_tok = tokenizer.batch_decode(predicted_ids)
+
+        self.assertListEqual(decoded_tok, decoded_processor)
+
+    def test_model_input_names(self):
+        protein_tokenizer = self.get_protein_tokenizer()
+        tokenizer = self.get_tokenizer()
+
+        processor = EvollaProcessor(tokenizer=tokenizer, protein_tokenizer=protein_tokenizer)
+        proteins, messages_list = self.prepare_inputs()
+
+        inputs = processor(messages_list=messages_list, proteins=proteins, padding="longest", return_tensors="pt")
+
+        # For now the processor supports only ['pixel_values', 'input_ids', 'attention_mask']
+        self.assertSetEqual(set(inputs.keys()), set(self.input_keys))
 
 @require_torch
 @require_vision
