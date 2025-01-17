@@ -1,24 +1,17 @@
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Callable, Optional, Tuple
 
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_outputs import (
-    BaseModelOutputWithPast,
-    CausalLMOutputWithPast,
-    SequenceClassifierOutputWithPast,
-    TokenClassifierOutput,
-)
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import logging
 from ..llama.modeling_llama import (
     LlamaAttention,
-    LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaForQuestionAnswering,
     LlamaForSequenceClassification,
@@ -140,5 +133,4 @@ __all__ = [
     "TeleChat2ForSequenceClassification",
     "TeleChat2ForTokenClassification",
     "TeleChat2Model",
-    "TeleChat2PreTrainedModel",
 ]

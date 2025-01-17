@@ -201,7 +201,6 @@ SPECIAL_CASES_TO_ALLOW = {
         "giou_cost",
         "giou_loss_coefficient",
     ],
-    "TeleChat2Config": ["n_head"],
 }
 
 
