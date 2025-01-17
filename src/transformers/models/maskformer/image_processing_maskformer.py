@@ -436,6 +436,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             The background label will be replaced by `ignore_index`.
         num_labels (`int`, *optional*):
             The number of labels in the segmentation map.
+        pad_size (`Optional`, *optional*): <fill_docstring>
 
     """
 
