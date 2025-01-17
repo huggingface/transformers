@@ -523,11 +523,14 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             if "generation_config" not in generate_kwargs:
                 generate_kwargs["generation_config"] = self.generation_config
 
-            tokens = self.model.generate(
-                inputs=inputs,
-                attention_mask=attention_mask,
+            main_input_name = self.model.main_input_name if hasattr(self.model, "main_input_name") else "inputs"
+            generate_kwargs = {
+                main_input_name: inputs,
+                "attention_mask": attention_mask,
                 **generate_kwargs,
-            )
+            }
+            tokens = self.model.generate(**generate_kwargs)
+            
             # whisper longform generation stores timestamps in "segments"
             if return_timestamps == "word" and self.type == "seq2seq_whisper":
                 if "segments" not in tokens:
