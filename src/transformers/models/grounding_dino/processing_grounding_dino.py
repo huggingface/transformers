@@ -323,3 +323,6 @@ class GroundingDinoProcessor(ProcessorMixin):
             results.append(result)
 
         return results
+
+
+__all__ = ["GroundingDinoProcessor"]

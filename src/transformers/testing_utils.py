@@ -14,6 +14,7 @@
 
 import collections
 import contextlib
+import copy
 import doctest
 import functools
 import gc
@@ -28,6 +29,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from collections import defaultdict
@@ -40,7 +42,9 @@ from typing import Callable, Dict, Iterable, Iterator, List, Optional, Union
 from unittest import mock
 from unittest.mock import patch
 
+import huggingface_hub.utils
 import urllib3
+from huggingface_hub import delete_repo
 
 from transformers import logging as transformers_logging
 
@@ -75,12 +79,16 @@ from .utils import (
     is_fbgemm_gpu_available,
     is_flash_attn_2_available,
     is_flax_available,
+    is_flute_available,
     is_fsdp_available,
     is_ftfy_available,
     is_g2p_en_available,
     is_galore_torch_available,
     is_gguf_available,
+    is_gptqmodel_available,
     is_grokadamw_available,
+    is_hadamard_available,
+    is_hqq_available,
     is_ipex_available,
     is_jieba_available,
     is_jinja_available,
@@ -110,7 +118,7 @@ from .utils import (
     is_scipy_available,
     is_sentencepiece_available,
     is_seqio_available,
-    is_soundfile_availble,
+    is_soundfile_available,
     is_spacy_available,
     is_sudachi_available,
     is_sudachi_projection_available,
@@ -139,6 +147,7 @@ from .utils import (
     is_torchdynamo_available,
     is_torchvision_available,
     is_vision_available,
+    is_vptq_available,
     strtobool,
 )
 
@@ -979,6 +988,17 @@ def require_torch_gpu(test_case):
     return unittest.skipUnless(torch_device == "cuda", "test requires CUDA")(test_case)
 
 
+def require_torch_large_gpu(test_case, memory: float = 20):
+    """Decorator marking a test that requires a CUDA GPU with more than `memory` GiB of memory."""
+    if torch_device != "cuda":
+        return unittest.skip(reason=f"test requires a CUDA GPU with more than {memory} GiB of memory")(test_case)
+
+    return unittest.skipUnless(
+        torch.cuda.get_device_properties(0).total_memory / 1024**3 > memory,
+        f"test requires a GPU with more than {memory} GiB of memory",
+    )(test_case)
+
+
 def require_torch_gpu_if_bnb_not_multi_backend_enabled(test_case):
     """
     Decorator marking a test that requires a GPU if bitsandbytes multi-backend feature is not enabled.
@@ -1115,7 +1135,7 @@ def require_soundfile(test_case):
     These tests are skipped when soundfile isn't installed.
 
     """
-    return unittest.skipUnless(is_soundfile_availble(), "test requires soundfile")(test_case)
+    return unittest.skipUnless(is_soundfile_available(), "test requires soundfile")(test_case)
 
 
 def require_deepspeed(test_case):
@@ -1139,11 +1159,28 @@ def require_aqlm(test_case):
     return unittest.skipUnless(is_aqlm_available(), "test requires aqlm")(test_case)
 
 
+def require_vptq(test_case):
+    """
+    Decorator marking a test that requires vptq
+    """
+    return unittest.skipUnless(is_vptq_available(), "test requires vptq")(test_case)
+
+
 def require_eetq(test_case):
     """
     Decorator marking a test that requires eetq
     """
-    return unittest.skipUnless(is_eetq_available(), "test requires eetq")(test_case)
+    eetq_available = is_eetq_available()
+    if eetq_available:
+        try:
+            import eetq  # noqa: F401
+        except ImportError as exc:
+            if "shard_checkpoint" in str(exc):
+                # EETQ 1.0.0 is currently broken with the latest transformers because it tries to import the removed
+                # shard_checkpoint function, see https://github.com/NetEase-FuXi/EETQ/issues/34.
+                # TODO: Remove once eetq releases a fix and this release is used in CI
+                eetq_available = False
+    return unittest.skipUnless(eetq_available, "test requires eetq")(test_case)
 
 
 def require_av(test_case):
@@ -1182,11 +1219,20 @@ def require_tensorboard(test_case):
     return unittest.skipUnless(is_tensorboard_available(), "test requires tensorboard")
 
 
-def require_auto_gptq(test_case):
+def require_gptq(test_case):
     """
     Decorator for auto_gptq dependency
     """
-    return unittest.skipUnless(is_auto_gptq_available(), "test requires auto-gptq")(test_case)
+    return unittest.skipUnless(
+        is_gptqmodel_available() or is_auto_gptq_available(), "test requires gptqmodel or auto-gptq"
+    )(test_case)
+
+
+def require_hqq(test_case):
+    """
+    Decorator for hqq dependency
+    """
+    return unittest.skipUnless(is_hqq_available(), "test requires hqq")(test_case)
 
 
 def require_auto_awq(test_case):
@@ -1215,6 +1261,15 @@ def require_fbgemm_gpu(test_case):
     Decorator for fbgemm_gpu dependency
     """
     return unittest.skipUnless(is_fbgemm_gpu_available(), "test requires fbgemm-gpu")(test_case)
+
+
+def require_flute_hadamard(test_case):
+    """
+    Decorator marking a test that requires higgs and hadamard
+    """
+    return unittest.skipUnless(
+        is_flute_available() and is_hadamard_available(), "test requires flute and fast_hadamard_transform"
+    )(test_case)
 
 
 def require_phonemizer(test_case):
@@ -1373,6 +1428,84 @@ def assert_screenout(out, what):
     out_pr = apply_print_resets(out).lower()
     match_str = out_pr.find(what.lower())
     assert match_str != -1, f"expecting to find {what} in output: f{out_pr}"
+
+
+def set_model_tester_for_less_flaky_test(test_case):
+    target_num_hidden_layers = 1
+    # TODO (if possible): Avoid exceptional cases
+    exceptional_classes = [
+        "ZambaModelTester",
+        "RwkvModelTester",
+        "AriaVisionText2TextModelTester",
+        "GPTNeoModelTester",
+        "DPTModelTester",
+    ]
+    if test_case.model_tester.__class__.__name__ in exceptional_classes:
+        target_num_hidden_layers = None
+    if hasattr(test_case.model_tester, "out_features") or hasattr(test_case.model_tester, "out_indices"):
+        target_num_hidden_layers = None
+
+    if hasattr(test_case.model_tester, "num_hidden_layers") and target_num_hidden_layers is not None:
+        test_case.model_tester.num_hidden_layers = target_num_hidden_layers
+    if (
+        hasattr(test_case.model_tester, "vision_config")
+        and "num_hidden_layers" in test_case.model_tester.vision_config
+        and target_num_hidden_layers is not None
+    ):
+        test_case.model_tester.vision_config = copy.deepcopy(test_case.model_tester.vision_config)
+        if isinstance(test_case.model_tester.vision_config, dict):
+            test_case.model_tester.vision_config["num_hidden_layers"] = 1
+        else:
+            test_case.model_tester.vision_config.num_hidden_layers = 1
+    if (
+        hasattr(test_case.model_tester, "text_config")
+        and "num_hidden_layers" in test_case.model_tester.text_config
+        and target_num_hidden_layers is not None
+    ):
+        test_case.model_tester.text_config = copy.deepcopy(test_case.model_tester.text_config)
+        if isinstance(test_case.model_tester.text_config, dict):
+            test_case.model_tester.text_config["num_hidden_layers"] = 1
+        else:
+            test_case.model_tester.text_config.num_hidden_layers = 1
+
+    # A few model class specific handling
+
+    # For Albert
+    if hasattr(test_case.model_tester, "num_hidden_groups"):
+        test_case.model_tester.num_hidden_groups = test_case.model_tester.num_hidden_layers
+
+
+def set_config_for_less_flaky_test(config):
+    target_attrs = [
+        "rms_norm_eps",
+        "layer_norm_eps",
+        "norm_eps",
+        "norm_epsilon",
+        "layer_norm_epsilon",
+        "batch_norm_eps",
+    ]
+    for target_attr in target_attrs:
+        setattr(config, target_attr, 1.0)
+
+    # norm layers (layer/group norm, etc.) could cause flaky tests when the tensors have very small variance.
+    # (We don't need the original epsilon values to check eager/sdpa matches)
+    attrs = ["text_config", "vision_config", "text_encoder", "audio_encoder", "decoder"]
+    for attr in attrs:
+        if hasattr(config, attr):
+            for target_attr in target_attrs:
+                setattr(getattr(config, attr), target_attr, 1.0)
+
+
+def set_model_for_less_flaky_test(model):
+    # Another way to make sure norm layers have desired epsilon. (Some models don't set it from its config.)
+    target_names = ("LayerNorm", "GroupNorm", "BatchNorm", "RMSNorm", "BatchNorm2d", "BatchNorm1d")
+    target_attrs = ["eps", "epsilon", "variance_epsilon"]
+    if is_torch_available() and isinstance(model, torch.nn.Module):
+        for module in model.modules():
+            if type(module).__name__.endswith(target_names):
+                for attr in target_attrs:
+                    if hasattr(module, attr):
+                        setattr(module, attr, 1.0)
 
 
 class CaptureStd:
@@ -1558,6 +1691,38 @@ def LoggingLevel(level):
         yield
     finally:
         transformers_logging.set_verbosity(orig_level)
+
+
+class TemporaryHubRepo:
+    """Create a temporary Hub repository and return its `RepoUrl` object. This is similar to
+    `tempfile.TemporaryDirectory` and can be used as a context manager. For example:
+
+        with TemporaryHubRepo(token=self._token) as temp_repo:
+            ...
+
+    Upon exiting the context, the repository and everything contained in it are removed.
+
+    Example:
+
+    ```python
+    with TemporaryHubRepo(token=self._token) as temp_repo:
+        model.push_to_hub(tmp_repo.repo_id, token=self._token)
+    ```
+    """
+
+    def __init__(self, namespace: Optional[str] = None, token: Optional[str] = None) -> None:
+        self.token = token
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            repo_id = Path(tmp_dir).name
+            if namespace is not None:
+                repo_id = f"{namespace}/{repo_id}"
+            self.repo_url = huggingface_hub.create_repo(repo_id, token=self.token)
+
+    def __enter__(self):
+        return self.repo_url
+
+    def __exit__(self, exc, value, tb):
+        delete_repo(repo_id=self.repo_url.repo_id, token=self.token, missing_ok=True)
 
 
 @contextlib.contextmanager
@@ -2267,12 +2432,28 @@ class RequestCounter:
 
     def __enter__(self):
         self._counter = defaultdict(int)
-        self.patcher = patch.object(urllib3.connectionpool.log, "debug", wraps=urllib3.connectionpool.log.debug)
+        self._thread_id = threading.get_ident()
+        self._extra_info = []
+
+        def patched_with_thread_info(func):
+            def wrap(*args, **kwargs):
+                self._extra_info.append(threading.get_ident())
+                return func(*args, **kwargs)
+
+            return wrap
+
+        self.patcher = patch.object(
+            urllib3.connectionpool.log, "debug", side_effect=patched_with_thread_info(urllib3.connectionpool.log.debug)
+        )
         self.mock = self.patcher.start()
         return self
 
     def __exit__(self, *args, **kwargs) -> None:
-        for call in self.mock.call_args_list:
+        assert len(self.mock.call_args_list) == len(self._extra_info)
+
+        for thread_id, call in zip(self._extra_info, self.mock.call_args_list):
+            if thread_id != self._thread_id:
+                continue
             log = call.args[0] % call.args[1:]
             for method in ("HEAD", "GET", "POST", "PUT", "DELETE", "CONNECT", "OPTIONS", "TRACE", "PATCH"):
                 if method in log:

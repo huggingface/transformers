@@ -158,7 +158,10 @@ class InstructBlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = InstructBlipVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=InstructBlipVisionConfig, has_text_modality=False, hidden_size=37
+            self,
+            config_class=InstructBlipConfig,
+            has_text_modality=False,
+            common_properties=["num_query_tokens", "image_token_index"],
         )
 
     def test_config(self):
@@ -945,7 +948,7 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
         # Add args to the config to trigger new logic when inputs are expanded in processing file
         processor.num_query_tokens = model.config.num_query_tokens
         processor.tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
-        model.config.image_token_index = len(processor.tokenizer) - 1
+        model.config.image_token_index = len(processor.tokenizer) - 2
         model.resize_token_embeddings(processor.tokenizer.vocab_size, pad_to_multiple_of=64)
 
         # Generate again with new inputs
