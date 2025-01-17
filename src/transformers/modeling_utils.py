@@ -2417,7 +2417,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         covariance = old_centered_embeddings.T @ old_centered_embeddings / old_num_tokens
 
         # Check if the covariance is positive definite.
-        eigenvalues = torch.linalg.eigvals(covariance)
+        eigenvalues = torch.linalg.eigvalsh(covariance)
         is_covariance_psd = bool(
             (covariance == covariance.T).all() and not torch.is_complex(eigenvalues) and (eigenvalues > 0).all()
         )
