@@ -940,13 +940,8 @@ class ProcessorMixin(PushToHubMixin):
                             f"in a dictionary for {modality} and as a **kwarg."
                         )
                 elif modality_key in kwargs:
-                    # Modality-specific processors can have overlapping kwargs
-                    # but we pop anyway and use it for the first modality that comes in `output_kwargs`
-                    # This is needed for BC, e.g. certain kwargs were applied only to text and not audio modality (`padding`)
-                    # Currently audio-text has some overlap with text being the first to pop kwargs
-                    # Image-video have overlaps with image being the first to pop kwargs
-                    # If user wants to have the same kwarg used in different modalities, we should recommend to explicitly pass
-                    # as a structured dict
+                    # we get a modality_key instead of popping it because modality-specific processors
+                    # can have overlapping kwargs
                     kwarg_value = kwargs.get(modality_key, "__empty__")
                 else:
                     kwarg_value = "__empty__"
