@@ -19,6 +19,7 @@
 # limitations under the License.
 """PyTorch Qwen2.5-VL model."""
 
+from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
 import torch
@@ -28,6 +29,7 @@ import torch.utils.checkpoint
 from torch.nn import CrossEntropyLoss
 
 from transformers.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
+from transformers.models.qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
 from transformers.models.qwen2_vl.modeling_qwen2_vl import (
     PatchEmbed,
     PatchMerger,
@@ -35,15 +37,19 @@ from transformers.models.qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLCausalLMOutputWithPast,
     Qwen2VLForConditionalGeneration,
     Qwen2VLPreTrainedModel,
-    Qwen2VLVisionBlock,
     VisionAttention,
     VisionRotaryEmbedding,
     VisionSdpaAttention,
 )
+from transformers.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
 
 from ...activations import ACT2FN
 from ...cache_utils import StaticCache
 from ...configuration_utils import PretrainedConfig
+from ...feature_extraction_utils import BatchFeature
+from ...image_utils import ImageInput, VideoInput
+from ...processing_utils import ProcessingKwargs, Unpack, VideosKwargs
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_flash_attn_2_available
 
 
@@ -80,7 +86,7 @@ class Qwen2_5_VLVisionConfig(PretrainedConfig):
         patch_size=14,
         spatial_merge_size=2,
         temporal_patch_size=2,
-        tokens_per_second=25,
+        tokens_per_second=4,
         window_size=112,
         out_hidden_size=3584,
         fullatt_block_indexes=list(range(7, 32, 8)),
@@ -179,7 +185,7 @@ class Qwen2_5_VLPatchMerger(PatchMerger):
         self.ln_q = Qwen2RMSNorm(context_dim, eps=1e-6)
 
 
-class VisionFlashAttention2(nn.Module):
+class Qwen2_5_VLVisionFlashAttention2(nn.Module):
     def __init__(self, dim: int, num_heads: int = 16) -> None:
         super().__init__()
         self.num_heads = num_heads
@@ -205,16 +211,24 @@ class VisionFlashAttention2(nn.Module):
         return attn_output
 
 
+class Qwen2_5_VLVisionAttention(VisionAttention):
+    pass
+
+
+class Qwen2_5_VLVisionSdpaAttention(VisionSdpaAttention):
+    pass
+
+
 QWEN2_5_VL_VISION_ATTENTION_CLASSES = {
-    "eager": VisionAttention,
-    "flash_attention_2": VisionFlashAttention2,
-    "sdpa": VisionSdpaAttention,
+    "eager": Qwen2_5_VLVisionAttention,
+    "flash_attention_2": Qwen2_5_VLVisionFlashAttention2,
+    "sdpa": Qwen2_5_VLVisionSdpaAttention,
 }
 
 
-class Qwen2_5_VLVisionBlock(Qwen2VLVisionBlock):
+class Qwen2_5_VLVisionBlock(nn.Module):
     def __init__(self, config, attn_implementation: str = "sdpa") -> None:
-        super().__init__(config, attn_implementation)
+        super().__init__()
         self.norm1 = Qwen2RMSNorm(config.hidden_size, eps=1e-6)
         self.norm2 = Qwen2RMSNorm(config.hidden_size, eps=1e-6)
         self.attn = QWEN2_5_VL_VISION_ATTENTION_CLASSES[attn_implementation](
@@ -222,13 +236,22 @@ class Qwen2_5_VLVisionBlock(Qwen2VLVisionBlock):
         )
         self.mlp = Qwen2_5_VLMLP(config, bias=True)
 
+    def forward(self, hidden_states, cu_seqlens, rotary_pos_emb) -> torch.Tensor:
+        hidden_states = hidden_states + self.attn(
+            self.norm1(hidden_states),
+            cu_seqlens=cu_seqlens,
+            rotary_pos_emb=rotary_pos_emb,
+        )
+        hidden_states = hidden_states + self.mlp(self.norm2(hidden_states))
+        return hidden_states
+
 
 class Qwen2_5_VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
     config_class = Qwen2_5_VLVisionConfig
     _no_split_modules = ["Qwen2_5_VLVisionBlock"]
 
-    def __init__(self, config) -> None:
-        super().__init__(config)
+    def __init__(self, config, *inputs, **kwargs) -> None:
+        super().__init__(config, *inputs, **kwargs)
         self.spatial_merge_size = config.spatial_merge_size
         self.patch_size = config.patch_size
         self.fullatt_block_indexes = config.fullatt_block_indexes
@@ -239,7 +262,7 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
             patch_size=config.patch_size,
             temporal_patch_size=config.temporal_patch_size,
             in_channels=config.in_channels,
-            hidden_size=config.hidden_size,
+            embed_dim=config.hidden_size,
         )
 
         head_dim = config.hidden_size // config.num_heads
@@ -381,6 +404,11 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
         hidden_states = hidden_states[reverse_indices, :]
 
         return hidden_states
+
+
+@dataclass
+class Qwen2_5_VLCausalLMOutputWithPast(Qwen2VLCausalLMOutputWithPast):
+    pass
 
 
 class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
@@ -588,7 +616,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         rope_deltas: Optional[torch.LongTensor] = None,
         cache_position: Optional[torch.LongTensor] = None,
         second_per_grid_ts: Optional[torch.Tensor] = None,
-    ) -> Union[Tuple, Qwen2VLCausalLMOutputWithPast]:
+    ) -> Union[Tuple, Qwen2_5_VLCausalLMOutputWithPast]:
         r"""
         Args:
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -738,7 +766,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
             output = (logits,) + outputs[1:]
             return (loss,) + output if loss is not None else output
 
-        return Qwen2VLCausalLMOutputWithPast(
+        return Qwen2_5_VLCausalLMOutputWithPast(
             loss=loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
@@ -819,3 +847,184 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
             }
         )
         return model_inputs
+
+
+class Qwen2_5_VLImageProcessor(Qwen2VLImageProcessor):
+    r"""
+    Constructs a Qwen2.5-VL image processor that dynamically resizes images based on the original images.
+
+    Args:
+        do_resize (`bool`, *optional*, defaults to `True`):
+            Whether to resize the image's (height, width) dimensions.
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
+            Resampling filter to use when resizing the image.
+        do_rescale (`bool`, *optional*, defaults to `True`):
+            Whether to rescale the image by the specified scale `rescale_factor`.
+        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
+            Scale factor to use if rescaling the image.
+        do_normalize (`bool`, *optional*, defaults to `True`):
+            Whether to normalize the image.
+        image_mean (`float` or `List[float]`, *optional*, defaults to `[0.48145466, 0.4578275, 0.40821073]`):
+            Mean to use if normalizing the image. This is a float or list of floats for each channel in the image.
+        image_std (`float` or `List[float]`, *optional*, defaults to `[0.26862954, 0.26130258, 0.27577711]`):
+            Standard deviation to use if normalizing the image. This is a float or list of floats for each channel in the image.
+        do_convert_rgb (`bool`, *optional*, defaults to `True`):
+            Whether to convert the image to RGB.
+        min_pixels (`int`, *optional*, defaults to `56 * 56`):
+            The min pixels of the image to resize the image.
+        max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):
+            The max pixels of the image to resize the image.
+        patch_size (`int`, *optional*, defaults to 14):
+            The spacial patch size of the vision encoder.
+        temporal_patch_size (`int`, *optional*, defaults to 2):
+            The temporal patch size of the vision encoder.
+        merge_size (`int`, *optional*, defaults to 2):
+            The merge size of the vision encoder to llm encoder.
+    """
+
+    model_input_names = [
+        "pixel_values",
+        "image_grid_thw",
+        "pixel_values_videos",
+        "video_grid_thw",
+        "second_per_grid_ts",
+    ]
+
+
+class Qwen2_5_VLVideosKwargs(VideosKwargs, total=False):
+    fps: Union[List[float], float]
+
+
+class Qwen2_5_VLProcessorKwargs(ProcessingKwargs, total=False):
+    videos_kwargs: Qwen2_5_VLVideosKwargs
+    _defaults = {
+        "text_kwargs": {
+            "padding": False,
+        },
+        "videos_kwargs": {"fps": 2.0},
+    }
+
+
+class Qwen2_5_VLProcessor(Qwen2VLProcessor):
+    r"""
+    Constructs a Qwen2.5-VL processor which wraps a Qwen2.5-VL image processor and a Qwen2 tokenizer into a single processor.
+    [`Qwen2_5_VLProcessor`] offers all the functionalities of [`Qwen2_5_VLImageProcessor`] and [`Qwen2TokenizerFast`]. See the
+    [`~Qwen2_5_VLProcessor.__call__`] and [`~Qwen2_5_VLProcessor.decode`] for more information.
+    Args:
+        image_processor ([`Qwen2_5_VLImageProcessor`], *optional*):
+            The image processor is a required input.
+        tokenizer ([`Qwen2TokenizerFast`], *optional*):
+            The tokenizer is a required input.
+        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
+            in a chat into a tokenizable string.
+    """
+
+    image_processor_class = "Qwen2_5_VLImageProcessor"
+
+    def __call__(
+        self,
+        images: ImageInput = None,
+        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        videos: VideoInput = None,
+        **kwargs: Unpack[Qwen2_5_VLProcessorKwargs],
+    ) -> BatchFeature:
+        """
+        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
+        and `kwargs` arguments to Qwen2TokenizerFast's [`~Qwen2TokenizerFast.__call__`] if `text` is not `None` to encode
+        the text. To prepare the vision inputs, this method forwards the `vision_infos` and `kwrags` arguments to
+        Qwen2_5_VLImageProcessor's [`~Qwen2_5_VLImageProcessor.__call__`] if `vision_infos` is not `None`.
+
+        Args:
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. Both channels-first and channels-last formats are supported.
+            text (`str`, `List[str]`, `List[List[str]]`):
+                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+            videos (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
+                The image or batch of videos to be prepared. Each video can be a 4D NumPy array or PyTorch
+                tensor, or a nested list of 3D frames. Both channels-first and channels-last formats are supported.
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors of a particular framework. Acceptable values are:
+                - `'tf'`: Return TensorFlow `tf.constant` objects.
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return NumPy `np.ndarray` objects.
+                - `'jax'`: Return JAX `jnp.ndarray` objects.
+
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
+            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
+              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+              `None`).
+            - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+            - **pixel_values_videos** -- Pixel values of videos to be fed to a model. Returned when `videos` is not `None`.
+            - **image_grid_thw** -- List of image 3D grid in LLM. Returned when `images` is not `None`.
+            - **video_grid_thw** -- List of video 3D grid in LLM. Returned when `videos` is not `None`.
+            - **second_per_grid_ts** -- List of video seconds per time grid. Returned when `videos` is not `None`.
+        """
+        output_kwargs = self._merge_kwargs(
+            Qwen2_5_VLProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+        if images is not None:
+            image_inputs = self.image_processor(images=images, videos=None, **output_kwargs["images_kwargs"])
+            image_grid_thw = image_inputs["image_grid_thw"]
+        else:
+            image_inputs = {}
+            image_grid_thw = None
+
+        if videos is not None:
+            videos_inputs = self.image_processor(images=None, videos=videos, **output_kwargs["images_kwargs"])
+            video_grid_thw = videos_inputs["video_grid_thw"]
+
+            fps = output_kwargs["videos_kwargs"].pop("fps", 2.0)
+            if isinstance(fps, (int, float)):
+                second_per_grid_ts = [self.image_processor.temporal_patch_size / fps] * len(video_grid_thw)
+            elif hasattr(fps, "__len__") and len(fps) == len(video_grid_thw):
+                second_per_grid_ts = [self.image_processor.temporal_patch_size / tmp for tmp in fps]
+            else:
+                raise ValueError(
+                    f"The length of fps ({len(fps) if hasattr(fps, '__len__') else fps}) must be equal to the length of video_grid_thw ({len(video_grid_thw)}) or fps should be a single number."
+                )
+            videos_inputs.update({"second_per_grid_ts": second_per_grid_ts})
+
+        else:
+            videos_inputs = {}
+            video_grid_thw = None
+
+        if not isinstance(text, list):
+            text = [text]
+
+        if image_grid_thw is not None:
+            merge_length = self.image_processor.merge_size**2
+            index = 0
+            for i in range(len(text)):
+                while self.image_token in text[i]:
+                    text[i] = text[i].replace(
+                        self.image_token,
+                        "<|placeholder|>" * (image_grid_thw[index].prod() // merge_length),
+                        1,
+                    )
+                    index += 1
+                text[i] = text[i].replace("<|placeholder|>", self.image_token)
+
+        if video_grid_thw is not None:
+            merge_length = self.image_processor.merge_size**2
+            index = 0
+            for i in range(len(text)):
+                while self.video_token in text[i]:
+                    text[i] = text[i].replace(
+                        self.video_token,
+                        "<|placeholder|>" * (video_grid_thw[index].prod() // merge_length),
+                        1,
+                    )
+                    index += 1
+                text[i] = text[i].replace("<|placeholder|>", self.video_token)
+
+        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+
+        return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs})

@@ -917,6 +917,9 @@ class Qwen2VLPreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
     _supports_static_cache = True
 
+    def __init__(self, config, *inputs, **kwargs):
+        super().__init__(config, *inputs, **kwargs)
+
     def _init_weights(self, module):
         std = self.config.initializer_range
         if isinstance(module, (nn.Linear, nn.Conv3d)):
