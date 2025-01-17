@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 <Tip>
 
-لمعرفة جميع البنى ونقاط التفتيش المتوافقة مع هذه المهمة، نوصي بالتحقق من [صفحة المهمة](https://huggingface.co/tasks/fill-mask)
+لمعرفة جميع البنى والنسخ المتوافقة مع هذه المهمة، نوصي بالتحقق من [صفحة المهمة](https://huggingface.co/tasks/fill-mask)
 
 </Tip>
 
