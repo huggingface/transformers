@@ -947,7 +947,7 @@ class ProcessorMixin(PushToHubMixin):
                     # Image-video have overlaps with image being the first to pop kwargs
                     # If user wants to have the same kwarg used in different modalities, we should recommend to explicitly pass
                     # as a structured dict
-                    kwarg_value = kwargs.pop(modality_key, "__empty__")
+                    kwarg_value = kwargs.get(modality_key, "__empty__")
                 else:
                     kwarg_value = "__empty__"
                 if kwarg_value != "__empty__":

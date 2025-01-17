@@ -356,7 +356,7 @@ class ProcessorTesterMixin:
         self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
         self.assertEqual(inputs[self.text_input_name].shape[-1], 76)
 
-    #  text + audio kwargs testing
+    # text + audio kwargs testing
     @require_torch
     def test_tokenizer_defaults_preserved_by_kwargs_audio(self):
         if "feature_extractor" not in self.processor_class.attributes:
@@ -390,17 +390,17 @@ class ProcessorTesterMixin:
         input_str = "lower newer"
         raw_speech = floats_list((3, 1000))
         raw_speech = [np.asarray(audio) for audio in raw_speech]
-        inputs = processor(text=input_str, audio=raw_speech, return_tensors="pt", max_length=112, padding="max_length")
+        inputs = processor(text=input_str, audio=raw_speech, return_tensors="pt", max_length=300, padding="max_length")
 
-        self.assertEqual(len(inputs[self.text_input_name][0]), 112)
+        self.assertEqual(len(inputs[self.text_input_name][0]), 300)
 
     @require_torch
-    def test_unstructured_kwargs_audio_preserved_by_processor(self):
+    def test_unstructured_kwargs_audio(self):
         if "feature_extractor" not in self.processor_class.attributes:
             self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
 
         feature_extractor = self.get_component("feature_extractor")
-        tokenizer = self.get_component("tokenizer", max_length=117)
+        tokenizer = self.get_component("tokenizer")
         processor_kwargs = self.prepare_processor_dict()
 
         processor = self.processor_class(tokenizer=tokenizer, feature_extractor=feature_extractor, **processor_kwargs)
@@ -409,14 +409,9 @@ class ProcessorTesterMixin:
         input_str = "lower newer"
         raw_speech = floats_list((3, 1000))
         raw_speech = [np.asarray(audio) for audio in raw_speech]
-        inputs = processor(
-            text=input_str,
-            audio=raw_speech,
-            return_tensors="pt",
-            padding="max_length",
-        )
+        inputs = processor(text=input_str, audio=raw_speech, return_tensors="pt", max_length=300, padding="max_length")
 
-        self.assertEqual(len(inputs[self.text_input_name][0]), 117)
+        self.assertEqual(len(inputs[self.text_input_name][0]), 300)
 
     @require_torch
     def test_doubly_passed_kwargs_audio(self):
@@ -462,7 +457,7 @@ class ProcessorTesterMixin:
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
             "text_kwargs": {"padding": "max_length", "max_length": 76},
-            "audio_kwargs": {},
+            "audio_kwargs": {"padding": "max_length", "max_length": 300},
         }
 
         inputs = processor(text=input_str, audio=raw_speech, **all_kwargs)
@@ -504,20 +499,12 @@ class ProcessorTesterMixin:
         processor = self.processor_class(tokenizer=tokenizer, feature_extractor=feature_extractor, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
-        input_str = ["This is a sentence longer than 10 tokens: lower newer lower newer lower newer"]
-        raw_speech = floats_list((3, 1000))
-        raw_speech = [np.asarray(audio) for audio in raw_speech]
+        input_str = ["lower newer"]
+        audio_lengths = [4000, 8000, 16000, 32000]
+        raw_speech = [np.asarray(audio)[:length] for audio, length in zip(floats_list((3, 32_000)), audio_lengths)]
 
-        # truncation = "max_length" should truncate inputs to length=10 only for the text and do not truncate audio
-        inputs = processor(
-            text=input_str,
-            audio=raw_speech,
-            truncation=True,
-            max_length=10,
-            return_tensors="pt",
-        )
-        self.assertTrue(inputs[self.audio_input_name].shape[-1] != 10)
-        self.assertTrue(inputs[self.text_input_name].shape[-1] == 10)
+        # padding = True should not raise an error and will if the audio processor popped its value to None
+        _ = processor(text=input_str, audio=raw_speech, padding=True, return_tensors="pt")
 
     def test_prepare_and_validate_optional_call_args(self):
         processor = self.get_processor()
