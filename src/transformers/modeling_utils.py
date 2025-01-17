@@ -5191,6 +5191,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             self._last_compile_config = compile_config
             self._compiled_call = torch.compile(self.__call__, **compile_config.to_dict())
         return self._compiled_call
+    
+    @classmethod
+    def is_backend_compatible(cls):
+        return cls._supports_attention_backend
 
 
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)
