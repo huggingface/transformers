@@ -5060,6 +5060,7 @@ class Trainer:
 
         args = {
             "deepspeed_plugin": self.args.deepspeed_plugin,
+            'gradient_accumulation_steps': self.args.gradient_accumulation_steps
         }
         if is_accelerate_available("0.28.0"):
             args["dataloader_config"] = dataloader_config
