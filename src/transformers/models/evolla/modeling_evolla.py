@@ -43,7 +43,7 @@ from ...utils import (
 )
 from .configuration_evolla import EvollaConfig
 from .perceiver import EvollaPerceiverResampler
-from .vision import EvollaVisionTransformer
+from .protein import EvollaProteinEncoder
 
 
 logger = logging.get_logger(__name__)
