@@ -1573,7 +1573,11 @@ class GenerationTesterMixin:
 
             # Encoder-Decoder checks
             if config.is_encoder_decoder:
-                encoder_num_attention_heads = config.encoder_attention_heads
+                encoder_num_attention_heads = (
+                    config.encoder_attention_heads
+                    if hasattr(config, "encoder_attention_heads")
+                    else config.num_attention_heads
+                )
                 encoder_per_head_embed_dim = embed_dim // encoder_num_attention_heads
                 batch_size, seq_length = inputs["decoder_input_ids"].shape
                 for i in range(num_hidden_layers):
