@@ -107,6 +107,10 @@ class TeleChat2Attention(LlamaAttention):
         return attn_output, attn_weights
 
 
+class TeleChat2PreTrainedModel(LlamaPreTrainedModel):
+    pass
+
+
 class TeleChat2Model(LlamaModel):
     pass
 
@@ -133,4 +137,5 @@ __all__ = [
     "TeleChat2ForSequenceClassification",
     "TeleChat2ForTokenClassification",
     "TeleChat2Model",
+    "TeleChat2PreTrainedModel",
 ]
