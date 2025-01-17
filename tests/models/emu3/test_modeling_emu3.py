@@ -386,16 +386,8 @@ class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
     def test_cpu_offload(self):
         pass
 
-    @unittest.skip("Doesn't work, tensors are not almost same")  # TODO raushan fixme
-    def test_custom_4d_attention_mask(self):
-        pass
-
     @unittest.skip("VQ-VAE module doesn't initialize weights properly")
     def test_initialization(self):
-        pass
-
-    @unittest.skip("Emu3 has dynamic control flow in unpadding")
-    def test_generate_compile_model_forward(self):
         pass
 
 

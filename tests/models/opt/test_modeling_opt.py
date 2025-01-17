@@ -89,7 +89,6 @@ class OPTModelTester:
         num_labels=3,
         word_embed_proj_dim=16,
         type_sequence_label_size=2,
-        attn_implementation="eager",
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -113,7 +112,6 @@ class OPTModelTester:
         self.type_sequence_label_size = type_sequence_label_size
         self.word_embed_proj_dim = word_embed_proj_dim
         self.is_encoder_decoder = False
-        self.attn_implementation = attn_implementation
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size).clamp(
@@ -143,7 +141,6 @@ class OPTModelTester:
             embed_dim=self.embed_dim,
             is_encoder_decoder=False,
             word_embed_proj_dim=self.word_embed_proj_dim,
-            attn_implementation=self.attn_implementation,
         )
 
     def get_pipeline_config(self):

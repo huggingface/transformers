@@ -529,7 +529,7 @@ class InstructBlipForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, Gene
         pass
 
     @unittest.skip(
-        "InstructBLIP can generate only from input ids, and requires pixel values in all cases to be present"
+        "InstructBLIP cannot generate only from input ids, and requires pixel values in all cases to be present"
     )
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass

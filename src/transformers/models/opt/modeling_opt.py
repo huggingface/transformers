@@ -427,10 +427,6 @@ class OPTSdpaAttention(OPTAttention):
             attn_mask=causal_mask,
             dropout_p=self.dropout if self.training else 0.0,
             is_causal=is_causal,
-            # this model uses the scaling factor in the query projection for some reason, but not in Q@K^T
-            # so we need to scale to remove scaling in SDPA to have similar results with eager.
-            # Maybe needs a change in the model to remove scaling in query projection
-            scale=1.0,
         )
 
         attn_output = attn_output.transpose(1, 2).contiguous()
@@ -928,10 +924,7 @@ class OPTDecoder(OPTPreTrainedModel):
             use_cache = False
 
         if input_ids is not None:
-            input_shape = input_ids.size()
-            input_ids = input_ids.view(-1, input_shape[-1])
-        elif inputs_embeds is not None:
-            input_shape = inputs_embeds.size()[:-1]
+            input_ids = input_ids.view(-1, input_ids.shape[-1])
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -953,6 +946,10 @@ class OPTDecoder(OPTPreTrainedModel):
                 past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
             )
 
+        if attention_mask is None:
+            seq_length = past_seen_tokens + inputs_embeds.shape[1]
+            attention_mask = torch.ones(inputs_embeds.shape[0], seq_length, device=inputs_embeds.device)
+
         causal_mask = self._update_causal_mask(
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
         )
@@ -960,7 +957,6 @@ class OPTDecoder(OPTPreTrainedModel):
         # embed positions
         if position_ids is None:
             # position_ids = cache_position.unsqueeze(0)
-
             position_ids = torch.cumsum(attention_mask, dim=1)
             position_ids = (position_ids * attention_mask - 1).long()
             # cut positions if `past_seen_tokens` is > 0
