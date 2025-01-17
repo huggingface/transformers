@@ -26,6 +26,7 @@ from transformers import Emu3Config, Emu3TextConfig, is_torch_available, is_visi
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_torch,
+    require_torch_large_gpu,
     slow,
     torch_device,
 )
@@ -422,6 +423,7 @@ class Emu3IntegrationTest(unittest.TestCase):
 
     @slow
     @require_bitsandbytes
+    @require_torch_large_gpu
     def test_model_generation_batched(self):
         model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Chat-hf", load_in_4bit=True)
         processor = Emu3Processor.from_pretrained("BAAI/Emu3-Chat-hf")
@@ -449,6 +451,7 @@ class Emu3IntegrationTest(unittest.TestCase):
 
     @slow
     @require_bitsandbytes
+    @require_torch_large_gpu
     def test_model_generation_multi_image(self):
         model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Chat-hf", load_in_4bit=True)
         processor = Emu3Processor.from_pretrained("BAAI/Emu3-Chat-hf")
@@ -467,6 +470,7 @@ class Emu3IntegrationTest(unittest.TestCase):
 
     @slow
     @require_bitsandbytes
+    @require_torch_large_gpu
     def test_model_generate_images(self):
         model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Gen-hf", load_in_4bit=True)
         processor = Emu3Processor.from_pretrained("BAAI/Emu3-Gen-hf")
