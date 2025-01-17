@@ -1127,5 +1127,4 @@ __all__ = [
     "TeleChat2ForSequenceClassification",
     "TeleChat2ForTokenClassification",
     "TeleChat2Model",
-    "TeleChat2PreTrainedModel",
 ]
