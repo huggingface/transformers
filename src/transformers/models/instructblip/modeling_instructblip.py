@@ -1471,7 +1471,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
             logger.warning_once(
                 "Expanding inputs for image tokens in InstructBLIP should be done in processing. "
                 "Please follow instruction here (https://gist.github.com/zucchini-nlp/e9f20b054fa322f84ac9311d9ab67042) to update your InstructBLIP model. "
-                "Using processors without these attributes in the config is deprecated and will throw an error in v4.47."
+                "Using processors without these attributes in the config is deprecated and will throw an error in v4.50."
             )
             inputs_embeds = torch.cat([language_model_inputs, inputs_embeds.to(language_model_inputs.device)], dim=1)
             attention_mask = torch.cat(
@@ -1591,11 +1591,12 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         )
 
         if input_ids is None:
-            input_ids = (
-                torch.LongTensor([[self.config.text_config.bos_token_id]])
-                .repeat(batch_size, 1)
-                .to(image_embeds.device)
-            )
+            start_tokens = [self.config.text_config.bos_token_id]
+            if getattr(self.config, "image_token_index", None) is not None:
+                start_tokens = [self.config.image_token_index] * self.config.num_query_tokens + start_tokens
+            input_ids = torch.tensor([start_tokens], dtype=torch.long, device=image_embeds.device)
+            input_ids = input_ids.repeat(batch_size, 1)
+
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
 
@@ -1610,7 +1611,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
             logger.warning_once(
                 "Expanding inputs for image tokens in InstructBLIP should be done in processing. "
                 "Please follow instruction here (https://gist.github.com/zucchini-nlp/e9f20b054fa322f84ac9311d9ab67042) to update your InstructBLIP model. "
-                "Using processors without these attributes in the config is deprecated and will throw an error in v4.47."
+                "Using processors without these attributes in the config is deprecated and will throw an error in v4.50."
             )
             inputs_embeds = torch.cat([language_model_inputs, inputs_embeds.to(language_model_inputs.device)], dim=1)
             attention_mask = torch.cat(
@@ -1632,3 +1633,11 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         outputs = self.language_model.generate(**inputs, **generate_kwargs)
 
         return outputs
+
+
+__all__ = [
+    "InstructBlipQFormerModel",
+    "InstructBlipPreTrainedModel",
+    "InstructBlipForConditionalGeneration",
+    "InstructBlipVisionModel",
+]

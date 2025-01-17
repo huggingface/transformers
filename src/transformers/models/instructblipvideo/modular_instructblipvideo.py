@@ -32,7 +32,7 @@ from transformers.models.instructblip.modeling_instructblip import (
 from ...configuration_utils import PretrainedConfig
 from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -103,6 +103,11 @@ class InstructBlipVideoConfig(PretrainedConfig):
     ```"""
 
     model_type = "instructblipvideo"
+    sub_configs = {
+        "text_config": AutoConfig,
+        "qformer_config": InstructBlipVideoQFormerConfig,
+        "vision_config": InstructBlipVideoVisionConfig,
+    }
 
     def __init__(
         self,
@@ -131,9 +136,6 @@ class InstructBlipVideoConfig(PretrainedConfig):
         self.qformer_config = InstructBlipVideoQFormerConfig(**qformer_config)
         text_model_type = text_config["model_type"] if "model_type" in text_config else "opt"
         self.text_config = CONFIG_MAPPING[text_model_type](**text_config)
-
-        self.tie_word_embeddings = self.text_config.tie_word_embeddings
-        self.is_encoder_decoder = self.text_config.is_encoder_decoder
 
         self.num_query_tokens = num_query_tokens
         self.video_token_index = video_token_index
@@ -434,11 +436,12 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         )
 
         if input_ids is None:
-            input_ids = (
-                torch.LongTensor([[self.config.text_config.bos_token_id]])
-                .repeat(batch_size, 1)
-                .to(image_embeds.device)
-            )
+            start_tokens = [self.config.text_config.bos_token_id]
+            if getattr(self.config, "video_token_index", None) is not None:
+                start_tokens = [self.config.video_token_index] * self.config.num_query_tokens * 4 + start_tokens
+            input_ids = torch.tensor([start_tokens], dtype=torch.long, device=image_embeds.device)
+            input_ids = input_ids.repeat(batch_size, 1)
+
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
 

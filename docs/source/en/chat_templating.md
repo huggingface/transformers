@@ -71,7 +71,7 @@ depending on what type of model you are using. Once you do that,
 you'll get output that's ready to go! When using chat templates as input for model generation, it's also a good idea
 to use `add_generation_prompt=True` to add a [generation prompt](#what-are-generation-prompts). 
 
-# Usage with text-only LLMs
+## Usage with text-only LLMs
 Here's an example of preparing input for `model.generate()`, using `Zephyr` again:
 
 ```python
@@ -118,11 +118,10 @@ How many helicopters can a human eat in one sitting?</s>
 Matey, I'm afraid I must inform ye that humans cannot eat helicopters. Helicopters are not food, they are flying machines. Food is meant to be eaten, like a hearty plate o' grog, a savory bowl o' stew, or a delicious loaf o' bread. But helicopters, they be for transportin' and movin' around, not for eatin'. So, I'd say none, me hearties. None at all.
 ```
 
-# Usage with multimodal LLMs
+## Usage with multimodal LLMs
 
-For multimodal LLMs such as [LLaVA](https://huggingface.co/llava-hf) the prompts can be formatted in a similar way,
-with the only difference that you need to pass input images/videos as well along with the text. Therefore each "content"
-has to be a list containing either a text or an image/video content.
+For multimodal LLMs such as [LLaVA](https://huggingface.co/llava-hf) the prompts can be formatted in a similar way. The only difference is you need to pass input images/videos as well along with the text. Each `"content"`
+has to be a list containing either a text or an image/video.
 
 Here's an example of preparing input for using `LLaVA` model:
 
@@ -141,7 +140,7 @@ messages = [
     {
       "role": "user",
       "content": [
-          {"type": "image", "image": "http://images.cocodataset.org/val2017/000000039769.jpg"},
+          {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
           {"type": "text", "text": "What are these?"},
         ],
     },
@@ -150,9 +149,8 @@ messages = [
 processed_chat = processor.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt")
 print(processor.batch_decode(processed_chat["input_ids"][:, :30]))
 ```
-This will yield a string in the input format that LLaVA expects with a bunch of `<image>` tokens at the end.
-The `<image>`tokens are there as a placeholder and each one will be replaced by image embeddings when running the model
-forward call. And the `processed_chat` can be further passed into `model.generate()` to generate text.
+This yields a string in LLaVAs expected input format with many `<image>` tokens at the end.
+The `<image>` tokens are placeholders and each one will be replaced by image embeddings when the mode is run in the forward call. The `processed_chat` can be further passed into [`~GenerationMixin.generate`] to generate text.
 ```text
 '<|im_start|>system 
 You are a friendly chatbot who always responds in the style of a pirate<|im_end|><|im_start|>user <image><image><image><image><image><image><image><image>'
@@ -725,7 +723,7 @@ one is a little simplified from the actual one!
 
 ```
 {%- for message in messages %}
-    {{- '<|' + message['role'] + |>\n' }}
+    {{- '<|' + message['role'] + '|>\n' }}
     {{- message['content'] + eos_token }}
 {%- endfor %}
 {%- if add_generation_prompt %}

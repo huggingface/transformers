@@ -17,7 +17,6 @@
 import unittest
 
 import numpy as np
-import requests
 from huggingface_hub import hf_hub_download
 
 from transformers import (
@@ -48,8 +47,6 @@ from ...test_modeling_common import (
 if is_torch_available():
     import torch
 
-else:
-    is_torch_greater_or_equal_than_2_0 = False
 
 if is_vision_available():
     from PIL import Image
@@ -91,7 +88,7 @@ class LlavaNextVideoVisionText2TextModelTester:
         },
         is_training=True,
         vision_config={
-            "image_size": 16,
+            "image_size": 8,
             "patch_size": 4,
             "num_channels": 3,
             "is_training": True,
@@ -125,10 +122,10 @@ class LlavaNextVideoVisionText2TextModelTester:
         self.batch_size = 3
         self.num_channels = 3
         self.image_size = 30
-        self.encoder_seq_length = 127
-        self.image_grid_pinpoints = [[32, 32]]
-        self.num_image_tokens = 88
-        self.num_video_tokens = 32
+
+        self.image_grid_pinpoints = [[16, 16]]
+        self.num_image_tokens = 24
+        self.num_video_tokens = 8
         self.seq_length = seq_length + self.num_image_tokens + self.num_video_tokens
 
     def get_config(self):
@@ -240,7 +237,13 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
 
     def setUp(self):
         self.model_tester = LlavaNextVideoVisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=LlavaNextVideoConfig, has_text_modality=False)
+        common_properties = ["image_token_index", "video_token_index", "vision_feature_layer", "image_seq_length"]
+        self.config_tester = ConfigTester(
+            self, config_class=LlavaNextVideoConfig, has_text_modality=False, common_properties=common_properties
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     def test_initialization(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -539,101 +542,3 @@ class LlavaNextVideoForConditionalGenerationIntegrationTest(unittest.TestCase):
                 model(**inputs_batched, output_hidden_states=True)
 
             self.assertIn("Padding side is set to 'right' but the model is in inference mode. For correct", logs)
-
-    @slow
-    @require_bitsandbytes
-    def test_expansion_in_processing(self):
-        model_id = "llava-hf/LLaVA-NeXT-Video-7B-hf"
-        model = LlavaNextVideoForConditionalGeneration.from_pretrained(
-            "llava-hf/LLaVA-NeXT-Video-7B-hf", load_in_4bit=True
-        )
-        processor = AutoProcessor.from_pretrained(model_id)
-
-        # check processing with expansion of inputs
-        processor.vision_feature_select_strategy = "default"
-        processor.patch_size = 14
-        inputs_expanded = processor(self.prompt_video, videos=[self.video], return_tensors="pt").to(torch_device)
-        self.assertTrue(inputs_expanded.input_ids.shape[-1] == 1170)
-
-        # check processing without expansion of inputs (legacy behavior)
-        processor.vision_feature_select_strategy = None
-        processor.patch_size = None
-        inputs = processor(self.prompt_video, videos=[self.video], return_tensors="pt").to(torch_device)
-        self.assertTrue(inputs.input_ids.shape[-1] == 19)
-
-        # generate exactly 20 tokens
-        output = model.generate(**inputs, min_new_tokens=20, max_new_tokens=20)
-        output_expanded = model.generate(**inputs_expanded, min_new_tokens=20, max_new_tokens=20)
-
-        # check that both inputs are handled correctly and generate the same output
-        self.assertListEqual(output_expanded[:, -20:].tolist(), output[:, -20:].tolist())
-
-    @slow
-    @require_bitsandbytes
-    def test_expansion_in_processing_images(self):
-        model_id = "llava-hf/LLaVA-NeXT-Video-7B-hf"
-        model = LlavaNextVideoForConditionalGeneration.from_pretrained(
-            "llava-hf/LLaVA-NeXT-Video-7B-hf", load_in_4bit=True
-        )
-        processor = AutoProcessor.from_pretrained(model_id)
-
-        # check processing with expansion of inputs
-        processor.vision_feature_select_strategy = "default"
-        processor.patch_size = 14
-        inputs_expanded = processor(self.prompt_image, images=[self.image], return_tensors="pt").to(torch_device)
-        self.assertTrue(inputs_expanded.input_ids.shape[-1] == 2652)
-
-        # check processing without expansion of inputs (legacy behavior)
-        processor.vision_feature_select_strategy = None
-        processor.patch_size = None
-        inputs = processor(self.prompt_image, images=[self.image], return_tensors="pt").to(torch_device)
-        self.assertTrue(inputs.input_ids.shape[-1] == 19)
-
-        # generate exactly 20 tokens
-        output = model.generate(**inputs, min_new_tokens=20, max_new_tokens=20)
-        output_expanded = model.generate(**inputs_expanded, min_new_tokens=20, max_new_tokens=20)
-
-        # check that both inputs are handled correctly and generate the same output
-        self.assertListEqual(output_expanded[:, -20:].tolist(), output[:, -20:].tolist())
-
-    @slow
-    @require_bitsandbytes
-    def test_expansion_in_processing_multiimage(self):
-        model_id = "llava-hf/LLaVA-NeXT-Video-7B-hf"
-        model = LlavaNextVideoForConditionalGeneration.from_pretrained(
-            "llava-hf/LLaVA-NeXT-Video-7B-hf", load_in_4bit=True
-        )
-        processor = AutoProcessor.from_pretrained(model_id)
-
-        prompt = "USER: <image><image>\nDescribe the similarity between the two images:\nASSISTANT:"
-        image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        deer_image = Image.open(
-            requests.get(
-                "https://4.img-dpreview.com/files/p/TS560x560~forums/56876524/03975b28741443319e9a94615e35667e",
-                stream=True,
-            ).raw
-        )
-
-        # check processing with expansion of inputs
-        processor.vision_feature_select_strategy = "default"
-        processor.patch_size = 14
-        inputs_expanded = processor(text=prompt, images=[raw_image, deer_image], return_tensors="pt").to(
-            torch_device, torch.float16
-        )
-        self.assertTrue(inputs_expanded.input_ids.shape[-1] == 3968)
-
-        # check processing without expansion of inputs (legacy behavior)
-        processor.vision_feature_select_strategy = None
-        processor.patch_size = None
-        inputs = processor(text=prompt, images=[raw_image, deer_image], return_tensors="pt").to(
-            torch_device, torch.float16
-        )
-        self.assertTrue(inputs.input_ids.shape[-1] == 22)
-
-        # generate exactly 20 tokens
-        output = model.generate(**inputs, min_new_tokens=20, max_new_tokens=20)
-        output_expanded = model.generate(**inputs_expanded, min_new_tokens=20, max_new_tokens=20)
-
-        # check that both inputs are handled correctly and generate the same output
-        self.assertListEqual(output_expanded[:, -20:].tolist(), output[:, -20:].tolist())

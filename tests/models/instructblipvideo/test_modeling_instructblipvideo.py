@@ -163,8 +163,9 @@ class InstructBlipVideoVisionModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = InstructBlipVideoVisionModelTester(self)
+        common_properties = ["num_query_tokens", "video_token_index"]
         self.config_tester = ConfigTester(
-            self, config_class=InstructBlipVideoVisionConfig, has_text_modality=False, hidden_size=37
+            self, config_class=InstructBlipVideoConfig, has_text_modality=False, common_properties=common_properties
         )
 
     def test_config(self):
@@ -510,10 +511,17 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
 
     def setUp(self):
         self.model_tester = InstructBlipVideoForConditionalGenerationDecoderOnlyModelTester(self)
+        common_properties = ["num_query_tokens", "video_token_index"]
+        self.config_tester = ConfigTester(
+            self, config_class=InstructBlipVideoConfig, has_text_modality=False, common_properties=common_properties
+        )
 
     def test_for_conditional_generation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_conditional_generation(*config_and_inputs)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
