@@ -311,8 +311,11 @@ class BartFlashAttention2(BartAttention):
         cache_position: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         # BartFlashAttention2 attention does not support output_attentions
-        if output_attentions:
-            raise ValueError("BartFlashAttention2 attention does not support output_attentions")
+        if output_attentions or layer_head_mask is not None:
+            raise ValueError(
+                "BartSdpaAttention2 attention does not support `output_attentions` or `layer_head_mask`. "
+                "Use the argument `attn_implementation='eager'` when loading the model."
+            )
 
         # if key_value_states are provided this layer is used as a cross-attention layer
         # for the decoder
@@ -410,7 +413,13 @@ class BartSdpaAttention(BartAttention):
         cache_position: Optional[torch.Tensor] = None,
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         """Input shape: Batch x Time x Channel"""
-        if output_attentions or layer_head_mask is not None:
+        if layer_head_mask is not None:
+            raise ValueError(
+                "BartSdpaAttention2 attention does not support `output_attentions` or `layer_head_mask`. "
+                "Use the argument `attn_implementation='eager'` when loading the model."
+            )
+
+        if output_attentions:
             # TODO: Improve this warning with e.g. `model.config._attn_implementation = "manual"` once this is implemented.
             logger.warning_once(
                 "BartModel is using BartSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True` or `layer_head_mask` not None. Falling back to the manual attention"
@@ -754,6 +763,7 @@ class BartPreTrainedModel(PreTrainedModel):
         }
         return dummy_inputs
 
+    # Copied from transformers.models.llama.modeling_llama.LlamaModel._update_causal_mask
     def _update_causal_mask(
         self,
         attention_mask: torch.Tensor,
@@ -761,7 +771,6 @@ class BartPreTrainedModel(PreTrainedModel):
         cache_position: torch.Tensor,
         past_key_values: Cache,
         output_attentions: bool,
-        cross_attn_head_mask: torch.Tensor,
     ):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and (attention_mask == 0.0).any():
@@ -775,13 +784,7 @@ class BartPreTrainedModel(PreTrainedModel):
         using_static_cache = isinstance(past_key_values, StaticCache)
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        # Same for `cross_attn_head_mask`, it is not compatible with SDPA so we fallback to eager
-        if (
-            self.config._attn_implementation == "sdpa"
-            and not using_static_cache
-            and not output_attentions
-            and cross_attn_head_mask is None
-        ):
+        if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
                 attention_mask,
                 inputs_embeds=input_tensor,
@@ -1436,7 +1439,6 @@ class BartDecoder(BartPreTrainedModel):
             cache_position,
             past_key_values.self_attention_cache if past_key_values is not None else None,
             output_attentions,
-            cross_attn_head_mask,
         )
 
         # expand encoder attention mask

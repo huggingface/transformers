@@ -226,6 +226,7 @@ class BartModelTester:
             attention_mask=inputs_dict["decoder_attention_mask"],
             encoder_hidden_states=encoder_last_hidden_state,
             encoder_attention_mask=inputs_dict["attention_mask"],
+            head_mask=inputs_dict["decoder_head_mask"],
         )[0]
 
         self.parent.assertTrue((last_hidden_state_2 - last_hidden_state).abs().max().item() < 1e-3)

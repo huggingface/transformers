@@ -478,7 +478,7 @@ class PegasusPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
 
-    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_causal_mask
+    # Copied from transformers.models.llama.modeling_llama.LlamaModel._update_causal_mask
     def _update_causal_mask(
         self,
         attention_mask: torch.Tensor,
@@ -486,7 +486,6 @@ class PegasusPreTrainedModel(PreTrainedModel):
         cache_position: torch.Tensor,
         past_key_values: Cache,
         output_attentions: bool,
-        cross_attn_head_mask: torch.Tensor,
     ):
         if self.config._attn_implementation == "flash_attention_2":
             if attention_mask is not None and (attention_mask == 0.0).any():
@@ -500,13 +499,7 @@ class PegasusPreTrainedModel(PreTrainedModel):
         using_static_cache = isinstance(past_key_values, StaticCache)
 
         # When output attentions is True, sdpa implementation's forward method calls the eager implementation's forward
-        # Same for `cross_attn_head_mask`, it is not compatible with SDPA so we fallback to eager
-        if (
-            self.config._attn_implementation == "sdpa"
-            and not using_static_cache
-            and not output_attentions
-            and cross_attn_head_mask is None
-        ):
+        if self.config._attn_implementation == "sdpa" and not using_static_cache and not output_attentions:
             if AttentionMaskConverter._ignore_causal_mask_sdpa(
                 attention_mask,
                 inputs_embeds=input_tensor,
@@ -1159,7 +1152,6 @@ class PegasusDecoder(PegasusPreTrainedModel):
             cache_position,
             past_key_values.self_attention_cache if past_key_values is not None else None,
             output_attentions,
-            cross_attn_head_mask,
         )
 
         # expand encoder attention mask
