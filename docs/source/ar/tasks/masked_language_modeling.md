@@ -174,7 +174,7 @@ pip install transformers datasets evaluate
 >>> lm_dataset = tokenized_eli5.map(group_texts, batched=True, num_proc=4)
 ```
 
-الآن، قم بإنشاء دفعة من الأمثلة باستخدام [`DataCollatorForLanguageModeling`]. من الأكثر كفاءة أن تقوم بـ *الحشو الديناميكي* للجمل إلى الطول الأطول في الدفعة أثناء التجميع، بدلاً من حشو مجموعة البيانات بأكملها إلى الطول الأقصى.
+الآن، قم بإنشاء دفعة من الأمثلة باستخدام [`DataCollatorForLanguageModeling`]. من الأكثر كفاءة أن تقوم بـ *الحشو الديناميكي* ليصل طولها إلى أطول جملة في الدفعة أثناء التجميع، بدلاً من حشو مجموعة البيانات بأكملها إلى الطول الأقصى.
 
 <frameworkcontent>
 <pt>
