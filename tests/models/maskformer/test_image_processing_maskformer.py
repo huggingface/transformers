@@ -30,9 +30,12 @@ if is_torch_available():
     import torch
 
     if is_vision_available():
-        from transformers import MaskFormerImageProcessor, MaskFormerImageProcessorFast
+        from transformers import MaskFormerImageProcessor
         from transformers.models.maskformer.image_processing_maskformer import binary_mask_to_rle
         from transformers.models.maskformer.modeling_maskformer import MaskFormerForInstanceSegmentationOutput
+
+        if is_torchvision_available():
+            from transformers import MaskFormerImageProcessorFast
 
 if is_vision_available():
     from PIL import Image

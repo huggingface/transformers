@@ -267,7 +267,14 @@ def convert_segmentation_map_to_binary_masks(
     segmentation_map: torch.Tensor,
     instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
     ignore_index: Optional[int] = None,
+    do_reduce_labels: bool = False,
 ):
+    if do_reduce_labels and ignore_index is None:
+        raise ValueError("If `do_reduce_labels` is True, `ignore_index` must be provided.")
+
+    if do_reduce_labels:
+        segmentation_map = torch.where(segmentation_map == 0, torch.tensor(ignore_index), segmentation_map - 1)
+
     # Get unique ids (class or instance ids based on input)
     all_labels = torch.unique(segmentation_map)
 
@@ -432,6 +439,7 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
         self._valid_processor_keys = [
             "images",
             "segmentation_maps",
+            "instance_id_to_semantic_id",
             "do_resize",
             "size",
             "size_divisor",
@@ -443,9 +451,7 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
             "image_std",
             "ignore_index",
             "do_reduce_labels",
-            "num_labels",
             "pad_size",
-            "format",
             "return_tensors",
             "data_format",
             "input_data_format",
@@ -566,7 +572,6 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
             image = F.normalize(image, image_mean, image_std)
         return image
 
-    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: ImageInput,
@@ -582,6 +587,7 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
         ignore_index: Optional[int] = None,
+        do_reduce_labels: Optional[bool] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -599,6 +605,7 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
         image_mean = self.image_mean if image_mean is None else image_mean
         image_std = self.image_std if image_std is None else image_std
         ignore_index = self.ignore_index if ignore_index is None else ignore_index
+        do_reduce_labels = do_reduce_labels if do_reduce_labels is not None else self.do_reduce_labels
         pad_size = self.pad_size if pad_size is None else pad_size
         device = kwargs.pop("device", None)
 
@@ -732,7 +739,7 @@ class MaskFormerImageProcessorFast(BaseImageProcessorFast):
                     instance_id = instance_id_to_semantic_id
                 # Use instance2class_id mapping per image
                 masks, classes = convert_segmentation_map_to_binary_masks(
-                    segmentation_map, instance_id, ignore_index=ignore_index
+                    segmentation_map, instance_id, ignore_index=ignore_index, do_reduce_labels=do_reduce_labels
                 )
                 mask_labels.append(masks)
                 class_labels.append(classes)

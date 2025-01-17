@@ -459,6 +459,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         ignore_index: Optional[int] = None,
         do_reduce_labels: bool = False,
         num_labels: Optional[int] = None,
+        pad_size: Optional[Dict[str, int]] = None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -482,6 +483,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         self.ignore_index = ignore_index
         self.do_reduce_labels = do_reduce_labels
         self.num_labels = num_labels
+        self.pad_size = pad_size
 
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
@@ -737,6 +739,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        pad_size: Optional[Dict[str, int]] = None,
     ) -> BatchFeature:
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
@@ -750,6 +753,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         ignore_index = ignore_index if ignore_index is not None else self.ignore_index
         do_reduce_labels = do_reduce_labels if do_reduce_labels is not None else self.do_reduce_labels
+        pad_size = self.pad_size if pad_size is None else pad_size
 
         if not valid_images(images):
             raise ValueError(
@@ -814,6 +818,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             do_reduce_labels,
             return_tensors,
             input_data_format=data_format,
+            pad_size=pad_size,
         )
         return encoded_inputs
 
@@ -854,6 +859,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        pad_size: Optional[Dict[str, int]] = None,
     ) -> BatchFeature:
         """
         Pads a batch of images to the bottom and right of the image with zeros to the size of largest height and width
@@ -877,13 +883,21 @@ class MaskFormerImageProcessor(BaseImageProcessor):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
             input_data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format of the input image. If not provided, it will be inferred.
+            pad_size (`Dict[str, int]`, *optional*):
+                The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
+                provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
+                height and width in the batch.
         """
-        pad_size = get_max_height_width(images, input_data_format=input_data_format)
+        pad_size = pad_size if pad_size is not None else self.pad_size
+        if pad_size is not None:
+            padded_size = (pad_size["height"], pad_size["width"])
+        else:
+            padded_size = get_max_height_width(images, input_data_format=input_data_format)
 
         padded_images = [
             self._pad_image(
                 image,
-                pad_size,
+                padded_size,
                 constant_values=constant_values,
                 data_format=data_format,
                 input_data_format=input_data_format,
@@ -894,7 +908,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
 
         if return_pixel_mask:
             masks = [
-                make_pixel_mask(image=image, output_size=pad_size, input_data_format=input_data_format)
+                make_pixel_mask(image=image, output_size=padded_size, input_data_format=input_data_format)
                 for image in images
             ]
             data["pixel_mask"] = masks
@@ -910,6 +924,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
         do_reduce_labels: bool = False,
         return_tensors: Optional[Union[str, TensorType]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        pad_size: Optional[Dict[str, int]] = None,
     ):
         """
         Pad images up to the largest image in a batch and create a corresponding `pixel_mask`.
@@ -945,6 +960,10 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             return_tensors (`str` or [`~file_utils.TensorType`], *optional*):
                 If set, will return tensors instead of NumPy arrays. If set to `'pt'`, return PyTorch `torch.Tensor`
                 objects.
+            pad_size (`Dict[str, int]`, *optional*):
+                The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
+                provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
+                height and width in the batch.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
@@ -967,7 +986,7 @@ class MaskFormerImageProcessor(BaseImageProcessor):
             input_data_format = infer_channel_dimension_format(pixel_values_list[0])
 
         encoded_inputs = self.pad(
-            pixel_values_list, return_tensors=return_tensors, input_data_format=input_data_format
+            pixel_values_list, return_tensors=return_tensors, input_data_format=input_data_format, pad_size=pad_size
         )
 
         if segmentation_maps is not None:
