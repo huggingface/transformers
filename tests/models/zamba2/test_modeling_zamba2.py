@@ -516,7 +516,7 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     @require_torch_gpu
     @require_bitsandbytes
     @pytest.mark.flash_attn_test
-    # @slow
+    @slow
     def test_flash_attn_2_fp32_ln(self):
         r"""
         Overriding the test_flash_attn_2_fp32_ln test as the Zamba2 model, like Mixtral, doesn't support
@@ -554,7 +554,7 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     @require_flash_attn
     @require_torch_gpu
     @pytest.mark.flash_attn_test
-    # @slow
+    @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         r"""
         Overriding the test_flash_attn_2_inference_padding_right test as the Zamba2 model, like Mixtral, doesn't support
