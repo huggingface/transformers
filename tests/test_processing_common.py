@@ -363,7 +363,7 @@ class ProcessorTesterMixin:
             self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
 
         feature_extractor = self.get_component("feature_extractor")
-        tokenizer = self.get_component("tokenizer", max_length=117, padding="max_length")
+        tokenizer = self.get_component("tokenizer", max_length=300, padding="max_length")
         processor_kwargs = self.prepare_processor_dict()
 
         processor = self.processor_class(tokenizer=tokenizer, feature_extractor=feature_extractor, **processor_kwargs)
@@ -373,7 +373,7 @@ class ProcessorTesterMixin:
         raw_speech = floats_list((3, 1000))
         raw_speech = [np.asarray(audio) for audio in raw_speech]
         inputs = processor(text=input_str, audio=raw_speech, return_tensors="pt")
-        self.assertEqual(len(inputs[self.text_input_name][0]), 117)
+        self.assertEqual(len(inputs[self.text_input_name][0]), 300)
 
     @require_torch
     def test_kwargs_overrides_default_tokenizer_kwargs_audio(self):
