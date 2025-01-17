@@ -15,14 +15,14 @@ rendered properly in your Markdown viewer.
 
 <Youtube id="mqElG5QJWUg"/>
 
-تتنبأ نمذجة اللغة المقنعة برمز مقنع في تسلسل، ويمكن للنموذج الانتباه إلى الرموز ثنائية الاتجاه. هذا
-يعني أن النموذج لديه إمكانية الوصول الكاملة إلى الرموز على اليسار واليمين. نمذجة اللغة المقنعة رائعة للمهام التي
+تتنبأ نمذجة اللغة المقنعة برمز مقنع في تسلسل، ويمكن للنموذج الانتباه إلى الرموز بشكل ثنائي الاتجاه. هذا
+يعني أن النموذج لديه إمكانية الوصول الكاملة إلى الرموز الموجودة على اليسار واليمين. تعد نمذجة اللغة المقنعة ممتازة للمهام التي
 تتطلب فهمًا سياقيًا جيدًا لتسلسل كامل. BERT هو مثال على نموذج لغة مقنع.
 
 سيوضح لك هذا الدليل كيفية:
 
-1. ضبط دقة [DistilRoBERTa](https://huggingface.co/distilbert/distilroberta-base) على مجموعة فرعية [r/askscience](https://www.reddit.com/r/askscience/) من مجموعة بيانات [ELI5](https://huggingface.co/datasets/eli5).
-2. استخدام نموذج الضبط الدقيق الخاص بك للاستدلال.
+1. تكييف [DistilRoBERTa](https://huggingface.co/distilbert/distilroberta-base) على مجموعة فرعية [r/askscience](https://www.reddit.com/r/askscience/) من مجموعة بيانات [ELI5](https://huggingface.co/datasets/eli5).
+2. استخدام نموذج المدرب الخاص بك للاستدلال.
 
 <Tip>
 
