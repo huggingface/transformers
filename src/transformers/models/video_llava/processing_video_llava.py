@@ -167,10 +167,11 @@ class VideoLlavaProcessor(ProcessorMixin):
                 num_frames = 1
 
             if "pixel_values_videos" in encoded_images.keys():
+                one_video = encoded_images.get("pixel_values_videos")[0]
                 if isinstance(encoded_images.get("pixel_values_videos")[0], (list, tuple)):
-                    one_video = np.array(encoded_images.get("pixel_values_videos")[0])
+                    one_video = np.array(one_video)
                 else:
-                    one_video = to_numpy_array(encoded_images.get("pixel_values_videos")[0])
+                    one_video = to_numpy_array(one_video)
                 height, width = get_image_size(one_video[0])
                 num_frames = one_video.shape[0]  # frame dim is always after batch dim
 
