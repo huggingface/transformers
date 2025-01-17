@@ -27,7 +27,7 @@ from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 
 
-class Qwen2_5_VLVisionConfig(PretrainedConfig):
+class Qwen25VisionConfig(PretrainedConfig):
     model_type = "qwen2_5_vl"
     base_config_key = "vision_config"
 
@@ -65,38 +65,6 @@ class Qwen2_5_VLVisionConfig(PretrainedConfig):
         self.window_size = window_size
         self.fullatt_block_indexes = fullatt_block_indexes
         self.out_hidden_size = out_hidden_size
-
-
-class Qwen25VisionConfig(PretrainedConfig):
-    model_type = "qwen2_5_"
-    base_config_key = "vision_config"
-
-    def __init__(
-        self,
-        depth=32,
-        embed_dim=1280,
-        hidden_size=3584,
-        hidden_act="quick_gelu",
-        mlp_ratio=4,
-        num_heads=16,
-        in_channels=3,
-        patch_size=14,
-        spatial_merge_size=2,
-        temporal_patch_size=2,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.depth = depth
-        self.embed_dim = embed_dim
-        self.hidden_size = hidden_size
-        self.hidden_act = hidden_act
-        self.mlp_ratio = mlp_ratio
-        self.num_heads = num_heads
-        self.in_channels = in_channels
-        self.patch_size = patch_size
-        self.spatial_merge_size = spatial_merge_size
-        self.temporal_patch_size = temporal_patch_size
 
 
 class Qwen2_5_VLConfig(PretrainedConfig):
@@ -206,7 +174,7 @@ class Qwen2_5_VLConfig(PretrainedConfig):
     ```"""
 
     model_type = "qwen2_5_vl"
-    sub_configs = {"vision_config": Qwen2_5_VLVisionConfig}
+    sub_configs = {"vision_config": Qwen25VisionConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
     # Default tensor parallel plan for base model `Qwen2_5_VL`
     base_model_tp_plan = {
@@ -281,7 +249,3 @@ class Qwen2_5_VLConfig(PretrainedConfig):
                 self.rope_scaling["type"] = "default"
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self, ignore_keys={"mrope_section"})
-        if isinstance(vision_config, dict):
-            self.vision_config = Qwen2_5_VLVisionConfig(**vision_config)
-        elif vision_config is None:
-            self.vision_config = Qwen2_5_VLVisionConfig()

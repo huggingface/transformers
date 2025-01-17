@@ -70,7 +70,7 @@ def apply_rotary_pos_emb_flashatt(tensor: torch.Tensor, freqs: torch.Tensor) -> 
     return output
 
 
-class Qwen2_5_VLVisionConfig(PretrainedConfig):
+class Qwen25VisionConfig(PretrainedConfig):
     model_type = "qwen2_5_vl"
     base_config_key = "vision_config"
 
@@ -112,7 +112,7 @@ class Qwen2_5_VLVisionConfig(PretrainedConfig):
 
 class Qwen2_5_VLConfig(Qwen2VLConfig):
     model_type = "qwen2_5_vl"
-    sub_configs = {"vision_config": Qwen2_5_VLVisionConfig}
+    sub_configs = {"vision_config": Qwen25VisionConfig}
 
     def __init__(
         self,
@@ -160,9 +160,9 @@ class Qwen2_5_VLConfig(Qwen2VLConfig):
             **kwargs,
         )
         if isinstance(vision_config, dict):
-            self.vision_config = Qwen2_5_VLVisionConfig(**vision_config)
+            self.vision_config = Qwen25VisionConfig(**vision_config)
         elif vision_config is None:
-            self.vision_config = Qwen2_5_VLVisionConfig()
+            self.vision_config = Qwen25VisionConfig()
 
 
 class Qwen2_5_VLMLP(nn.Module):
@@ -247,7 +247,7 @@ class Qwen2_5_VLVisionBlock(nn.Module):
 
 
 class Qwen2_5_VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
-    config_class = Qwen2_5_VLVisionConfig
+    config_class = Qwen25VisionConfig
     _no_split_modules = ["Qwen2_5_VLVisionBlock"]
 
     def __init__(self, config, *inputs, **kwargs) -> None:

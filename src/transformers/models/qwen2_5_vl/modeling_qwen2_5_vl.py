@@ -49,7 +49,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_qwen2_5_vl import Qwen2_5_VLConfig, Qwen2_5_VLVisionConfig
+from .configuration_qwen2_5_vl import Qwen2_5_VLConfig, Qwen25VisionConfig
 
 
 if is_flash_attn_2_available():
@@ -325,7 +325,7 @@ Qwen2_5_VL_START_DOCSTRING = r"""
     Qwen2_5_VL_START_DOCSTRING,
 )
 class Qwen2_5_VisionTransformerPretrainedModel(PreTrainedModel):
-    config_class = Qwen2_5_VLVisionConfig
+    config_class = Qwen25VisionConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Qwen2_5_VLVisionBlock"]
