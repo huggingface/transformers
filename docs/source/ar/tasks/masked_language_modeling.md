@@ -156,7 +156,7 @@ pip install transformers datasets evaluate
 ...     # تجميع جميع النصوص.
 ...     concatenated_examples = {k: sum(examples[k], []) for k in examples.keys()}
 ...     total_length = len(concatenated_examples[list(examples.keys())[0]])
-...     # نتجاهل الباقي الصغير، يمكننا إضافة الحشو إذا كان النموذج يدعم ذلك بدلاً من هذا الإسقاط، يمكنك
+...     # نتجاهل الجزء المتبقي الصغير، يمكننا إضافة الحشو إذا كان النموذج يدعمه بدلاً من هذا الإسقاط، يمكنك
 ...     # تخصيص هذا الجزء حسب احتياجاتك.
 ...     if total_length >= block_size:
 ...         total_length = (total_length // block_size) * block_size
