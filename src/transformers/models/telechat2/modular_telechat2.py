@@ -17,6 +17,7 @@ from ..llama.modeling_llama import (
     LlamaForSequenceClassification,
     LlamaForTokenClassification,
     LlamaModel,
+    LlamaPreTrainedModel,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
