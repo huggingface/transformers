@@ -600,6 +600,7 @@ def load_video(video: Union[str, "VideoInput"], num_frames: Optional[int] = None
     video = video_decoder(file_obj)
     return video
 
+
 def load_images(
     images: Union[List, Tuple, str, "PIL.Image.Image"], timeout: Optional[float] = None
 ) -> Union["PIL.Image.Image", List["PIL.Image.Image"], List[List["PIL.Image.Image"]]]:

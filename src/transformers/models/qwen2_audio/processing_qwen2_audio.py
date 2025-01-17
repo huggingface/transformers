@@ -16,6 +16,7 @@
 Processor class for Qwen2Audio.
 """
 
+import warnings
 from typing import List, Union
 
 import numpy as np
@@ -23,6 +24,7 @@ import numpy as np
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils.deprecation import deprecate_kwarg
 
 
 class Qwen2AudioProcessorKwargs(ProcessingKwargs, total=False):
@@ -77,12 +79,14 @@ class Qwen2AudioProcessor(ProcessorMixin):
         self.audio_eos_token = tokenizer.audio_eos_token if hasattr(tokenizer, "audio_eos_token") else audio_eos_token
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
+    @deprecate_kwarg("audios", version="4.54.0", new_name="audio")
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        audios: Union[np.ndarray, List[np.ndarray]] = None,
         images=None,
+        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
+        audio: Union[np.ndarray, List[np.ndarray]] = None,
         videos=None,
+        audios=None,  # kept for BC
         **kwargs: Unpack[Qwen2AudioProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -97,26 +101,56 @@ class Qwen2AudioProcessor(ProcessorMixin):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            audios (`np.ndarray`, `List[np.ndarray]`):
+            audio (`np.ndarray`, `List[np.ndarray]`):
                 The audio or batch of audios to be prepared. Each audio can be a NumPy array.
-            kwargs (`dict`, *optional*):
-                Additional kwargs to be used by the audio preprocessor or tokenizer.
         """
 
+        # Handle BC when user passes positional args and `audio` gets assigned the second argument
+        arguments_passed_correctly = False
+        # case 1: when processor("hello", optional[my_audio])
+        if images is not None and audio is None and audios is None:
+            if text is not None:
+                audio = text
+                text = images
+            else:
+                text = images
+        # case 2: when processor("hello", audios=my_audio)
+        elif images is not None and audios is not None and text is None:
+            audio = audios
+            text = images
+        # case 3: when processor(text="hello", audios=my_audio)
+        elif text is not None and audios is not None and audio is None and images is None:
+            audio = audios
+        # case 4: when processor(text="hello", audio=my_audio), the only correct way to pass args
+        elif text is not None and audio is not None and audios is None and images is None:
+            arguments_passed_correctly = True
+        else:
+            raise ValueError(
+                "Could not infer input arguments. It is strongly recommended to pass inputs as keyword arguments "
+                "with keys `text` and `audio` for correct processing."
+            )
+
+        if not arguments_passed_correctly:
+            warnings.wanr(
+                "You may have used the wrong order or keyword for inputs. It is strongly recommended to pass inputs as keyword arguments "
+                "with keys `audios` and `text`. This behavior will be deprecated and positional arguments will throw error in transformers v4.54 ",
+                FutureWarning,
+            )
+
         if text is None:
-            raise ValueError("You need to specify either a `text` input to process.")
+            raise ValueError("You need to specify `text` input to process.")
         elif isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
             raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
         # ensure we have as much audios as audio tokens
-        num_audio_tokens = sum(sample.count(self.audio_token) for sample in text)
-        num_audios = 1 if type(audios) == np.ndarray else len(audios)
-        if num_audio_tokens != num_audios:
-            raise ValueError(
-                f"Found {num_audio_tokens} {self.audio_token} token{'s' if num_audio_tokens > 1 else ''} in provided text but received {num_audios} audio{'s' if num_audios > 1 else ''}"
-            )
+        # num_audio_tokens = sum(sample.count(self.audio_token) for sample in text)
+        # num_audios = 1 if type(audio) == np.ndarray else len(audio)
+        # if num_audio_tokens != num_audios:
+        #     raise ValueError(
+        #         f"Found {num_audio_tokens} {self.audio_token} token{'s' if num_audio_tokens > 1 else ''} in provided text but received {num_audios} audio{'s' if num_audios > 1 else ''}"
+        #     )
 
         output_kwargs = self._merge_kwargs(
             Qwen2AudioProcessorKwargs,
@@ -124,15 +158,14 @@ class Qwen2AudioProcessor(ProcessorMixin):
             **kwargs,
         )
 
-        inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+        if audio is not None:
+            # Some kwargs should not be changed so we can expand text with audio tokens below
+            output_kwargs["audio_kwargs"]["return_attention_mask"] = True
+            output_kwargs["audio_kwargs"]["padding"] = "max_length"
+            audio_inputs = self.feature_extractor(audio, **output_kwargs["audio_kwargs"])
 
-        if audios is not None:
-            audio_inputs = self.feature_extractor(
-                audios, return_attention_mask=True, padding="max_length", **output_kwargs["audio_kwargs"]
-            )
-            audio_inputs["feature_attention_mask"] = audio_inputs.pop(
-                "attention_mask"
-            )  # rename attention_mask to prevent conflicts later on
+            # rename attention_mask to prevent conflicts later on
+            audio_inputs["feature_attention_mask"] = audio_inputs.pop("attention_mask")
 
             expanded_text = []
             audio_lengths = audio_inputs["feature_attention_mask"].sum(-1).tolist()
@@ -170,9 +203,9 @@ class Qwen2AudioProcessor(ProcessorMixin):
                 expanded_text.append(sample)
             text = expanded_text
 
-        inputs = self.tokenizer(text, padding=padding, **kwargs)
+        inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
-        if audios is not None:
+        if audio is not None:
             inputs.update(audio_inputs)
 
         return BatchFeature(data={**inputs})
@@ -236,7 +269,7 @@ class Qwen2AudioProcessor(ProcessorMixin):
                     "{{ message['content'] }}<|im_end|>\n"
                 "{% else %}"
                     "{% for content in message['content'] %}"
-                        "{% if 'audio' in content or 'audio_url' in content %}"
+                        "{% if 'audio' in content or 'audio_url' in content or message['type'] == 'audio' %}"
                             "{% set audio_count.value = audio_count.value + 1 %}"
                             "Audio {{ audio_count.value }}: <|audio_bos|><|AUDIO|><|audio_eos|>\n"
                         "{% elif 'text' in content %}"
