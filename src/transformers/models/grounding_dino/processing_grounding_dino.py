@@ -247,6 +247,7 @@ class GroundingDinoProcessor(ProcessorMixin):
         threshold: float = 0.25,
         text_threshold: float = 0.25,
         target_sizes: Optional[Union[TensorType, List[Tuple]]] = None,
+        text_labels: Optional[List[List[str]]] = None,
     ):
         """
         Converts the raw output of [`GroundingDinoForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
@@ -264,9 +265,17 @@ class GroundingDinoProcessor(ProcessorMixin):
             target_sizes (`torch.Tensor` or `List[Tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
                 `(height, width)` of each image in the batch. If unset, predictions will not be resized.
+            text_labels (`List[List[str]]`, *optional*):
+                List of candidate labels to be detected on each image. At the moment it's *NOT used*, but required
+                to be in signature for the zero-shot object detection pipeline. Text labels are instead extracted
+                from the `input_ids` tensor provided in `outputs`.
+
         Returns:
-            `List[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
-            in the batch as predicted by the model.
+            `List[Dict]`: A list of dictionaries, each dictionary containing the 
+                - **scores**: tensor of confidence scores for detected objects
+                - **boxes**: tensor of bounding boxes in [x0, y0, x1, y1] format
+                - **labels**: list of text labels for each detected object (will be replaced with integer ids in v4.51.0)
+                - **text_labels**: list of text labels for detected objects
         """
         batch_logits, batch_boxes = outputs.logits, outputs.pred_boxes
         input_ids = input_ids if input_ids is not None else outputs.input_ids
