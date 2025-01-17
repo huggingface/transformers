@@ -23,7 +23,7 @@ of text (as is the case with a standard language model), the model instead conti
 of one or more **messages**, each of which includes a **role**, like "user" or "assistant", as well as message text.
 
 Much like tokenization, different models expect very different input formats for chat. This is the reason we added
-**chat templates** as a feature. Chat templates are part of the tokenizer. They specify how to convert conversations, 
+**chat templates** as a feature. Chat templates are part of the tokenizer for text-only LLMs or processor for multimodal LLMs. They specify how to convert conversations, 
 represented as lists of messages, into a single tokenizable string in the format that the model expects. 
 
 Let's make this concrete with a quick example using the `mistralai/Mistral-7B-Instruct-v0.1` model:
@@ -66,10 +66,12 @@ for you, allowing you to write universal code that works for any model.
 ## How do I use chat templates?
 
 As you can see in the example above, chat templates are easy to use. Simply build a list of messages, with `role`
-and `content` keys, and then pass it to the [`~PreTrainedTokenizer.apply_chat_template`] method. Once you do that,
+and `content` keys, and then pass it to the [`~PreTrainedTokenizer.apply_chat_template`] or [`~ProcessorMixin.apply_chat_template`] method
+depending on what type of model you are using. Once you do that,
 you'll get output that's ready to go! When using chat templates as input for model generation, it's also a good idea
 to use `add_generation_prompt=True` to add a [generation prompt](#what-are-generation-prompts). 
 
+## Usage with text-only LLMs
 Here's an example of preparing input for `model.generate()`, using `Zephyr` again:
 
 ```python
@@ -114,6 +116,44 @@ You are a friendly chatbot who always responds in the style of a pirate</s>
 How many helicopters can a human eat in one sitting?</s> 
 <|assistant|>
 Matey, I'm afraid I must inform ye that humans cannot eat helicopters. Helicopters are not food, they are flying machines. Food is meant to be eaten, like a hearty plate o' grog, a savory bowl o' stew, or a delicious loaf o' bread. But helicopters, they be for transportin' and movin' around, not for eatin'. So, I'd say none, me hearties. None at all.
+```
+
+## Usage with multimodal LLMs
+
+For multimodal LLMs such as [LLaVA](https://huggingface.co/llava-hf) the prompts can be formatted in a similar way. The only difference is you need to pass input images/videos as well along with the text. Each `"content"`
+has to be a list containing either a text or an image/video.
+
+Here's an example of preparing input for using `LLaVA` model:
+
+```python
+from transformers import AutoProcessor, LlavaOnevisionForConditionalGeneration
+
+model_id = "llava-hf/llava-onevision-qwen2-0.5b-ov-hf"
+model = LlavaOnevisionForConditionalGeneration.from_pretrained(model_id)  # You may want to use bfloat16 and/or move to GPU here
+processor = AutoProcessor.from_pretrained(model_id)
+
+messages = [
+    {
+        "role": "system",
+        "content": [{"type": "text", "text": "You are a friendly chatbot who always responds in the style of a pirate"}],
+    },
+    {
+      "role": "user",
+      "content": [
+          {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
+          {"type": "text", "text": "What are these?"},
+        ],
+    },
+]
+
+processed_chat = processor.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt")
+print(processor.batch_decode(processed_chat["input_ids"][:, :30]))
+```
+This yields a string in LLaVAs expected input format with many `<image>` tokens at the end.
+The `<image>` tokens are placeholders and each one will be replaced by image embeddings when the mode is run in the forward call. The `processed_chat` can be further passed into [`~GenerationMixin.generate`] to generate text.
+```text
+'<|im_start|>system 
+You are a friendly chatbot who always responds in the style of a pirate<|im_end|><|im_start|>user <image><image><image><image><image><image><image><image>'
 ```
 
 Arr, 'twas easy after all!
@@ -683,7 +723,7 @@ one is a little simplified from the actual one!
 
 ```
 {%- for message in messages %}
-    {{- '<|' + message['role'] + |>\n' }}
+    {{- '<|' + message['role'] + '|>\n' }}
     {{- message['content'] + eos_token }}
 {%- endfor %}
 {%- if add_generation_prompt %}

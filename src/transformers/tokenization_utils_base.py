@@ -28,7 +28,7 @@ from collections.abc import Mapping, Sized
 from contextlib import contextmanager
 from dataclasses import dataclass
 from inspect import isfunction
-from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
 from packaging import version
@@ -1527,7 +1527,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
     def apply_chat_template(
         self,
         conversation: Union[List[Dict[str, str]], List[List[Dict[str, str]]]],
-        tools: Optional[List[Dict]] = None,
+        tools: Optional[List[Union[Dict, Callable]]] = None,
         documents: Optional[List[Dict[str, str]]] = None,
         chat_template: Optional[str] = None,
         add_generation_prompt: bool = False,
@@ -2292,13 +2292,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "Unable to load vocabulary from file. "
                 "Please check that the provided vocabulary is accessible and not corrupted."
             )
-        except RuntimeError as e:
-            if "sentencepiece_processor.cc" in str(e):
-                logger.info(
-                    "Unable to load tokenizer model from SPM, loading from TikToken will be attempted instead."
-                    "(SentencePiece RuntimeError: Tried to load SPM model with non-SPM vocab file).",
-                )
-                return False
 
         if added_tokens_decoder != {} and max(list(added_tokens_decoder.keys())[-1], 0) > tokenizer.vocab_size:
             logger.info(
@@ -2429,6 +2422,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             tokenizer_config["extra_special_tokens"] = self.extra_special_tokens
             tokenizer_config.update(self.extra_special_tokens)
 
+        saved_raw_chat_template = False
         if self.chat_template is not None:
             if isinstance(self.chat_template, dict):
                 # Chat template dicts are saved to the config as lists of dicts with fixed key names.
@@ -2439,6 +2433,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             elif kwargs.get("save_raw_chat_template", False):
                 with open(chat_template_file, "w", encoding="utf-8") as f:
                     f.write(self.chat_template)
+                saved_raw_chat_template = True
                 logger.info(f"chat template saved in {chat_template_file}")
                 if "chat_template" in tokenizer_config:
                     tokenizer_config.pop("chat_template")  # To ensure it doesn't somehow end up in the config too
@@ -2498,6 +2493,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         logger.info(f"Special tokens file saved in {special_tokens_map_file}")
 
         file_names = (tokenizer_config_file, special_tokens_map_file)
+        if saved_raw_chat_template:
+            file_names += (chat_template_file,)
 
         save_files = self._save_pretrained(
             save_directory=save_directory,
