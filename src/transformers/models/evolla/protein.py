@@ -27,7 +27,7 @@ from ...modeling_utils import find_pruneable_heads_and_indices, prune_linear_lay
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, BaseModelOutputWithPastAndCrossAttentions, BaseModelOutputWithPoolingAndCrossAttentions
 from ...utils import ModelOutput, logging
 from .configuration_evolla import EvollaProteinConfig, EvollaProteinEncoderConfig
-from .resampler import SequenceCompressorResampler
+from .sequence_compressor import SequenceCompressorResampler
 
 
 logger = logging.get_logger(__name__)
@@ -978,6 +978,8 @@ def get_extended_attention_mask(attention_mask: torch.Tensor, input_shape: Tuple
     extended_attention_mask = extended_attention_mask.to(dtype=dtype)  # fp16 compatibility
     extended_attention_mask = (1.0 - extended_attention_mask) * torch.finfo(dtype).min
     return extended_attention_mask
+
+
 # Adapted from transformers.models.esm.modeling_esm.EsmModel
 class SaProtProteinEncoder(nn.Module):
     def __init__(self, config: EvollaProteinEncoderConfig, add_pooling_layer=True):
