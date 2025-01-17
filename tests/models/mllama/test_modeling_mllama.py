@@ -383,6 +383,10 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
     def test_contrastive_generate_low_memory(self, assistant_type):
         pass
 
+    @unittest.skip(reason="Mllama can't assisted decoding due to cache format and `Cache.crop()`")
+    def test_assisted_decoding_with_num_logits_to_keep(self):
+        pass
+
     @pytest.mark.generate
     # overriden because mllama has special cache for self and cross attentions
     def test_past_key_values_format(self):

@@ -1152,7 +1152,7 @@ class GenerationTesterMixin:
                     "seamlessm4t",
                     "clvp",
                     "mllama",  # special cache sizes
-                    "blip_2",  # overridden `generate()`
+                    "blip2",  # overridden `generate()`
                     "instructblip",
                     "instructblipvideo",
                 ]
