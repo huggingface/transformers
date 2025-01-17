@@ -41,23 +41,6 @@ _CHECKPOINT_FOR_DOC = "TeleAI/TeleChat2-3B"
 _CONFIG_FOR_DOC = "TeleChat2Config"
 
 
-def dropout_add(x: torch.Tensor, prob: float, training: bool) -> torch.Tensor:
-    """
-    Apply dropout to `x` and add the result to the residual tensor.
-
-    Args:
-        x (`torch.Tensor`): Input tensor.
-        residual (`torch.Tensor`): Residual tensor.
-        prob (`float`): Dropout probability.
-        training (`bool`): Whether in training mode.
-
-    Returns:
-        `torch.Tensor`: Output after dropout and addition.
-    """
-    out = F.dropout(x, p=prob, training=training)
-    return out
-
-
 class TeleChat2MLP(nn.Module):
     """
     TeleChat2 MLP block with a gated activation function.
@@ -66,14 +49,15 @@ class TeleChat2MLP(nn.Module):
     def __init__(self, config: TeleChat2Config):
         super().__init__()
         hidden_size = config.hidden_size
-        self.gate_proj = nn.Linear(hidden_size, config.ffn_hidden_size, bias=config.mlp_bias)
-        self.up_proj = nn.Linear(hidden_size, config.ffn_hidden_size, bias=config.mlp_bias)
-        self.down_proj = nn.Linear(config.ffn_hidden_size, hidden_size, bias=True)
+        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(hidden_size, config.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(hidden_size, config.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(config.intermediate_size, hidden_size, bias=True)
         self.hidden_dropout = config.hidden_dropout
 
     def forward(self, hidden_states):
         intermediate_output = self.down_proj(F.silu(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
-        output = dropout_add(intermediate_output, self.hidden_dropout, self.training)
+        output = F.dropout(intermediate_output, p=self.hidden_dropout, training=self.training)
         return output
 
 
@@ -161,10 +145,10 @@ class TeleChat2Attention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
-
-        self.query = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
-        self.key_value = nn.Linear(config.hidden_size, self.head_dim * config.num_key_value_heads * 2, bias=False)
-        self.dense = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size)
+        self.q_proj = nn.Linear(config.hidden_size, config.num_attention_heads * self.head_dim, bias=False)
+        self.k_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
+        self.v_proj = nn.Linear(config.hidden_size, config.num_key_value_heads * self.head_dim, bias=False)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=True)
 
     def forward(
         self,
@@ -178,13 +162,9 @@ class TeleChat2Attention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.query(hidden_states).view(hidden_shape).transpose(1, 2)
-
-        mixed_kv = self.key_value(hidden_states)
-        mixed_kv = mixed_kv.view(*input_shape, -1, 2 * self.head_dim)
-        key_states, value_states = torch.split(mixed_kv, self.head_dim, dim=-1)
-        key_states = key_states.transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
+        query_states = self.q_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(hidden_states).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
@@ -216,7 +196,7 @@ class TeleChat2Attention(nn.Module):
         )
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        attn_output = self.dense(attn_output)
+        attn_output = self.o_proj(attn_output)
         return attn_output, attn_weights
 
 
@@ -238,106 +218,6 @@ class TeleChat2RMSNorm(nn.Module):
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
-class TeleChat2DecoderLayer(nn.Module):
-    def __init__(self, config: TeleChat2Config, layer_idx: int):
-        super().__init__()
-        self.hidden_size = config.hidden_size
-
-        self.mlp = TeleChat2MLP(config)
-        self.input_layernorm = TeleChat2RMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
-        self.post_attention_layernorm = TeleChat2RMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
-
-        self.self_attention = TeleChat2Attention(config=config, layer_idx=layer_idx)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        residual = hidden_states
-
-        hidden_states = self.input_layernorm(hidden_states)
-
-        # Self Attention
-        hidden_states, self_attn_weights = self.self_attention(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_value=past_key_value,
-            output_attentions=output_attentions,
-            use_cache=use_cache,
-            cache_position=cache_position,
-            position_embeddings=position_embeddings,
-            **kwargs,
-        )
-        hidden_states = residual + hidden_states
-
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-
-        outputs = (hidden_states,)
-        if output_attentions:
-            outputs += (self_attn_weights,)
-
-        return outputs
-
-
-TELECHAT2_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`TeleChat2Config`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The bare TeleChat2 Model outputting raw hidden-states without any specific head on top.",
-    TELECHAT2_START_DOCSTRING,
-)
-class TeleChat2PreTrainedModel(PreTrainedModel):
-    config_class = TeleChat2Config
-    base_model_prefix = "transformer"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["TeleChat2DecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
-
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
 
 
 class TeleChat2RotaryEmbedding(nn.Module):
@@ -399,6 +279,106 @@ class TeleChat2RotaryEmbedding(nn.Module):
         sin = sin * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
+class TeleChat2DecoderLayer(nn.Module):
+    def __init__(self, config: TeleChat2Config, layer_idx: int):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+
+        self.self_attn = TeleChat2Attention(config=config, layer_idx=layer_idx)
+
+        self.mlp = TeleChat2MLP(config)
+        self.input_layernorm = TeleChat2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = TeleChat2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
+        output_attentions: Optional[bool] = False,
+        use_cache: Optional[bool] = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        residual = hidden_states
+
+        hidden_states = self.input_layernorm(hidden_states)
+
+        # Self Attention
+        hidden_states, self_attn_weights = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_value=past_key_value,
+            output_attentions=output_attentions,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            position_embeddings=position_embeddings,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states
+
+        # Fully Connected
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+
+        outputs = (hidden_states,)
+        if output_attentions:
+            outputs += (self_attn_weights,)
+
+        return outputs
+
+
+TELECHAT2_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`TeleChat2Config`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+
+@add_start_docstrings(
+    "The bare TeleChat2 Model outputting raw hidden-states without any specific head on top.",
+    TELECHAT2_START_DOCSTRING,
+)
+class TeleChat2PreTrainedModel(PreTrainedModel):
+    config_class = TeleChat2Config
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["TeleChat2DecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_cache_class = True
+    _supports_quantized_cache = True
+    _supports_static_cache = True
+
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
 
 
 TELECHAT2_INPUTS_DOCSTRING = r"""
@@ -492,21 +472,23 @@ class TeleChat2Model(TeleChat2PreTrainedModel):
         super().__init__(config)
         self.padding_idx = config.pad_token_id
         self.vocab_size = config.vocab_size
+
+        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.layers = nn.ModuleList(
+            [TeleChat2DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
+        self.norm = TeleChat2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = TeleChat2RotaryEmbedding(config=config)
         self.gradient_checkpointing = False
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-
-        self.h = nn.ModuleList([TeleChat2DecoderLayer(config, i) for i in range(config.num_hidden_layers)])
-        self.ln_f = TeleChat2RMSNorm(config.hidden_size, eps=config.layer_norm_epsilon)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.word_embeddings
+        return self.embed_tokens
 
     def set_input_embeddings(self, value):
-        self.word_embeddings = value
+        self.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(TELECHAT2_INPUTS_DOCSTRING)
     def forward(
@@ -540,7 +522,7 @@ class TeleChat2Model(TeleChat2PreTrainedModel):
             use_cache = False
 
         if inputs_embeds is None:
-            inputs_embeds = self.word_embeddings(input_ids)
+            inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache()
@@ -567,7 +549,7 @@ class TeleChat2Model(TeleChat2PreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
 
-        for decoder_layer in self.h[: self.config.num_hidden_layers]:
+        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -601,7 +583,7 @@ class TeleChat2Model(TeleChat2PreTrainedModel):
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
 
-        hidden_states = self.ln_f(hidden_states)
+        hidden_states = self.norm(hidden_states)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
@@ -746,18 +728,18 @@ class TeleChat2ForCausalLM(TeleChat2PreTrainedModel, GenerationMixin):
 
     def __init__(self, config):
         super().__init__(config)
+        self.model = TeleChat2Model(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self.transformer = TeleChat2Model(config)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.transformer.word_embeddings
+        return self.model.embed_tokens
 
     def set_input_embeddings(self, value):
-        self.transformer.word_embeddings = value
+        self.model.embed_tokens = value
 
     def get_output_embeddings(self):
         return self.lm_head
@@ -766,10 +748,10 @@ class TeleChat2ForCausalLM(TeleChat2PreTrainedModel, GenerationMixin):
         self.lm_head = new_embeddings
 
     def set_decoder(self, decoder):
-        self.transformer = decoder
+        self.model = decoder
 
     def get_decoder(self):
-        return self.transformer
+        return self.model
 
     @add_start_docstrings_to_model_forward(TELECHAT2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -826,7 +808,7 @@ class TeleChat2ForCausalLM(TeleChat2PreTrainedModel, GenerationMixin):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         # decoder outputs consists of (dec_features, layer_state, dec_hidden, dec_attn)
-        outputs = self.transformer(
+        outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -880,17 +862,17 @@ class TeleChat2ForSequenceClassification(TeleChat2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
+        self.model = TeleChat2Model(config)
         self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
-        self.transformer = TeleChat2Model(config)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.transformer.word_embeddings
+        return self.model.embed_tokens
 
     def set_input_embeddings(self, value):
-        self.transformer.word_embeddings = value
+        self.model.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(TELECHAT2_INPUTS_DOCSTRING)
     def forward(
@@ -914,7 +896,7 @@ class TeleChat2ForSequenceClassification(TeleChat2PreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        transformer_outputs = self.transformer(
+        transformer_outputs = self.model(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -984,10 +966,10 @@ class TeleChat2ForQuestionAnswering(TeleChat2PreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.transformer.word_embeddings
+        return self.transformer.embed_tokens
 
     def set_input_embeddings(self, value):
-        self.transformer.word_embeddings = value
+        self.transformer.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(TELECHAT2_INPUTS_DOCSTRING)
     def forward(
@@ -1062,6 +1044,7 @@ class TeleChat2ForTokenClassification(TeleChat2PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
+        self.model = TeleChat2Model(config)
         if getattr(config, "classifier_dropout", None) is not None:
             classifier_dropout = config.classifier_dropout
         elif getattr(config, "hidden_dropout", None) is not None:
@@ -1070,16 +1053,15 @@ class TeleChat2ForTokenClassification(TeleChat2PreTrainedModel):
             classifier_dropout = 0.1
         self.dropout = nn.Dropout(classifier_dropout)
         self.score = nn.Linear(config.hidden_size, config.num_labels)
-        self.transformer = TeleChat2Model(config)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.transformer.word_embeddings
+        return self.model.embed_tokens
 
     def set_input_embeddings(self, value):
-        self.transformer.word_embeddings = value
+        self.model.embed_tokens = value
 
     @add_start_docstrings_to_model_forward(TELECHAT2_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -1108,7 +1090,7 @@ class TeleChat2ForTokenClassification(TeleChat2PreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.transformer(
+        outputs = self.model(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
