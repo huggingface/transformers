@@ -247,7 +247,8 @@ pip install transformers datasets evaluate
 >>> trainer.train()
 ```
 
-بمجرد اكتمال التدريب، استخدم طريقة [`~transformers.Trainer.evaluate`] لتقييم نموذجك والحصول على حيرته:
+بمجرد اكتمال التدريب، استخدم طريقة [`~transformers.Trainer.evaluate`] لتقييم النموذج والحصول على مقياس
+    الحيرة:
 
 ```py
 >>> import math
