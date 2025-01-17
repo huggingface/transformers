@@ -590,18 +590,58 @@ and the `**super_kwargs` syntax unravelled all the arguments, while the `super()
 
 However, we want to make it clear that the `**super_kwargs` syntax is not a replacement to being explicit when you redefine your methods: if you actually overwrite the method (i.e. you do not call `super().method()`), then we want you to explicitly write the signature as you would usually. This is only a short-cut when switching decorators, and a few other niche cases.
 
-## Current Limitations
+### The DOCSTRING variables
+
+Usually, if whatever object is defned both in the modular file and the modeling file from which we inherit, then the definition of the modular takes precedence. However, this is not the case for assignments containing the pattern `DOCSTRING`. Indeed, we usually have variables defined as `MODEL_START_DOCSTRING` and `MODEL_INPUT_DOCSTRING` in the modeling files. These are just very big blocks of, well, docstrings... But they are (almost) always exactly the same up to the model name! And modular automatically rewrite the names everywhere! For this reason, assignments containing the pattern will _always_ use the definition found in the source file instead of the modular file. This is extremely handy if we need the variable reference somewhere (e.g. to redefine a decorator) but we do not want to clutter the modular file with 100 lines of docstrings which are always the same. It allows to do the following (taken from [modular_starcoder2.py](LINK HERE))
+
+```py
+STARCODER2_INPUTS_DOCSTRING = None  # will be automatically redefined
+
+class Starcoder2Model(MistralModel):
+    ...
+
+    @add_start_docstrings_to_model_forward(STARCODER2_INPUTS_DOCSTRING)
+    def forward(...)
+        ...
+```
+
+and here, the linter will correctly take the same definition of the docstring as in `Mistral`, without having to clutter the modular file!
+
+## Limitations
 
 Now, let's go over some of the limitations of modular.
 
-### Special naming (for multimodal models)
+### Special naming (essentially for multimodal models)
 
-We now also support special cases like
-```python
-class GemmaVisionModel(CLIPModel):                                 
+Because our linter automatically renames everything when inheriting from a class (defining `class NewModelMLP(LlamaMLP)` will rename every mention of `Llama` to `NewModel`, and recursively for all dependencies grabbed), it has somewhat strict rules when it comes to naming. For consistency reasons, we require that you always use the same class name prefix when inheriting different classes from the same file. For example, doing:
+
+```py
+class MyModelIncredibleMLP(LlamaMLP):
+    ...
+
+class MyModelDecoderLayer(LlamaDecoderLayer):
+    ...
+```
+
+is not recommended, first because it breaks standards in the library and we do not like it, and second because the linter will not know how to rename potential high-order dependencies (should we use `MyModelIncredible`, or `MyModel`?).
+
+If there are no dependencies to grab implicitly however (as was the case in section LINK SECTION HERE), local renaming (for a single class) will not be an issue and the linter will not complain. But make sure to explicitly redefine every other mentions of the class with the new name pattern! For example in the example above, all mentions of `LlamaMLP` in other modules inherited should be explicitly replaced by mentions to `MyModelIncredibleMLP`, otherwise the linter may add a new and unwanted `MyModelMLP` class!
+
+In any way, if there is an ambiguous case detected, the linter will raise a warning such as
+
+```
+We detected multiple prefix names when inheriting from transformers.models.llama.modeling_llama: ('Emu3Text', 'Emu3'). We will only use the most used 'Emu3' prefix when grabbing args and dependencies. Make sure to subclass the intermediate classes with the prefix you want (if different from 'Emu3') or use a single prefix in all the modular (best).
+```
+
+explaining what is happening, and which prefix is used by default for grabbing dependencies. As explained, if you see automatic dependencies appear with a prefix but you want another one, then explicitly rename these classes locally with a simple `pass` class, such as
+
+```py
+class Emu3TextMLP(LlamaMLP):                                 
     pass
 ```
-where the name of your class `GemmaVision` is not the same as the modular `Gemma`. This is super useful for composite models.
 
-### Automatic docstrings
+Such warnings and renaming patterns complications usually only arise when defining multimodel models, when you want to define e.g. the text part of your model from an existing model, but want to add the part `Text` to the class names to make it clear what they refer to in the multimodal setup.
 
+### Automatic docstrings issue (mostly for Configs)
+
+When inheriting a Config class and adding or deleting some attributes, it may be tempting to only redefine the new attributes in the docstring, and hoping that modular will do the rest. And similarly when deleting an argument, do nothing and hope that modular will remove itself from the docstring. However, due to current limitations of our linter, this is not yet supported. Thus, if you are in this case, you need to directly put the whole docstring (as it should appear in the end, with the correct arguments and default values) directly in the modular file under the class definition.
