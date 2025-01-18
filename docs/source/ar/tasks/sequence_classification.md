@@ -84,7 +84,7 @@ pip install transformers datasets evaluate accelerate
 ...     return tokenizer(examples["text"], truncation=True)
 ```
 
-لتطبيق وظيفة المعالجة المسبقة على مجموعة البيانات بأكملها، استخدم وظيفة 🤗 Datasets [`~datasets.Dataset.map`] . يمكنك تسريع `map` عن طريق تعيين `batched=True` لمعالجة عناصر متعددة من مجموعة البيانات في وقت واحد:
+لتطبيق دالة التهيئة على مجموعة البيانات بأكملها، استخدم دالة 🤗 Datasets [`~datasets.Dataset.map`] . يمكنك تسريع `map` باستخدام `batched=True` لمعالجة دفعات من البيانات:
 
 ```py
 tokenized_imdb = imdb.map(preprocess_function, batched=True)
