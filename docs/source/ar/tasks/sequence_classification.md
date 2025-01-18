@@ -282,7 +282,7 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 ... )
 ```
 
-ثم اربط استدعاءاتك معًا:
+ثم اجمع الاستدعاءات معًا:
 
 ```py
 >>> callbacks = [metric_callback, push_to_hub_callback]
