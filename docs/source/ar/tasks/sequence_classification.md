@@ -225,7 +225,7 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 >>> optimizer, schedule = create_optimizer(init_lr=2e-5, num_warmup_steps=0, num_train_steps=total_train_steps)
 ```
 
-ثم يمكنك تحميل DistilBERT مع [`TFAutoModelForSequenceClassification`] جنبًا إلى جنب مع عدد التصنيفات المتوقعة، وخرائط التصنيف:
+ثم يمكنك تحميل DistilBERT مع [`TFAutoModelForSequenceClassification`] بالإضافة إلى عدد التصنيفات المتوقعة، وتعيينات التسميات:
 
 ```py
 >>> from transformers import TFAutoModelForSequenceClassification
