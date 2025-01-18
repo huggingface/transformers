@@ -90,7 +90,7 @@ pip install transformers datasets evaluate accelerate
 tokenized_imdb = imdb.map(preprocess_function, batched=True)
 ```
 
-الآن قم بإنشاء دفعة من الأمثلة باستخدام [`DataCollatorWithPadding`]. من الأكثر كفاءة *الحشو الديناميكي* للجمل إلى الطول الأطول في دفعة أثناء التجميع، بدلاً من حشو كل مجموعة البيانات  إلى الطول الأقصى.
+الآن قم بإنشاء دفعة من الأمثلة باستخدام [`DataCollatorWithPadding`].  الأكثر كفاءة هو استخدام الحشو الديناميكي لجعل الجمل متساوية في الطول داخل كل دفعة، بدلًا من حشو كامل البيانات إلى الحد الأقصى للطول.
 
 <frameworkcontent>
 <pt>
