@@ -70,7 +70,7 @@ class Qwen2_5_VLConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`Qwen2_5_VLModel`]. It is used to instantiate a
     Qwen2.5-VL model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of
-    Qwen2.5-VL-7B-Instruct [Qwen/Qwen2_5_VL-7B-Instruct](https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct).
+    Qwen2.5-VL-7B-Instruct [Qwen/Qwen2.5-VL-7B-Instruct](https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
