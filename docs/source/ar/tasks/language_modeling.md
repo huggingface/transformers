@@ -29,7 +29,7 @@ rendered properly in your Markdown viewer.
 
 <Tip>
 
-لرؤية جميع العمارات ونقاط التفتيش المتوافقة مع هذه المهمة، نوصي بالتحقق من [task-page](https://huggingface.co/tasks/text-generation)
+لرؤية جميع العمارات ونقاط التحقق المتوافقة مع هذه المهمة، نوصي بالتحقق من [task-page](https://huggingface.co/tasks/text-generation)
 
 </Tip>
 
