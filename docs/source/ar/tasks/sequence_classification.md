@@ -69,7 +69,7 @@ pip install transformers datasets evaluate accelerate
 
 ## المعالجة المسبقة(Preprocess)
 
-الخطوة التالية هي تحميل مجزء النص DistilBERT للمعالجة المسبقة لحقل `text`:
+الخطوة التالية هي تحميل المُجزِّئ النص DistilBERT لتهيئة لحقل `text`:
 
 ```py
 >>> from transformers import AutoTokenizer
