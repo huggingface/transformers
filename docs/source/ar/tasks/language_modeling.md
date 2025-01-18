@@ -57,7 +57,7 @@ pip install transformers datasets evaluate
 >>> eli5 = load_dataset("eli5_category", split="train[:5000]")
 ```
 
-قم بتقسيم مجموعة بيانات `train` إلى مجموعة تدريب واختبار باستخدام طريقة [`~datasets.Dataset.train_test_split`]:
+قم بتقسيم مجموعة بيانات `train` إلى مجموعتي تدريب واختبار باستخدام الخاصية [`~datasets.Dataset.train_test_split`]:
 
 ```py
 >>> eli5 = eli5.train_test_split(test_size=0.2)
