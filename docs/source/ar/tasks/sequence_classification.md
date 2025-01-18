@@ -316,7 +316,7 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 >>> text = "This was a masterpiece. Not completely faithful to the books, but enthralling from beginning to end. Might be my favorite of the three."
 ```
 
-أسهل طريقة لتجربة نموذجك المضبوط للاستدلال هي استخدامه في [`pipeline`]. قم بتنفيذ `pipeline` لتحليل المشاعر مع نموذجك، ومرر نصك إليه:
+أسهل طريقة لتجربة النموذج المضبوط للاستدلال هي استخدامه ضمن [`pipeline`]. قم بإنشاء `pipeline` لتحليل المشاعر مع نموذجك، ومرر نصك إليه:
 
 ```py
 >>> from transformers import pipeline
