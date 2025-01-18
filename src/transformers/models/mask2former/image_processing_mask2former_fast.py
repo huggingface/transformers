@@ -4,11 +4,8 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_mask2former.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-import functools
 import math
 from typing import Any, Dict, List, Optional, Set, Tuple, Union
-
-import numpy as np
 
 from ...image_processing_utils import INIT_SERVICE_KWARGS, BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
@@ -28,20 +25,25 @@ from ...image_utils import (
     infer_channel_dimension_format,
     make_list_of_images,
     valid_images,
+    validate_fast_preprocess_arguments,
     validate_kwargs,
 )
 from ...utils import (
     TensorType,
     filter_out_non_signature_kwargs,
     is_torch_available,
-    is_torch_tensor,
     is_torchvision_available,
     is_torchvision_v2_available,
     is_vision_available,
     logging,
 )
 from ...utils.deprecation import deprecate_kwarg
-from .image_processing_mask2former import get_size_with_aspect_ratio
+from .image_processing_mask2former import (
+    compute_segments,
+    convert_segmentation_to_rle,
+    get_size_with_aspect_ratio,
+    remove_low_and_no_objects,
+)
 
 
 if is_torch_available():
@@ -61,164 +63,8 @@ elif is_torchvision_available():
 logger = logging.get_logger(__name__)
 
 
-# Copied from transformers.models.detr.image_processing_detr.binary_mask_to_rle
-def binary_mask_to_rle(mask):
-    """
-    Converts given binary mask of shape `(height, width)` to the run-length encoding (RLE) format.
-
-    Args:
-        mask (`torch.Tensor` or `numpy.array`):
-            A binary mask tensor of shape `(height, width)` where 0 denotes background and 1 denotes the target
-            segment_id or class_id.
-    Returns:
-        `List`: Run-length encoded list of the binary mask. Refer to COCO API for more information about the RLE
-        format.
-    """
-    if is_torch_tensor(mask):
-        mask = mask.numpy()
-
-    pixels = mask.flatten()
-    pixels = np.concatenate([[0], pixels, [0]])
-    runs = np.where(pixels[1:] != pixels[:-1])[0] + 1
-    runs[1::2] -= runs[::2]
-    return list(runs)
-
-
-# Copied from transformers.models.detr.image_processing_detr.convert_segmentation_to_rle
-def convert_segmentation_to_rle(segmentation):
-    """
-    Converts given segmentation map of shape `(height, width)` to the run-length encoding (RLE) format.
-
-    Args:
-        segmentation (`torch.Tensor` or `numpy.array`):
-            A segmentation map of shape `(height, width)` where each value denotes a segment or class id.
-    Returns:
-        `List[List]`: A list of lists, where each list is the run-length encoding of a segment / class id.
-    """
-    segment_ids = torch.unique(segmentation)
-
-    run_length_encodings = []
-    for idx in segment_ids:
-        mask = torch.where(segmentation == idx, 1, 0)
-        rle = binary_mask_to_rle(mask)
-        run_length_encodings.append(rle)
-
-    return run_length_encodings
-
-
-# Copied from transformers.models.detr.image_processing_detr.remove_low_and_no_objects
-def remove_low_and_no_objects(masks, scores, labels, object_mask_threshold, num_labels):
-    """
-    Binarize the given masks using `object_mask_threshold`, it returns the associated values of `masks`, `scores` and
-    `labels`.
-
-    Args:
-        masks (`torch.Tensor`):
-            A tensor of shape `(num_queries, height, width)`.
-        scores (`torch.Tensor`):
-            A tensor of shape `(num_queries)`.
-        labels (`torch.Tensor`):
-            A tensor of shape `(num_queries)`.
-        object_mask_threshold (`float`):
-            A number between 0 and 1 used to binarize the masks.
-    Raises:
-        `ValueError`: Raised when the first dimension doesn't match in all input tensors.
-    Returns:
-        `Tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`]`: The `masks`, `scores` and `labels` without the region
-        < `object_mask_threshold`.
-    """
-    if not (masks.shape[0] == scores.shape[0] == labels.shape[0]):
-        raise ValueError("mask, scores and labels must have the same shape!")
-
-    to_keep = labels.ne(num_labels) & (scores > object_mask_threshold)
-
-    return masks[to_keep], scores[to_keep], labels[to_keep]
-
-
-# Copied from transformers.models.detr.image_processing_detr.check_segment_validity
-def check_segment_validity(mask_labels, mask_probs, k, mask_threshold=0.5, overlap_mask_area_threshold=0.8):
-    # Get the mask associated with the k class
-    mask_k = mask_labels == k
-    mask_k_area = mask_k.sum()
-
-    # Compute the area of all the stuff in query k
-    original_area = (mask_probs[k] >= mask_threshold).sum()
-    mask_exists = mask_k_area > 0 and original_area > 0
-
-    # Eliminate disconnected tiny segments
-    if mask_exists:
-        area_ratio = mask_k_area / original_area
-        if not area_ratio.item() > overlap_mask_area_threshold:
-            mask_exists = False
-
-    return mask_exists, mask_k
-
-
-# Copied from transformers.models.detr.image_processing_detr.compute_segments
-def compute_segments(
-    mask_probs,
-    pred_scores,
-    pred_labels,
-    mask_threshold: float = 0.5,
-    overlap_mask_area_threshold: float = 0.8,
-    label_ids_to_fuse: Optional[Set[int]] = None,
-    target_size: Tuple[int, int] = None,
-):
-    height = mask_probs.shape[1] if target_size is None else target_size[0]
-    width = mask_probs.shape[2] if target_size is None else target_size[1]
-
-    segmentation = torch.zeros((height, width), dtype=torch.int32, device=mask_probs.device)
-    segments: List[Dict] = []
-
-    if target_size is not None:
-        mask_probs = nn.functional.interpolate(
-            mask_probs.unsqueeze(0), size=target_size, mode="bilinear", align_corners=False
-        )[0]
-
-    current_segment_id = 0
-
-    # Weigh each mask by its prediction score
-    mask_probs *= pred_scores.view(-1, 1, 1)
-    mask_labels = mask_probs.argmax(0)  # [height, width]
-
-    # Keep track of instances of each class
-    stuff_memory_list: Dict[str, int] = {}
-    for k in range(pred_labels.shape[0]):
-        pred_class = pred_labels[k].item()
-        should_fuse = pred_class in label_ids_to_fuse
-
-        # Check if mask exists and large enough to be a segment
-        mask_exists, mask_k = check_segment_validity(
-            mask_labels, mask_probs, k, mask_threshold, overlap_mask_area_threshold
-        )
-
-        if mask_exists:
-            if pred_class in stuff_memory_list:
-                current_segment_id = stuff_memory_list[pred_class]
-            else:
-                current_segment_id += 1
-
-            # Add current object segment to final segmentation map
-            segmentation[mask_k] = current_segment_id
-            segment_score = round(pred_scores[k].item(), 6)
-            segments.append(
-                {
-                    "id": current_segment_id,
-                    "label_id": pred_class,
-                    "was_fused": should_fuse,
-                    "score": segment_score,
-                }
-            )
-            if should_fuse:
-                stuff_memory_list[pred_class] = current_segment_id
-
-    return segmentation, segments
-
-
-# TODO: (Amy) Move to image_transforms
-# Copied from transformers.models.maskformer.image_processing_maskformer.convert_segmentation_map_to_binary_masks
 def convert_segmentation_map_to_binary_masks(
-    segmentation_map: "np.ndarray",
+    segmentation_map: torch.Tensor,
     instance_id_to_semantic_id: Optional[Dict[int, int]] = None,
     ignore_index: Optional[int] = None,
     do_reduce_labels: bool = False,
@@ -227,35 +73,35 @@ def convert_segmentation_map_to_binary_masks(
         raise ValueError("If `do_reduce_labels` is True, `ignore_index` must be provided.")
 
     if do_reduce_labels:
-        segmentation_map = np.where(segmentation_map == 0, ignore_index, segmentation_map - 1)
+        segmentation_map = torch.where(segmentation_map == 0, torch.tensor(ignore_index), segmentation_map - 1)
 
     # Get unique ids (class or instance ids based on input)
-    all_labels = np.unique(segmentation_map)
+    all_labels = torch.unique(segmentation_map)
 
     # Drop background label if applicable
     if ignore_index is not None:
         all_labels = all_labels[all_labels != ignore_index]
 
     # Generate a binary mask for each object instance
-    binary_masks = [(segmentation_map == i) for i in all_labels]
+    binary_masks = [(segmentation_map == i).unsqueeze(0) for i in all_labels]
 
     # Stack the binary masks
     if binary_masks:
-        binary_masks = np.stack(binary_masks, axis=0)
+        binary_masks = torch.cat(binary_masks, axis=0)
     else:
-        binary_masks = np.zeros((0, *segmentation_map.shape))
+        binary_masks = torch.zeros((0, *segmentation_map.shape), device=segmentation_map.device)
 
     # Convert instance ids to class ids
     if instance_id_to_semantic_id is not None:
-        labels = np.zeros(all_labels.shape[0])
+        labels = torch.zeros(all_labels.shape[0], dtype=torch.long, device=segmentation_map.device)
 
         for label in all_labels:
-            class_id = instance_id_to_semantic_id[label + 1 if do_reduce_labels else label]
-            labels[all_labels == label] = class_id - 1 if do_reduce_labels else class_id
+            class_id = instance_id_to_semantic_id[label.item()]
+            labels[all_labels == label] = class_id
     else:
         labels = all_labels
 
-    return binary_masks.astype(np.float32), labels.astype(np.int64)
+    return binary_masks, labels
 
 
 class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
@@ -460,31 +306,6 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
     def __call__(self, images, segmentation_maps=None, **kwargs) -> BatchFeature:
         return self.preprocess(images, segmentation_maps=segmentation_maps, **kwargs)
 
-    def _preprocess(
-        self,
-        image: ImageInput,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
-        size_divisor: int = None,
-        interpolation: "F.InterpolationMode" = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-    ):
-        if do_resize:
-            image = self.resize(image, size=size, size_divisor=size_divisor, interpolation=interpolation)
-
-        if do_rescale and do_normalize:
-            # fused rescale and normalize
-            image = F.normalize(image.to(dtype=torch.float32), image_mean, image_std)
-        elif do_rescale:
-            image = image * rescale_factor
-        elif do_normalize:
-            image = F.normalize(image, image_mean, image_std)
-        return image
-
     def preprocess(
         self,
         images: ImageInput,
@@ -534,7 +355,7 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
             raise ValueError(f"Unsupported input image type {image_type}")
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
-        self._validate_input_arguments(
+        validate_fast_preprocess_arguments(
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
             do_normalize=do_normalize,
@@ -689,35 +510,6 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
         pixel_mask[: original_size[0], : original_size[1]] = 1
 
         return image, pixel_mask, segmentation_map
-
-    @functools.lru_cache(maxsize=1)
-    def _validate_input_arguments(
-        self,
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: Union[float, List[float]],
-        image_std: Union[float, List[float]],
-        do_resize: bool,
-        size: Dict[str, int],
-        resample: "PILImageResampling",
-        data_format: Union[str, ChannelDimension],
-        return_tensors: Union[TensorType, str],
-    ):
-        if return_tensors != "pt":
-            raise ValueError("Only returning PyTorch tensors is currently supported.")
-
-        if data_format != ChannelDimension.FIRST:
-            raise ValueError("Only channel first data format is currently supported.")
-
-        if do_resize and None in (size, resample):
-            raise ValueError("Size and resample must be specified if do_resize is True.")
-
-        if do_rescale and rescale_factor is None:
-            raise ValueError("Rescale factor must be specified if do_rescale is True.")
-
-        if do_normalize and None in (image_mean, image_std):
-            raise ValueError("Image mean and standard deviation must be specified if do_normalize is True.")
 
     def post_process_semantic_segmentation(
         self, outputs, target_sizes: Optional[List[Tuple[int, int]]] = None
@@ -989,15 +781,6 @@ class Mask2FormerImageProcessorFast(BaseImageProcessorFast):
 
             results.append({"segmentation": segmentation, "segments_info": segments})
         return results
-
-    def post_process():
-        raise NotImplementedError("Post-processing is not implemented for Mask2Former yet.")
-
-    def post_process_instance():
-        raise NotImplementedError("Instance post-processing is not implemented for Mask2Former yet.")
-
-    def post_process_panoptic():
-        raise NotImplementedError("Panoptic post-processing is not implemented for Mask2Former yet.")
 
 
 __all__ = ["Mask2FormerImageProcessorFast"]

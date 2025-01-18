@@ -220,9 +220,9 @@ class MaskFormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
     def test_with_size_divisor(self):
         size_divisors = [8, 16, 32]
         weird_input_sizes = [(407, 802), (582, 1094)]
-        for size_divisor in size_divisors:
-            image_processor_dict = {**self.image_processor_dict, **{"size_divisor": size_divisor}}
-            for image_processing_class in self.image_processor_list:
+        for image_processing_class in self.image_processor_list:
+            for size_divisor in size_divisors:
+                image_processor_dict = {**self.image_processor_dict, **{"size_divisor": size_divisor}}
                 image_processing = image_processing_class(**image_processor_dict)
                 for weird_input_size in weird_input_sizes:
                     inputs = image_processing([np.ones((3, *weird_input_size))], return_tensors="pt")
