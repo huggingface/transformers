@@ -132,7 +132,7 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 ...     return accuracy.compute(predictions=predictions, references=labels)
 ```
 
-وظيفتك `compute_metrics` جاهزة الآن، وستعود إليها عندما تقوم بإعداد تدريبك.
+دالة `compute_metrics` جاهزة الآن، وستعود إليها عند إعداد التدريب.
 
 ## التدريب(Train)
 
