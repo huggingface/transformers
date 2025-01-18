@@ -431,7 +431,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         Explanation:
             Each embedding sequence contains vision embedding and text embedding or just contains text embedding.
 
-            For pure text embedding sequence, the rotary position embedding has no difference with mordern LLMs.
+            For pure text embedding sequence, the rotary position embedding has no difference with modern LLMs.
             Examples:
                 input_ids: [T T T T T], here T is for text.
                 temporal position_ids: [0, 1, 2, 3, 4]
