@@ -45,8 +45,7 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
-else:
-    is_torch_greater_or_equal_than_2_0 = False
+
 
 if is_vision_available():
     from PIL import Image
@@ -267,18 +266,6 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
 
     @unittest.skip(reason="Compile not yet supported because in LLava models")
     def test_sdpa_can_dispatch_on_flash(self):
-        pass
-
-    @unittest.skip(reason="")
-    def test_new_cache_format_0(self):
-        pass
-
-    @unittest.skip(reason="")
-    def test_new_cache_format_1(self):
-        pass
-
-    @unittest.skip(reason="")
-    def test_new_cache_format_2(self):
         pass
 
     @unittest.skip(reason="Feedforward chunking is not yet supported")

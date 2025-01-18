@@ -19,7 +19,6 @@ import tempfile
 import unittest
 
 import pytest
-from parameterized import parameterized
 
 from transformers import AutoTokenizer, ZambaConfig, is_torch_available
 from transformers.testing_utils import (
@@ -46,7 +45,7 @@ if is_torch_available():
         ZambaModel,
     )
     from transformers.models.zamba.modeling_zamba import (
-        HybridMambaAttentionDynamicCache,
+        ZambaHybridDynamicCache,
     )
 
 
@@ -215,9 +214,7 @@ class ZambaModelTester:
 
         # first forward pass
         # Attention: Zamba needs the cache to be initialized to return a cache!
-        past_key_values = HybridMambaAttentionDynamicCache(
-            config, input_ids.shape[0], model.dtype, device=model.device
-        )
+        past_key_values = ZambaHybridDynamicCache(config, input_ids.shape[0], model.dtype, device=model.device)
         outputs = model(
             input_ids,
             attention_mask=input_mask,
@@ -552,11 +549,6 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         right padding + use cache with FA2
         """
         self.skipTest(reason="Zamba flash attention does not support right padding")
-
-    @unittest.skip(reason="Zamba has its own special cache type")
-    @parameterized.expand([(1, False), (1, True), (4, False)])
-    def test_new_cache_format(self, num_beams, do_sample):
-        pass
 
 
 @require_torch
