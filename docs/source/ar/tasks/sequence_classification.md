@@ -24,7 +24,7 @@ rendered properly in your Markdown viewer.
 
 <Tip>
 
-لرؤية جميع البنى ونقاط التفتيش المتوافقة مع هذه المهمة، نوصي بالتحقق من [صفحة المهمة](https://huggingface.co/tasks/text-classification).
+لرؤية جميع البنى ونقاط التحقق المتوافقة مع هذه المهمة، نوصي بالتحقق من [صفحة المهمة](https://huggingface.co/tasks/text-classification).
 
 </Tip>
 
