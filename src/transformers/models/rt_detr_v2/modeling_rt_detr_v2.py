@@ -1216,29 +1216,6 @@ def inverse_sigmoid(x, eps=1e-5):
     return torch.log(x1 / x2)
 
 
-# taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
-class RtDetrV2MLPPredictionHead(nn.Module):
-    """
-    Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
-    height and width of a bounding box w.r.t. an image.
-
-    Copied from https://github.com/facebookresearch/detr/blob/master/models/detr.py
-    Origin from https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/RtDetrV2_paddle/ppdet/modeling/transformers/utils.py#L453
-
-    """
-
-    def __init__(self, config, input_dim, d_model, output_dim, num_layers):
-        super().__init__()
-        self.num_layers = num_layers
-        h = [d_model] * (num_layers - 1)
-        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
-
-    def forward(self, x):
-        for i, layer in enumerate(self.layers):
-            x = nn.functional.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
-        return x
-
-
 def get_contrastive_denoising_training_group(
     targets,
     num_classes,
@@ -1448,9 +1425,9 @@ class RtDetrV2PreTrainedModel(PreTrainedModel):
     _no_split_modules = [r"RtDetrV2ConvEncoder", r"RtDetrV2EncoderLayer", r"RtDetrV2DecoderLayer"]
 
     def _init_weights(self, module):
-        # this could be simplified like calling the base class function first then adding new stuff
-        """Initalize the weights
-        initialize linear layer biasreturn value according to a given probability value."""
+        """Initalize the weights"""
+
+        """initialize linear layer bias value according to a given probability value."""
         if isinstance(module, (RtDetrV2ForObjectDetection, RtDetrV2Decoder)):
             if module.class_embed is not None:
                 for layer in module.class_embed:
@@ -1996,6 +1973,29 @@ class RtDetrV2Model(RtDetrV2PreTrainedModel):
         )
 
 
+# taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
+class RtDetrV2MLPPredictionHead(nn.Module):
+    """
+    Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
+    height and width of a bounding box w.r.t. an image.
+
+    Copied from https://github.com/facebookresearch/detr/blob/master/models/detr.py
+    Origin from https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/RtDetrV2_paddle/ppdet/modeling/transformers/utils.py#L453
+
+    """
+
+    def __init__(self, config, input_dim, d_model, output_dim, num_layers):
+        super().__init__()
+        self.num_layers = num_layers
+        h = [d_model] * (num_layers - 1)
+        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
+
+    def forward(self, x):
+        for i, layer in enumerate(self.layers):
+            x = nn.functional.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
+        return x
+
+
 @add_start_docstrings(
     """
     RT-DETR Model (consisting of a backbone and encoder-decoder) outputting bounding boxes and logits to be further
@@ -2026,8 +2026,8 @@ class RtDetrV2ForObjectDetection(RtDetrV2PreTrainedModel):
         else:
             self.class_embed = nn.ModuleList([self.class_embed() for _ in range(num_pred)])
             self.bbox_embed = nn.ModuleList([self.bbox_embed() for _ in range(num_pred)])
-        # here self.model.decoder.bbox_embed is null, but not self.bbox_embed
-        # fix bug
+
+        # hack implementation for iterative bounding box refinement
         self.model.decoder.class_embed = self.class_embed
         self.model.decoder.bbox_embed = self.bbox_embed
 
