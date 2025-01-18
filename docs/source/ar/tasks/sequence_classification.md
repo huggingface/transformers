@@ -200,7 +200,7 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 
 </Tip>
 
-بمجرد اكتمال التدريب، شارك نموذجك على Hub باستخدام طريقة [`~transformers.Trainer.push_to_hub`] حتى يتمكن الجميع من استخدام نموذجك:
+بعد اكتمال التدريب، شارك نموذجك على Hub باستخدام الطريقة [`~transformers.Trainer.push_to_hub`] ليستخدمه الجميع:
 
 ```py
 >>> trainer.push_to_hub()
