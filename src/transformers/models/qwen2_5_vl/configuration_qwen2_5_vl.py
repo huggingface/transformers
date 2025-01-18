@@ -27,7 +27,7 @@ from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import rope_config_validation
 
 
-class Qwen25VisionConfig(PretrainedConfig):
+class Qwen2_5_VLVisionConfig(PretrainedConfig):
     model_type = "qwen2_5_vl"
     base_config_key = "vision_config"
 
@@ -68,9 +68,9 @@ class Qwen25VisionConfig(PretrainedConfig):
 class Qwen2_5_VLConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen2_5_VLModel`]. It is used to instantiate a
-    Qwen2-VL model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    Qwen2.5-VL model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of
-    Qwen2-VL-7B-Instruct [Qwen/Qwen2-VL-7B-Instruct](https://huggingface.co/Qwen/Qwen2-VL-7B-Instruct).
+    Qwen2.5-VL-7B-Instruct [Qwen/Qwen2_5_VL-7B-Instruct](https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -78,7 +78,7 @@ class Qwen2_5_VLConfig(PretrainedConfig):
 
     Args:
         vocab_size (`int`, *optional*, defaults to 152064):
-            Vocabulary size of the Qwen2_5_VL model. Defines the number of different tokens that can be represented by the
+            Vocabulary size of the Qwen2.5-VL model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`Qwen2_5_VLModel`]
         hidden_size (`int`, *optional*, defaults to 8192):
             Dimension of the hidden representations.
@@ -164,26 +164,16 @@ class Qwen2_5_VLConfig(PretrainedConfig):
     >>> # Initializing a Qwen2_5_VL style configuration
     >>> configuration = Qwen2_5_VLConfig()
 
-    >>> # Initializing a model from the Qwen2-VL-7B style configuration
-    >>> model = Qwen2_5_VLForConditionalGeneration(configuration)
-
     >>> # Accessing the model configuration
     >>> configuration = model.config
+
+    >>> # Initializing a model from the Qwen2_5_VL configuration
+    >>> model = Qwen2_5_VLForConditionalGeneration(configuration)
     ```"""
 
     model_type = "qwen2_5_vl"
-    sub_configs = {"vision_config": Qwen25VisionConfig}
+    sub_configs = {"vision_config": Qwen2_5_VLVisionConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
-    # Default tensor parallel plan for base model `Qwen2_5_VL`
-    base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
-    }
 
     def __init__(
         self,
@@ -208,11 +198,10 @@ class Qwen2_5_VLConfig(PretrainedConfig):
         rope_scaling=None,
         **kwargs,
     ):
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
         if isinstance(vision_config, dict):
-            self.vision_config = Qwen25VisionConfig(**vision_config)
+            self.vision_config = Qwen2_5_VLVisionConfig(**vision_config)
         elif vision_config is None:
-            self.vision_config = Qwen25VisionConfig()
+            self.vision_config = Qwen2_5_VLVisionConfig()
 
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
@@ -247,3 +236,5 @@ class Qwen2_5_VLConfig(PretrainedConfig):
                 self.rope_scaling["type"] = "default"
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self, ignore_keys={"mrope_section"})
+
+        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)

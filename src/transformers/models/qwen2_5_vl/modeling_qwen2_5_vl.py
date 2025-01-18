@@ -49,7 +49,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_qwen2_5_vl import Qwen2_5_VLConfig, Qwen25VisionConfig
+from .configuration_qwen2_5_vl import Qwen2_5_VLConfig, Qwen2_5_VLVisionConfig
 
 
 if is_flash_attn_2_available():
@@ -325,7 +325,7 @@ Qwen2_5_VL_START_DOCSTRING = r"""
     Qwen2_5_VL_START_DOCSTRING,
 )
 class Qwen2_5_VisionTransformerPretrainedModel(PreTrainedModel):
-    config_class = Qwen25VisionConfig
+    config_class = Qwen2_5_VLVisionConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["Qwen2_5_VLVisionBlock"]
@@ -1548,7 +1548,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
         Explanation:
             Each embedding sequence contains vision embedding and text embedding or just contains text embedding.
 
-            For pure text embedding sequence, the rotary position embedding has no difference with mordern LLMs.
+            For pure text embedding sequence, the rotary position embedding has no difference with modern LLMs.
             Examples:
                 input_ids: [T T T T T], here T is for text.
                 temporal position_ids: [0, 1, 2, 3, 4]
