@@ -39,8 +39,8 @@
       title: تصنيف الرموز
     - local: tasks/question_answering
       title: الإجابة على الأسئلة
-#     - local: tasks/language_modeling
-#       title: نمذجة اللغة السببية
+    - local: tasks/language_modeling
+      title: نمذجة اللغة السببية
     - local: tasks/masked_language_modeling
       title: نمذجة اللغة المقنعة
     - local: tasks/translation
