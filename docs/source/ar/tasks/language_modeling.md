@@ -24,8 +24,8 @@ rendered properly in your Markdown viewer.
 
 سيوضح لك هذا الدليل كيفية:
 
-1. ضبط دقيق [DistilGPT2](https://huggingface.co/distilbert/distilgpt2) على [r/askscience](https://www.reddit.com/r/askscience/) مجموعة فرعية من [ELI5](https://huggingface.co/datasets/eli5) مجموعة البيانات.
-2. استخدم نموذجك المُضبط الدقيق للاستنتاج.
+1. ضبط دقيق [DistilRoBERTa](https://huggingface.co/distilbert/distilroberta-base) على مجموعة فرعية [r/askscience](https://www.reddit.com/r/askscience/) من مجموعة بيانات [ELI5](https://huggingface.co/datasets/eli5).
+2.  استخدام النموذج المدرب الخاص بك للاستنتاج.
 
 <Tip>
 
