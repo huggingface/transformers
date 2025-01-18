@@ -101,8 +101,8 @@ pip install transformers datasets evaluate
 >>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilgpt2")
 ```
 
-ستلاحظ من المثال أعلاه، حقل `text` هو في الواقع متداخل داخل `answers`. هذا يعني أنك ستحتاج إلى
-استخراج حقل `text` الفرعي من بنيته المتداخلة باستخدام طريقة [`flatten`](https://huggingface.co/docs/datasets/process#flatten):
+ستلاحظ من المثال أعلاه، الحقل `text` هو في الواقع متداخل داخل `answers`. هذا يعني أنك ستحتاج إلى
+استخراج حقل `text` الفرعي من بنيته المتداخلة باستخدام الدالة [`flatten`](https://huggingface.co/docs/datasets/process#flatten):
 
 ```py
 >>> eli5 = eli5.flatten()
