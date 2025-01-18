@@ -339,7 +339,7 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 >>> inputs = tokenizer(text, return_tensors="pt")
 ```
 
-قم بتمرير مدخلاتك إلى النموذج وإرجاع `logits`:
+مرر المدخلات إلى النموذج واسترجع `logits`:
 
 ```py
 >>> from transformers import AutoModelForSequenceClassification
