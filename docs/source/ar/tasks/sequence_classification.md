@@ -77,7 +77,7 @@ pip install transformers datasets evaluate accelerate
 >>> tokenizer = AutoTokenizer.from_pretrained("distilbert/distilbert-base-uncased")
 ```
 
-قم بإنشاء وظيفة معالجة مسبقة لتجزئة النص للحقل `text`وبتر السلاسل بحيث لا تكون أطول من طول الإدخال الأقصى لـ DistilBERT:
+أنشئ دالة لتهيئة حقل `text` وتقصير السلاسل النصية بحيث لا يتجاوز طولها الحد الأقصى لإدخالات DistilBERT:
 
 ```py
 >>> def preprocess_function(examples):
