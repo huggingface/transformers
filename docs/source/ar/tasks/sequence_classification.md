@@ -121,7 +121,7 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 >>> accuracy = evaluate.load("accuracy")
 ```
 
-ثم قم بإنشاء وظيفة تقوم بتمرير تنبؤاتك وتصنيفاتك إلى [`~evaluate.EvaluationModule.compute`] لحساب الدقة:
+ثم أنشئ دالة تقوم بتمرير تنبؤاتك وتصنيفاتك إلى [`~evaluate.EvaluationModule.compute`] لحساب الدقة:
 
 ```py
 >>> import numpy as np
