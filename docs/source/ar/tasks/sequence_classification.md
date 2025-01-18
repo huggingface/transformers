@@ -349,7 +349,7 @@ tokenized_imdb = imdb.map(preprocess_function, batched=True)
 ...     logits = model(**inputs).logits
 ```
 
-احصل على الفئة ذات أعلى احتمال، واستخدم خريطة `id2label` الخاصة بالنموذج  لتحويلها إلى تصنيف نصي:
+استخرج الفئة ذات الاحتمالية الأعلى، واستخدم `id2label` لتحويلها إلى تصنيف نصي:
 
 ```py
 >>> predicted_class_id = logits.argmax().item()
