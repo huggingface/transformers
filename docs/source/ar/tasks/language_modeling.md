@@ -184,7 +184,7 @@ pip install transformers datasets evaluate
 
 <frameworkcontent>
 <pt>
-استخدم رمز نهاية السلسلة كرمز الحشو، وحدد `mlm=False`. سيستخدم هذا المدخلات كعلامات منزاحة إلى اليمين بعنصر واحد:
+استخدم رمز نهاية التسلسل كرمز للحشو، وحدد `mlm_probability` لحجب الرموز بشكل عشوائي عند كل تكرار للبيانات:
 
 ```py
 >>> from transformers import DataCollatorForLanguageModeling
