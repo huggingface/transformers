@@ -303,7 +303,9 @@ class GPT2Attention(nn.Module):
 
         if past_key_value is not None:
             cache_kwargs = {"cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs=cache_kwargs)
+            key_states, value_states = past_key_value.update(
+                key_states, value_states, self.layer_idx, cache_kwargs=cache_kwargs
+            )
 
         is_cross_attention = encoder_hidden_states is not None
         self.is_causal = attention_mask is None and query_states.shape[-2] > 1 and not is_cross_attention
