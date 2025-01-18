@@ -27,7 +27,7 @@ def flex_attention_forward(
         if softcap is not None:
             score = softcap * torch.tanh(score / softcap)
         if causal_mask is not None:
-            score += causal_mask[b][0][q_idx][kv_idx]
+            score = score + causal_mask[b][0][q_idx][kv_idx]
         return score
 
     attn_output, attention_weights = flex_attention(

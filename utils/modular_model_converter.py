@@ -58,7 +58,7 @@ def get_module_source_from_name(module_name: str) -> str:
 def preserve_case_replace(text, patterns: dict, default_name: str):
     # Create a regex pattern to match all variations
     regex_pattern = "|".join(re.escape(key) for key in patterns.keys())
-    compiled_regex = re.compile(f"({regex_pattern})(.|$)", re.IGNORECASE | re.DOTALL)
+    compiled_regex = re.compile(f"(?<![a-z0-9])({regex_pattern})(.|$)", re.IGNORECASE | re.DOTALL)
 
     def replace(match):
         matched_pattern = match.group(1)
@@ -776,7 +776,7 @@ class ModelFileMapper(ModuleMapper):
                 else:
                     merged_dependencies.append(class_dep)
             # Sort both list according to the order in their respective file
-            original_dependencies = sorted(original_dependencies, key=lambda x: self.start_lines[x])
+            original_dependencies = sorted(original_dependencies, key=lambda x: self.start_lines.get(x, 1e10))
             merged_dependencies = sorted(merged_dependencies, key=lambda x: self.modular_file_start_lines[x])
 
             # Add all original node first, then merged ones
@@ -801,7 +801,7 @@ class ModelFileMapper(ModuleMapper):
             else:
                 original_dependencies.append(dep)
         # Sort both list according to the order in their respective file
-        original_dependencies = sorted(original_dependencies, key=lambda x: self.start_lines[x])
+        original_dependencies = sorted(original_dependencies, key=lambda x: self.start_lines.get(x, 1e10))
         merged_dependencies = sorted(merged_dependencies, key=lambda x: self.modular_file_start_lines[x])
 
         # Add all original node first, then merged ones
@@ -1321,6 +1321,20 @@ class ModularFileMapper(ModuleMapper):
                             self.added_objects_file_mapping[dep] = file
                             self.functions[dep] = visited_module.global_nodes[dep]
 
+                # Add/overwrite the imported functions to other visited modules as well, in case it is absent/different
+                # in he modeling source file of the inherited class. See `examples/modular-tranformers/modular_switch_function.py`
+                # and `examples/modular-tranformers/modular_add_function.py` for examples
+                recursive_dependencies = visited_module.object_recursive_dependency_mapping.get(object_name, set())
+                node_recursive_dependencies_mapping = {
+                    dep: visited_module.global_nodes[dep] for dep in recursive_dependencies
+                }
+                for filename, module_mapper in self.visited_modules.items():
+                    if filename != file:
+                        module_mapper.global_nodes[object_name] = visited_module.functions[object_name]
+                        if len(recursive_dependencies) > 0:
+                            module_mapper.object_recursive_dependency_mapping[object_name] = recursive_dependencies
+                            module_mapper.global_nodes.update(node_recursive_dependencies_mapping)
+
             # Add assignments and their dependencies
             elif object_name in visited_module.assignments and object_name not in self.assignments:
                 self.assignments[object_name] = visited_module.assignments[object_name]
@@ -1691,9 +1705,13 @@ if __name__ == "__main__":
     args = parser.parse_args()
     if args.files_to_parse == ["all"]:
         args.files_to_parse = glob.glob("src/transformers/models/**/modular_*.py", recursive=True)
-        args.files_to_parse += glob.glob("examples/**/modular_*.py", recursive=True)
+    if args.files_to_parse == ["examples"]:
+        args.files_to_parse = glob.glob("examples/**/modular_*.py", recursive=True)
 
-    for file_name in find_priority_list(args.files_to_parse):
+    priority_list = find_priority_list(args.files_to_parse)
+    assert len(priority_list) == len(args.files_to_parse), "Some files will not be converted"
+
+    for file_name in priority_list:
         print(f"Converting {file_name} to a single model single file format")
         module_path = file_name.replace("/", ".").replace(".py", "").replace("src.", "")
         converted_files = convert_modular_file(file_name)
