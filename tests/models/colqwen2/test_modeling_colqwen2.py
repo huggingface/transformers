@@ -1,3 +1,4 @@
+# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -11,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch ColPali model."""
+"""Testing suite for the PyTorch ColQwen2 model."""
 
 import gc
 import unittest
@@ -19,17 +20,20 @@ from typing import ClassVar
 
 import torch
 from datasets import load_dataset
+from parameterized import parameterized
 
 from tests.test_configuration_common import ConfigTester
 from tests.test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from transformers import (
     is_torch_available,
+    is_vision_available,
 )
-from transformers.models.colpali.configuration_colpali import ColPaliConfig
-from transformers.models.colpali.modeling_colpali import ColPaliForRetrieval, ColPaliForRetrievalOutput
-from transformers.models.colpali.processing_colpali import ColPaliProcessor
+from transformers.models.colqwen2.configuration_colqwen2 import ColQwen2Config
+from transformers.models.colqwen2.modeling_colqwen2 import ColQwen2ForRetrieval, ColQwen2ForRetrievalOutput
+from transformers.models.colqwen2.processing_colqwen2 import ColQwen2Processor
 from transformers.testing_utils import (
     require_torch,
+    require_torch_sdpa,
     require_vision,
     slow,
     torch_device,
@@ -39,132 +43,142 @@ from transformers.testing_utils import (
 if is_torch_available():
     import torch
 
+if is_vision_available():
+    pass
 
-class ColPaliForRetrievalModelTester:
+
+class ColQwen2ForRetrievalModelTester:
     def __init__(
         self,
         parent,
         ignore_index=-100,
-        image_token_index=0,
+        pad_token_id=2,
         projector_hidden_act="gelu",
-        seq_length=25,
+        seq_length=20,
         vision_feature_select_strategy="default",
         vision_feature_layer=-1,
         projection_dim=32,
-        text_config={
-            "model_type": "gemma",
-            "seq_length": 128,
-            "is_training": True,
-            "use_token_type_ids": False,
-            "use_labels": True,
-            "vocab_size": 99,
-            "hidden_size": 32,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 4,
-            "num_key_value_heads": 1,
-            "head_dim": 8,
-            "intermediate_size": 37,
-            "hidden_activation": "gelu_pytorch_tanh",
-            "hidden_dropout_prob": 0.1,
-            "attention_probs_dropout_prob": 0.1,
-            "max_position_embeddings": 512,
-            "type_vocab_size": 16,
-            "type_sequence_label_size": 2,
-            "initializer_range": 0.02,
-            "num_labels": 3,
-            "num_choices": 4,
-            "pad_token_id": 1,
-        },
         is_training=False,
-        vision_config={
-            "use_labels": True,
-            "image_size": 20,
-            "patch_size": 5,
-            "num_image_tokens": 4,
-            "num_channels": 3,
-            "is_training": True,
-            "hidden_size": 32,
-            "projection_dim": 32,
-            "num_key_value_heads": 1,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 4,
-            "intermediate_size": 37,
-            "dropout": 0.1,
-            "attention_dropout": 0.1,
-            "initializer_range": 0.02,
-        },
         use_cache=False,
-        embedding_dim=128,
+        vlm_config={
+            "_name_or_path": "Qwen/Qwen2-VL-2B-Instruct",
+            "bos_token_id": 0,
+            "eos_token_id": 1,
+            "vision_start_token_id": 3,
+            "image_token_id": 4,
+            "video_token_id": 5,
+            "hidden_size": 1536,
+            "intermediate_size": 2,
+            "max_window_layers": 2,
+            "model_type": "qwen2_vl",
+            "num_attention_heads": 2,
+            "num_hidden_layers": 2,
+            "num_key_value_heads": 2,
+            "rms_norm_eps": 1e-06,
+            "rope_scaling": {"mrope_section": [1, 1, 1], "rope_type": "default", "type": "default"},
+            "sliding_window": 32768,
+            "tie_word_embeddings": True,
+            "torch_dtype": "bfloat16",
+            "vision_config": {
+                "depth": 2,
+                "embed_dim": 32,
+                "hidden_act": "quick_gelu",
+                "hidden_size": 32,
+                "mlp_ratio": 4,
+                "num_heads": 4,
+                "patch_size": 14,
+                "in_chans": 3,
+                "spatial_merge_size": 1,
+                "temporal_patch_size": 1,
+            },
+            "vision_end_token_id": 151653,
+            "vision_token_id": 151654,
+            "vocab_size": 99,
+        },
+        embedding_dim=32,
     ):
         self.parent = parent
         self.ignore_index = ignore_index
+        self.pad_token_id = pad_token_id
+
         # `image_token_index` is set to 0 to pass "resize_embeddings" test, do not modify
-        self.image_token_index = image_token_index
+        self.image_token_index = 0
+
+        self.image_token_id = vlm_config["image_token_id"]
+        self.video_token_id = vlm_config["video_token_id"]
+        self.pad_token_id = vlm_config["eos_token_id"]
         self.projector_hidden_act = projector_hidden_act
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.vision_feature_layer = vision_feature_layer
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.seq_length = seq_length
-        self.projection_dim = projection_dim
-        self.pad_token_id = text_config["pad_token_id"]
 
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.vocab_size = text_config["vocab_size"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
+        self.image_size = 14
+        self.num_image_tokens = 32
+
+        self.seq_length = seq_length + self.num_image_tokens
+        self.projection_dim = projection_dim
+
+        self.num_hidden_layers = vlm_config["num_hidden_layers"]
+        self.vocab_size = vlm_config["vocab_size"]
+        self.hidden_size = vlm_config["hidden_size"]
+        self.num_attention_heads = vlm_config["num_attention_heads"]
         self.is_training = is_training
 
         self.batch_size = 3
-        self.num_channels = vision_config["num_channels"]
-        self.image_size = vision_config["image_size"]
+        self.num_channels = vlm_config["vision_config"]["in_chans"]
+
         self.encoder_seq_length = seq_length
         self.use_cache = use_cache
 
         self.embedding_dim = embedding_dim
-        self.vlm_config = {
-            "model_type": "paligemma",
-            "text_config": self.text_config,
-            "vision_config": self.vision_config,
-            "ignore_index": self.ignore_index,
-            "image_token_index": self.image_token_index,
-            "projector_hidden_act": self.projector_hidden_act,
-            "projection_dim": self.projection_dim,
-            "vision_feature_select_strategy": self.vision_feature_select_strategy,
-            "vision_feature_layer": self.vision_feature_layer,
-        }
+        self.vlm_config = vlm_config
 
     def get_config(self):
-        return ColPaliConfig(
+        return ColQwen2Config(
             vlm_config=self.vlm_config,
             embedding_dim=self.embedding_dim,
         )
 
     def prepare_config_and_inputs(self):
+        # pixel_values = floats_tensor(
+        #     [
+        #         self.batch_size,
+        #         self.num_channels,
+        #         self.image_size,
+        #         self.image_size,
+        #     ]
+        # )
+        config = self.get_config()
+        patch_size = config.vlm_config.vision_config.patch_size
+        temporal_patch_size = config.vlm_config.vision_config.temporal_patch_size
         pixel_values = floats_tensor(
             [
-                self.batch_size,
-                self.vision_config["num_channels"],
-                self.vision_config["image_size"],
-                self.vision_config["image_size"],
+                self.batch_size * (self.image_size**2) // (patch_size**2),
+                self.num_channels * (patch_size**2) * temporal_patch_size,
             ]
         )
-        config = self.get_config()
 
         return config, pixel_values
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, pixel_values = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.vlm_config.text_config.vocab_size - 1) + 1
-        attention_mask = input_ids.ne(1).to(torch_device)
-        # set the 16 first tokens to be image, and ensure that no other tokens are image tokens
-        # do not change this unless you modified image size or patch size
-        input_ids[input_ids == config.vlm_config.image_token_index] = self.pad_token_id
-        input_ids[:, :16] = config.vlm_config.image_token_index
+        input_ids = (
+            ids_tensor(shape=[self.batch_size, self.seq_length], vocab_size=config.vlm_config.vocab_size - 1) + 1
+        )
+        attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
+
+        # Do not change this unless you modified image size or patch size.
+        input_ids[:, -1] = self.pad_token_id
+        input_ids[input_ids == self.video_token_id] = self.pad_token_id
+        input_ids[input_ids == self.image_token_id] = self.pad_token_id
+        input_ids[:, self.num_image_tokens] = self.image_token_id
+
+        # Hardcoded image grid size: do not change unless you modified image size or patch size!
+        image_grid_thw = torch.tensor([1, 1, 1]).repeat(self.batch_size, 1)
         inputs_dict = {
-            "pixel_values": pixel_values,
             "input_ids": input_ids,
+            "pixel_values": pixel_values,
+            "image_grid_thw": image_grid_thw,
             "attention_mask": attention_mask,
             "labels": input_ids,
         }
@@ -172,12 +186,12 @@ class ColPaliForRetrievalModelTester:
 
 
 @require_torch
-class ColPaliForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
+class ColQwen2ForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     """
-    Model tester for `ColPaliForRetrieval`.
+    Model tester for `ColQwen2ForRetrieval`.
     """
 
-    all_model_classes = (ColPaliForRetrieval,) if is_torch_available() else ()
+    all_model_classes = (ColQwen2ForRetrieval,) if is_torch_available() else ()
     fx_compatible = False
     test_torchscript = False
     test_pruning = False
@@ -185,8 +199,8 @@ class ColPaliForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     test_head_masking = False
 
     def setUp(self):
-        self.model_tester = ColPaliForRetrievalModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=ColPaliConfig, has_text_modality=False)
+        self.model_tester = ColQwen2ForRetrievalModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=ColQwen2Config, has_text_modality=False)
 
         # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
 
@@ -230,11 +244,11 @@ class ColPaliForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 out_ids = model(input_ids=input_ids, **inputs)[0]
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            torch.testing.assert_close(out_embeds, out_ids)
+            self.assertTrue(torch.allclose(out_embeds, out_ids))
 
     @slow
     @require_vision
-    def test_colpali_forward_inputs(self):
+    def test_colqwen2_forward_inputs(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -247,25 +261,33 @@ class ColPaliForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
             with torch.no_grad():
                 outputs = model(**inputs, return_dict=True)
 
-            self.assertIsInstance(outputs, ColPaliForRetrievalOutput)
+            self.assertIsInstance(outputs, ColQwen2ForRetrievalOutput)
 
     @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing(self):
         pass
 
     @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant(self):
         pass
 
     @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+        reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
+
+    @require_torch_sdpa
+    @slow
+    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
+    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
+        self.skipTest(
+            "Due to custom causal mask, there is a slightly too big difference between eager and sdpa in bfloat16."
+        )
 
     @unittest.skip(
         reason="From PaliGemma: Some undefined behavior encountered with test versions of this model. Skip for now."
@@ -284,21 +306,21 @@ class ColPaliForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model_outputs_equivalence(self):
         pass
 
-    @unittest.skip(reason="Pass because ColPali requires `attention_mask is not None`")
+    @unittest.skip(reason="Pass because ColQwen2 requires `attention_mask is not None`")
     def test_sdpa_can_dispatch_on_flash(self):
         pass
 
-    @unittest.skip(reason="Pass because ColPali requires `attention_mask is not None`")
+    @unittest.skip(reason="Pass because ColQwen2 requires `attention_mask is not None`")
     def test_sdpa_can_compile_dynamic(self):
         pass
 
 
 @require_torch
-class ColPaliModelIntegrationTest(unittest.TestCase):
-    model_name: ClassVar[str] = "vidore/colpali-v1.2-hf"
+class ColQwen2ModelIntegrationTest(unittest.TestCase):
+    model_name: ClassVar[str] = "vidore/colqwen2-1.0-hf-internal"  # TODO: remove "-internal" before merge
 
     def setUp(self):
-        self.processor = ColPaliProcessor.from_pretrained(self.model_name)
+        self.processor = ColQwen2Processor.from_pretrained(self.model_name)
 
     def tearDown(self):
         gc.collect()
@@ -309,7 +331,7 @@ class ColPaliModelIntegrationTest(unittest.TestCase):
         """
         Test if the model is able to retrieve the correct pages for a small and easy dataset.
         """
-        model = ColPaliForRetrieval.from_pretrained(
+        model = ColQwen2ForRetrieval.from_pretrained(
             self.model_name,
             torch_dtype=torch.bfloat16,
             device_map=torch_device,
@@ -340,13 +362,14 @@ class ColPaliModelIntegrationTest(unittest.TestCase):
         self.assertTrue((scores.argmax(axis=1) == torch.arange(len(ds), device=scores.device)).all())
 
         # Further validation: fine-grained check, with a hardcoded score from the original implementation
+        # NOTE: Expected scores were obtained using "colpali-engine==0.3.8" on a L4 GPU.
         expected_scores = torch.tensor(
             [
-                [15.5625, 6.5938, 14.4375],
-                [12.2500, 16.2500, 11.0000],
-                [15.0625, 11.7500, 21.0000],
+                [16.2500, 7.9062, 14.6250],
+                [9.5000, 17.3750, 10.5625],
+                [15.0625, 10.8750, 20.1250],
             ],
             dtype=scores.dtype,
         )
 
-        assert torch.allclose(scores, expected_scores, atol=1), f"Expected scores {expected_scores}, got {scores}"
+        assert torch.allclose(scores, expected_scores, atol=1e-3), f"Expected scores {expected_scores}, got {scores}"

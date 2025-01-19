@@ -72,6 +72,7 @@ scores = processor.score_retrieval(query_embeddings, image_embeddings)
 print("Retrieval scores (query x image):")
 print(scores)
 ```
+
 </hfoption>
 </hfoptions>
 
@@ -96,7 +97,7 @@ bnb_config = BitsAndBytesConfig(
 
 model_name = "vidore/colpali-v1.2-hf"
 
-# Load model 
+# Load model
 model = ColPaliForRetrieval.from_pretrained(
     model_name,
     quantization_config=bnb_config,
