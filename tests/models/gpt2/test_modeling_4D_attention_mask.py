@@ -26,17 +26,15 @@ class TestAttentionMaskIssue(unittest.TestCase):
             input_ids = torch.zeros((1, total_length), dtype=torch.long)
             # Create 4D attention mask with proper shape
             attention_mask = torch.full(
-                (1, 1, total_length, total_length),
-                dtype=torch.float32,
-                fill_value=float("-inf")
+                (1, 1, total_length, total_length), dtype=torch.float32, fill_value=float("-inf")
             )
 
             offset = 0
             for i, (ids, mask) in enumerate(zip(encoded["input_ids"], encoded["attention_mask"])):
                 length = len(ids)
-                input_ids[0, offset:offset + length] = torch.tensor(ids)
+                input_ids[0, offset : offset + length] = torch.tensor(ids)
                 # Set valid attention positions to 0
-                attention_mask[0, 0, offset:offset + length, :offset + length] = 0.
+                attention_mask[0, 0, offset : offset + length, : offset + length] = 0.0
                 offset += length
 
             return input_ids, attention_mask
@@ -47,8 +45,8 @@ class TestAttentionMaskIssue(unittest.TestCase):
             attention_mask = torch.zeros((len(texts), max_length), dtype=torch.long)
 
             for i, (ids, mask) in enumerate(zip(encoded["input_ids"], encoded["attention_mask"])):
-                input_ids[i, :len(ids)] = torch.tensor(ids)
-                attention_mask[i, :len(mask)] = torch.tensor(mask)
+                input_ids[i, : len(ids)] = torch.tensor(ids)
+                attention_mask[i, : len(mask)] = torch.tensor(mask)
 
             return input_ids, attention_mask
 
@@ -61,14 +59,8 @@ class TestAttentionMaskIssue(unittest.TestCase):
         output_packed = self.model(input_ids=input_ids_packed, attention_mask=mask_packed)
 
         # Verify outputs have expected shapes
-        self.assertEqual(
-            output_regular.logits.shape[:-1],
-            input_ids_regular.shape
-        )
-        self.assertEqual(
-            output_packed.logits.shape[:-1],
-            input_ids_packed.shape
-        )
+        self.assertEqual(output_regular.logits.shape[:-1], input_ids_regular.shape)
+        self.assertEqual(output_packed.logits.shape[:-1], input_ids_packed.shape)
 
     def test_attention_patterns(self):
         # Test that attention patterns are preserved
@@ -109,24 +101,13 @@ class TestAttentionMaskIssue(unittest.TestCase):
         input_ids, mask_4d = self.prepare_data(packing=True)
 
         # Single batch
-        single_output = self.model(
-            input_ids[:1],
-            attention_mask=mask_4d[:1]
-        )
+        single_output = self.model(input_ids[:1], attention_mask=mask_4d[:1])
 
         # Multiple batches
-        multi_output = self.model(
-            input_ids,
-            attention_mask=mask_4d
-        )
+        multi_output = self.model(input_ids, attention_mask=mask_4d)
 
         # First batch should give same results
-        torch.testing.assert_close(
-            single_output.logits,
-            multi_output.logits[:1],
-            rtol=1e-5,
-            atol=1e-5
-        )
+        torch.testing.assert_close(single_output.logits, multi_output.logits[:1], rtol=1e-5, atol=1e-5)
 
     def test_edge_cases(self):
         # Test edge cases
@@ -148,10 +129,7 @@ class TestAttentionMaskIssue(unittest.TestCase):
         long_ids = torch.ones((1, max_length), dtype=torch.long)
         long_mask = torch.zeros((1, 1, max_length, max_length))
         outputs = self.model(long_ids, attention_mask=long_mask)
-        self.assertEqual(
-            outputs.logits.shape,
-            (1, max_length, self.model.config.vocab_size)
-        )
+        self.assertEqual(outputs.logits.shape, (1, max_length, self.model.config.vocab_size))
 
     def test_4d_mask_handling(self):
         """Critical test: Verify 4D attention mask is handled correctly"""
@@ -167,10 +145,7 @@ class TestAttentionMaskIssue(unittest.TestCase):
 
     def test_2d_vs_4d_mask_behavior(self):
         """Test that 2D and 4D masks produce consistent behavior"""
-        model = GPT2LMHeadModel.from_pretrained(
-            self.model_name,
-            attn_implementation="eager"
-        )
+        model = GPT2LMHeadModel.from_pretrained(self.model_name, attn_implementation="eager")
 
         # Create a simple sequence with both 2D and 4D masks
         input_ids = torch.tensor([[1, 2, 3, 4]], dtype=torch.long)
@@ -179,21 +154,13 @@ class TestAttentionMaskIssue(unittest.TestCase):
         mask_2d = torch.tensor([[1, 1, 0, 0]], dtype=torch.float)
 
         # Equivalent 4D mask
-        mask_4d = torch.full((1, 1, 4, 4), float('-inf'))
+        mask_4d = torch.full((1, 1, 4, 4), float("-inf"))
         mask_4d[0, 0, :2, :2] = 0  # Allow attention for first two tokens
 
         # Get outputs for both masks
-        outputs_2d = model(
-            input_ids,
-            attention_mask=mask_2d,
-            output_attentions=True
-        )
+        outputs_2d = model(input_ids, attention_mask=mask_2d, output_attentions=True)
 
-        outputs_4d = model(
-            input_ids,
-            attention_mask=mask_4d,
-            output_attentions=True
-        )
+        outputs_4d = model(input_ids, attention_mask=mask_4d, output_attentions=True)
 
         print("\n2D mask attention patterns:")
         print(outputs_2d.attentions[0][0, 0])  # First layer, first batch, first head
@@ -216,27 +183,24 @@ class TestAttentionMaskIssue(unittest.TestCase):
         input_ids = torch.zeros((1, total_length), dtype=torch.long)
 
         # Create 4D attention mask initialized to -inf
-        mask_4d = torch.full(
-            (1, 1, total_length, total_length),
-            float('-inf'),
-            dtype=torch.float
-        )
+        mask_4d = torch.full((1, 1, total_length, total_length), float("-inf"), dtype=torch.float)
 
         offset = 0
         for ids in encoded["input_ids"]:
             length = len(ids)
-            input_ids[0, offset:offset + length] = torch.tensor(ids)
+            input_ids[0, offset : offset + length] = torch.tensor(ids)
             # Set valid attention positions to 0.0
-            mask_4d[0, 0, offset:offset + length, offset:offset + length] = 0.0
+            mask_4d[0, 0, offset : offset + length, offset : offset + length] = 0.0
             offset += length
 
         # Add debugging print
         print("Mask statistics:")
         print("- Total positions:", mask_4d.numel())
-        print("- Masked positions:", (mask_4d == float('-inf')).sum().item())
+        print("- Masked positions:", (mask_4d == float("-inf")).sum().item())
         print("- Unmasked positions:", (mask_4d == 0).sum().item())
 
         return input_ids, mask_4d
+
 
 if __name__ == "__main__":
     unittest.main()
