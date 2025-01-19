@@ -5,6 +5,7 @@ from transformers import pipeline, AutoConfig
 
 from transformers.testing_utils import require_torch
 
+
 @require_torch
 class AudioClassificationTopKTest(unittest.TestCase):
     def test_top_k_none_returns_all_labels(self):
