@@ -21,6 +21,7 @@ from datetime import datetime
 from functools import lru_cache
 from types import NoneType
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, get_args, get_origin, get_type_hints
+
 from packaging import version
 
 from .import_utils import is_jinja_available, is_torch_available, is_vision_available
