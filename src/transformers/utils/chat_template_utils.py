@@ -80,7 +80,7 @@ def _get_json_schema_type(param_type: str) -> Dict[str, str]:
         tuple: {"type": "array"},
         list: {"type": "array"},
         Any: {"type": "any"},
-        NoneType: {"type": "none"},
+        NoneType: {"type": "null"},
     }
     if is_vision_available():
         type_mapping[Image] = {"type": "image"}
