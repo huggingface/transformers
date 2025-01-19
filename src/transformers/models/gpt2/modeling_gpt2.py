@@ -838,7 +838,7 @@ class GPT2Model(GPT2PreTrainedModel):
             # positions we want to attend and the dtype's smallest value for masked positions.
             attention_mask = attention_mask.to(dtype=self.dtype)  # fp16 compatibility
             attention_mask = (1.0 - attention_mask) * torch.finfo(self.dtype).min
-            
+
         if inputs_embeds is None:
             inputs_embeds = self.wte(input_ids)
         position_embeds = self.wpe(position_ids)
