@@ -19,8 +19,8 @@ import types
 from contextlib import contextmanager
 from datetime import datetime
 from functools import lru_cache
-from typing import Any, Callable, Dict, List, NoneType, Optional, Tuple, Union, get_args, get_origin, get_type_hints
-
+from types import NoneType
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union, get_args, get_origin, get_type_hints
 from packaging import version
 
 from .import_utils import is_jinja_available, is_torch_available, is_vision_available
@@ -414,7 +414,7 @@ def _compile_jinja_template(chat_template):
 
     if version.parse(jinja2.__version__) < version.parse("3.1.0"):
         raise ImportError(
-            "apply_chat_template requires jinja2>=3.1.0 to be installed. Your version is " f"{jinja2.__version__}."
+            f"apply_chat_template requires jinja2>=3.1.0 to be installed. Your version is {jinja2.__version__}."
         )
 
     def raise_exception(message):
