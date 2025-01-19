@@ -19,7 +19,7 @@ import types
 from contextlib import contextmanager
 from datetime import datetime
 from functools import lru_cache
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union, get_args, get_origin, get_type_hints
+from typing import Any, Callable, Dict, List, NoneType, Optional, Tuple, Union, get_args, get_origin, get_type_hints
 
 from packaging import version
 
@@ -77,7 +77,10 @@ def _get_json_schema_type(param_type: str) -> Dict[str, str]:
         float: {"type": "number"},
         str: {"type": "string"},
         bool: {"type": "boolean"},
-        Any: {},
+        tuple: {"type": "array"},
+        list: {"type": "array"},
+        Any: {"type": "any"},
+        NoneType: {"type": "none"},
     }
     if is_vision_available():
         type_mapping[Image] = {"type": "image"}
