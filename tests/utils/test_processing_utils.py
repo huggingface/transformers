@@ -18,7 +18,7 @@ import unittest
 import numpy as np
 
 from transformers import is_torch_available, is_vision_available
-from transformers.processing_utils import _validate_images_text_input_order
+from transformers.processing_utils import _validate_images_text_input_order, ProcessorMixin
 from transformers.testing_utils import require_torch, require_vision
 
 
@@ -30,7 +30,21 @@ if is_torch_available():
 
 
 @require_vision
+class CustomImageProcessor:
+    def from_pretrained(cls, *args, **kwargs):
+        return cls()
+
+class CustomProcessor(ProcessorMixin):
+    attributes = ["image_processor"]
+    image_processor_class = "CustomImageProcessor"
+
 class ProcessingUtilTester(unittest.TestCase):
+    def test_custom_processor_class(self):
+        # Test that custom processor classes can be loaded from config
+        config = type("Config", (), {"custom_classes": {"CustomImageProcessor": CustomImageProcessor}})
+        processor = CustomProcessor()
+        processor._get_arguments_from_pretrained("dummy", config=config)
+
     def test_validate_images_text_input_order(self):
         # text string and PIL images inputs
         images = PIL.Image.new("RGB", (224, 224))

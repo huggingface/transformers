@@ -1066,14 +1066,36 @@ class ProcessorMixin(PushToHubMixin):
         for attribute_name in cls.attributes:
             class_name = getattr(cls, f"{attribute_name}_class")
             if isinstance(class_name, tuple):
-                classes = tuple(getattr(transformers_module, n) if n is not None else None for n in class_name)
+                classes = []
+                for n in class_name:
+                    if n is None:
+                        classes.append(None)
+                    else:
+                        try:
+                            classes.append(getattr(transformers_module, n))
+                        except AttributeError:
+                            # If the class is not in the root module, try to get it from the config
+                            config = kwargs.get("config", None)
+                            if config is not None and hasattr(config, "custom_classes") and n in config.custom_classes:
+                                classes.append(config.custom_classes[n])
+                            else:
+                                raise
+                classes = tuple(classes)
                 use_fast = kwargs.get("use_fast", True)
                 if use_fast and classes[1] is not None:
                     attribute_class = classes[1]
                 else:
                     attribute_class = classes[0]
             else:
-                attribute_class = getattr(transformers_module, class_name)
+                try:
+                    attribute_class = getattr(transformers_module, class_name)
+                except AttributeError:
+                    # If the class is not in the root module, try to get it from the config
+                    config = kwargs.get("config", None)
+                    if config is not None and hasattr(config, "custom_classes") and class_name in config.custom_classes:
+                        attribute_class = config.custom_classes[class_name]
+                    else:
+                        raise
 
             args.append(attribute_class.from_pretrained(pretrained_model_name_or_path, **kwargs))
         return args
