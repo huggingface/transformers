@@ -36,7 +36,7 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
-        processor = Qwen2_5_VLProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct", patch_size=4)
+        processor = Qwen2_5_VLProcessor.from_pretrained("Qwen/Qwen2-VL-7B-Instruct", patch_size=4)  # Qwen/Qwen2.5-VL-7B-Instruct will cause the test to fail.
         processor.save_pretrained(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
