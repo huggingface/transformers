@@ -202,6 +202,13 @@ _import_structure = {
         "BarkProcessor",
         "BarkSemanticConfig",
     ],
+    "models.style_text_to_speech_2": [
+        "StyleTextToSpeech2CoarseConfig",
+        "StyleTextToSpeech2Config",
+        "StyleTextToSpeech2FineConfig",
+        "StyleTextToSpeech2Processor",
+        "StyleTextToSpeech2SemanticConfig",
+    ],
     "models.bart": ["BartConfig", "BartTokenizer"],
     "models.barthez": [],
     "models.bartpho": [],
@@ -1575,6 +1582,16 @@ else:
             "BarkModel",
             "BarkPreTrainedModel",
             "BarkSemanticModel",
+        ]
+    )
+    _import_structure["models.style_text_to_speech_2"].extend(
+        [
+            "StyleTextToSpeech2CausalModel",
+            "StyleTextToSpeech2CoarseModel",
+            "StyleTextToSpeech2FineModel",
+            "StyleTextToSpeech2Model",
+            "StyleTextToSpeech2PreTrainedModel",
+            "StyleTextToSpeech2SemanticModel",
         ]
     )
     _import_structure["models.bart"].extend(
@@ -5218,6 +5235,13 @@ if TYPE_CHECKING:
         BarkProcessor,
         BarkSemanticConfig,
     )
+    from .models.style_text_to_speech_2 import (
+        StyleTextToSpeech2CoarseConfig,
+        StyleTextToSpeech2Config,
+        StyleTextToSpeech2FineConfig,
+        StyleTextToSpeech2Processor,
+        StyleTextToSpeech2SemanticConfig,
+    )
     from .models.bart import BartConfig, BartTokenizer
     from .models.beit import BeitConfig
     from .models.bert import (
@@ -6626,6 +6650,14 @@ if TYPE_CHECKING:
             BarkModel,
             BarkPreTrainedModel,
             BarkSemanticModel,
+        )
+        from .models.style_text_to_speech_2 import (
+            StyleTextToSpeech2CausalModel,
+            StyleTextToSpeech2CoarseModel,
+            StyleTextToSpeech2FineModel,
+            StyleTextToSpeech2Model,
+            StyleTextToSpeech2PreTrainedModel,
+            StyleTextToSpeech2SemanticModel,
         )
         from .models.bart import (
             BartForCausalLM,
