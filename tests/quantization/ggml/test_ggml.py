@@ -636,6 +636,7 @@ class GgufIntegrationTests(unittest.TestCase):
         EXPECTED_TEXT = 'Hello,\nI am trying to use the "get_post_meta"'
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
+    @unittest.skip("The test causes a torch.OutOfMemoryError on the CI but it passes with enough memory")
     def test_falcon7b_weights_conversion_fp16(self):
         quantized_model = AutoModelForCausalLM.from_pretrained(
             self.falcon7b_model_id_fp16,
