@@ -128,7 +128,7 @@ class InstructBlipVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertListEqual(
             list(inputs.keys()),
-            ["input_ids", "attention_mask", "qformer_input_ids", "qformer_attention_mask", "pixel_values"],
+            ["qformer_input_ids", "qformer_attention_mask", "input_ids", "attention_mask", "pixel_values"],
         )
 
         # test if it raises when no input is passed
@@ -175,5 +175,5 @@ class InstructBlipVideoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertListEqual(
             list(inputs.keys()),
-            ["input_ids", "attention_mask", "qformer_input_ids", "qformer_attention_mask", "pixel_values"],
+            ["qformer_input_ids", "qformer_attention_mask", "input_ids", "attention_mask", "pixel_values"],
         )

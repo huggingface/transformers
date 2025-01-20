@@ -108,6 +108,27 @@ class InstructBlipVideoProcessor(ProcessorMixin):
             elif not isinstance(text, list) and not isinstance(text[0], str):
                 raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
+            qformer_text_encoding = self.qformer_tokenizer(
+                text=text,
+                add_special_tokens=add_special_tokens,
+                padding=padding,
+                truncation=truncation,
+                max_length=max_length,
+                stride=stride,
+                pad_to_multiple_of=pad_to_multiple_of,
+                return_attention_mask=return_attention_mask,
+                return_overflowing_tokens=return_overflowing_tokens,
+                return_special_tokens_mask=return_special_tokens_mask,
+                return_offsets_mapping=return_offsets_mapping,
+                return_token_type_ids=return_token_type_ids,
+                return_length=return_length,
+                verbose=verbose,
+                return_tensors=return_tensors,
+                **kwargs,
+            )
+            encoding["qformer_input_ids"] = qformer_text_encoding.pop("input_ids")
+            encoding["qformer_attention_mask"] = qformer_text_encoding.pop("attention_mask")
+
             # We need this hacky manipulation because BLIP expects image tokens to be at the beginning even before BOS token
             # InstrucBLIP works with 4 frames only
             text_encoding = self.tokenizer(
@@ -145,26 +166,6 @@ class InstructBlipVideoProcessor(ProcessorMixin):
                 text_encoding[k] = [video_text_encoding[k] + sample for sample in text_encoding[k]]
 
             encoding.update(text_encoding)
-            qformer_text_encoding = self.qformer_tokenizer(
-                text=text,
-                add_special_tokens=add_special_tokens,
-                padding=padding,
-                truncation=truncation,
-                max_length=max_length,
-                stride=stride,
-                pad_to_multiple_of=pad_to_multiple_of,
-                return_attention_mask=return_attention_mask,
-                return_overflowing_tokens=return_overflowing_tokens,
-                return_special_tokens_mask=return_special_tokens_mask,
-                return_offsets_mapping=return_offsets_mapping,
-                return_token_type_ids=return_token_type_ids,
-                return_length=return_length,
-                verbose=verbose,
-                return_tensors=return_tensors,
-                **kwargs,
-            )
-            encoding["qformer_input_ids"] = qformer_text_encoding.pop("input_ids")
-            encoding["qformer_attention_mask"] = qformer_text_encoding.pop("attention_mask")
 
         if images is not None:
             image_encoding = self.image_processor(images, return_tensors=return_tensors)
