@@ -132,7 +132,7 @@ class InstructBlipVideoProcessor(ProcessorMixin):
             video_tokens = self.video_token.content * self.num_query_tokens * 4
             video_text_encoding = self.tokenizer(
                 video_tokens,
-                add_special_tokens=False,
+                add_special_tokens=False,  # required to concatenate below
                 return_attention_mask=return_attention_mask,
                 return_overflowing_tokens=return_overflowing_tokens,
                 return_special_tokens_mask=return_special_tokens_mask,

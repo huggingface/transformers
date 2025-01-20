@@ -126,19 +126,19 @@ class InstructBlipProcessor(ProcessorMixin):
             elif not isinstance(text, list) and not isinstance(text[0], str):
                 raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
+            qformer_text_encoding = self.qformer_tokenizer(text, **output_kwargs["text_kwargs"])
+            encoding["qformer_input_ids"] = qformer_text_encoding.pop("input_ids")
+            encoding["qformer_attention_mask"] = qformer_text_encoding.pop("attention_mask")
+
             # We need this hacky manipulation because BLIP expects image tokens to be at the beginning even before BOS token
             text_encoding = self.tokenizer(text, **output_kwargs["text_kwargs"])
-
             image_tokens = self.image_token.content * self.num_query_tokens
             output_kwargs["text_kwargs"]["add_special_tokens"] = False
             image_text_encoding = self.tokenizer(image_tokens, **output_kwargs["text_kwargs"])
             for k in text_encoding:
                 text_encoding[k] = [image_text_encoding[k] + sample for sample in text_encoding[k]]
-
             encoding.update(text_encoding)
-            qformer_text_encoding = self.qformer_tokenizer(text, **output_kwargs["text_kwargs"])
-            encoding["qformer_input_ids"] = qformer_text_encoding.pop("input_ids")
-            encoding["qformer_attention_mask"] = qformer_text_encoding.pop("attention_mask")
+
             encoding = BatchFeature(data=encoding, tensor_type=return_tensors)
 
         if images is not None:

@@ -1461,6 +1461,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
 
         special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
         special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+        language_model_inputs = language_model_inputs.to(inputs_embeds.device, inputs_embeds.dtype)
         inputs_embeds[special_image_mask] = language_model_inputs.flatten()
 
         if self.config.use_decoder_only_language_model:
@@ -1586,6 +1587,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
 
         special_image_mask = (input_ids == self.config.image_token_index).unsqueeze(-1)
         special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+        language_model_inputs = language_model_inputs.to(inputs_embeds.device, inputs_embeds.dtype)
         inputs_embeds[special_image_mask] = language_model_inputs.flatten()
 
         inputs = {"inputs_embeds": inputs_embeds, "attention_mask": attention_mask}
