@@ -18,7 +18,7 @@ import re
 import time
 from typing import Optional
 
-import IPython.display as disp
+from IPython import display as disp
 
 from ..trainer_callback import TrainerCallback
 from ..trainer_utils import IntervalStrategy, has_length
@@ -190,57 +190,80 @@ class NotebookProgressBar:
 
         self.label += "]" if self.comment is None or len(self.comment) == 0 else f", {self.comment}]"
         self.display()
+        def display(self):
+            self.html_code = html_progress_bar(self.value, self.total, self.prefix, self.label, self.width)
+            if self.parent is not None:
+                self.parent.display()
+                return
 
-    def display(self):
-        self.html_code = html_progress_bar(self.value, self.total, self.prefix, self.label, self.width)
-        if self.parent is not None:
-            # If this is a child bar, the parent will take care of the display.
-            self.parent.display()
-            return
-        if self.output is None:
-            self.output = disp.display(disp.HTML(self.html_code), display_id=True)
-        else:
-            self.output.update(disp.HTML(self.html_code))
+            import warnings
+            tried_html = False
+            
+            try:
+                if self.output is None:
+                    self.output = disp.display(disp.HTML(data=self.html_code), display_id=True)
+                else:
+                    self.output.update(disp.HTML(data=self.html_code))
+                tried_html = True
+            except (IsADirectoryError, Exception) as e:  # Catch broader exceptions but log them
+                if tried_html:
+                    warnings.warn(f"HTML display failed with {type(e).__name__}, falling back to basic display")
+                if self.output is None:
+                    self.output = disp.display(self.html_code, display_id=True)
+                else:
+                    self.output.update(self.html_code)
 
-    def close(self):
-        "Closes the progress bar."
-        if self.parent is None and self.output is not None:
-            self.output.update(disp.HTML(""))
+        def close(self):
+            "Closes the progress bar."
+            if self.parent is None and self.output is not None:
+                self.output.update(disp.HTML(""))
 
 
-class NotebookTrainingTracker(NotebookProgressBar):
-    """
-    An object tracking the updates of an ongoing training with progress bars and a nice table reporting metrics.
-
-    Args:
-        num_steps (`int`): The number of steps during training. column_names (`List[str]`, *optional*):
-            The list of column names for the metrics table (will be inferred from the first call to
-            [`~utils.notebook.NotebookTrainingTracker.write_line`] if not set).
-    """
-
-    def __init__(self, num_steps, column_names=None):
-        super().__init__(num_steps)
-        self.inner_table = None if column_names is None else [column_names]
-        self.child_bar = None
-
-    def display(self):
-        self.html_code = html_progress_bar(self.value, self.total, self.prefix, self.label, self.width)
-        if self.inner_table is not None:
-            self.html_code += text_to_html_table(self.inner_table)
-        if self.child_bar is not None:
-            self.html_code += self.child_bar.html_code
-        if self.output is None:
-            self.output = disp.display(disp.HTML(self.html_code), display_id=True)
-        else:
-            self.output.update(disp.HTML(self.html_code))
-
-    def write_line(self, values):
+    class NotebookTrainingTracker(NotebookProgressBar):
         """
-        Write the values in the inner table.
+        An object tracking the updates of an ongoing training with progress bars and a nice table reporting metrics.
 
         Args:
-            values (`Dict[str, float]`): The values to display.
+            num_steps (`int`): The number of steps during training. column_names (`List[str]`, *optional*):
+                The list of column names for the metrics table (will be inferred from the first call to
+                [`~utils.notebook.NotebookTrainingTracker.write_line`] if not set).
         """
+
+        def __init__(self, num_steps, column_names=None):
+            super().__init__(num_steps)
+            self.inner_table = None if column_names is None else [column_names]
+            self.child_bar = None
+
+        def display(self):
+            self.html_code = html_progress_bar(self.value, self.total, self.prefix, self.label, self.width)
+            if self.parent is not None:
+                self.parent.display()
+                return
+
+            import warnings
+            tried_html = False
+            
+            try:
+                if self.output is None:
+                    self.output = disp.display(disp.HTML(data=self.html_code), display_id=True)
+                else:
+                    self.output.update(disp.HTML(data=self.html_code))
+                tried_html = True
+            except (IsADirectoryError, Exception) as e:  # Catch broader exceptions but log them
+                if tried_html:
+                    warnings.warn(f"HTML display failed with {type(e).__name__}, falling back to basic display")
+                if self.output is None:
+                    self.output = disp.display(self.html_code, display_id=True)
+                else:
+                    self.output.update(self.html_code)
+
+        def write_line(self, values):
+            """
+            Write the values in the inner table.
+
+            Args:
+                values (`Dict[str, float]`): The values to display.
+            """
         if self.inner_table is None:
             self.inner_table = [list(values.keys()), list(values.values())]
         else:
