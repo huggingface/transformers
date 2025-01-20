@@ -747,6 +747,7 @@ class LlamaIntegrationTest(unittest.TestCase):
     @slow
     @require_read_token
     def test_export_static_cache(self):
+        # this test only run with an accelerator but it doesn't need an accelerator ?
         if version.parse(torch.__version__) < version.parse("2.4.0"):
             self.skipTest(reason="This test requires torch >= 2.4 to run.")
 
