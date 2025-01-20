@@ -131,9 +131,15 @@ class InstructBlipProcessor(ProcessorMixin):
             encoding["qformer_attention_mask"] = qformer_text_encoding.pop("attention_mask")
 
             # We need this hacky manipulation because BLIP expects image tokens to be at the beginning even before BOS token
+            if output_kwargs["text_kwargs"].get("max_length") is not None:
+                output_kwargs["text_kwargs"]["max_length"] -= self.num_query_tokens
             text_encoding = self.tokenizer(text, **output_kwargs["text_kwargs"])
+
+            # Image tokens should not be padded/truncated or prepended with special BOS token
             image_tokens = self.image_token.content * self.num_query_tokens
             output_kwargs["text_kwargs"]["add_special_tokens"] = False
+            output_kwargs["text_kwargs"]["padding"] = False
+            output_kwargs["text_kwargs"]["truncation"] = False
             image_text_encoding = self.tokenizer(image_tokens, **output_kwargs["text_kwargs"])
             for k in text_encoding:
                 text_encoding[k] = [image_text_encoding[k] + sample for sample in text_encoding[k]]

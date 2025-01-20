@@ -120,7 +120,7 @@ class Blip2Processor(ProcessorMixin):
         )
 
         # BC for explicit return_tensors
-        return_tensors = output_kwargs["common_kwargs"].pop("return_tensors", None)
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         encoding = BatchFeature(tensor_type=return_tensors)
         if text is not None:
             if isinstance(text, str):
@@ -129,11 +129,15 @@ class Blip2Processor(ProcessorMixin):
                 raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
             # We need this hacky manipulation because BLIP expects image tokens to be at the beginning even before BOS token
-            output_kwargs["text_kwargs"]["return_tensors"] = None
+            if output_kwargs["text_kwargs"].get("max_length") is not None:
+                output_kwargs["text_kwargs"]["max_length"] -= self.num_query_tokens
             text_encoding = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
+            # Image tokens should not be padded/truncated or prepended with special BOS token
             image_tokens = self.image_token.content * self.num_query_tokens
             output_kwargs["text_kwargs"]["add_special_tokens"] = False
+            output_kwargs["text_kwargs"]["padding"] = False
+            output_kwargs["text_kwargs"]["truncation"] = False
             image_text_encoding = self.tokenizer(image_tokens, **output_kwargs["text_kwargs"])
             for k in text_encoding:
                 text_encoding[k] = [image_text_encoding[k] + sample for sample in text_encoding[k]]
