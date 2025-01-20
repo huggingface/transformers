@@ -775,6 +775,9 @@ class ModelFileMapper(ModuleMapper):
                     original_dependencies.append(class_dep)
                 else:
                     merged_dependencies.append(class_dep)
+            # We need to sort deterministically before actual sorting, so that entries missing (i.e. with value 1e10)
+            # will always get the same order independently of the system (they come from a set, which has no deterministic order)
+            original_dependencies = sorted(original_dependencies, reverse=True)
             # Sort both list according to the order in their respective file
             original_dependencies = sorted(original_dependencies, key=lambda x: self.start_lines.get(x, 1e10))
             merged_dependencies = sorted(merged_dependencies, key=lambda x: self.modular_file_start_lines[x])
@@ -800,6 +803,9 @@ class ModelFileMapper(ModuleMapper):
                 merged_dependencies.append(dep)
             else:
                 original_dependencies.append(dep)
+        # We need to sort deterministically before actual sorting, so that entries missing (i.e. with value 1e10)
+        # will always get the same order independently of the system (they come from a set, which has no deterministic order)
+        original_dependencies = sorted(original_dependencies, reverse=True)
         # Sort both list according to the order in their respective file
         original_dependencies = sorted(original_dependencies, key=lambda x: self.start_lines.get(x, 1e10))
         merged_dependencies = sorted(merged_dependencies, key=lambda x: self.modular_file_start_lines[x])
