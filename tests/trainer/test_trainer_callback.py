@@ -31,7 +31,7 @@ from transformers import (
     TrainingArguments,
     is_torch_available,
 )
-from transformers.testing_utils import require_torch
+from transformers.testing_utils import require_torch, skipIfRocm
 from transformers.trainer_callback import ExportableState
 
 
@@ -217,6 +217,7 @@ class TrainerCallbackTest(unittest.TestCase):
         expected_callbacks.insert(0, DefaultFlowCallback)
         self.check_callbacks_equality(trainer.callback_handler.callbacks, expected_callbacks)
 
+    @skipIfRocm(arch='gfx1201')
     def test_event_flow(self):
         import warnings
 

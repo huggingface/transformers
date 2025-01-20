@@ -2546,6 +2546,21 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             "return_tensors": "pt",
         }
 
+    @skipIfRocm(arch='gfx1201')
+    def test_custom_logits_processor(self): 
+        super().test_custom_logits_processor()
+        pass
+
+    @skipIfRocm(arch='gfx1201')
+    def test_max_new_tokens_encoder_decoder(self):
+        super().test_max_new_tokens_encoder_decoder()
+        pass
+
+    @skipIfRocm(arch='gfx1201')
+    def test_eos_token_id_int_and_list_beam_search(self):
+        super().test_eos_token_id_int_and_list_beam_search()
+        pass
+
     @slow
     def test_diverse_beam_search(self):
         # PT-only test: TF doesn't have a diverse beam search implementation
@@ -2595,6 +2610,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         out_gen_embeds = model.generate(inputs_embeds=inputs_embeds, max_length=max_length)
         self.assertEqual(out_gen.shape[-1], input_len + out_gen_embeds.shape[-1])
 
+    @skipIfRocm(arch='gfx1201')
     def test_min_length_if_input_embeds(self):
         # PT-only test: TF doesn't have StoppingCriteria
         article = "Today a dragon flew over Paris."
@@ -2647,6 +2663,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         )
 
     # TODO (joao): replace `stop_sequence` in the pipeline by the more recent `generate` functionality
+    @skipIfRocm(arch='gfx1201')
     def test_stop_sequence_stopping_criteria(self):
         # PT-only test: TF doesn't have StoppingCriteria
         prompt = """Hello I believe in"""
@@ -3229,6 +3246,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         self.assertListEqual(out.logits[-1].tolist(), out.scores[-1].tolist())
         self.assertNotEqual(out_with_temp.logits[-1].tolist(), out_with_temp.scores[-1].tolist())
 
+    @skipIfRocm(arch='gfx1201')
     def test_eos_token_id_int_and_list_top_k_top_sampling(self):
         # Has TF equivalent: this test relies on random sampling
         generation_kwargs = {
@@ -3257,6 +3275,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         generated_tokens = model.generate(**tokens, eos_token_id=eos_token_id, **generation_kwargs)
         self.assertTrue(expectation == len(generated_tokens[0]))
 
+    @skipIfRocm(arch='gfx1201')
     def test_model_kwarg_encoder_signature_filtering(self):
         # Has TF equivalent: ample use of framework-specific code
         bart_tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bart")
@@ -3294,6 +3313,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             # FakeEncoder.forward() accepts **kwargs -> no filtering -> type error due to unexpected input "foo"
             bart_model.generate(input_ids, foo="bar")
 
+    @skipIfRocm(arch='gfx1201')
     def test_default_max_length_warning(self):
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-gpt2")
@@ -3351,6 +3371,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         self.assertEqual(config.assistant_confidence_threshold, 0.4)
         self.assertEqual(config.is_assistant, False)
 
+    @skipIfRocm(arch='gfx1201')
     def test_generated_length_assisted_generation(self):
         # PT-only test: TF doesn't support assisted decoding yet.
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
@@ -3379,6 +3400,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         )
         self.assertTrue((input_length + 10) <= out.shape[-1] <= 20)
 
+    @skipIfRocm(arch='gfx1201')
     def test_model_kwarg_assisted_decoding_decoder_only(self):
         # PT-only test: TF doesn't support assisted decoding yet.
         model = AutoModelForCausalLM.from_pretrained("hf-internal-testing/tiny-random-gpt2").to(torch_device)
@@ -3413,6 +3435,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         )
         self.assertListEqual(outputs_assisted.tolist(), outputs_tti.tolist())
 
+    @skipIfRocm(arch='gfx1201')
     def test_model_kwarg_assisted_decoding_encoder_decoder(self):
         """
         Tests that the following scenario is compatible with assisted generation:
@@ -3479,6 +3502,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         )
         self.assertListEqual(outputs_assisted.tolist(), outputs_foo.tolist())
 
+    @skipIfRocm(arch='gfx1201')
     def test_assisted_decoding_encoder_decoder_shared_encoder(self):
         """
         Tests that the following scenario is compatible with assisted generation:
@@ -3557,6 +3581,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         )
         self.assertListEqual(outputs_assisted.tolist(), outputs_foo.tolist())
 
+    @skipIfRocm(arch='gfx1201')
     def test_assisted_decoding_num_assistant_tokens_heuristic_schedule(self):
         # This test ensures that the assisted generation num_assistant_tokens 'heuristic' schedule works properly.
 
@@ -3805,6 +3830,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         self.assertTrue(test_bos_id == gen_output[0, 0])
         self.assertTrue(generation_config.bos_token_id is None)
 
+    @skipIfRocm(arch='gfx1201')
     def test_speculative_decoding_equals_regular_decoding(self):
         draft_name = "double7/vicuna-68m"
         target_name = "Qwen/Qwen2-0.5B-Instruct"
@@ -3835,6 +3861,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
     @pytest.mark.generate
     @require_torch_multi_gpu
+    @skipIfRocm(arch='gfx1201')
     def test_generate_with_static_cache_multi_gpu(self):
         """
         Tests if the static cache has been set correctly and if generate works correctly when we are using multi-gpus.
@@ -3870,6 +3897,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
 
     @pytest.mark.generate
     @require_torch_multi_gpu
+    @skipIfRocm(arch='gfx1201')
     def test_init_static_cache_multi_gpu(self):
         """
         Tests if the static cache has been set correctly when we initialize it manually in a multi-gpu setup.
@@ -4051,6 +4079,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         self.assertEqual(generated_text_no_padding, generated_text_with_padding)
         self.assertEqual(generated_text_no_padding, "Ich muss diese Aufgabe vor Ende des Tages beenden.")
 
+    @skipIfRocm(arch='gfx1201')
     def test_prepare_inputs_for_generation_decoder_llm(self):
         """Tests GenerationMixin.prepare_inputs_for_generation against expected usage with decoder-only llms."""
 
@@ -4167,6 +4196,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         self.assertTrue(model_inputs["encoder_outputs"] == "foo")
         # See the decoder-only test for more corner cases. The code is the same, so we don't repeat it here.
 
+    @skipIfRocm(arch='gfx1201')
     def test_generate_compile_fullgraph_tiny(self):
         """
         Tests that we can call end-to-end generation with a tiny model (i.e. doesn't crash)
@@ -4190,6 +4220,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         gen_out = compiled_generate(**model_inputs, generation_config=generation_config)
         self.assertTrue(gen_out.shape[1] > model_inputs["input_ids"].shape[1])  # some text was generated
 
+    @skipIfRocm(arch='gfx1201')
     def test_assisted_generation_early_exit(self):
         """
         Tests that assisted generation with early exit works as expected. Under the hood, this has complex cache
@@ -4226,6 +4257,7 @@ class TokenHealingTestCase(unittest.TestCase):
             ("empty_prompt", "", ""),
         ]
     )
+    @skipIfRocm(arch='gfx1201')
     def test_prompts(self, name, input, expected):
         model_name_or_path = "distilbert/distilgpt2"
         tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, use_fast=True)

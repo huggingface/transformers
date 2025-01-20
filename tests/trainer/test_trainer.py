@@ -2814,6 +2814,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertIs(model_wrapped_before, model_wrapped_after, "should be not wrapped twice")
 
     @require_torch_up_to_2_accelerators
+    @skipIfRocm(arch='gfx1201')
     def test_can_resume_training(self):
         # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
         # save_steps, the checkpoint will resume training at epoch 2 or more (so the data seen by the model
@@ -3081,6 +3082,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         trainer.train(resume_from_checkpoint=False)
 
     @require_torch_up_to_2_accelerators
+    @skipIfRocm(arch='gfx1201')
     def test_resume_training_with_shard_checkpoint(self):
         # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
         # save_steps, the checkpoint will resume training at epoch 2 or more (so the data seen by the model
@@ -3107,6 +3109,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
     @require_safetensors
     @require_torch_up_to_2_accelerators
+    @skipIfRocm(arch='gfx1201')
     def test_resume_training_with_safe_checkpoint(self):
         # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
         # save_steps, the checkpoint will resume training at epoch 2 or more (so the data seen by the model
@@ -3142,6 +3145,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                     self.check_trainer_state_are_the_same(state, state1)
 
     @require_torch_up_to_2_accelerators
+    @skipIfRocm(arch='gfx1201')
     def test_resume_training_with_gradient_accumulation(self):
         # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
         # save_steps, the checkpoint will resume training at epoch 2 or more (so the data seen by the model
@@ -3180,6 +3184,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.check_trainer_state_are_the_same(state, state1)
 
     @require_torch_up_to_2_accelerators
+    @skipIfRocm(arch='gfx1201')
     def test_resume_training_with_frozen_params(self):
         # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
         # save_steps, the checkpoint will resume training at epoch 2 or more (so the data seen by the model

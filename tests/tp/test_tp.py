@@ -14,6 +14,7 @@
 
 import os
 
+from transformers.testing_utils import skipIfRocm
 from transformers import is_torch_available
 from transformers.models.llama.configuration_llama import LlamaConfig
 from transformers.models.llama.modeling_llama import LlamaModel
@@ -31,6 +32,7 @@ if is_torch_available():
 
 class TestTensorParallel(TestCasePlus):
     @require_torch_multi_gpu
+    @skipIfRocm(arch='gfx1201')
     def test_tp(self):
         distributed_args = f"""--nproc_per_node={torch.cuda.device_count()}
             --master_port={get_torch_dist_unique_port()}

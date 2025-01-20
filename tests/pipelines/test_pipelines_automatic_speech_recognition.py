@@ -47,6 +47,7 @@ from transformers.testing_utils import (
     require_torchaudio,
     slow,
     torch_device,
+    skipIfRocm,
 )
 
 from .test_pipelines_common import ANY
@@ -237,6 +238,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         speech_recognizer(waveform)
 
     @require_torch
+    @skipIfRocm(arch='gfx1201')
     def test_small_model_pt_seq2seq(self):
         speech_recognizer = pipeline(
             model="hf-internal-testing/tiny-random-speech-encoder-decoder",

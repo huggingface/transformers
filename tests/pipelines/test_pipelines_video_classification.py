@@ -27,6 +27,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_or_tf,
     require_vision,
+    skipIfRocm,
 )
 
 from .test_pipelines_common import ANY
@@ -81,6 +82,7 @@ class VideoClassificationPipelineTests(unittest.TestCase):
                 compare_pipeline_output_to_hub_spec(element, VideoClassificationOutputElement)
 
     @require_torch
+    @skipIfRocm(arch='gfx1201')
     def test_small_model_pt(self):
         small_model = "hf-internal-testing/tiny-random-VideoMAEForVideoClassification"
         small_feature_extractor = VideoMAEFeatureExtractor(

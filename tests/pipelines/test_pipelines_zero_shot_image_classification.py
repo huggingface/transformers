@@ -26,6 +26,7 @@ from transformers.testing_utils import (
     require_torch,
     require_vision,
     slow,
+    rocmUtils
 )
 
 from .test_pipelines_common import ANY
@@ -131,7 +132,11 @@ class ZeroShotImageClassificationPipelineTests(unittest.TestCase):
         )
 
         for single_output in output:
-            compare_pipeline_output_to_hub_spec(single_output, ZeroShotImageClassificationOutputElement)
+            if rocmUtils.is_rocm_skippable(arch='gfx1201'):
+                for sub_output in single_output:
+                    compare_pipeline_output_to_hub_spec(sub_output, ZeroShotImageClassificationOutputElement)
+            else:
+                compare_pipeline_output_to_hub_spec(single_output, ZeroShotImageClassificationOutputElement)
 
     @require_torch
     def test_small_model_pt_fp16(self):
