@@ -16,7 +16,7 @@ class TestNEFTune(unittest.TestCase):
     def tearDown(self):
         # Remove the hook after tests
         self.hook_handle.remove()
-    
+
     def test_single_sequence(self):
         # Test regular non-packed behavior
         input_ids = torch.tensor([[1, 2, 3, 4, 5]])
