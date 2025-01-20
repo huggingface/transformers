@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from functools import partial
 from typing import List, Optional
 
 import torch
@@ -600,11 +601,24 @@ class RtDetrV2MLPPredictionHead(RTDetrMLPPredictionHead):
     pass
 
 
-class RtDetrV2ForObjectDetection(RTDetrForObjectDetection):
+class RtDetrV2ForObjectDetection(RTDetrForObjectDetection, RtDetrV2PreTrainedModel):
     def __init__(self, config: RtDetrV2Config):
-        super().__init__(config)
+        RtDetrV2PreTrainedModel.__init__(config)
         # RTDETR encoder-decoder model
         self.model = RtDetrV2Model(config)
+
+        # Detection heads on top
+        class_embed = partial(nn.Linear, config.d_model, config.num_labels)
+        bbox_embed = partial(RtDetrV2MLPPredictionHead, config, config.d_model, config.d_model, 4, num_layers=3)
+
+        self.class_embed = nn.ModuleList([class_embed() for _ in range(config.decoder_layers)])
+        self.bbox_embed = nn.ModuleList([bbox_embed() for _ in range(config.decoder_layers)])
+
+        self.model.decoder.class_embed = self.class_embed
+        self.model.decoder.bbox_embed = self.bbox_embed
+
+        # Initialize weights and apply final processing
+        self.post_init()
 
 
 __all__ = [

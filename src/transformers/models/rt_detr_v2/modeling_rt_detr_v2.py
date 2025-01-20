@@ -2015,19 +2015,12 @@ class RtDetrV2ForObjectDetection(RtDetrV2PreTrainedModel):
         self.model = RtDetrV2Model(config)
 
         # Detection heads on top
-        self.class_embed = partial(nn.Linear, config.d_model, config.num_labels)
-        self.bbox_embed = partial(RtDetrV2MLPPredictionHead, config, config.d_model, config.d_model, 4, num_layers=3)
+        class_embed = partial(nn.Linear, config.d_model, config.num_labels)
+        bbox_embed = partial(RtDetrV2MLPPredictionHead, config, config.d_model, config.d_model, 4, num_layers=3)
 
-        # if two-stage, the last class_embed and bbox_embed is for region proposal generation
-        num_pred = config.decoder_layers
-        if config.with_box_refine:
-            self.class_embed = _get_clones(self.class_embed, num_pred)
-            self.bbox_embed = _get_clones(self.bbox_embed, num_pred)
-        else:
-            self.class_embed = nn.ModuleList([self.class_embed() for _ in range(num_pred)])
-            self.bbox_embed = nn.ModuleList([self.bbox_embed() for _ in range(num_pred)])
+        self.class_embed = nn.ModuleList([class_embed() for _ in range(config.decoder_layers)])
+        self.bbox_embed = nn.ModuleList([bbox_embed() for _ in range(config.decoder_layers)])
 
-        # hack implementation for iterative bounding box refinement
         self.model.decoder.class_embed = self.class_embed
         self.model.decoder.bbox_embed = self.bbox_embed
 
