@@ -1482,9 +1482,14 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
             if attention_mask is None:
                 attention_mask = torch.ones_like(total_input_ids)
             position_ids = torch.ones(
-                3, input_ids.shape[0], input_ids.shape[1], dtype=input_ids.dtype, device=input_ids.device
+                3,
+                input_ids.shape[0],
+                input_ids.shape[1],
+                dtype=input_ids.dtype,
+                device=input_ids.device,
             )
             image_index, video_index = 0, 0
+            attention_mask = attention_mask.to(total_input_ids.device)
             for i, input_ids in enumerate(total_input_ids):
                 input_ids = input_ids[attention_mask[i] == 1]
                 image_nums, video_nums = 0, 0
@@ -1511,15 +1516,21 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
                             image_grid_thw[image_index][1],
                             image_grid_thw[image_index][2],
                         )
+                        second_per_grid_t = 0
                         image_index += 1
                         remain_images -= 1
                         ed = ed_image
+
                     else:
                         t, h, w = (
                             video_grid_thw[video_index][0],
                             video_grid_thw[video_index][1],
                             video_grid_thw[video_index][2],
                         )
+                        if second_per_grid_ts is not None:
+                            second_per_grid_t = second_per_grid_ts[video_index]
+                        else:
+                            second_per_grid_t = 1.0
                         video_index += 1
                         remain_videos -= 1
                         ed = ed_video
@@ -1533,7 +1544,15 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
                     st_idx = llm_pos_ids_list[-1].max() + 1 if len(llm_pos_ids_list) > 0 else 0
                     llm_pos_ids_list.append(torch.arange(text_len).view(1, -1).expand(3, -1) + st_idx)
 
-                    t_index = torch.arange(llm_grid_t).view(-1, 1).expand(-1, llm_grid_h * llm_grid_w).flatten()
+                    t_index = (
+                        (
+                            torch.arange(llm_grid_t).view(-1, 1).expand(-1, llm_grid_h * llm_grid_w)
+                            * second_per_grid_t
+                            * self.config.vision_config.tokens_per_second
+                        )
+                        .long()
+                        .flatten()
+                    )
                     h_index = torch.arange(llm_grid_h).view(1, -1, 1).expand(llm_grid_t, -1, llm_grid_w).flatten()
                     w_index = torch.arange(llm_grid_w).view(1, 1, -1).expand(llm_grid_t, llm_grid_h, -1).flatten()
                     llm_pos_ids_list.append(torch.stack([t_index, h_index, w_index]) + text_len + st_idx)
@@ -1553,7 +1572,7 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
             if attention_mask is not None:
                 position_ids = attention_mask.long().cumsum(-1) - 1
                 position_ids.masked_fill_(attention_mask == 0, 1)
-                position_ids = position_ids.unsqueeze(0).expand(3, -1, -1).to(attention_mask.device)
+                position_ids = position_ids.unsqueeze(0).expand(3, -1, -1).to(input_ids.device)
                 max_position_ids = position_ids.max(0, keepdim=False)[0].max(-1, keepdim=True)[0]
                 mrope_position_deltas = max_position_ids + 1 - attention_mask.shape[-1]
             else:
