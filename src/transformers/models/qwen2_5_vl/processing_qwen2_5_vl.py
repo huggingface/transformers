@@ -27,13 +27,16 @@ from typing import List, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, VideoInput
-from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from .modeling_qwen2_5_vl import Qwen2_5_VLVideosKwargs
+
+
+class Qwen2_5_VLVideosProcessorKwargs(VideosKwargs, total=False):
+    fps: Union[List[float], float]
 
 
 class Qwen2_5_VLProcessorKwargs(ProcessingKwargs, total=False):
-    videos_kwargs: Qwen2_5_VLVideosKwargs
+    videos_kwargs: Qwen2_5_VLVideosProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "padding": False,

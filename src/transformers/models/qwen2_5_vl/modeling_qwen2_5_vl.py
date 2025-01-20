@@ -40,7 +40,6 @@ from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
-from ...processing_utils import VideosKwargs
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -1972,7 +1971,3 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
             }
         )
         return model_inputs
-
-
-class Qwen2_5_VLVideosKwargs(VideosKwargs, total=False):
-    fps: Union[List[float], float]

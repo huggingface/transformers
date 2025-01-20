@@ -1009,12 +1009,12 @@ class Qwen2_5_VLImageProcessor(Qwen2VLImageProcessor):
     ]
 
 
-class Qwen2_5_VLVideosKwargs(VideosKwargs, total=False):
+class Qwen2_5_VLVideosProcessorKwargs(VideosKwargs, total=False):
     fps: Union[List[float], float]
 
 
 class Qwen2_5_VLProcessorKwargs(ProcessingKwargs, total=False):
-    videos_kwargs: Qwen2_5_VLVideosKwargs
+    videos_kwargs: Qwen2_5_VLVideosProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "padding": False,
