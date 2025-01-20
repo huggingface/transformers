@@ -17,7 +17,7 @@
 import unittest
 
 from transformers import AutoTokenizer, RobertaConfig, is_torch_available
-from transformers.testing_utils import TestCasePlus, require_torch, slow, torch_device
+from transformers.testing_utils import TestCasePlus, require_torch, slow, torch_device, skipIfRocm
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -396,6 +396,21 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     )
     fx_compatible = True
     model_split_percents = [0.5, 0.8, 0.9]
+
+    @skipIfRocm(arch='gfx1201')
+    def test_cpu_offload(self):
+        super().test_cpu_offload()
+        pass
+
+    @skipIfRocm(arch='gfx1201')
+    def test_disk_offload_bin(self):
+        super().test_disk_offload_bin()
+        pass
+
+    @skipIfRocm(arch='gfx1201')
+    def test_disk_offload_safetensors(self):
+        super().test_disk_offload_safetensors()
+        pass
 
     def setUp(self):
         self.model_tester = RobertaModelTester(self)

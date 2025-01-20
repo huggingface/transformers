@@ -26,6 +26,8 @@ from transformers.testing_utils import (
     require_torch,
     slow,
     torch_device,
+    skipIfRocm,
+    rocmUtils,
 )
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -302,6 +304,18 @@ class OlmoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
     model_split_percents = [0.5, 0.7, 0.8]
+
+    def test_generate_with_static_cache(self):
+        if rocmUtils.is_rocm_skippable(arch='gfx1201'):
+            torch._dynamo.config.capture_dynamic_output_shape_ops = True
+        super().test_generate_with_static_cache()
+        pass
+
+    def test_generate_from_inputs_embeds_with_static_cache(self):
+        if rocmUtils.is_rocm_skippable(arch='gfx1201'):
+            torch._dynamo.config.capture_dynamic_output_shape_ops = True
+        super().test_generate_from_inputs_embeds_with_static_cache()
+        pass
 
     def setUp(self):
         self.model_tester = OlmoeModelTester(self)
