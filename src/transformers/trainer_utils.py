@@ -125,28 +125,31 @@ def set_seed(seed: int, deterministic: bool = False):
 
 def neftune_post_forward_hook(module, input, output):
     """
-    Implements the NEFTune forward pass for the model using forward hooks. Note this works only for torch.nn.Embedding
-    layers. This method is slightly adapted from the original source code that can be found here:
-    https://github.com/neelsjain/NEFTune Simply add it to your model as follows:
-    ```python
-    model = ...
-    model.embed_tokens.neftune_noise_alpha = 0.1
-    model.embed_tokens.register_forward_hook(neftune_post_forward_hook)
-    ```
-    Args:
-        module (`torch.nn.Module`):
-            The embedding module where the hook is attached. Note that you need to set `module.neftune_noise_alpha` to
-            the desired noise alpha value.
-        input (`torch.Tensor`):
-            The input tensor to the model.
-        output (`torch.Tensor`):
-            The output tensor of the model (i.e. the embeddings).
+    NEFTune forward hook with support for packed sequences.
     """
-    if module.training:
+    if not module.training:
+        return output
+        
+    # Get attention mask if provided
+    attention_mask = None
+    if len(input) > 1 and input[1] is not None:
+        attention_mask = input[1]
+    
+    if attention_mask is None:
+        # Original behavior for non-packed sequences
         dims = torch.tensor(output.size(1) * output.size(2))
         mag_norm = module.neftune_noise_alpha / torch.sqrt(dims)
-        output = output + torch.zeros_like(output).uniform_(-mag_norm, mag_norm)
-    return output
+        noise = torch.zeros_like(output).uniform_(-mag_norm, mag_norm)
+    else:
+        # Handle packed sequences
+        noise = torch.zeros_like(output)
+        for i in range(output.size(0)):
+            seq_len = attention_mask[i].sum()
+            dims = seq_len * output.size(2)
+            mag_norm = module.neftune_noise_alpha / torch.sqrt(dims)
+            noise[i, :seq_len] = torch.zeros_like(output[i, :seq_len]).uniform_(-mag_norm, mag_norm)
+            
+    return output + noise
 
 
 class EvalPrediction:
