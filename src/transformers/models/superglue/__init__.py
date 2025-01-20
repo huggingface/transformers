@@ -11,28 +11,18 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
 
-from ..utils import is_torch_available
+from ...utils import _LazyModule
+from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from torch import nn
+    from .configuration_superglue import *
+    from .image_processing_superglue import *
+    from .modeling_superglue import *
+else:
+    import sys
 
-
-def is_fsdp_managed_module(module: nn.Module) -> bool:
-    if not is_torch_available():
-        return False
-
-    import torch
-
-    if not torch.distributed.is_available():
-        return False
-
-    import torch.distributed.fsdp
-
-    return isinstance(module, torch.distributed.fsdp.FullyShardedDataParallel) or getattr(
-        module, "_is_fsdp_managed_module", False
-    )
+    _file = globals()["__file__"]
+    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)
