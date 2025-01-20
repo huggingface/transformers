@@ -21,7 +21,6 @@ from .convert import ConvertCommand
 from .download import DownloadCommand
 from .env import EnvironmentCommand
 from .lfs import LfsCommands
-from .pt_to_tf import PTtoTFCommand
 from .run import RunCommand
 from .serving import ServeCommand
 from .user import UserCommands
@@ -41,7 +40,6 @@ def main():
     UserCommands.register_subcommand(commands_parser)
     AddNewModelLikeCommand.register_subcommand(commands_parser)
     LfsCommands.register_subcommand(commands_parser)
-    PTtoTFCommand.register_subcommand(commands_parser)
 
     # Let's go
     args = parser.parse_args()
