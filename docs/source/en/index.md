@@ -359,8 +359,8 @@ Flax), PyTorch, and/or TensorFlow.
 |                       [ViTMAE](model_doc/vit_mae)                        |       ✅        |         ✅         |      ❌      |
 |                      [ViTMatte](model_doc/vitmatte)                      |       ✅        |         ❌         |      ❌      |
 |                       [ViTMSN](model_doc/vit_msn)                        |       ✅        |         ❌         |      ❌      |
-|                       [VitPose](model_doc/vitpose)                       |       ✅        |         ❌         |      ❌      |
-|              [VitPoseBackbone](model_doc/vitpose_backbone)               |       ✅        |         ❌         |      ❌      |
+|                       [ViTPose](model_doc/vitpose)                       |       ✅        |         ❌         |      ❌      |
+|              [ViTPoseBackbone](model_doc/vitpose_backbone)               |       ✅        |         ❌         |      ❌      |
 |                          [VITS](model_doc/vits)                          |       ✅        |         ❌         |      ❌      |
 |                         [ViViT](model_doc/vivit)                         |       ✅        |         ❌         |      ❌      |
 |                      [Wav2Vec2](model_doc/wav2vec2)                      |       ✅        |         ✅         |      ✅      |
