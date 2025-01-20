@@ -815,7 +815,9 @@ class TrainingArguments:
     framework = "pt"
     output_dir: Optional[str] = field(
         default=None,
-        metadata={"help": "The output directory where the model predictions and checkpoints will be written. Defaults to 'trainer_output' if not provided."},
+        metadata={
+            "help": "The output directory where the model predictions and checkpoints will be written. Defaults to 'trainer_output' if not provided."
+        },
     )
     overwrite_output_dir: bool = field(
         default=False,
