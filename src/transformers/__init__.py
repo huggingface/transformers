@@ -1302,7 +1302,7 @@ else:
     _import_structure["models.vit"].append("ViTImageProcessorFast")
 
 try:
-    if not is_torchvision_available() and not is_timm_available():
+    if not (is_torchvision_available() and is_timm_available()):
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     from .utils import dummy_timm_and_torchvision_objects
@@ -6399,7 +6399,7 @@ if TYPE_CHECKING:
         from .models.vit import ViTImageProcessorFast
 
     try:
-        if not is_torchvision_available() and not is_timm_available():
+        if not (is_torchvision_available() and is_timm_available()):
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         from .utils.dummy_timm_and_torchvision_objects import *
