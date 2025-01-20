@@ -129,12 +129,12 @@ def neftune_post_forward_hook(module, input, output):
     """
     if not module.training:
         return output
-        
+
     # Get attention mask if provided
     attention_mask = None
     if len(input) > 1 and input[1] is not None:
         attention_mask = input[1]
-    
+
     if attention_mask is None:
         # Original behavior for non-packed sequences
         dims = torch.tensor(output.size(1) * output.size(2))
@@ -148,7 +148,7 @@ def neftune_post_forward_hook(module, input, output):
             dims = seq_len * output.size(2)
             mag_norm = module.neftune_noise_alpha / torch.sqrt(dims)
             noise[i, :seq_len] = torch.zeros_like(output[i, :seq_len]).uniform_(-mag_norm, mag_norm)
-            
+
     return output + noise
 
 
