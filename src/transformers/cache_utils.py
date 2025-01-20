@@ -1080,7 +1080,8 @@ class StaticCache(Cache):
             The maximum sequence length with which the model will be used.
         device (`torch.device` or `str`):
             The device on which the cache should be initialized. Should be the same as the layer.
-            If not provided, cache will be initialized on `meta` device by default, and then moved to input device when updating.
+            The recommended way however is not not indicate any `device`, in that case cache will be initialized on `meta`
+            device by default, and then moved to input device when updating.
         dtype (`torch.dtype`, *optional*, defaults to `torch.float32`):
             The default `dtype` to use when initializing the layer.
         layer_device_map(`Dict[int, Union[str, torch.device, int]]]`, `optional`):
@@ -1197,16 +1198,24 @@ class StaticCache(Cache):
 
         cache_position = cache_kwargs.get("cache_position")
 
-        k_out = self.key_cache[layer_idx]
-        v_out = self.value_cache[layer_idx]
-        key_states = key_states.to(k_out.dtype)
-        value_states = value_states.to(v_out.dtype)
-
-        if k_out.device.type == "meta":
-            k_out = torch.zeros(*k_out.size(), device=key_states.device, dtype=key_states.dtype)
-            v_out = torch.zeros(*v_out.size(), device=value_states.device, dtype=value_states.dtype)
+        if self.key_cache[layer_idx].device.type == "meta":
+            k_out = torch.zeros(
+                *self.key_cache[layer_idx].size(),
+                device=key_states.device,
+                dtype=key_states.dtype,
+            )
+            v_out = torch.zeros(
+                *self.value_cache[layer_idx].size(),
+                device=value_states.device,
+                dtype=value_states.dtype,
+            )
             self.key_cache[layer_idx] = k_out
             self.value_cache[layer_idx] = v_out
+        else:
+            k_out = self.key_cache[layer_idx]
+            v_out = self.value_cache[layer_idx]
+            key_states = key_states.to(k_out.dtype)
+            value_states = value_states.to(v_out.dtype)
 
         if cache_position is None:
             k_out.copy_(key_states)
@@ -1281,7 +1290,8 @@ class SlidingWindowCache(StaticCache):
             The maximum sequence length with which the model will be used.
         device (`torch.device` or `str`):
             The device on which the cache should be initialized. Should be the same as the layer.
-            If not provided, cache will be initialized on `meta` device by default, and then moved to input device when updating.
+            The recommended way however is not not indicate any `device`, in that case cache will be initialized on `meta`
+            device by default, and then moved to input device when updating.
         dtype (`torch.dtype`, *optional*, defaults to `torch.float32`):
             The default `dtype` to use when initializing the layer.
         layer_device_map(`Dict[int, Union[str, torch.device, int]]]`, `optional`):
@@ -1346,14 +1356,25 @@ class SlidingWindowCache(StaticCache):
         cache_kwargs: Optional[Dict[str, Any]] = None,
     ) -> Tuple[torch.Tensor]:
         cache_position = cache_kwargs.get("cache_position")
-        k_out = self.key_cache[layer_idx]
-        v_out = self.value_cache[layer_idx]
 
-        if k_out.device.type == "meta":
-            k_out = torch.zeros(*k_out.size(), device=key_states.device, dtype=key_states.dtype)
-            v_out = torch.zeros(*v_out.size(), device=value_states.device, dtype=value_states.dtype)
+        if self.key_cache[layer_idx].device.type == "meta":
+            k_out = torch.zeros(
+                *self.key_cache[layer_idx].size(),
+                device=key_states.device,
+                dtype=key_states.dtype,
+            )
+            v_out = torch.zeros(
+                *self.value_cache[layer_idx].size(),
+                device=value_states.device,
+                dtype=value_states.dtype,
+            )
             self.key_cache[layer_idx] = k_out
             self.value_cache[layer_idx] = v_out
+        else:
+            k_out = self.key_cache[layer_idx]
+            v_out = self.value_cache[layer_idx]
+            key_states = key_states.to(k_out.dtype)
+            value_states = value_states.to(v_out.dtype)
 
         # assume this only happens in prefill phase when prompt length > sliding_window_size (= max_cache_len)
         if cache_position.shape[0] > self.max_cache_len:
@@ -1595,7 +1616,8 @@ class HybridCache(Cache):
             The maximum sequence length with which the model will be used.
         device (`torch.device` or `str`, *optional*):
             The device on which the cache should be initialized. Should be the same as the layer.
-            If not provided, cache will be initialized on `meta` device by default, and then moved to input device when updating.
+            The recommended way however is not not indicate any `device`, in that case cache will be initialized on `meta`
+            device by default, and then moved to input device when updating.
         dtype (torch.dtype, *optional*, defaults to `torch.float32`):
             The default `dtype` to use when initializing the layer.
         layer_device_map(`Dict[int, Union[str, torch.device, int]]]`, `optional`):
@@ -1732,14 +1754,25 @@ class HybridCache(Cache):
     ) -> Tuple[torch.Tensor]:
         cache_position = cache_kwargs.get("cache_position")
         sliding_window = cache_kwargs.get("sliding_window")
-        k_out = self.key_cache[layer_idx]
-        v_out = self.value_cache[layer_idx]
 
-        if k_out.device.type == "meta":
-            k_out = torch.zeros(*k_out.size(), device=key_states.device, dtype=key_states.dtype)
-            v_out = torch.zeros(*v_out.size(), device=value_states.device, dtype=value_states.dtype)
+        if self.key_cache[layer_idx].device.type == "meta":
+            k_out = torch.zeros(
+                *self.key_cache[layer_idx].size(),
+                device=key_states.device,
+                dtype=key_states.dtype,
+            )
+            v_out = torch.zeros(
+                *self.value_cache[layer_idx].size(),
+                device=value_states.device,
+                dtype=value_states.dtype,
+            )
             self.key_cache[layer_idx] = k_out
             self.value_cache[layer_idx] = v_out
+        else:
+            k_out = self.key_cache[layer_idx]
+            v_out = self.value_cache[layer_idx]
+            key_states = key_states.to(k_out.dtype)
+            value_states = value_states.to(v_out.dtype)
 
         if sliding_window:
             update_fn = self._sliding_update
@@ -1804,7 +1837,8 @@ class MambaCache:
             The default `dtype` to use when initializing the layer.
         device (`torch.device` or `str`, *optional*):
             The device on which the cache should be initialized. Should be the same as the layer.
-            If not provided, cache will be initialized on `meta` device by default, and then moved to input device when updating.
+            The recommended way however is not not indicate any `device`, in that case cache will be initialized on `meta`
+            device by default, and then moved to input device when updating.
 
     Attributes:
         dtype: (`torch.dtype`):
@@ -1887,10 +1921,15 @@ class MambaCache:
     def update_conv_state(
         self, layer_idx: int, new_conv_state: torch.Tensor, cache_position: torch.LongTensor
     ) -> torch.Tensor:
-        conv_state = self.conv_states[layer_idx]
-        if conv_state.device.type == "meta":
-            conv_state = torch.zeros(*conv_state.size(), device=new_conv_state.device, dtype=new_conv_state.dtype)
+        if self.conv_states[layer_idx].device.type == "meta":
+            conv_state = torch.zeros(
+                *self.conv_states[layer_idx].size(),
+                device=new_conv_state.device,
+                dtype=new_conv_state.dtype,
+            )
             self.conv_states[layer_idx] = conv_state
+        else:
+            conv_state = self.conv_states[layer_idx]
 
         cache_position = cache_position.clamp(0, self.conv_kernel_size - 1)
 
@@ -1901,10 +1940,16 @@ class MambaCache:
         return self.conv_states[layer_idx]
 
     def update_ssm_state(self, layer_idx: int, new_ssm_state: torch.Tensor):
-        ssm_state = self.ssm_states[layer_idx]
-        if ssm_state.device.type == "meta":
-            ssm_state = torch.zeros(*ssm_state.size(), device=new_ssm_state.device, dtype=new_ssm_state.dtype)
+        if self.ssm_states[layer_idx].device.type == "meta":
+            ssm_state = torch.zeros(
+                *self.ssm_states[layer_idx].size(),
+                device=new_ssm_state.device,
+                dtype=new_ssm_state.dtype,
+            )
             self.ssm_states[layer_idx] = ssm_state
+        else:
+            ssm_state = self.ssm_states[layer_idx]
+
         self.ssm_states[layer_idx] = new_ssm_state
         return self.ssm_states[layer_idx]
 

@@ -198,6 +198,7 @@ class CacheTest(unittest.TestCase):
                 cache_config={
                     "batch_size": batch_size,
                     "max_cache_len": max_cache_len,
+                    "device": device,
                 },
             ),
         )
@@ -310,11 +311,12 @@ class CacheIntegrationTest(unittest.TestCase):
             do_sample=False,
             max_new_tokens=20,
             num_return_sequences=2,
+            num_beams=2,
         )
         decoded = tokenizer.batch_decode(gen_out, skip_special_tokens=True)
         expected_text = [
-            "Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many",
-            "Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many",
+            "Hello I am doing a project for my school and I am trying to make a program that will allow me to input a",
+            "Hello I am doing a project for my school and I am trying to make a program that will allow me to use a",
         ]
         self.assertListEqual(decoded, expected_text)
 
