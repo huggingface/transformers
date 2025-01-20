@@ -2292,9 +2292,8 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         language_model_inputs = self.language_projection(query_output)
 
         if input_ids is None:
-            start_tokens = [self.config.image_token_index] * self.config.num_query_tokens + [
-                self.config.text_config.bos_token_id
-            ]
+            image_tokens = [self.config.image_token_index] * self.config.num_query_tokens
+            start_tokens = image_tokens + [self.config.text_config.bos_token_id]
             input_ids = torch.tensor([start_tokens], dtype=torch.long, device=image_embeds.device)
             input_ids = input_ids.repeat(batch_size, 1)
 

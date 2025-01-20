@@ -298,6 +298,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
 
         special_image_mask = (input_ids == self.config.video_token_index).unsqueeze(-1)
         special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+        language_model_inputs = language_model_inputs.to(inputs_embeds.device, inputs_embeds.dtype)
         inputs_embeds[special_image_mask] = language_model_inputs.flatten()
 
         if self.config.use_decoder_only_language_model:
@@ -418,9 +419,8 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         language_model_inputs = language_model_inputs.reshape(batch_size, self.config.num_query_tokens * frames, -1)
 
         if input_ids is None:
-            start_tokens = [self.config.video_token_index] * self.config.num_query_tokens * 4 + [
-                self.config.text_config.bos_token_id
-            ]
+            video_tokens = [self.config.video_token_index] * self.config.num_query_tokens * 4
+            start_tokens = video_tokens + [self.config.text_config.bos_token_id]
             input_ids = torch.tensor([start_tokens], dtype=torch.long, device=image_embeds.device)
             input_ids = input_ids.repeat(batch_size, 1)
 
@@ -431,6 +431,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
 
         special_image_mask = (input_ids == self.config.video_token_index).unsqueeze(-1)
         special_image_mask = special_image_mask.expand_as(inputs_embeds).to(inputs_embeds.device)
+        language_model_inputs = language_model_inputs.to(inputs_embeds.device, inputs_embeds.dtype)
         inputs_embeds[special_image_mask] = language_model_inputs.flatten()
 
         inputs = {"inputs_embeds": inputs_embeds, "attention_mask": attention_mask}
