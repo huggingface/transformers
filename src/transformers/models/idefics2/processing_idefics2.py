@@ -16,6 +16,7 @@
 Processor class for IDEFICS2.
 """
 
+from itertools import accumulate
 from typing import TYPE_CHECKING, List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
@@ -94,15 +95,18 @@ class Idefics2Processor(ProcessorMixin):
         if tokenizer is None:
             raise ValueError("You need to specify a `tokenizer`.")
 
-        self.fake_image_token = AddedToken("<fake_token_around_image>", normalized=False, special=True)
-        self.image_token = AddedToken("<image>", normalized=False, special=True)
-        self.end_of_utterance_token = AddedToken("<end_of_utterance>", normalized=False, special=True)
-        self.image_seq_len = image_seq_len
+        if not hasattr(tokenizer, "image_token"):
+            self.fake_image_token = AddedToken("<fake_token_around_image>", normalized=False, special=True)
+            self.image_token = AddedToken("<image>", normalized=False, special=True)
+            tokens_to_add = {"additional_special_tokens": [self.fake_image_token, self.image_token]}
+            tokenizer.add_special_tokens(tokens_to_add)
+        else:
+            self.fake_image_token = tokenizer.image_boundary_token
+            self.image_token = tokenizer.image_token
 
-        tokens_to_add = {
-            "additional_special_tokens": [self.fake_image_token, self.image_token, self.end_of_utterance_token]
-        }
-        tokenizer.add_special_tokens(tokens_to_add)
+        self.end_of_utterance_token = AddedToken("<end_of_utterance>", normalized=False, special=True)
+        tokenizer.add_special_tokens({"additional_special_tokens": [self.end_of_utterance_token]})
+        self.image_seq_len = image_seq_len
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
@@ -218,7 +222,21 @@ class Idefics2Processor(ProcessorMixin):
             if is_image_or_image_url(images):
                 images = [[images]]
             elif isinstance(images, list) and is_image_or_image_url(images[0]):
-                images = [images]
+                if text is not None:
+                    if sum(n_images_in_text) != len(images):
+                        raise ValueError(
+                            f"The total number of {image_token} tokens in the prompts should be the same as the number of images passed."
+                            f" Found {sum(n_images_in_text)} {image_token} tokens and {len(images)} images."
+                        )
+                    # Reorganize the images to match the prompts
+                    cumsum_images_in_text = [0] + list(accumulate(n_images_in_text))
+                    images = [
+                        images[cumsum_images_in_text[i] : cumsum_images_in_text[i + 1]]
+                        for i in range(len(n_images_in_text))
+                    ]
+                else:
+                    images = [images]
+
             elif (
                 not isinstance(images, list)
                 and not isinstance(images[0], list)
@@ -260,3 +278,6 @@ class Idefics2Processor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+
+__all__ = ["Idefics2Processor"]

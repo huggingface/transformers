@@ -15,7 +15,6 @@
 """Testing suite for the PyTorch Idefics3 model."""
 
 import copy
-import gc
 import unittest
 from io import BytesIO
 
@@ -27,7 +26,14 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import require_bitsandbytes, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    cleanup,
+    require_bitsandbytes,
+    require_torch,
+    require_torch_sdpa,
+    slow,
+    torch_device,
+)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -42,8 +48,6 @@ if is_torch_available():
         Idefics3ForConditionalGeneration,
         Idefics3Model,
     )
-else:
-    is_torch_greater_or_equal_than_2_0 = False
 
 if is_vision_available():
     from PIL import Image
@@ -170,7 +174,12 @@ class Idefics3ModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = Idefics3VisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Idefics3Config, has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self, config_class=Idefics3Config, has_text_modality=False, common_properties=["image_token_id"]
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="input_embeds cannot be passed in without input_ids")
     def test_inputs_embeds():
@@ -178,10 +187,6 @@ class Idefics3ModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="input_embeds cannot be passed in without input_ids")
     def test_inputs_embeds_matches_input_ids(self):
-        pass
-
-    @unittest.skip(reason="Model does not support padding right")
-    def test_flash_attn_2_generate_padding_right(self):
         pass
 
     @unittest.skip(reason="Model does not support padding right")
@@ -323,6 +328,7 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
 
     all_model_classes = (Idefics3ForConditionalGeneration,) if is_torch_available() else ()
     all_generative_model_classes = (Idefics3ForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = {"image-text-to-text": Idefics3ForConditionalGeneration} if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True
@@ -335,10 +341,6 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
 
     @unittest.skip(reason="input_embeds cannot be passed in without input_ids")
     def test_inputs_embeds():
-        pass
-
-    @unittest.skip(reason="Model does not support padding right")
-    def test_flash_attn_2_generate_padding_right(self):
         pass
 
     @unittest.skip(reason="Model does not support padding right")
@@ -368,48 +370,13 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
         pass
 
     @pytest.mark.generate
-    def test_generate_from_inputs_embeds_decoder_only(self):
-        # overwrite because IDEFICS needs ids and embeds at the input to be not None
-        for model_class in self.all_generative_model_classes:
-            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-
-            # Ignore:
-            # a) eos (to always output 20 tokens) and pad (so we don't try to infer the attn mask from the input_ids,
-            #   which would cause a mismatch),
-            config.pad_token_id = config.eos_token_id = -1
-            config.is_decoder = True
-            model = model_class(config).to(torch_device).eval()
-            input_ids = inputs_dict.pop("input_ids")
-
-            # Traditional way of generating text
-            outputs_from_ids = model.generate(
-                input_ids, max_new_tokens=5, return_dict_in_generate=True, output_scores=True
-            )
-            self.assertEqual(outputs_from_ids.sequences.shape, (input_ids.shape[0], input_ids.shape[1] + 5))
-
-            # Same thing, but from input embeddings (`input_ids` is passed so the prompt is present in the output)
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-            outputs_from_embeds = model.generate(
-                input_ids,
-                inputs_embeds=inputs_embeds,
-                max_new_tokens=5,
-                return_dict_in_generate=True,
-                output_scores=True,
-            )
-            self.assertListEqual(outputs_from_ids.sequences.tolist(), outputs_from_embeds.sequences.tolist())
-
-            # But if we pass different inputs_embeds, we should get different outputs (the output text may be the
-            # same, but the logits will almost surely be different)
-            random_embeds = torch.rand_like(inputs_embeds)
-            outputs_from_rand_embeds = model.generate(
-                input_ids,
-                inputs_embeds=random_embeds,
-                max_new_tokens=5,
-                return_dict_in_generate=True,
-                output_scores=True,
-            )
-            for i in range(len(outputs_from_rand_embeds.scores)):
-                self.assertFalse(torch.allclose(outputs_from_embeds.scores[i], outputs_from_rand_embeds.scores[i]))
+    @require_torch_sdpa
+    @slow
+    @unittest.skip(
+        reason="Idefics3 doesn't support SDPA for all backbones, vision backbones has only eager/FA2 attention"
+    )
+    def test_eager_matches_sdpa_generate(self):
+        pass
 
     # We need to override as we need to prepare such that the image token is the last token
     def test_resize_tokens_embeddings(self):
@@ -526,31 +493,6 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             model(**self._prepare_for_class(inputs_dict, model_class))
 
-    def test_inputs_embeds_matches_input_ids_with_generate(self):
-        # overwrite because IDEFICS needs ids and embeds at the input to be not None
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
-            pad_token_id = config.pad_token_id if config.pad_token_id is not None else 1
-
-            wte = model.get_input_embeddings()
-
-            input_ids = inputs["input_ids"]
-            # some models infer position ids/attn mask differently when input ids
-            # by check if pad_token let's make sure no padding is in input ids
-            not_pad_token_id = pad_token_id + 1 if max(0, pad_token_id - 1) == 0 else pad_token_id - 1
-            input_ids[input_ids == pad_token_id] = not_pad_token_id
-            del inputs["input_ids"]
-            inputs_embeds = wte(input_ids)
-            out_ids = model.generate(input_ids=input_ids, **inputs, max_new_tokens=2)
-            out_embeds = model.generate(input_ids=input_ids, inputs_embeds=inputs_embeds, **inputs, max_new_tokens=2)
-
-            self.assertTrue(torch.allclose(out_embeds, out_ids))
-
 
 @require_torch
 class Idefics3ForConditionalGenerationIntegrationTest(unittest.TestCase):
@@ -575,8 +517,7 @@ class Idefics3ForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     @slow
     @unittest.skip("multi-gpu tests are disabled for now")

@@ -13,7 +13,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import math
 from typing import Optional
 
 import torch
@@ -21,38 +20,19 @@ import torch.nn as nn
 import torch.utils.checkpoint
 
 from ...utils import logging
-from ..gemma.modeling_gemma import (
-    GemmaForCausalLM,
-    GemmaForSequenceClassification,
-    GemmaForTokenClassification,
-)
-from ..granite.modeling_granite import (
-    GraniteAttention,
-    GraniteFlashAttention2,
-    GraniteSdpaAttention,
-)
 from ..llama.modeling_llama import (
-    LlamaDecoderLayer,
-    LlamaModel,
-    LlamaPreTrainedModel,
+    LlamaAttention,
+    LlamaForCausalLM,
+    LlamaForSequenceClassification,
+    LlamaForTokenClassification,
 )
-from ..phi3.modeling_phi3 import (
-    Phi3MLP,
-    Phi3RMSNorm,
-    Phi3RotaryEmbedding,
-)
+from ..phi3.modeling_phi3 import Phi3MLP
 from .configuration_glm import GlmConfig
 
 
 logger = logging.get_logger(__name__)
 
-
-class GlmRMSNorm(Phi3RMSNorm):
-    pass
-
-
-class GlmRotaryEmbedding(Phi3RotaryEmbedding):
-    pass
+_CHECKPOINT_FOR_DOC = "THUDM/glm-4-9b"
 
 
 class GlmMLP(Phi3MLP):
@@ -93,13 +73,14 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     cos = cos[..., : cos.shape[-1] // 2].repeat_interleave(2, dim=-1)
     sin = sin[..., : sin.shape[-1] // 2].repeat_interleave(2, dim=-1)
 
-    # Keep half for later concatenation
-    q, q_pass = q[..., : q.shape[-1] // 2], q[..., q.shape[-1] // 2 :]
-    k, k_pass = k[..., : k.shape[-1] // 2], k[..., k.shape[-1] // 2 :]
+    # Keep half or full tensor for later concatenation
+    rotary_dim = cos.shape[-1]
+    q_rot, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
+    k_rot, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
 
-    # Apply rotary embeddings on the first half
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
+    # Apply rotary embeddings on the first half or full tensor
+    q_embed = (q_rot * cos) + (rotate_half(q_rot) * sin)
+    k_embed = (k_rot * cos) + (rotate_half(k_rot) * sin)
 
     # Concatenate back to full shape
     q_embed = torch.cat([q_embed, q_pass], dim=-1)
@@ -107,81 +88,27 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-class GlmAttention(GraniteAttention):
+class GlmAttention(LlamaAttention):
     def __init__(self, config: GlmConfig, layer_idx: Optional[int] = None):
         super().__init__(config, layer_idx)
-        self.o_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=False)
-        self.scaling = 1 / math.sqrt(self.head_dim)
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
 
 
-class GlmFlashAttention2(GlmAttention, GraniteFlashAttention2):
+class GlmForCausalLM(LlamaForCausalLM):
     pass
 
 
-class GlmSdpaAttention(GraniteSdpaAttention):
+class GlmForSequenceClassification(LlamaForSequenceClassification):
     pass
 
 
-GLM_ATTENTION_CLASSES = {
-    "eager": GlmAttention,
-    "flash_attention_2": GlmFlashAttention2,
-    "sdpa": GlmSdpaAttention,
-}
-
-
-class GlmDecoderLayer(LlamaDecoderLayer):
-    def __init__(self, config: GlmConfig, layer_idx: Optional[int] = None):
-        super().__init__()
-
-        self.mlp = GlmMLP(config)
-        self.input_layernorm = GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-
-class GlmPreTrainedModel(LlamaPreTrainedModel):
+class GlmForTokenClassification(LlamaForTokenClassification):
     pass
-
-
-class GlmModel(GlmPreTrainedModel, LlamaModel):
-    def __init__(self, config: GlmConfig):
-        super().__init__(config)
-        self.layers = nn.ModuleList(
-            [GlmDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
-        self.norm = GlmRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = GlmRotaryEmbedding(
-            dim=config.head_dim // 2, max_position_embeddings=config.max_position_embeddings, base=config.rope_theta
-        )
-        self.gradient_checkpointing = False
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-
-class GlmForCausalLM(GemmaForCausalLM):
-    def __init__(self, config: GlmConfig):
-        super().__init__(config)
-        self.model = GlmModel(config)
-        self.post_init()
-
-
-class GlmForSequenceClassification(GemmaForSequenceClassification):
-    def __init__(self, config: GlmConfig):
-        super().__init__(config)
-        self.model = GlmModel(config)
-        self.post_init()
-
-
-class GlmForTokenClassification(GemmaForTokenClassification):
-    def __init__(self, config: GlmConfig):
-        super().__init__(config)
-        self.model = GlmModel(config)
-        self.post_init()
 
 
 __all__ = [
-    "GlmPreTrainedModel",
-    "GlmModel",
+    "GlmPreTrainedModel",  # noqa: F822
+    "GlmModel",  # noqa: F822
     "GlmForCausalLM",
     "GlmForSequenceClassification",
     "GlmForTokenClassification",

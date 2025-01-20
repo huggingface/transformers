@@ -30,44 +30,30 @@ Check more detailed information for [oneccl_bind_pt](https://github.com/intel/to
 
 Wheel files are available for the following Python versions:
 
-| Extension Version | Python 3.6 | Python 3.7 | Python 3.8 | Python 3.9 | Python 3.10 |
-| :---------------: | :--------: | :--------: | :--------: | :--------: | :---------: |
-| 2.1.0             |            | √          | √          | √          | √           |
-| 2.0.0             |            | √          | √          | √          | √           |
-| 1.13.0            |            | √          | √          | √          | √           |
-| 1.12.100          |            | √          | √          | √          | √           |
-| 1.12.0            |            | √          | √          | √          | √           |
+| Extension Version | Python 3.7 | Python 3.8 | Python 3.9 | Python 3.10 | Python 3.11 |
+| :---------------: | :--------: | :--------: | :--------: | :---------: | :---------: |
+| 2.5.0             |            | √          | √          | √           | √           |
+| 2.4.0             |            | √          | √          | √           | √           |
+| 2.3.0             |            | √          | √          | √           | √           |
+| 2.2.0             |            | √          | √          | √           | √           |
 
 Please run `pip list | grep torch` to get your `pytorch_version`.
 ```bash
 pip install oneccl_bind_pt=={pytorch_version} -f https://developer.intel.com/ipex-whl-stable-cpu
 ```
-where `{pytorch_version}` should be your PyTorch version, for instance 2.1.0.
+where `{pytorch_version}` should be your PyTorch version, for instance 2.4.0.
 Check more approaches for [oneccl_bind_pt installation](https://github.com/intel/torch-ccl).
 Versions of oneCCL and PyTorch must match.
 
-<Tip warning={true}>
-
-oneccl_bindings_for_pytorch 1.12.0 prebuilt wheel does not work with PyTorch 1.12.1 (it is for PyTorch 1.12.0)
-PyTorch 1.12.1 should work with oneccl_bindings_for_pytorch 1.12.100
-
-</Tip>
 
 ## Intel® MPI library
 Use this standards-based MPI implementation to deliver flexible, efficient, scalable cluster messaging on Intel® architecture. This component is part of the Intel® oneAPI HPC Toolkit.
 
 oneccl_bindings_for_pytorch is installed along with the MPI tool set. Need to source the environment before using it.
 
-for Intel® oneCCL >= 1.12.0
 ```bash
 oneccl_bindings_for_pytorch_path=$(python -c "from oneccl_bindings_for_pytorch import cwd; print(cwd)")
 source $oneccl_bindings_for_pytorch_path/env/setvars.sh
-```
-
-for Intel® oneCCL whose version < 1.12.0
-```bash
-torch_ccl_path=$(python -c "import torch; import torch_ccl; import os;  print(os.path.abspath(os.path.dirname(torch_ccl.__file__)))")
-source $torch_ccl_path/env/setvars.sh
 ```
 
 #### Intel® Extension for PyTorch installation
@@ -89,7 +75,7 @@ The following command enables training with 2 processes on one Xeon node, with o
  export CCL_WORKER_COUNT=1
  export MASTER_ADDR=127.0.0.1
  mpirun -n 2 -genv OMP_NUM_THREADS=23 \
- python3 run_qa.py \
+ python3 examples/pytorch/question-answering/run_qa.py \
  --model_name_or_path google-bert/bert-large-uncased \
  --dataset_name squad \
  --do_train \
@@ -118,7 +104,7 @@ Now, run the following command in node0 and **4DDP** will be enabled in node0 an
  export MASTER_ADDR=xxx.xxx.xxx.xxx #node0 ip
  mpirun -f hostfile -n 4 -ppn 2 \
  -genv OMP_NUM_THREADS=23 \
- python3 run_qa.py \
+ python3 examples/pytorch/question-answering/run_qa.py \
  --model_name_or_path google-bert/bert-large-uncased \
  --dataset_name squad \
  --do_train \
@@ -155,7 +141,7 @@ This example assumes that you have:
 The snippet below is an example of a Dockerfile that uses a base image that supports distributed CPU training and then
 extracts a Transformers release to the `/workspace` directory, so that the example scripts are included in the image:
 ```dockerfile
-FROM intel/intel-optimized-pytorch:2.3.0-pip-multinode
+FROM intel/intel-optimized-pytorch:2.4.0-pip-multinode
 
 RUN apt-get update -y && \
     apt-get install -y --no-install-recommends --fix-missing \
@@ -165,7 +151,7 @@ RUN apt-get update -y && \
 WORKDIR /workspace
 
 # Download and extract the transformers code
-ARG HF_TRANSFORMERS_VER="4.44.0"
+ARG HF_TRANSFORMERS_VER="4.46.0"
 RUN pip install --no-cache-dir \
     transformers==${HF_TRANSFORMERS_VER} && \
     mkdir transformers && \

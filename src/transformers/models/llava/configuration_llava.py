@@ -15,7 +15,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -50,6 +50,8 @@ class LlavaConfig(PretrainedConfig):
             The index of the layer to select the vision feature.
         image_seq_length (`int`, *optional*, defaults to 576):
             Sequence length of one image embedding.
+        multimodal_projector_bias (`bool`, *optional*, defaults to `True`):
+            Whether to use bias in the multimodal projector.
 
     Example:
 
@@ -73,7 +75,7 @@ class LlavaConfig(PretrainedConfig):
     ```"""
 
     model_type = "llava"
-    is_composition = True
+    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
 
     def __init__(
         self,
@@ -85,6 +87,7 @@ class LlavaConfig(PretrainedConfig):
         vision_feature_select_strategy="default",
         vision_feature_layer=-2,
         image_seq_length=576,
+        multimodal_projector_bias=True,
         **kwargs,
     ):
         self.ignore_index = ignore_index
@@ -127,5 +130,9 @@ class LlavaConfig(PretrainedConfig):
             text_config = CONFIG_MAPPING["llama"]()
 
         self.text_config = text_config
+        self.multimodal_projector_bias = multimodal_projector_bias
 
         super().__init__(**kwargs)
+
+
+__all__ = ["LlavaConfig"]

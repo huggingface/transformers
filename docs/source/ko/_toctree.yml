@@ -145,34 +145,14 @@
     title: (번역중) Getting started
   - local: quantization/bitsandbytes
     title: bitsandbytes
-  - local: in_translation
-    title: (번역중) GPTQ
+  - local: quantization/gptq
+    title: GPTQ
   - local: quantization/awq
     title: AWQ
   - local: in_translation
     title: (번역중) AQLM
   - local: in_translation
-    title: (번역중) Quanto
-  - local: in_translation
-    title: (번역중) EETQ
-  - local: in_translation
-    title: (번역중) HQQ
-  - local: in_translation
-    title: (번역중) Optimum
-  - local: in_translation
-    title: (번역중) Contribute new quantization method
-  title: (번역중) 경량화 메소드
-- sections:
-  - local: in_translation
-    title: (번역중) Getting started
-  - local: in_translation
-    title: (번역중) bitsandbytes
-  - local: quantization/gptq
-    title: GPTQ
-  - local: in_translation
-    title: (번역중) AWQ
-  - local: in_translation
-    title: (번역중) AQLM
+    title: (번역중) VPTQ 
   - local: quantization/quanto
     title: Quanto
   - local: quantization/eetq
@@ -206,8 +186,8 @@
       title: 다중 CPU에서 훈련하기
     - local: perf_train_tpu_tf
       title: TensorFlow로 TPU에서 훈련하기
-    - local: in_translation
-      title: (번역중) PyTorch training on Apple silicon
+    - local: perf_train_special
+      title: Apple 실리콘에서 PyTorch 학습
     - local: perf_hardware
       title: 훈련용 사용자 맞춤형 하드웨어
     - local: hpo_train
@@ -308,6 +288,8 @@
       title: Trainer
     - local: deepspeed
       title: DeepSpeed
+    - local: main_classes/executorch
+      title: ExecuTorch
     - local: main_classes/feature_extractor
       title: 특성 추출기
     - local: in_translation
@@ -320,16 +302,16 @@
         title: (번역중) ALBERT
       - local: model_doc/bart
         title: BART
-      - local: in_translation
-        title: (번역중) BARThez
-      - local: in_translation
-        title: (번역중) BARTpho
-      - local: in_translation
-        title: (번역중) BERT
+      - local: model_doc/barthez
+        title: BARThez
+      - local: model_doc/bartpho
+        title: BARTpho
+      - local: model_doc/bert
+        title: BERT
       - local: in_translation
         title: (번역중) BertGeneration
-      - local: in_translation
-        title: (번역중) BertJapanese
+      - local: model_doc/bert-japanese
+        title: 일본어 Bert
       - local: model_doc/bertweet
         title: Bertweet
       - local: in_translation
@@ -356,8 +338,8 @@
         title: (번역중) CodeGen
       - local: model_doc/cohere
         title: Cohere
-      - local: in_translation
-        title: (번역중) ConvBERT
+      - local: model_doc/convbert
+        title: ConvBERT
       - local: in_translation
         title: (번역중) CPM
       - local: in_translation
@@ -378,8 +360,8 @@
         title: (번역중) DPR
       - local: in_translation
         title: (번역중) ELECTRA
-      - local: in_translation
-        title: (번역중) Encoder Decoder Models
+      - local: model_doc/encoder-decoder
+        title: 인코더 디코더 모델
       - local: in_translation
         title: (번역중) ERNIE
       - local: in_translation
@@ -446,8 +428,8 @@
         title: Mamba
       - local: model_doc/mamba2
         title: Mamba2
-      - local: in_translation
-        title: (번역중) MarianMT
+      - local: model_doc/marian
+        title: MarianMT
       - local: in_translation
         title: (번역중) MarkupLM
       - local: in_translation
@@ -673,8 +655,12 @@
       - local: in_translation
         title: (번역중) XLSR-Wav2Vec2
       title: (번역중) 오디오 모델
-      - isExpanded: false
+    - isExpanded: false
       sections:
+      - local: model_doc/timesformer
+        title: TimeSformer
+      - local: in_translation
+        title: (번역중) VideoMAE
       - local: model_doc/vivit
         title: ViViT
       title: (번역중) 비디오 모델
@@ -682,8 +668,8 @@
       sections:
       - local: in_translation
         title: (번역중) ALIGN
-      - local: in_translation
-        title: (번역중) AltCLIP
+      - local: model_doc/altclip
+        title: AltCLIP
       - local: model_doc/blip-2
         title: BLIP-2
       - local: model_doc/blip

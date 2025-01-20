@@ -18,7 +18,7 @@ from ...configuration_utils import PretrainedConfig
 from ...utils import (
     logging,
 )
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -58,6 +58,8 @@ class LlavaOnevisionConfig(PretrainedConfig):
             of the form `(height, width)`.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
+        multimodal_projector_bias (`bool`, *optional*, defaults to `True`):
+            Whether to use bias in the multimodal projector.
 
     Example:
 
@@ -81,7 +83,7 @@ class LlavaOnevisionConfig(PretrainedConfig):
     ```"""
 
     model_type = "llava_onevision"
-    is_composition = False
+    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
 
     def __init__(
         self,
@@ -95,11 +97,13 @@ class LlavaOnevisionConfig(PretrainedConfig):
         vision_aspect_ratio="anyres_max_9",
         image_grid_pinpoints=None,
         tie_word_embeddings=False,
+        multimodal_projector_bias=True,
         **kwargs,
     ):
         self.image_token_index = image_token_index
         self.video_token_index = video_token_index
         self.projector_hidden_act = projector_hidden_act
+        self.multimodal_projector_bias = multimodal_projector_bias
 
         if vision_feature_select_strategy not in ["default", "full"]:
             raise ValueError(
@@ -181,3 +185,6 @@ class LlavaOnevisionConfig(PretrainedConfig):
         self.text_config = text_config
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+
+
+__all__ = ["LlavaOnevisionConfig"]

@@ -1752,7 +1752,7 @@ class RTDetrModel(RTDetrPreTrainedModel):
         anchors = torch.concat(anchors, 1)
         valid_mask = ((anchors > eps) * (anchors < 1 - eps)).all(-1, keepdim=True)
         anchors = torch.log(anchors / (1 - anchors))
-        anchors = torch.where(valid_mask, anchors, torch.inf)
+        anchors = torch.where(valid_mask, anchors, torch.tensor(torch.finfo(dtype).max, dtype=dtype, device=device))
 
         return anchors, valid_mask
 
@@ -2027,6 +2027,7 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **loss_kwargs,
     ) -> Union[Tuple[torch.FloatTensor], RTDetrObjectDetectionOutput]:
         r"""
         labels (`List[Dict]` of len `(batch_size,)`, *optional*):
@@ -2128,6 +2129,7 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
                 enc_topk_logits=enc_topk_logits,
                 enc_topk_bboxes=enc_topk_bboxes,
                 denoising_meta_values=denoising_meta_values,
+                **loss_kwargs,
             )
 
         if not return_dict:
@@ -2160,3 +2162,10 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
             enc_outputs_coord_logits=outputs.enc_outputs_coord_logits,
             denoising_meta_values=outputs.denoising_meta_values,
         )
+
+
+__all__ = [
+    "RTDetrForObjectDetection",
+    "RTDetrModel",
+    "RTDetrPreTrainedModel",
+]

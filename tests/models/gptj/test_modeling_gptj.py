@@ -17,14 +17,9 @@
 import datetime
 import unittest
 
-import pytest
-
-from transformers import BitsAndBytesConfig, GPTJConfig, is_torch_available
+from transformers import GPTJConfig, is_torch_available
 from transformers.testing_utils import (
-    require_bitsandbytes,
-    require_flash_attn,
     require_torch,
-    require_torch_gpu,
     slow,
     tooslow,
     torch_device,
@@ -46,9 +41,6 @@ if is_torch_available():
         GPTJForSequenceClassification,
         GPTJModel,
     )
-    from transformers.pytorch_utils import is_torch_greater_or_equal_than_1_12
-else:
-    is_torch_greater_or_equal_than_1_12 = False
 
 
 class GPTJModelTester:
@@ -368,15 +360,9 @@ class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     test_model_parallel = False
     test_head_masking = False
 
-    @unittest.skipIf(
-        not is_torch_greater_or_equal_than_1_12, reason="PR #22069 made changes that require torch v1.12+."
-    )
     def test_torch_fx(self):
         super().test_torch_fx()
 
-    @unittest.skipIf(
-        not is_torch_greater_or_equal_than_1_12, reason="PR #22069 made changes that require torch v1.12+."
-    )
     def test_torch_fx_output_loss(self):
         super().test_torch_fx_output_loss()
 
@@ -504,44 +490,6 @@ class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         model_name = "EleutherAI/gpt-j-6B"
         model = GPTJModel.from_pretrained(model_name, revision="float16", torch_dtype=torch.float16)
         self.assertIsNotNone(model)
-
-    @require_flash_attn
-    @require_torch_gpu
-    @require_bitsandbytes
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_generate_padding_right(self):
-        """
-        Overwritting the common test as the test is flaky on tiny models
-        """
-        tokenizer = AutoTokenizer.from_pretrained("EleutherAI/gpt-j-6b")
-
-        texts = ["hi", "Hello this is a very long sentence"]
-        expected_outputs = [
-            "hi<|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|>Q: I have a question about the new version of the game. I have a question about the",
-            "Hello this is a very long sentence.\n\nA:\n\nI think the best way to understand this is to think of it",
-        ]
-
-        tokenizer.padding_side = "right"
-        tokenizer.pad_token = tokenizer.eos_token
-
-        inputs = tokenizer(texts, return_tensors="pt", padding=True).to(0)
-
-        quantization_config = BitsAndBytesConfig(load_in_4bit=True)
-
-        model = GPTJForCausalLM.from_pretrained(
-            "EleutherAI/gpt-j-6b",
-            device_map={"": 0},
-            attn_implementation="flash_attention_2",
-            revision="float16",
-            torch_dtype=torch.float16,
-            quantization_config=quantization_config,
-        )
-
-        output_fa_2 = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_fa_2 = tokenizer.batch_decode(output_fa_2)
-
-        self.assertListEqual(expected_outputs, output_fa_2)
 
 
 @require_torch

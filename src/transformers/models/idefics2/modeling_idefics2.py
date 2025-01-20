@@ -16,7 +16,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
@@ -38,7 +38,7 @@ from ...utils import (
     replace_return_docstrings,
 )
 from ..auto import AutoModel
-from .configuration_idefics2 import Idefics2Config, Idefics2VisionConfig
+from .configuration_idefics2 import Idefics2Config, Idefics2PerceiverConfig, Idefics2VisionConfig
 
 
 if is_flash_attn_2_available():
@@ -272,7 +272,6 @@ class Idefics2VisionFlashAttention2(Idefics2VisionAttention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -572,9 +571,86 @@ class Idefics2Encoder(nn.Module):
         )
 
 
-class Idefics2VisionTransformer(nn.Module):
+IDEFICS2_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`Idefics2Config`] or [`Idefics2VisionConfig`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+
+@add_start_docstrings(
+    "The bare Idefics2 Model outputting raw hidden-states without any specific head on top.",
+    IDEFICS2_START_DOCSTRING,
+)
+class Idefics2PreTrainedModel(PreTrainedModel):
+    config_class = Idefics2Config
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["Idefics2VisionAttention", "Idefics2MLP", "Idefics2PerceiverLayer", "Idefics2DecoderLayer"]
+    _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_cache_class = True
+
+    def _init_weights(self, module):
+        std = (
+            self.config.text_config.initializer_range
+            if hasattr(self.config, "initializer_range")
+            else self.config.text_config.initializer_range
+        )
+
+        if hasattr(module, "class_embedding"):
+            module.class_embedding.data.normal_(mean=0.0, std=std)
+
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.bias is not None:
+                module.bias.data.zero_()
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
+
+
+IDEFICS2_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
+            The tensors corresponding to the input images. Pixel values can be obtained using
+            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details ([]`LlavaProcessor`] uses
+            [`CLIPImageProcessor`] for processing images).
+        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
+            Mask to avoid performing attention on padding pixel indices.
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+
+
+@add_start_docstrings(
+    """Idefics2 vision encoder model that returnss raw image embeddings.""",
+    IDEFICS2_START_DOCSTRING,
+)
+class Idefics2VisionTransformer(Idefics2PreTrainedModel):
+    _supports_sdpa = False
+    config_class = Idefics2VisionConfig
+
     def __init__(self, config: Idefics2VisionConfig):
-        super().__init__()
+        super().__init__(config)
         embed_dim = config.hidden_size
 
         self.config = config
@@ -687,12 +763,12 @@ class Idefics2PerceiverAttention(nn.Module):
         super().__init__()
 
         self.layer_idx = None
-        self.hidden_size = config.text_config.hidden_size
-        self.num_heads = config.perceiver_config.resampler_n_heads
-        self.head_dim = config.perceiver_config.resampler_head_dim
-        self.num_key_value_heads = config.perceiver_config.num_key_value_heads
+        self.hidden_size = config.hidden_size
+        self.num_heads = config.resampler_n_heads
+        self.head_dim = config.resampler_head_dim
+        self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
-        self.attention_dropout = config.perceiver_config.attention_dropout
+        self.attention_dropout = config.attention_dropout
 
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
@@ -782,7 +858,8 @@ class Idefics2PerceiverAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.mistral.modeling_mistral.MistralFlashAttention2 with MistralAttention->Idefics2PerceiverAttention,MistralFlashAttention->Idefics2PerceiverFlashAttention,Mistral->Idefics2
+# NO LONGER EXIST Copied from transformers.models.mistral.modeling_mistral.MistralFlashAttention2 with MistralAttention->Idefics2PerceiverAttention,MistralFlashAttention->Idefics2PerceiverFlashAttention,Mistral->Idefics2
+# TODO cyril: modular
 class Idefics2PerceiverFlashAttention2(Idefics2PerceiverAttention):
     """
     Idefics2 flash attention module. This module inherits from `Idefics2PerceiverAttention` as the weights of the module stays
@@ -790,7 +867,6 @@ class Idefics2PerceiverFlashAttention2(Idefics2PerceiverAttention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -918,20 +994,20 @@ IDEFICS2_PERCEIVER_ATTENTION_CLASSES = {
 class Idefics2PerceiverLayer(nn.Module):
     def __init__(self, config, layer_idx: int):
         super().__init__()
-        self.hidden_size = config.text_config.hidden_size
-        self.n_latents = config.perceiver_config.resampler_n_latents
-        self.depth = config.perceiver_config.resampler_depth
-        self.rms_norm_eps = config.text_config.rms_norm_eps
+        self.hidden_size = config.hidden_size
+        self.n_latents = config.resampler_n_latents
+        self.depth = config.resampler_depth
+        self.rms_norm_eps = config.rms_norm_eps
 
         self.input_latents_norm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
         self.input_context_norm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
         self.self_attn = IDEFICS2_PERCEIVER_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx=layer_idx)
         self.post_attention_layernorm = Idefics2RMSNorm(self.hidden_size, eps=self.rms_norm_eps)
         self.mlp = Idefics2MLP(
-            hidden_size=config.text_config.hidden_size,
-            intermediate_size=config.text_config.hidden_size * 4,
-            output_size=config.text_config.hidden_size,
-            hidden_act=config.perceiver_config.hidden_act,
+            hidden_size=config.hidden_size,
+            intermediate_size=config.hidden_size * 4,
+            output_size=config.hidden_size,
+            hidden_act=config.hidden_act,
         )
 
     def forward(
@@ -987,20 +1063,37 @@ class Idefics2PerceiverLayer(nn.Module):
         return outputs
 
 
-class Idefics2PerceiverResampler(nn.Module):
+IDEFICS2_INPUTS_DOCSTRING = r"""
+    Args:
+        context (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_dim)`):
+            The hidden states of the image after vision encoder and modality projection.
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+"""
+
+
+@add_start_docstrings(
+    "Idefics2 perceiver resampler model that performs `depth` blocks of cross-attention with a fixed ",
+    "`n_latents` inputs to decrease embedding sequence length. The Resampler acts as a form of learned pooling and ",
+    "is derived from [Perceiver: General Perception with Iterative Attention](https://arxiv.org/abs/2103.03206)",
+    IDEFICS2_START_DOCSTRING,
+)
+class Idefics2PerceiverResampler(Idefics2PreTrainedModel):
+    _supports_sdpa = False
+    config_class = Idefics2PerceiverConfig
+
     def __init__(self, config) -> None:
-        """
-        Instantiates a Perceiver Resampler that operates over a sequence of embeddings (say from a ResNet or ViT or
-        MAE) of a given dimension, performs `depth` blocks of cross-attention with a fixed `n_latents` inputs, then
-        returns a Tensor of shape [bsz, n_latents, embed_dim]. The Resampler acts as a form of learned pooling and
-        is derived from [Perceiver: General Perception with Iterative Attention](https://arxiv.org/abs/2103.03206).
-        """
-        super().__init__()
-        self.hidden_size = config.text_config.hidden_size
-        self.hidden_act = config.perceiver_config.hidden_act
-        self.n_latents = config.perceiver_config.resampler_n_latents
-        self.depth = config.perceiver_config.resampler_depth
-        self.rms_norm_eps = config.text_config.rms_norm_eps
+        super().__init__(config)
+        self.hidden_size = config.hidden_size
+        self.hidden_act = config.hidden_act
+        self.n_latents = config.resampler_n_latents
+        self.depth = config.resampler_depth
+        self.rms_norm_eps = config.rms_norm_eps
 
         # Create Latents for Perceiver
         self.latents = nn.Parameter(torch.ones(self.n_latents, self.hidden_size))
@@ -1014,7 +1107,7 @@ class Idefics2PerceiverResampler(nn.Module):
     def forward(
         self,
         context: torch.Tensor,
-        attention_mask,
+        attention_mask: torch.Tensor,
     ) -> torch.Tensor:
         # seq embed -> bsz seq embed
         latents = self.latents.unsqueeze(0).expand((context.shape[0], *self.latents.size()))
@@ -1057,86 +1150,12 @@ class Idefics2Connector(nn.Module):
             output_size=config.text_config.hidden_size,
             hidden_act=config.text_config.hidden_act,
         )
-        self.perceiver_resampler = Idefics2PerceiverResampler(config)
+        self.perceiver_resampler = Idefics2PerceiverResampler._from_config(config.perceiver_config)
 
     def forward(self, image_hidden_states, attention_mask):
         image_hidden_states = self.modality_projection(image_hidden_states)
         image_hidden_states = self.perceiver_resampler(context=image_hidden_states, attention_mask=attention_mask)
         return image_hidden_states
-
-
-IDEFICS2_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`Idefics2Config`] or [`Idefics2VisionConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The bare Idefics2 Model outputting raw hidden-states without any specific head on top.",
-    IDEFICS2_START_DOCSTRING,
-)
-class Idefics2PreTrainedModel(PreTrainedModel):
-    config_class = Idefics2Config
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["Idefics2VisionAttention", "Idefics2MLP", "Idefics2PerceiverLayer", "Idefics2DecoderLayer"]
-    _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn_2 = True
-    _supports_cache_class = True
-
-    def _init_weights(self, module):
-        std = (
-            self.config.initializer_range
-            if hasattr(self.config, "initializer_range")
-            else self.config.text_config.initializer_range
-        )
-
-        if hasattr(module, "class_embedding"):
-            module.class_embedding.data.normal_(mean=0.0, std=std)
-
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-
-    @classmethod
-    def _autoset_attn_implementation(
-        cls,
-        config,
-        use_flash_attention_2: bool = False,
-        torch_dtype: Optional[torch.dtype] = None,
-        device_map: Optional[Union[str, Dict[str, int]]] = None,
-        check_device_map: bool = True,
-        **kwargs,
-    ):
-        """
-        Overrides the method in `PreTrainedModel` to update the vision config with the correct attention implementation
-        """
-        config = super()._autoset_attn_implementation(
-            config=config,
-            use_flash_attention_2=use_flash_attention_2,
-            torch_dtype=torch_dtype,
-            device_map=device_map,
-            check_device_map=check_device_map,
-            **kwargs,
-        )
-        config.vision_config._attn_implementation = config._attn_implementation
-        return config
 
 
 IDEFICS2_INPUTS_DOCSTRING = r"""
@@ -1219,14 +1238,14 @@ class Idefics2Model(Idefics2PreTrainedModel):
         self.padding_idx = self.config.text_config.pad_token_id
         self.vocab_size = self.config.text_config.vocab_size
 
-        self.vision_model = Idefics2VisionTransformer(config.vision_config)
+        self.vision_model = Idefics2VisionTransformer._from_config(config.vision_config)
         self.connector = Idefics2Connector(config)
-        self.text_model = AutoModel.from_config(config.text_config, attn_implementation=config._attn_implementation)
+        self.text_model = AutoModel.from_config(config.text_config)
 
         self.image_seq_len = config.perceiver_config.resampler_n_latents
         self.image_token_id = self.config.image_token_id
 
-        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+        self._use_flash_attention_2 = config.text_config._attn_implementation == "flash_attention_2"
 
         self.post_init()
 
@@ -1265,13 +1284,6 @@ class Idefics2Model(Idefics2PreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.text_model.set_input_embeddings(value)
-
-    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
-        model_embeds = self.text_model.resize_token_embeddings(
-            new_num_tokens=new_num_tokens, pad_to_multiple_of=pad_to_multiple_of
-        )
-        self.config.text_config.vocab_size = model_embeds.num_embeddings
-        return model_embeds
 
     def inputs_merger(
         self,
@@ -1496,32 +1508,6 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
-        # model_embeds = self.model.resize_token_embeddings(new_num_tokens=new_num_tokens, pad_to_multiple_of=pad_to_multiple_of)
-        model_embeds = self._resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
-        if new_num_tokens is None and pad_to_multiple_of is None:
-            return model_embeds
-
-        # Update base model and current model config
-        # Ignore copy
-        self.config.text_config.vocab_size = model_embeds.weight.shape[0]
-        self.vocab_size = self.config.text_config.vocab_size
-
-        # Tie weights again if needed
-        self.tie_weights()
-
-        return model_embeds
-
-    def tie_weights(self):
-        """
-        Overwrite `transformers.modeling_utils.PreTrainedModel.tie_weights` to handle the case of DecoupledLinear and DecoupledEmbedding.
-        """
-        output_embeddings = self.get_output_embeddings()
-        input_embeddings = self.get_input_embeddings()
-
-        if getattr(self.config, "tie_word_embeddings", True):
-            output_embeddings.weight = input_embeddings.weight
-
     @add_start_docstrings_to_model_forward(IDEFICS2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=Idefics2CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1733,3 +1719,6 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
+
+
+__all__ = ["Idefics2ForConditionalGeneration", "Idefics2PreTrainedModel", "Idefics2Model"]

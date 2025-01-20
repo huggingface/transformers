@@ -46,7 +46,7 @@ result = subprocess.run(
 print(result.stdout)
 
 if len(result.stderr) > 0:
-    if "ERROR: not found: " in result.stderr:
+    if "ERROR: file or directory not found: " in result.stderr:
         print("test not found in this commit")
         exit(0)
     else:
@@ -74,6 +74,9 @@ def find_bad_commit(target_test, start_commit, end_commit):
     Returns:
         `str`: The earliest commit at which `target_test` fails.
     """
+
+    if start_commit == end_commit:
+        return start_commit
 
     create_script(target_test=target_test)
 
@@ -182,7 +185,15 @@ if __name__ == "__main__":
                 info = {"test": test, "commit": commit}
                 info.update(get_commit_info(commit))
                 failed_tests_with_bad_commits.append(info)
-            reports[model]["single-gpu"] = failed_tests_with_bad_commits
+
+            # If no single-gpu test failures, remove the key
+            if len(failed_tests_with_bad_commits) > 0:
+                reports[model]["single-gpu"] = failed_tests_with_bad_commits
+            else:
+                reports[model].pop("single-gpu", None)
+
+        # remove the models without any test failure
+        reports = {k: v for k, v in reports.items() if len(v) > 0}
 
         with open(args.output_file, "w", encoding="UTF-8") as fp:
             json.dump(reports, fp, ensure_ascii=False, indent=4)

@@ -183,6 +183,8 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
     main_input_name = "inputs"
     supports_gradient_checkpointing = True
     _supports_param_buffer_assignment = False
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
 
     def __init__(
         self,
@@ -213,10 +215,10 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         super().__init__(config)
 
         if encoder is None:
-            encoder = AutoModel.from_config(config.encoder, attn_implementation=config._attn_implementation)
+            encoder = AutoModel.from_config(config.encoder)
 
         if decoder is None:
-            decoder = AutoModelForCausalLM.from_config(config.decoder, attn_implementation=config._attn_implementation)
+            decoder = AutoModelForCausalLM.from_config(config.decoder)
 
         self.encoder = encoder
         self.decoder = decoder
@@ -234,6 +236,8 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
 
         # make sure that the individual model's config refers to the shared config
         # so that the updates to the config will be synced
+        self.config.encoder._attn_implementation = self.encoder.config._attn_implementation
+        self.config.decoder._attn_implementation = self.decoder.config._attn_implementation
         self.encoder.config = self.config.encoder
         self.decoder.config = self.config.decoder
 
@@ -256,6 +260,9 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
 
     def get_decoder(self):
         return self.decoder
+
+    def get_input_embeddings(self):
+        return self.decoder.get_input_embeddings()
 
     def get_output_embeddings(self):
         return self.decoder.get_output_embeddings()
@@ -487,6 +494,8 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         kwargs_decoder = {
             argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
         }
+        if "num_items_in_batch" in kwargs_encoder:
+            kwargs_decoder["num_items_in_batch"] = kwargs_encoder.pop("num_items_in_batch", None)
 
         if encoder_outputs is None:
             if inputs is None:
@@ -584,3 +593,6 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
     def _reorder_cache(self, past_key_values, beam_idx):
         # apply decoder cache reordering here
         return self.decoder._reorder_cache(past_key_values, beam_idx)
+
+
+__all__ = ["SpeechEncoderDecoderModel"]

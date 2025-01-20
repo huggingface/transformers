@@ -39,53 +39,65 @@ The original code can be found [here](https://github.com/isl-org/ZoeDepth).
 The easiest to perform inference with ZoeDepth is by leveraging the [pipeline API](../main_classes/pipelines.md):
 
 ```python
-from transformers import pipeline
-from PIL import Image
-import requests
+>>> from transformers import pipeline
+>>> from PIL import Image
+>>> import requests
 
-url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-image = Image.open(requests.get(url, stream=True).raw)
+>>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+>>> image = Image.open(requests.get(url, stream=True).raw)
 
-pipe = pipeline(task="depth-estimation", model="Intel/zoedepth-nyu-kitti")
-result = pipe(image)
-depth = result["depth"]
+>>> pipe = pipeline(task="depth-estimation", model="Intel/zoedepth-nyu-kitti")
+>>> result = pipe(image)
+>>> depth = result["depth"]
 ```
 
 Alternatively, one can also perform inference using the classes:
 
 ```python
-from transformers import AutoImageProcessor, ZoeDepthForDepthEstimation
-import torch
-import numpy as np
-from PIL import Image
-import requests
+>>> from transformers import AutoImageProcessor, ZoeDepthForDepthEstimation
+>>> import torch
+>>> import numpy as np
+>>> from PIL import Image
+>>> import requests
 
-url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-image = Image.open(requests.get(url, stream=True).raw)
+>>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+>>> image = Image.open(requests.get(url, stream=True).raw)
 
-image_processor = AutoImageProcessor.from_pretrained("Intel/zoedepth-nyu-kitti")
-model = ZoeDepthForDepthEstimation.from_pretrained("Intel/zoedepth-nyu-kitti")
+>>> image_processor = AutoImageProcessor.from_pretrained("Intel/zoedepth-nyu-kitti")
+>>> model = ZoeDepthForDepthEstimation.from_pretrained("Intel/zoedepth-nyu-kitti")
 
-# prepare image for the model
-inputs = image_processor(images=image, return_tensors="pt")
+>>> # prepare image for the model
+>>> inputs = image_processor(images=image, return_tensors="pt")
 
-with torch.no_grad():
-    outputs = model(**inputs)
-    predicted_depth = outputs.predicted_depth
+>>> with torch.no_grad():   
+...     outputs = model(pixel_values)
 
-# interpolate to original size
-prediction = torch.nn.functional.interpolate(
-    predicted_depth.unsqueeze(1),
-    size=image.size[::-1],
-    mode="bicubic",
-    align_corners=False,
-)
+>>> # interpolate to original size and visualize the prediction
+>>> ## ZoeDepth dynamically pads the input image. Thus we pass the original image size as argument
+>>> ## to `post_process_depth_estimation` to remove the padding and resize to original dimensions.
+>>> post_processed_output = image_processor.post_process_depth_estimation(
+...     outputs,
+...     source_sizes=[(image.height, image.width)],
+... )
 
-# visualize the prediction
-output = prediction.squeeze().cpu().numpy()
-formatted = (output * 255 / np.max(output)).astype("uint8")
-depth = Image.fromarray(formatted)
+>>> predicted_depth = post_processed_output[0]["predicted_depth"]
+>>> depth = (predicted_depth - predicted_depth.min()) / (predicted_depth.max() - predicted_depth.min())
+>>> depth = depth.detach().cpu().numpy() * 255
+>>> depth = Image.fromarray(depth.astype("uint8"))
 ```
+
+<Tip>
+<p>In the <a href="https://github.com/isl-org/ZoeDepth/blob/edb6daf45458569e24f50250ef1ed08c015f17a7/zoedepth/models/depth_model.py#L131">original implementation</a> ZoeDepth model performs inference on both the original and flipped images and averages out the results. The <code>post_process_depth_estimation</code> function can handle this for us by passing the flipped outputs to the optional <code>outputs_flipped</code> argument:</p>
+<pre><code class="language-Python">&gt;&gt;&gt; with torch.no_grad():   
+...     outputs = model(pixel_values)
+...     outputs_flipped = model(pixel_values=torch.flip(inputs.pixel_values, dims=[3]))
+&gt;&gt;&gt; post_processed_output = image_processor.post_process_depth_estimation(
+...     outputs,
+...     source_sizes=[(image.height, image.width)],
+...     outputs_flipped=outputs_flipped,
+... )
+</code></pre>
+</Tip>
 
 ## Resources
 

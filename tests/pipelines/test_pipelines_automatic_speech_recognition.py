@@ -33,7 +33,7 @@ from transformers import (
     WhisperForConditionalGeneration,
 )
 from transformers.pipelines import AutomaticSpeechRecognitionPipeline, pipeline
-from transformers.pipelines.audio_utils import chunk_bytes_iter
+from transformers.pipelines.audio_utils import chunk_bytes_iter, ffmpeg_microphone_live
 from transformers.pipelines.automatic_speech_recognition import _find_timestamp_sequence, chunk_iter
 from transformers.testing_utils import (
     compare_pipeline_output_to_hub_spec,
@@ -1444,6 +1444,25 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         self.assertEqual(output[0]["text"][:6], "ZBT ZC")
 
     @require_torch
+    def test_input_parameter_passthrough(self):
+        """Test that chunked vs non chunked versions of ASR pipelines returns the same structure for the same inputs."""
+        speech_recognizer = pipeline(
+            task="automatic-speech-recognition",
+            model="hf-internal-testing/tiny-random-wav2vec2",
+        )
+
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
+        audio = ds[40]["audio"]["array"]
+
+        inputs = {"raw": audio, "sampling_rate": 16_000, "id": 1}
+
+        chunked_output = speech_recognizer(inputs.copy(), chunk_length_s=30)
+        non_chunked_output = speech_recognizer(inputs.copy())
+        assert (
+            chunked_output.keys() == non_chunked_output.keys()
+        ), "The output structure should be the same for chunked vs non-chunked versions of asr pipelines."
+
+    @require_torch
     def test_return_timestamps_ctc_fast(self):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
@@ -1914,6 +1933,20 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
             },
         )
 
+    @require_torch
+    def test_pipeline_assisted_generation(self):
+        """Tests that we can run assisted generation in the pipeline"""
+        model = "openai/whisper-tiny"
+        pipe = pipeline("automatic-speech-recognition", model=model, assistant_model=model)
+
+        # We can run the pipeline
+        prompt = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation[:1]")["audio"]
+        _ = pipe(prompt)
+
+        # It is running assisted generation under the hood (e.g. flags incompatible with assisted gen will crash)
+        with self.assertRaises(ValueError):
+            _ = pipe(prompt, generate_kwargs={"num_beams": 2})
+
 
 def require_ffmpeg(test_case):
     """
@@ -1989,3 +2022,11 @@ class AudioUtilsTest(unittest.TestCase):
         )
         with self.assertRaises(StopIteration):
             next(iter_)
+
+    def test_ffmpeg_no_additional_args(self):
+        mic = ffmpeg_microphone_live(16000, 2.0)
+        mic.close()
+
+    def test_ffmpeg_additional_args(self):
+        mic = ffmpeg_microphone_live(16000, 2.0, ffmpeg_additional_args=["-nostdin"])
+        mic.close()

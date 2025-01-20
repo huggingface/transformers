@@ -17,6 +17,7 @@ Processor class for Idefics3.
 """
 
 import re
+from itertools import accumulate
 from typing import TYPE_CHECKING, Dict, List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
@@ -241,11 +242,31 @@ class Idefics3Processor(ProcessorMixin):
         n_images_in_images = []
         inputs = BatchFeature()
 
+        if text is not None:
+            if isinstance(text, str):
+                text = [text]
+            elif not isinstance(text, list) and not isinstance(text[0], str):
+                raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+            n_images_in_text = [sample.count(self.image_token.content) for sample in text]
+
         if images is not None:
             if is_image_or_image_url(images):
                 images = [[images]]
             elif isinstance(images, list) and is_image_or_image_url(images[0]):
-                images = [images]
+                if text is not None:
+                    if sum(n_images_in_text) != len(images):
+                        raise ValueError(
+                            f"The total number of {self.image_token.content} tokens in the prompts should be the same as the number of images passed."
+                            f" Found {sum(n_images_in_text)} {self.image_token.content} tokens and {len(images)} images."
+                        )
+                    # Reorganize the images to match the prompts
+                    cumsum_images_in_text = [0] + list(accumulate(n_images_in_text))
+                    images = [
+                        images[cumsum_images_in_text[i] : cumsum_images_in_text[i + 1]]
+                        for i in range(len(n_images_in_text))
+                    ]
+                else:
+                    images = [images]
             elif (
                 not isinstance(images, list)
                 and not isinstance(images[0], list)
@@ -262,53 +283,54 @@ class Idefics3Processor(ProcessorMixin):
             image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
             inputs.update(image_inputs)
 
-        if text is not None:
-            if isinstance(text, str):
-                text = [text]
-            elif not isinstance(text, list) and not isinstance(text[0], str):
-                raise ValueError("Invalid input text. Please provide a string, or a list of strings")
-
-            image_rows = inputs.pop("rows", [[0] * len(text)])
-            image_cols = inputs.pop("cols", [[0] * len(text)])
-
-            fake_image_token = self.fake_image_token.content
-            image_token = self.image_token.content
-            global_img_token = self.global_image_tag
-
-            prompt_strings = []
-            for sample, sample_rows, sample_cols in zip(text, image_rows, image_cols):
-                n_images_in_text.append(sample.count(image_token))
-
-                # Replace the image token with fake tokens around the expanded image token sequence of length `image_seq_len`
-                image_prompt_strings = []
-                for n_rows, n_cols in zip(sample_rows, sample_cols):
-                    image_prompt_string = get_image_prompt_string(
-                        n_rows,
-                        n_cols,
-                        image_seq_len,
-                        image_token=image_token,
-                        fake_token_around_image=fake_image_token,
-                        global_img_token=global_img_token,
+            if text is not None:
+                if n_images_in_images != n_images_in_text:
+                    raise ValueError(
+                        f"The number of images in the text {n_images_in_text} and images {n_images_in_images} should be the same."
                     )
-                    image_prompt_strings.append(image_prompt_string)
 
-                split_sample = sample.split(image_token)
-                if len(split_sample) == 0:
-                    raise ValueError("The image token should be present in the text.")
+                image_rows = inputs.pop("rows", [[0] * len(text)])
+                image_cols = inputs.pop("cols", [[0] * len(text)])
 
-                # Place in the image prompt strings where the image tokens are
-                sample = split_sample[0]
-                for i, image_prompt_string in enumerate(image_prompt_strings):
-                    sample += image_prompt_string + split_sample[i + 1]
-                prompt_strings.append(sample)
+                fake_image_token = self.fake_image_token.content
+                image_token = self.image_token.content
+                global_img_token = self.global_image_tag
 
-            text_inputs = self.tokenizer(text=prompt_strings, **output_kwargs["text_kwargs"])
-            inputs.update(text_inputs)
+                prompt_strings = []
+                for sample, sample_rows, sample_cols in zip(text, image_rows, image_cols):
+                    # Replace the image token with fake tokens around the expanded image token sequence of length `image_seq_len`
+                    image_prompt_strings = []
+                    for n_rows, n_cols in zip(sample_rows, sample_cols):
+                        image_prompt_string = get_image_prompt_string(
+                            n_rows,
+                            n_cols,
+                            image_seq_len,
+                            image_token=image_token,
+                            fake_token_around_image=fake_image_token,
+                            global_img_token=global_img_token,
+                        )
+                        image_prompt_strings.append(image_prompt_string)
 
-            if n_images_in_images != n_images_in_text:
+                    split_sample = sample.split(image_token)
+                    if len(split_sample) == 0:
+                        raise ValueError("The image token should be present in the text.")
+
+                    # Place in the image prompt strings where the image tokens are
+                    sample = split_sample[0]
+                    for i, image_prompt_string in enumerate(image_prompt_strings):
+                        sample += image_prompt_string + split_sample[i + 1]
+                    prompt_strings.append(sample)
+
+                text_inputs = self.tokenizer(text=prompt_strings, **output_kwargs["text_kwargs"])
+                inputs.update(text_inputs)
+
+        elif text is not None:
+            if any(n_images_in_text):
                 raise ValueError(
-                    f"The number of images in the text {n_images_in_text} and images  {n_images_in_images} should be the same."
+                    f"Found {sum(n_images_in_text)} {self.image_token.content} tokens in the text but no images were passed."
                 )
+            text_inputs = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
+            inputs.update(text_inputs)
 
         return inputs
 
@@ -333,3 +355,6 @@ class Idefics3Processor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+
+__all__ = ["Idefics3Processor"]

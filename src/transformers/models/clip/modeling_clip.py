@@ -277,6 +277,13 @@ class CLIPTextEmbeddings(nn.Module):
         inputs_embeds: Optional[torch.FloatTensor] = None,
     ) -> torch.Tensor:
         seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
+        max_position_embedding = self.position_embedding.weight.shape[0]
+
+        if seq_length > max_position_embedding:
+            raise ValueError(
+                f"Sequence length must be less than max_position_embeddings (got `sequence length`: "
+                f"{seq_length} and max_position_embeddings: {max_position_embedding}"
+            )
 
         if position_ids is None:
             position_ids = self.position_ids[:, :seq_length]
@@ -401,7 +408,6 @@ class CLIPFlashAttention2(CLIPAttention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -1204,10 +1210,10 @@ class CLIPModel(CLIPPreTrainedModel):
         self.text_embed_dim = text_config.hidden_size
         self.vision_embed_dim = vision_config.hidden_size
 
-        text_model = CLIPTextModel._from_config(text_config, attn_implementation=config._attn_implementation)
+        text_model = CLIPTextModel._from_config(text_config)
         self.text_model = text_model.text_model
 
-        vision_model = CLIPVisionModel._from_config(vision_config, attn_implementation=config._attn_implementation)
+        vision_model = CLIPVisionModel._from_config(vision_config)
         self.vision_model = vision_model.vision_model
 
         self.visual_projection = nn.Linear(self.vision_embed_dim, self.projection_dim, bias=False)
@@ -1427,7 +1433,7 @@ class CLIPTextModelWithProjection(CLIPPreTrainedModel):
     def __init__(self, config: CLIPTextConfig):
         super().__init__(config)
 
-        text_model = CLIPTextModel._from_config(config, attn_implementation=config._attn_implementation)
+        text_model = CLIPTextModel._from_config(config)
         self.text_model = text_model.text_model
 
         self.text_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
@@ -1508,7 +1514,7 @@ class CLIPVisionModelWithProjection(CLIPPreTrainedModel):
     def __init__(self, config: CLIPVisionConfig):
         super().__init__(config)
 
-        vision_model = CLIPVisionModel._from_config(config, attn_implementation=config._attn_implementation)
+        vision_model = CLIPVisionModel._from_config(config)
         self.vision_model = vision_model.vision_model
 
         self.visual_projection = nn.Linear(config.hidden_size, config.projection_dim, bias=False)
@@ -1590,9 +1596,7 @@ class CLIPForImageClassification(CLIPPreTrainedModel):
         super().__init__(config)
 
         self.num_labels = config.num_labels
-        vision_model = CLIPVisionModel._from_config(
-            config.vision_config, attn_implementation=config._attn_implementation
-        )
+        vision_model = CLIPVisionModel._from_config(config.vision_config)
         self.vision_model = vision_model.vision_model
 
         # Classifier head
@@ -1679,3 +1683,14 @@ class CLIPForImageClassification(CLIPPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "CLIPModel",
+    "CLIPPreTrainedModel",
+    "CLIPTextModel",
+    "CLIPTextModelWithProjection",
+    "CLIPVisionModel",
+    "CLIPVisionModelWithProjection",
+    "CLIPForImageClassification",
+]

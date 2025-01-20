@@ -161,6 +161,8 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _supports_param_buffer_assignment = False
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
 
     def __init__(
         self,
@@ -191,10 +193,10 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         super().__init__(config)
 
         if encoder is None:
-            encoder = AutoModel.from_config(config.encoder, attn_implementation=config._attn_implementation)
+            encoder = AutoModel.from_config(config.encoder)
 
         if decoder is None:
-            decoder = AutoModelForCausalLM.from_config(config.decoder, attn_implementation=config._attn_implementation)
+            decoder = AutoModelForCausalLM.from_config(config.decoder)
 
         self.encoder = encoder
         self.decoder = decoder
@@ -212,6 +214,8 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
 
         # make sure that the individual model's config refers to the shared config
         # so that the updates to the config will be synced
+        self.config.encoder._attn_implementation = self.encoder.config._attn_implementation
+        self.config.decoder._attn_implementation = self.decoder.config._attn_implementation
         self.encoder.config = self.config.encoder
         self.decoder.config = self.config.decoder
 
@@ -232,6 +236,9 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
 
     def get_decoder(self):
         return self.decoder
+
+    def get_input_embeddings(self):
+        return self.decoder.get_input_embeddings()
 
     def get_output_embeddings(self):
         return self.decoder.get_output_embeddings()
@@ -655,12 +662,9 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
     def prepare_decoder_input_ids_from_labels(self, labels: torch.Tensor):
         return shift_tokens_right(labels, self.config.pad_token_id, self.config.decoder_start_token_id)
 
-    def resize_token_embeddings(self, *args, **kwargs):
-        raise NotImplementedError(
-            "Resizing the embedding layers via the VisionEncoderDecoderModel directly is not supported.Please use the"
-            " respective methods of the wrapped decoder object (model.decoder.resize_token_embeddings(...))"
-        )
-
     def _reorder_cache(self, past_key_values, beam_idx):
         # apply decoder cache reordering here
         return self.decoder._reorder_cache(past_key_values, beam_idx)
+
+
+__all__ = ["VisionEncoderDecoderModel"]

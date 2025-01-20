@@ -78,27 +78,24 @@ If you want to do the pre- and post-processing yourself, here's how to do that:
 
 >>> with torch.no_grad():
 ...     outputs = model(**inputs)
-...     predicted_depth = outputs.predicted_depth
 
->>> # interpolate to original size
->>> prediction = torch.nn.functional.interpolate(
-...     predicted_depth.unsqueeze(1),
-...     size=image.size[::-1],
-...     mode="bicubic",
-...     align_corners=False,
+>>> # interpolate to original size and visualize the prediction
+>>> post_processed_output = image_processor.post_process_depth_estimation(
+...     outputs,
+...     target_sizes=[(image.height, image.width)],
 ... )
 
->>> # visualize the prediction
->>> output = prediction.squeeze().cpu().numpy()
->>> formatted = (output * 255 / np.max(output)).astype("uint8")
->>> depth = Image.fromarray(formatted)
+>>> predicted_depth = post_processed_output[0]["predicted_depth"]
+>>> depth = (predicted_depth - predicted_depth.min()) / (predicted_depth.max() - predicted_depth.min())
+>>> depth = depth.detach().cpu().numpy() * 255
+>>> depth = Image.fromarray(depth.astype("uint8"))
 ```
 
 ## Resources
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with Depth Anything.
 
-- [Monocular depth estimation task guide](../tasks/depth_estimation)
+- [Monocular depth estimation task guide](../tasks/monocular_depth_estimation)
 - [Depth Anything V2 demo](https://huggingface.co/spaces/depth-anything/Depth-Anything-V2).
 - A notebook showcasing inference with [`DepthAnythingForDepthEstimation`] can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/blob/master/Depth%20Anything/Predicting_depth_in_an_image_with_Depth_Anything.ipynb). 🌎
 - [Core ML conversion of the `small` variant for use on Apple Silicon](https://huggingface.co/apple/coreml-depth-anything-v2-small).

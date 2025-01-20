@@ -19,7 +19,7 @@ from typing import Dict, List, Optional, Union
 
 import numpy as np
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature
+from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import (
     pad,
     resize,
@@ -464,7 +464,7 @@ class FuyuImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         batch_images = [[to_numpy_array(image) for image in images] for images in batch_images]
 
-        if is_scaled_image(batch_images[0][0]) and do_rescale:
+        if do_rescale and is_scaled_image(batch_images[0][0]):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -475,6 +475,7 @@ class FuyuImageProcessor(BaseImageProcessor):
             input_data_format = infer_channel_dimension_format(batch_images[0][0])
 
         original_image_sizes = [get_image_size(images[0], channel_dim=input_data_format) for images in batch_images]
+        size = get_size_dict(size)  # for BC
 
         if do_resize:
             batch_images = [
@@ -718,3 +719,6 @@ class FuyuImageProcessor(BaseImageProcessor):
                 "image_patch_indices_per_subsequence": image_patch_indices_per_subsequence,
             }
         )
+
+
+__all__ = ["FuyuImageProcessor"]
