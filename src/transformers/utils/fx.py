@@ -35,7 +35,7 @@ from torch.fx._symbolic_trace import is_fx_tracing
 from torch.fx.proxy import ParameterProxy
 
 from .. import logging
-from ..cache_utils import Cache, DynamicCache, SinkCache, StaticCache
+from ..cache_utils import Cache
 from ..modeling_utils import PretrainedConfig, PreTrainedModel
 from ..models.auto import get_values
 from ..models.auto.modeling_auto import (
