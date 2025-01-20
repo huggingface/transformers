@@ -214,7 +214,6 @@ class HybridMambaAttentionDynamicCache(DynamicCache):
 
     def __init__(self, config, batch_size, dtype=torch.float16, device=None):
         super().__init__()
-        self.dtype = dtype
         self.layers_block_type = config.layers_block_type
         self.has_previous_state = False  # only used by mamba
         intermediate_size = config.mamba_expand * config.hidden_size

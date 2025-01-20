@@ -128,7 +128,6 @@ class ZambaHybridDynamicCache(DynamicCache):
     """
 
     def __init__(self, config, batch_size, dtype=torch.float16, device=None):
-        self.dtype = dtype
         self.layers_block_type = config.layers_block_type
         self.has_previous_state = False  # only used by mamba
         self.intermediate_size = config.mamba_expand * config.hidden_size
@@ -138,9 +137,7 @@ class ZambaHybridDynamicCache(DynamicCache):
         self.conv_states = []
         self.ssm_states = []
         self.transformer_layers = []
-        self._modules = {}
-        self._parameters = {}
-        self._buffers = {}
+
         for i in range(config.num_hidden_layers):
             self.conv_states += [
                 torch.zeros(batch_size, self.intermediate_size, self.conv_kernel_size, device=device, dtype=dtype)
