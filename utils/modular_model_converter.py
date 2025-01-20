@@ -268,7 +268,7 @@ def merge_docstrings(original_docstring, updated_docstring):
             updated_docstring = "".join(
                 [
                     parts[0].rstrip(" \n") + new_parts[0],
-                    f"\n{original_level*' '}```",
+                    f"\n{original_level * ' '}```",
                     parts[1],
                     "```",
                     parts[2],
@@ -515,11 +515,8 @@ def find_all_dependencies(
     return all_dependencies_with_parent
 
 
-# These top-level variables will always use the value in the `modular_xxx.py` file
-ASSIGNMENTS_REGEX_TO_KEEP = [
-    r"_CHECKPOINT",
-    r"_EXPECTED",
-]
+# Top-level variables that match the following patterns will always use the value in the `modular_xxx.py` file
+ASSIGNMENTS_REGEX_TO_KEEP = [r"_CHECKPOINT", r"_EXPECTED", r"_FOR_DOC"]
 
 
 class ClassDependencyMapper(CSTVisitor):
@@ -829,8 +826,8 @@ class ModelFileMapper(ModuleMapper):
     def _merge_assignments(self, assignments: dict[str, cst.CSTNode], object_mapping: dict[str, set]):
         """Update the global nodes with the assignment from the modular file.
 
-        Merging rule: if any assignment with the same name was redefined in the modular, we use it and its dependencies ONLY if it is
-        in `ASSIGNMENTS_TO_KEEP`. Otherwise, we use the original value and dependencies. This rule was chosen to avoid having to rewrite the
+        Merging rule: if any assignment with the same name was redefined in the modular, we use it and its dependencies ONLY if it matches
+        a pattern in `ASSIGNMENTS_REGEX_TO_KEEP`. Otherwise, we use the original value and dependencies. This rule was chosen to avoid having to rewrite the
         big docstrings.
         """
         for assignment, node in assignments.items():
@@ -1393,7 +1390,7 @@ class ModularFileMapper(ModuleMapper):
             ]
             if len(modeling_bases) > 1:
                 raise ValueError(
-                    f"{class_name} was defined with more than 1 model-specific super class. This is unsupported. We found {*modeling_bases,}."
+                    f"{class_name} was defined with more than 1 model-specific super class. This is unsupported. We found {(*modeling_bases,)}."
                 )
             if len(modeling_bases) == 1:
                 filename = self.model_specific_imported_objects[modeling_bases[0]]
@@ -1421,7 +1418,7 @@ class ModularFileMapper(ModuleMapper):
             if final_name != cased_default_name and has_prefix_collision:
                 if len(prefixes_counter) > 1:
                     logger.warning(
-                        f"We detected multiple prefix names when inheriting from {file}: {*set(prefixes_counter),}. However, the "
+                        f"We detected multiple prefix names when inheriting from {file}: {(*set(prefixes_counter),)}. However, the "
                         f"most used one, '{final_name}', is already present in the source file and will likely cause consistency "
                         f"issues. For this reason we fallback to the default prefix '{cased_default_name}' when grabbing args "
                         "and dependencies. Make sure to subclass the intermediate classes with the prefix you want (if different "
@@ -1437,7 +1434,7 @@ class ModularFileMapper(ModuleMapper):
                 final_name = cased_default_name
             elif len(prefixes_counter) > 1:
                 logger.warning(
-                    f"We detected multiple prefix names when inheriting from {file}: {*set(prefixes_counter),}. We will only "
+                    f"We detected multiple prefix names when inheriting from {file}: {(*set(prefixes_counter),)}. We will only "
                     f"use the most used '{final_name}' prefix when grabbing args and dependencies. Make sure to subclass the "
                     f"intermediate classes with the prefix you want (if different from '{final_name}') or use a single prefix "
                     "in all the modular (best)."

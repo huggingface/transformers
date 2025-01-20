@@ -52,6 +52,7 @@ from .configuration_cohere import CohereConfig
 
 
 logger = logging.get_logger(__name__)
+
 _CONFIG_FOR_DOC = "CohereConfig"
 
 
