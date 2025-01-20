@@ -18,7 +18,7 @@
 # to defer the actual importing for when the objects are requested. This way `import transformers` provides the names
 # in the namespace without actually importing anything (and especially none of the backends).
 
-__version__ = "4.48.0.dev0"
+__version__ = "4.49.0.dev0"
 
 from typing import TYPE_CHECKING
 
@@ -428,6 +428,12 @@ _import_structure = {
         "ElectraConfig",
         "ElectraTokenizer",
     ],
+    "models.emu3": [
+        "Emu3Config",
+        "Emu3Processor",
+        "Emu3TextConfig",
+        "Emu3VQVAEConfig",
+    ],
     "models.encodec": [
         "EncodecConfig",
         "EncodecFeatureExtractor",
@@ -492,6 +498,7 @@ _import_structure = {
         "GroupViTTextConfig",
         "GroupViTVisionConfig",
     ],
+    "models.helium": ["HeliumConfig"],
     "models.herbert": ["HerbertTokenizer"],
     "models.hiera": ["HieraConfig"],
     "models.hubert": ["HubertConfig"],
@@ -610,6 +617,7 @@ _import_structure = {
     "models.mobilevit": ["MobileViTConfig"],
     "models.mobilevitv2": ["MobileViTV2Config"],
     "models.modernbert": ["ModernBertConfig"],
+    "models.moonshine": ["MoonshineConfig"],
     "models.moshi": [
         "MoshiConfig",
         "MoshiDepthConfig",
@@ -777,6 +785,7 @@ _import_structure = {
     ],
     "models.stablelm": ["StableLmConfig"],
     "models.starcoder2": ["Starcoder2Config"],
+    "models.superglue": ["SuperGlueConfig"],
     "models.superpoint": ["SuperPointConfig"],
     "models.swiftformer": ["SwiftFormerConfig"],
     "models.swin": ["SwinConfig"],
@@ -834,6 +843,8 @@ _import_structure = {
     "models.vit_msn": ["ViTMSNConfig"],
     "models.vitdet": ["VitDetConfig"],
     "models.vitmatte": ["VitMatteConfig"],
+    "models.vitpose": ["VitPoseConfig"],
+    "models.vitpose_backbone": ["VitPoseBackboneConfig"],
     "models.vits": [
         "VitsConfig",
         "VitsTokenizer",
@@ -1219,6 +1230,7 @@ else:
     _import_structure["models.donut"].extend(["DonutFeatureExtractor", "DonutImageProcessor"])
     _import_structure["models.dpt"].extend(["DPTFeatureExtractor", "DPTImageProcessor"])
     _import_structure["models.efficientnet"].append("EfficientNetImageProcessor")
+    _import_structure["models.emu3"].append("Emu3ImageProcessor")
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
     _import_structure["models.fuyu"].extend(["FuyuImageProcessor", "FuyuProcessor"])
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
@@ -1257,6 +1269,7 @@ else:
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
     _import_structure["models.seggpt"].extend(["SegGptImageProcessor"])
     _import_structure["models.siglip"].append("SiglipImageProcessor")
+    _import_structure["models.superglue"].extend(["SuperGlueImageProcessor"])
     _import_structure["models.superpoint"].extend(["SuperPointImageProcessor"])
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
     _import_structure["models.textnet"].extend(["TextNetImageProcessor"])
@@ -1266,6 +1279,7 @@ else:
     _import_structure["models.vilt"].extend(["ViltFeatureExtractor", "ViltImageProcessor", "ViltProcessor"])
     _import_structure["models.vit"].extend(["ViTFeatureExtractor", "ViTImageProcessor"])
     _import_structure["models.vitmatte"].append("VitMatteImageProcessor")
+    _import_structure["models.vitpose"].append("VitPoseImageProcessor")
     _import_structure["models.vivit"].append("VivitImageProcessor")
     _import_structure["models.yolos"].extend(["YolosFeatureExtractor", "YolosImageProcessor"])
     _import_structure["models.zoedepth"].append("ZoeDepthImageProcessor")
@@ -1365,7 +1379,6 @@ else:
             "LogitNormalization",
             "LogitsProcessor",
             "LogitsProcessorList",
-            "LogitsWarper",
             "MaxLengthCriteria",
             "MaxTimeCriteria",
             "MinLengthLogitsProcessor",
@@ -2239,6 +2252,15 @@ else:
             "load_tf_weights_in_electra",
         ]
     )
+    _import_structure["models.emu3"].extend(
+        [
+            "Emu3ForCausalLM",
+            "Emu3ForConditionalGeneration",
+            "Emu3PreTrainedModel",
+            "Emu3TextModel",
+            "Emu3VQVAE",
+        ]
+    )
     _import_structure["models.encodec"].extend(
         [
             "EncodecModel",
@@ -2484,6 +2506,15 @@ else:
             "GroupViTPreTrainedModel",
             "GroupViTTextModel",
             "GroupViTVisionModel",
+        ]
+    )
+    _import_structure["models.helium"].extend(
+        [
+            "HeliumForCausalLM",
+            "HeliumForSequenceClassification",
+            "HeliumForTokenClassification",
+            "HeliumModel",
+            "HeliumPreTrainedModel",
         ]
     )
     _import_structure["models.hiera"].extend(
@@ -2902,6 +2933,13 @@ else:
             "ModernBertForTokenClassification",
             "ModernBertModel",
             "ModernBertPreTrainedModel",
+        ]
+    )
+    _import_structure["models.moonshine"].extend(
+        [
+            "MoonshineForConditionalGeneration",
+            "MoonshineModel",
+            "MoonshinePreTrainedModel",
         ]
     )
     _import_structure["models.moshi"].extend(
@@ -3509,6 +3547,12 @@ else:
             "Starcoder2PreTrainedModel",
         ]
     )
+    _import_structure["models.superglue"].extend(
+        [
+            "SuperGlueForKeypointMatching",
+            "SuperGluePreTrainedModel",
+        ]
+    )
     _import_structure["models.superpoint"].extend(
         [
             "SuperPointForKeypointDetection",
@@ -3753,6 +3797,18 @@ else:
         [
             "VitMatteForImageMatting",
             "VitMattePreTrainedModel",
+        ]
+    )
+    _import_structure["models.vitpose"].extend(
+        [
+            "VitPoseForPoseEstimation",
+            "VitPosePreTrainedModel",
+        ]
+    )
+    _import_structure["models.vitpose_backbone"].extend(
+        [
+            "VitPoseBackbone",
+            "VitPoseBackbonePreTrainedModel",
         ]
     )
     _import_structure["models.vits"].extend(
@@ -5417,6 +5473,12 @@ if TYPE_CHECKING:
         ElectraConfig,
         ElectraTokenizer,
     )
+    from .models.emu3 import (
+        Emu3Config,
+        Emu3Processor,
+        Emu3TextConfig,
+        Emu3VQVAEConfig,
+    )
     from .models.encodec import (
         EncodecConfig,
         EncodecFeatureExtractor,
@@ -5484,6 +5546,7 @@ if TYPE_CHECKING:
         GroupViTTextConfig,
         GroupViTVisionConfig,
     )
+    from .models.helium import HeliumConfig
     from .models.herbert import HerbertTokenizer
     from .models.hiera import HieraConfig
     from .models.hubert import HubertConfig
@@ -5618,6 +5681,7 @@ if TYPE_CHECKING:
         MobileViTV2Config,
     )
     from .models.modernbert import ModernBertConfig
+    from .models.moonshine import MoonshineConfig
     from .models.moshi import (
         MoshiConfig,
         MoshiDepthConfig,
@@ -5805,6 +5869,7 @@ if TYPE_CHECKING:
     )
     from .models.stablelm import StableLmConfig
     from .models.starcoder2 import Starcoder2Config
+    from .models.superglue import SuperGlueConfig
     from .models.superpoint import SuperPointConfig
     from .models.swiftformer import (
         SwiftFormerConfig,
@@ -5877,6 +5942,8 @@ if TYPE_CHECKING:
     from .models.vit_msn import ViTMSNConfig
     from .models.vitdet import VitDetConfig
     from .models.vitmatte import VitMatteConfig
+    from .models.vitpose import VitPoseConfig
+    from .models.vitpose_backbone import VitPoseBackboneConfig
     from .models.vits import (
         VitsConfig,
         VitsTokenizer,
@@ -6244,6 +6311,7 @@ if TYPE_CHECKING:
         from .models.donut import DonutFeatureExtractor, DonutImageProcessor
         from .models.dpt import DPTFeatureExtractor, DPTImageProcessor
         from .models.efficientnet import EfficientNetImageProcessor
+        from .models.emu3 import Emu3ImageProcessor
         from .models.flava import (
             FlavaFeatureExtractor,
             FlavaImageProcessor,
@@ -6302,6 +6370,7 @@ if TYPE_CHECKING:
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.seggpt import SegGptImageProcessor
         from .models.siglip import SiglipImageProcessor
+        from .models.superglue import SuperGlueImageProcessor
         from .models.superpoint import SuperPointImageProcessor
         from .models.swin2sr import Swin2SRImageProcessor
         from .models.textnet import TextNetImageProcessor
@@ -6311,6 +6380,7 @@ if TYPE_CHECKING:
         from .models.vilt import ViltFeatureExtractor, ViltImageProcessor, ViltProcessor
         from .models.vit import ViTFeatureExtractor, ViTImageProcessor
         from .models.vitmatte import VitMatteImageProcessor
+        from .models.vitpose import VitPoseImageProcessor
         from .models.vivit import VivitImageProcessor
         from .models.yolos import YolosFeatureExtractor, YolosImageProcessor
         from .models.zoedepth import ZoeDepthImageProcessor
@@ -6399,7 +6469,6 @@ if TYPE_CHECKING:
             LogitNormalization,
             LogitsProcessor,
             LogitsProcessorList,
-            LogitsWarper,
             MaxLengthCriteria,
             MaxTimeCriteria,
             MinLengthLogitsProcessor,
@@ -7112,6 +7181,13 @@ if TYPE_CHECKING:
             ElectraPreTrainedModel,
             load_tf_weights_in_electra,
         )
+        from .models.emu3 import (
+            Emu3ForCausalLM,
+            Emu3ForConditionalGeneration,
+            Emu3PreTrainedModel,
+            Emu3TextModel,
+            Emu3VQVAE,
+        )
         from .models.encodec import (
             EncodecModel,
             EncodecPreTrainedModel,
@@ -7313,6 +7389,13 @@ if TYPE_CHECKING:
             GroupViTPreTrainedModel,
             GroupViTTextModel,
             GroupViTVisionModel,
+        )
+        from .models.helium import (
+            HeliumForCausalLM,
+            HeliumForSequenceClassification,
+            HeliumForTokenClassification,
+            HeliumModel,
+            HeliumPreTrainedModel,
         )
         from .models.hiera import (
             HieraBackbone,
@@ -7633,6 +7716,11 @@ if TYPE_CHECKING:
             ModernBertForTokenClassification,
             ModernBertModel,
             ModernBertPreTrainedModel,
+        )
+        from .models.moonshine import (
+            MoonshineForConditionalGeneration,
+            MoonshineModel,
+            MoonshinePreTrainedModel,
         )
         from .models.moshi import (
             MoshiForCausalLM,
@@ -8108,6 +8196,10 @@ if TYPE_CHECKING:
             Starcoder2Model,
             Starcoder2PreTrainedModel,
         )
+        from .models.superglue import (
+            SuperGlueForKeypointMatching,
+            SuperGluePreTrainedModel,
+        )
         from .models.superpoint import (
             SuperPointForKeypointDetection,
             SuperPointPreTrainedModel,
@@ -8294,6 +8386,11 @@ if TYPE_CHECKING:
             VitMatteForImageMatting,
             VitMattePreTrainedModel,
         )
+        from .models.vitpose import (
+            VitPoseForPoseEstimation,
+            VitPosePreTrainedModel,
+        )
+        from .models.vitpose_backbone import VitPoseBackbone, VitPoseBackbonePreTrainedModel
         from .models.vits import (
             VitsModel,
             VitsPreTrainedModel,

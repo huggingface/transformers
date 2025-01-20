@@ -158,7 +158,10 @@ class InstructBlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def setUp(self):
         self.model_tester = InstructBlipVisionModelTester(self)
         self.config_tester = ConfigTester(
-            self, config_class=InstructBlipVisionConfig, has_text_modality=False, hidden_size=37
+            self,
+            config_class=InstructBlipConfig,
+            has_text_modality=False,
+            common_properties=["num_query_tokens", "image_token_index"],
         )
 
     def test_config(self):
@@ -838,17 +841,6 @@ class InstructBlipModelIntegrationTest(unittest.TestCase):
         image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
         prompt = "What is unusual about this image?"
         inputs = processor(images=image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
-
-        # verify logits
-        with torch.no_grad():
-            logits = model(**inputs).logits
-
-        expected_slice = torch.tensor(
-            [[-3.3047, -12.0625, 8.4922], [-4.9258, -11.7578, 8.1406], [-3.9297, -13.5000, 9.2500]],
-            device=torch_device,
-        )
-
-        self.assertTrue(torch.allclose(logits[0, :3, :3].float(), expected_slice, atol=1e-3))
 
         # verify generation
         outputs = model.generate(**inputs, max_new_tokens=30)

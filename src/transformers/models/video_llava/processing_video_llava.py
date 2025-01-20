@@ -179,7 +179,7 @@ class VideoLlavaProcessor(ProcessorMixin):
             ) + self.num_additional_image_tokens
             num_video_tokens = num_image_tokens * num_frames
             if self.vision_feature_select_strategy == "default":
-                num_image_tokens -= self.num_additional_image_tokens
+                num_image_tokens -= 1
 
             prompt_strings = []
             for sample in text:

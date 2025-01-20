@@ -230,6 +230,7 @@ if is_accelerate_available():
     from accelerate import __version__ as accelerate_version
     from accelerate.state import AcceleratorState
     from accelerate.utils import (
+        AutocastKwargs,
         DistributedDataParallelKwargs,
         DistributedType,
         load_fsdp_model,
@@ -521,6 +522,9 @@ class Trainer:
                 if isinstance(model, PreTrainedModel):
                     # Patch the model with liger kernels. Use the default kernel configurations.
                     _apply_liger_kernel_to_instance(model=model)
+                elif hasattr(model, "get_base_model") and isinstance(model.get_base_model(), PreTrainedModel):
+                    # Patch the base model with liger kernels where model is a PeftModel. Use the default kernel configurations.
+                    _apply_liger_kernel_to_instance(model=model.get_base_model())
                 else:
                     logger.warning(
                         "The model is not an instance of PreTrainedModel. No liger kernels will be applied."
@@ -1832,7 +1836,8 @@ class Trainer:
                 # remove mixed precision hooks from the model
                 if original_forward:
                     jit_model.forward = original_forward
-                with self.accelerator.autocast(cache_enabled=False), torch.no_grad():
+                autocast_handler = AutocastKwargs(cache_enabled=False)
+                with self.accelerator.autocast(autocast_handler=autocast_handler), torch.no_grad():
                     if version.parse(version.parse(torch.__version__).base_version) >= version.parse("2.0.0"):
                         if isinstance(example_batch, dict):
                             jit_model = torch.jit.trace(jit_model, example_kwarg_inputs=example_batch, strict=False)
@@ -3156,7 +3161,6 @@ class Trainer:
     def _determine_best_metric(self, metrics, trial):
         """
         Determine if the model should be saved based on the evaluation metrics.
-        If args.metric_for_best_model is not set, the loss is used.
 
         Returns:
             bool: True if a new best metric was found, else False
@@ -3707,7 +3711,7 @@ class Trainer:
                 scaled_loss.backward()
         else:
             # Finally we need to normalize the loss for reporting
-            if num_items_in_batch is None:
+            if not self.model_accepts_loss_kwargs and self.compute_loss_func is None:
                 loss = loss / self.args.gradient_accumulation_steps
 
             self.accelerator.backward(loss, **kwargs)

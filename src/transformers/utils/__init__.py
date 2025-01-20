@@ -131,6 +131,7 @@ from .import_utils import (
     is_cv2_available,
     is_cython_available,
     is_datasets_available,
+    is_decord_available,
     is_detectron2_available,
     is_eetq_available,
     is_essentia_available,
@@ -146,6 +147,7 @@ from .import_utils import (
     is_g2p_en_available,
     is_galore_torch_available,
     is_gguf_available,
+    is_gptqmodel_available,
     is_grokadamw_available,
     is_hadamard_available,
     is_hqq_available,
@@ -236,6 +238,7 @@ from .import_utils import (
     is_uroman_available,
     is_vision_available,
     is_vptq_available,
+    is_yt_dlp_available,
     requires_backends,
     torch_only_method,
 )
