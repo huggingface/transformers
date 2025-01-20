@@ -765,6 +765,15 @@ def is_torch_musa_available(check_device=False):
     return hasattr(torch, "musa") and torch.musa.is_available()
 
 
+@lru_cache()
+def is_torch_hpu_available():
+    try:
+        import torch
+        return torch.device("hpu") is not None
+    except (ImportError, RuntimeError):
+        return False
+
+
 def is_torchdynamo_available():
     if not is_torch_available():
         return False
