@@ -395,6 +395,11 @@ class StopStringCriteria(StoppingCriteria):
         # Flip input_ids because we're only matching strings at the end of the generated sequence
         flipped_ids = torch.flip(input_ids, (1,))
 
+        # Clip token IDs to be within the tokenizer's vocabulary size
+        # This handles the case where model.config.vocab_size > len(tokenizer)
+        vocab_size = self.embedding_vec.size(0)
+        flipped_ids = torch.clamp(flipped_ids, max=vocab_size - 1)
+
         # Size of the vector of positions a single token can match
         max_valid_positions = self.max_valid_positions
 
