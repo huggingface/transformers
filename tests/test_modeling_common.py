@@ -2397,7 +2397,7 @@ class ModelTesterMixin:
                     elif tuple_object is None:
                         return
                     # model might return non-tensors objects (e.g. Cache class)
-                    elif isinstance(tuple_object, torch.Tensor):
+                    elif isinstance(tuple_object, torch.Tensor) and not isinstance(tuple_object, Cache):
                         self.assertTrue(
                             torch.allclose(
                                 set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5

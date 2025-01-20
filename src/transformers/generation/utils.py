@@ -731,6 +731,7 @@ class GenerationMixin:
                     key != "cache_position"
                     and dict_to_expand[key] is not None
                     and isinstance(dict_to_expand[key], torch.Tensor)
+                    and not isinstance(dict_to_expand[key], Cache)
                 ):
                     dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=0)
             return dict_to_expand
@@ -4552,13 +4553,13 @@ def _split(data, full_batch_size: int, num_hidden_layers: int, split_size: int =
     """
     if data is None:
         return [None] * (full_batch_size // split_size)
-    if isinstance(data, torch.Tensor):
-        return [data[i : i + split_size] for i in range(0, full_batch_size, split_size)]
     # New cache format
     elif isinstance(data, DynamicCache) or (
         isinstance(data, EncoderDecoderCache) and isinstance(data.self_attention_cache, DynamicCache)
     ):
         return data.batch_split(full_batch_size, split_size, num_hidden_layers)
+    if isinstance(data, torch.Tensor):
+        return [data[i : i + split_size] for i in range(0, full_batch_size, split_size)]
     elif isinstance(data, tuple):
         # If the elements of the tuple are also tuples (e.g., past_key_values in our earlier example)
         if isinstance(data[0], tuple):
@@ -4665,13 +4666,13 @@ def stack_model_outputs(model_outputs: List[ModelOutput], config: PretrainedConf
         """
         if any(data is None for data in data):
             return None
-        if isinstance(data[0], torch.Tensor):
-            return torch.cat(data, dim=0)
         # New cache format
-        elif isinstance(data[0], DynamicCache):
+        if isinstance(data[0], DynamicCache):
             return DynamicCache.from_batch_splits(data, num_hidden_layers=num_hidden_layers)
         elif isinstance(data[0], EncoderDecoderCache):
             return EncoderDecoderCache.from_batch_splits(data, num_hidden_layers=num_hidden_layers)
+        elif isinstance(data[0], torch.Tensor):
+            return torch.cat(data, dim=0)
         elif isinstance(data[0], tuple):
             # If the elements of the tuple are also tuples (e.g., past_key_values in our earlier example)
             if isinstance(data[0][0], tuple):

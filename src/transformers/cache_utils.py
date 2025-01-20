@@ -29,8 +29,24 @@ class Cache(torch.Tensor):
     Base, abstract class for all caches. The actual data structure is specific to each subclass.
     """
 
-    def __init__(self):
-        super().__init__()
+    def __new__(cls, *args, dtype=None, device=None, **kwargs):
+        # We use a tensor wrapper to allow for torch script tracing when using the cache as an input to nn.Module
+        # dtype and device don't need to be in the subclass's __init__ (unless they are used for something)
+        # But they can be passed as arguments when instantiating the cache (e.g. `DynamicCache(dtype=dtype)`)
+        # And will be accessible as `cache.dtype` and `cache.device`
+        self = torch.Tensor._make_wrapper_subclass(cls, (), dtype=dtype, device=device, requires_grad=False)
+        self.__init__(*args, **kwargs)
+        return self
+
+    @classmethod
+    def __torch_dispatch__(cls, func, types, args, kwargs):
+        assert (
+            func.__name__ in cls.__dict__
+        ), f"Class {cls.__name__} is a tensor wrapper and does not implement method {func.__name__}"
+        return getattr(cls, func.__name__)(*args, **kwargs)
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}()"
 
     def update(
         self,
@@ -677,8 +693,6 @@ class QuantizedCache(DynamicCache):
         self.compute_dtype = cache_config.compute_dtype
         self.device = cache_config.device
 
-        super().__init__()
-
     def update(
         self,
         key_states: torch.Tensor,
@@ -1121,7 +1135,6 @@ class StaticCache(Cache):
             config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
         )
 
-        self.dtype = dtype
         self.num_key_value_heads = (
             config.num_attention_heads
             if getattr(config, "num_key_value_heads", None) is None
@@ -1145,8 +1158,8 @@ class StaticCache(Cache):
             #     it is not needed anyway)
             # 2. `torch.export()` requires mutations to be registered as buffers.
             if not is_torchdynamo_compiling():
-                self.register_buffer(f"key_cache_{idx}", torch.zeros(cache_shape, dtype=dtype, device=layer_device))
-                self.register_buffer(f"value_cache_{idx}", torch.zeros(cache_shape, dtype=dtype, device=layer_device))
+                setattr(self, f"key_cache_{idx}", new_layer_key_cache)
+                setattr(self, f"value_cache_{idx}", new_layer_value_cache)
                 new_layer_key_cache = getattr(self, f"key_cache_{idx}")
                 new_layer_value_cache = getattr(self, f"value_cache_{idx}")
                 torch._dynamo.mark_static_address(new_layer_key_cache)
@@ -1619,7 +1632,6 @@ class HybridCache(Cache):
             config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
         )
 
-        self.dtype = dtype
         self.num_key_value_heads = (
             config.num_attention_heads if config.num_key_value_heads is None else config.num_key_value_heads
         )
@@ -1804,7 +1816,7 @@ class MambaCache:
                 f"The 'batch_size' argument of {self.__class__.__name__} is deprecated and will be removed in "
                 "v4.49. Use the more precisely named 'max_batch_size' argument instead."
             )
-        self.dtype = dtype
+
         self.max_batch_size = batch_size or max_batch_size
         self.intermediate_size = config.intermediate_size
         self.ssm_state_size = config.state_size
@@ -1934,7 +1946,6 @@ class OffloadedStaticCache(StaticCache):
         self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
         self.device = torch.device(device) if layer_device_map is None else layer_device_map[0]
         self.offload_device = torch.device(offload_device)
-        self.dtype = dtype if dtype is not None else torch.float32
 
         # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
         head_dim = config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
