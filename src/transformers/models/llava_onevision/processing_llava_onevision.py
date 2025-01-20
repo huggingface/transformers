@@ -219,6 +219,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         num_image_tokens = unpadded_features + newline_features + base_features
         return num_image_tokens
 
+    # Adapted from transformers.models.llava_next.processing_llava_next.LlavaNextProcessor._get_unpadded_features
     def _get_unpadded_features(self, height, width, patches_height, patches_width, scale_height, scale_width):
         """
         Get number of features for a given image with height/width. LLaVA-NeXT is different from LLaVA
