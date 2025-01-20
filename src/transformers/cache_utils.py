@@ -45,6 +45,10 @@ class Cache(torch.Tensor):
         ), f"Class {cls.__name__} is a tensor wrapper and does not implement method {func.__name__}"
         return getattr(cls, func.__name__)(*args, **kwargs)
 
+    def __bool__(self):
+        # in many places, past_key_values is checked for not being None using `if past_key_values:`
+        return True
+
     def __repr__(self):
         return f"{self.__class__.__name__}()"
 
