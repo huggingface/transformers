@@ -16,14 +16,6 @@ from typing import TYPE_CHECKING
 from ...utils import _LazyModule
 from ...utils.import_utils import define_import_structure
 
-try:
-    if not is_vision_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["image_processing_llava"] = ["LlavaImageProcessor"]
-
 
 if TYPE_CHECKING:
     from .configuration_llava import *

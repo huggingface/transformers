@@ -162,7 +162,9 @@ class LlavaImageProcessor(BaseImageProcessor):
             image (`np.ndarray`):
                 The image to pad.
             background_color (`int` or `Tuple[int, int, int]`, *optional*, defaults to 0):
-                The color to use for the padding. Can be an integer or a tuple of integers representing the RGB values.
+                The color to use for the padding. Can be an integer for single channel or a
+                tuple of integers representing for multi-channel images. If passed as integer
+                in mutli-channel mode, it will default to `0` in subsequent channels.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format for the output image. Can be one of:
                     - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -192,9 +194,11 @@ class LlavaImageProcessor(BaseImageProcessor):
 
         # Ensure background_color is the correct shape
         if isinstance(background_color, int):
-            background_color = [background_color] * num_channels
+            background_color = [background_color]
         elif len(background_color) != num_channels:
-            raise ValueError(f"background_color must have {num_channels} elements to match the number of channels")
+            raise ValueError(
+                f"background_color must have no more than {num_channels} elements to match the number of channels"
+            )
 
         if input_data_format == ChannelDimension.FIRST:
             result = np.zeros((num_channels, max_dim, max_dim), dtype=image.dtype)
@@ -439,3 +443,6 @@ class LlavaImageProcessor(BaseImageProcessor):
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+
+__all__ = ["LlavaImageProcessor"]
