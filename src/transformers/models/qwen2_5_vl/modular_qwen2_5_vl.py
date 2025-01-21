@@ -203,7 +203,11 @@ class Qwen2_5_VLVisionBlock(nn.Module):
         return hidden_states
 
 
-class Qwen2_5_VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
+class Qwen2_5_VLPreTrainedModel(Qwen2VLPreTrainedModel):
+    pass
+
+
+class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
     config_class = Qwen2_5_VLVisionConfig
     _no_split_modules = ["Qwen2_5_VLVisionBlock"]
 
@@ -365,10 +369,6 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
         hidden_states = hidden_states[reverse_indices, :]
 
         return hidden_states
-
-
-class Qwen2_5_VLPreTrainedModel(Qwen2VLPreTrainedModel):
-    pass
 
 
 class Qwen2_5_VLModel(Qwen2VLModel):
