@@ -61,21 +61,23 @@
     - local: pipeline_webserver
       title: Web server inference
     - local: add_new_pipeline
-      title: Add a new pipeline
+      title: Adding a new pipeline
   - title: LLMs
     sections:
-    - local: tasks/prompting
-      title: Prompt engineering
-    - local: llm_optims
-      title: Optimize inference
-    - local: kv_cache
-      title: KV cache strategies
-    - local: cache_explanation
-      title: Caching
     - local: llm_tutorial
       title: Text generation
     - local: generation_strategies
       title: Generation strategies
+    - local: tasks/prompting
+    - local: generation_features
+      title: Generation features
+      title: Prompt engineering
+    - local: llm_optims
+      title: Optimizing inference
+    - local: kv_cache
+      title: KV cache strategies
+    - local: cache_explanation
+      title: Caching
     - local: llm_tutorial_optimization
       title: Getting the most out of LLMs
     - local: perplexity

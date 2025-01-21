@@ -9,24 +9,24 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 -->
 
-# Optimize inference
+# Optimizing inference
 
-Inference with large language models (LLMs) can be challenging because they have to store and handle billions of parameters. To load a 70B parameter [Llama 2](https://hf.co/meta-llama/Llama-2-70b-hf) model, it requires 256GB of memory for full precision weights and 128GB of memory for half-precision weights. For comparison, the most powerful GPUs today - the A100 and H100 - only have 80GB of memory.
+Inference with large language models (LLMs) can be challenging because they have to store and handle billions of parameters. To load a 70B parameter [Llama 2](https://hf.co/meta-llama/Llama-2-70b-hf) model, it requires 256GB of memory for full precision weights and 128GB of memory for half-precision weights. The most powerful GPUs today - the A100 and H100 - only have 80GB of memory.
 
 On top of the memory requirements, inference is slow because LLMs are called repeatedly to generate the next token. The input sequence increases as generation progresses, which takes longer and longer to process.
 
 This guide will show you how to optimize LLM inference to accelerate generation and reduce memory usage.
 
 > [!TIP]
-> Try out [Text Generation Inference (TGI)](https://hf.co/docs/text-generation-inference), a Hugging Face library dedicated to deploying and serving highly optimized LLMs for inference. It includes deployment-oriented optimization features not included in Transformers, such as continuous batching for increasing throughput and tensor parallelism for multi-GPU inference.
+> Try out [Text Generation Inference (TGI)](https://hf.co/docs/text-generation-inference), a Hugging Face library dedicated to deploying and serving highly optimized LLMs for inference.
 
 ## Static kv-cache and torch.compile
 
 LLMs compute key-value (kv) values for each input token, and it performs the same kv computation each time because the generated output becomes part of the input. However, performing the same kv computation every time is not very efficient.
 
-A *kv-cache* stores the past keys and values instead of recomputing them each time. But the kv-cache is dynamic and it grows with each generation step which prevents you from taking advantage of [torch.compile](./perf_torch_compile), a powerful optimization method that fuses PyTorch code into optimized kernels.
+A *kv-cache* stores the past keys and values instead of recomputing them each time. As a result, the kv-cache is dynamic and it grows with each generation step which prevents you from taking advantage of [torch.compile](./perf_torch_compile), a powerful optimization method that fuses PyTorch code into optimized kernels.
 
-The *static kv-cache* solves this issue by pre-allocating the kv-cache size to a maximum value, which allows you to combine it with [torch.compile](./perf_torch_compile) for up to a 4x speed up. Your speed up may vary depending on the model size (larger models have a smaller speed up) and hardware.
+The *static kv-cache* solves this issue by pre-allocating the kv-cache size to a maximum value, so you can combine it with [torch.compile](./perf_torch_compile) for up to a 4x speed up. Your speed up may vary depending on the model size (larger models have a smaller speed up) and hardware.
 
 > [!WARNING]
 > Follow this [issue](https://github.com/huggingface/transformers/issues/28981) to track which models (Llama, Gemma, Mistral, etc.) support a static kv-cache and torch.compile.
@@ -151,7 +151,7 @@ To enable static kv-cache and [torch.compile](./perf_torch_compile) with [`Stati
 
 1. Initialize [`StaticCache`] before using the model for inference to configure parameters like the maximum batch size and sequence length.
 2. Call [torch.compile](./perf_torch_compile) on the model to compile the forward pass with the static kv-cache.
-3. Set `enable_math=True` in the [torch.backends.cuda.sdp_kernel](https://pytorch.org/docs/master/generated/torch.nn.functional.scaled_dot_product_attention.html) context manager to enable the native PyTorch C++ implementation of scaled dot product attention to speed up inference even more.
+3. se SDPBackend.MATH in the [torch.nn.attention.sdpa_kernel](https://pytorch.org/docs/stable/generated/torch.nn.attention.sdpa_kernel.html) context manager to enable the native PyTorch C++ implementation of scaled dot product attention to speed up inference even more.
 
 ```py
 from torch.nn.attention import SDPBackend, sdpa_kernel
@@ -190,7 +190,7 @@ text
 </hfoption>
 <hfoption id="3. compile entire generate function">
 
-Compiling the entire [`~GenerationMixin.generate`] function also compiles the input preparation logit processor operations, and more in addition to the forward pass. With this approach, you don't need to initialize [`StaticCache`] or set the [cache_implementation](https://hf.co/docs/transformers/main_classes/text_generation#transformers.GenerationConfig.cache_implementation) parameter.
+Compiling the entire [`~GenerationMixin.generate`] function also compiles the input preparation logit processor operations, and more, in addition to the forward pass. With this approach, you don't need to initialize [`StaticCache`] or set the [cache_implementation](https://hf.co/docs/transformers/main_classes/text_generation#transformers.GenerationConfig.cache_implementation) parameter.
 
 ```py
 from transformers import AutoTokenizer, AutoModelForCausalLM
@@ -220,7 +220,7 @@ This usage pattern is more appropriate for unique hardware or use cases, but the
 </hfoption>
 </hfoptions>
 
-## Decoding
+## Decoding strategies
 
 Decoding can also be optimized to accelerate generation. You can use a lightweight assistant model to generate candidate tokens faster than the LLM itself or you can use a variant of this decoding strategy that works especially well for input-grounded tasks.
 
@@ -234,7 +234,7 @@ For each input token, the model weights are loaded each time during the forward 
 To get the largest speed up, the assistant model should be a lot smaller than the LLM so that it can generate tokens quickly. The assistant and LLM model must also share the same tokenizer to avoid re-encoding and decoding tokens.
 
 > [!WARNING]
-> Speculative decoding is only supported for the greedy search and sampling decoding strategies, and it also doesn't support batched inputs.
+> Speculative decoding is only supported for the greedy search and sampling decoding strategies, and it doesn't support batched inputs.
 
 Enable speculative decoding by loading an assistant model and passing it to [`~GenerationMixin.generate`].
 
@@ -355,99 +355,6 @@ model = AutoModelForCausalLM.from_pretrained(
 )
 ```
 
-### Fine-Tuning with torch.compile and Padding-Free Data Collation
-
-In addition to optimizing inference, you can also enhance the training efficiency of large language models by leveraging torch.compile during fine-tuning and using a padding-free data collator. This approach can significantly speed up training and reduce computational overhead.
-
-Here's how you can fine-tune a Llama model using SFTTrainer from the TRL library, with torch_compile enabled and a padding-free data collator:
-
-```
-#################### IMPORTS ###################
-
-import math
-import datasets
-import dataclasses
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    TrainingArguments
-)
-from trl import SFTConfig, SFTTrainer, DataCollatorForCompletionOnlyLM
-
-#################### MODEL LOADING WITH FLASH ATTENTION ###################
-
-model_name = "meta-llama/Llama-3.2-1B"
-model = AutoModelForCausalLM.from_pretrained(
-    model_name,
-    attn_implementation="flash_attention_2"  # Enables FlashAttention-2
-)
-tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-
-#################### DATA PREPROCESSING (PADDING-FREE) ###################
-
-response_template = "\n### Label:"
-response_template_ids = tokenizer.encode(
-    response_template, add_special_tokens=False
-)[2:]  # Exclude special tokens
-
-data_collator = DataCollatorForCompletionOnlyLM(
-    response_template_ids=response_template_ids,
-    tokenizer=tokenizer,
-    ignore_index=-100,
-    padding_free=True  # Enables padding-free collation
-)
-
-def format_dataset(example):
-    return {
-        "output": example["output"] + tokenizer.eos_token
-    }
-
-data_files = {"train": "path/to/dataset"}  # Replace with your dataset path
-json_dataset = datasets.load_dataset("json", data_files=data_files)
-formatted_train_dataset = json_dataset["train"].map(format_dataset)
-
-################# TRAINING CONFIGURATION ############################
-
-train_args = TrainingArguments(
-    num_train_epochs=5,
-    per_device_train_batch_size=4,
-    per_device_eval_batch_size=4,
-    gradient_accumulation_steps=4,
-    learning_rate=1e-5,
-    weight_decay=0.0,
-    warmup_ratio=0.03,
-    lr_scheduler_type="cosine",
-    logging_steps=1,
-    include_tokens_per_second=True,
-    save_strategy="epoch",
-    output_dir="output",
-    torch_compile=True,  # Enables torch.compile
-    torch_compile_backend="inductor",
-    torch_compile_mode="default"
-)
-
-# Convert TrainingArguments to SFTConfig
-transformer_train_arg_fields = [x.name for x in dataclasses.fields(SFTConfig)]
-transformer_kwargs = {
-    k: v
-    for k, v in train_args.to_dict().items()
-    if k in transformer_train_arg_fields
-}
-training_args = SFTConfig(**transformer_kwargs)
-
-####################### FINE-TUNING #####################
-
-trainer = SFTTrainer(
-    model=model,
-    tokenizer=tokenizer,
-    train_dataset=formatted_train_dataset,
-    data_collator=data_collator,
-    dataset_text_field="output",
-    args=training_args,
-)
-trainer.train()
-```
-
 ### PyTorch scaled dot product attention
 
 Scaled dot product attention (SDPA) is automatically enabled in PyTorch 2.0 and it supports FlashAttention, xFormers, and PyTorch's C++ implementation. SDPA chooses the most performant attention algorithm if you're using a CUDA backend. For other backends, SDPA defaults to the PyTorch C++ implementation.
@@ -473,7 +380,9 @@ with sdpa_kernel(SDPBackend.FLASH_ATTENTION):
 
 ## Quantization
 
-Quantization reduces the size of model weights by storing them in a lower precision. This translates to lower memory usage and makes loading LLMs for inference more accessible if you're constrained by GPU memory. If you aren't limited by your GPU, you don't necessarily need to quantize your model because it can increase latency slightly (except for AWQ and fused AWQ modules) due to the extra step required to quantize and dequantize the weights.
+Quantization reduces the size of model weights by storing them in a lower precision. This translates to lower memory usage and makes loading LLMs for inference more accessible if you're constrained by GPU memory.
+
+If you aren't limited by your GPU, you don't necessarily need to quantize your model because it can increase latency slightly (except for AWQ and fused AWQ modules) due to the extra step required to quantize and dequantize the weights.
 
 > [!TIP]
 > There are many quantization libraries (see the [Quantization](./quantization) guide for more details) available, such as Quanto, AQLM, VPTQ, AWQ, and AutoGPTQ. Feel free to try them out and see which one works best for your use case. We also recommend reading the [Overview of natively supported quantization schemes in 🤗 Transformers](https://hf.co/blog/overview-quantization-transformers) blog post which compares AutoGPTQ and bitsandbytes.

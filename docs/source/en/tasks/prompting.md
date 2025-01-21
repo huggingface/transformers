@@ -18,9 +18,9 @@ rendered properly in your Markdown viewer.
 
 [[open-in-colab]]
 
-Prompt engineering or prompting, refers to using natural language to improve large language model (LLM) performance on a variety of tasks. LLMs have tremendous capacity as a result of their training and size, such that a prompt can steer the model towards generating a desired output. In many cases ([but not all](#finetuning)), you don't need a finetuned model for a task, you just need a good prompt.
+Prompt engineering or prompting, uses natural language to improve large language model (LLM) performance on a variety of tasks. A prompt can steer the model towards generating a desired output. In many cases, you don't even need a [fine-tuned](#finetuning) model for a task. You just need a good prompt.
 
-Try prompting a LLM to classify some text. When you create a prompt, it's very important to provide specific instructions about the task you want to perform and what the result should look like.
+Try prompting a LLM to classify some text. When you create a prompt, it's important to provide very specific instructions about the task and what the result should look like.
 
 ```py
 from transformers import pipeline
@@ -41,13 +41,13 @@ Sentiment:
 Positive
 ```
 
-The challenge lies in designing prompts that produces the results you're expecting, which can be tricky, because language is so incredibly nuanced and expressive.
+The challenge lies in designing prompts that produces the results you're expecting because language is so incredibly nuanced and expressive.
 
 This guide covers prompt engineering best practices, techniques, and examples for how to solve language and reasoning tasks.
 
 ## Best practices
 
-1. Try to pick the latest models for the best performance. Keep in mind that LLMs can come in two flavors, [base](https://hf.co/mistralai/Mistral-7B-v0.1) and [instruction-tuned](https://hf.co/mistralai/Mistral-7B-Instruct-v0.1) (or chat).
+1. Try to pick the latest models for the best performance. Keep in mind that LLMs can come in two variants, [base](https://hf.co/mistralai/Mistral-7B-v0.1) and [instruction-tuned](https://hf.co/mistralai/Mistral-7B-Instruct-v0.1) (or chat).
 
     Base models are excellent at completing text given an initial prompt, but they're not as good at following instructions. Instruction-tuned models are specifically trained versions of the base models on instructional or conversational data. This makes instruction-tuned models a better fit for prompting.
 
@@ -60,11 +60,11 @@ This guide covers prompt engineering best practices, techniques, and examples fo
 
 4. Clearly separate instructions from the text of interest.
 
-5. Be specific and descriptive about the task and the desired output, including for example, its format, length, style, and language. Avoid ambiguous and vague descriptions and instructions.
+5. Be specific and descriptive about the task and the desired output, including for example, its format, length, style, and language. Avoid ambiguous descriptions and instructions.
 
 6. Instructions should focus on "what to do" rather than "what not to do".
 
-7. Help lead the model generate the correct output by writing the first word or even the first sentence.
+7. Lead the model to generate the correct output by writing the first word or even the first sentence.
 
 8. Try other techniques like [few-shot](#few-shot) and [chain-of-thought](#chain-of-thought) to improve results.
 
@@ -76,13 +76,13 @@ This guide covers prompt engineering best practices, techniques, and examples fo
 
 Crafting a good prompt alone, also known as zero-shot prompting, may not be enough to get the results you want. You may need to try a few prompting techniques to get the best performance.
 
-This section covers a few of these techniques.
+This section covers a few prompting techniques.
 
 ### Few-shot
 
-Few-shot prompting improves accuracy and performance by including specific examples of what a model should generate given an input. The explicit examples give the model a better understanding of the task and the output format you're looking for. Try experimenting with different numbers of examples (2, 4, 8, etc.) to the model to see how it affects performance.
+Few-shot prompting improves accuracy and performance by including specific examples of what a model should generate given an input. The explicit examples give the model a better understanding of the task and the output format you're looking for. Try experimenting with different numbers of examples (2, 4, 8, etc.) to see how it affects performance.
 
-The example below provides the model with 1 example (1-shot) of the output format, a date in MM/DD/YYYY format, it should return.
+The example below provides the model with 1 example (1-shot) of the output format (a date in MM/DD/YYYY format) it should return.
 
 ```py
 from transformers import pipeline
@@ -109,7 +109,7 @@ The downside of few-shot prompting is that you need to create lengthier prompts 
 
 Chain-of-thought (CoT) is effective at generating more coherent and well-reasoned outputs by providing a series of prompts that help a model "think" more thoroughly about a topic.
 
-The example below provides the model with several prompts that forces it to work through several intermediate reasoning steps.
+The example below provides the model with several prompts to work through intermediate reasoning steps.
 
 ```py
 from transformers import pipeline
@@ -137,24 +137,24 @@ If you eat 6 muffins, how many are left?
 Answer: 6
 ```
 
-Like [few-shot](#few-shot) prompting, the downside of CoT is that it requires more effort to design a series of prompts that help the model reason through a complex task and the prompt length increases latency.
+Like [few-shot](#few-shot) prompting, the downside of CoT is that it requires more effort to design a series of prompts that help the model reason through a complex task and prompt length increases latency.
 
-## Finetuning
+## Fine-tuning
 
-While prompting is a powerful way to work with LLMs, there are scenarios where a finetuned model or even finetuning a model works better.
+While prompting is a powerful way to work with LLMs, there are scenarios where a fine-tuned model or even fine-tuning a model works better.
 
-Here are some examples scenarios where a finetuned model makes sense.
+Here are some examples scenarios where a fine-tuned model makes sense.
 
 - Your domain is extremely different from what a LLM was pretrained on, and extensive prompting didn't produce the results you want.
 - Your model needs to work well in a low-resource language.
 - Your model needs to be trained on sensitive data that have strict regulatory requirements.
 - You're using a small model due to cost, privacy, infrastructure, or other constraints.
 
-In all of these scenarios, ensure that you have a large enough domain-specific dataset to train your model with, have enough time and resources, and the cost of finetuning is worth it. Otherwise, you may be better off trying to optimize your prompt!
+In all of these scenarios, ensure that you have a large enough domain-specific dataset to train your model with, have enough time and resources, and the cost of fine-tuning is worth it. Otherwise, you may be better off trying to optimize your prompt.
 
 ## Examples
 
-Here are some examples of prompting a LLM for different tasks.
+The examples below demonstrate prompting a LLM for different tasks.
 
 <hfoptions id="tasks">
 <hfoption id="named entity recognition">

@@ -55,5 +55,5 @@ Visualize how the tiktoken tokenizer works by selecting Llama3 in the Tokenizer 
 	src="https://xenova-the-tokenizer-playground.static.hf.space"
 	frameborder="0"
 	width="850"
-	height="600"
+	height="850"
 ></iframe>
