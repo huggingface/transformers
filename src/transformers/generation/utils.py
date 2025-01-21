@@ -3500,14 +3500,6 @@ class GenerationMixin:
         running_beam_indices *= -1
         beam_indices = running_beam_indices.clone().detach()
 
-        # flatten beam dim
-        if "encoder_outputs" in model_kwargs:
-            model_kwargs["encoder_outputs"]["last_hidden_state"] = flatten_beam_dim(
-                model_kwargs["encoder_outputs"]["last_hidden_state"]
-            )
-        if "attention_mask" in model_kwargs:
-            model_kwargs["attention_mask"] = flatten_beam_dim(model_kwargs["attention_mask"])
-
         # 4. define custom stopping criteria (depends on the state of the beams and their scores)
         def beam_search_has_unfinished_sequences(
             cur_len: int,
@@ -3553,14 +3545,14 @@ class GenerationMixin:
             is_sent_finished,
         ):
             # a. Forward current tokens, obtain the logits
-            model_inputs = self.prepare_inputs_for_generation(flatten_beam_dim(input_ids), **model_kwargs)
+            model_inputs = self.prepare_inputs_for_generation(flatten_beam_dim(running_sequences), **model_kwargs)
 
             # prepare variable output controls (note: some models won't accept all output controls)
             model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
             model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
 
             model_outputs = self(**model_inputs, return_dict=True)
-            logits = model_outputs.logits
+            logits = model_outputs.logits[:, -1, :].clone().detach()  # Clone is needed to avoid keeping a hanging ref
 
             # b. Compute log probs -- get log probabilities from logits, process logits with processors (*e.g.*
             # `temperature`, ...), and add new logprobs to existing running logprobs scores.
@@ -3586,7 +3578,6 @@ class GenerationMixin:
                 elif output_hidden_states and self.config.is_encoder_decoder:
                     decoder_hidden_states.append(model_outputs.hidden_states)
 
-            breakpoint()
             log_probs = unflatten_beam_dim(log_probs, num_beams)
             log_probs = log_probs + running_beam_scores[:, :, None]  # (batch_size, num_beams, vocab_size)
             vocab_size = log_probs.shape[2]
