@@ -25,7 +25,6 @@ class MaskCropPipelineTests(unittest.TestCase):
         return Image.fromarray(image)
 
     def test_pipeline_attributes(self):
-        pipe = self.get_test_pipeline()
         processor = self.get_image_processor()
         self.assertTrue(hasattr(processor, "generate_crop_boxes"))
 
@@ -72,12 +71,9 @@ class MaskCropPipelineTests(unittest.TestCase):
     @slow
     def test_integration_with_pipeline(self):
         pipe = self.get_test_pipeline()
-        processor = self.get_image_processor()
         image = self.get_test_image()
 
-        # First generate crops
-        crop_outputs = processor.generate_crop_boxes(image, target_size=64, crop_n_layers=1, points_per_crop=32)
-
+        
         # Then use these crops for mask generation
         masks = pipe(image, points_per_batch=32, crops_n_layers=1)
 
