@@ -2184,7 +2184,7 @@ class PagedAttentionCache(Cache):
         batch_idx = torch.arange(KV_B, device=device, dtype=torch.int32)
         self.paged_attentions[layer_idx].assign(
             batch_idx,
-            cache_kwargs["cache_position"],
+            cache_kwargs["cache_position"].unsqueeze(0),
             key_states,
             value_states,
             self.key_cache[layer_idx],
