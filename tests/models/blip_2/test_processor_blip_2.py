@@ -130,3 +130,130 @@ class Blip2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         # For now the processor supports only ['pixel_values', 'input_ids', 'attention_mask']
         self.assertCountEqual(list(inputs.keys()), ["input_ids", "pixel_values", "attention_mask"])
+
+    # Overriden tests because Blip appends image tokens to text increasing total length
+    # We keep the max-length as the length of only text for BC
+
+    def test_tokenizer_defaults_preserved_by_kwargs(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        processor_components = self.prepare_components()
+        processor_components["tokenizer"] = self.get_component("tokenizer", max_length=117, padding="max_length")
+        processor_kwargs = self.prepare_processor_dict()
+
+        processor = self.processor_class(**processor_components, **processor_kwargs)
+        self.skip_processor_without_typed_kwargs(processor)
+        input_str = self.prepare_text_inputs()
+        image_input = self.prepare_image_inputs()
+        inputs = processor(text=input_str, images=image_input, return_tensors="pt")
+        self.assertEqual(inputs[self.text_input_name].shape[-1], 117 + processor.num_query_tokens)
+
+    def test_kwargs_overrides_default_tokenizer_kwargs(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        processor_components = self.prepare_components()
+        processor_components["tokenizer"] = self.get_component("tokenizer", padding="longest")
+        processor_kwargs = self.prepare_processor_dict()
+
+        processor = self.processor_class(**processor_components, **processor_kwargs)
+        self.skip_processor_without_typed_kwargs(processor)
+        input_str = self.prepare_text_inputs()
+        image_input = self.prepare_image_inputs()
+        inputs = processor(
+            text=input_str, images=image_input, return_tensors="pt", max_length=112, padding="max_length"
+        )
+        self.assertEqual(inputs[self.text_input_name].shape[-1], 112 + processor.num_query_tokens)
+
+    def test_unstructured_kwargs(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        processor_components = self.prepare_components()
+        processor_kwargs = self.prepare_processor_dict()
+        processor = self.processor_class(**processor_components, **processor_kwargs)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = self.prepare_text_inputs()
+        image_input = self.prepare_image_inputs()
+        inputs = processor(
+            text=input_str,
+            images=image_input,
+            return_tensors="pt",
+            do_rescale=True,
+            rescale_factor=-1,
+            padding="max_length",
+            max_length=76,
+        )
+
+        self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
+        self.assertEqual(inputs[self.text_input_name].shape[-1], 76 + processor.num_query_tokens)
+
+    def test_unstructured_kwargs_batched(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        processor_components = self.prepare_components()
+        processor_kwargs = self.prepare_processor_dict()
+        processor = self.processor_class(**processor_components, **processor_kwargs)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = self.prepare_text_inputs(batch_size=2)
+        image_input = self.prepare_image_inputs(batch_size=2)
+        inputs = processor(
+            text=input_str,
+            images=image_input,
+            return_tensors="pt",
+            do_rescale=True,
+            rescale_factor=-1,
+            padding="longest",
+            max_length=76,
+        )
+
+        self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
+        self.assertTrue(
+            len(inputs[self.text_input_name][0]) == len(inputs[self.text_input_name][1])
+            and len(inputs[self.text_input_name][1]) < 76 + processor.num_query_tokens
+        )
+
+    def test_structured_kwargs_nested(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        processor_components = self.prepare_components()
+        processor_kwargs = self.prepare_processor_dict()
+        processor = self.processor_class(**processor_components, **processor_kwargs)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        input_str = self.prepare_text_inputs()
+        image_input = self.prepare_image_inputs()
+
+        # Define the kwargs for each modality
+        all_kwargs = {
+            "common_kwargs": {"return_tensors": "pt"},
+            "images_kwargs": {"do_rescale": True, "rescale_factor": -1},
+            "text_kwargs": {"padding": "max_length", "max_length": 76},
+        }
+
+        inputs = processor(text=input_str, images=image_input, **all_kwargs)
+        self.skip_processor_without_typed_kwargs(processor)
+
+        self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
+        self.assertEqual(inputs[self.text_input_name].shape[-1], 76 + processor.num_query_tokens)
+
+    def test_structured_kwargs_nested_from_dict(self):
+        if "image_processor" not in self.processor_class.attributes:
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        processor_components = self.prepare_components()
+        processor_kwargs = self.prepare_processor_dict()
+        processor = self.processor_class(**processor_components, **processor_kwargs)
+        self.skip_processor_without_typed_kwargs(processor)
+        input_str = self.prepare_text_inputs()
+        image_input = self.prepare_image_inputs()
+
+        # Define the kwargs for each modality
+        all_kwargs = {
+            "common_kwargs": {"return_tensors": "pt"},
+            "images_kwargs": {"do_rescale": True, "rescale_factor": -1},
+            "text_kwargs": {"padding": "max_length", "max_length": 76},
+        }
+
+        inputs = processor(text=input_str, images=image_input, **all_kwargs)
+        self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
+        self.assertEqual(inputs[self.text_input_name].shape[-1], 76 + processor.num_query_tokens)

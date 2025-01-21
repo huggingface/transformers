@@ -129,8 +129,6 @@ class Blip2Processor(ProcessorMixin):
                 raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
             # We need this hacky manipulation because BLIP expects image tokens to be at the beginning even before BOS token
-            if output_kwargs["text_kwargs"].get("max_length") is not None:
-                output_kwargs["text_kwargs"]["max_length"] -= self.num_query_tokens
             text_encoding = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
             # Image tokens should not be padded/truncated or prepended with special BOS token
