@@ -367,11 +367,11 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
         return hidden_states
 
 
-def Qwen2_5_VLPreTrainedModel(Qwen2VLPreTrainedModel):
+class Qwen2_5_VLPreTrainedModel(Qwen2VLPreTrainedModel):
     pass
 
 
-def Qwen2_5_VLModel(Qwen2VLModel):
+class Qwen2_5_VLModel(Qwen2VLModel):
     pass
 
 
