@@ -2227,14 +2227,14 @@ class Trainer:
         if self.args.include_tokens_per_second:
             num_train_tokens = self.num_tokens(train_dataloader, None if epoch_based else max_steps)
             # If going by epochs, multiply tokens linearly
-            if len_dataloader is not None and max_steps < 0:
+            if len_dataloader is not None and epoch_based:
                 num_train_tokens *= args.num_train_epochs
             # Otherwise since its steps, we just multiply by grad accum
             else:
                 num_train_tokens *= args.gradient_accumulation_steps
 
         # Now we figure out `num_examples`, `num_train_epochs`, and `train_samples`
-        if has_length(train_dataloader):
+        if len_dataloader:
             num_examples = self.num_examples(train_dataloader)
             if args.max_steps > 0:
                 num_train_epochs = max_steps // num_update_steps_per_epoch + int(
