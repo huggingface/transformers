@@ -37,7 +37,7 @@ When you use Transformers' [`Cache`] class, the attention module performs severa
 
 2. When the `forward` method is called iteratively, it's crucial that the attention mask shape matches the combined length of the past and current kv pairs. The attention mask should have the shape `(batch_size, past_kv_length + new_tokens_length)`. This is typically handled internally in [`~GenerationMixin.generate`], but if you want to implement your own generation loop with [`Cache`], keep this in mind! The attention mask should hold the past and current token values.
 
-3. It is also important to be aware of the `cache_position`. This is important if you want to reuse a prefilled [`Cache`] with the `forward` method because you have to pass a valid `cache_position` value. This indicates the input positions in a sequence. `cache_position` is unaffected by padding, and it always adds one more position for each token. For example, if a kv cache contains 10 tokens - regardless of pad tokens - the cache position for the next token should be `torch.tensor([10]).
+3. It is also important to be aware of the `cache_position`. This is important if you want to reuse a prefilled [`Cache`] with the `forward` method because you have to pass a valid `cache_position` value. This indicates the input positions in a sequence. `cache_position` is unaffected by padding, and it always adds one more position for each token. For example, if a kv cache contains 10 tokens - regardless of pad tokens - the cache position for the next token should be `torch.tensor([10])`.
 
 The example below demonstrates how to create a generation loop with [`DynamicCache`]. As discussed, the attention mask is a concatenation of past and current token values and `1` is added to the cache position for the next token.
 
@@ -71,4 +71,26 @@ for _ in range(max_new_tokens):
 
 print(tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0])
 "[INST] Hello, what's your name. [/INST]  Hello! My name is LLaMA,"
+```
+
+## Legacy cache format
+
+Before the [`Cache`] class, the cache used to be stored as a tuple of tuples of tensors. This format has is dynamic because it grows as text is generated, similar to [`DynamicCache`].
+
+If your project depends on this legacy format, you can convert between [`DynamicCache`] and a tuple of tuples as shown below with the [`~DynamicCache.from_legacy_cache`] and [`DynamicCache.to_legacy_cache`] functions. This is helpful if you have custom logic for manipulating a cache in a specific format.
+
+```py
+import torch
+from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache
+
+tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", torch_dtype=torch.float16, device_map="auto")
+inputs = tokenizer("Hello, my name is", return_tensors="pt").to(model.device)
+
+# `return_dict_in_generate=True` is required to return the cache and `return_legacy_cache` forces the returned cache
+# in the the legacy format
+generation_outputs = model.generate(**inputs, return_dict_in_generate=True, return_legacy_cache=True, max_new_tokens=5)
+
+cache = DynamicCache.from_legacy_cache(generation_outputs.past_key_values)
+legacy_format_cache = cache.to_legacy_cache()
 ```

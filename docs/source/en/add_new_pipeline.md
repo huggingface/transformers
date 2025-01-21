@@ -13,21 +13,21 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Add a new pipeline
+# Adding a new pipeline
 
-You can make [`Pipeline`] your own by subclassing it, and then implementing a few methods. Share the code with the community on the [Hub](https://hf.co) and register the pipeline with Transformers so that everyone can quickly and easily use it.
+Make [`Pipeline`] your own by subclassing it and implementing a few methods. Share the code with the community on the [Hub](https://hf.co) and register the pipeline with Transformers so that everyone can quickly and easily use it.
 
 This guide will walk you through the process of adding a new pipeline to Transformers.
 
 ## Design choices
 
-At a bare minimum, you only need to provide [`Pipeline`] with an appropriate input for a task. This is also where you should begin when designing your pipeline.
+At a minimum, you only need to provide [`Pipeline`] with an appropriate input for a task. This is also where you should begin when designing your pipeline.
 
 Decide what input types [`Pipeline`] can accept. It can be strings, raw bytes, dictionaries, and so on. Try to keep the inputs in pure Python where possible because it's more compatible. Next, decide on the output [`Pipeline`] should return. Again, keeping the output in Python is the simplest and best option because it's easier to work with.
 
-Keeping the inputs and outputs simple, and ideally JSON-serializable, makes it easier for users to run your [`Pipeline`] without needing to learn new object types. It's also common to support many different input types, for even greater ease of use. For example, making an audio file acceptable from a filename, URL, or raw bytes gives the user more flexibility in how they provide the audio data.
+Keeping the inputs and outputs simple, and ideally JSON-serializable, makes it easier for users to run your [`Pipeline`] without needing to learn new object types. It's also common to support many different input types for even greater ease of use. For example, making an audio file acceptable from a filename, URL, or raw bytes gives the user more flexibility in how they provide the audio data.
 
-## Implement a pipeline
+## Create a pipeline
 
 With an input and output decided, you can start implementing [`Pipeline`]. Your pipeline should inherit from the base [`Pipeline`] class and include 4 methods.
 
@@ -52,7 +52,7 @@ def preprocess(self, inputs, maybe_arg=2):
     return {"model_input": model_input}
 ```
 
-1. `_forward` shouldn't be called directly. `forward` is the preferred method because it includes safeguards to make sure everything works correctly on the expected device. Anything linked to the model belongs in `_forward`, and everything else belongs in either `preprocess` or `postprocess`.
+1. `_forward` shouldn't be called directly. `forward` is the preferred method because it includes safeguards to make sure everything works correctly on the expected device. Anything linked to the model belongs in `_forward` and everything else belongs in either `preprocess` or `postprocess`.
 
 ```py
 def _forward(self, model_inputs):
@@ -68,7 +68,7 @@ def postprocess(self, model_outputs, top_k=5):
     return best_class
 ```
 
-1. `_sanitize_parameters` lets users pass additional parameters to [`Pipeline`]. This could be during the initialization or when [`Pipeline`] is called. `_sanitize_parameters` returns 3 dicts of additional keyword arguments that are passed directly to `preprocess`, `_forward`, and `postprocess`. Don't add anything if a user didn't call the pipeline with an extra parameters! This keeps the default arguments in the function definition which is always more *natural*.
+1. `_sanitize_parameters` lets users pass additional parameters to [`Pipeline`]. This could be during initialization or when [`Pipeline`] is called. `_sanitize_parameters` returns 3 dicts of additional keyword arguments that are passed directly to `preprocess`, `_forward`, and `postprocess`. Don't add anything if a user didn't call the pipeline with extra parameters. This keeps the default arguments in the function definition which is always more natural.
 
 For example, add a `top_k` parameter in `postprocess` to return the top 5 most likely classes. Then in `_sanitize_parameters`, check if the user passed in `top_k` and add it to `postprocess_kwargs`.
 
@@ -84,7 +84,7 @@ def _sanitize_parameters(self, **kwargs):
     return preprocess_kwargs, {}, postprocess_kwargs
 ```
 
-Now the pipeline can return the top most likely labels if they choose to.
+Now the pipeline can return the top most likely labels if a user chooses to.
 
 ```py
 from transformers import pipeline
@@ -122,25 +122,22 @@ PIPELINE_REGISTRY.register_pipeline(
 
 Share your pipeline with the community on the [Hub](https://hf.co) or you can add it directly to Transformers.
 
-It's faster to upload your pipeline code to the Hub because it doesn't require any review from the Transformers team. Adding the pipeline to Transformers may be slower because it requires a review and you need to add tests to ensure the [`Pipeline`] works.
+It's faster to upload your pipeline code to the Hub because it doesn't require a review from the Transformers team. Adding the pipeline to Transformers may be slower because it requires a review and you need to add tests to ensure your [`Pipeline`] works.
 
 ### Upload to the Hub
 
 Add your pipeline code to the Hub in a Python file.
 
-For example, a custom pipeline for sentence pair classification might look the following code below.
+For example, a custom pipeline for sentence pair classification might look like the following code below. The implementation works for PyTorch and TensorFlow models.
 
 ```py
 import numpy as np
-
 from transformers import Pipeline
-
 
 def softmax(outputs):
     maxes = np.max(outputs, axis=-1, keepdims=True)
     shifted_exp = np.exp(outputs - maxes)
     return shifted_exp / shifted_exp.sum(axis=-1, keepdims=True)
-
 
 class PairClassificationPipeline(Pipeline):
     def _sanitize_parameters(self, **kwargs):
@@ -166,6 +163,37 @@ class PairClassificationPipeline(Pipeline):
         return {"label": label, "score": score, "logits": logits}
 ```
 
+Save the code in a file named `pair_classification.py`, and import and register it as shown below.
+
+```py
+from pair_classification import PairClassificationPipeline
+from transformers.pipelines import PIPELINE_REGISTRY
+from transformers import AutoModelForSequenceClassification, TFAutoModelForSequenceClassification
+
+PIPELINE_REGISTRY.register_pipeline(
+    "pair-classification",
+    pipeline_class=PairClassificationPipeline,
+    pt_model=AutoModelForSequenceClassification,
+    tf_model=TFAutoModelForSequenceClassification,
+)
+```
+
+The [register_pipeline](https://github.com/huggingface/transformers/blob/9feae5fb0164e89d4998e5776897c16f7330d3df/src/transformers/pipelines/base.py#L1387) function registers the pipeline details (task type, pipeline class, supported backends) to a models `config.json` file.
+
+```json
+  "custom_pipelines": {
+    "pair-classification": {
+      "impl": "pair_classification.PairClassificationPipeline",
+      "pt": [
+        "AutoModelForSequenceClassification"
+      ],
+      "tf": [
+        "TFAutoModelForSequenceClassification"
+      ],
+    }
+  },
+```
+
 Call [`~Pipeline.push_to_hub`] to push the pipeline to the Hub. The Python file containing the code is copied to the Hub, and the pipelines model and tokenizer are also saved and pushed to the Hub. Your pipeline should now be available on the Hub under your namespace.
 
 ```py
@@ -189,11 +217,11 @@ Adding a custom pipeline to Transformers requires adding tests to make sure ever
 
 Add your pipeline code as a new module to the [pipelines](https://github.com/huggingface/transformers/tree/main/src/transformers/pipelines) submodule, and add it to the list of tasks defined in [pipelines/__init__.py](https://github.com/huggingface/transformers/blob/main/src/transformers/pipelines/__init__.py).
 
-Next, add a new test for the pipeline in [transformers/tests/pipelines](https://github.com/huggingface/transformers/tree/main/tests/pipelines). You can look at the other tests for examples of how to test your pipeline. For example, take a look at the text classification pipeline test.
+Next, add a new test for the pipeline in [transformers/tests/pipelines](https://github.com/huggingface/transformers/tree/main/tests/pipelines). You can look at the other tests for examples of how to test your pipeline.
 
 The [run_pipeline_test](https://github.com/huggingface/transformers/blob/db70426854fe7850f2c5834d633aff637f14772e/tests/pipelines/test_pipelines_text_classification.py#L186) function should be very generic and run on the models defined in [model_mapping](https://github.com/huggingface/transformers/blob/db70426854fe7850f2c5834d633aff637f14772e/tests/pipelines/test_pipelines_text_classification.py#L48) and [tf_model_mapping](https://github.com/huggingface/transformers/blob/db70426854fe7850f2c5834d633aff637f14772e/tests/pipelines/test_pipelines_text_classification.py#L49). This is important for testing future compatibility with new models.
 
-You'll also notice `ANY` is used throughout the `run_pipeline_test` function. The models are random, so you can't check the actual values. Using `ANY` allows the test to just match the output of the pipeline type instead.
+You'll also notice `ANY` is used throughout the [run_pipeline_test](https://github.com/huggingface/transformers/blob/db70426854fe7850f2c5834d633aff637f14772e/tests/pipelines/test_pipelines_text_classification.py#L186) function. The models are random, so you can't check the actual values. Using `ANY` allows the test to match the output of the pipeline type instead.
 
 Finally, you should also implement the following 4 tests.
 

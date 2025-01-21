@@ -16,9 +16,9 @@ rendered properly in your Markdown viewer.
 
 # KV cache strategies
 
-The key-value (KV) vectors are used to calculate attention scores, and for autoregressive models, the KV scores are calculated *every* time because the model predicts one token at a time. Each prediction depends on the previous tokens, which means the model performs the same computations each time.
+The key-value (KV) vectors are used to calculate attention scores. For autoregressive models, KV scores are calculated *every* time because the model predicts one token at a time. Each prediction depends on the previous tokens, which means the model performs the same computations each time.
 
-A KV *cache* stores these calculations so they can be reused without recomputing them. Efficient caching is crucial for optimizing model performance because it reduces computation time and improves response rates. For a more in-depth explanation about how a cache works, refer to [Caching](./cache_explanation.md).
+A KV *cache* stores these calculations so they can be reused without recomputing them. Efficient caching is crucial for optimizing model performance because it reduces computation time and improves response rates. Refer to the [Caching](./cache_explanation.md) doc for a more detailed explanation about how a cache works.
 
 Transformers offers several [`Cache`] classes that implement different caching mechanisms. Some of these [`Cache`] classes are optimized to save memory while others are designed to maximize generation speed. Refer to the table below to compare cache types and use it to help you select the best cache for your use case.
 
@@ -221,7 +221,7 @@ tokenizer.batch_decode(out, skip_special_tokens=True)[0]
 
 ### Offloaded static cache
 
-The [`OffloadedStaticCache`] is very similar to the [OffloadedCache](#offloaded-cache) except the cache size is set to a maximum cache size. Otherwise, [`OffladedStaticCache`] only keeps the current layer cache on the GPU and the rest are moved to the CPU.
+The [`OffloadedStaticCache`] is very similar to the [OffloadedCache](#offloaded-cache) except the cache size is set to a maximum cache size. Otherwise, [`OffloadedStaticCache`] only keeps the current layer cache on the GPU and the rest are moved to the CPU.
 
 Enable [`OffloadedStaticCache`] by configuring `cache_implementation="offloaded_static"` in [`~GenerationMixin.generate`].
 
@@ -241,7 +241,7 @@ Cache offloading requires a CUDA GPU.
 
 ### Sliding window cache
 
-[`SlidingWindowCache`] implements a sliding window over the previos kv pairs, and only keeps the last `sliding_window` tokens. This cache type is designed to only work with models that support *sliding window attention*, such as [Mistral](./model_doc/mistral). Older kv states are discarded and replaced by new kv states.
+[`SlidingWindowCache`] implements a sliding window over the previous kv pairs, and only keeps the last `sliding_window` tokens. This cache type is designed to only work with models that support *sliding window attention*, such as [Mistral](./model_doc/mistral). Older kv states are discarded and replaced by new kv states.
 
 Enable [`SlidingWindowCache`] by configuring `cache_implementation="sliding_window"` in [`~GenerationMixin.generate`].
 

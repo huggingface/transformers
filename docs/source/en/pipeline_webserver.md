@@ -16,11 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Web server inference
 
-A web server is basically a system that waits for requests and serves them as they come in. This means you can use [`Pipeline`] as an inference engine on the web server, since you can use an iterator (similar to how you would [iterate over a dataset](./pipeline_tutorial#large-datasets)) to handle each incoming request.
+A web server is a system that waits for requests and serves them as they come in. This means you can use [`Pipeline`] as an inference engine on a web server, since you can use an iterator (similar to how you would [iterate over a dataset](./pipeline_tutorial#large-datasets)) to handle each incoming request.
 
 Designing a web server with [`Pipeline`] is unique though because they're fundamentally different. Web servers are multiplexed (multithreaded, async, etc.) to handle multiple requests concurrently. [`Pipeline`] and its underlying model on the other hand are not designed for parallelism because they take a lot of memory. It's best to give a [`Pipeline`] all the available resources when they're running or for a compute intensive job.
 
-This guide shows how to work around this difference by using the web server to handle the light load of receiving and sending requests, and having a single thread to handle the heavier load of running [`Pipeline`].
+This guide shows how to work around this difference by using a web server to handle the lighter load of receiving and sending requests, and having a single thread to handle the heavier load of running [`Pipeline`].
 
 ## Create a server
 
@@ -77,7 +77,7 @@ Start the server with the following command.
 uvicorn server:app
 ```
 
-The server can be queried now with a POST request.
+Query the server with a POST request.
 
 ```bash
 curl -X POST -d "Paris is the [MASK] of France." http://localhost:8000/
@@ -105,12 +105,12 @@ curl -X POST -d "Paris is the [MASK] of France." http://localhost:8000/
 
 ## Queuing requests
 
-The server's queuing mechanism can be used for some interesting applications such as dynamic batching. With dynamic batching, you can accumulate several requests first before processing them with the [`Pipeline`].
+The server's queuing mechanism can be used for some interesting applications such as dynamic batching. Dynamic batching accumulates several requests first before processing them with [`Pipeline`].
 
 The example below is written in pseudocode for readability rather than performance, in particular, you'll notice that:
 
 1. There is no batch size limit.
-2. The timeout is reset on every queue fetch, so you could end up waiting much longer than the `timeout` value before processing a request. This would also delay the first inference request by that amount of time. The web server always waits 1ms even if the queue is empty, which is inefficient, because you could be using that time to start inference. It could make sense though if batching is essential to your use case.
+2. The timeout is reset on every queue fetch, so you could end up waiting much longer than the `timeout` value before processing a request. This would also delay the first inference request by that amount of time. The web server always waits 1ms even if the queue is empty, which is inefficient, because that time can be used to start inference. It could make sense though if batching is essential to your use case.
 
     It would be better to have a single 1ms deadline, instead of resetting it on every fetch.
 
@@ -133,21 +133,21 @@ for rq, out in zip(queues, outs):
 
 ## Error checking
 
-There are many things that can go wrong in production. You could run out-of-memory, out of space, fail to load a model, have an incorrect model configuration, have an incorrect query, and so much more!
+There are many things that can go wrong in production. You could run out-of-memory, out of space, fail to load a model, have an incorrect model configuration, have an incorrect query, and so much more.
 
-Adding `try...except` statements could be helpful to return these errors to the user for debugging. Keep in mind that this could pose a security risk though if you shouldn't be revealing certain information.
+Adding `try...except` statements is helpful for returning these errors to the user for debugging. Keep in mind this could be a security risk if you shouldn't be revealing certain information.
 
 ## Circuit breaking
 
-It is better to return errors when the server is overloaded instead of forcing a user to wait indefinitely. Try to return a 503 or 504 error instead of making a user wait for a really long time.
+Try to return a 503 or 504 error when the server is overloaded instead of forcing a user to wait indefinitely.
 
-It is relatively simple to implement these error types since it's only a single queue. You should look at the queue size to determine when to start returning errors before your server fails under load.
+It is relatively simple to implement these error types since it's only a single queue. Take a look at the queue size to determine when to start returning errors before your server fails under load.
 
 ## Block the main thread
 
 PyTorch is not async aware, so computation will block the main thread from running.
 
-For this reason, it's better to run PyTorch on its own separate thread or process. When inference of a single request is especially long (> 1s), it's even more important because it means every query during inference must wait 1s before even receiving an error.
+For this reason, it's better to run PyTorch on its own separate thread or process. When inference of a single request is especially long (more than 1s), it's even more important because it means every query during inference must wait 1s before even receiving an error.
 
 ## Dynamic batching
 
