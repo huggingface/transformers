@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import inspect
 import os
 from typing import Any, Dict, Optional, Tuple, Union
 
@@ -33,6 +33,8 @@ if is_torch_available():
 
 
 logger = logging.get_logger(__name__)
+
+_DATA_ARG_KEYS = ("input_size", "img_size", "interpolation", "in_chans", "mean", "std", "use_train_size")
 
 
 class TimmWrapperImageProcessor(BaseImageProcessor):
@@ -58,11 +60,22 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
         requires_backends(self, "timm")
         super().__init__(architecture=architecture)
 
-        self.data_config = timm.data.resolve_data_config(pretrained_cfg, model=None, verbose=False)
-        self.val_transforms = timm.data.create_transform(**self.data_config, is_training=False)
+        data_arg_overrides = {}
+        for k in _DATA_ARG_KEYS:
+            if k in kwargs:
+                data_arg_overrides[k] = kwargs.pop(k)
+        self.data_config = timm.data.resolve_data_config(
+            args=data_arg_overrides,  # will override values in pretrained_cfg
+            pretrained_cfg=pretrained_cfg,
+            model=None,
+            use_test_size=not data_arg_overrides.get("use_train_size", False),
+            verbose=False,
+        )
+
+        self.val_transforms = timm.data.create_transform(**self.data_config, is_training=False, **kwargs)
 
         # useful for training, see examples/pytorch/image-classification/run_image_classification.py
-        self.train_transforms = timm.data.create_transform(**self.data_config, is_training=True)
+        self.train_transforms = timm.data.create_transform(**self.data_config, is_training=True, **kwargs)
 
         # If `ToTensor` is in the transforms, then the input should be numpy array or PIL image.
         # Otherwise, the input can be a tensor. In later timm versions, `MaybeToTensor` is used
@@ -88,10 +101,25 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
         """
         Get the image processor dict for the model.
         """
+        requires_backends(cls, "timm")
+
         image_processor_filename = kwargs.pop("image_processor_filename", "config.json")
-        return super().get_image_processor_dict(
+        image_processor_dict, kwargs = super().get_image_processor_dict(
             pretrained_model_name_or_path, image_processor_filename=image_processor_filename, **kwargs
         )
+
+        # Only pass through architecture and pretrained_cfg from config.json
+        image_processor_dict = {
+            "architecture": image_processor_dict["architecture"],
+            "pretrained_cfg": image_processor_dict["pretrained_cfg"],
+        }
+
+        # Merge kwargs that should be passed through to timm transform factory into image_processor_dict
+        for k in _DATA_ARG_KEYS + tuple(inspect.signature(timm.data.create_transform).parameters.keys()):
+            if k in kwargs:
+                image_processor_dict[k] = kwargs.pop(k)
+
+        return image_processor_dict, kwargs
 
     def preprocess(
         self,
