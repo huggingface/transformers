@@ -85,6 +85,44 @@ class Qwen2_5_VLMLP(nn.Module):
         return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
 
 
+class Qwen2_5_VisionPatchEmbed(nn.Module):
+    def __init__(
+        self,
+        patch_size: int = 14,
+        temporal_patch_size: int = 2,
+        in_channels: int = 3,
+        embed_dim: int = 1152,
+    ) -> None:
+        super().__init__()
+        self.patch_size = patch_size
+        self.temporal_patch_size = temporal_patch_size
+        self.in_channels = in_channels
+        self.embed_dim = embed_dim
+
+        kernel_size = [temporal_patch_size, patch_size, patch_size]
+        self.proj = nn.Conv3d(in_channels, embed_dim, kernel_size=kernel_size, stride=kernel_size, bias=False)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        target_dtype = self.proj.weight.dtype
+        hidden_states = hidden_states.view(
+            -1, self.in_channels, self.temporal_patch_size, self.patch_size, self.patch_size
+        )
+        hidden_states = self.proj(hidden_states.to(dtype=target_dtype)).view(-1, self.embed_dim)
+        return hidden_states
+
+
+class Qwen2_5_VisionRotaryEmbedding(nn.Module):
+    def __init__(self, dim: int, theta: float = 10000.0) -> None:
+        super().__init__()
+        inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+
+    def forward(self, seqlen: int) -> torch.Tensor:
+        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
+        freqs = torch.outer(seq, self.inv_freq)
+        return freqs
+
+
 class Qwen2RMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -264,44 +302,6 @@ class Qwen2_5_VLVisionBlock(nn.Module):
         return hidden_states
 
 
-class VisionRotaryEmbedding(nn.Module):
-    def __init__(self, dim: int, theta: float = 10000.0) -> None:
-        super().__init__()
-        inv_freq = 1.0 / (theta ** (torch.arange(0, dim, 2, dtype=torch.float) / dim))
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-
-    def forward(self, seqlen: int) -> torch.Tensor:
-        seq = torch.arange(seqlen, device=self.inv_freq.device, dtype=self.inv_freq.dtype)
-        freqs = torch.outer(seq, self.inv_freq)
-        return freqs
-
-
-class PatchEmbed(nn.Module):
-    def __init__(
-        self,
-        patch_size: int = 14,
-        temporal_patch_size: int = 2,
-        in_channels: int = 3,
-        embed_dim: int = 1152,
-    ) -> None:
-        super().__init__()
-        self.patch_size = patch_size
-        self.temporal_patch_size = temporal_patch_size
-        self.in_channels = in_channels
-        self.embed_dim = embed_dim
-
-        kernel_size = [temporal_patch_size, patch_size, patch_size]
-        self.proj = nn.Conv3d(in_channels, embed_dim, kernel_size=kernel_size, stride=kernel_size, bias=False)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        target_dtype = self.proj.weight.dtype
-        hidden_states = hidden_states.view(
-            -1, self.in_channels, self.temporal_patch_size, self.patch_size, self.patch_size
-        )
-        hidden_states = self.proj(hidden_states.to(dtype=target_dtype)).view(-1, self.embed_dim)
-        return hidden_states
-
-
 Qwen2_5_VL_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
@@ -342,7 +342,7 @@ class Qwen2_5_VisionTransformerPretrainedModel(PreTrainedModel):
         self.window_size = config.window_size
         self.spatial_merge_unit = self.spatial_merge_size * self.spatial_merge_size
 
-        self.patch_embed = PatchEmbed(
+        self.patch_embed = Qwen2_5_VisionPatchEmbed(
             patch_size=config.patch_size,
             temporal_patch_size=config.temporal_patch_size,
             in_channels=config.in_channels,
@@ -350,7 +350,7 @@ class Qwen2_5_VisionTransformerPretrainedModel(PreTrainedModel):
         )
 
         head_dim = config.hidden_size // config.num_heads
-        self.rotary_pos_emb = VisionRotaryEmbedding(head_dim // 2)
+        self.rotary_pos_emb = Qwen2_5_VisionRotaryEmbedding(head_dim // 2)
 
         self.blocks = nn.ModuleList(
             [Qwen2_5_VLVisionBlock(config, config._attn_implementation) for _ in range(config.depth)]
@@ -372,12 +372,6 @@ class Qwen2_5_VisionTransformerPretrainedModel(PreTrainedModel):
             module.weight.data.normal_(mean=0.0, std=std)
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
-
-    def get_dtype(self) -> torch.dtype:
-        return self.blocks[0].mlp.up_proj.weight.dtype
-
-    def get_device(self) -> torch.device:
-        return self.blocks[0].mlp.up_proj.weight.device
 
     def rot_pos_emb(self, grid_thw):
         pos_ids = []
@@ -450,6 +444,16 @@ class Qwen2_5_VisionTransformerPretrainedModel(PreTrainedModel):
         return window_index, cu_window_seqlens
 
     def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            hidden_states (`torch.Tensor` of shape `(batch_size, seq_len, hidden_size)`):
+                The final hidden states of the model.
+            grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
+                The temporal, height and width of feature shape of each image in LLM.
+
+        Returns:
+            `torch.Tensor`: hidden_states.
+        """
         hidden_states = self.patch_embed(hidden_states)
         rotary_pos_emb = self.rot_pos_emb(grid_thw)
         window_index, cu_window_seqlens = self.get_window_index(grid_thw)
@@ -1790,7 +1794,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
         if inputs_embeds is None:
             inputs_embeds = self.model.embed_tokens(input_ids)
             if pixel_values is not None:
-                pixel_values = pixel_values.type(self.visual.get_dtype())
+                pixel_values = pixel_values.type(self.visual.dtype())
                 image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
                 n_image_tokens = (input_ids == self.config.image_token_id).sum().item()
                 n_image_features = image_embeds.shape[0]
@@ -1808,7 +1812,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
                 inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
             if pixel_values_videos is not None:
-                pixel_values_videos = pixel_values_videos.type(self.visual.get_dtype())
+                pixel_values_videos = pixel_values_videos.type(self.visual.dtype())
                 video_embeds = self.visual(pixel_values_videos, grid_thw=video_grid_thw)
                 n_video_tokens = (input_ids == self.config.video_token_id).sum().item()
                 n_video_features = video_embeds.shape[0]
