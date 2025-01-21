@@ -18,30 +18,29 @@ rendered properly in your Markdown viewer.
 
 [[open-in-colab]]
 
-Text generation is one of the most popular applications of large language models (LLMs). A LLM is trained to generate the next word (token) given some initial text (prompt) along with its own generated outputs up to a predefined length or when it reaches an end-of-sequence (`EOS`) token.
+Text generation is the most popular application for large language models (LLMs). A LLM is trained to generate the next word (token) given some initial text (prompt) along with its own generated outputs up to a predefined length or when it reaches an end-of-sequence (`EOS`) token.
 
 In Transformers, the [`~GenerationMixin.generate`] API handles text generation, and it is available for all models with generative capabilities.
 
-This guide will show you the basics of text generation with the [`~GenerationMixin.generate`] API and some common pitfalls to avoid.
+This guide will show you the basics of text generation with [`~GenerationMixin.generate`] and some common pitfalls to avoid.
 
-## Generate
+## Default generate
 
 Before you begin, it's helpful to install [bitsandbytes](https://hf.co/docs/bitsandbytes/index) to quantize really large models to reduce their memory usage.
 
 ```bash
-!pip install transformers bitsandbytes>0.39.0 -q
+!pip install -U transformers bitsandbytes
 ```
 Bitsandbytes supports multiple backends in addition to CUDA-based GPUs. Refer to the multi-backend installation [guide](https://huggingface.co/docs/bitsandbytes/main/en/installation#multi-backend) to learn more.
 
-Load a LLM with [`~PreTrainedModel.from_pretrained`] and add the following two parameters to lessen the memory requirements.
+Load a LLM with [`~PreTrainedModel.from_pretrained`] and add the following two parameters to reduce the memory requirements.
 
-- `device_map="auto` enables Accelerate's [Big Model Inference](./models#big-model-inference) feature for automatically initiating the model skeleton and loading and dispatching the model weights across all available devices, starting with the fastest device (GPU).
+- `device_map="auto"` enables Accelerates' [Big Model Inference](./models#big-model-inference) feature for automatically initiating the model skeleton and loading and dispatching the model weights across all available devices, starting with the fastest device (GPU).
 - `quantization_config` is a configuration object that defines the quantization settings. This examples uses bitsandbytes as the quantization backend (see the [Quantization](./quantization/overview) section for more available backends) and it loads the model in [4-bits](./quantization/bitsandbytes).
 
 ```py
 from transformers import AutoTokenizer, AutoModelForCausalLM, BitsAndBytesConfig
 
-# load model and set up quantization configuration
 quantization_config = BitsAndBytesConfig(load_in_4bit=True)
 model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", device_map="auto", quantization_config=quantization_config)
 ```
@@ -52,23 +51,92 @@ Tokenize your input, and set the [`~PreTrainedTokenizer.padding_side`] parameter
 > Process more than one prompt at a time by passing a list of strings to the tokenizer. Batch the inputs to improve throughput at a small cost to latency and memory.
 
 ```py
-# tokenize input
 tokenizer = AutoTokenizer.from_pretrained("mistralai/Mistral-7B-v0.1", padding_side="left")
 model_inputs = tokenizer(["A list of colors: red, blue"], return_tensors="pt").to("cuda")
 ```
 
-Pass the inputs to [`~GenerationMixin.generate`] to generate tokens, and then [`~PreTrainedTokenizer.batch_decode`] the generated tokens back to text.
+Pass the inputs to [`~GenerationMixin.generate`] to generate tokens, and [`~PreTrainedTokenizer.batch_decode`] the generated tokens back to text.
 
 ```py
-# generate and decode back to text
 generated_ids = model.generate(**model_inputs)
 tokenizer.batch_decode(generated_ids, skip_special_tokens=True)[0]
 "A list of colors: red, blue, green, yellow, orange, purple, pink,"
 ```
 
+## Generation configuration
+
+All generation settings are contained in [`GenerationConfig`]. In the example above, the generation settings are derived from the `generation_config.json` file of [mistralai/Mistral-7B-v0.1](https://huggingface.co/mistralai/Mistral-7B-v0.1). A default decoding strategy is used when no configuration is saved with a model.
+
+Inspect the configuration through the `generation_config` attribute. It only shows values that are different from the default configuration, in this case, the `bos_token_id` and `eos_token_id`.
+
+```py
+from transformers import AutoModelForCausalLM
+
+model = AutoModelForCausalLM.from_pretrained("mistralai/Mistral-7B-v0.1", device_map="auto")
+model.generation_config
+GenerationConfig {
+  "bos_token_id": 1,
+  "eos_token_id": 2
+}
+```
+
+You can customize [`~GenerationMixin.generate`] by overriding the parameters and values in [`GenerationConfig`]. Some of the most commonly adjusted parameters are [`~GenerationConfig.max_new_tokens`], [`~GenerationConfig.num_beams`], [`~GenerationConfig.do_sample`], and [`~GenerationConfig.num_return_sequences`].
+
+```py
+# enable beam search sampling strategy
+model.generate(**inputs, num_beams=4, do_sample=True)
+```
+
+[`~GenerationMixin.generate`] can also be extended with external libraries or custom code. The `logits_processor` parameter accepts custom [`LogitsProcessor`] instances for manupulating the next token probability distribution. `stopping_criteria` supports custom [`StoppingCriteria`] to stop text generation. Check out the [logits-processor-zoo](https://github.com/NVIDIA/logits-processor-zoo) for more examples of external [`~GenerationMixin.generate`]-compatible extensions.
+
+Refer to the [Generation strategies](./generation_strategies) guide to learn more about search, sampling, and decoding strategies.
+
+### Saving
+
+Create an instance of [`GenerationConfig`] and specify the decoding parameters you want.
+
+```py
+from transformers import AutoModelForCausalLM, GenerationConfig
+
+model = AutoModelForCausalLM.from_pretrained("my_account/my_model")
+generation_config = GenerationConfig(
+    max_new_tokens=50, do_sample=True, top_k=50, eos_token_id=model.config.eos_token_id
+)
+```
+
+Use [`~GenerationConfig.save_pretrained`] to save a specific generation configuration and set the `push_to_hub` parameter to `True` to upload it to the Hub.
+
+```py
+generation_config.save_pretrained("my_account/my_model", push_to_hub=True)
+```
+
+Leave the `config_file_name` parameter empty. This parameter should be used when storing multiple generation configurations in a single directory. It gives you a way to specify which generation configuration to load. You can create different configurations for different generative tasks (creative text generation with sampling, summarization with beam search) for use with a single model.
+
+```py
+from transformers import AutoModelForSeq2SeqLM, AutoTokenizer, GenerationConfig
+
+tokenizer = AutoTokenizer.from_pretrained("google-t5/t5-small")
+model = AutoModelForSeq2SeqLM.from_pretrained("google-t5/t5-small")
+
+translation_generation_config = GenerationConfig(
+    num_beams=4,
+    early_stopping=True,
+    decoder_start_token_id=0,
+    eos_token_id=model.config.eos_token_id,
+    pad_token=model.config.pad_token_id,
+)
+
+translation_generation_config.save_pretrained("/tmp", config_file_name="translation_generation_config.json", push_to_hub=True)
+
+generation_config = GenerationConfig.from_pretrained("/tmp", config_file_name="translation_generation_config.json")
+inputs = tokenizer("translate English to French: Configuration files are easy to use!", return_tensors="pt")
+outputs = model.generate(**inputs, generation_config=generation_config)
+print(tokenizer.batch_decode(outputs, skip_special_tokens=True))
+```
+
 ## Pitfalls
 
-The section below covers some common issues that you may encounter during text generation and how to solve them.
+The section below covers some common issues you may encounter during text generation and how to solve them.
 
 ## Wrong output length
 

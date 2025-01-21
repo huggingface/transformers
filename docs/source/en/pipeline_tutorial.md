@@ -16,7 +16,9 @@ rendered properly in your Markdown viewer.
 
 # Pipeline
 
-The [`Pipeline`] is a simple but powerful inference API that is readily available for a variety of machine learning tasks with any model from the Hugging Face [Hub](https://hf.co/models). Tailor the [`Pipeline`] to your task with certain task specific parameters, such as adding timestamps to an automatic speech recognition (ASR) pipeline for transcribing meeting notes. [`Pipeline`] supports GPUs, Apple silicon, and half-precision weights to accelerate inference and save memory.
+The [`Pipeline`] is a simple but powerful inference API that is readily available for a variety of machine learning tasks with any model from the Hugging Face [Hub](https://hf.co/models).
+
+Tailor the [`Pipeline`] to your task with task specific parameters such as adding timestamps to an automatic speech recognition (ASR) pipeline for transcribing meeting notes. [`Pipeline`] supports GPUs, Apple Silicon, and half-precision weights to accelerate inference and save memory.
 
 <Youtube id=tiZFewofSLM/>
 
@@ -45,11 +47,11 @@ pipeline(["the secret to baking a really good cake is ", "a baguette is "])
  [{'generated_text': 'a baguette is 100% bread.\n\na baguette is 100%'}]]
 ```
 
-This guide will introduce you to the [`Pipeline`], demonstrate its features, and show you how to configure its various parameters.
+This guide will introduce you to the [`Pipeline`], demonstrate its features, and show how to configure its various parameters.
 
 ## Tasks
 
-[`Pipeline`] is compatible with many machine learning tasks across different modalities. You just need to pass an appropriate input to the pipeline and it will handle the rest.
+[`Pipeline`] is compatible with many machine learning tasks across different modalities. Pass an appropriate input to the pipeline and it will handle the rest.
 
 Here are some examples of how to use [`Pipeline`] for different tasks and modalities.
 
@@ -111,13 +113,13 @@ pipeline(
 
 ## Parameters
 
-At a minimum, a [`Pipeline`] only requires a task identifier, model, and the appropriate input. But there are many parameters available to configure the pipeline with, from task-specific parameters to optimizing performance.
+At a minimum, [`Pipeline`] only requires a task identifier, model, and the appropriate input. But there are many parameters available to configure the pipeline with, from task-specific parameters to optimizing performance.
 
-This section will walk you through some of the more important parameters.
+This section introduces you to some of the more important parameters.
 
 ### Device
 
-[`Pipeline`] is compatible with many hardware types, including GPUs, CPUs, Apple silicon, and more. This is configured with the `device` parameter. By default, [`Pipeline`] runs on a CPU which is given by `device=-1`.
+[`Pipeline`] is compatible with many hardware types, including GPUs, CPUs, Apple Silicon, and more. Configure the hardware type with the `device` parameter. By default, [`Pipeline`] runs on a CPU which is given by `device=-1`.
 
 <hfoptions id="device">
 <hfoption id="GPU">
@@ -134,7 +136,7 @@ pipeline("the secret to baking a really good cake is ")
 You could also let [Accelerate](https://hf.co/docs/accelerate/index), a library for distributed training, automatically choose how to load and store the model weights on the appropriate device. This is especially useful if you have multiple devices. Accelerate loads and stores the model weights on the fastest device first, and then moves the weights to other devices (CPU, hard drive) as needed. Set `device_map="auto"` to let Accelerate choose the device.
 
 > [!TIP]
-> Make sure you have [Accelerate](https://hf.co/docs/accelerate/basic_tutorials/install) installed.
+> Make sure have [Accelerate](https://hf.co/docs/accelerate/basic_tutorials/install) is installed.
 >
 > ```py
 > !pip install -U accelerate
@@ -164,9 +166,9 @@ pipeline("the secret to baking a really good cake is ")
 
 ### Batch inference
 
-[`Pipeline`] can also process batches of inputs with the `batch_size` parameter. Batch inference may improve speed, especially on a GPU, but it isn't guaranteed to. Other variables such as hardware, data, and the model itself can affect whether batch inference improves speed. For this reason, batch inference is disabled by default.
+[`Pipeline`] can also process batches of inputs with the `batch_size` parameter. Batch inference may improve speed, especially on a GPU, but it isn't guaranteed. Other variables such as hardware, data, and the model itself can affect whether batch inference improves speed. For this reason, batch inference is disabled by default.
 
-In this example, when there are 4 inputs and `batch_size` is set to 2, [`Pipeline`] passes a batch of 2 inputs to the model at a time.
+In the example below, when there are 4 inputs and `batch_size` is set to 2, [`Pipeline`] passes a batch of 2 inputs to the model at a time.
 
 ```py
 from transformers import pipeline
@@ -179,7 +181,7 @@ pipeline(["the secret to baking a really good cake is", "a baguette is", "paris 
  [{'generated_text': 'hotdogs are a staple of the american diet. they are a great source of protein and can'}]]
 ```
 
-Another good use case for batch inference is when you stream data in [`Pipeline`].
+Another good use case for batch inference is for streaming data in [`Pipeline`].
 
 ```py
 from transformers import pipeline
@@ -193,25 +195,25 @@ for out in pipeline(KeyDataset(dataset, "text"), batch_size=8, truncation="only_
     print(out)
 ```
 
-Here are some general rules of thumb for determining whether batch inference can help improve performance.
+Keep the following general rules of thumb in mind for determining whether batch inference can help improve performance.
 
 1. The only way to know for sure is to measure performance on your model, data, and hardware.
 2. Don't batch inference if you're constrained by latency (a live inference product for example).
 3. Don't batch inference if you're using a CPU.
 4. Don't batch inference if you don't know the `sequence_length` of your data. Measure performance, iteratively add to `sequence_length`, and include out-of-memory (OOM) checks to recover from failures.
-5. Do batch inference if your `sequence_length` is regular, and keep pushing it until you reach an OOM error. The larger the GPU, the more likely batch inference is to be beneficial.
+5. Do batch inference if your `sequence_length` is regular, and keep pushing it until you reach an OOM error. The larger the GPU, the more helpful batch inference is.
 6. Do make sure you can handle OOM errors if you decide to do batch inference.
 
 ### Task-specific parameters
 
-The [`Pipeline`] accepts any parameters that are supported by each individual task pipeline. Make sure to check out each individual task pipeline to see what type of parameters are available. If you can't find a parameter that would be useful for your use case, please feel free to open a GitHub [issue](https://github.com/huggingface/transformers/issues/new?assignees=&labels=feature&template=feature-request.yml) to request it!
+[`Pipeline`] accepts any parameters that are supported by each individual task pipeline. Make sure to check out each individual task pipeline to see what type of parameters are available. If you can't find a parameter that is useful for your use case, please feel free to open a GitHub [issue](https://github.com/huggingface/transformers/issues/new?assignees=&labels=feature&template=feature-request.yml) to request it!
 
-Here are some examples of enabling these task-specific parameters in [`Pipeline`].
+The examples below demonstrate some of the task-specific parameters available.
 
 <hfoptions id="task-specific-parameters">
 <hfoption id="automatic speech recognition">
 
-The [`AutomaticSpeechRecognitionPipeline.__call__`] method has a `return_timestamps` parameter that returns when each word was spoken by setting it to `"word"`. This parameter can be passed along to [`Pipeline`].
+Pass the `return_timestamps="word"` parameter to [`Pipeline`] to return when each word was spoken.
 
 ```py
 from transformers import pipeline
@@ -245,9 +247,9 @@ pipeline(audio="https://huggingface.co/datasets/Narsil/asr_dummy/resolve/main/ml
 </hfoption>
 <hfoption id="text generation">
 
-The [`~TextGenerationPipeline.__call__`] method has a `return_full_text` parameter that determines whether to return the full text or only the generated text. Set it to `False` to only return the generated text.
+Pass `return_full_text=False` to [`Pipeline`] to only return the generated text instead of the full text (prompt and generated text).
 
-[`~TextGenerationPipeline.__call__`] also additional keyword arguments from the [`~GenerationMixin.generate`] method, which itself takes generation configuration parameters from [`GenerationConfig`]. To return more than one generated sequence, set `num_return_sequences` to a value greater than 1. Pass this parameter to [`Pipeline`].
+[`~TextGenerationPipeline.__call__`] also supports additional keyword arguments from the [`~GenerationMixin.generate`] method. To return more than one generated sequence, set `num_return_sequences` to a value greater than 1.
 
 ```py
 from transformers import pipeline
@@ -270,36 +272,27 @@ There are some instances where you need to process data in chunks.
 - for some data types, a single input (for example, a really long audio file) may need to be chunked into multiple parts before it can be processed
 - for some tasks, like zero-shot classification or question answering, a single input may need multiple forward passes which can cause issues with the `batch_size` parameter
 
-The [`ChunkPipeline`] class is designed to handle these use cases. Both pipeline classes are used in the same way, but since [`ChunkPipeline`] can automatically handle batching you don't need to worry about the number of forward passes your inputs trigger. Instead, you can optimize `batch_size` independently of the inputs.
+The [ChunkPipeline](https://github.com/huggingface/transformers/blob/99e0ab6ed888136ea4877c6d8ab03690a1478363/src/transformers/pipelines/base.py#L1387) class is designed to handle these use cases. Both pipeline classes are used in the same way, but since [ChunkPipeline](https://github.com/huggingface/transformers/blob/99e0ab6ed888136ea4877c6d8ab03690a1478363/src/transformers/pipelines/base.py#L1387) can automatically handle batching, you don't need to worry about the number of forward passes your inputs trigger. Instead, you can optimize `batch_size` independently of the inputs.
 
-Here is how it differs from a regular [`Pipeline`].
-
-<hfoptions id="chunk-batching">
-<hfoption id="ChunkPipeline">
+The example below shows how it differs from [`Pipeline`].
 
 ```py
+# ChunkPipeline
 all_model_outputs = []
 for preprocessed in pipeline.preprocess(inputs):
     model_outputs = pipeline.model_forward(preprocessed)
     all_model_outputs.append(model_outputs)
 outputs =pipeline.postprocess(all_model_outputs)
-```
 
-</hfoption>
-<hfoption id="Pipeline">
-
-```py
+# Pipeline
 preprocessed = pipeline.preprocess(inputs)
 model_outputs = pipeline.forward(preprocessed)
 outputs = pipeline.postprocess(model_outputs)
 ```
 
-</hfoption>
-</hfoptions>
-
 ## Large datasets
 
-For inference on large datasets, you can iterate directly over the dataset. This avoids immediately allocating memory for the entire dataset, and you don't need to worry about creating batches yourself. As mentioned in the [Batch inference](#batch-inference) section, you can try using the `batch_size` parameter to see if it improves performance.
+For inference with large datasets, you can iterate directly over the dataset itself. This avoids immediately allocating memory for the entire dataset, and you don't need to worry about creating batches yourself. Try [Batch inference](#batch-inference) with the `batch_size` parameter to see if it improves performance.
 
 ```py
 from transformers.pipelines.pt_utils import KeyDataset
@@ -333,14 +326,14 @@ for out in pipeline(data()):
 !pip install -U accelerate
 ```
 
-As mentioned in the [Device](#device) section, the `device_map="auto"` setting is useful for automatically distributing the model across the fastest devices (GPUs) first before dispatching to other slower devices if available (CPU, hard drive).
+The `device_map="auto"` setting is useful for automatically distributing the model across the fastest devices (GPUs) first before dispatching to other slower devices if available (CPU, hard drive).
 
-[`Pipeline`] supports half-precision weights, torch.float16, which can be significantly faster and save memory. Performance loss is negligible for most models, especially for larger models. If your hardware supports it, you can enable torch.bfloat16 instead for more range.
+[`Pipeline`] supports half-precision weights (torch.float16), which can be significantly faster and save memory. Performance loss is negligible for most models, especially for larger ones. If your hardware supports it, you can enable torch.bfloat16 instead for more range.
 
 > [!TIP]
-> Inputs are internally converted to torch.float16, and it only works for models with a PyTorch backend.
+> Inputs are internally converted to torch.float16 and it only works for models with a PyTorch backend.
 
-Lastly, [`Pipeline`] also accepts quantized models to really reduce memory usage even further. Make sure you have the [bitsandbytes](https://hf.co/docs/bitsandbytes/installation) library installed first, and then add `load_in_8bit=True` to `model_kwargs` in the pipeline.
+Lastly, [`Pipeline`] also accepts quantized models to reduce memory usage even further. Make sure you have the [bitsandbytes](https://hf.co/docs/bitsandbytes/installation) library installed first, and then add `load_in_8bit=True` to `model_kwargs` in the pipeline.
 
 ```py
 import torch

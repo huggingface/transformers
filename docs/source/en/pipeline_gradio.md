@@ -48,5 +48,5 @@ The Space below is created with the code above and hosted on Spaces.
 	src="https://stevhliu-gradio-pipeline-demo.hf.space"
 	frameborder="0"
 	width="850"
-	height="450"
+	height="850"
 ></iframe>
