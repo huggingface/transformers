@@ -3469,8 +3469,6 @@ class GenerationMixin:
         # TODO: implement these
         if synced_gpus:
             raise NotImplementedError("synced_gpus")
-        if generation_config.use_cache is not False:
-            raise NotImplementedError("use_cache")
 
         # 2. init output tuples
         all_scores = () if (return_dict_in_generate and output_scores) else None
@@ -3667,7 +3665,7 @@ class GenerationMixin:
             # h. Prepare data for the next iteration
             if model_kwargs.get("past_key_values", None) is not None:
                 model_kwargs["past_key_values"] = self._temporary_reorder_cache(
-                    model_kwargs["past_key_values"], running_beam_indices
+                    model_kwargs["past_key_values"], flatten_beam_dim(running_beam_indices[..., -1])
                 )
 
             cur_len = cur_len + 1
