@@ -52,6 +52,7 @@ from ...utils.import_utils import (
     is_mamba_ssm_available,
 )
 from .configuration_jamba import JambaConfig
+from ...utils.deprecation import deprecate_kwarg
 
 
 if is_flash_attn_2_available():
@@ -1433,9 +1434,9 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
+    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(JAMBA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=MoeCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
-    # Ignore copy
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1450,7 +1451,7 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
         output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        num_logits_to_keep: Optional[Union[int, None]] = None,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **loss_kwargs,
     ) -> Union[Tuple, MoeCausalLMOutputWithPast]:
         r"""
@@ -1460,10 +1461,12 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
-            num_logits_to_keep (`int` or `None`, *optional*):
-                Calculate logits for the last `num_logits_to_keep` tokens. If `None`, calculate logits for all
-                `input_ids`. Only last token logits are needed for generation, and calculating them only for that token
-                can save memory, which becomes pretty significant for long sequences.
+            logits_to_keep (`int` or `torch.Tensor`, *optional*):
+                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
+                `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
+                token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
+                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
+                This is useful when using packed tensor format (single dimension for batch and sequence length).
 
         Returns:
 
@@ -1510,10 +1513,8 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs[0]
-        if num_logits_to_keep is None:
-            logits = self.lm_head(hidden_states)
-        else:
-            logits = self.lm_head(hidden_states[..., -num_logits_to_keep:, :])
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
@@ -1595,7 +1596,7 @@ class JambaForCausalLM(JambaPreTrainedModel, GenerationMixin):
                 "use_cache": use_cache,
                 "attention_mask": attention_mask,
                 "output_router_logits": output_router_logits,
-                "num_logits_to_keep": self.config.num_logits_to_keep,
+                "logits_to_keep": self.config.num_logits_to_keep,
                 "cache_position": cache_position,
             }
         )
