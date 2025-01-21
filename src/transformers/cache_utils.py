@@ -1895,7 +1895,7 @@ class MambaCache:
         return self.conv_states[layer_idx]
 
     def update_ssm_state(self, layer_idx: int, new_ssm_state: torch.Tensor):
-        self.ssm_states[layer_idx] = new_ssm_state.to(self.ssm_states.device)
+        self.ssm_states[layer_idx] = new_ssm_state.to(self.ssm_states[layer_idx].device)
         return self.ssm_states[layer_idx]
 
     def reset(self):
