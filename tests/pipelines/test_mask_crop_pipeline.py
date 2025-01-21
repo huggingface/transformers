@@ -62,3 +62,21 @@ class MaskCropPipelineTests(unittest.TestCase):
         # Verify points grid properties
         self.assertEqual(points_per_crop.ndim, 4)  # [num_crops, batch, num_points, 2]
         self.assertEqual(points_per_crop.shape[-1], 2)  # x,y coordinates
+
+    def test_crop_generation_parameters(self):
+        processor = self.get_image_processor()
+        image = self.get_test_image()
+        
+        # Test different crop_n_layers
+        for n_layers in [0, 1, 2]:
+            outputs = processor.generate_crop_boxes(
+                image,
+                target_size=64,
+                crop_n_layers=n_layers,
+                points_per_crop=32
+            )
+            # Number of crops should increase with layers
+            crop_boxes = outputs[0]
+            if isinstance(crop_boxes, torch.Tensor):
+                crop_boxes = crop_boxes.numpy()
+            self.assertGreaterEqual(len(crop_boxes), n_layers + 1)
