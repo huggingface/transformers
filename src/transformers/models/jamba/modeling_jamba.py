@@ -45,6 +45,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.import_utils import (
     is_causal_conv1d_available,
     is_flash_attn_2_available,
@@ -52,7 +53,6 @@ from ...utils.import_utils import (
     is_mamba_ssm_available,
 )
 from .configuration_jamba import JambaConfig
-from ...utils.deprecation import deprecate_kwarg
 
 
 if is_flash_attn_2_available():

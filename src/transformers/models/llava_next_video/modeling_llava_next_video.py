@@ -33,9 +33,10 @@ from ...image_processing_utils import select_best_resolution
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
+from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_llava_next_video import LlavaNextVideoConfig
-from ...utils.deprecation import deprecate_kwarg
+
 
 logger = logging.get_logger(__name__)
 

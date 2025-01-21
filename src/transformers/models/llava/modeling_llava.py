@@ -31,9 +31,10 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_llava import LlavaConfig
-from ...utils.deprecation import deprecate_kwarg
+
 
 logger = logging.get_logger(__name__)
 

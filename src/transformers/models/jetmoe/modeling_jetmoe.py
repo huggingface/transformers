@@ -42,8 +42,8 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_jetmoe import JetMoeConfig
 from ...utils.deprecation import deprecate_kwarg
+from .configuration_jetmoe import JetMoeConfig
 
 
 if is_flash_attn_2_available():
