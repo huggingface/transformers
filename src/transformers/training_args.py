@@ -3146,6 +3146,15 @@ class ParallelMode(Enum):
 
 
 def serialize_parameter(k, v):
+	"""
+	Serializes a parameter based on its type and key.
+	This function takes a key and value, and serializes the value depending on its type.
+	Args: 
+		k: The key associated with the parameter. 
+		v: The value to be serialized, which can be of various types.
+	Returns:: 
+		The serialized value, which depends on its original type and key.
+	"""
     if k == "torch_dtype" and not isinstance(v, str):
         return str(v).split(".")[1]
     if isinstance(v, dict):
