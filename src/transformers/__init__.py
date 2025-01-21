@@ -498,6 +498,7 @@ _import_structure = {
         "GroupViTTextConfig",
         "GroupViTVisionConfig",
     ],
+    "models.helium": ["HeliumConfig"],
     "models.herbert": ["HerbertTokenizer"],
     "models.hiera": ["HieraConfig"],
     "models.hubert": ["HubertConfig"],
@@ -788,6 +789,7 @@ _import_structure = {
     ],
     "models.stablelm": ["StableLmConfig"],
     "models.starcoder2": ["Starcoder2Config"],
+    "models.superglue": ["SuperGlueConfig"],
     "models.superpoint": ["SuperPointConfig"],
     "models.swiftformer": ["SwiftFormerConfig"],
     "models.swin": ["SwinConfig"],
@@ -1246,6 +1248,7 @@ else:
     _import_structure["models.layoutlmv2"].extend(["LayoutLMv2FeatureExtractor", "LayoutLMv2ImageProcessor"])
     _import_structure["models.layoutlmv3"].extend(["LayoutLMv3FeatureExtractor", "LayoutLMv3ImageProcessor"])
     _import_structure["models.levit"].extend(["LevitFeatureExtractor", "LevitImageProcessor"])
+    _import_structure["models.llava"].append("LlavaImageProcessor")
     _import_structure["models.llava_next"].append("LlavaNextImageProcessor")
     _import_structure["models.llava_next_video"].append("LlavaNextVideoImageProcessor")
     _import_structure["models.llava_onevision"].extend(
@@ -1272,6 +1275,7 @@ else:
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
     _import_structure["models.seggpt"].extend(["SegGptImageProcessor"])
     _import_structure["models.siglip"].append("SiglipImageProcessor")
+    _import_structure["models.superglue"].extend(["SuperGlueImageProcessor"])
     _import_structure["models.superpoint"].extend(["SuperPointImageProcessor"])
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
     _import_structure["models.textnet"].extend(["TextNetImageProcessor"])
@@ -1304,7 +1308,7 @@ else:
     _import_structure["models.vit"].append("ViTImageProcessorFast")
 
 try:
-    if not is_torchvision_available() and not is_timm_available():
+    if not (is_torchvision_available() and is_timm_available()):
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     from .utils import dummy_timm_and_torchvision_objects
@@ -1381,7 +1385,6 @@ else:
             "LogitNormalization",
             "LogitsProcessor",
             "LogitsProcessorList",
-            "LogitsWarper",
             "MaxLengthCriteria",
             "MaxTimeCriteria",
             "MinLengthLogitsProcessor",
@@ -2511,6 +2514,15 @@ else:
             "GroupViTVisionModel",
         ]
     )
+    _import_structure["models.helium"].extend(
+        [
+            "HeliumForCausalLM",
+            "HeliumForSequenceClassification",
+            "HeliumForTokenClassification",
+            "HeliumModel",
+            "HeliumPreTrainedModel",
+        ]
+    )
     _import_structure["models.hiera"].extend(
         [
             "HieraBackbone",
@@ -3546,6 +3558,12 @@ else:
             "Starcoder2ForTokenClassification",
             "Starcoder2Model",
             "Starcoder2PreTrainedModel",
+        ]
+    )
+    _import_structure["models.superglue"].extend(
+        [
+            "SuperGlueForKeypointMatching",
+            "SuperGluePreTrainedModel",
         ]
     )
     _import_structure["models.superpoint"].extend(
@@ -5541,6 +5559,7 @@ if TYPE_CHECKING:
         GroupViTTextConfig,
         GroupViTVisionConfig,
     )
+    from .models.helium import HeliumConfig
     from .models.herbert import HerbertTokenizer
     from .models.hiera import HieraConfig
     from .models.hubert import HubertConfig
@@ -5867,6 +5886,7 @@ if TYPE_CHECKING:
     )
     from .models.stablelm import StableLmConfig
     from .models.starcoder2 import Starcoder2Config
+    from .models.superglue import SuperGlueConfig
     from .models.superpoint import SuperPointConfig
     from .models.swiftformer import (
         SwiftFormerConfig,
@@ -6332,6 +6352,7 @@ if TYPE_CHECKING:
             LayoutLMv3ImageProcessor,
         )
         from .models.levit import LevitFeatureExtractor, LevitImageProcessor
+        from .models.llava import LlavaImageProcessor
         from .models.llava_next import LlavaNextImageProcessor
         from .models.llava_next_video import LlavaNextVideoImageProcessor
         from .models.llava_onevision import LlavaOnevisionImageProcessor, LlavaOnevisionVideoProcessor
@@ -6368,6 +6389,7 @@ if TYPE_CHECKING:
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.seggpt import SegGptImageProcessor
         from .models.siglip import SiglipImageProcessor
+        from .models.superglue import SuperGlueImageProcessor
         from .models.superpoint import SuperPointImageProcessor
         from .models.swin2sr import Swin2SRImageProcessor
         from .models.textnet import TextNetImageProcessor
@@ -6396,7 +6418,7 @@ if TYPE_CHECKING:
         from .models.vit import ViTImageProcessorFast
 
     try:
-        if not is_torchvision_available() and not is_timm_available():
+        if not (is_torchvision_available() and is_timm_available()):
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         from .utils.dummy_timm_and_torchvision_objects import *
@@ -6466,7 +6488,6 @@ if TYPE_CHECKING:
             LogitNormalization,
             LogitsProcessor,
             LogitsProcessorList,
-            LogitsWarper,
             MaxLengthCriteria,
             MaxTimeCriteria,
             MinLengthLogitsProcessor,
@@ -7388,6 +7409,13 @@ if TYPE_CHECKING:
             GroupViTTextModel,
             GroupViTVisionModel,
         )
+        from .models.helium import (
+            HeliumForCausalLM,
+            HeliumForSequenceClassification,
+            HeliumForTokenClassification,
+            HeliumModel,
+            HeliumPreTrainedModel,
+        )
         from .models.hiera import (
             HieraBackbone,
             HieraForImageClassification,
@@ -8191,6 +8219,10 @@ if TYPE_CHECKING:
             Starcoder2ForTokenClassification,
             Starcoder2Model,
             Starcoder2PreTrainedModel,
+        )
+        from .models.superglue import (
+            SuperGlueForKeypointMatching,
+            SuperGluePreTrainedModel,
         )
         from .models.superpoint import (
             SuperPointForKeypointDetection,

@@ -452,6 +452,8 @@
         title: Granite
       - local: model_doc/granitemoe
         title: GraniteMoe
+      - local: model_doc/helium
+        title: Helium
       - local: model_doc/herbert
         title: HerBERT
       - local: model_doc/ibert
@@ -506,8 +508,6 @@
         title: MobileBERT
       - local: model_doc/modernbert
         title: ModernBert
-      - local: model_doc/moonshine
-        title: moonshine
       - local: model_doc/mpnet
         title: MPNet
       - local: model_doc/mpt
@@ -711,6 +711,8 @@
         title: SegFormer
       - local: model_doc/seggpt
         title: SegGpt
+      - local: model_doc/superglue
+        title: SuperGlue
       - local: model_doc/superpoint
         title: SuperPoint
       - local: model_doc/swiftformer
@@ -770,6 +772,8 @@
         title: Mimi
       - local: model_doc/mms
         title: MMS
+      - local: model_doc/moonshine
+        title: Moonshine
       - local: model_doc/moshi
         title: Moshi
       - local: model_doc/musicgen
