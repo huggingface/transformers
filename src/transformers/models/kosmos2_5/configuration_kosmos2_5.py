@@ -51,7 +51,7 @@ class Kosmos2_5TextConfig(PretrainedConfig):
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
         dropout (`float`, *optional*, defaults to 0.1):
             The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_dropout (`float`, *optional*, defaults to 0.1):
+        attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         activation_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for activations inside the fully connected layer.
@@ -87,7 +87,7 @@ class Kosmos2_5TextConfig(PretrainedConfig):
         attention_heads=16,
         activation_function="gelu",
         dropout=0.1,
-        attention_dropout=0,
+        attention_dropout=0.0,
         activation_dropout=0.0,
         layerdrop=0.0,
         layer_norm_eps=1e-5,
@@ -134,17 +134,17 @@ class Kosmos2_5VisionConfig(PretrainedConfig):
     documentation from [`PretrainedConfig`] for more information.
 
     Args:
-        hidden_size (`int`, *optional*, defaults to 768):
+        hidden_size (`int`, *optional*, defaults to 1536):
             Dimensionality of the encoder layers and the pooler layer.
         patch_embed_hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the input patch_embedding layer in the Transformer encoder.
-        d_ff (`int`, *optional*, defaults to 2048):
+        d_ff (`int`, *optional*, defaults to 3968):
             Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
         d_kv (`int`, *optional*, defaults to 64):
             Dimensionality of the key, query, value projections per attention head.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
+        num_hidden_layers (`int`, *optional*, defaults to 18):
             Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
+        num_attention_heads (`int`, *optional*, defaults to 24):
             Number of attention heads for each attention layer in the Transformer encoder.
         dense_act_fn (`str` or `function`, *optional*, defaults to `"gelu_new"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
