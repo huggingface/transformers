@@ -28,6 +28,7 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch.nn import CrossEntropyLoss
 
+from transformers.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
 from transformers.models.qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
 from transformers.models.qwen2_vl.modeling_qwen2_vl import (
     PatchEmbed,
@@ -47,7 +48,6 @@ from ...cache_utils import StaticCache
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, VideoInput
-from ...modeling_rope_utils import rope_config_validation
 from ...processing_utils import ProcessingKwargs, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_flash_attn_2_available
@@ -88,7 +88,7 @@ class Qwen2_5_VLVisionConfig(PretrainedConfig):
         tokens_per_second=4,
         window_size=112,
         out_hidden_size=3584,
-        fullatt_block_indexes=list(range(7, 32, 8)),
+        fullatt_block_indexes=[7, 15, 23, 31],
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -108,179 +108,9 @@ class Qwen2_5_VLVisionConfig(PretrainedConfig):
         self.out_hidden_size = out_hidden_size
 
 
-class Qwen2_5_VLConfig(PretrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`Qwen2_5_VLModel`]. It is used to instantiate a
-    Qwen2.5-VL model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of
-    Qwen2.5-VL-7B-Instruct [Qwen/Qwen2.5-VL-7B-Instruct](https://huggingface.co/Qwen/Qwen2.5-VL-7B-Instruct).
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 152064):
-            Vocabulary size of the Qwen2.5-VL model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`Qwen2_5_VLModel`]
-        hidden_size (`int`, *optional*, defaults to 8192):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 29568):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 80):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 64):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 8):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `32`.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 32768):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
-        rope_theta (`float`, *optional*, defaults to 1000000.0):
-            The base period of the RoPE embeddings.
-        use_sliding_window (`bool`, *optional*, defaults to `False`):
-            Whether to use sliding window attention.
-        sliding_window (`int`, *optional*, defaults to 4096):
-            Sliding window attention (SWA) window size. If not specified, will default to `4096`.
-        max_window_layers (`int`, *optional*, defaults to 80):
-            The number of layers that use SWA (Sliding Window Attention). The bottom layers use SWA while the top use full attention.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        vision_config (`Dict`, *optional*):
-            The config for the visual encoder initialization.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
-            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
-            accordingly.
-            Expected contents:
-                `rope_type` (`str`):
-                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-                    'llama3'], with 'default' being the original RoPE implementation.
-                `factor` (`float`, *optional*):
-                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
-                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
-                    original maximum pre-trained length.
-                `original_max_position_embeddings` (`int`, *optional*):
-                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
-                    pretraining.
-                `attention_factor` (`float`, *optional*):
-                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
-                    computation. If unspecified, it defaults to value recommended by the implementation, using the
-                    `factor` field to infer the suggested value.
-                `beta_fast` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 32.
-                `beta_slow` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`List[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `long_factor` (`List[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `low_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
-                `high_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
-
-    ```python
-    >>> from transformers import Qwen2_5_VLForConditionalGeneration, Qwen2_5_VLConfig
-
-    >>> # Initializing a Qwen2_5_VL style configuration
-    >>> configuration = Qwen2_5_VLConfig()
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-
-    >>> # Initializing a model from the Qwen2_5_VL configuration
-    >>> model = Qwen2_5_VLForConditionalGeneration(configuration)
-    ```"""
-
+class Qwen2_5_VLConfig(Qwen2VLConfig):
     model_type = "qwen2_5_vl"
     sub_configs = {"vision_config": Qwen2_5_VLVisionConfig}
-    keys_to_ignore_at_inference = ["past_key_values"]
-
-    def __init__(
-        self,
-        vocab_size=152064,
-        hidden_size=8192,
-        intermediate_size=29568,
-        num_hidden_layers=80,
-        num_attention_heads=64,
-        num_key_value_heads=8,
-        hidden_act="silu",
-        max_position_embeddings=32768,
-        initializer_range=0.02,
-        rms_norm_eps=1e-05,
-        use_cache=True,
-        tie_word_embeddings=False,
-        rope_theta=1000000.0,
-        use_sliding_window=False,
-        sliding_window=4096,
-        max_window_layers=80,
-        attention_dropout=0.0,
-        vision_config=None,
-        rope_scaling=None,
-        **kwargs,
-    ):
-        if isinstance(vision_config, dict):
-            self.vision_config = Qwen2_5_VLVisionConfig(**vision_config)
-        elif vision_config is None:
-            self.vision_config = Qwen2_5_VLVisionConfig()
-
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.use_sliding_window = use_sliding_window
-        self.sliding_window = sliding_window
-        self.max_window_layers = max_window_layers
-
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.attention_dropout = attention_dropout
-        self.rope_scaling = rope_scaling
-
-        # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, move it to 'rope_type'.
-        # and change type from 'mrope' to 'default' because `mrope` does defeault RoPE calculations
-        # one can set it to "linear"/"dynamic" etc. to have scaled RoPE
-        # TODO: @raushan update config in the hub
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            if self.rope_scaling["type"] == "mrope":
-                self.rope_scaling["type"] = "default"
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
-        rope_config_validation(self, ignore_keys={"mrope_section"})
-
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 
 
 class Qwen2_5_VLMLP(nn.Module):
@@ -296,6 +126,12 @@ class Qwen2_5_VLMLP(nn.Module):
     def forward(self, hidden_state):
         return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
 
+
+class Qwen2_5_VisionPatchEmbed(PatchEmbed):
+    pass
+
+class Qwen2_5_VisionRotaryEmbedding(VisionRotaryEmbedding):
+    pass
 
 class Qwen2_5_VLPatchMerger(PatchMerger):
     def __init__(self, dim: int, context_dim: int, spatial_merge_size: int = 2) -> None:
@@ -376,7 +212,7 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
         self.window_size = config.window_size
         self.spatial_merge_unit = self.spatial_merge_size * self.spatial_merge_size
 
-        self.patch_embed = PatchEmbed(
+        self.patch_embed = Qwen2_5_VisionPatchEmbed(
             patch_size=config.patch_size,
             temporal_patch_size=config.temporal_patch_size,
             in_channels=config.in_channels,
@@ -384,7 +220,7 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
         )
 
         head_dim = config.hidden_size // config.num_heads
-        self.rotary_pos_emb = VisionRotaryEmbedding(head_dim // 2)
+        self.rotary_pos_emb = Qwen2_5_VisionRotaryEmbedding(head_dim // 2)
 
         self.blocks = nn.ModuleList(
             [Qwen2_5_VLVisionBlock(config, config._attn_implementation) for _ in range(config.depth)]
@@ -395,12 +231,6 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
             spatial_merge_size=config.spatial_merge_size,
         )
         self.gradient_checkpointing = False
-
-    def get_dtype(self) -> torch.dtype:
-        return self.blocks[0].mlp.up_proj.weight.dtype
-
-    def get_device(self) -> torch.device:
-        return self.blocks[0].mlp.up_proj.weight.device
 
     def rot_pos_emb(self, grid_thw):
         pos_ids = []
@@ -473,6 +303,16 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
         return window_index, cu_window_seqlens
 
     def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            hidden_states (`torch.Tensor` of shape `(batch_size, seq_len, hidden_size)`):
+                The final hidden states of the model.
+            grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
+                The temporal, height and width of feature shape of each image in LLM.
+
+        Returns:
+            `torch.Tensor`: hidden_states.
+        """
         hidden_states = self.patch_embed(hidden_states)
         rotary_pos_emb = self.rot_pos_emb(grid_thw)
         window_index, cu_window_seqlens = self.get_window_index(grid_thw)
@@ -672,7 +512,9 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
 
                     t_index = (
                         (
-                            torch.arange(llm_grid_t).view(-1, 1).expand(-1, llm_grid_h * llm_grid_w)
+                            torch.arange(llm_grid_t)
+                            .view(-1, 1)
+                            .expand(-1, llm_grid_h * llm_grid_w)
                             * second_per_grid_t
                             * self.config.vision_config.tokens_per_second
                         )
@@ -784,7 +626,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         if inputs_embeds is None:
             inputs_embeds = self.model.embed_tokens(input_ids)
             if pixel_values is not None:
-                pixel_values = pixel_values.type(self.visual.get_dtype())
+                pixel_values = pixel_values.type(self.visual.dtype())
                 image_embeds = self.visual(pixel_values, grid_thw=image_grid_thw)
                 n_image_tokens = (input_ids == self.config.image_token_id).sum().item()
                 n_image_features = image_embeds.shape[0]
@@ -802,7 +644,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
                 inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
             if pixel_values_videos is not None:
-                pixel_values_videos = pixel_values_videos.type(self.visual.get_dtype())
+                pixel_values_videos = pixel_values_videos.type(self.visual.dtype())
                 video_embeds = self.visual(pixel_values_videos, grid_thw=video_grid_thw)
                 n_video_tokens = (input_ids == self.config.video_token_id).sum().item()
                 n_video_features = video_embeds.shape[0]

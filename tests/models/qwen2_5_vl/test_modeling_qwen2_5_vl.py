@@ -377,7 +377,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         inputs = self.processor(text=[text], images=[self.image], return_tensors="pt")
 
         expected_input_ids = [151644, 8948, 198, 2610, 525, 264, 10950, 17847, 13, 151645, 198, 151644, 872, 198, 151652, 151655, 151655]  # fmt: skip
-        assert expected_input_ids == inputs.input_ids[0].tolist()[:17]
+        torch.testing.assert_close(expected_input_ids, inputs.input_ids[0].tolist()[:17])
 
         expected_pixel_slice = torch.tensor(
             [
