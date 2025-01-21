@@ -18,7 +18,7 @@ import inspect
 import os
 import warnings
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Union, Iterable
+from typing import TYPE_CHECKING, Any, Callable, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
 import torch
@@ -3359,28 +3359,6 @@ class GenerationMixin:
             past_key_values.reorder_cache(beam_idx)
         return past_key_values
 
-    @staticmethod
-    def _gather_beams(nested: Union[torch.Tensor, Iterable], beam_indices: torch.Tensor):
-        """
-        Gathers the beam slices indexed by beam_indices into new beam array.
-
-        Args:
-            nested (`torch.Tensor` or `Iterable`): A tensor or an iterable of tensors containing data to be gathered.
-            beam_indices: The indices of the beams to select
-
-        Returns:
-            A tensor or an iterable of tensors
-        """
-        def gather_fn(tensor):
-            breakpoint()
-            gathered_tensor = torch.gather(params=tensor, indices=beam_indices, dim=1)
-            return gathered_tensor
-
-        if isinstance(nested, torch.Tensor):
-            return gather_fn(nested)
-        else:
-            return [gather_fn(tensor) for tensor in nested]
-
     def _beam_search(
         self,
         input_ids: torch.LongTensor,
@@ -3419,6 +3397,7 @@ class GenerationMixin:
             `return_dict_in_generate=True` or a [`~generation.GenerateBeamEncoderDecoderOutput`] if
             `model.config.is_encoder_decoder=True`.
         """
+
         def flatten_beam_dim(tensor):
             """3D with beams in a separate dim -> 2D with batch*beam in batch dim"""
             shape = list(tensor.shape)
@@ -3427,7 +3406,34 @@ class GenerationMixin:
         def unflatten_beam_dim(tensor, num_beams):
             """2D with batch*beam in batch dim -> 3D with beams in a separate dim"""
             shape = list(tensor.shape)
-            return torch.reshape(tensor, [-1, num_beams] + shape[1 :])
+            return torch.reshape(tensor, [-1, num_beams] + shape[1:])
+
+        def gather_beams(nested: Union[torch.Tensor, Iterable], beam_indices: torch.Tensor):
+            """
+            Gathers the beam slices indexed by beam_indices into new beam array.
+
+            Args:
+                nested (`Iterable` or `torch.Tensor`): A tensor or an iterable of tensors containing data to be
+                    gathered. The tensor is a 2D or a 3D tensor with the two first dimensions depicting the batch and
+                    the beam dimensions.
+                beam_indices (`torch.Tensor` of shape `(batch_size, num_beams_to_select)`): The indices of the beams to
+                    select .
+
+            Returns:
+                A tensor or an iterable of tensors with the selected beams
+            """
+
+            def gather_fn(tensor, beam_indices):
+                # `take_along_dim` requires its indices arg to have the same number of dims as `input`
+                while len(beam_indices.shape) < len(tensor.shape):
+                    beam_indices = beam_indices.unsqueeze(-1)
+                gathered_tensor = torch.take_along_dim(tensor, beam_indices, dim=1)
+                return gathered_tensor
+
+            if isinstance(nested, torch.Tensor):
+                return gather_fn(nested, beam_indices)
+            else:
+                return [gather_fn(tensor, beam_indices) for tensor in nested]
 
         # 1. init beam_search values
         pad_token_id = generation_config._pad_token_tensor
@@ -3442,12 +3448,12 @@ class GenerationMixin:
         length_penalty = generation_config.length_penalty
         max_length = generation_config.max_length
         num_beams = generation_config.num_beams
+        num_return_sequences = generation_config.num_return_sequences
 
         batch_size_unflattened, cur_len = input_ids.shape
         batch_size = batch_size_unflattened // num_beams
         n_eos_tokens = eos_token_id.shape[0] if eos_token_id is not None else 0
         decoder_prompt_len = cur_len
-        this_peer_finished = False
 
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
@@ -3494,10 +3500,7 @@ class GenerationMixin:
         # per batch, beam-item state bit indicating if sentence has finished.
         is_sent_finished = torch.zeros((batch_size, num_beams), dtype=torch.bool, device=input_ids.device)
         # per batch beam indices
-        running_beam_indices = torch.ones(
-            (batch_size, num_beams, max_length - decoder_prompt_len), dtype=torch.int32, device=input_ids.device
-        )
-        running_beam_indices *= -1
+        running_beam_indices = torch.ones((batch_size, num_beams, 0), dtype=torch.int32, device=input_ids.device)
         beam_indices = running_beam_indices.clone().detach()
 
         # 4. define custom stopping criteria (depends on the state of the beams and their scores)
@@ -3525,7 +3528,7 @@ class GenerationMixin:
                     best_hypothetical_length = max_length - decoder_prompt_len
                 else:
                     best_hypothetical_length = cur_len - decoder_prompt_len
-                best_running_score = running_beam_scores[:, :1] / (best_hypothetical_length ** length_penalty)
+                best_running_score = running_beam_scores[:, :1] / (best_hypothetical_length**length_penalty)
                 worst_finished_score = torch.where(
                     is_sent_finished, torch.min(beam_scores, dim=1, keepdim=True)[0], -1.0e9
                 )
@@ -3545,7 +3548,8 @@ class GenerationMixin:
             is_sent_finished,
         ):
             # a. Forward current tokens, obtain the logits
-            model_inputs = self.prepare_inputs_for_generation(flatten_beam_dim(running_sequences), **model_kwargs)
+            flat_running_sequences = flatten_beam_dim(running_sequences)
+            model_inputs = self.prepare_inputs_for_generation(flat_running_sequences, **model_kwargs)
 
             # prepare variable output controls (note: some models won't accept all output controls)
             model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
@@ -3557,7 +3561,7 @@ class GenerationMixin:
             # b. Compute log probs -- get log probabilities from logits, process logits with processors (*e.g.*
             # `temperature`, ...), and add new logprobs to existing running logprobs scores.
             log_probs = nn.functional.log_softmax(logits, dim=-1)
-            log_probs = logits_processor(flatten_beam_dim(running_sequences), log_probs)
+            log_probs = logits_processor(flat_running_sequences, log_probs)
 
             # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:
@@ -3601,81 +3605,77 @@ class GenerationMixin:
 
             # Gather K top beams, recover the beam index by floor division and token id by modulo division
             topk_current_beam_indices = topk_indices // vocab_size
-            topk_running_beam_indices = self._gather_beams(running_beam_indices, topk_current_beam_indices)
-            topk_running_sequences = self._gather_beams(running_sequences, topk_current_beam_indices)
+            topk_running_beam_indices = gather_beams(running_beam_indices, topk_current_beam_indices)
+            topk_running_sequences = gather_beams(running_sequences, topk_current_beam_indices)
             topk_ids = topk_indices % vocab_size
 
             # Update sequences for the K top-k new sequences.
-            indices_batch = tf.repeat(tf.range(batch_size), [beams_to_keep])
-            indices_beam = tf.tile(tf.range(beams_to_keep), [batch_size])
-            update_indices = tf.stack(
-                [indices_batch, indices_beam, tf.broadcast_to(cur_len, [batch_size * beams_to_keep])], axis=-1
-            )
-            topk_sequences = tf.tensor_scatter_nd_update(
-                tensor=topk_running_sequences,
-                indices=update_indices,
-                updates=tf.reshape(topk_ids, [batch_size * beams_to_keep]),
-            )
+            topk_running_sequences = torch.cat([topk_running_sequences, topk_ids[:, :, None]], dim=-1)
 
             # we want to store the beam indices with batch information -> real beam index = beam index % num beams
-            batch_modified_indices = topk_current_beam_indices + tf.broadcast_to(
-                tf.expand_dims(tf.range(batch_size) * num_beams, axis=1), topk_current_beam_indices.shape
-            )
-            update_indices = tf.stack(
-                [
-                    indices_batch,
-                    indices_beam,
-                    tf.broadcast_to(cur_len - decoder_prompt_len, [batch_size * beams_to_keep]),
-                ],
-                axis=-1,
-            )
-            topk_beam_indices = tf.tensor_scatter_nd_update(
-                tensor=topk_running_beam_indices,
-                indices=update_indices,
-                updates=tf.reshape(batch_modified_indices, [batch_size * beams_to_keep]),
+            batch_offset = torch.arange(batch_size, device=input_ids.device).view(-1, 1) * num_beams
+            batch_modified_indices = topk_current_beam_indices + batch_offset
+            topk_running_beam_indices = torch.cat(
+                (topk_running_beam_indices, batch_modified_indices[:, :, None]), dim=-1
             )
 
             # d. Check which sequences have ended
-            next_token_hits_stopping_criteria = stopping_criteria(topk_sequences, all_scores)
-            # Only the top `num_beam` sequences are considered for the final returned sequences
-            did_top_num_beams_just_finished = next_token_hits_stopping_criteria & tf.broadcast_to(
-                tf.concat((tf.ones((num_beams), dtype=tf.bool), tf.zeros((num_beams), dtype=tf.bool)), axis=0),
-                next_token_hits_stopping_criteria.shape,
-            )
-            # To prevent these just finished sequences from being added to the current sequences set of active beam
-            # search sequences, set their log probs to a very large negative value
+            next_token_hits_stopping_criteria = stopping_criteria(flatten_beam_dim(topk_running_sequences), all_scores)
+            next_token_hits_stopping_criteria = unflatten_beam_dim(next_token_hits_stopping_criteria, beams_to_keep)
+
+            # Only the top `num_beam` sequences can be considered for the final returned sequences
+            top_num_beam_mask = torch.cat(
+                (torch.ones((num_beams), dtype=torch.bool), torch.zeros((num_beams), dtype=torch.bool)), dim=0
+            ).to(next_token_hits_stopping_criteria.device)
+            did_top_num_beams_just_finished = next_token_hits_stopping_criteria & top_num_beam_mask[None, :]
+            # To prevent these just finished sequences from being used in subsequent iterations, set their log probs
+            # to a very large negative value
             running_topk_log_probs = topk_log_probs + next_token_hits_stopping_criteria.to(torch.float32) * -1.0e9
 
             # e. Get running `num_beam` sequences for the next generation step
             next_topk_indices = torch.topk(running_topk_log_probs, k=num_beams)[1]
-            running_sequences, running_beam_scores, running_beam_indices = self._gather_beams(
-                [topk_sequences, running_topk_log_probs, topk_beam_indices], next_topk_indices
+            running_sequences, running_beam_scores, running_beam_indices = gather_beams(
+                [topk_running_sequences, running_topk_log_probs, topk_running_beam_indices], next_topk_indices
             )
 
             # f. Further process topk logits
             # - add length penalty
-            topk_log_probs = topk_log_probs / ((cur_len + 1 - decoder_prompt_len).to(torch.float32) ** length_penalty)
-            # - make sure no scores can be added anymore if beam is full
-            beams_in_batch_are_full = tf.broadcast_to(
-                torch.all(is_sent_finished, axis=-1, keepdims=True), did_top_num_beams_just_finished.shape
-            ) & (early_stopping is True)
+            topk_log_probs = topk_log_probs / ((cur_len + 1 - decoder_prompt_len) ** length_penalty)
+            # - make sure no scores can be added anymore if beam is full and early stopping is on
+            beams_in_batch_are_full = torch.all(is_sent_finished, axis=-1, keepdims=True) & (early_stopping is True)
             topk_log_probs += beams_in_batch_are_full.to(torch.float32) * -1.0e9
             # - make sure still running sequences cannot be chosen as finalized beam
             topk_log_probs += (~did_top_num_beams_just_finished) * -1.0e9
 
             # g. Get finalized  `num_beam` sequences for the next generation step -- combine the previous finalized
-            # data with the new finalized sequences (if any, flagged through their logprobs score not being a very
-            # large negative number), and keep the best `num_beams` sequences
-            merged_sequences = tf.concat([sequences, topk_sequences], axis=1)
-            merged_scores = tf.concat([beam_scores, topk_log_probs], axis=1)
-            merged_beams = tf.concat([beam_indices, topk_beam_indices], axis=1)
-            merged_is_sent_finished = tf.concat([is_sent_finished, did_top_num_beams_just_finished], axis=1)
+            # data with the new finalized sequences (if any, non-finalized sequences have a very large negative score
+            # in this step), and keep the best `num_beams` sequences.
+            # Variable shape tensors that grow with generation are padded before selecting the best beams, to ensure
+            # all beams have the same length
+            padded_sequences = nn.functional.pad(sequences, (0, 1), value=pad_token_id)
+            padded_beam_indices = nn.functional.pad(beam_indices, (0, 1), value=-1)
+
+            merged_sequences = torch.cat([padded_sequences, topk_running_sequences], dim=1)
+            merged_beams = torch.cat([padded_beam_indices, topk_running_beam_indices], dim=1)
+            merged_scores = torch.cat([beam_scores, topk_log_probs], dim=1)
+            merged_is_sent_finished = torch.cat([is_sent_finished, did_top_num_beams_just_finished], dim=1)
             topk_merged_indices = torch.topk(merged_scores, k=num_beams)[1]
-            sequences, beam_scores, beam_indices, is_sent_finished = self._gather_beams(
+            sequences, beam_scores, beam_indices, is_sent_finished = gather_beams(
                 [merged_sequences, merged_scores, merged_beams, merged_is_sent_finished], topk_merged_indices
             )
 
             # h. Prepare data for the next iteration
+            if model_kwargs.get("past_key_values", None) is not None:
+                model_kwargs["past_key_values"] = self._temporary_reorder_cache(
+                    model_kwargs["past_key_values"], running_beam_indices
+                )
+
+            cur_len = cur_len + 1
+            model_kwargs = self._update_model_kwargs_for_generation(
+                model_outputs,
+                model_kwargs,
+                is_encoder_decoder=self.config.is_encoder_decoder,
+            )
 
             # This is needed to properly delete outputs.logits which may be very large for first iteration
             # Otherwise a reference to outputs is kept which keeps the logits alive in the next iteration
@@ -3683,22 +3683,11 @@ class GenerationMixin:
             # that way the memory peak does not include outputs.logits)
             del model_outputs
 
-            if model_kwargs.get("past_key_values", None) is not None:
-                model_kwargs["past_key_values"] = self._temporary_reorder_cache(
-                    model_kwargs["past_key_values"], running_beam_indices
-                )
-
-            cur_len = cur_len + 1
-            if "past_key_values" in model_outputs:
-                # TODO!!!!!
-                raise NotImplementedError("past_key_values not implemented")
-
-            model_kwargs = self._update_model_kwargs_for_generation(
-                model_outputs,
-                model_kwargs,
-                is_encoder_decoder=self.config.is_encoder_decoder,
-            )
-
+        # 6. prepare outputs
+        # Take best beams for each batch (the score is sorted in descending order)
+        sequences = flatten_beam_dim(sequences[:, :num_return_sequences, :])
+        beam_scores = flatten_beam_dim(beam_scores[:, :num_return_sequences])
+        beam_indices = flatten_beam_dim(beam_indices[:, :num_return_sequences, :])
 
         if return_dict_in_generate:
             if not output_scores:
@@ -3732,16 +3721,12 @@ class GenerationMixin:
         else:
             return sequences
 
-
-
-
         # # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
         # if return_dict_in_generate and self.config.is_encoder_decoder:
         #     encoder_attentions = model_kwargs["encoder_outputs"].get("attentions") if output_attentions else None
         #     encoder_hidden_states = (
         #         model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None
         #     )
-
 
         # beam_scores = beam_scores.view((batch_size * num_beams,))
 
@@ -3905,8 +3890,6 @@ class GenerationMixin:
         #     beam_indices=beam_indices,
         #     decoder_prompt_len=decoder_prompt_len,
         # )
-
-
 
     def _group_beam_search(
         self,
