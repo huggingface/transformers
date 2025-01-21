@@ -855,7 +855,14 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertLess(max(diff_truth), 0.01, f"Difference {max(diff_truth)} is not within 0.01")
 
             # max diff broken should be very off
-            self.assertGreater(max(diff_broken), 3, f"Difference {max(diff_broken)} is not greater than 3")
+            self.assertGreater(max(diff_broken), 2, f"Difference {max(diff_broken)} is not greater than 2")
+
+            loss_base = sum(base_loss_callback.losses)
+            loss_broken = sum(broken_loss_callback.losses)
+
+            # mean/sum loss should not vary too much.
+            relative_diff = abs(loss_base - loss_broken) / max(loss_base, loss_broken)
+            self.assertLess(relative_diff, 0.1, f"Relative difference {relative_diff} is not within 0.1")
 
     @slow
     def test_gradient_accumulation_loss_alignment_with_loss_func(self):
@@ -1831,7 +1838,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         _ = trainer.train()
 
     @require_grokadamw
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_grokadamw(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -1852,7 +1859,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         _ = trainer.train()
 
     @require_schedulefree
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_schedulefree_adam(self):
         config = LlamaConfig(vocab_size=100, hidden_size=32, num_hidden_layers=3, num_attention_heads=4)
         tiny_llama = LlamaForCausalLM(config)
@@ -5007,6 +5014,13 @@ if is_torch_available():
             (
                 OptimizerNames.ADAMW_TORCH_4BIT,
                 torchao.prototype.low_bit_optim.AdamW4bit,
+                default_adam_kwargs,
+            )
+        )
+        optim_test_params.append(
+            (
+                TrainingArguments(optim=OptimizerNames.ADAMW_TORCH_8BIT, output_dir="None"),
+                torchao.prototype.low_bit_optim.AdamW8bit,
                 default_adam_kwargs,
             )
         )

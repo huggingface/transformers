@@ -56,6 +56,7 @@ from .configuration_starcoder2 import Starcoder2Config
 
 logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "bigcode/starcoder2-7b"
+
 _CONFIG_FOR_DOC = "Starcoder2Config"
 
 
@@ -304,6 +305,9 @@ class Starcoder2RotaryEmbedding(nn.Module):
             self.max_seq_len_cached = seq_len
 
         if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
+            # This .to() is needed if the model has been moved to a device after being initialized (because
+            # the buffer is automatically moved, but not the original copy)
+            self.original_inv_freq = self.original_inv_freq.to(device)
             self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
             self.max_seq_len_cached = self.original_max_seq_len
 
