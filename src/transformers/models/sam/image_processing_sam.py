@@ -54,8 +54,6 @@ if is_torch_available():
 
 if is_torchvision_available():
     from torchvision.ops.boxes import batched_nms
-else:
-    batched_nms = None
 
 if is_tf_available():
     import tensorflow as tf
