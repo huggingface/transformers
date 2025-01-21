@@ -37,6 +37,7 @@ import requests
 import torch
 from torchvision import io
 from typing import Dict
+from transformers.image_utils import load_images, load_video
 from transformers import Qwen2_5_VLForConditionalGeneration, AutoTokenizer, AutoProcessor
 
 # Load the model in half-precision on the available device(s)
@@ -77,33 +78,7 @@ output_text = processor.batch_decode(generated_ids, skip_special_tokens=True, cl
 print(output_text)
 
 # Video
-def fetch_video(ele: Dict, nframe_factor=2):
-    if isinstance(ele['video'], str):
-        def round_by_factor(number: int, factor: int) -> int:
-            return round(number / factor) * factor
-
-        video = ele["video"]
-        if video.startswith("file://"):
-            video = video[7:]
-
-        video, _, info = io.read_video(
-            video,
-            start_pts=ele.get("video_start", 0.0),
-            end_pts=ele.get("video_end", None),
-            pts_unit="sec",
-            output_format="TCHW",
-        )
-        assert not ("fps" in ele and "nframes" in ele), "Only accept either `fps` or `nframes`"
-        if "nframes" in ele:
-            nframes = round_by_factor(ele["nframes"], nframe_factor)
-        else:
-            fps = ele.get("fps", 1.0)
-            nframes = round_by_factor(video.size(0) / info["video_fps"] * fps, nframe_factor)
-        idx = torch.linspace(0, video.size(0) - 1, nframes, dtype=torch.int64)
-        return video[idx]
-
-video_info = {"type": "video", "video": "/path/to/video.mp4", "fps": 1.0}
-video = fetch_video(video_info)
+video = load_video(video="/path/to/video.mp4")
 conversation = [
     {
         "role": "user",
@@ -135,16 +110,14 @@ print(output_text)
 The model can batch inputs composed of mixed samples of various types such as images, videos, and text. Here is an example.
 
 ```python
-image1 = Image.open("/path/to/image1.jpg")
-image2 = Image.open("/path/to/image2.jpg")
-image3 = Image.open("/path/to/image3.jpg")
-image4 = Image.open("/path/to/image4.jpg")
-image5 = Image.open("/path/to/image5.jpg")
-video = fetch_video({
-    "type": "video",
-    "video": "/path/to/video.mp4",
-    "fps": 1.0
-})
+images = load_images([
+    "/path/to/image1.jpg",
+    "/path/to/image2.jpg",
+    "/path/to/image3.jpg",
+    "/path/to/image4.jpg",
+    "/path/to/image5.jpg",
+])
+video = load_video(video="/path/to/video.mp4")
 
 # Conversation for the first image
 conversation1 = [
@@ -196,7 +169,7 @@ conversations = [conversation1, conversation2, conversation3, conversation4]
 texts = [processor.apply_chat_template(msg, add_generation_prompt=True) for msg in conversations]
 inputs = processor(
     text=texts,
-    images=[image1, image2, image3, image4, image5],
+    images=images,
     videos=[video],
     padding=True,
     return_tensors="pt",
