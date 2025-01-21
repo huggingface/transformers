@@ -164,79 +164,76 @@ class SamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_generate_crop_boxes_batched(self):
         """Test that generate_crop_boxes handles batched inputs correctly"""
         image_processor = self.get_image_processor()
-        
+
         # Create a test image
         image1 = np.zeros((100, 100, 3), dtype=np.uint8)
-        
+
         points_per_side = 32
         # Test with crops_n_layers=1
         crop_boxes1, points_per_crop1, cropped_images1, input_labels1 = image_processor.generate_crop_boxes(
-            image1,
-            target_size=64,
-            crop_n_layers=1,
-            points_per_crop=points_per_side
+            image1, target_size=64, crop_n_layers=1, points_per_crop=points_per_side
         )
-        
+
         # Basic shape checks
         self.assertEqual(points_per_crop1.ndim, 4)  # Should be [num_crops, batch, num_points, 2]
         self.assertEqual(input_labels1.shape[0], points_per_crop1.shape[0])  # Same number of crops
-        
+
         # Convert to numpy if tensor
-        if hasattr(points_per_crop1, 'numpy'):
+        if hasattr(points_per_crop1, "numpy"):
             points_per_crop1 = points_per_crop1.numpy()
-        if hasattr(crop_boxes1, 'numpy'):
+        if hasattr(crop_boxes1, "numpy"):
             crop_boxes1 = crop_boxes1.numpy()
-        
+
         # Verify each crop's points
         for crop_idx in range(len(crop_boxes1)):
             crop_box = crop_boxes1[crop_idx]
             points = points_per_crop1[crop_idx]
-            
+
             # Check points shape
             self.assertEqual(points.shape[0], 1)  # batch dimension
             self.assertEqual(points.shape[-1], 2)  # x,y coordinates
-            
+
             # Verify grid dimensions
             x_coords = points[0, :, 0]  # Take first batch
             y_coords = points[0, :, 1]
             unique_x = np.unique(x_coords)
             unique_y = np.unique(y_coords)
-            
+
             # Should have points_per_side unique coordinates in each dimension
             self.assertEqual(len(unique_x), points_per_side)
             self.assertEqual(len(unique_y), points_per_side)
-            
+
             # Total points should be points_per_side squared
             total_points = points.size // 2
             self.assertEqual(total_points, points_per_side * points_per_side)
-            
+
             # Verify points are monotonically increasing
             sorted_x = np.sort(unique_x)
             sorted_y = np.sort(unique_y)
             self.assertTrue(np.all(np.diff(sorted_x) > 0))
             self.assertTrue(np.all(np.diff(sorted_y) > 0))
-            
+
             # Get the actual bounds of the points
             x_min_points = np.min(x_coords)
             x_max_points = np.max(x_coords)
             y_min_points = np.min(y_coords)
             y_max_points = np.max(y_coords)
-            
+
             # Verify points form a regular grid
             x_spacing = (x_max_points - x_min_points) / (points_per_side - 1)
             y_spacing = (y_max_points - y_min_points) / (points_per_side - 1)
-            
+
             # Check that spacings are roughly equal (allowing for floating point imprecision)
             x_spacings = np.diff(sorted_x)
             y_spacings = np.diff(sorted_y)
             self.assertTrue(np.allclose(x_spacings, x_spacing, rtol=1e-5))
             self.assertTrue(np.allclose(y_spacings, y_spacing, rtol=1e-5))
-            
+
             # Verify the grid covers a reasonable portion of the crop box
             x_min, y_min, x_max, y_max = crop_box
             box_width = x_max - x_min
             box_height = y_max - y_min
-            
+
             # Points should cover at least 60% of the crop box dimensions
             coverage_threshold = 0.6
             x_coverage = (x_max_points - x_min_points) / box_width
