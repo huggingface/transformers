@@ -25,7 +25,11 @@ from torch.nn import CrossEntropyLoss
 from transformers.models.blip.image_processing_blip import BlipImageProcessor
 from transformers.models.qwen2.modeling_qwen2 import Qwen2Model, Qwen2PreTrainedModel
 from transformers.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
-from transformers.models.sam.modeling_sam import SamVisionEncoder
+from transformers.models.sam.modeling_sam import (
+    SamVisionAttention,
+    SamVisionEncoder,
+    SamVisionLayer,
+)
 from transformers.processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from transformers.tokenization_utils_base import (
     PreTokenizedInput,
@@ -612,6 +616,20 @@ class GotOcr2VisionAdapter(nn.Module):
         hidden_state = hidden_state.flatten(2).permute(0, 2, 1)
         hidden_state = self.multimodal_projector(hidden_state)
         return hidden_state
+
+
+class GotOcr2VisionAttention(SamVisionAttention):
+    pass
+
+
+class GotOcr2VisionLayer(SamVisionLayer):
+    def __init__(self, config, window_size):
+        super().__init__()
+        self.layer_norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.attn = GotOcr2VisionAttention(config, window_size)
+        self.layer_norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.mlp = GotOcr2MLPBlock(config)
+        self.window_size = window_size
 
 
 class GotOcr2VisionEncoder(SamVisionEncoder):
