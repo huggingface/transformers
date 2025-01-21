@@ -3427,7 +3427,7 @@ class GenerationMixin:
                 # `take_along_dim` requires its indices arg to have the same number of dims as `input`
                 while len(beam_indices.shape) < len(tensor.shape):
                     beam_indices = beam_indices.unsqueeze(-1)
-                gathered_tensor = torch.take_along_dim(tensor, beam_indices, dim=1)
+                gathered_tensor = torch.take_along_dim(input=tensor, indices=beam_indices, dim=1)
                 return gathered_tensor
 
             if isinstance(nested, torch.Tensor):
@@ -3454,21 +3454,18 @@ class GenerationMixin:
         batch_size = batch_size_unflattened // num_beams
         n_eos_tokens = eos_token_id.shape[0] if eos_token_id is not None else 0
         decoder_prompt_len = cur_len
+        this_peer_finished = False
 
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
-        # (joao) feature lost in the refactor -- probably won't implement, due to newer low-memory alternatives
-        # like the offloaded cache
+        # (joao) feature lost in the refactor. Probably won't implement, hurts readbility with minimal gains (there
+        # newer low-memory alternative like the offloaded cache)
         sequential = generation_config.low_memory
         if sequential:
             raise ValueError(
                 "`low_memory=True` is not supported after the beam search refactor. Please open an issue on GitHub "
                 "and tag @gante."
             )
-
-        # TODO: implement these
-        if synced_gpus:
-            raise NotImplementedError("synced_gpus")
 
         # 2. init output tuples
         all_scores = () if (return_dict_in_generate and output_scores) else None
@@ -3497,6 +3494,10 @@ class GenerationMixin:
         beam_scores = torch.ones((batch_size, num_beams), dtype=torch.float, device=input_ids.device) * -1e9
         # per batch, beam-item state bit indicating if sentence has finished.
         is_sent_finished = torch.zeros((batch_size, num_beams), dtype=torch.bool, device=input_ids.device)
+        # per batch, beam-item state bit indicating if there are valid continuations.
+        next_token_hits_stopping_criteria = torch.zeros(
+            (batch_size, num_beams), dtype=torch.bool, device=input_ids.device
+        )
         # per batch beam indices
         running_beam_indices = torch.ones((batch_size, num_beams, 0), dtype=torch.int32, device=input_ids.device)
         beam_indices = running_beam_indices.clone().detach()
@@ -3507,44 +3508,38 @@ class GenerationMixin:
             running_beam_scores: torch.Tensor,
             beam_scores: torch.Tensor,
             is_sent_finished: torch.Tensor,
+            next_token_hits_stopping_criteria: torch.Tensor,
         ):
             """Beam Search stopping condition -- halts the generation loop if any of these conditions becomes False"""
-            # a. is less than max length?
-            not_max_length_yet = cur_len < max_length
-
-            # b. can the new beams still improve?
-            if cur_len == decoder_prompt_len:  # First iteration
-                improvement_still_possible = True
+            # a. Can the open beams improve the top completed scores?
+            # early_stopping == False -> apply heuristic = always get the best score from
+            #   `cur_len - decoder_prompt_len`. See the discussion below for more details.
+            #   https://github.com/huggingface/transformers/pull/20901#issuecomment-1369845565
+            # early_stopping == "never" -> compute the best score from `max_length` or `cur_len`, depending on the
+            #   sign of `length_penalty`. Positive `length_penalty` favors longer sequences, thus we use
+            #   `max_length` there.
+            if early_stopping == "never" and length_penalty > 0.0:
+                best_hypothetical_length = max_length - decoder_prompt_len
             else:
-                # early_stopping == False -> apply heuristic = always get the best score from
-                #   `cur_len - decoder_prompt_len`. See the discussion below for more details.
-                #   https://github.com/huggingface/transformers/pull/20901#issuecomment-1369845565
-                # early_stopping == "never" -> compute the best score from `max_length` or `cur_len`, depending on the
-                #   sign of `length_penalty`. Positive `length_penalty` favors longer sequences, thus we use
-                #   `max_length` there.
-                if early_stopping == "never" and length_penalty > 0.0:
-                    best_hypothetical_length = max_length - decoder_prompt_len
-                else:
-                    best_hypothetical_length = cur_len - decoder_prompt_len
-                best_running_score = running_beam_scores[:, :1] / (best_hypothetical_length**length_penalty)
-                worst_finished_score = torch.where(
-                    is_sent_finished, torch.min(beam_scores, dim=1, keepdim=True)[0], -1.0e9
-                )
-                improvement_still_possible = torch.any(best_running_score > worst_finished_score)
+                best_hypothetical_length = cur_len - decoder_prompt_len
+            best_possible_running_score = running_beam_scores[:, :1] / (best_hypothetical_length**length_penalty)
+            worst_finished_score = torch.where(
+                is_sent_finished, torch.min(beam_scores, dim=1, keepdim=True)[0], -1.0e9
+            )
+            improvement_possible = torch.any(best_possible_running_score > worst_finished_score)
 
-            # c. is there still a beam that has not finished?
-            # TODO (joao) this condition looks fishy
-            still_open_beam = ~(torch.all(is_sent_finished) & (early_stopping is True))
+            # b. Is there still a beam without fully completed sequences? This is only relevant if early_stopping is
+            # enabled, where we want to finish as soon as all beams have a completed sequence.
+            exists_open_beam = ~(torch.all(is_sent_finished) & (early_stopping is True))
 
-            return not_max_length_yet & still_open_beam & improvement_still_possible
+            # c. Have we hit a stopping criteria with all running sequences and have no way to continue? e.g. we have
+            # reached `max_length``
+            valid_continuations = ~torch.all(next_token_hits_stopping_criteria)
+
+            return improvement_possible & exists_open_beam & valid_continuations
 
         # 5. run generation
-        while beam_search_has_unfinished_sequences(
-            cur_len,
-            running_beam_scores,
-            beam_scores,
-            is_sent_finished,
-        ):
+        while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # a. Forward current tokens, obtain the logits
             flat_running_sequences = flatten_beam_dim(running_sequences)
             model_inputs = self.prepare_inputs_for_generation(flat_running_sequences, **model_kwargs)
@@ -3554,7 +3549,17 @@ class GenerationMixin:
             model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
 
             model_outputs = self(**model_inputs, return_dict=True)
-            logits = model_outputs.logits[:, -1, :].clone().detach()  # Clone is needed to avoid keeping a hanging ref
+
+            # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
+            model_kwargs = self._update_model_kwargs_for_generation(
+                model_outputs,
+                model_kwargs,
+                is_encoder_decoder=self.config.is_encoder_decoder,
+            )
+            if synced_gpus and this_peer_finished:
+                continue
+
+            logits = model_outputs.logits[:, -1, :].clone().float()  # Clone is needed to avoid keeping a hanging ref
 
             # b. Compute log probs -- get log probabilities from logits, process logits with processors (*e.g.*
             # `temperature`, ...), and add new logprobs to existing running logprobs scores.
@@ -3564,9 +3569,9 @@ class GenerationMixin:
             # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:
                 if output_logits:
-                    raw_logits.append(logits.clone().detach())
+                    raw_logits.append(logits.clone())
                 if output_scores:
-                    all_scores.append(log_probs.clone().detach())
+                    all_scores.append(log_probs.clone())
 
                 if output_attentions and self.config.is_encoder_decoder:
                     decoder_attentions.append(model_outputs.decoder_attentions)
@@ -3579,6 +3584,10 @@ class GenerationMixin:
                     decoder_hidden_states.append(model_outputs.decoder_hidden_states)
                 elif output_hidden_states and self.config.is_encoder_decoder:
                     decoder_hidden_states.append(model_outputs.hidden_states)
+
+            # This is needed to properly delete logits which may be very large for first iteration
+            # Otherwise a reference to outputs is kept which keeps the logits alive in the next iteration
+            del model_outputs
 
             log_probs = unflatten_beam_dim(log_probs, num_beams)
             log_probs = log_probs + running_beam_scores[:, :, None]  # (batch_size, num_beams, vocab_size)
@@ -3662,24 +3671,23 @@ class GenerationMixin:
                 [merged_sequences, merged_scores, merged_beams, merged_is_sent_finished], topk_merged_indices
             )
 
-            # h. Prepare data for the next iteration
+            # h. Prepare remaining data for the next iteration, including computing the stopping condition
+            cur_len = cur_len + 1
+
+            # pluck the cache from the beam indices that will be used in the next iteration
             if model_kwargs.get("past_key_values", None) is not None:
                 model_kwargs["past_key_values"] = self._temporary_reorder_cache(
                     model_kwargs["past_key_values"], flatten_beam_dim(running_beam_indices[..., -1])
                 )
 
-            cur_len = cur_len + 1
-            model_kwargs = self._update_model_kwargs_for_generation(
-                model_outputs,
-                model_kwargs,
-                is_encoder_decoder=self.config.is_encoder_decoder,
+            # Check if generation is finished
+            this_peer_finished = not beam_search_has_unfinished_sequences(
+                cur_len,
+                running_beam_scores,
+                beam_scores,
+                is_sent_finished,
+                next_token_hits_stopping_criteria,
             )
-
-            # This is needed to properly delete outputs.logits which may be very large for first iteration
-            # Otherwise a reference to outputs is kept which keeps the logits alive in the next iteration
-            # IMPORTANT: Note that this should appear BEFORE the call to _reorder_cache() to save the maximum memory
-            # that way the memory peak does not include outputs.logits)
-            del model_outputs
 
         # 6. prepare outputs
         # Take best beams for each batch (the score is sorted in descending order)
@@ -3718,176 +3726,6 @@ class GenerationMixin:
                 )
         else:
             return sequences
-
-        # # if model is an encoder-decoder, retrieve encoder attention weights and hidden states
-        # if return_dict_in_generate and self.config.is_encoder_decoder:
-        #     encoder_attentions = model_kwargs["encoder_outputs"].get("attentions") if output_attentions else None
-        #     encoder_hidden_states = (
-        #         model_kwargs["encoder_outputs"].get("hidden_states") if output_hidden_states else None
-        #     )
-
-        # beam_scores = beam_scores.view((batch_size * num_beams,))
-
-        # this_peer_finished = False
-
-        # decoder_prompt_len = input_ids.shape[-1]  # record the prompt length of decoder
-
-        # while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
-        #     model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-
-        #     # prepare variable output controls (note: some models won't accept all output controls)
-        #     model_inputs.update({"output_attentions": output_attentions} if output_attentions else {})
-        #     model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
-
-        #     # if sequential is True, split the input to batches of batch_size and run sequentially
-        #     if sequential:
-        #         if any(
-        #             model_name in self.__class__.__name__.lower()
-        #             for model_name in [
-        #                 "fsmt",
-        #                 "reformer",
-        #                 "ctrl",
-        #                 "gpt_bigcode",
-        #                 "transo_xl",
-        #                 "xlnet",
-        #                 "cpm",
-        #                 "jamba",
-        #             ]
-        #         ):
-        #             raise RuntimeError(
-        #                 f"Currently generation for {self.__class__.__name__} is not supported "
-        #                 f"for `low_memory beam_search`. Please open an issue on GitHub if you need this feature."
-        #             )
-
-        #         inputs_per_sub_batches = _split_model_inputs(
-        #             model_inputs,
-        #             split_size=batch_size,
-        #             full_batch_size=batch_beam_size,
-        #             config=self.config.get_text_config(),
-        #         )
-        #         outputs_per_sub_batch = [
-        #             self(**inputs_per_sub_batch, return_dict=True) for inputs_per_sub_batch in inputs_per_sub_batches
-        #         ]
-
-        #         outputs = stack_model_outputs(outputs_per_sub_batch, self.config.get_text_config())
-
-        #     else:  # Unchanged original behavior
-        #         outputs = self(**model_inputs, return_dict=True)
-
-        #     # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
-        #     model_kwargs = self._update_model_kwargs_for_generation(
-        #         outputs,
-        #         model_kwargs,
-        #         is_encoder_decoder=self.config.is_encoder_decoder,
-        #     )
-        #     if synced_gpus and this_peer_finished:
-        #         cur_len = cur_len + 1
-        #         continue
-
-        #     # Clone is needed to avoid keeping a hanging ref to outputs.logits which may be very large for first iteration
-        #     # (the clone itself is always small)
-        #     # .float() is needed to retain precision for later logits manipulations
-        #     next_token_logits = outputs.logits[:, -1, :].clone().float()
-        #     next_token_logits = next_token_logits.to(input_ids.device)
-        #     next_token_scores = nn.functional.log_softmax(
-        #         next_token_logits, dim=-1
-        #     )  # (batch_size * num_beams, vocab_size)
-
-        #     next_token_scores_processed = logits_processor(input_ids, next_token_scores)
-        #     next_token_scores = next_token_scores_processed + beam_scores[:, None].expand_as(
-        #         next_token_scores_processed
-        #     )
-
-        #     # Store scores, attentions and hidden_states when required
-        #     if return_dict_in_generate:
-        #         if output_scores:
-        #             scores += (next_token_scores_processed,)
-        #         if output_logits:
-        #             raw_logits += (next_token_logits,)
-        #         if output_attentions:
-        #             decoder_attentions += (
-        #                 (outputs.decoder_attentions,) if self.config.is_encoder_decoder else (outputs.attentions,)
-        #             )
-        #             if self.config.is_encoder_decoder:
-        #                 cross_attentions += (outputs.cross_attentions,)
-        #         if output_hidden_states:
-        #             decoder_hidden_states += (
-        #                 (outputs.decoder_hidden_states,)
-        #                 if self.config.is_encoder_decoder
-        #                 else (outputs.hidden_states,)
-        #             )
-
-        #     # reshape for beam search
-        #     vocab_size = next_token_scores.shape[-1]
-        #     next_token_scores = next_token_scores.view(batch_size, num_beams * vocab_size)
-
-        #     # Beam token selection: pick 1 + eos_token_id.shape[0] next tokens for each beam so we have at least 1
-        #     # non eos token per beam.
-        #     n_eos_tokens = eos_token_id.shape[0] if eos_token_id is not None else 0
-        #     n_tokens_to_keep = max(2, 1 + n_eos_tokens) * num_beams
-        #     if do_sample:
-        #         probs = nn.functional.softmax(next_token_scores, dim=-1)
-        #         next_tokens = torch.multinomial(probs, num_samples=n_tokens_to_keep)
-        #         next_token_scores = torch.gather(next_token_scores, -1, next_tokens)
-        #         next_token_scores, _indices = torch.sort(next_token_scores, descending=True, dim=1)
-        #         next_tokens = torch.gather(next_tokens, -1, _indices)
-        #     else:
-        #         next_token_scores, next_tokens = torch.topk(
-        #             next_token_scores, n_tokens_to_keep, dim=1, largest=True, sorted=True
-        #         )
-
-        #     next_indices = torch.div(next_tokens, vocab_size, rounding_mode="floor")
-        #     next_tokens = next_tokens % vocab_size
-
-        #     # stateless
-        #     beam_outputs = beam_scorer.process(
-        #         input_ids,
-        #         next_token_scores,
-        #         next_tokens,
-        #         next_indices,
-        #         pad_token_id=pad_token_id,
-        #         eos_token_id=eos_token_id,
-        #         beam_indices=beam_indices,
-        #         decoder_prompt_len=decoder_prompt_len,
-        #     )
-
-        #     beam_scores = beam_outputs["next_beam_scores"]
-        #     beam_next_tokens = beam_outputs["next_beam_tokens"]
-        #     beam_idx = beam_outputs["next_beam_indices"]
-
-        #     input_ids = torch.cat([input_ids[beam_idx, :], beam_next_tokens.unsqueeze(-1)], dim=-1)
-
-        #     # This is needed to properly delete outputs.logits which may be very large for first iteration
-        #     # Otherwise a reference to outputs is kept which keeps the logits alive in the next iteration
-        #     # IMPORTANT: Note that this should appear BEFORE the call to _reorder_cache() to save the maximum memory
-        #     # (that way the memory peak does not include outputs.logits)
-        #     del outputs
-
-        #     if model_kwargs.get("past_key_values", None) is not None:
-        #         model_kwargs["past_key_values"] = self._temporary_reorder_cache(
-        #             model_kwargs["past_key_values"], beam_idx
-        #         )
-
-        #     if return_dict_in_generate and output_scores:
-        #         beam_indices = tuple((beam_indices[beam_idx[i]] + (beam_idx[i],) for i in range(len(beam_indices))))
-
-        #     # increase cur_len
-        #     cur_len = cur_len + 1
-
-        #     if beam_scorer.is_done or all(stopping_criteria(input_ids, scores)):
-        #         this_peer_finished = True
-
-        # sequence_outputs = beam_scorer.finalize(
-        #     input_ids,
-        #     beam_scores,
-        #     next_tokens,
-        #     next_indices,
-        #     pad_token_id=pad_token_id,
-        #     eos_token_id=eos_token_id,
-        #     max_length=stopping_criteria.max_length,
-        #     beam_indices=beam_indices,
-        #     decoder_prompt_len=decoder_prompt_len,
-        # )
 
     def _group_beam_search(
         self,
