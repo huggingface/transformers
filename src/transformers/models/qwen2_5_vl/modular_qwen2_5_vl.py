@@ -37,6 +37,7 @@ from transformers.models.qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLCausalLMOutputWithPast,
     Qwen2VLForConditionalGeneration,
     Qwen2VLPreTrainedModel,
+    Qwen2VLModel,
     VisionAttention,
     VisionRotaryEmbedding,
     VisionSdpaAttention,
@@ -364,6 +365,14 @@ class Qwen2_5_VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
         hidden_states = hidden_states[reverse_indices, :]
 
         return hidden_states
+
+
+def Qwen2_5_VLPreTrainedModel(Qwen2VLPreTrainedModel):
+    pass
+
+
+def Qwen2_5_VLModel(Qwen2VLModel):
+    pass
 
 
 @dataclass
@@ -993,6 +1002,8 @@ class Qwen2_5_VLProcessor(Qwen2VLProcessor):
 __all__ = [
     "Qwen2_5_VLConfig",
     "Qwen2_5_VLForConditionalGeneration",
+    "Qwen2_5_VLModel",
+    "Qwen2_5_VLPreTrainedModel",
     "Qwen2_5_VLImageProcessor",
     "Qwen2_5_VLProcessor",
 ]
