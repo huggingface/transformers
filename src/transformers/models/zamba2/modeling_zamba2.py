@@ -55,7 +55,8 @@ else:
 
 logger = logging.get_logger(__name__)
 
-_CONFIG_FOR_DOC = "Zamba2Config"
+
+_CONFIG_FOR_DOC = "Zyphra/Zamba2-2.7B"
 
 
 class Zamba2RMSNormGated(torch.nn.Module):
