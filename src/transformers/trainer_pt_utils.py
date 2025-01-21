@@ -1403,4 +1403,4 @@ def set_rng_state_for_device(device_name, device_module, checkpoint_rng_state, i
             device_module.random.set_rng_state(checkpoint_rng_state[device_state_key])
     except Exception as e:
         # Log error if setting RNG state fails
-        logger.info(err_template.format(backend=device_name, exception=e))
+        logger.error(err_template.format(backend=device_name, exception=e))
