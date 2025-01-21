@@ -130,8 +130,10 @@ class Qwen2_5_VLMLP(nn.Module):
 class Qwen2_5_VisionPatchEmbed(PatchEmbed):
     pass
 
+
 class Qwen2_5_VisionRotaryEmbedding(VisionRotaryEmbedding):
     pass
+
 
 class Qwen2_5_VLPatchMerger(PatchMerger):
     def __init__(self, dim: int, context_dim: int, spatial_merge_size: int = 2) -> None:
@@ -512,9 +514,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
 
                     t_index = (
                         (
-                            torch.arange(llm_grid_t)
-                            .view(-1, 1)
-                            .expand(-1, llm_grid_h * llm_grid_w)
+                            torch.arange(llm_grid_t).view(-1, 1).expand(-1, llm_grid_h * llm_grid_w)
                             * second_per_grid_t
                             * self.config.vision_config.tokens_per_second
                         )
