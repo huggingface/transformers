@@ -150,7 +150,7 @@ class LlavaImageProcessor(BaseImageProcessor):
 
     def pad_to_square(
         self,
-        image: np.array,
+        image: np.ndarray,
         background_color: Union[int, Tuple[int, int, int]] = 0,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
