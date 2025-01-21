@@ -101,7 +101,7 @@ else:
             ("layoutlmv2", ("LayoutLMv2ImageProcessor",)),
             ("layoutlmv3", ("LayoutLMv3ImageProcessor",)),
             ("levit", ("LevitImageProcessor",)),
-            ("llava", ("CLIPImageProcessor",)),
+            ("llava", ("LlavaImageProcessor",)),
             ("llava_next", ("LlavaNextImageProcessor",)),
             ("llava_next_video", ("LlavaNextVideoImageProcessor",)),
             ("llava_onevision", ("LlavaOnevisionImageProcessor",)),
