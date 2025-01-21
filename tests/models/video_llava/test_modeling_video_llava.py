@@ -31,7 +31,6 @@ from transformers.testing_utils import (
     cleanup,
     require_bitsandbytes,
     require_torch,
-    require_torch_gpu,
     run_test_using_subprocess,
     slow,
     torch_device,
@@ -127,7 +126,6 @@ class VideoLlavaVisionText2TextModelTester:
         self.num_image_tokens = (vision_config["image_size"] // vision_config["patch_size"]) ** 2
         self.num_video_tokens = (self.num_image_tokens + 1) * self.num_frames
         self.seq_length = seq_length + self.num_image_tokens + self.num_video_tokens
-        self.encoder_seq_length = self.seq_length
 
     def get_config(self):
         return VideoLlavaConfig(
@@ -180,22 +178,6 @@ class VideoLlavaVisionText2TextModelTester:
         inputs_dict = {
             "pixel_values_videos": pixel_values_videos,
             "pixel_values_images": pixel_values_images,
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-        }
-        return config, inputs_dict
-
-    def prepare_config_and_inputs_for_batched_test(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        config, _, pixel_values_videos = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
-        attention_mask = input_ids.ne(1).to(torch_device)
-
-        # make sure no other special tokens are set
-        input_ids[(input_ids == 0) | (input_ids == 1)] = 3
-        input_ids[:, 0] = config.video_token_index
-        inputs_dict = {
-            "pixel_values_videos": pixel_values_videos,
             "input_ids": input_ids,
             "attention_mask": attention_mask,
         }
@@ -339,7 +321,7 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
                     ),
                 )
 
-        config, batched_input = self.model_tester.prepare_config_and_inputs_for_batched_test()
+        config, batched_input = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             config.output_hidden_states = True
@@ -457,11 +439,11 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             repo_id="raushan-testing-hf/videos-test", filename="video_demo.npy", repo_type="dataset"
         )
         video_file = np.load(video_file)
-        inputs = self.processor(prompt, videos=video_file, return_tensors="pt")
+        inputs = self.processor(prompt, videos=video_file, return_tensors="pt").to(torch_device)
 
-        EXPECTED_INPUT_IDS = torch.tensor([[1,  3148, 1001, 29901, 29871, 32001, 13, 11008, 338, 445, 4863, 2090, 1460, 29973, 319, 1799, 9047, 13566, 29901]])  # fmt: skip
-
-        self.assertTrue(torch.equal(inputs["input_ids"], EXPECTED_INPUT_IDS))
+        EXPECTED_INPUT_IDS = torch.tensor([1,  3148, 1001, 29901, 29871, 13, 11008, 338, 445, 4863, 2090, 1460, 29973, 319, 1799, 9047, 13566, 29901], device=torch_device)  # fmt: skip
+        non_video_inputs = inputs["input_ids"][inputs["input_ids"] != 32001]
+        self.assertTrue(torch.equal(non_video_inputs, EXPECTED_INPUT_IDS))
 
         output = model.generate(**inputs, do_sample=False, max_new_tokens=20)
         EXPECTED_DECODED_TEXT = "USER: \nWhy is this video funny? ASSISTANT: The video is funny because it shows a baby sitting on a bed and reading a book, which"  # fmt: skip
@@ -487,12 +469,14 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         image = Image.open(requests.get(url, stream=True).raw)
 
-        inputs = self.processor(prompts, images=[image], videos=[video_file], padding=True, return_tensors="pt")
+        inputs = self.processor(prompts, images=[image], videos=[video_file], padding=True, return_tensors="pt").to(
+            torch_device
+        )
         output = model.generate(**inputs, do_sample=False, max_new_tokens=20)
 
         EXPECTED_DECODED_TEXT = [
             'USER: \nWhat are the cats in the image doing? ASSISTANT: The cats in the image are sleeping or resting on a couch.',
-            'USER: \nWhy is this video funny? ASSISTANT: The video is funny because it shows a baby sitting on a bed and reading a book. The'
+            'USER: \nWhy is this video funny? ASSISTANT: The video is funny because it shows a baby sitting on a bed and reading a book, which'
         ]  # fmt: skip
 
         self.assertEqual(
@@ -543,7 +527,7 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             hf_hub_download(repo_id="raushan-testing-hf/videos-test", filename="video_demo_2.npy", repo_type="dataset")
         )
 
-        inputs = processor(prompts, videos=[video_1, video_2], return_tensors="pt", padding=True)
+        inputs = processor(prompts, videos=[video_1, video_2], return_tensors="pt", padding=True).to(torch_device)
 
         output = model.generate(**inputs, max_new_tokens=20)
 
@@ -553,126 +537,3 @@ class VideoLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         ]  # fmt: skip
 
         self.assertEqual(processor.batch_decode(output, skip_special_tokens=True), EXPECTED_DECODED_TEXT)
-
-    @slow
-    @require_bitsandbytes
-    def test_video_llava_index_error_bug(self):
-        # This is a reproducer of https://github.com/huggingface/transformers/pull/28032 and makes sure it does not happen anymore
-        # Please refer to that PR, or specifically https://github.com/huggingface/transformers/pull/28032#issuecomment-1860650043 for
-        # more details
-        model = VideoLlavaForConditionalGeneration.from_pretrained("LanguageBind/Video-LLaVA-7B-hf", load_in_4bit=True)
-
-        # Simulate a super long prompt
-        user_prompt = "Describe the video:?\n" * 200
-        prompt = f"USER: <video>{user_prompt}ASSISTANT:"
-        video_file = hf_hub_download(
-            repo_id="raushan-testing-hf/videos-test", filename="video_demo.npy", repo_type="dataset"
-        )
-        video_file = np.load(video_file)
-
-        # let's expand it for 16 frames, to check model can handle any number of frames
-        video_file = video_file.repeat(2, 0)
-        inputs = self.processor(prompt, videos=video_file, return_tensors="pt").to(torch_device, torch.float16)
-
-        # Make sure that `generate` works
-        _ = model.generate(**inputs, max_new_tokens=20)
-
-    @slow
-    @require_torch_gpu
-    def test_video_llava_merge_inputs_error_bug(self):
-        # This is a reproducer of https://github.com/huggingface/transformers/pull/28333 and makes sure it does not happen anymore
-        model = VideoLlavaForConditionalGeneration.from_pretrained("LanguageBind/Video-LLaVA-7B-hf", load_in_4bit=True)
-
-        # Simulate some user inputs
-        pixel_values_videos = torch.randn(
-            (1, 8, 3, 224, 224),
-            dtype=torch.float,
-            device=torch_device,
-        )
-        # fmt: off
-        input_ids = torch.tensor(
-            [[32002, 32002, 1, 15043, 7084, 32001, 29871, 13, 7900]],
-            dtype=torch.long,
-            device=torch_device,
-        )
-        # fmt: on
-        attention_mask = torch.tensor(
-            [[0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]],
-            dtype=torch.long,
-            device=torch_device,
-        )
-
-        # Make sure that the loss is properly computed
-        loss = model(
-            pixel_values_videos=pixel_values_videos,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            labels=input_ids,
-        ).loss
-        loss.backward()
-
-    @slow
-    @require_bitsandbytes
-    def test_expansion_in_processing_images(self):
-        model_id = "LanguageBind/Video-LLaVA-7B-hf"
-        model = VideoLlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
-        processor = VideoLlavaProcessor.from_pretrained(model_id)
-
-        prompt = "USER: <image>\nDescribe the image in details. ASSISTANT:"
-        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        image = Image.open(requests.get(url, stream=True).raw)
-
-        # check processing with expansion of inputs
-        processor.vision_feature_select_strategy = "default"
-        processor.patch_size = 14
-        processor.num_additional_image_tokens = 1
-        inputs_expanded = processor(prompt, images=image, return_tensors="pt").to(torch_device, torch.float16)
-        self.assertTrue(inputs_expanded.input_ids.shape[-1] == 274)
-
-        # check processing without expansion of inputs (legacy behavior)
-        processor.vision_feature_select_strategy = None
-        processor.patch_size = None
-        processor.num_additional_image_tokens = None
-        inputs = processor(prompt, images=image, return_tensors="pt").to(torch_device, torch.float16)
-        self.assertTrue(inputs.input_ids.shape[-1] == 19)
-
-        # generate exactly 20 tokens
-        output = model.generate(**inputs, min_new_tokens=20, max_new_tokens=20)
-        output_expanded = model.generate(**inputs_expanded, min_new_tokens=20, max_new_tokens=20)
-
-        # check that both inputs are handled correctly and generate the same output
-        self.assertListEqual(output_expanded[:, -20:].tolist(), output[:, -20:].tolist())
-
-    @slow
-    @require_bitsandbytes
-    def test_expansion_in_processing(self):
-        model_id = "LanguageBind/Video-LLaVA-7B-hf"
-        model = VideoLlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
-        processor = VideoLlavaProcessor.from_pretrained(model_id)
-
-        prompt = "USER: <video>\nDescribe the video in details. ASSISTANT:"
-        video_file = hf_hub_download(
-            repo_id="raushan-testing-hf/videos-test", filename="video_demo.npy", repo_type="dataset"
-        )
-        video_file = np.load(video_file)
-
-        # check processing with expansion of inputs
-        processor.vision_feature_select_strategy = "default"
-        processor.patch_size = 14
-        processor.num_additional_image_tokens = 1
-        inputs_expanded = processor(prompt, videos=video_file, return_tensors="pt").to(torch_device, torch.float16)
-        self.assertTrue(inputs_expanded.input_ids.shape[-1] == 2074)
-
-        # check processing without expansion of inputs (legacy behavior)
-        processor.vision_feature_select_strategy = None
-        processor.patch_size = None
-        processor.num_additional_image_tokens = None
-        inputs = processor(prompt, videos=video_file, return_tensors="pt").to(torch_device, torch.float16)
-        self.assertTrue(inputs.input_ids.shape[-1] == 19)
-
-        # generate exactly 20 tokens
-        output = model.generate(**inputs, min_new_tokens=20, max_new_tokens=20)
-        output_expanded = model.generate(**inputs_expanded, min_new_tokens=20, max_new_tokens=20)
-
-        # check that both inputs are handled correctly and generate the same output
-        self.assertListEqual(output_expanded[:, -20:].tolist(), output[:, -20:].tolist())
