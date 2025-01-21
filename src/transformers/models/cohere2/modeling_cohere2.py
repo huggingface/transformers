@@ -43,6 +43,7 @@ from .configuration_cohere2 import Cohere2Config
 
 
 logger = logging.get_logger(__name__)
+
 _CONFIG_FOR_DOC = "Cohere2Config"
 
 
