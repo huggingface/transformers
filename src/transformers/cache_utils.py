@@ -2182,9 +2182,10 @@ class PagedAttentionCache(Cache):
         KV_B, KV_H, KV_S, QK_D = key_states.shape
         device = key_states.device
         batch_idx = torch.arange(KV_B, device=device, dtype=torch.int32)
+
         self.paged_attentions[layer_idx].assign(
             batch_idx,
-            cache_kwargs["cache_position"].unsqueeze(0),
+            cache_kwargs["cache_position"].unsqueeze(0).expand([KV_B, KV_S]),
             key_states,
             value_states,
             self.key_cache[layer_idx],
