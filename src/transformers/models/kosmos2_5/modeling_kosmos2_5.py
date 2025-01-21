@@ -522,7 +522,6 @@ class Kosmos2_5VisionFlashAttention2(Kosmos2_5VisionAttention):
     them.
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -1004,7 +1003,6 @@ class Kosmos2_5TextFlashAttention2(Kosmos2_5TextAttention):
     public API of flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
