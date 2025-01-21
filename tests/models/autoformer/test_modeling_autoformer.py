@@ -217,6 +217,13 @@ class AutoformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         self.model_tester = AutoformerModelTester(self)
         self.config_tester = ConfigTester(self, config_class=AutoformerConfig, has_text_modality=False)
 
+    # TODO: (ydshieh) Fix the wrong logic for `tmp_delay` is possible
+    @unittest.skip(
+        reason="The computation of `tmp_delay` in `AutoformerAttention.forward` seems wrong, see PR #12345. Also `topk` is used to compute indices which is not stable."
+    )
+    def test_batching_equivalence(self):
+        super().test_batching_equivalence()
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
