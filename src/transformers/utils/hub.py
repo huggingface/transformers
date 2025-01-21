@@ -25,7 +25,7 @@ import traceback
 import warnings
 from concurrent import futures
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Union
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -60,7 +60,6 @@ from huggingface_hub.utils import (
     hf_raise_for_status,
     send_telemetry,
 )
-from huggingface_hub.utils._deprecation import _deprecate_method
 from requests.exceptions import HTTPError
 
 from . import __version__, logging
