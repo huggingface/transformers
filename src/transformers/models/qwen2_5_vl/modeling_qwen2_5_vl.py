@@ -1977,4 +1977,4 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
         return model_inputs
 
 
-__all__ = ["Qwen2_5_VLForConditionalGeneration", "Qwen2_5_VLModel", "Qwen2_5_VLPreTrainedModel"]
+__all__ = ["Qwen2_5_VLForConditionalGeneration"]
