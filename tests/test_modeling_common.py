@@ -805,8 +805,12 @@ class ModelTesterMixin:
                 self.assertFalse(
                     torch.isinf(single_row_object).any(), f"Single row output has `inf` in {model_name} for key={key}"
                 )
-                msg = f"Batched and Single row outputs are not equal in {model_name} for key={key}."
-                torch.testing.assert_close(batched_row, single_row_object, atol=1e-5, rtol=1e-5, msg=msg)
+                try:
+                    torch.testing.assert_close(batched_row, single_row_object, atol=1e-5, rtol=1e-5)
+                except AssertionError as e:
+                    msg = f"Batched and Single row outputs are not equal in {model_name} for key={key}.\n\n"
+                    msg += str(e)
+                    raise AssertionError(msg)
 
         set_model_tester_for_less_flaky_test(self)
 
