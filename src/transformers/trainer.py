@@ -3963,9 +3963,9 @@ class Trainer:
         # Good practice: save your training arguments together with the trained model
         if not binary_serializiation:
             self.args.to_json_file(os.path.join(output_dir, TRAINING_ARGS_NAME))
-            logger.info(
-                "safe serialization has been enabled by default and the training args will be stored in a {TRAINING_ARGS_NAME} \n"
-                "to fall back to the {DEPRECATED_ARGS_NAME} you can set os.environ['binary_serializiation']= '1' "
+            logger.warn(
+                "Safe serialization has been enabled by default and the training args will be stored in a {TRAINING_ARGS_NAME} \n"
+                "to fall back to the {DEPRECATED_ARGS_NAME} you can set os.environ['binary_serializiation']= '1', this feature will be removed in version 5.0.0"
             )
         else:
             torch.save(self.args, os.path.join(output_dir, "training_args.bin"))
@@ -4680,9 +4680,9 @@ class Trainer:
         # Same for the training arguments
         if not binary_serializiation:
             self.args.to_json_file(os.path.join(output_dir, TRAINING_ARGS_NAME))
-            logger.info(
-                "safe serialization has been enabled by default and the training args will be stored in a {TRAINING_ARGS_NAME} \n"
-                "to fall back to the {DEPRECATED_ARGS_NAME} you can set os.environ['binary_serializiation']= '1' "
+            logger.warn(
+                "Safe serialization has been enabled by default and the training args will be stored in a {TRAINING_ARGS_NAME} \n"
+                "to fall back to the {DEPRECATED_ARGS_NAME} you can set os.environ['binary_serializiation']= '1', this feature will be removed in version 5.0.0"
             )
         else:
             torch.save(self.args, os.path.join(output_dir, "training_args.bin"))
