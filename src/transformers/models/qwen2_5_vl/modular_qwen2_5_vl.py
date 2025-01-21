@@ -988,3 +988,13 @@ class Qwen2_5_VLProcessor(Qwen2VLProcessor):
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
 
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs})
+
+
+__all__ = [
+    "Qwen2_5_VLConfig",
+    "Qwen2_5_VLForConditionalGeneration",
+    "Qwen2_5_VLModel",
+    "Qwen2_5_VLPreTrainedModel",
+    "Qwen2_5_VLImageProcessor",
+    "Qwen2_5_VLProcessor",
+]

@@ -248,3 +248,6 @@ class Qwen2_5_VLConfig(PretrainedConfig):
         rope_config_validation(self, ignore_keys={"mrope_section"})
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+
+
+__all__ = ["Qwen2_5_VLConfig"]
