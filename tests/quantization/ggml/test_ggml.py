@@ -633,7 +633,7 @@ class GgufIntegrationTests(unittest.TestCase):
         text = tokenizer(self.example_text, return_tensors="pt")["input_ids"].to(torch_device)
         out = model.generate(text, max_new_tokens=16)
 
-        EXPECTED_TEXT = 'Hello All,\nI am new to this forum.\nI am using the '
+        EXPECTED_TEXT = "Hello All,\nI am new to this forum.\nI am using the "
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     @unittest.skip("The test causes a torch.OutOfMemoryError on the CI but it passes with enough memory")
