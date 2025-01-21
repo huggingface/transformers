@@ -73,6 +73,13 @@ T = TypeVar("T", bound="TrainingArguments")
 
 
 def serialize(func):
+	"""
+	A decorator that captures and serializes the parameters of any method that was called from the original class and stores all valid parameters in the `__training_args_params__` attribute.
+	Args: 
+		func: The function to be decorated.
+	Returns:
+		The wrapped function with serialized parameters.
+	"""
     @wraps(func)
     def wrapper(self, *args, **kwargs):
         bound_args = inspect.signature(func).bind(self, *args, **kwargs)
