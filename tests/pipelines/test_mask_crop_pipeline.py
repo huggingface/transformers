@@ -20,3 +20,13 @@ class MaskCropPipelineTests(unittest.TestCase):
     
     def get_image_processor(self):
         return AutoImageProcessor.from_pretrained("facebook/sam-vit-base")
+    
+    def get_test_image(self) -> Image.Image:
+        # Create a simple test image
+        image = np.zeros((100, 100, 3), dtype=np.uint8)
+        return Image.fromarray(image)
+
+    def test_pipeline_attributes(self):
+        pipe = self.get_test_pipeline()
+        processor = self.get_image_processor()
+        self.assertTrue(hasattr(processor, "generate_crop_boxes"))
