@@ -1135,7 +1135,13 @@ def _generate_crop_boxes(
 
     # Reshape points to match the expected format for batched processing
     points_per_crop = np.array(point_grid_per_crop)
-    points_per_crop = np.expand_dims(points_per_crop, axis=1)  # Add batch dimension
+    # Check if batch dimension already exists
+    if points_per_crop.ndim == 3:  # [num_crops, num_points, 2]
+        points_per_crop = np.expand_dims(points_per_crop, axis=1)  # Add batch dimension -> [num_crops, 1, num_points, 2]
+    elif points_per_crop.ndim == 4:  # Already in [num_crops, batch, num_points, 2] format
+        pass
+    else:
+        raise ValueError(f"Unexpected points_per_crop shape: {points_per_crop.shape}. Expected 3 or 4 dimensions.")
     input_labels = np.ones_like(points_per_crop[:, :, :, 0], dtype=np.int64)
 
     return crop_boxes, points_per_crop, cropped_images, input_labels
@@ -1420,8 +1426,6 @@ def _mask_to_rle_tf(input_mask: "tf.Tensor"):
         counts += [cur_idxs[0].item()] + btw_idxs.tolist() + [height * width - cur_idxs[-1]]
         out.append({"size": [height, width], "counts": counts})
     return out
-
-
 
 
 def _rle_to_mask(rle: Dict[str, Any]) -> np.ndarray:
