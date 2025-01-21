@@ -28,6 +28,8 @@ class SiglipImageProcessorFast(BaseImageProcessorFast):
             `do_resize` in the `preprocess` method.
         size (`Dict[str, int]` *optional*, defaults to `{"height": 224, "width": 224}`):
             Size of the image after resizing. Can be overridden by `size` in the `preprocess` method.
+        default_to_square (`bool`, *optional*):
+            Whether to default to a square image when resizing, if size is an int.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
         do_center_crop (`bool`, *optional*, defaults to `True`):

@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_deformable_detr.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-import functools
 import pathlib
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -24,21 +23,15 @@ from ...image_utils import (
     AnnotationType,
     ChannelDimension,
     ImageInput,
-    ImageType,
     PILImageResampling,
     get_image_size,
-    get_image_type,
-    infer_channel_dimension_format,
-    make_list_of_images,
     validate_annotations,
-    validate_kwargs,
 )
 from ...utils import (
     TensorType,
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
-    is_vision_available,
     logging,
 )
 from .image_processing_deformable_detr import get_size_with_aspect_ratio
@@ -46,9 +39,6 @@ from .image_processing_deformable_detr import get_size_with_aspect_ratio
 
 if is_torch_available():
     import torch
-
-if is_vision_available():
-    from ...image_utils import pil_torch_interpolation_mapping
 
 
 if is_torchvision_v2_available():
@@ -314,7 +304,26 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
             height and width in the batch.
     """
 
+    resample = PILImageResampling.BILINEAR
+    image_mean = IMAGENET_DEFAULT_MEAN
+    image_std = IMAGENET_DEFAULT_STD
+    format = AnnotationFormat.COCO_DETECTION
+    do_resize = True
+    do_rescale = True
+    do_normalize = True
+    do_pad = True
+    size = {"shortest_edge": 800, "longest_edge": 1333}
+    default_to_square = False
     model_input_names = ["pixel_values", "pixel_mask"]
+    valid_extra_kwargs = [
+        "format",
+        "annotations",
+        "do_convert_annotations",
+        "do_pad",
+        "pad_size",
+        "return_segmentation_masks",
+        "masks_path",
+    ]
 
     def __init__(
         self,
@@ -351,19 +360,21 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
         if do_convert_annotations is None:
             do_convert_annotations = do_normalize
 
-        super().__init__(**kwargs)
-        self.format = format
-        self.do_resize = do_resize
-        self.size = size
-        self.resample = resample
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.do_convert_annotations = do_convert_annotations
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
-        self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
-        self.do_pad = do_pad
-        self.pad_size = pad_size
+        super().__init__(
+            format=format,
+            do_resize=do_resize,
+            size=size,
+            resample=resample,
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_convert_annotations=do_convert_annotations,
+            do_pad=do_pad,
+            pad_size=pad_size,
+            **kwargs,
+        )
 
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
@@ -598,35 +609,6 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
 
         return image, pixel_mask, annotation
 
-    @functools.lru_cache(maxsize=1)
-    def _validate_input_arguments(
-        self,
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: Union[float, List[float]],
-        image_std: Union[float, List[float]],
-        do_resize: bool,
-        size: Dict[str, int],
-        resample: "PILImageResampling",
-        data_format: Union[str, ChannelDimension],
-        return_tensors: Union[TensorType, str],
-    ):
-        if return_tensors != "pt":
-            raise ValueError("Only returning PyTorch tensors is currently supported.")
-
-        if data_format != ChannelDimension.FIRST:
-            raise ValueError("Only channel first data format is currently supported.")
-
-        if do_resize and None in (size, resample):
-            raise ValueError("Size and resample must be specified if do_resize is True.")
-
-        if do_rescale and rescale_factor is None:
-            raise ValueError("Rescale factor must be specified if do_rescale is True.")
-
-        if do_normalize and None in (image_mean, image_std):
-            raise ValueError("Image mean and standard deviation must be specified if do_normalize is True.")
-
     def preprocess(
         self,
         images: ImageInput,
@@ -740,47 +722,54 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
                 " `size['longest_edge']` instead."
             )
             size = kwargs.pop("max_size")
-        do_resize = self.do_resize if do_resize is None else do_resize
-        size = self.size if size is None else size
-        size = get_size_dict(size=size, default_to_square=False)
-        resample = self.resample if resample is None else resample
-        do_rescale = self.do_rescale if do_rescale is None else do_rescale
-        rescale_factor = self.rescale_factor if rescale_factor is None else rescale_factor
-        do_normalize = self.do_normalize if do_normalize is None else do_normalize
-        image_mean = self.image_mean if image_mean is None else image_mean
-        image_std = self.image_std if image_std is None else image_std
-        do_convert_annotations = (
-            self.do_convert_annotations if do_convert_annotations is None else do_convert_annotations
-        )
-        do_pad = self.do_pad if do_pad is None else do_pad
-        pad_size = self.pad_size if pad_size is None else pad_size
-        format = self.format if format is None else format
 
-        # Make hashable for cache
-        size = SizeDict(**size)
-        image_mean = tuple(image_mean) if isinstance(image_mean, list) else image_mean
-        image_std = tuple(image_std) if isinstance(image_std, list) else image_std
-
-        images = make_list_of_images(images)
-        image_type = get_image_type(images[0])
-
-        if image_type not in [ImageType.PIL, ImageType.TORCH, ImageType.NUMPY]:
-            raise ValueError(f"Unsupported input image type {image_type}")
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_extra_kwargs)
-
-        self._validate_input_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
+        return super().preprocess(
+            images=images,
+            annotations=annotations,
+            return_segmentation_masks=return_segmentation_masks,
+            masks_path=masks_path,
             do_resize=do_resize,
             size=size,
             resample=resample,
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            do_convert_annotations=do_convert_annotations,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_pad=do_pad,
+            pad_size=pad_size,
+            format=format,
             return_tensors=return_tensors,
-            data_format=data_format,
+            input_data_format=input_data_format,
+            device=device,
         )
 
+    def _preprocess(
+        self,
+        images: List["torch.Tensor"],
+        annotations: Optional[Union[AnnotationType, List[AnnotationType]]],
+        return_segmentation_masks: bool,
+        masks_path: Optional[Union[str, pathlib.Path]],
+        do_resize: bool,
+        size: SizeDict,
+        interpolation: Optional["F.InterpolationMode"],
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        do_convert_annotations: bool,
+        image_mean: Optional[Union[float, List[float]]],
+        image_std: Optional[Union[float, List[float]]],
+        do_pad: bool,
+        pad_size: Optional[Dict[str, int]],
+        format: Optional[Union[str, AnnotationFormat]],
+        return_tensors: Optional[Union[str, TensorType]],
+    ) -> BatchFeature:
+        """
+        Preprocess an image or a batch of images so that it can be used by the model.
+        """
         if annotations is not None and isinstance(annotations, dict):
             annotations = [annotations]
 
@@ -804,26 +793,6 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
             )
 
         data = {}
-        if image_type == ImageType.PIL:
-            images = [F.pil_to_tensor(image) for image in images]
-        elif image_type == ImageType.NUMPY:
-            # not using F.to_tensor as it doesn't handle (C, H, W) numpy arrays
-            images = [torch.from_numpy(image).contiguous() for image in images]
-
-        if device is not None:
-            images = [image.to(device) for image in images]
-
-        # We assume that all images have the same channel dimension format.
-        if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(images[0])
-        if input_data_format == ChannelDimension.LAST:
-            images = [image.permute(2, 0, 1).contiguous() for image in images]
-            input_data_format = ChannelDimension.FIRST
-
-        if do_rescale and do_normalize:
-            # fused rescale and normalize
-            new_mean = torch.tensor(image_mean, device=images[0].device) * (1.0 / rescale_factor)
-            new_std = torch.tensor(image_std, device=images[0].device) * (1.0 / rescale_factor)
 
         processed_images = []
         processed_annotations = []
@@ -837,15 +806,10 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
                     format,
                     return_segmentation_masks=return_segmentation_masks,
                     masks_path=masks_path,
-                    input_data_format=input_data_format,
+                    input_data_format=ChannelDimension.FIRST,
                 )
 
             if do_resize:
-                interpolation = (
-                    pil_torch_interpolation_mapping[resample]
-                    if isinstance(resample, (PILImageResampling, int))
-                    else resample
-                )
                 resized_image = self.resize(image, size=size, interpolation=interpolation)
                 if annotations is not None:
                     annotation = self.resize_annotation(
@@ -857,14 +821,14 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
 
             if do_rescale and do_normalize:
                 # fused rescale and normalize
-                image = F.normalize(image.to(dtype=torch.float32), new_mean, new_std)
+                image = F.normalize(image.to(dtype=torch.float32), image_mean, image_std)
             elif do_rescale:
                 image = image * rescale_factor
             elif do_normalize:
                 image = F.normalize(image, image_mean, image_std)
 
             if do_convert_annotations and annotations is not None:
-                annotation = self.normalize_annotation(annotation, get_image_size(image, input_data_format))
+                annotation = self.normalize_annotation(annotation, get_image_size(image, ChannelDimension.FIRST))
 
             processed_images.append(image)
             processed_annotations.append(annotation)

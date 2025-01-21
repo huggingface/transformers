@@ -352,6 +352,7 @@ class ImageProcessingTestMixin:
         dict_slow_0 = {key: dict_slow_0[key] for key in set(dict_slow_0) & set(dict_slow_1)}
         dict_slow_1 = {key: dict_slow_1[key] for key in set(dict_slow_0) & set(dict_slow_1)}
         # check that all additional keys are None
+        print("difference", difference)
         self.assertTrue(all(value is None for value in difference.values()))
         # check that the remaining keys are the same
         self.assertEqual(dict_slow_0, dict_slow_1)

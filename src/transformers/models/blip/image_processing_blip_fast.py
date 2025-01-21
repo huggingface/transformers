@@ -29,6 +29,8 @@ class BlipImageProcessorFast(BaseImageProcessorFast):
         size (`dict`, *optional*, defaults to `{"height": 384, "width": 384}`):
             Size of the output image after resizing. Can be overridden by the `size` parameter in the `preprocess`
             method.
+        default_to_square (`bool`, *optional*):
+            Whether to default to a square image when resizing, if size is an int.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
             Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`. Can be
             overridden by the `resample` parameter in the `preprocess` method.

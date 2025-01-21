@@ -65,6 +65,8 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
         size (`dict`, *optional*, defaults to `{"height": 224, "width": 224}`):
             Size of the output image after resizing. Can be overridden by the `size` parameter in the `preprocess`
             method.
+        default_to_square (`bool`, *optional*):
+            Whether to default to a square image when resizing, if size is an int.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
             `preprocess` method.

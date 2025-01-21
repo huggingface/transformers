@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
@@ -48,6 +49,7 @@ from .utils import (
     is_torchvision_available,
     is_torchvision_v2_available,
     is_vision_available,
+    logging,
 )
 
 
@@ -64,6 +66,8 @@ if is_torchvision_available():
         from torchvision.transforms.v2 import functional as F
     else:
         from torchvision.transforms import functional as F
+
+logger = logging.get_logger(__name__)
 
 
 def safe_squeeze(tensor: "torch.Tensor", axis: Optional[int] = None) -> "torch.Tensor":
@@ -131,6 +135,8 @@ class BaseImageProcessorFast(BaseImageProcessor):
         size (`dict`, *optional*):
             Size of the output image after resizing. Can be overridden by the `size` parameter in the `preprocess`
             method.
+        default_to_square (`bool`, *optional*):
+            Whether to default to a square image when resizing, if size is an int.
         resample (`PILImageResampling`, *optional*):
             Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`. Can be
             overridden by the `resample` parameter in the `preprocess` method.
@@ -173,12 +179,13 @@ class BaseImageProcessorFast(BaseImageProcessor):
     do_normalize = None
     do_convert_rgb = None
     model_input_names = ["pixel_values"]
-    valid_extra_kwargs = ["default_to_square"]
+    valid_extra_kwargs = []
 
     def __init__(
         self,
         do_resize: bool = None,
         size: Dict[str, int] = None,
+        default_to_square: bool = None,
         resample: Union["PILImageResampling", "F.InterpolationMode"] = None,
         do_center_crop: bool = None,
         crop_size: Dict[str, int] = None,
@@ -191,8 +198,12 @@ class BaseImageProcessorFast(BaseImageProcessor):
         **kwargs,
     ) -> None:
         size = size if size is not None else self.size
-        default_to_square = kwargs.pop(
-            "default_to_square", self.default_to_square if self.default_to_square is not None else True
+        default_to_square = (
+            default_to_square
+            if default_to_square is not None
+            else self.default_to_square
+            if self.default_to_square is not None
+            else True
         )
         size = get_size_dict(size, default_to_square=default_to_square) if size is not None else None
         crop_size = crop_size if crop_size is not None else self.crop_size
@@ -210,6 +221,13 @@ class BaseImageProcessorFast(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else self.image_mean
         self.image_std = image_std if image_std is not None else self.image_std
         self.do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        for key in self.valid_extra_kwargs:
+            if kwargs.get(key) is not None:
+                setattr(self, key, kwargs.pop(key))
+            else:
+                setattr(self, key, getattr(self, key, None))
+        if kwargs:
+            logger.warning_once(f"Found kwargs that are not in valid_extra_kwargs: {kwargs.keys()}")
 
     def resize(
         self,
@@ -393,27 +411,35 @@ class BaseImageProcessorFast(BaseImageProcessor):
         if image_type not in [ImageType.PIL, ImageType.TORCH, ImageType.NUMPY]:
             raise ValueError(f"Unsupported input image type {image_type}")
 
-        if do_convert_rgb:
-            images = [self.convert_to_rgb(image) for image in images]
+        def process_image(image):
+            if do_convert_rgb:
+                image = self.convert_to_rgb(image)
 
-        if image_type == ImageType.PIL:
-            images = [F.pil_to_tensor(image) for image in images]
-        elif image_type == ImageType.NUMPY:
-            # not using F.to_tensor as it doesn't handle (C, H, W) numpy arrays
-            images = [torch.from_numpy(image).contiguous() for image in images]
+            if image_type == ImageType.PIL:
+                image = F.pil_to_tensor(image)
+            elif image_type == ImageType.NUMPY:
+                # not using F.to_tensor as it doesn't handle (C, H, W) numpy arrays
+                image = torch.from_numpy(image).contiguous()
 
-        # Now that we have torch tensors, we can move them to the right device
-        if device is not None:
-            images = [image.to(device) for image in images]
+            # Infer the channel dimension format if not provided
+            nonlocal input_data_format
+            if input_data_format is None:
+                input_data_format = infer_channel_dimension_format(image)
 
-        # We assume that all images have the same channel dimension format.
-        if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(images[0])
-        if input_data_format == ChannelDimension.LAST:
-            # We force the channel dimension to be first for torch tensors as this is what torchvision expects.
-            images = [image.permute(2, 0, 1).contiguous() for image in images]
+            if input_data_format == ChannelDimension.LAST:
+                # We force the channel dimension to be first for torch tensors as this is what torchvision expects.
+                image = image.permute(2, 0, 1).contiguous()
 
-        return images
+            # Now that we have torch tensors, we can move them to the right device
+            if device is not None:
+                image = image.to(device)
+
+            return image
+
+        with ThreadPoolExecutor() as executor:
+            processed_images = list(executor.map(process_image, images))
+
+        return processed_images
 
     def _prepare_process_arguments(
         self,
@@ -530,6 +556,8 @@ class BaseImageProcessorFast(BaseImageProcessor):
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
             device (`torch.device`, *optional*):
                 The device to process the images on. If unset, the device is inferred from the input images.
+            kwargs:
+                Model-specific arguments to pass to the `_preprocess` method.
         """
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_extra_kwargs)
 
@@ -549,6 +577,12 @@ class BaseImageProcessorFast(BaseImageProcessor):
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
+        kwargs_dict = {
+            kwarg: kwargs.pop(kwarg) if kwargs.get(kwarg) is not None else getattr(self, kwarg, None)
+            for kwarg in self.valid_extra_kwargs
+        }
+        if kwargs:
+            logger.warning_once(f"Found kwargs that are not in valid_extra_kwargs: {kwargs.keys()}")
 
         images = self._prepare_input_images(
             images=images,
@@ -571,6 +605,41 @@ class BaseImageProcessorFast(BaseImageProcessor):
             data_format=data_format,
             device=images[0].device,
         )
+
+        return self._preprocess(
+            images=images,
+            do_resize=do_resize,
+            size=size,
+            interpolation=interpolation,
+            do_center_crop=do_center_crop,
+            crop_size=crop_size,
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            return_tensors=return_tensors,
+            **kwargs_dict,
+        )
+
+    def _preprocess(
+        self,
+        images: List["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        interpolation: Optional["F.InterpolationMode"],
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: Optional[Union[float, List[float]]],
+        image_std: Optional[Union[float, List[float]]],
+        return_tensors: Optional[Union[str, TensorType]],
+    ) -> BatchFeature:
+        """
+        Preprocess images.
+        """
 
         # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images)

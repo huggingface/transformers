@@ -28,6 +28,8 @@ class DeiTImageProcessorFast(BaseImageProcessorFast):
             `do_resize` in `preprocess`.
         size (`Dict[str, int]` *optional*, defaults to `{"height": 256, "width": 256}`):
             Size of the image after `resize`. Can be overridden by `size` in `preprocess`.
+        default_to_square (`bool`, *optional*):
+            Whether to default to a square image when resizing, if size is an int.
         resample (`PILImageResampling` filter, *optional*, defaults to `Resampling.BICUBIC`):
             Resampling filter to use if resizing the image. Can be overridden by `resample` in `preprocess`.
         do_center_crop (`bool`, *optional*, defaults to `True`):
