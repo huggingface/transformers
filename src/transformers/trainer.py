@@ -2207,23 +2207,33 @@ class Trainer:
         # total number of training steps to execute: max_steps
         total_train_batch_size = self._train_batch_size * args.gradient_accumulation_steps * args.world_size
 
+        # Since the actual `max_steps` depends on if we have a dataloader length, number of epochs, or max_steps,
+        # we keep it defined here first as the "base case" if we don't have a dataloader length later (Case 1)
         max_steps = args.max_steps
+
+        # If max_steps is negative, we use the number of epochs to determine the number of total steps later
+        epoch_based = max_steps < 0
+
         len_dataloader = len(train_dataloader) if has_length(train_dataloader) else None
 
-        if has_length(train_dataloader):
-            num_update_steps_per_epoch = len(train_dataloader) // args.gradient_accumulation_steps
-            num_update_steps_per_epoch = max(num_update_steps_per_epoch, 1)
-            if args.max_steps < 1:
+        # Case 2: We have a dataloader length and can extrapolate
+        if len_dataloader is not None:
+            num_update_steps_per_epoch = max(len_dataloader // args.gradient_accumulation_steps, 1)
+            # Case 3: We have a length but are using epochs, we can extrapolate the number of steps
+            if epoch_based:
                 max_steps = math.ceil(args.num_train_epochs * num_update_steps_per_epoch)
 
         num_train_tokens = None
         if self.args.include_tokens_per_second:
-            num_train_tokens = self.num_tokens(train_dataloader, max_steps)
-            if has_length(train_dataloader) and args.max_steps < 1:
+            num_train_tokens = self.num_tokens(train_dataloader, None if epoch_based else max_steps)
+            # If going by epochs, multiply tokens linearly
+            if len_dataloader is not None and max_steps < 0:
                 num_train_tokens *= args.num_train_epochs
+            # Otherwise since its steps, we just multiply by grad accum
             else:
                 num_train_tokens *= args.gradient_accumulation_steps
 
+        # Now we figure out `num_examples`, `num_train_epochs`, and `train_samples`
         if has_length(train_dataloader):
             num_examples = self.num_examples(train_dataloader)
             if args.max_steps > 0:
