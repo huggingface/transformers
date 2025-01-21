@@ -14,7 +14,7 @@
 # limitations under the License.
 import inspect
 import os
-from typing import Any, Dict, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 
@@ -34,7 +34,16 @@ if is_torch_available():
 
 logger = logging.get_logger(__name__)
 
-_DATA_ARG_KEYS = ("input_size", "img_size", "interpolation", "in_chans", "mean", "std", "use_train_size")
+_DATA_ARG_KEYS = (
+    "input_size",
+    "img_size",
+    "interpolation",
+    "in_chans",
+    "mean",
+    "std",
+    "use_test_size",
+    "use_train_size",
+)
 
 
 class TimmWrapperImageProcessor(BaseImageProcessor):
@@ -64,11 +73,18 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
         for k in _DATA_ARG_KEYS:
             if k in kwargs:
                 data_arg_overrides[k] = kwargs.pop(k)
+
+        # Many convnets in timm have a different, higher test time input size default to leverage the
+        # train-test resolution discrepancy. This isn't expected in most transformers use cases so,
+        # we default to using train resolution unless `use_test_size = True` or `use_train_size = False` is
+        # passed as a kwarg.
+        # Both flags are checked because the defaults are opposite between here and timm useage.
+        use_test_size = data_arg_overrides.get("use_test_size", data_arg_overrides.get("use_train_size", True))
         self.data_config = timm.data.resolve_data_config(
             args=data_arg_overrides,  # will override values in pretrained_cfg
             pretrained_cfg=pretrained_cfg,
             model=None,
-            use_test_size=not data_arg_overrides.get("use_train_size", False),
+            use_test_size=use_test_size,
             verbose=False,
         )
 
@@ -83,6 +99,45 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
         self._not_supports_tensor_input = any(
             transform.__class__.__name__ == "ToTensor" for transform in self.val_transforms.transforms
         )
+
+    def get_size_dict(self):
+        input_size = self.data_config["input_size"][1:]  # remove leading channel dim
+        # timm can do more advanced crop (aspect preserving shortest edge w/ non-square target)
+        # This logic should provide least surprises to downstream users attempting to match.
+        if self.data_config["crop_mode"] == "center" and input_size[0] == input_size[1]:
+            # Aspect preserving, resize shortest edge to target & crop
+            # NOTE in timm the resize & centre crop is aspect preserving even if height != width
+            # but most other code that leverages this size is not able to match so we must prioritize
+            # getting the correct final height & width, we fallback to squash crop below.
+            return {"shortest_edge": input_size[0]}
+        elif self.data_config["crop_mode"] == "border" and input_size[0] == input_size[1]:
+            # Aspect preserving, resize longest edge to target & pad
+            # NOTE same concerns as "center" above
+            return {"longest_edge": input_size[0]}
+        else:
+            # Non aspect preserving, resize dims to target aka 'squash' in timm terms
+            return {"height": input_size[0], "width": input_size[1]}
+
+    @property
+    def size(self) -> Dict:
+        return self.get_size_dict()
+
+    @property
+    def crop_size(self) -> Dict:
+        input_size = self.data_config["input_size"]
+        return {"height": input_size[-2], "width": input_size[-1]}
+
+    @property
+    def crop_pct(self) -> float:
+        return self.data_config["crop_pct"]
+
+    @property
+    def image_mean(self) -> List[int]:
+        return self.data_config["mean"]
+
+    @property
+    def image_std(self) -> List[int]:
+        return self.data_config["std"]
 
     def to_dict(self) -> Dict[str, Any]:
         """
@@ -115,7 +170,9 @@ class TimmWrapperImageProcessor(BaseImageProcessor):
         }
 
         # Merge kwargs that should be passed through to timm transform factory into image_processor_dict
-        for k in _DATA_ARG_KEYS + tuple(inspect.signature(timm.data.create_transform).parameters.keys()):
+        create_transform_keys = tuple(inspect.signature(timm.data.create_transform).parameters.keys())
+        all_timm_keys = set(_DATA_ARG_KEYS + create_transform_keys)
+        for k in all_timm_keys:
             if k in kwargs:
                 image_processor_dict[k] = kwargs.pop(k)
 
