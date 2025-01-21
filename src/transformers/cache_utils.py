@@ -1188,11 +1188,7 @@ class StaticCache(Cache):
         cache_position = cache_kwargs.get("cache_position")
 
         if self.key_cache[layer_idx].device.type == "meta":
-            k_out = torch.zeros(
-                *self.key_cache[layer_idx].size(),
-                device=key_states.device,
-                dtype=key_states.dtype,
-            )
+            k_out = torch.zeros_like(self.key_cache[layer_idx], device=key_states.device)
             v_out = torch.zeros(
                 *self.value_cache[layer_idx].size(),
                 device=value_states.device,
