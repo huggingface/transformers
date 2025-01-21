@@ -504,7 +504,7 @@ class PixtralVisionModel(PixtralPreTrainedModel):
         ]
 
         # flatten to a single sequence
-        patch_embeds = torch.cat([p.unsqueeze(0).flatten(2).permute(0, 2, 1) for p in patch_embeds_list], dim=1)
+        patch_embeds = torch.cat([p.flatten(1).T for p in patch_embeds_list], dim=0).unsqueeze(0)
         patch_embeds = self.ln_pre(patch_embeds)
 
         # positional embeddings

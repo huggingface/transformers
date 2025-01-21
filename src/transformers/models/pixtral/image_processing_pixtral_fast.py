@@ -319,33 +319,32 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
             data_format=data_format,
         )
 
-        if do_convert_rgb:
-            images = [convert_to_rgb(image) for image in images]
-
-        if image_type == ImageType.PIL:
-            images = [F.pil_to_tensor(image) for image in images]
-        elif image_type == ImageType.NUMPY:
-            # not using F.to_tensor as it doesn't handle (C, H, W) numpy arrays
-            images = [torch.from_numpy(image).contiguous() for image in images]
-
-        if images is not None:
-            images_list = [image.to(device) for image in images]
-
-        # We assume that all images have the same channel dimension format.
-        if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(images[0])
-        if input_data_format == ChannelDimension.LAST:
-            images = [image.permute(2, 0, 1).contiguous() for image in images]
-            input_data_format = ChannelDimension.FIRST
-
         if do_rescale and do_normalize:
             # fused rescale and normalize
-            new_mean = torch.tensor(image_mean, device=images_list[0].device) * (1.0 / rescale_factor)
-            new_std = torch.tensor(image_std, device=images_list[0].device) * (1.0 / rescale_factor)
+            new_mean = torch.tensor(image_mean, device=device) * (1.0 / rescale_factor)
+            new_std = torch.tensor(image_std, device=device) * (1.0 / rescale_factor)
 
         batch_images = []
         batch_image_sizes = []
         for image in images:
+            if do_convert_rgb:
+                image = convert_to_rgb(image)
+
+            if image_type == ImageType.PIL:
+                image = F.pil_to_tensor(image)
+            elif image_type == ImageType.NUMPY:
+                # not using F.to_tensor as it doesn't handle (C, H, W) numpy arrays
+                image = torch.from_numpy(image).contiguous()
+
+            # We assume that all images have the same channel dimension format.
+            if input_data_format is None:
+                input_data_format = infer_channel_dimension_format(image)
+
+            if input_data_format == ChannelDimension.LAST:
+                image = image.permute(2, 0, 1).contiguous()
+
+            image = image.to(device)
+
             if do_resize:
                 interpolation = (
                     pil_torch_interpolation_mapping[resample]
@@ -368,7 +367,7 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
                 image = F.normalize(image, image_mean, image_std)
 
             batch_images.append(image)
-            batch_image_sizes.append(get_image_size(image, input_data_format))
+            batch_image_sizes.append(get_image_size(image, ChannelDimension.FIRST))
 
         pixel_values = self._pad_for_batching(
             pixel_values=batch_images,

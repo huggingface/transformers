@@ -451,13 +451,10 @@ class PixtralImageProcessor(BaseImageProcessor):
                     image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
                 )
 
-            batch_images.append(image)
-            batch_image_sizes.append(get_image_size(image, input_data_format))
+            image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
 
-        batch_images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
-            for image in batch_images
-        ]
+            batch_images.append(image)
+            batch_image_sizes.append(get_image_size(image, data_format))
 
         pixel_values = self._pad_for_batching(
             pixel_values=batch_images,
