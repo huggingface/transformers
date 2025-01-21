@@ -18,7 +18,10 @@ Processor class for LLaVa-NeXT-Video.
 
 from typing import TYPE_CHECKING, List, Optional, Union
 
+import numpy as np
+
 from ...feature_extraction_utils import BatchFeature
+from ...image_processing_utils import select_best_resolution
 from ...image_utils import ImageInput, VideoInput, get_image_size, to_numpy_array
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
@@ -57,12 +60,22 @@ class LlavaNextVideoProcessor(ProcessorMixin):
             Special token used to denote video location.
         image_token (`str`, *optional*, defaults to `"<image>"`):
             Special token used to denote image location.
+        num_additional_image_tokens (`int`, *optional*, defaults to 0):
+            Number of additional tokens added to the image embeddings, such as CLS (+1). If the backbone has no CLS or other
+            extra tokens appended, no need to set this arg.
     """
 
     # video and image processor share same args, but have different processing logic
     # only image processor config is saved in the hub
     attributes = ["video_processor", "image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template", "patch_size", "vision_feature_select_strategy", "image_token", "video_token"]
+    valid_kwargs = [
+        "chat_template",
+        "patch_size",
+        "vision_feature_select_strategy",
+        "image_token",
+        "video_token",
+        "num_additional_image_tokens",
+    ]
     image_processor_class = "LlavaNextImageProcessor"
     video_processor_class = "LlavaNextVideoImageProcessor"
     tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
@@ -77,12 +90,14 @@ class LlavaNextVideoProcessor(ProcessorMixin):
         vision_feature_select_strategy=None,
         video_token="<video>",
         image_token="<image>",
+        num_additional_image_tokens=0,
         **kwargs,
     ):
         self.patch_size = patch_size
+        self.num_additional_image_tokens = num_additional_image_tokens
         self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.image_token = image_token
-        self.video_token = video_token
+        self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
+        self.video_token = tokenizer.video_token if hasattr(tokenizer, "video_token") else video_token
         super().__init__(video_processor, image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
@@ -160,59 +175,95 @@ class LlavaNextVideoProcessor(ProcessorMixin):
         elif not isinstance(text, list) and not isinstance(text[0], str):
             raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
-        print(self.patch_size, self.vision_feature_select_strategy, image_inputs, videos_inputs.keys())
-
-        if self.patch_size is None or self.vision_feature_select_strategy is None:
-            prompt_strings = text
-            logger.warning_once(
-                "Expanding inputs for image/video tokens in LLaVa-NeXT-Video should be done in processing. "
-                "Please add `patch_size` and `vision_feature_select_strategy` to the model's processing config or set directly "
-                "with `processor.patch_size = {{patch_size}}` and processor.vision_feature_select_strategy = {{vision_feature_select_strategy}}`. "
-                "Using processors without these attributes in the config is deprecated and will throw an error in v4.47."
-            )
-        # cannot infer image expansion length if no images/videos are found
-        elif not image_inputs and not videos_inputs:
-            prompt_strings = text
-        else:
-            # images expand taking into account num_of_patches in each image
-            if image_inputs:
-                image_sizes = image_inputs["image_sizes"]
-                height, width = get_image_size(to_numpy_array(image_inputs["pixel_values"][0][0]))
-                prompt_strings = []
-                for image_size, sample in zip(image_sizes, text):
-                    # Replace the image token with the expanded image token sequence
+        if image_inputs:
+            image_sizes = iter(image_inputs["image_sizes"])
+            height, width = get_image_size(to_numpy_array(image_inputs["pixel_values"][0][0]))
+            prompt_strings = []
+            for sample in text:
+                while self.image_token in sample:
+                    image_size = next(image_sizes)
+                    if not isinstance(image_size, (list, tuple)):
+                        # cast to list to avoid numerical precision errors when calculating unpadding
+                        image_size = image_size.tolist()
                     orig_height, orig_width = image_size
                     num_image_tokens = self._get_number_of_features(orig_height, orig_width, height, width)
                     if self.vision_feature_select_strategy == "default":
                         num_image_tokens -= 1
+                    sample = sample.replace(self.image_token, "<placeholder>" * num_image_tokens, 1)
+                prompt_strings.append(sample)
+            text = [sample.replace("<placeholder>", self.image_token) for sample in prompt_strings]
 
-                    sample = sample.replace(self.image_token, self.image_token * num_image_tokens)
-                    prompt_strings.append(sample)
-                text = prompt_strings
+        # videos are easier, simply get frames and multiply
+        if videos_inputs:
+            one_video = videos_inputs.get("pixel_values_videos")[0]
+            if isinstance(one_video, (list, tuple)):
+                one_video = np.array(one_video)
+            else:
+                one_video = to_numpy_array(one_video)
+            height, width = get_image_size(one_video[0])
+            num_frames = one_video.shape[0]  # frame dim is always after batch dim
 
-            # videos are easier, simply get frames and multiply
-            if videos_inputs:
-                one_video = to_numpy_array(videos_inputs.get("pixel_values_videos")[0])
-                height, width = get_image_size(one_video[0])
-                num_frames = one_video.shape[0]  # frame dim is always after batch dim
-                num_image_tokens = (height // self.patch_size) * (width // self.patch_size)
-                num_video_tokens = num_image_tokens // 4 * num_frames  # divide by 4 needed for avg pooling layer
-
-                prompt_strings = []
-                for sample in text:
-                    sample = sample.replace(self.video_token, self.video_token * num_video_tokens)
-                    prompt_strings.append(sample)
+            # no `self.num_additional_image_tokens` added because video always has a default feature selection strategy
+            num_image_tokens = (height // self.patch_size) * (width // self.patch_size)
+            num_video_tokens = num_image_tokens // 4 * num_frames  # divide by 4 needed for avg pooling layer
+            prompt_strings = []
+            for sample in text:
+                sample = sample.replace(self.video_token, self.video_token * num_video_tokens)
+                prompt_strings.append(sample)
+            text = prompt_strings
 
         text_inputs = self.tokenizer(
-            prompt_strings,
+            text,
             return_tensors=return_tensors,
             padding=padding,
             truncation=truncation,
             max_length=max_length,
         )
-        print(text_inputs.keys())
-
         return BatchFeature(data={**text_inputs, **image_inputs, **videos_inputs})
+
+    # Copied from transformers.models.llava_next.processing_llava_next.LlavaNextProcessor._get_number_of_features
+    def _get_number_of_features(self, orig_height: int, orig_width: int, height: int, width: int) -> int:
+        image_grid_pinpoints = self.image_processor.image_grid_pinpoints
+
+        height_best_resolution, width_best_resolution = select_best_resolution(
+            [orig_height, orig_width], image_grid_pinpoints
+        )
+        scale_height, scale_width = height_best_resolution // height, width_best_resolution // width
+
+        patches_height = height // self.patch_size
+        patches_width = width // self.patch_size
+        unpadded_features, newline_features = self._get_unpadded_features(
+            orig_height, orig_width, patches_height, patches_width, scale_height, scale_width
+        )
+        # The base patch covers the entire image (+1 for the CLS)
+        base_features = patches_height * patches_width + self.num_additional_image_tokens
+        num_image_tokens = unpadded_features + newline_features + base_features
+        return num_image_tokens
+
+    # Copied from transformers.models.llava_next.processing_llava_next.LlavaNextProcessor._get_unpadded_features
+    def _get_unpadded_features(self, height, width, patches_height, patches_width, scale_height, scale_width):
+        """
+        Get number of features for a given image with height/width. LLaVA-NeXT is different from LLaVA
+        because it divided each image into patches depending on its resolution. Therefore we need to calculate how many
+        patches an image is divided into and get the number of features from that.
+        """
+        current_height = patches_height * scale_height
+        current_width = patches_width * scale_width
+
+        original_aspect_ratio = width / height
+        current_aspect_ratio = current_width / current_height
+        if original_aspect_ratio > current_aspect_ratio:
+            new_height = (height * current_width) // width
+            padding = (current_height - new_height) // 2
+            current_height -= padding * 2
+        else:
+            new_width = (width * current_height) // height
+            padding = (current_width - new_width) // 2
+            current_width -= padding * 2
+
+        unpadded_features = current_height * current_width
+        newline_features = current_height
+        return (unpadded_features, newline_features)
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):
@@ -236,3 +287,6 @@ class LlavaNextVideoProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+
+__all__ = ["LlavaNextVideoProcessor"]

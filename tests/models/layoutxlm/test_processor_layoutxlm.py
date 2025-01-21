@@ -19,10 +19,8 @@ import tempfile
 import unittest
 from typing import List
 
-import numpy as np
-
 from transformers import PreTrainedTokenizer, PreTrainedTokenizerBase, PreTrainedTokenizerFast
-from transformers.models.layoutxlm import LayoutXLMTokenizer, LayoutXLMTokenizerFast
+from transformers.models.layoutxlm import LayoutXLMProcessor, LayoutXLMTokenizer, LayoutXLMTokenizerFast
 from transformers.testing_utils import (
     require_pytesseract,
     require_sentencepiece,
@@ -32,19 +30,22 @@ from transformers.testing_utils import (
 )
 from transformers.utils import FEATURE_EXTRACTOR_NAME, cached_property, is_pytesseract_available
 
+from ...test_processing_common import ProcessorTesterMixin
+
 
 if is_pytesseract_available():
     from PIL import Image
 
-    from transformers import LayoutLMv2ImageProcessor, LayoutXLMProcessor
+    from transformers import LayoutLMv2ImageProcessor
 
 
 @require_pytesseract
 @require_sentencepiece
 @require_tokenizers
-class LayoutXLMProcessorTest(unittest.TestCase):
+class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     tokenizer_class = LayoutXLMTokenizer
     rust_tokenizer_class = LayoutXLMTokenizerFast
+    processor_class = LayoutXLMProcessor
 
     def setUp(self):
         image_processor_map = {
@@ -61,6 +62,11 @@ class LayoutXLMProcessorTest(unittest.TestCase):
         # taken from `test_tokenization_layoutxlm.LayoutXLMTokenizationTest.test_save_pretrained`
         self.tokenizer_pretrained_name = "hf-internal-testing/tiny-random-layoutxlm"
 
+        tokenizer = self.get_tokenizer()
+        image_processor = self.get_image_processor()
+        processor = LayoutXLMProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor.save_pretrained(self.tmpdirname)
+
     def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:
         return self.tokenizer_class.from_pretrained(self.tokenizer_pretrained_name, **kwargs)
 
@@ -75,17 +81,6 @@ class LayoutXLMProcessorTest(unittest.TestCase):
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
-
-    def prepare_image_inputs(self):
-        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
-        or a list of PyTorch tensors if one specifies torchify=True.
-        """
-
-        image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
-
-        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
-
-        return image_inputs
 
     def test_save_load_pretrained_default(self):
         image_processor = self.get_image_processor()

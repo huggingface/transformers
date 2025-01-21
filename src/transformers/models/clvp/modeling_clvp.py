@@ -26,7 +26,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...generation import GenerationConfig
+from ...generation import GenerationConfig, GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -735,7 +735,7 @@ class ClvpPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.fc1.proj.weight if getattr(module.fc1, "proj") else module.fc1.weight, std=fc_std)
             nn.init.normal_(module.fc2.weight, std=in_proj_std)
         elif isinstance(module, ClvpEncoder):
-            config = self.config.text_config if hasattr(self.config, "text_config") else self.config
+            config = self.config.get_text_config()
             factor = config.initializer_factor
             module.projection.weight.data.normal_(mean=0.0, std=factor * (config.hidden_size**-0.5))
         elif isinstance(module, ClvpConditioningEncoder):
@@ -1278,7 +1278,7 @@ class ClvpModel(ClvpPreTrainedModel):
     "The CLVP decoder model with a language modelling head on top.",
     CLVP_START_DOCSTRING,
 )
-class ClvpForCausalLM(ClvpPreTrainedModel):
+class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
     def __init__(self, config):
         super().__init__(config)
 
@@ -1367,6 +1367,8 @@ class ClvpForCausalLM(ClvpPreTrainedModel):
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, inputs_embeds=None, conditioning_embeds=None, **kwargs
     ):
+        # Overwritten: has `conditioning_embeds`-related logic
+
         input_ids_length = input_ids.shape[-1]
         token_type_ids = kwargs.get("token_type_ids", None)
         # only last token for inputs_ids if past is defined in kwargs
@@ -1509,7 +1511,7 @@ class ClvpForCausalLM(ClvpPreTrainedModel):
     "together to filter out the best speech_ids.",
     CLVP_START_DOCSTRING,
 )
-class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
+class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
     config_class = ClvpConfig
 
     def __init__(self, config: ClvpConfig):
@@ -2019,3 +2021,13 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
             text_encoder_hidden_states=text_outputs.hidden_states,
             speech_encoder_hidden_states=speech_outputs.hidden_states,
         )
+
+
+__all__ = [
+    "ClvpModelForConditionalGeneration",
+    "ClvpForCausalLM",
+    "ClvpModel",
+    "ClvpPreTrainedModel",
+    "ClvpEncoder",
+    "ClvpDecoder",
+]

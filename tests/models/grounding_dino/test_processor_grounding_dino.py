@@ -17,8 +17,8 @@ import os
 import shutil
 import tempfile
 import unittest
+from typing import Optional
 
-import numpy as np
 import pytest
 
 from transformers import BertTokenizer, BertTokenizerFast, GroundingDinoProcessor
@@ -35,8 +35,6 @@ if is_torch_available():
     from transformers.models.grounding_dino.modeling_grounding_dino import GroundingDinoObjectDetectionOutput
 
 if is_vision_available():
-    from PIL import Image
-
     from transformers import GroundingDinoImageProcessor
 
 
@@ -80,6 +78,20 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.embed_dim = 5
         self.seq_length = 5
 
+    def prepare_text_inputs(self, batch_size: Optional[int] = None):
+        labels = ["a cat", "remote control"]
+        labels_longer = ["a person", "a car", "a dog", "a cat"]
+
+        if batch_size is None:
+            return labels
+
+        if batch_size < 1:
+            raise ValueError("batch_size must be greater than 0")
+
+        if batch_size == 1:
+            return [labels]
+        return [labels, labels_longer] + [labels] * (batch_size - 2)
+
     # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.get_tokenizer with CLIP->Bert
     def get_tokenizer(self, **kwargs):
         return BertTokenizer.from_pretrained(self.tmpdirname, **kwargs)
@@ -96,23 +108,12 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
-    # Copied from tests.models.clip.test_processor_clip.CLIPProcessorTest.prepare_image_inputs
-    def prepare_image_inputs(self):
-        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
-        or a list of PyTorch tensors if one specifies torchify=True.
-        """
-
-        image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
-
-        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
-
-        return image_inputs
-
     def get_fake_grounding_dino_output(self):
         torch.manual_seed(42)
         return GroundingDinoObjectDetectionOutput(
             pred_boxes=torch.rand(self.batch_size, self.num_queries, 4),
             logits=torch.rand(self.batch_size, self.num_queries, self.embed_dim),
+            input_ids=self.get_fake_grounding_dino_input_ids(),
         )
 
     def get_fake_grounding_dino_input_ids(self):
@@ -126,14 +127,11 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         processor = GroundingDinoProcessor(tokenizer=tokenizer, image_processor=image_processor)
 
         grounding_dino_output = self.get_fake_grounding_dino_output()
-        grounding_dino_input_ids = self.get_fake_grounding_dino_input_ids()
 
-        post_processed = processor.post_process_grounded_object_detection(
-            grounding_dino_output, grounding_dino_input_ids
-        )
+        post_processed = processor.post_process_grounded_object_detection(grounding_dino_output)
 
         self.assertEqual(len(post_processed), self.batch_size)
-        self.assertEqual(list(post_processed[0].keys()), ["scores", "labels", "boxes"])
+        self.assertEqual(list(post_processed[0].keys()), ["scores", "boxes", "text_labels", "labels"])
         self.assertEqual(post_processed[0]["boxes"].shape, (self.num_queries, 4))
         self.assertEqual(post_processed[0]["scores"].shape, (self.num_queries,))
 
@@ -263,3 +261,26 @@ class GroundingDinoProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(text=input_str, images=image_input)
 
         self.assertListEqual(list(inputs.keys()), processor.model_input_names)
+
+    def test_text_preprocessing_equivalence(self):
+        processor = GroundingDinoProcessor.from_pretrained(self.tmpdirname)
+
+        # check for single input
+        formatted_labels = "a cat. a remote control."
+        labels = ["a cat", "a remote control"]
+        inputs1 = processor(text=formatted_labels, return_tensors="pt")
+        inputs2 = processor(text=labels, return_tensors="pt")
+        self.assertTrue(
+            torch.allclose(inputs1["input_ids"], inputs2["input_ids"]),
+            f"Input ids are not equal for single input: {inputs1['input_ids']} != {inputs2['input_ids']}",
+        )
+
+        # check for batched input
+        formatted_labels = ["a cat. a remote control.", "a car. a person."]
+        labels = [["a cat", "a remote control"], ["a car", "a person"]]
+        inputs1 = processor(text=formatted_labels, return_tensors="pt", padding=True)
+        inputs2 = processor(text=labels, return_tensors="pt", padding=True)
+        self.assertTrue(
+            torch.allclose(inputs1["input_ids"], inputs2["input_ids"]),
+            f"Input ids are not equal for batched input: {inputs1['input_ids']} != {inputs2['input_ids']}",
+        )

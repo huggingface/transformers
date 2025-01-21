@@ -33,7 +33,7 @@ alt="drawing" width="600"/>
 
 ## Usage
 
-### Presequities
+### Prerequisites
 
 Jamba requires you use `transformers` version 4.39.0 or higher:
 ```bash

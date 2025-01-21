@@ -995,9 +995,7 @@ def _print_list(l) -> str:
 
 
 def infer_tests_to_run(
-    output_file: str,
-    diff_with_last_commit: bool = False,
-    filter_models: bool = True,
+    output_file: str, diff_with_last_commit: bool = False, filter_models: bool = False, test_all: bool = False
 ):
     """
     The main function called by the test fetcher. Determines the tests to run from the diff.
@@ -1018,7 +1016,11 @@ def infer_tests_to_run(
             Whether or not to filter the tests to core models only, when a file modified results in a lot of model
             tests.
     """
-    modified_files = get_modified_python_files(diff_with_last_commit=diff_with_last_commit)
+    if not test_all:
+        modified_files = get_modified_python_files(diff_with_last_commit=diff_with_last_commit)
+    else:
+        modified_files = [str(k) for k in PATH_TO_TESTS.glob("*/*") if str(k).endswith(".py") and "test_" in str(k)]
+        print("\n### test_all is TRUE, FETCHING ALL FILES###\n")
     print(f"\n### MODIFIED FILES ###\n{_print_list(modified_files)}")
 
     # Create the map that will give us all impacted modules.
@@ -1148,10 +1150,12 @@ JOB_TO_TEST_FILE = {
     "pipelines_torch": r"tests/models/.*/test_modeling_(?!(?:flax_|tf_)).*",
     "tests_hub": r"tests/.*",
     "tests_onnx": r"tests/models/.*/test_modeling_(?:tf_|(?!flax)).*",
+    "tests_non_model": r"tests/[^/]*?/test_.*\.py",
 }
 
 
 def create_test_list_from_filter(full_test_list, out_path):
+    os.makedirs(out_path, exist_ok=True)
     all_test_files = "\n".join(full_test_list)
     for job_name, _filter in JOB_TO_TEST_FILE.items():
         file_name = os.path.join(out_path, f"{job_name}_test_list.txt")
@@ -1193,9 +1197,9 @@ if __name__ == "__main__":
         default=None,
     )
     parser.add_argument(
-        "--commit_message",
-        type=str,
-        help="The commit message (which could contain a command to force all tests or skip the CI).",
+        "--fetch_all",
+        action="store_true",
+        help="Will fetch all tests.",
         default=None,
     )
     args = parser.parse_args()
@@ -1212,6 +1216,9 @@ if __name__ == "__main__":
             quit()
         if commit_flags["no_filter"]:
             print("Running all tests fetched without filtering.")
+
+        if args.fetch_all:
+            commit_flags["test_all"] = True
         if commit_flags["test_all"]:
             print("Force-launching all tests")
 
@@ -1224,6 +1231,7 @@ if __name__ == "__main__":
         infer_tests_to_run(
             args.output_file,
             diff_with_last_commit=diff_with_last_commit,
-            filter_models=(not (commit_flags["no_filter"] or is_main_branch)),
+            filter_models=False,
+            test_all=commit_flags["test_all"],
         )
         filter_tests(args.output_file, ["repo_utils"])

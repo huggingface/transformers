@@ -85,7 +85,7 @@ If you want to do the pre- and postprocessing yourself, here's how to do that:
 
 >>> candidate_labels = ["2 cats", "2 dogs"]
 # follows the pipeline prompt template to get same results
->>> candidate_labels = [f'This is a photo of {label}.' for label in candidate_labels]
+>>> texts = [f'This is a photo of {label}.' for label in candidate_labels]
 >>> # important: we pass `padding=max_length` since the model was trained with this
 >>> inputs = processor(text=texts, images=image, padding="max_length", return_tensors="pt")
 
@@ -94,7 +94,7 @@ If you want to do the pre- and postprocessing yourself, here's how to do that:
 
 >>> logits_per_image = outputs.logits_per_image
 >>> probs = torch.sigmoid(logits_per_image) # these are the probabilities
->>> print(f"{probs[0][0]:.1%} that image 0 is '{texts[0]}'")
+>>> print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
 31.9% that image 0 is 'a photo of 2 cats'
 ```
 
@@ -102,7 +102,7 @@ If you want to do the pre- and postprocessing yourself, here's how to do that:
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with SigLIP.
 
-- [Zero-shot image classification task guide](../tasks/zero_shot_image_classification_md)
+- [Zero-shot image classification task guide](../tasks/zero_shot_image_classification)
 - Demo notebooks for SigLIP can be found [here](https://github.com/NielsRogge/Transformers-Tutorials/tree/master/SigLIP). 🌎
 
 If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
@@ -140,9 +140,9 @@ To load and run a model using Flash Attention 2, refer to the snippet below:
 
 >>> candidate_labels = ["2 cats", "2 dogs"]
 # follows the pipeline prompt template to get same results
->>> candidate_labels = [f'This is a photo of {label}.' for label in candidate_labels]
+>>> texts = [f'This is a photo of {label}.' for label in candidate_labels]
 # important: we pass `padding=max_length` since the model was trained with this
->>> inputs = processor(text=candidate_labels, images=image, padding="max_length", return_tensors="pt")
+>>> inputs = processor(text=texts, images=image, padding="max_length", return_tensors="pt")
 >>> inputs.to(device)
 
 >>> with torch.no_grad():

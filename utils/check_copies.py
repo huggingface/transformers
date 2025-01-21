@@ -672,9 +672,13 @@ def is_copy_consistent(filename: str, overwrite: bool = False, buffer: dict = No
         indent, object_name, replace_pattern = search.groups()
 
         # Find the file lines, the object's code, and its blocks
-        target_lines, theoretical_code, theoretical_code_splits = find_code_and_splits(
-            object_name, base_path, buffer=buffer
-        )
+        try:
+            target_lines, theoretical_code, theoretical_code_splits = find_code_and_splits(
+                object_name, base_path, buffer=buffer
+            )
+        except Exception as exc:
+            exc.args = (f"Error while trying to find source code for {filename}.\n\n" + str(exc),)
+            raise
 
         # code replaced by the patterns
         theoretical_code_blocks = OrderedDict()
@@ -1088,6 +1092,7 @@ MODELS_NOT_IN_README = [
     "CLIPVisionModel",
     "SiglipVisionModel",
     "ChineseCLIPVisionModel",
+    "VitPoseBackbone",
 ]
 
 # Template for new entries to add in the main README when we have missing models.

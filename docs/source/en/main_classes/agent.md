@@ -50,11 +50,19 @@ We provide two types of agents, based on the main [`Agent`] class:
 
 [[autodoc]] ReactCodeAgent
 
+### ManagedAgent
+
+[[autodoc]] ManagedAgent
+
 ## Tools
 
 ### load_tool
 
 [[autodoc]] load_tool
+
+### tool
+
+[[autodoc]] tool
 
 ### Tool
 

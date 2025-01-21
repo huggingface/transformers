@@ -13,6 +13,7 @@ jobs:
     check_circleci_user:
         docker:
             - image: python:3.10-slim
+        resource_class: small
         parallelism: 1
         steps:
             - run: echo $CIRCLE_PROJECT_USERNAME
@@ -47,27 +48,29 @@ jobs:
 
             - run:
                 name: "Retrieve Artifact Paths"
-                env:
-                    CIRCLE_TOKEN: ${{ secrets.CI_ARTIFACT_TOKEN }}
+                # [reference] https://circleci.com/docs/api/v2/index.html#operation/getJobArtifacts
+                # `CIRCLE_TOKEN` is defined as an environment variables set within a context, see `https://circleci.com/docs/contexts/`
                 command: |
                     project_slug="gh/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}"
                     job_number=${CIRCLE_BUILD_NUM}
                     url="https://circleci.com/api/v2/project/${project_slug}/${job_number}/artifacts"
-                    curl -o  test_preparation/artifacts.json ${url}
+                    curl -o test_preparation/artifacts.json ${url} --header "Circle-Token: $CIRCLE_TOKEN"
             - run:
-                name: "Show Artifacts"
+                name: "Prepare pipeline parameters"
                 command: |
-                    cat test_preparation/artifacts.json | jq '.items | map({(.path | split("/")[-1][:-4]): .url}) | add | del(.["generated_config"])' > test_preparation/transformed_artifacts.json
-            
+                    python utils/process_test_artifacts.py 
+
             # To avoid too long generated_config.yaml on the continuation orb, we pass the links to the artifacts as parameters.
             # Otherwise the list of tests was just too big. Explicit is good but for that it was a limitation.
             # We used:
 
             # https://circleci.com/docs/api/v2/index.html#operation/getJobArtifacts : to get the job artifacts
             # We could not pass a nested dict, which is why we create the test_file_... parameters for every single job
-                
+
             - store_artifacts:
                 path: test_preparation/transformed_artifacts.json
+            - store_artifacts:
+                path: test_preparation/artifacts.json
             - continuation/continue:
                 parameters:  test_preparation/transformed_artifacts.json
                 configuration_path: test_preparation/generated_config.yml
@@ -80,22 +83,49 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - run: uv pip install -e .
+            - run: uv pip install -U -e .
+            - run: echo 'export "GIT_COMMIT_MESSAGE=$(git show -s --format=%s)"' >> "$BASH_ENV" && source "$BASH_ENV"
+            - run: mkdir -p test_preparation
+            - run: python utils/tests_fetcher.py --fetch_all | tee tests_fetched_summary.txt
+            - run: python utils/tests_fetcher.py --filter_tests
+            - run: export "GIT_COMMIT_MESSAGE=$(git show -s --format=%s)" && echo $GIT_COMMIT_MESSAGE && python .circleci/create_circleci_config.py --fetcher_folder test_preparation
             - run: |
-                  mkdir test_preparation
-                  echo -n "tests" > test_preparation/test_list.txt
-                  echo -n "all" > test_preparation/examples_test_list.txt
-                  echo -n "tests/repo_utils" > test_preparation/test_repo_utils.txt
-            - run: |
-                  echo -n "tests" > test_list.txt
-                  python utils/tests_fetcher.py --filter_tests
-                  mv test_list.txt test_preparation/filtered_test_list.txt
-            - run: python .circleci/create_circleci_config.py --fetcher_folder test_preparation
-            - run: cp test_preparation/generated_config.yml test_preparation/generated_config.txt
+                if [ ! -s test_preparation/generated_config.yml ]; then
+                    echo "No tests to run, exiting early!"
+                    circleci-agent step halt
+                fi
+
             - store_artifacts:
-                  path: test_preparation/generated_config.txt
+                path: test_preparation
+
+            - run:
+                name: "Retrieve Artifact Paths"
+                env:
+                    CIRCLE_TOKEN: ${{ secrets.CI_ARTIFACT_TOKEN }}
+                command: |
+                    project_slug="gh/${CIRCLE_PROJECT_USERNAME}/${CIRCLE_PROJECT_REPONAME}"
+                    job_number=${CIRCLE_BUILD_NUM}
+                    url="https://circleci.com/api/v2/project/${project_slug}/${job_number}/artifacts"
+                    curl -o  test_preparation/artifacts.json ${url}
+            - run:
+                name: "Prepare pipeline parameters"
+                command: |
+                    python utils/process_test_artifacts.py 
+
+            # To avoid too long generated_config.yaml on the continuation orb, we pass the links to the artifacts as parameters.
+            # Otherwise the list of tests was just too big. Explicit is good but for that it was a limitation.
+            # We used:
+
+            # https://circleci.com/docs/api/v2/index.html#operation/getJobArtifacts : to get the job artifacts
+            # We could not pass a nested dict, which is why we create the test_file_... parameters for every single job
+
+            - store_artifacts:
+                path: test_preparation/transformed_artifacts.json
+            - store_artifacts:
+                path: test_preparation/artifacts.json
             - continuation/continue:
-                  configuration_path: test_preparation/generated_config.yml
+                parameters:  test_preparation/transformed_artifacts.json
+                configuration_path: test_preparation/generated_config.yml
 
     check_code_quality:
         working_directory: ~/transformers
@@ -108,7 +138,7 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - run: uv pip install -e .
+            - run: uv pip install -e ".[quality]"
             - run:
                 name: Show installed libraries and their versions
                 command: pip freeze | tee installed.txt
@@ -133,13 +163,14 @@ jobs:
         parallelism: 1
         steps:
             - checkout
-            - run: uv pip install -e .
+            - run: uv pip install -e ".[quality]"
             - run:
                 name: Show installed libraries and their versions
                 command: pip freeze | tee installed.txt
             - store_artifacts:
                   path: ~/transformers/installed.txt
             - run: python utils/check_copies.py
+            - run: python utils/check_modular_conversion.py
             - run: python utils/check_table.py
             - run: python utils/check_dummies.py
             - run: python utils/check_repo.py
@@ -156,12 +187,27 @@ workflows:
     version: 2
     setup_and_quality:
         when:
-            not: <<pipeline.parameters.nightly>>
+            and:
+                - equal: [<<pipeline.project.git_url>>, https://github.com/huggingface/transformers]
+                - not: <<pipeline.parameters.nightly>>
         jobs:
             - check_circleci_user
             - check_code_quality
             - check_repository_consistency
             - fetch_tests
+
+    setup_and_quality_2:
+        when:
+            not:
+                 equal: [<<pipeline.project.git_url>>, https://github.com/huggingface/transformers]
+        jobs:
+            - check_circleci_user
+            - check_code_quality
+            - check_repository_consistency
+            - fetch_tests:
+                # [reference] https://circleci.com/docs/contexts/
+                context:
+                    - TRANSFORMERS_CONTEXT
 
     nightly:
         when: <<pipeline.parameters.nightly>>

@@ -112,7 +112,7 @@ python src/transformers/commands/transformers_cli.py env
 
 要为 🤗 Transformers 做贡献，你需要基本的 `git` 使用技能。虽然 `git` 不是一个很容易使用的工具，但它提供了非常全面的手册，在命令行中输入 `git --help` 并享受吧！如果你更喜欢书籍，[Pro Git](https://git-scm.com/book/en/v2)是一本很好的参考书。
 
-要为 🤗 Transformers 做贡献，你需要 **[Python 3.8](https://github.com/huggingface/transformers/blob/main/setup.py#L426)** 或更高版本。请按照以下步骤开始贡献：
+要为 🤗 Transformers 做贡献，你需要 **[Python 3.9](https://github.com/huggingface/transformers/blob/main/setup.py#L426)** 或更高版本。请按照以下步骤开始贡献：
 
 1. 点击[仓库](https://github.com/huggingface/transformers)页面上的 **[Fork](https://github.com/huggingface/transformers/fork)** 按钮，这会在你的 GitHub 账号下拷贝一份代码。
 

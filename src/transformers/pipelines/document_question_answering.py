@@ -189,7 +189,14 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         if handle_impossible_answer is not None:
             postprocess_params["handle_impossible_answer"] = handle_impossible_answer
 
-        return preprocess_params, {}, postprocess_params
+        forward_params = {}
+        if self.assistant_model is not None:
+            forward_params["assistant_model"] = self.assistant_model
+        if self.assistant_tokenizer is not None:
+            forward_params["tokenizer"] = self.tokenizer
+            forward_params["assistant_tokenizer"] = self.assistant_tokenizer
+
+        return preprocess_params, forward_params, postprocess_params
 
     def __call__(
         self,
@@ -429,6 +436,10 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         is_last = model_inputs.pop("is_last", False)
 
         if self.model_type == ModelType.VisionEncoderDecoder:
+            # User-defined `generation_config` passed to the pipeline call take precedence
+            if "generation_config" not in generate_kwargs:
+                generate_kwargs["generation_config"] = self.generation_config
+
             model_outputs = self.model.generate(**model_inputs, **generate_kwargs)
         else:
             model_outputs = self.model(**model_inputs)
@@ -473,6 +484,11 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         answers = []
         for output in model_outputs:
             words = output["words"]
+
+            if self.framework == "pt" and output["start_logits"].dtype in (torch.bfloat16, torch.float16):
+                output["start_logits"] = output["start_logits"].float()
+            if self.framework == "pt" and output["end_logits"].dtype in (torch.bfloat16, torch.float16):
+                output["end_logits"] = output["end_logits"].float()
 
             starts, ends, scores, min_null_score = select_starts_ends(
                 start=output["start_logits"],

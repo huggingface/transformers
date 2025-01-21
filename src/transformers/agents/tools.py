@@ -14,14 +14,17 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import ast
 import base64
 import importlib
+import inspect
 import io
 import json
 import os
 import tempfile
-from functools import lru_cache
-from typing import Any, Dict, List, Optional, Union
+from functools import lru_cache, wraps
+from pathlib import Path
+from typing import Any, Callable, Dict, List, Optional, Union
 
 from huggingface_hub import create_repo, get_collection, hf_hub_download, metadata_update, upload_folder
 from huggingface_hub.utils import RepositoryNotFoundError, build_hf_headers, get_session
@@ -35,13 +38,15 @@ from ..dynamic_module_utils import (
 from ..models.auto import AutoProcessor
 from ..utils import (
     CONFIG_NAME,
+    TypeHintParsingException,
     cached_file,
+    get_json_schema,
     is_accelerate_available,
     is_torch_available,
     is_vision_available,
     logging,
 )
-from .agent_types import handle_agent_inputs, handle_agent_outputs
+from .agent_types import ImageType, handle_agent_inputs, handle_agent_outputs
 
 
 logger = logging.get_logger(__name__)
@@ -84,6 +89,22 @@ launch_gradio_demo({class_name})
 """
 
 
+def validate_after_init(cls, do_validate_forward: bool = True):
+    original_init = cls.__init__
+
+    @wraps(original_init)
+    def new_init(self, *args, **kwargs):
+        original_init(self, *args, **kwargs)
+        if not isinstance(self, PipelineTool):
+            self.validate_arguments(do_validate_forward=do_validate_forward)
+
+    cls.__init__ = new_init
+    return cls
+
+
+CONVERSION_DICT = {"str": "string", "int": "integer", "float": "number"}
+
+
 class Tool:
     """
     A base class for the functions used by the agent. Subclass this and implement the `__call__` method as well as the
@@ -114,17 +135,45 @@ class Tool:
     def __init__(self, *args, **kwargs):
         self.is_initialized = False
 
-    def validate_attributes(self):
+    def __init_subclass__(cls, **kwargs):
+        super().__init_subclass__(**kwargs)
+        validate_after_init(cls, do_validate_forward=False)
+
+    def validate_arguments(self, do_validate_forward: bool = True):
         required_attributes = {
             "description": str,
             "name": str,
-            "inputs": Dict,
-            "output_type": type,
+            "inputs": dict,
+            "output_type": str,
         }
+        authorized_types = ["string", "integer", "number", "image", "audio", "any", "boolean"]
+
         for attr, expected_type in required_attributes.items():
             attr_value = getattr(self, attr, None)
+            if attr_value is None:
+                raise TypeError(f"You must set an attribute {attr}.")
             if not isinstance(attr_value, expected_type):
-                raise TypeError(f"Instance attribute {attr} must exist and be of type {expected_type.__name__}")
+                raise TypeError(
+                    f"Attribute {attr} should have type {expected_type.__name__}, got {type(attr_value)} instead."
+                )
+        for input_name, input_content in self.inputs.items():
+            assert isinstance(input_content, dict), f"Input '{input_name}' should be a dictionary."
+            assert (
+                "type" in input_content and "description" in input_content
+            ), f"Input '{input_name}' should have keys 'type' and 'description', has only {list(input_content.keys())}."
+            if input_content["type"] not in authorized_types:
+                raise Exception(
+                    f"Input '{input_name}': type '{input_content['type']}' is not an authorized value, should be one of {authorized_types}."
+                )
+
+        assert getattr(self, "output_type", None) in authorized_types
+        if do_validate_forward:
+            if not isinstance(self, PipelineTool):
+                signature = inspect.signature(self.forward)
+                if not set(signature.parameters.keys()) == set(self.inputs.keys()):
+                    raise Exception(
+                        "Tool's 'forward' method should take 'self' as its first argument, then its next arguments should match the keys of tool attribute 'inputs'."
+                    )
 
     def forward(self, *args, **kwargs):
         return NotImplemented("Write this method in your subclass of `Tool`.")
@@ -205,7 +254,6 @@ class Tool:
     def from_hub(
         cls,
         repo_id: str,
-        model_repo_id: Optional[str] = None,
         token: Optional[str] = None,
         **kwargs,
     ):
@@ -223,9 +271,6 @@ class Tool:
         Args:
             repo_id (`str`):
                 The name of the repo on the Hub where your tool is defined.
-            model_repo_id (`str`, *optional*):
-                If your tool uses a model and you want to use a different model than the default, you can pass a second
-                repo ID or an endpoint url to this argument.
             token (`str`, *optional*):
                 The token to identify you on hf.co. If unset, will use the token generated when running
                 `huggingface-cli login` (stored in `~/.huggingface`).
@@ -311,6 +356,9 @@ class Tool:
         if tool_class.output_type != custom_tool["output_type"]:
             tool_class.output_type = custom_tool["output_type"]
 
+        if not isinstance(tool_class.inputs, dict):
+            tool_class.inputs = ast.literal_eval(tool_class.inputs)
+
         return tool_class(**kwargs)
 
     def push_to_hub(
@@ -339,7 +387,7 @@ class Tool:
             commit_message (`str`, *optional*, defaults to `"Upload tool"`):
                 Message to commit while pushing.
             private (`bool`, *optional*):
-                Whether or not the repository created should be private.
+                Whether to make the repo private. If `None` (default), the repo will be public unless the organization's default is private. This value is ignored if the repo already exists.
             token (`bool` or `str`, *optional*):
                 The token to use as HTTP bearer authorization for remote files. If unset, will use the token generated
                 when running `huggingface-cli login` (stored in `~/.huggingface`).
@@ -371,6 +419,122 @@ class Tool:
             )
 
     @staticmethod
+    def from_space(
+        space_id: str, name: str, description: str, api_name: Optional[str] = None, token: Optional[str] = None
+    ):
+        """
+        Creates a [`Tool`] from a Space given its id on the Hub.
+
+        Args:
+            space_id (`str`):
+                The id of the Space on the Hub.
+            name (`str`):
+                The name of the tool.
+            description (`str`):
+                The description of the tool.
+            api_name (`str`, *optional*):
+                The specific api_name to use, if the space has several tabs. If not precised, will default to the first available api.
+            token (`str`, *optional*):
+                Add your token to access private spaces or increase your GPU quotas.
+        Returns:
+            [`Tool`]:
+                The Space, as a tool.
+
+        Examples:
+        ```
+        image_generator = Tool.from_space(
+            space_id="black-forest-labs/FLUX.1-schnell",
+            name="image-generator",
+            description="Generate an image from a prompt"
+        )
+        image = image_generator("Generate an image of a cool surfer in Tahiti")
+        ```
+        ```
+        face_swapper = Tool.from_space(
+            "tuan2308/face-swap",
+            "face_swapper",
+            "Tool that puts the face shown on the first image on the second image. You can give it paths to images.",
+        )
+        image = face_swapper('./aymeric.jpeg', './ruth.jpg')
+        ```
+        """
+        from gradio_client import Client, handle_file
+        from gradio_client.utils import is_http_url_like
+
+        class SpaceToolWrapper(Tool):
+            def __init__(
+                self,
+                space_id: str,
+                name: str,
+                description: str,
+                api_name: Optional[str] = None,
+                token: Optional[str] = None,
+            ):
+                self.client = Client(space_id, hf_token=token)
+                self.name = name
+                self.description = description
+                space_description = self.client.view_api(return_format="dict", print_info=False)["named_endpoints"]
+
+                # If api_name is not defined, take the first of the available APIs for this space
+                if api_name is None:
+                    api_name = list(space_description.keys())[0]
+                    logger.warning(
+                        f"Since `api_name` was not defined, it was automatically set to the first avilable API: `{api_name}`."
+                    )
+                self.api_name = api_name
+
+                try:
+                    space_description_api = space_description[api_name]
+                except KeyError:
+                    raise KeyError(f"Could not find specified {api_name=} among available api names.")
+
+                self.inputs = {}
+                for parameter in space_description_api["parameters"]:
+                    if not parameter["parameter_has_default"]:
+                        parameter_type = parameter["type"]["type"]
+                        if parameter_type == "object":
+                            parameter_type = "any"
+                        self.inputs[parameter["parameter_name"]] = {
+                            "type": parameter_type,
+                            "description": parameter["python_type"]["description"],
+                        }
+                output_component = space_description_api["returns"][0]["component"]
+                if output_component == "Image":
+                    self.output_type = "image"
+                elif output_component == "Audio":
+                    self.output_type = "audio"
+                else:
+                    self.output_type = "any"
+
+            def sanitize_argument_for_prediction(self, arg):
+                if isinstance(arg, ImageType):
+                    temp_file = tempfile.NamedTemporaryFile(suffix=".png", delete=False)
+                    arg.save(temp_file.name)
+                    arg = temp_file.name
+                if (isinstance(arg, (str, Path)) and Path(arg).exists() and Path(arg).is_file()) or is_http_url_like(
+                    arg
+                ):
+                    arg = handle_file(arg)
+                return arg
+
+            def forward(self, *args, **kwargs):
+                # Preprocess args and kwargs:
+                args = list(args)
+                for i, arg in enumerate(args):
+                    args[i] = self.sanitize_argument_for_prediction(arg)
+                for arg_name, arg in kwargs.items():
+                    kwargs[arg_name] = self.sanitize_argument_for_prediction(arg)
+
+                output = self.client.predict(*args, api_name=self.api_name, **kwargs)
+                if isinstance(output, tuple) or isinstance(output, list):
+                    return output[
+                        0
+                    ]  # Sometime the space also returns the generation seed, in which case the result is at index 0
+                return output
+
+        return SpaceToolWrapper(space_id, name, description, api_name=api_name, token=token)
+
+    @staticmethod
     def from_gradio(gradio_tool):
         """
         Creates a [`Tool`] from a gradio tool.
@@ -379,16 +543,15 @@ class Tool:
 
         class GradioToolWrapper(Tool):
             def __init__(self, _gradio_tool):
-                super().__init__()
                 self.name = _gradio_tool.name
                 self.description = _gradio_tool.description
-                self.output_type = "text"
+                self.output_type = "string"
                 self._gradio_tool = _gradio_tool
-                func_args = list(inspect.signature(_gradio_tool.run).parameters.keys())
-                self.inputs = {key: "" for key in func_args}
-
-            def forward(self, *args, **kwargs):
-                return self._gradio_tool.run(*args, **kwargs)
+                func_args = list(inspect.signature(_gradio_tool.run).parameters.items())
+                self.inputs = {
+                    key: {"type": CONVERSION_DICT[value.annotation], "description": ""} for key, value in func_args
+                }
+                self.forward = self._gradio_tool.run
 
         return GradioToolWrapper(gradio_tool)
 
@@ -400,11 +563,14 @@ class Tool:
 
         class LangChainToolWrapper(Tool):
             def __init__(self, _langchain_tool):
-                super().__init__()
                 self.name = _langchain_tool.name.lower()
                 self.description = _langchain_tool.description
-                self.inputs = parse_langchain_args(_langchain_tool.args)
-                self.output_type = "text"
+                self.inputs = _langchain_tool.args.copy()
+                for input_content in self.inputs.values():
+                    if "title" in input_content:
+                        input_content.pop("title")
+                    input_content["description"] = ""
+                self.output_type = "string"
                 self.langchain_tool = _langchain_tool
 
             def forward(self, *args, **kwargs):
@@ -421,6 +587,7 @@ class Tool:
 DEFAULT_TOOL_DESCRIPTION_TEMPLATE = """
 - {{ tool.name }}: {{ tool.description }}
     Takes inputs: {{tool.inputs}}
+    Returns an output of type: {{tool.output_type}}
 """
 
 
@@ -618,21 +785,22 @@ def launch_gradio_demo(tool_class: Tool):
     def fn(*args, **kwargs):
         return tool(*args, **kwargs)
 
+    TYPE_TO_COMPONENT_CLASS_MAPPING = {
+        "image": gr.Image,
+        "audio": gr.Audio,
+        "string": gr.Textbox,
+        "integer": gr.Textbox,
+        "number": gr.Textbox,
+    }
+
     gradio_inputs = []
     for input_name, input_details in tool_class.inputs.items():
-        input_type = input_details["type"]
-        if input_type == "text":
-            gradio_inputs.append(gr.Textbox(label=input_name))
-        elif input_type == "image":
-            gradio_inputs.append(gr.Image(label=input_name))
-        elif input_type == "audio":
-            gradio_inputs.append(gr.Audio(label=input_name))
-        else:
-            error_message = f"Input type '{input_type}' not supported."
-            raise ValueError(error_message)
+        input_gradio_component_class = TYPE_TO_COMPONENT_CLASS_MAPPING[input_details["type"]]
+        new_component = input_gradio_component_class(label=input_name)
+        gradio_inputs.append(new_component)
 
-    gradio_output = tool_class.output_type
-    assert gradio_output in ["text", "image", "audio"], f"Output type '{gradio_output}' not supported."
+    output_gradio_componentclass = TYPE_TO_COMPONENT_CLASS_MAPPING[tool_class.output_type]
+    gradio_output = output_gradio_componentclass(label=input_name)
 
     gr.Interface(
         fn=fn,
@@ -769,15 +937,6 @@ class EndpointClient:
             return response.json()
 
 
-def parse_langchain_args(args: Dict[str, str]) -> Dict[str, str]:
-    """Parse the args attribute of a LangChain tool to create a matching inputs dictionary."""
-    inputs = args.copy()
-    for arg_details in inputs.values():
-        if "title" in arg_details:
-            arg_details.pop("title")
-    return inputs
-
-
 class ToolCollection:
     """
     Tool collections enable loading all Spaces from a collection in order to be added to the agent's toolbox.
@@ -808,3 +967,37 @@ class ToolCollection:
         self._collection = get_collection(collection_slug, token=token)
         self._hub_repo_ids = {item.item_id for item in self._collection.items if item.item_type == "space"}
         self.tools = {Tool.from_hub(repo_id) for repo_id in self._hub_repo_ids}
+
+
+def tool(tool_function: Callable) -> Tool:
+    """
+    Converts a function into an instance of a Tool subclass.
+
+    Args:
+        tool_function: Your function. Should have type hints for each input and a type hint for the output.
+        Should also have a docstring description including an 'Args:' part where each argument is described.
+    """
+    parameters = get_json_schema(tool_function)["function"]
+    if "return" not in parameters:
+        raise TypeHintParsingException("Tool return type not found: make sure your function has a return type hint!")
+    class_name = f"{parameters['name'].capitalize()}Tool"
+
+    class SpecificTool(Tool):
+        name = parameters["name"]
+        description = parameters["description"]
+        inputs = parameters["parameters"]["properties"]
+        output_type = parameters["return"]["type"]
+
+        @wraps(tool_function)
+        def forward(self, *args, **kwargs):
+            return tool_function(*args, **kwargs)
+
+    original_signature = inspect.signature(tool_function)
+    new_parameters = [inspect.Parameter("self", inspect.Parameter.POSITIONAL_OR_KEYWORD)] + list(
+        original_signature.parameters.values()
+    )
+    new_signature = original_signature.replace(parameters=new_parameters)
+    SpecificTool.forward.__signature__ = new_signature
+
+    SpecificTool.__name__ = class_name
+    return SpecificTool()

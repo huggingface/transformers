@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 
 ### What is an agent?
 
-Large Language Models (LLMs) trained to perform [causal language modeling](./tasks/language_modeling.) can tackle a wide range of tasks, but they often struggle with basic tasks like logic, calculation, and search. When prompted in domains in which they do not perform well, they often fail to generate the answer we expect them to.
+Large Language Models (LLMs) trained to perform [causal language modeling](./tasks/language_modeling) can tackle a wide range of tasks, but they often struggle with basic tasks like logic, calculation, and search. When prompted in domains in which they do not perform well, they often fail to generate the answer we expect them to.
 
 One approach to overcome this weakness is to create an *agent*.
 
@@ -28,8 +28,8 @@ An agent is a system that uses an LLM as its engine, and it has access to functi
 These *tools* are functions for performing a task, and they contain all necessary description for the agent to properly use them.
 
 The agent can be programmed to:
-- devise a series of actions/tools and run them all at once like the [`CodeAgent`] for example
-- plan and execute actions/tools one by one and wait for the outcome of each action before launching the next one like the [`ReactJsonAgent`] for example
+- devise a series of actions/tools and run them all at once,  like the [`CodeAgent`]
+- plan and execute actions/tools one by one and wait for the outcome of each action before launching the next one, like the [`ReactJsonAgent`]
 
 ### Types of agents
 
@@ -46,7 +46,18 @@ We implement two versions of ReactJsonAgent:
 - [`ReactCodeAgent`] is a new type of ReactJsonAgent that generates its tool calls as blobs of code, which works really well for LLMs that have strong coding performance.
 
 > [!TIP]
-> Read [Open-source LLMs as LangChain Agents](https://huggingface.co/blog/open-source-llms-as-agents) blog post to learn more the ReAct agent.
+> Read [Open-source LLMs as LangChain Agents](https://huggingface.co/blog/open-source-llms-as-agents) blog post to learn more about ReAct agents.
+
+<div class="flex justify-center">
+    <img
+        class="block dark:hidden"
+        src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/Agent_ManimCE.gif"
+    />
+    <img
+        class="hidden dark:block"
+        src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/Agent_ManimCE.gif"
+    />
+</div>
 
 ![Framework of a React Agent](https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/blog/open-source-llms-as-agents/ReAct.png)
 
@@ -103,7 +114,7 @@ To start with, please install the `agents` extras in order to install all defaul
 pip install transformers[agents]
 ```
 
-Build your LLM engine by defining a `llm_engine` method which accepts a list of [messages](./chat_templating.) and returns text. This callable also needs to accept a `stop` argument that indicates when to stop generating.
+Build your LLM engine by defining a `llm_engine` method which accepts a list of [messages](./chat_templating) and returns text. This callable also needs to accept a `stop` argument that indicates when to stop generating.
 
 ```python
 from huggingface_hub import login, InferenceClient
@@ -119,7 +130,7 @@ def llm_engine(messages, stop_sequences=["Task"]) -> str:
 ```
 
 You could use any `llm_engine` method as long as:
-1. it follows the [messages format](./chat_templating.md) (`List[Dict[str, str]]`) for its input `messages`, and it returns a `str`.
+1. it follows the [messages format](./chat_templating) (`List[Dict[str, str]]`) for its input `messages`, and it returns a `str`.
 2. it stops generating outputs at the sequences passed in the argument `stop_sequences`
 
 Additionally, `llm_engine` can also take a `grammar` argument. In the case where you specify a `grammar` upon agent initialization, this argument will be passed to the calls to llm_engine, with the `grammar` that you defined upon initialization, to allow [constrained generation](https://huggingface.co/docs/text-generation-inference/conceptual/guidance) in order to force properly-formatted agent outputs.
@@ -214,7 +225,7 @@ You have access to the following tools:
 To solve the task, you must plan forward to proceed in a series of steps, in a cycle of 'Thought:', 'Code:', and 'Observation:' sequences.
 
 At each step, in the 'Thought:' sequence, you should first explain your reasoning towards solving the task, then the tools that you want to use.
-Then in the 'Code:' sequence, you shold write the code in simple Python. The code sequence must end with '/End code' sequence.
+Then in the 'Code:' sequence, you should write the code in simple Python. The code sequence must end with '/End code' sequence.
 During each intermediate step, you can use 'print()' to save whatever important information you will then need.
 These print outputs will then be available in the 'Observation:' field, for using this information as input for the next step.
 
@@ -314,62 +325,37 @@ model = next(iter(list_models(filter=task, sort="downloads", direction=-1)))
 print(model.id)
 ```
 
-This code can be converted into a class that inherits from the [`Tool`] superclass.
+This code can quickly be converted into a tool, just by wrapping it in a function and adding the `tool` decorator:
 
 
-The custom tool needs:
-- An attribute `name`, which corresponds to the name of the tool itself. The name usually describes what the tool does. Since the code returns the model with the most downloads for a task, let's name is `model_download_counter`.
-- An attribute `description` is used to populate the agent's system prompt.
-- An `inputs` attribute, which is a dictionary with keys `"type"` and `"description"`. It contains information that helps the Python interpreter make educated choices about the input.
-- An `output_type` attribute, which specifies the output type.
-- A `forward` method which contains the inference code to be executed.
+```py
+from transformers import tool
 
+@tool
+def model_download_tool(task: str) -> str:
+    """
+    This is a tool that returns the most downloaded model of a given task on the Hugging Face Hub.
+    It returns the name of the checkpoint.
 
-```python
-from transformers import Tool
-from huggingface_hub import list_models
-
-class HFModelDownloadsTool(Tool):
-    name = "model_download_counter"
-    description = (
-        "This is a tool that returns the most downloaded model of a given task on the Hugging Face Hub. "
-        "It returns the name of the checkpoint."
-    )
-
-    inputs = {
-        "task": {
-            "type": "text",
-            "description": "the task category (such as text-classification, depth-estimation, etc)",
-        }
-    }
-    output_type = "text"
-
-    def forward(self, task: str):
-        model = next(iter(list_models(filter=task, sort="downloads", direction=-1)))
-        return model.id
+    Args:
+        task: The task for which
+    """
+    model = next(iter(list_models(filter="text-classification", sort="downloads", direction=-1)))
+    return model.id
 ```
 
-Now that the custom `HfModelDownloadsTool` class is ready, you can save it to a file named `model_downloads.py` and import it for use.
+The function needs:
+- A clear name. The name usually describes what the tool does. Since the code returns the model with the most downloads for a task, let's put `model_download_tool`.
+- Type hints on both inputs and output
+- A description, that includes an 'Args:' part where each argument is described (without a type indication this time, it will be pulled from the type hint).
+All these will be automatically baked into the agent's system prompt upon initialization: so strive to make them as clear as possible!
 
+> [!TIP]
+> This definition format is the same as tool schemas used in `apply_chat_template`, the only difference is the added `tool` decorator: read more on our tool use API [here](https://huggingface.co/blog/unified-tool-use#passing-tools-to-a-chat-template).
 
-```python
-from model_downloads import HFModelDownloadsTool
-
-tool = HFModelDownloadsTool()
-```
-
-You can also share your custom tool to the Hub by calling [`~Tool.push_to_hub`] on the tool. Make sure you've created a repository for it on the Hub and are using a token with read access.
-
-```python
-tool.push_to_hub("{your_username}/hf-model-downloads")
-```
-
-Load the tool with the [`~Tool.load_tool`] function and pass it to the `tools` parameter in your agent.
-
-```python
-from transformers import load_tool, CodeAgent
-
-model_download_tool = load_tool("m-ric/hf-model-downloads")
+Then you can directly initialize your agent:
+```py
+from transformers import CodeAgent
 agent = CodeAgent(tools=[model_download_tool], llm_engine=llm_engine)
 agent.run(
     "Can you give me the name of the model that has the most downloads in the 'text-to-video' task on the Hugging Face Hub?"
@@ -381,14 +367,13 @@ You get the following:
 ======== New task ========
 Can you give me the name of the model that has the most downloads in the 'text-to-video' task on the Hugging Face Hub?
 ==== Agent is executing the code below:
-most_downloaded_model = model_download_counter(task="text-to-video")
+most_downloaded_model = model_download_tool(task="text-to-video")
 print(f"The most downloaded model for the 'text-to-video' task is {most_downloaded_model}.")
 ====
 ```
 
 And the output:
 `"The most downloaded model for the 'text-to-video' task is ByteDance/AnimateDiff-Lightning."`
-
 
 ### Manage your agent's toolbox
 
@@ -444,123 +429,3 @@ To speed up the start, tools are loaded only if called by the agent.
 This gets you this image:
 
 <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/rivers_and_lakes.png">
-
-
-### Use gradio-tools
-
-[gradio-tools](https://github.com/freddyaboulton/gradio-tools) is a powerful library that allows using Hugging
-Face Spaces as tools. It supports many existing Spaces as well as custom Spaces.
-
-Transformers supports `gradio_tools` with the [`Tool.from_gradio`] method. For example, let's use the [`StableDiffusionPromptGeneratorTool`](https://github.com/freddyaboulton/gradio-tools/blob/main/gradio_tools/tools/prompt_generator.py) from `gradio-tools` toolkit for improving prompts to generate better images.
-
-Import and instantiate the tool, then pass it to the `Tool.from_gradio` method:
-
-```python
-from gradio_tools import StableDiffusionPromptGeneratorTool
-from transformers import Tool, load_tool, CodeAgent
-
-gradio_prompt_generator_tool = StableDiffusionPromptGeneratorTool()
-prompt_generator_tool = Tool.from_gradio(gradio_prompt_generator_tool)
-```
-
-Now you can use it just like any other tool. For example, let's improve the prompt  `a rabbit wearing a space suit`.
-
-```python
-image_generation_tool = load_tool('huggingface-tools/text-to-image')
-agent = CodeAgent(tools=[prompt_generator_tool, image_generation_tool], llm_engine=llm_engine)
-
-agent.run(
-    "Improve this prompt, then generate an image of it.", prompt='A rabbit wearing a space suit'
-)
-```
-
-The model adequately leverages the tool:
-```text
-======== New task ========
-Improve this prompt, then generate an image of it.
-You have been provided with these initial arguments: {'prompt': 'A rabbit wearing a space suit'}.
-==== Agent is executing the code below:
-improved_prompt = StableDiffusionPromptGenerator(query=prompt)
-while improved_prompt == "QUEUE_FULL":
-    improved_prompt = StableDiffusionPromptGenerator(query=prompt)
-print(f"The improved prompt is {improved_prompt}.")
-image = image_generator(prompt=improved_prompt)
-====
-```
-
-Before finally generating the image:
-
-<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/rabbit.png">
-
-
-> [!WARNING]
-> gradio-tools require *textual* inputs and outputs even when working with different modalities like image and audio objects. Image and audio inputs and outputs are currently incompatible.
-
-### Use LangChain tools
-
-We love Langchain and think it has a very compelling suite of tools.
-To import a tool from LangChain, use the `from_langchain()` method.
-
-Here is how you can use it to recreate the intro's search result using a LangChain web search tool.
-
-```python
-from langchain.agents import load_tools
-from transformers import Tool, ReactCodeAgent
-
-search_tool = Tool.from_langchain(load_tools(["serpapi"])[0])
-
-agent = ReactCodeAgent(tools=[search_tool])
-
-agent.run("How many more blocks (also denoted as layers) in BERT base encoder than the encoder from the architecture proposed in Attention is All You Need?")
-```
-
-## Gradio interface
-
-You can leverage `gradio.Chatbot`to display your agent's thoughts using `stream_to_gradio`, here is an example:
-
-```py
-import gradio as gr
-from transformers import (
-    load_tool,
-    ReactCodeAgent,
-    HfApiEngine,
-    stream_to_gradio,
-)
-
-# Import tool from Hub
-image_generation_tool = load_tool("m-ric/text-to-image")
-
-llm_engine = HfApiEngine("meta-llama/Meta-Llama-3-70B-Instruct")
-
-# Initialize the agent with the image generation tool
-agent = ReactCodeAgent(tools=[image_generation_tool], llm_engine=llm_engine)
-
-
-def interact_with_agent(task):
-    messages = []
-    messages.append(gr.ChatMessage(role="user", content=task))
-    yield messages
-    for msg in stream_to_gradio(agent, task):
-        messages.append(msg)
-        yield messages + [
-            gr.ChatMessage(role="assistant", content="⏳ Task not finished yet!")
-        ]
-    yield messages
-
-
-with gr.Blocks() as demo:
-    text_input = gr.Textbox(lines=1, label="Chat Message", value="Make me a picture of the Statue of Liberty.")
-    submit = gr.Button("Run illustrator agent!")
-    chatbot = gr.Chatbot(
-        label="Agent",
-        type="messages",
-        avatar_images=(
-            None,
-            "https://em-content.zobj.net/source/twitter/53/robot-face_1f916.png",
-        ),
-    )
-    submit.click(interact_with_agent, [text_input], [chatbot])
-
-if __name__ == "__main__":
-    demo.launch()
-```

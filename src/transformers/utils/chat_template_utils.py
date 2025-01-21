@@ -15,14 +15,16 @@
 import inspect
 import json
 import re
+import types
 from contextlib import contextmanager
 from datetime import datetime
 from functools import lru_cache
+from types import NoneType
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, get_args, get_origin, get_type_hints
 
 from packaging import version
 
-from .import_utils import is_jinja_available
+from .import_utils import is_jinja_available, is_torch_available, is_vision_available
 
 
 if is_jinja_available():
@@ -31,6 +33,12 @@ if is_jinja_available():
     from jinja2.sandbox import ImmutableSandboxedEnvironment
 else:
     jinja2 = None
+
+if is_vision_available():
+    from PIL.Image import Image
+
+if is_torch_available():
+    from torch import Tensor
 
 
 BASIC_TYPES = (int, float, str, bool, Any, type(None), ...)
@@ -70,8 +78,13 @@ def _get_json_schema_type(param_type: str) -> Dict[str, str]:
         float: {"type": "number"},
         str: {"type": "string"},
         bool: {"type": "boolean"},
+        NoneType: {"type": "null"},
         Any: {},
     }
+    if is_vision_available():
+        type_mapping[Image] = {"type": "image"}
+    if is_torch_available():
+        type_mapping[Tensor] = {"type": "audio"}
     return type_mapping.get(param_type, {"type": "object"})
 
 
@@ -87,7 +100,7 @@ def _parse_type_hint(hint: str) -> Dict:
                 "Couldn't parse this type hint, likely due to a custom class or object: ", hint
             )
 
-    elif origin is Union:
+    elif origin is Union or (hasattr(types, "UnionType") and origin is types.UnionType):
         # Recurse into each of the subtypes in the Union, except None, which is handled separately at the end
         subtypes = [_parse_type_hint(t) for t in args if t is not type(None)]
         if len(subtypes) == 1:
@@ -351,6 +364,11 @@ def _render_with_assistant_indices(
 
 @lru_cache
 def _compile_jinja_template(chat_template):
+    if not is_jinja_available():
+        raise ImportError(
+            "apply_chat_template requires jinja2 to be installed. Please install it using `pip install jinja2`."
+        )
+
     class AssistantTracker(Extension):
         # This extension is used to track the indices of assistant-generated tokens in the rendered chat
         tags = {"generation"}

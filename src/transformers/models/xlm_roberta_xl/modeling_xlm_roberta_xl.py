@@ -24,6 +24,7 @@ from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN, gelu
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import (
     _prepare_4d_attention_mask_for_sdpa,
     _prepare_4d_causal_attention_mask_for_sdpa,
@@ -839,7 +840,7 @@ class XLMRobertaXLModel(XLMRobertaXLPreTrainedModel):
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention if
             the model is configured as a decoder.
-        encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)`, *optional*):
+        encoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, target_length)`, *optional*):
             Mask to avoid performing attention on the padding token indices of the encoder input. This mask is used in
             the cross-attention if the model is configured as a decoder. Mask values selected in `[0, 1]`:
 
@@ -909,7 +910,7 @@ class XLMRobertaXLModel(XLMRobertaXLPreTrainedModel):
         )
 
         # Expand the attention mask
-        if use_sdpa_attention_masks:
+        if use_sdpa_attention_masks and attention_mask.dim() == 2:
             # Expand the attention mask for SDPA.
             # [bsz, seq_len] -> [bsz, 1, seq_len, seq_len]
             if self.config.is_decoder:
@@ -936,7 +937,7 @@ class XLMRobertaXLModel(XLMRobertaXLPreTrainedModel):
             if encoder_attention_mask is None:
                 encoder_attention_mask = torch.ones(encoder_hidden_shape, device=device)
 
-            if use_sdpa_attention_masks:
+            if use_sdpa_attention_masks and encoder_attention_mask.dim() == 2:
                 # Expand the attention mask for SDPA.
                 # [bsz, seq_len] -> [bsz, 1, seq_len, seq_len]
                 encoder_extended_attention_mask = _prepare_4d_attention_mask_for_sdpa(
@@ -986,7 +987,7 @@ class XLMRobertaXLModel(XLMRobertaXLPreTrainedModel):
     """XLM-RoBERTa-XL Model with a `language modeling` head on top for CLM fine-tuning.""",
     XLM_ROBERTA_XL_START_DOCSTRING,
 )
-class XLMRobertaXLForCausalLM(XLMRobertaXLPreTrainedModel):
+class XLMRobertaXLForCausalLM(XLMRobertaXLPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
     def __init__(self, config):
@@ -1111,10 +1112,19 @@ class XLMRobertaXLForCausalLM(XLMRobertaXLPreTrainedModel):
         )
 
     def prepare_inputs_for_generation(self, input_ids, past_key_values=None, attention_mask=None, **model_kwargs):
+        # Overwritten -- model logic breaks when `inputs_embeds` are passed from this function
+
         input_shape = input_ids.shape
         # if model is used as a decoder in encoder-decoder model, the decoder attention mask is created on the fly
         if attention_mask is None:
             attention_mask = input_ids.new_ones(input_shape)
+
+        # Create missing `position_ids` on the fly
+        position_ids = None
+        if model_kwargs.get("position_ids") is None:
+            position_ids = create_position_ids_from_input_ids(
+                input_ids, padding_idx=self.config.pad_token_id
+            )  # placed in kwargs for further processing (see below)
 
         # cut decoder_input_ids if past_key_values is used
         if past_key_values is not None:
@@ -1128,8 +1138,15 @@ class XLMRobertaXLForCausalLM(XLMRobertaXLPreTrainedModel):
                 remove_prefix_length = input_ids.shape[1] - 1
 
             input_ids = input_ids[:, remove_prefix_length:]
+            if position_ids is not None:
+                position_ids = position_ids[:, remove_prefix_length:]
 
-        return {"input_ids": input_ids, "attention_mask": attention_mask, "past_key_values": past_key_values}
+        return {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "position_ids": position_ids,
+            "past_key_values": past_key_values,
+        }
 
     def _reorder_cache(self, past_key_values, beam_idx):
         reordered_past = ()
@@ -1672,3 +1689,15 @@ def create_position_ids_from_input_ids(input_ids, padding_idx, past_key_values_l
     mask = input_ids.ne(padding_idx).int()
     incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length) * mask
     return incremental_indices.long() + padding_idx
+
+
+__all__ = [
+    "XLMRobertaXLForCausalLM",
+    "XLMRobertaXLForMaskedLM",
+    "XLMRobertaXLForMultipleChoice",
+    "XLMRobertaXLForQuestionAnswering",
+    "XLMRobertaXLForSequenceClassification",
+    "XLMRobertaXLForTokenClassification",
+    "XLMRobertaXLModel",
+    "XLMRobertaXLPreTrainedModel",
+]

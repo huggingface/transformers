@@ -470,7 +470,7 @@ class TFT5GenerationIntegrationTests(unittest.TestCase):
         self.assertListEqual(expected_output_string, output_strings_xla)
 
     @slow
-    def test_greedy_generate(self):
+    def test_t5_greedy_generate(self):
         model = TFT5ForConditionalGeneration.from_pretrained("google-t5/t5-small")
         tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
 
@@ -520,7 +520,7 @@ class TFT5GenerationIntegrationTests(unittest.TestCase):
             self.assertListEqual(expected_output_string_xla, output_strings_xla)
 
     @slow
-    def test_sample_generate(self):
+    def test_t5_sample_generate(self):
         model = TFT5ForConditionalGeneration.from_pretrained("google-t5/t5-small")
         tokenizer = T5Tokenizer.from_pretrained("google-t5/t5-small")
 

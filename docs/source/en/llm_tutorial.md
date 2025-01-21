@@ -164,7 +164,7 @@ If not specified in the [`~generation.GenerationConfig`] file, `generate` return
 By default, and unless specified in the [`~generation.GenerationConfig`] file, `generate` selects the most likely token at each iteration (greedy decoding). Depending on your task, this may be undesirable; creative tasks like chatbots or writing an essay benefit from sampling. On the other hand, input-grounded tasks like audio transcription or translation benefit from greedy decoding. Enable sampling with `do_sample=True`, and you can learn more about this topic in this [blog post](https://huggingface.co/blog/how-to-generate).
 
 ```py
->>> # Set seed or reproducibility -- you don't need this unless you want full reproducibility
+>>> # Set seed for reproducibility -- you don't need this unless you want full reproducibility
 >>> from transformers import set_seed
 >>> set_seed(42)
 
@@ -265,8 +265,9 @@ While the autoregressive generation process is relatively straightforward, makin
 
 ### Related libraries
 
-1. [`optimum`](https://github.com/huggingface/optimum), an extension of 🤗 Transformers that optimizes for specific hardware devices.
+1. [`optimum`](https://github.com/huggingface/optimum), an extension of 🤗 Transformers that optimizes for specific hardware devices;
 2. [`outlines`](https://github.com/outlines-dev/outlines), a library where you can constrain text generation (e.g. to generate JSON files);
-3. [`SynCode`](https://github.com/uiuc-focal-lab/syncode), a library for context-free grammar guided generation. (e.g. JSON, SQL, Python)
+3. [`SynCode`](https://github.com/uiuc-focal-lab/syncode), a library for context-free grammar guided generation (e.g. JSON, SQL, Python);
 4. [`text-generation-inference`](https://github.com/huggingface/text-generation-inference), a production-ready server for LLMs;
 5. [`text-generation-webui`](https://github.com/oobabooga/text-generation-webui), a UI for text generation;
+6. [`logits-processor-zoo`](https://github.com/NVIDIA/logits-processor-zoo), containing additional options to control text generation with 🤗 Transformers. See our related [blog post](https://huggingface.co/blog/logits-processor-zoo).

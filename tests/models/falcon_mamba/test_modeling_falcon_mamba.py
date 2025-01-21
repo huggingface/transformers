@@ -23,7 +23,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     require_torch_multi_gpu,
     slow,
     torch_device,
@@ -43,9 +43,6 @@ if is_torch_available():
         FalconMambaModel,
     )
     from transformers.cache_utils import MambaCache
-    from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_0
-else:
-    is_torch_greater_or_equal_than_2_0 = False
 
 
 # Copied from transformers.tests.models.mamba.MambaModelTester with Mamba->FalconMamba,mamba->falcon_mamba
@@ -150,25 +147,6 @@ class FalconMambaModelTester:
         config.vocab_size = 300
         return config
 
-    def prepare_config_and_inputs_for_decoder(self):
-        (
-            config,
-            input_ids,
-            attention_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = self.prepare_config_and_inputs()
-
-        return (
-            config,
-            input_ids,
-            attention_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        )
-
     def create_and_check_falcon_mamba_model(self, config, input_ids, *args):
         config.output_hidden_states = True
         model = FalconMambaModel(config=config)
@@ -265,9 +243,6 @@ class FalconMambaModelTester:
         return config, inputs_dict
 
 
-@unittest.skipIf(
-    not is_torch_greater_or_equal_than_2_0, reason="See https://github.com/huggingface/transformers/pull/24204"
-)
 @require_torch
 # Copied from transformers.tests.models.mamba.MambaModelTest with Mamba->Falcon,mamba->falcon_mamba,FalconMambaCache->MambaCache
 class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
@@ -451,7 +426,7 @@ class FalconMambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTest
 
 
 @require_torch
-@require_torch_gpu
+@require_torch_accelerator
 @slow
 class FalconMambaIntegrationTests(unittest.TestCase):
     def setUp(self):
@@ -524,3 +499,32 @@ class FalconMambaIntegrationTests(unittest.TestCase):
         out = tok.batch_decode(out, skip_special_tokens=True)
 
         self.assertListEqual(out, EXPECTED_OUTPUT)
+
+    @require_torch_multi_gpu
+    def test_training_kernel(self):
+        model_id = "tiiuae/falcon-mamba-7b"
+
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto", torch_dtype=torch.bfloat16)
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+
+        text = "Hello today"
+
+        inputs = tokenizer(text, return_tensors="pt").to(torch_device)
+
+        with torch.no_grad():
+            logits = torch.argmax(model(**inputs).logits, dim=-1)
+
+        out_no_training = tokenizer.batch_decode(logits)
+
+        model.train()
+        lm_logits = model(**inputs).logits
+        next_token = torch.argmax(lm_logits, dim=-1)
+
+        out_training = tokenizer.batch_decode(next_token)
+
+        # Just verify backward works
+        loss = (1 - lm_logits).mean()
+        loss.backward()
+
+        self.assertEqual(out_training, out_no_training)
