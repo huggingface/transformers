@@ -211,14 +211,19 @@ class MaskGenerationPipeline(ChunkPipeline):
                     batched_points = crop_points[:, :, i:i + points_per_batch, :]
                     labels = crop_labels[:, :, i:i + points_per_batch]
                     is_last = (crop_idx == n_crops - 1) and (i == n_points - points_per_batch)
+                    # Extract other model inputs for current crop
+                    crop_model_inputs = {
+                        k: v[crop_idx:crop_idx+1] if isinstance(v, torch.Tensor) else v
+                        for k, v in model_inputs.items() if k != "image_embeddings"
+                    }
+                    
                     yield {
                         "input_points": batched_points,
                         "input_labels": labels,
                         "input_boxes": crop_boxes[crop_idx:crop_idx+1],
                         "is_last": is_last,
                         "image_embeddings": image_embeddings[crop_idx:crop_idx+1],
-                        **{k: v[crop_idx:crop_idx+1] if isinstance(v, torch.Tensor) else v
-                           for k, v in model_inputs.items() if k != "image_embeddings"}
+                        **crop_model_inputs
                     }
         else:
             # Original behavior for no crops
