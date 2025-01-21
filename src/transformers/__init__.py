@@ -6400,7 +6400,6 @@ if TYPE_CHECKING:
         from .models.pixtral import PixtralImageProcessorFast
         from .models.qwen2_vl import Qwen2VLImageProcessorFast
         from .models.rt_detr import RTDetrImageProcessorFast
-        from .models.timm_wrapper import TimmWrapperImageProcessor
         from .models.vit import ViTImageProcessorFast
 
     try:
