@@ -35,16 +35,16 @@ class Kosmos2_5TextConfig(PretrainedConfig):
         vocab_size (`int`, *optional*, defaults to 108481):
             Vocabulary size of the Kosmos2_5 model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`Kosmos2_5Model`].
-        max_position_embeddings (`int`, *optional*, defaults to 2048):
+        max_position_embeddings (`int`, *optional*, defaults to 4096):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
-        embed_dim (`int`, *optional*, defaults to 2048):
+        embed_dim (`int`, *optional*, defaults to 1536):
             Dimensionality of the layers and the pooler layer.
         layers (`int`, *optional*, defaults to 24):
             Number of hidden layers in the Transformer encoder.
-        ffn_dim (`int`, *optional*, defaults to 8192):
+        ffn_dim (`int`, *optional*, defaults to 6144):
             Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
-        attention_heads (`int`, *optional*, defaults to 32):
+        attention_heads (`int`, *optional*, defaults to 16):
             Number of attention heads for each attention layer in the Transformer encoder.
         activation_function (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
