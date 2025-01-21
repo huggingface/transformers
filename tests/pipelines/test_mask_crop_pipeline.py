@@ -11,6 +11,7 @@ from transformers.utils.import_utils import is_vision_available
 
 from .test_pipelines_common import ANY
 
+
 @require_vision
 @require_torch
 class MaskCropPipelineTests(unittest.TestCase):
@@ -20,7 +21,7 @@ class MaskCropPipelineTests(unittest.TestCase):
     
     def get_image_processor(self):
         return AutoImageProcessor.from_pretrained("facebook/sam-vit-base")
-    
+
     def get_test_image(self) -> Image.Image:
         # Create a simple test image
         image = np.zeros((100, 100, 3), dtype=np.uint8)
