@@ -734,10 +734,6 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
     def test_sdpa_can_compile_dynamic(self):
         pass
 
-    @is_flaky()
-    def test_batching_equivalence(self):
-        super().test_batching_equivalence()
-
 
 # Copied from transformers.tests.encodec.test_modeling_encodec.normalize
 def normalize(arr):
