@@ -1425,6 +1425,7 @@ def _mask_to_rle_tf(input_mask: "tf.Tensor"):
 
 
 
+
 def _rle_to_mask(rle: Dict[str, Any]) -> np.ndarray:
     """Compute a binary mask from an uncompressed RLE."""
     height, width = rle["size"]
@@ -1439,7 +1440,7 @@ def _rle_to_mask(rle: Dict[str, Any]) -> np.ndarray:
     return mask.transpose()  # Reshape to original shape
 
 
-def _postprocess_for_mg(rle_masks, iou_scores, mask_boxes, amg_crops_nms_thresh=0.7):
+def _postprocess_for_mg(self,rle_masks, iou_scores, mask_boxes, amg_crops_nms_thresh=0.7):
     """
     Perform NMS (Non Maximum Suppression) on the outputs.
 
@@ -1453,10 +1454,7 @@ def _postprocess_for_mg(rle_masks, iou_scores, mask_boxes, amg_crops_nms_thresh=
             amg_crops_nms_thresh (`float`, *optional*, defaults to 0.7):
                 NMS threshold.
     """
-    if batched_nms is None:
-        raise ImportError(
-            "Using SAM for mask generation requires `torchvision` to be installed. Please install it with `pip install torchvision`."
-        )
+    requires_backends(self, ["torchvision"])
 
     keep_by_nms = batched_nms(
         boxes=mask_boxes.float(),
