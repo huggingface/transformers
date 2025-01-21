@@ -3560,12 +3560,12 @@ class GenerationMixin:
             model_inputs.update({"output_hidden_states": output_hidden_states} if output_hidden_states else {})
 
             model_outputs = self(**model_inputs, return_dict=True)
-            logits = model_outputs.logits[:, -1]
+            logits = model_outputs.logits
 
             # b. Compute log probs -- get log probabilities from logits, process logits with processors (*e.g.*
             # `temperature`, ...), and add new logprobs to existing running logprobs scores.
-            log_probs = torch.log_softmax(logits)
-            log_probs = logits_processor(flatten_beam_dim(running_sequences), log_probs, cur_len)
+            log_probs = nn.functional.log_softmax(logits, dim=-1)
+            log_probs = logits_processor(flatten_beam_dim(running_sequences), log_probs)
 
             # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:
@@ -3586,6 +3586,7 @@ class GenerationMixin:
                 elif output_hidden_states and self.config.is_encoder_decoder:
                     decoder_hidden_states.append(model_outputs.hidden_states)
 
+            breakpoint()
             log_probs = unflatten_beam_dim(log_probs, num_beams)
             log_probs = log_probs + running_beam_scores[:, :, None]  # (batch_size, num_beams, vocab_size)
             vocab_size = log_probs.shape[2]
