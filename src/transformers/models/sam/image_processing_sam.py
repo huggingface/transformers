@@ -1137,7 +1137,9 @@ def _generate_crop_boxes(
     points_per_crop = np.array(point_grid_per_crop)
     # Check if batch dimension already exists
     if points_per_crop.ndim == 3:  # [num_crops, num_points, 2]
-        points_per_crop = np.expand_dims(points_per_crop, axis=1)  # Add batch dimension -> [num_crops, 1, num_points, 2]
+        points_per_crop = np.expand_dims(
+            points_per_crop, axis=1
+        )  # Add batch dimension -> [num_crops, 1, num_points, 2]
     elif points_per_crop.ndim == 4:  # Already in [num_crops, batch, num_points, 2] format
         pass
     else:
@@ -1442,7 +1444,7 @@ def _rle_to_mask(rle: Dict[str, Any]) -> np.ndarray:
     return mask.transpose()  # Reshape to original shape
 
 
-def _postprocess_for_mg(self,rle_masks, iou_scores, mask_boxes, amg_crops_nms_thresh=0.7):
+def _postprocess_for_mg(self, rle_masks, iou_scores, mask_boxes, amg_crops_nms_thresh=0.7):
     """
     Perform NMS (Non Maximum Suppression) on the outputs.
 
