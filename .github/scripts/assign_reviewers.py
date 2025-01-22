@@ -4,6 +4,7 @@ import json
 from github import Github
 from fnmatch import fnmatch
 from collections import Counter
+from pathlib import Path
 
 def get_file_owners(file_path, codeowners_lines):
     # Process lines in reverse (last matching pattern takes precedence)
@@ -28,7 +29,8 @@ def main():
     repo = g.get_repo("huggingface/transformers")
     with open(os.environ['GITHUB_EVENT_PATH']) as f:
         event = json.load(f)
-    with open("codeowners_for_review_action") as f:
+    script_dir = Path(__file__).parent.absolute()
+    with open(script_dir / "codeowners_for_review_action") as f:
         codeowners_lines = f.readlines()
 
     # The PR number is available in the event payload
