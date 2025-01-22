@@ -689,8 +689,8 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
                 dimensions. Otherwise, the image will be padded to the maximum height and width of the batch.
             format (`str` or `AnnotationFormat`, *optional*, defaults to self.format):
                 Format of the annotations.
-            return_tensors (`str` or `TensorType`, *optional*, defaults to self.return_tensors):
-                Type of tensors to return. If `None`, will return the list of images.
+            return_tensors (`str` or `TensorType`, *optional*):
+                Returns stacked tensors if set to `pt, returns a list of tensors if unset.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.

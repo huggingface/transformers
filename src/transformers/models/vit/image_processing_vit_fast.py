@@ -15,9 +15,9 @@
 """Fast Image processor class for ViT."""
 
 import functools
-from typing import Dict, List, Optional, Union
+from typing import List, Optional, Union
 
-from ...image_processing_utils import BatchFeature, get_size_dict
+from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
     SizeDict,
@@ -26,10 +26,7 @@ from ...image_transforms import GroupByShape, Normalize, ReorderImages, Rescale,
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
-    ChannelDimension,
-    ImageInput,
     PILImageResampling,
-    validate_kwargs,
 )
 from ...utils import (
     TensorType,
@@ -147,25 +144,20 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
     def get_transforms(self, **kwargs) -> "Sequential":
         return self._build_transforms(**kwargs)
 
-    def preprocess(
+    def _preprocess(
         self,
-        images: ImageInput,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
-        resample: Optional[Union["PILImageResampling", "F.InterpolationMode"]] = None,
-        do_center_crop: bool = None,
-        crop_size: int = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        do_convert_rgb: bool = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        device: Optional["torch.device"] = None,
-        **kwargs,
+        images: List["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        interpolation: Optional["F.InterpolationMode"],
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: Optional[Union[float, List[float]]],
+        image_std: Optional[Union[float, List[float]]],
+        return_tensors: Optional[Union[str, TensorType]],
     ) -> BatchFeature:
         """
         Preprocess an image or batch of images.
@@ -196,66 +188,9 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
             image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
                 Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
                 `True`.
-            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
-                Whether to convert the image to RGB.
             return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Default to `"pt"` for PyTorch tensors if unset.
-                Fast image processors only support PyTorch tensors.
-            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - Unset: Use the channel dimension format of the input image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-            device (`torch.device`, *optional*):
-                The device to process the images on. If unset, the device is inferred from the input images.
+                Returns stacked tensors if set to `pt, returns a list of tensors if unset.
         """
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_extra_kwargs)
-
-        do_resize = do_resize if do_resize is not None else self.do_resize
-        size = size if size is not None else self.size
-        default_to_square = kwargs.pop(
-            "default_to_square", self.default_to_square if self.default_to_square is not None else True
-        )
-        size = get_size_dict(size=size, default_to_square=default_to_square) if size is not None else None
-        resample = resample if resample is not None else self.resample
-        do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
-        crop_size = crop_size if crop_size is not None else self.crop_size
-        crop_size = get_size_dict(crop_size, param_name="crop_size") if crop_size is not None else None
-        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
-        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
-        image_mean = image_mean if image_mean is not None else self.image_mean
-        image_std = image_std if image_std is not None else self.image_std
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
-
-        images = self._prepare_input_images(
-            images=images,
-            do_convert_rgb=do_convert_rgb,
-            input_data_format=input_data_format,
-            device=device,
-        )
-
-        image_mean, image_std, size, crop_size, interpolation = self._prepare_process_arguments(
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
-            crop_size=crop_size,
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            return_tensors=return_tensors,
-            data_format=data_format,
-            device=images[0].device,
-        )
-
         transforms = self.get_transforms(
             do_resize=do_resize,
             do_rescale=do_rescale,

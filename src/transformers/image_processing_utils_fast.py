@@ -541,8 +541,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
             do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
                 Whether to convert the image to RGB.
             return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Default to `"pt"` for PyTorch tensors if unset.
-                Fast image processors only support PyTorch tensors.
+                Returns stacked tensors if set to `pt, otherwise returns a list of tensors.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.

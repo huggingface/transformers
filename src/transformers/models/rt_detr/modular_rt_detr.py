@@ -261,6 +261,66 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
     ) -> BatchFeature:
         """
         Preprocess an image or a batch of images so that it can be used by the model.
+
+        Args:
+            images (`ImageInput`):
+                Image or batch of images to preprocess. Expects a single or batch of images with pixel values ranging
+                from 0 to 255. If passing in images with pixel values between 0 and 1, set `do_rescale=False`.
+            annotations (`AnnotationType` or `List[AnnotationType]`, *optional*):
+                List of annotations associated with the image or batch of images. If annotation is for object
+                detection, the annotations should be a dictionary with the following keys:
+                - "image_id" (`int`): The image id.
+                - "annotations" (`List[Dict]`): List of annotations for an image. Each annotation should be a
+                  dictionary. An image can have no annotations, in which case the list should be empty.
+                If annotation is for segmentation, the annotations should be a dictionary with the following keys:
+                - "image_id" (`int`): The image id.
+                - "segments_info" (`List[Dict]`): List of segments for an image. Each segment should be a dictionary.
+                  An image can have no segments, in which case the list should be empty.
+                - "file_name" (`str`): The file name of the image.
+            return_segmentation_masks (`bool`, *optional*, defaults to self.return_segmentation_masks):
+                Whether to return segmentation masks.
+            masks_path (`str` or `pathlib.Path`, *optional*):
+                Path to the directory containing the segmentation masks.
+            do_resize (`bool`, *optional*, defaults to self.do_resize):
+                Whether to resize the image.
+            size (`Dict[str, int]`, *optional*, defaults to self.size):
+                Size of the image's `(height, width)` dimensions after resizing. Available options are:
+                    - `{"height": int, "width": int}`: The image will be resized to the exact size `(height, width)`.
+                        Do NOT keep the aspect ratio.
+                    - `{"shortest_edge": int, "longest_edge": int}`: The image will be resized to a maximum size respecting
+                        the aspect ratio and keeping the shortest edge less or equal to `shortest_edge` and the longest edge
+                        less or equal to `longest_edge`.
+                    - `{"max_height": int, "max_width": int}`: The image will be resized to the maximum size respecting the
+                        aspect ratio and keeping the height less or equal to `max_height` and the width less or equal to
+                        `max_width`.
+            resample (`PILImageResampling` or `InterpolationMode`, *optional*, defaults to self.resample):
+                Resampling filter to use when resizing the image.
+            do_rescale (`bool`, *optional*, defaults to self.do_rescale):
+                Whether to rescale the image.
+            rescale_factor (`float`, *optional*, defaults to self.rescale_factor):
+                Rescale factor to use when rescaling the image.
+            do_normalize (`bool`, *optional*, defaults to self.do_normalize):
+                Whether to normalize the image.
+            do_convert_annotations (`bool`, *optional*, defaults to self.do_convert_annotations):
+                Whether to convert the annotations to the format expected by the model. Converts the bounding
+                boxes from the format `(top_left_x, top_left_y, width, height)` to `(center_x, center_y, width, height)`
+                and in relative coordinates.
+            image_mean (`float` or `List[float]`, *optional*, defaults to self.image_mean):
+                Mean to use when normalizing the image.
+            image_std (`float` or `List[float]`, *optional*, defaults to self.image_std):
+                Standard deviation to use when normalizing the image.
+            do_pad (`bool`, *optional*, defaults to self.do_pad):
+                Whether to pad the image. If `True`, padding will be applied to the bottom and right of
+                the image with zeros. If `pad_size` is provided, the image will be padded to the specified
+                dimensions. Otherwise, the image will be padded to the maximum height and width of the batch.
+            pad_size (`Dict[str, int]`, *optional*):
+                The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
+                provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
+                height and width in the batch.
+            format (`str` or `AnnotationFormat`, *optional*, defaults to self.format):
+                Format of the annotations.
+            return_tensors (`str` or `TensorType`, *optional*):
+                Returns stacked tensors if set to `pt, returns a list of tensors if unset.
         """
 
         if annotations is not None and isinstance(annotations, dict):
