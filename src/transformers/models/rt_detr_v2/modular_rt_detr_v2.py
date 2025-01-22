@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 Baidu Inc and The HuggingFace Inc. team.
+# Copyright 2025 Baidu Inc and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -480,9 +480,9 @@ class RtDetrV2MultiscaleDeformableAttention(RTDetrMultiscaleDeformableAttention)
     with improved offset handling and initialization.
     """
 
-    def __init__(self, config: RtDetrV2Config, num_heads: int = None, n_points: int = None):
-        num_heads = num_heads if num_heads is not None else config.decoder_attention_heads
-        n_points = n_points if n_points is not None else config.decoder_n_points
+    def __init__(self, config: RtDetrV2Config):
+        num_heads = config.decoder_attention_heads
+        n_points = config.decoder_n_points
         # Initialize parent class with config parameters
         super().__init__(config=config, num_heads=num_heads, n_points=n_points)
 
