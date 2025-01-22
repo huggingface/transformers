@@ -34,8 +34,8 @@ In the following, we demonstrate how to use `InternLM3-8B-Instruct` for the infe
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 >>> device = "cuda" # the device to load the model onto
 
->>> tokenizer = transformers.InternLM3Tokenizer.from_pretrained("internlm/internlm3-8b-instruct")
->>> model = transformers.InternLM3ForCausalLM.from_pretrained("internlm/internlm3-8b-instruct", device_map="auto")
+>>> tokenizer = AutoTokenizer.from_pretrained("internlm/internlm3-8b-instruct")
+>>> model = AutoModelForCausalLM.from_pretrained("internlm/internlm3-8b-instruct", device_map="auto")
 >>> model = model.eval()
 
 >>> system_prompt = """You are an AI assistant whose name is InternLM (书生·浦语).
