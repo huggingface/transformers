@@ -60,7 +60,7 @@ def get_current_wind_speed(location: str) -> float:
 tools = [get_current_temperature, get_current_wind_speed]
 ```
 
-Load a model and tokenizer that supports tool use like [NousResearch/Hermes-2-Pro-Llama-3-8B](https://hf.co/NousResearch/Hermes-2-Pro-Llama-3-8B), but you can also consider a larger model like [Command-R](./model_doc/cohere) and [Mixtral-8x22B](./model_doc/mixtral) if your hardware can support it.
+Load a model and tokenizer that supports tool-use like [NousResearch/Hermes-2-Pro-Llama-3-8B](https://hf.co/NousResearch/Hermes-2-Pro-Llama-3-8B), but you can also consider a larger model like [Command-R](./model_doc/cohere) and [Mixtral-8x22B](./model_doc/mixtral) if your hardware can support it.
 
 ```py
 import torch
@@ -80,7 +80,7 @@ messages = [
 ]
 ```
 
-Use [`~PreTrainedTokenizerBase.apply_chat_template`] on the messages and pass the list of tools to the `tools` parameter. Then you can pass the inputs to the model for generation.
+Pass `messages` and a list of tools to [`~PreTrainedTokenizerBase.apply_chat_template`]. Then you can pass the inputs to the model for generation.
 
 ```py
 inputs = tokenizer.apply_chat_template(messages, tools=tools, add_generation_prompt=True, return_dict=True, return_tensors="pt")
@@ -144,11 +144,11 @@ print(tokenizer.decode(out[0][len(inputs["input_ids"][0]):]))
 </hfoption>
 </hfoptions>
 
-### Schema
+## Schema
 
-[`~PreTrainedTokenizerBase.apply_chat_template`] converts functions into a [JSON schema](https://json-schema.org/learn/getting-started-step-by-step) which is passed to the model chat template. A LLM never sees the code inside the function. In other words, a LLM doesn't care how the model works technically, it only cares about function **definition** and **arguments**.
+[`~PreTrainedTokenizerBase.apply_chat_template`] converts functions into a [JSON schema](https://json-schema.org/learn/getting-started-step-by-step) which is passed to the chat template. A LLM never sees the code inside the function. In other words, a LLM doesn't care how the model works technically, it only cares about function **definition** and **arguments**.
 
-The JSON schema is automatically generated behind the scenes as long as your function follows the rules listed earlier above. But you can use [get_json_schema](https://github.com/huggingface/transformers/blob/14561209291255e51c55260306c7d00c159381a5/src/transformers/utils/chat_template_utils.py#L205) to manually convert a schema for more visibility or debugging.
+The JSON schema is automatically generated behind the scenes as long as your function follows the [rules](#tools) listed earlier above. But you can use [get_json_schema](https://github.com/huggingface/transformers/blob/14561209291255e51c55260306c7d00c159381a5/src/transformers/utils/chat_template_utils.py#L205) to manually convert a schema for more visibility or debugging.
 
 ```py
 from transformers.utils import get_json_schema
@@ -191,7 +191,7 @@ print(schema)
 }
 ```
 
-You can edit the schema or write one entirely from scratch. This gives you a lot of flexibility to definie precise schemas for more complex functions.
+You can edit the schema or write one entirely from scratch. This gives you a lot of flexibility to define precise schemas for more complex functions.
 
 > [!WARNING]
 > Try keeping your function signatures simple and the arguments to a minimum. These are easier for a model to understand and use than complex functions for example with nested arguments.

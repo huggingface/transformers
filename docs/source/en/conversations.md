@@ -16,18 +16,18 @@ rendered properly in your Markdown viewer.
 
 # Chat pipeline
 
-Chat models are conversational models that you can send and receive messages with. There are many chat models available to choose from, but in general, larger models tend to be more capable though that's not always the case. The model size is often included in the name, like "8B" or "70B", and it describes the number of parameters. Some mixture-of-expert (MoE) models have names like "8x7B" or "141B-A35B" which basically means it's a 57B and 141B parameter model. Without quantization, you'll need ~2 bytes of memory per parameter. To reduce memory requirements, try quantizing the model.
+Chat models are conversational models you can send and receive messages from. There are many chat models available to choose from, but in general, larger models tend to be better though that's not always the case. The model size is often included in the name, like "8B" or "70B", and it describes the number of parameters. Mixture-of-expert (MoE) models have names like "8x7B" or "141B-A35B" which means it's a 56B and 141B parameter model. You can try quantizing larger models to reduce memory requirements, otherwise you'll need ~2 bytes of memory per parameter.
 
 Check model leaderboards like [OpenLLM](https://hf.co/spaces/HuggingFaceH4/open_llm_leaderboard) and [LMSys Chatbot Arena](https://chat.lmsys.org/?leaderboard) to further help you identify the best chat models for your use case. Models that are specialized in certain domains (medical, legal text, non-English languages, etc.) may sometimes outperform larger general purpose models.
 
 > [!TIP]
 > Chat with a number of open-source models for free on [HuggingChat](https://hf.co/chat/)!
 
-This guide shows you how to build and format a conversation, and how to quickly start chatting with a model with the [`TextGenerationPipeline`].
+This guide shows you how to build and format a conversation, and how to quickly start chatting with a model with [`TextGenerationPipeline`].
 
 ## TextGenerationPipeline
 
-The [`TextGenerationPipeline`] is a high-level text generation API with a "chat mode". Chat mode is turned on when a conversational model is detected and the chat prompt is [properly formatted](./llm_tutorial#wrong-prompt-format).
+[`TextGenerationPipeline`] is a high-level text generation class with a "chat mode". Chat mode is enabled when a conversational model is detected and the chat prompt is [properly formatted](./llm_tutorial#wrong-prompt-format).
 
 To start, build a chat history with the following two roles.
 
@@ -41,7 +41,7 @@ chat = [
 ]
 ```
 
-Create a [`TextGenerationPipeline`] and pass the `chat` to it. For large models, setting [device_map="auto"](./models#big-model-inference) helps load the model quicker and automatically places it on the fastest device available. Changing the data type to [torch.bfloat16](./models#model-data-type) also helps save memory.
+Create the [`TextGenerationPipeline`] and pass `chat` to it. For large models, setting [device_map="auto"](./models#big-model-inference) helps load the model quicker and automatically places it on the fastest device available. Changing the data type to [torch.bfloat16](./models#model-data-type) also helps save memory.
 
 ```py
 import torch
@@ -75,7 +75,7 @@ So, there you have it, pal! That's my expert advice on what to do in New York. N
 excuse me, I've got some oil changes to attend to. (winks)
 ```
 
-Use the `append` method on `chat` to respond to the model's message.
+Use the `append` method on `chat` to respond to the models message.
 
 ```py
 chat = response[0]["generated_text"]
@@ -102,12 +102,12 @@ But, hey, that's what makes art, art, right? (laughs)
 
 ## Performance
 
-Transformers load models in full precision by default, and for a 8B model, this requires ~32GB of memory! Reduce a model's memory usage by loading a model in half-precision or bfloat16 (only uses ~2 bytes per parameter). You can even quantize the model to a lower precision like 8-bit or 4-bit with [bitsandbytes](https://hf.co/docs/bitsandbytes/index).
+Transformers load models in full precision by default, and for a 8B model, this requires ~32GB of memory! Reduce memory usage by loading a model in half-precision or bfloat16 (only uses ~2 bytes per parameter). You can even quantize the model to a lower precision like 8-bit or 4-bit with [bitsandbytes](https://hf.co/docs/bitsandbytes/index).
 
 > [!TIP]
-> Refer to the [Quantization](./quantization/overview) section for more information about different quantization backends.
+> Refer to the [Quantization](./quantization/overview) docs for more information about the different quantization backends available.
 
-Create a [`BitsAndBytesConfig`] with your desired quantization settings and pass it to the pipelines `model_kwargs` parameter.
+Create a [`BitsAndBytesConfig`] with your desired quantization settings and pass it to the pipelines `model_kwargs` parameter. The example below quantizes a model to 8-bits.
 
 ```py
 from transformers import pipeline, BitsAndBytesConfig
@@ -116,7 +116,7 @@ quantization_config = BitsAndBytesConfig(load_in_8bit=True)
 pipeline = pipeline(task="text-generation", model="meta-llama/Meta-Llama-3-8B-Instruct", device_map="auto", model_kwargs={"quantization_config": quantization_config})
 ```
 
-In general, larger models are slower in addition to requiring more memory because text generation is bottlenecked by **memory bandwidth** instead of compute power. Each active parameter must be read from memory for each generated token. For a 16GB model, this means 16GB must be read from memory for every generated token.
+In general, larger models are slower in addition to requiring more memory because text generation is bottlenecked by **memory bandwidth** instead of compute power. Each active parameter must be read from memory for every generated token. For a 16GB model, 16GB must be read from memory for every generated token.
 
 The number of generated tokens/sec is proportional to the total memory bandwidth of the system divided by the model size. Depending on your hardware, total memory bandwidth can vary. Refer to the table below for approximate generation speeds for different hardware types.
 
@@ -126,7 +126,9 @@ The number of generated tokens/sec is proportional to the total memory bandwidth
 | specialized CPU (Intel Xeon, AMD Threadripper/Epyc, Apple silicon) | 200-900GB/sec |
 | data center GPU (NVIDIA A100/H100) | 2-3TB/sec |
 
-The easiest solution for improving generation speed is to either reduce the model size in memory with quantization or use hardware with higher memory bandwidth. You can also try techniques like [speculative decoding](./generation_strategies#speculative-decoding), where a smaller model generates candidate tokens that are verified by the larger model. If the candidate tokens are correct, the larger model can generate more than one token per `forward` pass. This significantly alleviates the bandwidth bottleneck and improves generation speed.
+The easiest solution for improving generation speed is to either quantize a model or use hardware with higher memory bandwidth.
+
+You can also try techniques like [speculative decoding](./generation_strategies#speculative-decoding), where a smaller model generates candidate tokens that are verified by the larger model. If the candidate tokens are correct, the larger model can generate more than one token per `forward` pass. This significantly alleviates the bandwidth bottleneck and improves generation speed.
 
 > [!TIP]
 > Parameters may not be active for every generated token in MoE models such as [Mixtral](./model_doc/mixtral), [Qwen2MoE](./model_doc/qwen2_moe.md), and [DBRX](./model_doc/dbrx). As a result, MoE models generally have much lower memory bandwidth requirements and can be faster than a regular LLM of the same size. However, techniques like speculative decoding are ineffective with MoE models because parameters become activated with each new speculated token.
