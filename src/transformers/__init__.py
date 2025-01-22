@@ -2995,11 +2995,11 @@ else:
     _import_structure["models.modernbert"].extend(
         [
             "ModernBertForMaskedLM",
+            "ModernBertForQuestionAnswering",
             "ModernBertForSequenceClassification",
             "ModernBertForTokenClassification",
             "ModernBertModel",
             "ModernBertPreTrainedModel",
-            "ModernBertForQuestionAnswering",
         ]
     )
     _import_structure["models.moonshine"].extend(
