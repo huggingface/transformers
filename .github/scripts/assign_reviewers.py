@@ -9,9 +9,9 @@ from pathlib import Path
 def get_file_owners(file_path, codeowners_lines):
     # Process lines in reverse (last matching pattern takes precedence)
     for line in reversed(codeowners_lines):
-        # Skip comments and empty lines
-        line = line.strip()
-        if not line or line.startswith('#'):
+        # Skip comments and empty lines, strip inline comments
+        line = line.split('#')[0].strip()
+        if not line:
             continue
 
         # Split into pattern and owners
