@@ -316,10 +316,6 @@ def check_models_equal(model1, model2):
     return models_are_equal
 
 
-def fake_from_config(*args, **kwargs):
-    raise RuntimeError()
-
-
 @require_torch
 class ModelUtilsTest(TestCasePlus):
     @slow
