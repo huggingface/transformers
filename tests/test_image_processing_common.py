@@ -125,19 +125,19 @@ def prepare_video_inputs(
     assert not (numpify and torchify), "You cannot specify both numpy and PyTorch tensors at the same time"
 
     video_inputs = []
-    for i in range(batch_size):
+    for _ in range(batch_size):
         if equal_resolution:
             width = height = max_resolution
         else:
             width, height = np.random.choice(np.arange(min_resolution, max_resolution), 2)
-            video = prepare_video(
-                num_frames=num_frames,
-                num_channels=num_channels,
-                width=width,
-                height=height,
-                numpify=numpify,
-                torchify=torchify,
-            )
+        video = prepare_video(
+            num_frames=num_frames,
+            num_channels=num_channels,
+            width=width,
+            height=height,
+            numpify=numpify,
+            torchify=torchify,
+        )
         video_inputs.append(video)
 
     return video_inputs
@@ -181,7 +181,10 @@ class ImageProcessingTestMixin:
         encoding_slow = image_processor_slow(dummy_image, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
 
-        self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-2))
+        self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1))
+        self.assertLessEqual(
+            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 1e-3
+        )
 
     @require_vision
     @require_torch
@@ -193,6 +196,8 @@ class ImageProcessingTestMixin:
             self.skipTest(reason="Skipping speed test as one of the image processors is not defined")
 
         def measure_time(image_processor, image):
+            # Warmup
+            _ = image_processor(image, return_tensors="pt")
             start = time.time()
             _ = image_processor(image, return_tensors="pt")
             return time.time() - start
