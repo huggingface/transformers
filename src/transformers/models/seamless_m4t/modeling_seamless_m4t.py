@@ -293,6 +293,8 @@ def format_speech_generation_kwargs(kwargs):
         elif key.startswith("speech_"):
             key = key[len("speech_") :]
             kwargs_speech[key] = value
+        elif key == "generation_config":
+            kwargs_text[key] = value
         else:
             # If the key is already in a specific config, then it's been set with a
             # submodules specific value and we don't override
@@ -4284,3 +4286,17 @@ class SeamlessM4TModel(SeamlessM4TPreTrainedModel):
                 tuple(past_state.index_select(0, beam_idx) for past_state in layer_past[:2]) + layer_past[2:],
             )
         return reordered_past
+
+
+__all__ = [
+    "SeamlessM4TForTextToSpeech",
+    "SeamlessM4TForSpeechToSpeech",
+    "SeamlessM4TForTextToText",
+    "SeamlessM4TForSpeechToText",
+    "SeamlessM4TModel",
+    "SeamlessM4TPreTrainedModel",
+    "SeamlessM4TCodeHifiGan",
+    "SeamlessM4THifiGan",
+    "SeamlessM4TTextToUnitForConditionalGeneration",
+    "SeamlessM4TTextToUnitModel",
+]

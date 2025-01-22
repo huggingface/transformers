@@ -24,7 +24,7 @@ import torch.utils.checkpoint
 from torch import Size, Tensor, nn
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, StaticCache
+from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import _flash_attention_forward
@@ -76,7 +76,7 @@ class NemotronLayerNorm1P(nn.LayerNorm):
 
     def forward(self, input: Tensor) -> Tensor:
         args = _cast_if_autocast_enabled(input, self.normalized_shape, self.weight + 1, self.bias, self.eps)
-        with torch.cuda.amp.autocast(enabled=False):
+        with torch.amp.autocast(input.device.type, enabled=False):
             return F.layer_norm(*args)
 
 
@@ -98,7 +98,6 @@ class NemotronRotaryEmbedding(nn.Module):
         self.original_max_seq_len = config.max_position_embeddings
 
         self.config = config
-        self.rope_kwargs = None
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
         inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
@@ -113,13 +112,14 @@ class NemotronRotaryEmbedding(nn.Module):
         """
         seq_len = torch.max(position_ids) + 1
         if seq_len > self.max_seq_len_cached:  # growth
-            inv_freq, self.attention_scaling = self.rope_init_fn(
-                self.config, device, seq_len=seq_len, **self.rope_kwargs
-            )
+            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
             self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
             self.max_seq_len_cached = seq_len
 
         if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
+            # This .to() is needed if the model has been moved to a device after being initialized (because
+            # the buffer is automatically moved, but not the original copy)
+            self.original_inv_freq = self.original_inv_freq.to(device)
             self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
             self.max_seq_len_cached = self.original_max_seq_len
 
@@ -301,7 +301,8 @@ class NemotronAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2 with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
+# NO LONGER EXIST Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2 with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
+# TODO cyril: modular
 class NemotronFlashAttention2(NemotronAttention):
     """
     Nemotron flash attention module. This module inherits from `NemotronAttention` as the weights of the module stays
@@ -415,7 +416,8 @@ class NemotronFlashAttention2(NemotronAttention):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
+# NO LONGER EXIST Copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
+# TODO cyril: modular
 class NemotronSdpaAttention(NemotronAttention):
     """
     Nemotron attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
@@ -514,7 +516,8 @@ NEMOTRON_ATTENTION_CLASSES = {
 }
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
+# copied from transformers.models.llama.modeling_llama.LlamaDecoderLayer with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
+# no longer copied after attention refactors
 class NemotronDecoderLayer(nn.Module):
     # Ignore copy
     def __init__(self, config: NemotronConfig, layer_idx: int):
@@ -536,7 +539,7 @@ class NemotronDecoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.46
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
@@ -780,11 +783,20 @@ class NemotronModel(NemotronPreTrainedModel):
             )
             use_cache = False
 
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache()
+
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
+        if use_cache and past_key_values is None:
+            past_key_values = DynamicCache()
+
         if cache_position is None:
-            cache_position = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device)
+            past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
+            cache_position = torch.arange(
+                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            )
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
@@ -866,7 +878,7 @@ class NemotronModel(NemotronPreTrainedModel):
         output_attentions: bool,
     ):
         if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and 0.0 in attention_mask:
+            if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
 
@@ -980,7 +992,7 @@ class NemotronModel(NemotronPreTrainedModel):
         return causal_mask
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
+# TODO: re-enable check: Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM with LLAMA->NEMOTRON,Llama->Nemotron,llama->nemotron
 class NemotronForCausalLM(NemotronPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
 
@@ -1381,3 +1393,13 @@ class NemotronForTokenClassification(NemotronPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "NemotronForQuestionAnswering",
+    "NemotronForCausalLM",
+    "NemotronModel",
+    "NemotronPreTrainedModel",
+    "NemotronForSequenceClassification",
+    "NemotronForTokenClassification",
+]

@@ -18,6 +18,7 @@ import copy
 import unittest
 from io import BytesIO
 
+import pytest
 import requests
 
 from transformers import (
@@ -25,7 +26,14 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
-from transformers.testing_utils import cleanup, require_bitsandbytes, require_torch, slow, torch_device
+from transformers.testing_utils import (
+    cleanup,
+    require_bitsandbytes,
+    require_torch,
+    require_torch_sdpa,
+    slow,
+    torch_device,
+)
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -40,8 +48,6 @@ if is_torch_available():
         Idefics3ForConditionalGeneration,
         Idefics3Model,
     )
-else:
-    is_torch_greater_or_equal_than_2_0 = False
 
 if is_vision_available():
     from PIL import Image
@@ -168,7 +174,12 @@ class Idefics3ModelTest(ModelTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = Idefics3VisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Idefics3Config, has_text_modality=False)
+        self.config_tester = ConfigTester(
+            self, config_class=Idefics3Config, has_text_modality=False, common_properties=["image_token_id"]
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="input_embeds cannot be passed in without input_ids")
     def test_inputs_embeds():
@@ -317,6 +328,7 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
 
     all_model_classes = (Idefics3ForConditionalGeneration,) if is_torch_available() else ()
     all_generative_model_classes = (Idefics3ForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = {"image-text-to-text": Idefics3ForConditionalGeneration} if is_torch_available() else ()
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True
@@ -355,6 +367,15 @@ class Idefics3ForConditionalGenerationModelTest(GenerationTesterMixin, ModelTest
 
     @unittest.skip(reason=" FlashAttention only support fp16 and bf16 data type")
     def test_flash_attn_2_fp32_ln(self):
+        pass
+
+    @pytest.mark.generate
+    @require_torch_sdpa
+    @slow
+    @unittest.skip(
+        reason="Idefics3 doesn't support SDPA for all backbones, vision backbones has only eager/FA2 attention"
+    )
+    def test_eager_matches_sdpa_generate(self):
         pass
 
     # We need to override as we need to prepare such that the image token is the last token

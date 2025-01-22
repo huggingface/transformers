@@ -29,7 +29,6 @@ from transformers.testing_utils import (
     cleanup,
     require_bitsandbytes,
     require_torch,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -41,8 +40,6 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
-else:
-    is_torch_greater_or_equal_than_2_0 = False
 
 if is_vision_available():
     from PIL import Image
@@ -85,7 +82,7 @@ class VipLlavaVisionText2TextModelTester:
         is_training=True,
         vision_config={
             "batch_size": 12,
-            "image_size": 30,
+            "image_size": 8,
             "patch_size": 2,
             "num_channels": 3,
             "is_training": True,
@@ -117,9 +114,9 @@ class VipLlavaVisionText2TextModelTester:
         self.batch_size = 3
         self.num_channels = 3
         self.image_size = 336
-        self.encoder_seq_length = 232
-        self.num_image_tokens = 225
+        self.num_image_tokens = (self.vision_config["image_size"] // self.vision_config["patch_size"]) ** 2
         self.seq_length = seq_length + self.num_image_tokens
+        self.encoder_seq_length = self.seq_length
 
     def get_config(self):
         return VipLlavaConfig(
@@ -170,6 +167,7 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTest
 
     all_model_classes = (VipLlavaForConditionalGeneration,) if is_torch_available() else ()
     all_generative_model_classes = (VipLlavaForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = {"image-text-to-text": VipLlavaForConditionalGeneration} if is_torch_available() else {}
     fx_compatible = False
     test_pruning = False
     test_resize_embeddings = True
@@ -178,7 +176,13 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTest
 
     def setUp(self):
         self.model_tester = VipLlavaVisionText2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=VipLlavaConfig, has_text_modality=False)
+        common_properties = ["image_token_index", "vision_feature_layers", "image_seq_length"]
+        self.config_tester = ConfigTester(
+            self, config_class=VipLlavaConfig, has_text_modality=False, common_properties=common_properties
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
     def test_inputs_embeds(self):
@@ -315,70 +319,5 @@ class VipLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         outputs = model.generate(**inputs, max_new_tokens=10)
 
-        EXPECTED_OUTPUT = "USER: <image> \nCan you please describe this image?\nASSISTANT: The image features a brown and white cat sitting on"
+        EXPECTED_OUTPUT = "USER:  \nCan you please describe this image?\nASSISTANT: The image features a brown and white cat sitting on"
         self.assertEqual(processor.decode(outputs[0], skip_special_tokens=True), EXPECTED_OUTPUT)
-
-    @slow
-    @require_torch_gpu
-    def test_vipllava_merge_inputs_error_bug(self):
-        # This is a reproducer of https://github.com/huggingface/transformers/pull/28333 and makes sure it does not happen anymore
-        model_id = "llava-hf/vip-llava-7b-hf"
-        model = VipLlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
-
-        # Simulate some user inputs
-        pixel_values = torch.randn(
-            (1, 3, 336, 336),
-            dtype=torch.float,
-            device=torch_device,
-        )
-        input_ids = torch.tensor(
-            [
-                [32001, 32001, 1, 15043, 7084, 32000, 29871, 13, 7900],
-            ],
-            dtype=torch.long,
-            device=torch_device,
-        )
-        attention_mask = torch.tensor(
-            [[0, 0, 1, 1, 1, 1, 1, 1, 1]],
-            dtype=torch.long,
-            device=torch_device,
-        )
-
-        # Make sure that the loss is properly computed
-        loss = model(
-            pixel_values=pixel_values,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            labels=input_ids,
-        ).loss
-        loss.backward()
-
-    @slow
-    @require_bitsandbytes
-    def test_expansion_in_processing(self):
-        model_id = "llava-hf/vip-llava-7b-hf"
-        model = VipLlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
-        processor = AutoProcessor.from_pretrained(model_id)
-
-        prompt = "USER: <image>\nDescribe the image:\nASSISTANT:"
-        image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
-
-        # check processing with expansion of inputs
-        processor.vision_feature_select_strategy = "default"
-        processor.patch_size = 14
-        inputs_expanded = processor(prompt, raw_image, return_tensors="pt").to(torch_device, torch.float16)
-        self.assertTrue(inputs_expanded.input_ids.shape[-1] == 593)
-
-        # check processing without expansion of inputs (legacy behavior)
-        processor.vision_feature_select_strategy = None
-        processor.patch_size = None
-        inputs = processor(prompt, raw_image, return_tensors="pt").to(torch_device, torch.float16)
-        self.assertTrue(inputs.input_ids.shape[-1] == 18)
-
-        # generate exactly 20 tokens
-        output = model.generate(**inputs, min_new_tokens=20, max_new_tokens=20)
-        output_expanded = model.generate(**inputs_expanded, min_new_tokens=20, max_new_tokens=20)
-
-        # check that both inputs are handled correctly and generate the same output
-        self.assertListEqual(output_expanded[:, -20:].tolist(), output[:, -20:].tolist())

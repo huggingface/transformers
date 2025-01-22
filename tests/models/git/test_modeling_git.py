@@ -401,7 +401,12 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     all_model_classes = (GitModel, GitForCausalLM) if is_torch_available() else ()
     all_generative_model_classes = (GitForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": GitModel, "image-to-text": GitForCausalLM, "text-generation": GitForCausalLM}
+        {
+            "feature-extraction": GitModel,
+            "image-to-text": GitForCausalLM,
+            "text-generation": GitForCausalLM,
+            "image-text-to-text": GitForCausalLM,
+        }
         if is_torch_available()
         else {}
     )

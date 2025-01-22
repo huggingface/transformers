@@ -13,12 +13,9 @@
 # limitations under the License.
 """Idefics3 model configuration"""
 
-import os
-from typing import Union
-
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -57,8 +54,8 @@ class Idefics3VisionConfig(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        intializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation for initializing all weight matrices in the model.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
 
     Example:
 
@@ -76,7 +73,8 @@ class Idefics3VisionConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "idefics3"
+    model_type = "idefics3_vision"
+    base_config_key = "vision_config"
 
     def __init__(
         self,
@@ -106,24 +104,6 @@ class Idefics3VisionConfig(PretrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        # get the vision config dict if we are loading from Idefics3Config
-        if config_dict.get("model_type") == "idefics3":
-            config_dict = config_dict["vision_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
 
 
 class Idefics3Config(PretrainedConfig):
@@ -165,7 +145,7 @@ class Idefics3Config(PretrainedConfig):
     ```"""
 
     model_type = "idefics3"
-    is_composition = True
+    sub_configs = {"text_config": AutoConfig, "vision_config": Idefics3VisionConfig}
 
     def __init__(
         self,
@@ -204,4 +184,7 @@ class Idefics3Config(PretrainedConfig):
         self.text_config = text_config
         self.scale_factor = scale_factor
 
-        super().__init__(**kwargs, tie_word_embeddings=tie_word_embeddings)
+        super().__init__(**kwargs, pad_token_id=pad_token_id, tie_word_embeddings=tie_word_embeddings)
+
+
+__all__ = ["Idefics3Config", "Idefics3VisionConfig"]

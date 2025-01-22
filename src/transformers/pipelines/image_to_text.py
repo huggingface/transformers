@@ -92,6 +92,12 @@ class ImageToTextPipeline(Pipeline):
                 )
             forward_params.update(generate_kwargs)
 
+        if self.assistant_model is not None:
+            forward_params["assistant_model"] = self.assistant_model
+        if self.assistant_tokenizer is not None:
+            forward_params["tokenizer"] = self.tokenizer
+            forward_params["assistant_tokenizer"] = self.assistant_tokenizer
+
         return preprocess_params, forward_params, {}
 
     def __call__(self, inputs: Union[str, List[str], "Image.Image", List["Image.Image"]] = None, **kwargs):
@@ -134,6 +140,10 @@ class ImageToTextPipeline(Pipeline):
         image = load_image(image, timeout=timeout)
 
         if prompt is not None:
+            logger.warning_once(
+                "Passing `prompt` to the `image-to-text` pipeline is deprecated and will be removed in version 4.48"
+                " of 🤗 Transformers. Use the `image-text-to-text` pipeline instead",
+            )
             if not isinstance(prompt, str):
                 raise ValueError(
                     f"Received an invalid text input, got - {type(prompt)} - but expected a single string. "

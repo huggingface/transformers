@@ -63,8 +63,11 @@ class InstructBlipVideoProcessor(ProcessorMixin):
     qformer_tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor, tokenizer, qformer_tokenizer, num_query_tokens=None, **kwargs):
-        self.video_token = AddedToken("<video>", normalized=False, special=True)
-        tokenizer.add_tokens([self.video_token], special_tokens=True)
+        if not hasattr(tokenizer, "video_token"):
+            self.video_token = AddedToken("<video>", normalized=False, special=True)
+            tokenizer.add_tokens([self.video_token], special_tokens=True)
+        else:
+            self.video_token = tokenizer.video_token
         self.num_query_tokens = num_query_tokens
         super().__init__(image_processor, tokenizer, qformer_tokenizer)
 

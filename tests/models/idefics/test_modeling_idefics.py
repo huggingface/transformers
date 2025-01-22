@@ -44,9 +44,6 @@ if is_torch_available():
 
     from transformers import IdeficsForVisionText2Text, IdeficsModel, IdeficsProcessor
     from transformers.models.idefics.configuration_idefics import IdeficsPerceiverConfig, IdeficsVisionConfig
-    from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_0
-else:
-    is_torch_greater_or_equal_than_2_0 = False
 
 if is_vision_available():
     from PIL import Image
@@ -134,7 +131,7 @@ class IdeficsModelTester:
             num_attention_heads=self.vision_num_attention_heads,
             num_hidden_layers=self.vision_num_hidden_layers,
             intermediate_size=self.vision_intermediate_size,
-        )
+        ).to_dict()
 
         self.perceiver_qk_layer_norms_perceiver = perceiver_qk_layer_norms_perceiver
         self.perceiver_resampler_depth = perceiver_resampler_depth
@@ -316,7 +313,6 @@ class IdeficsModelTester:
         return floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
 
     @require_torch_sdpa
-    @slow
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     def test_eager_matches_sdpa_inference(self, torch_dtype: str):
         self.skipTest(reason="Idefics has a hard requirement on SDPA, skipping this test")
@@ -328,11 +324,14 @@ class IdeficsModelTester:
         self.skipTest(reason="Idefics has a hard requirement on SDPA, skipping this test")
 
 
-@unittest.skipIf(not is_torch_greater_or_equal_than_2_0, reason="pytorch 2.0 or higher is required")
 @require_torch
 class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (IdeficsModel, IdeficsForVisionText2Text) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": IdeficsModel} if is_torch_available() else {}
+    pipeline_model_mapping = (
+        {"feature-extraction": IdeficsModel, "image-text-to-text": IdeficsForVisionText2Text}
+        if is_torch_available()
+        else {}
+    )
     test_pruning = False
     test_headmasking = False
     test_torchscript = False
@@ -348,6 +347,12 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
             )
 
         return inputs_dict
+
+    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
+    @require_torch_sdpa
+    @unittest.skip("Idefics requires both text and image inputs which is currently not done in this test.")
+    def test_eager_matches_sdpa_inference(self):
+        pass
 
     def test_model_outputs_equivalence(self):
         try:
@@ -585,7 +590,6 @@ class IdeficsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         pass
 
 
-@unittest.skipIf(not is_torch_greater_or_equal_than_2_0, reason="pytorch 2.0 or higher is required")
 @require_torch
 class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (IdeficsForVisionText2Text,) if is_torch_available() else ()
@@ -597,6 +601,12 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
             modality_type_vocab_size=3,
         )
         self.config_tester = ConfigTester(self, config_class=IdeficsConfig, hidden_size=37)
+
+    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
+    @require_torch_sdpa
+    @unittest.skip("Idefics requires both text and image inputs which is currently not done in this test.")
+    def test_eager_matches_sdpa_inference(self, torch_dtype):
+        pass
 
     @pytest.mark.generate
     def test_left_padding_compatibility(self):
@@ -799,7 +809,6 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
         pass
 
 
-@unittest.skipIf(not is_torch_greater_or_equal_than_2_0, reason="pytorch 2.0 or higher is required")
 @require_torch
 @require_vision
 class IdeficsModelIntegrationTest(TestCasePlus):

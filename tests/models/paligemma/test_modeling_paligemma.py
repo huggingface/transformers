@@ -17,7 +17,6 @@
 import unittest
 
 import requests
-from parameterized import parameterized
 
 from transformers import (
     PaliGemmaConfig,
@@ -30,7 +29,6 @@ from transformers.testing_utils import (
     cleanup,
     require_read_token,
     require_torch,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -42,8 +40,7 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
-else:
-    is_torch_greater_or_equal_than_2_0 = False
+
 
 if is_vision_available():
     from PIL import Image
@@ -183,6 +180,7 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
 
     all_model_classes = (PaliGemmaForConditionalGeneration,) if is_torch_available() else ()
     all_generative_model_classes = (PaliGemmaForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = {"image-text-to-text": PaliGemmaForConditionalGeneration}
     fx_compatible = False
     test_pruning = False
     test_torchscript = False
@@ -300,14 +298,6 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     def test_model_parallelism(self):
         pass
 
-    @require_torch_sdpa
-    @slow
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
-        self.skipTest(
-            "Due to custom causal mask, there is a slightly too big difference between eager and sdpa in bfloat16."
-        )
-
     @unittest.skip(
         reason="PaliGemmma's SigLip encoder uses the same initialization scheme as the Flax original implementation"
     )
@@ -354,6 +344,11 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
         "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
     )
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    # TODO (joao, raushan): fix me -- the problem is in `cache_position[0] == 0`, i.e. dynamic control flow
+    @unittest.skip("PaliGemma is not compatible with end-to-end generation compilation")
+    def test_generate_compile_model_forward(self):
         pass
 
 

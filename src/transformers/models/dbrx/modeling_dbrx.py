@@ -46,7 +46,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "DbrxConfig"
 
 
-# Copied from transformers.models.gemma.modeling_gemma.GemmaRotaryEmbedding with Gemma->Dbrx
 class DbrxRotaryEmbedding(nn.Module):
     def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
         super().__init__()
@@ -318,7 +317,6 @@ class DbrxFlashAttention2(DbrxAttention):
     calls the public API of flash attention.
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -845,7 +843,7 @@ class DbrxPreTrainedModel(PreTrainedModel):
             if module.padding_idx is not None:
                 module.weight.data[module.padding_idx].zero_()
         elif isinstance(module, nn.LayerNorm):
-            module.weight.data.normal_(mean=0.0, std=std)
+            module.weight.data.fill_(1.0)
             if module.bias is not None:
                 module.bias.data.zero_()
         elif isinstance(module, DbrxExpertGLU):
@@ -1113,7 +1111,7 @@ class DbrxModel(DbrxPreTrainedModel):
         output_attentions: bool,
     ):
         if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and 0.0 in attention_mask:
+            if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
 
@@ -1376,3 +1374,6 @@ class DbrxForCausalLM(DbrxPreTrainedModel, GenerationMixin):
             attentions=outputs.attentions,
             router_logits=outputs.router_logits,
         )
+
+
+__all__ = ["DbrxForCausalLM", "DbrxModel", "DbrxPreTrainedModel"]
