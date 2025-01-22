@@ -34,7 +34,7 @@ if is_vision_available():
     from transformers import NougatImageProcessor
 
 
-class NougatImageProcessingTester(unittest.TestCase):
+class NougatImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -53,7 +53,6 @@ class NougatImageProcessingTester(unittest.TestCase):
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
     ):
-        super().__init__()
         size = size if size is not None else {"height": 20, "width": 20}
         self.parent = parent
         self.batch_size = batch_size
