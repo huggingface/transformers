@@ -14,6 +14,9 @@ rendered properly in your Markdown viewer.
 
 -->
 
+> [!TIP]
+> Agents and tools are being spun out into the standalone [smolagents](https://huggingface.co/docs/smolagents/index) library. These docs will be deprecated in the future! 
+
 # Tools
 
 A tool is a function an agent can use to complete a task. Depending on your task, a tool can perform a web search, answer questions about a document, transcribe speech to text, and much more.
