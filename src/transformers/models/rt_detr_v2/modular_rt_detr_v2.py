@@ -278,7 +278,7 @@ class RtDetrV2Config(PretrainedConfig):
             logger.info(
                 "`backbone_config` and `backbone` are `None`. Initializing the config with the default `RtDetrV2-ResNet` backbone."
             )
-            backbone_model_type = "rt_detr_v2_resnet"
+            backbone_model_type = "rt_detr_resnet"
             config_class = CONFIG_MAPPING[backbone_model_type]
             # this will map it to RTDetrResNetConfig
             # note: we can instead create RtDetrV2ResNetConfig but it will be exactly the same as V1

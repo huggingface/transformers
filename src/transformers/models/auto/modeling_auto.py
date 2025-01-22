@@ -1398,7 +1398,6 @@ MODEL_FOR_BACKBONE_MAPPING_NAMES = OrderedDict(
         ("pvt_v2", "PvtV2Backbone"),
         ("resnet", "ResNetBackbone"),
         ("rt_detr_resnet", "RTDetrResNetBackbone"),
-        ("rt_detr_v2_resnet", "RTDetrResNetBackbone"),
         ("swin", "SwinBackbone"),
         ("swinv2", "Swinv2Backbone"),
         ("textnet", "TextNetBackbone"),
