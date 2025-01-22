@@ -49,7 +49,7 @@ pred = onnx_qa(question, context)
 > [!WARNING]
 > BetterTransformer isn't supported for all models. Check this [list](https://hf.co/docs/optimum/bettertransformer/overview#supported-models) to see whether a model supports BetterTransformer.
 
-BetterTransformer is available through Optimum with the [`~PreTrainedModel.to_bettertransformer`] method.
+BetterTransformer is available through Optimum with [`~PreTrainedModel.to_bettertransformer`].
 
 ```py
 from transformers import AutoModelForCausalLM
