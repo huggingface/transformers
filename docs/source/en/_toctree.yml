@@ -139,8 +139,6 @@
     title: Export to TFLite
   - local: torchscript
     title: Export to TorchScript
-  - local: benchmarks
-    title: Benchmarks
   - local: notebooks
     title: Notebooks with examples
   - local: community
@@ -408,8 +406,6 @@
         title: Falcon3
       - local: model_doc/falcon_mamba
         title: FalconMamba
-      - local: model_doc/fastspeech2_conformer
-        title: FastSpeech2Conformer
       - local: model_doc/flan-t5
         title: FLAN-T5
       - local: model_doc/flan-ul2
@@ -508,8 +504,6 @@
         title: MobileBERT
       - local: model_doc/modernbert
         title: ModernBert
-      - local: model_doc/moonshine
-        title: moonshine
       - local: model_doc/mpnet
         title: MPNet
       - local: model_doc/mpt
@@ -713,6 +707,8 @@
         title: SegFormer
       - local: model_doc/seggpt
         title: SegGpt
+      - local: model_doc/superglue
+        title: SuperGlue
       - local: model_doc/superpoint
         title: SuperPoint
       - local: model_doc/swiftformer
@@ -764,6 +760,8 @@
         title: dac
       - local: model_doc/encodec
         title: EnCodec
+      - local: model_doc/fastspeech2_conformer
+        title: FastSpeech2Conformer
       - local: model_doc/hubert
         title: Hubert
       - local: model_doc/mctct
@@ -772,6 +770,8 @@
         title: Mimi
       - local: model_doc/mms
         title: MMS
+      - local: model_doc/moonshine
+        title: Moonshine
       - local: model_doc/moshi
         title: Moshi
       - local: model_doc/musicgen

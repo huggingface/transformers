@@ -73,7 +73,6 @@ _import_structure = {
         "tool",
     ],
     "audio_utils": [],
-    "benchmark": [],
     "commands": [],
     "configuration_utils": ["PretrainedConfig"],
     "convert_graph_to_onnx": [],
@@ -785,6 +784,7 @@ _import_structure = {
     ],
     "models.stablelm": ["StableLmConfig"],
     "models.starcoder2": ["Starcoder2Config"],
+    "models.superglue": ["SuperGlueConfig"],
     "models.superpoint": ["SuperPointConfig"],
     "models.swiftformer": ["SwiftFormerConfig"],
     "models.swin": ["SwinConfig"],
@@ -1242,6 +1242,7 @@ else:
     _import_structure["models.layoutlmv2"].extend(["LayoutLMv2FeatureExtractor", "LayoutLMv2ImageProcessor"])
     _import_structure["models.layoutlmv3"].extend(["LayoutLMv3FeatureExtractor", "LayoutLMv3ImageProcessor"])
     _import_structure["models.levit"].extend(["LevitFeatureExtractor", "LevitImageProcessor"])
+    _import_structure["models.llava"].append("LlavaImageProcessor")
     _import_structure["models.llava_next"].append("LlavaNextImageProcessor")
     _import_structure["models.llava_next_video"].append("LlavaNextVideoImageProcessor")
     _import_structure["models.llava_onevision"].extend(
@@ -1268,6 +1269,7 @@ else:
     _import_structure["models.segformer"].extend(["SegformerFeatureExtractor", "SegformerImageProcessor"])
     _import_structure["models.seggpt"].extend(["SegGptImageProcessor"])
     _import_structure["models.siglip"].append("SiglipImageProcessor")
+    _import_structure["models.superglue"].extend(["SuperGlueImageProcessor"])
     _import_structure["models.superpoint"].extend(["SuperPointImageProcessor"])
     _import_structure["models.swin2sr"].append("Swin2SRImageProcessor")
     _import_structure["models.textnet"].extend(["TextNetImageProcessor"])
@@ -1296,11 +1298,12 @@ else:
     _import_structure["models.deformable_detr"].append("DeformableDetrImageProcessorFast")
     _import_structure["models.detr"].append("DetrImageProcessorFast")
     _import_structure["models.pixtral"].append("PixtralImageProcessorFast")
+    _import_structure["models.qwen2_vl"].append("Qwen2VLImageProcessorFast")
     _import_structure["models.rt_detr"].append("RTDetrImageProcessorFast")
     _import_structure["models.vit"].append("ViTImageProcessorFast")
 
 try:
-    if not is_torchvision_available() and not is_timm_available():
+    if not (is_torchvision_available() and is_timm_available()):
         raise OptionalDependencyNotAvailable()
 except OptionalDependencyNotAvailable:
     from .utils import dummy_timm_and_torchvision_objects
@@ -1321,8 +1324,6 @@ except OptionalDependencyNotAvailable:
     _import_structure["utils.dummy_pt_objects"] = [name for name in dir(dummy_pt_objects) if not name.startswith("_")]
 else:
     _import_structure["activations"] = []
-    _import_structure["benchmark.benchmark"] = ["PyTorchBenchmark"]
-    _import_structure["benchmark.benchmark_args"] = ["PyTorchBenchmarkArguments"]
     _import_structure["cache_utils"] = [
         "Cache",
         "CacheConfig",
@@ -3545,6 +3546,12 @@ else:
             "Starcoder2PreTrainedModel",
         ]
     )
+    _import_structure["models.superglue"].extend(
+        [
+            "SuperGlueForKeypointMatching",
+            "SuperGluePreTrainedModel",
+        ]
+    )
     _import_structure["models.superpoint"].extend(
         [
             "SuperPointForKeypointDetection",
@@ -4010,8 +4017,6 @@ except OptionalDependencyNotAvailable:
     _import_structure["utils.dummy_tf_objects"] = [name for name in dir(dummy_tf_objects) if not name.startswith("_")]
 else:
     _import_structure["activations_tf"] = []
-    _import_structure["benchmark.benchmark_args_tf"] = ["TensorFlowBenchmarkArguments"]
-    _import_structure["benchmark.benchmark_tf"] = ["TensorFlowBenchmark"]
     _import_structure["generation"].extend(
         [
             "TFForcedBOSTokenLogitsProcessor",
@@ -5861,6 +5866,7 @@ if TYPE_CHECKING:
     )
     from .models.stablelm import StableLmConfig
     from .models.starcoder2 import Starcoder2Config
+    from .models.superglue import SuperGlueConfig
     from .models.superpoint import SuperPointConfig
     from .models.swiftformer import (
         SwiftFormerConfig,
@@ -6325,6 +6331,7 @@ if TYPE_CHECKING:
             LayoutLMv3ImageProcessor,
         )
         from .models.levit import LevitFeatureExtractor, LevitImageProcessor
+        from .models.llava import LlavaImageProcessor
         from .models.llava_next import LlavaNextImageProcessor
         from .models.llava_next_video import LlavaNextVideoImageProcessor
         from .models.llava_onevision import LlavaOnevisionImageProcessor, LlavaOnevisionVideoProcessor
@@ -6361,6 +6368,7 @@ if TYPE_CHECKING:
         from .models.segformer import SegformerFeatureExtractor, SegformerImageProcessor
         from .models.seggpt import SegGptImageProcessor
         from .models.siglip import SiglipImageProcessor
+        from .models.superglue import SuperGlueImageProcessor
         from .models.superpoint import SuperPointImageProcessor
         from .models.swin2sr import Swin2SRImageProcessor
         from .models.textnet import TextNetImageProcessor
@@ -6385,11 +6393,12 @@ if TYPE_CHECKING:
         from .models.deformable_detr import DeformableDetrImageProcessorFast
         from .models.detr import DetrImageProcessorFast
         from .models.pixtral import PixtralImageProcessorFast
+        from .models.qwen2_vl import Qwen2VLImageProcessorFast
         from .models.rt_detr import RTDetrImageProcessorFast
         from .models.vit import ViTImageProcessorFast
 
     try:
-        if not is_torchvision_available() and not is_timm_available():
+        if not (is_torchvision_available() and is_timm_available()):
             raise OptionalDependencyNotAvailable()
     except OptionalDependencyNotAvailable:
         from .utils.dummy_timm_and_torchvision_objects import *
@@ -6403,9 +6412,6 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_pt_objects import *
     else:
-        # Benchmarks
-        from .benchmark.benchmark import PyTorchBenchmark
-        from .benchmark.benchmark_args import PyTorchBenchmarkArguments
         from .cache_utils import (
             Cache,
             CacheConfig,
@@ -8186,6 +8192,10 @@ if TYPE_CHECKING:
             Starcoder2Model,
             Starcoder2PreTrainedModel,
         )
+        from .models.superglue import (
+            SuperGlueForKeypointMatching,
+            SuperGluePreTrainedModel,
+        )
         from .models.superpoint import (
             SuperPointForKeypointDetection,
             SuperPointPreTrainedModel,
@@ -8545,10 +8555,6 @@ if TYPE_CHECKING:
         # They will raise an import error if the user tries to instantiate / use them.
         from .utils.dummy_tf_objects import *
     else:
-        from .benchmark.benchmark_args_tf import TensorFlowBenchmarkArguments
-
-        # Benchmarks
-        from .benchmark.benchmark_tf import TensorFlowBenchmark
         from .generation import (
             TFForcedBOSTokenLogitsProcessor,
             TFForcedEOSTokenLogitsProcessor,

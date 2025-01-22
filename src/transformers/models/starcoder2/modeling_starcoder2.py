@@ -56,6 +56,7 @@ from .configuration_starcoder2 import Starcoder2Config
 
 logger = logging.get_logger(__name__)
 _CHECKPOINT_FOR_DOC = "bigcode/starcoder2-7b"
+
 _CONFIG_FOR_DOC = "Starcoder2Config"
 
 
