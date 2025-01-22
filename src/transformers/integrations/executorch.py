@@ -206,9 +206,8 @@ def convert_and_export_with_cache(
 
         # Due to issue https://github.com/pytorch/pytorch/issues/128394, we need to switch to use an internal
         # export API and pre_dispatch=False. Switch to use the public API once the issue is included in 2.5 release.
-        torch_exportable_module = TorchExportableModuleWithStaticCache(model)
         exported_program = torch.export._trace._export(
-            torch_exportable_module,
+            TorchExportableModuleWithStaticCache(model),
             args=(example_input_ids,),
             kwargs={"cache_position": example_cache_position},
             pre_dispatch=False,
