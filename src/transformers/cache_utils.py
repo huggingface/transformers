@@ -736,6 +736,7 @@ class QuantizedCache(DynamicCache):
     """
 
     def __init__(self, cache_config: QuantizedCacheConfig) -> None:
+        super().__init__()
         self._quantized_key_cache: List[torch.Tensor] = []
         self._quantized_value_cache: List[torch.Tensor] = []
 
@@ -746,6 +747,8 @@ class QuantizedCache(DynamicCache):
         self.axis_value = cache_config.axis_value
         self.compute_dtype = cache_config.compute_dtype
         self.device = cache_config.device
+
+        super().__init__()
 
     def update(
         self,
@@ -1178,6 +1181,7 @@ class StaticCache(Cache):
         max_batch_size: Optional[int] = None,
         layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
     ) -> None:
+        super().__init__()
         if batch_size is not None:
             logger.warning_once(
                 f"The 'batch_size' argument of {self.__class__.__name__} is deprecated and will be removed in "
@@ -1216,6 +1220,8 @@ class StaticCache(Cache):
             torch._dynamo.mark_static_address(new_layer_key_cache)
             self.key_cache.append(new_layer_key_cache)
             self.value_cache.append(new_layer_value_cache)
+
+        print("init key_cache.device", self.key_cache[0].device)
 
     def update(
         self,
@@ -1261,6 +1267,9 @@ class StaticCache(Cache):
             # `tensor[:, :, index] = tensor`, but the first one is compile-friendly and it does explicitly an in-place
             # operation, that avoids copies and uses less memory.
             try:
+                print("kout.device", k_out.device)
+                print("key_states.device", key_states.device)
+                print("cache_position.device", cache_position.device)
                 k_out.index_copy_(2, cache_position, key_states)
                 v_out.index_copy_(2, cache_position, value_states)
             except NotImplementedError:
