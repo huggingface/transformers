@@ -19,7 +19,10 @@ import types
 from contextlib import contextmanager
 from datetime import datetime
 from functools import lru_cache
-from types import NoneType
+try:
+    from types import NoneType
+except ImportError:
+    NoneType = type(None)
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union, get_args, get_origin, get_type_hints
 
 from packaging import version
