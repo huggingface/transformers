@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import os
-
+#  TORCH_LOGS=+dtensor CUDA_LAUNCH_BLOCKING=1 TORCH_USE_CUDA_DSA=1 PYTHONPATH="src" python -m torch.distributed.run --nproc_per_node 2 ./tests/tp/test_tp.py
 from transformers import is_torch_available
 from transformers.models.llama.configuration_llama import LlamaConfig
 from transformers.models.llama.modeling_llama import LlamaModel
@@ -55,9 +55,8 @@ if __name__ == "__main__":
 
     # Test settings
     model_id = "meta-llama/Meta-Llama-3-8B-Instruct"
-    bs = 4
-    seqlen = 64
-
+    bs = 1
+    seqlen = 4096
     # Get distributed settings
     rank = int(os.environ["RANK"])
     world_size = int(os.environ["WORLD_SIZE"])
@@ -69,23 +68,67 @@ if __name__ == "__main__":
 
     # Get model config
     config = LlamaConfig.from_pretrained(model_id)
-    # Shrink model size
-    config.num_hidden_layers //= 8
-    config.vocab_size //= 8
-
+    config.hidden_size = 2048
+    config.attention_bias = False
     # Instantiate model
     with device:
-        model = LlamaModel(config)
+        model = LlamaModel(config).to(dtype=torch.float16)
 
     model.eval()
-
+    print(world_size)
     # Tensor Parallel
     if world_size > 1:
         model.tensor_parallel(device_mesh)
-
+    print(model.layers[0].self_attn.q_proj.weight)
     # Run model
+
     inputs = torch.randint(config.vocab_size, (bs, seqlen), device=device)
     with torch.no_grad():
         out = model(inputs)
+        print("simple forward done!")
+        exit(0)
+        model.forward = torch.compile(model.forward, mode = "reduce-overhead")
+        out = model(inputs)
+        out = model(inputs)
+
+
+    with torch.cuda.device(device):
+        print("Cuda graphing")
+        with torch.no_grad():
+            inputs = torch.randint(config.vocab_size, (bs, seqlen), device=device)
+            # CUDA Graph setup
+            s = torch.cuda.Stream(device=device)
+            s.wait_stream(torch.cuda.current_stream())
+            with torch.cuda.stream(s):
+                for i in range(3):
+                    out = model(inputs)
+            torch.cuda.current_stream().wait_stream(s)
+
+            g = torch.cuda.CUDAGraph()
+            with torch.cuda.graph(g):
+                out = model(inputs)
+                
+            for _ in range(2):
+                g.replay()
+
+            
+            # Synchronize after replaying
+            s.synchronize()
+
+    print("DONE")
+    with torch.no_grad():
+        out = model(inputs)
+        print("simple forward done!")
+        model.forward = torch.compile(model.forward, mode = "reduce-overhead")
+        out = model(inputs)
+        out = model(inputs)
 
     assert out.last_hidden_state.shape == torch.Size([bs, seqlen, config.hidden_size])
+
+
+        # from torch.distributed.tensor import DTensor
+
+        # # Convert hidden_states to the same type as self.q_proj.weight
+        # # Assuming self.q_proj.weight is a DTensor
+        # hidden_states_dtensor = DTensor.from_local(hidden_states[0], self.q_proj.weight.device_mesh)
+        # torch.matmul(hidden_states_dtensor.transpose(0,1), self.q_proj.weight)
