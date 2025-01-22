@@ -43,6 +43,7 @@ from .configuration_cohere2 import Cohere2Config
 
 
 logger = logging.get_logger(__name__)
+
 _CONFIG_FOR_DOC = "Cohere2Config"
 
 
@@ -581,7 +582,6 @@ class Cohere2Model(Cohere2PreTrainedModel):
                 self.config,
                 max_batch_size=batch_size,
                 max_cache_len=seq_len,
-                device=self.device,
                 dtype=inputs_embeds.dtype,
             )
 

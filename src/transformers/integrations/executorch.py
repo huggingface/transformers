@@ -72,6 +72,7 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
             batch_size=self.model.generation_config.cache_config.batch_size,
             max_cache_len=self.model.generation_config.cache_config.max_cache_len,
             dtype=self.model.dtype,
+            device=self.model.generation_config.cache_config.device,
         )
         for i in range(len(self.static_cache.key_cache)):
             self.register_buffer(f"key_cache_{i}", self.static_cache.key_cache[i], persistent=False)

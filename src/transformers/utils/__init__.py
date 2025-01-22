@@ -91,7 +91,6 @@ from .hub import (
     define_sagemaker_information,
     download_url,
     extract_commit_hash,
-    get_cached_models,
     get_file_from_repo,
     has_file,
     http_user_agent,
