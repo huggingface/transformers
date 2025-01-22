@@ -42,3 +42,30 @@ class SwitchTransformersRouterTest(unittest.TestCase):
             torch.allclose(output1, output2),
             "Outputs should be identical in eval mode"
         )
+
+    def test_router_training_mode(self):
+        """Test that jitter noise is only applied during training"""
+        model = SwitchTransformersSparseMLP(self.config)
+        model.train()  # Set to training mode
+        
+        # Create input
+        hidden_states = torch.ones(2, 4, 32)
+        original_states = hidden_states.clone()
+        
+        # First forward pass
+        output1, _ = model(hidden_states)
+        
+        # Second forward pass with same input
+        output2, _ = model(hidden_states)
+        
+        # Verify original input wasn't modified
+        self.assertTrue(
+            torch.allclose(hidden_states, original_states),
+            "Input hidden states should not be modified"
+        )
+        
+        # Verify outputs are different (due to jitter noise in training)
+        self.assertFalse(
+            torch.allclose(output1, output2),
+            "Outputs should differ in training mode due to jitter noise"
+        )
