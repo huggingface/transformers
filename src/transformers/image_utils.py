@@ -1163,6 +1163,8 @@ class SizeDict:
     shortest_edge: int = None
     max_height: int = None
     max_width: int = None
+    max_pixels: int = None
+    min_pixels: int = None
 
     def __getitem__(self, key):
         if hasattr(self, key):

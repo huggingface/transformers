@@ -581,9 +581,6 @@ class BaseImageProcessorFast(BaseImageProcessor):
             kwarg: kwargs.pop(kwarg) if kwargs.get(kwarg) is not None else getattr(self, kwarg, None)
             for kwarg in self.valid_extra_kwargs
         }
-        if kwargs:
-            logger.warning_once(f"Found kwargs that are not in valid_extra_kwargs: {kwargs.keys()}")
-
         images = self._prepare_input_images(
             images=images,
             do_convert_rgb=do_convert_rgb,
