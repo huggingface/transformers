@@ -331,6 +331,7 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_batching_equivalence(self):
         pass
 
+
 @require_torch
 class ChameleonIntegrationTest(unittest.TestCase):
     @slow

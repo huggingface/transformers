@@ -30,7 +30,6 @@ from parameterized import parameterized
 from transformers import AutoConfig, is_torch_available, pipeline
 from transformers.testing_utils import (
     is_flaky,
-    parse_flag_from_env,
     require_accelerate,
     require_flash_attn,
     require_optimum_quanto,
@@ -2006,10 +2005,11 @@ class GenerationTesterMixin:
                 "return_dict_in_generate": True,
                 "output_scores": True,
             }
-              if "gemma2" in model_class.__name__.lower():
-                  generation_kwargs["cache_implementation"] = "hybrid"
-              else:
-                  generation_kwargs["cache_implementation"] = "static"
+
+            if "gemma2" in model_class.__name__.lower():
+                generation_kwargs["cache_implementation"] = "hybrid"
+            else:
+                generation_kwargs["cache_implementation"] = "static"
 
             # get eager + dynamic cache results for future comparison
             dynamic_outputs = []

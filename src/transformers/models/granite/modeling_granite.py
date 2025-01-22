@@ -634,7 +634,6 @@ class GraniteModel(GranitePreTrainedModel):
         )
         return output if return_dict else output.to_tuple()
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaModel._update_causal_mask
     def _update_causal_mask(
         self,
         attention_mask: torch.Tensor,

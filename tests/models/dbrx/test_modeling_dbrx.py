@@ -368,6 +368,7 @@ class DbrxModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_disk_offload_bin(self):
         pass
 
+
 @require_torch
 class DbrxModelIntegrationTest(unittest.TestCase):
     @slow
