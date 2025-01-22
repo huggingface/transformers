@@ -382,6 +382,7 @@ class DFineDecoder(RTDetrDecoder):
         self.d_model = config.d_model
         self.layer_scale = config.layer_scale
         self.num_head = config.decoder_attention_heads
+        self.up = nn.Parameter(torch.tensor([0.5]), requires_grad=False)
         self.layers = nn.ModuleList(
             [DFineDecoderLayer(config=config) for _ in range(config.decoder_layers)]
             + [DFineDecoderLayer(config=config) for _ in range(config.decoder_layers - self.eval_idx - 1)]
@@ -508,6 +509,7 @@ class DFineModel(RTDetrModel):
         super().__init__(config)
 
         # decoder
+        self.pre_bbox_head = MLP(config.hidden_size, config.hidden_size, 4, 3)
         self.decoder = DFineDecoder(config)
 
         # create encoder

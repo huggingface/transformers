@@ -1156,6 +1156,7 @@ class DFineDecoder(DFinePreTrainedModel):
         self.d_model = config.d_model
         self.layer_scale = config.layer_scale
         self.num_head = config.decoder_attention_heads
+        self.up = nn.Parameter(torch.tensor([0.5]), requires_grad=False)
         self.lqe_layers = nn.ModuleList([LQE(4, 64, 2, config.reg_max) for _ in range(config.decoder_layers)])
 
         # Initialize weights and apply final processing
@@ -1382,9 +1383,10 @@ class DFineModel(DFinePreTrainedModel):
             )
             in_channels = config.d_model
         self.decoder_input_proj = nn.ModuleList(decoder_input_proj_list)
+        self.decoder = DFineDecoder(config)
 
         # decoder
-        self.decoder = DFineDecoder(config)
+        self.pre_bbox_head = MLP(config.hidden_size, config.hidden_size, 4, 3)
 
         self.post_init()
 
