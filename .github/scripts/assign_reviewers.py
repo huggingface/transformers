@@ -35,6 +35,12 @@ def main():
     pr_number = event['pull_request']['number']
     pr = repo.get_pull(pr_number)
 
+    users_requested, teams_requested = pr.get_review_requests()
+    users_requested = list(users_requested)
+    if users_requested:
+        print(f"Reviewers already requested: {users_requested}")
+        return
+
     locs_per_owner = Counter()
     for file in pr.get_files():
         owners = get_file_owners(file.filename, codeowners_lines)
