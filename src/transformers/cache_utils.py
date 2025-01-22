@@ -1,5 +1,6 @@
 import copy
 import importlib.metadata
+import inspect
 import json
 import os
 from dataclasses import dataclass
@@ -24,13 +25,26 @@ class Cache(torch.Tensor):
     Base, abstract class for all caches. The actual data structure is specific to each subclass.
     """
 
-    def __new__(cls, *args, dtype=None, device=None, **kwargs):
+    @staticmethod
+    def __new__(cls, *args, **kwargs):
         # We use a tensor wrapper to allow for torch script tracing when using the cache as an input to nn.Module
         # dtype and device don't need to be in the subclass's __init__ (unless they are used for something)
-        # But they can be passed as arguments when instantiating the cache (e.g. `DynamicCache(dtype=dtype)`)
-        # And will be accessible as `cache.dtype` and `cache.device`
-        self = torch.Tensor._make_wrapper_subclass(cls, (), dtype=dtype, device=device, requires_grad=False)
-        self.__init__(*args, **kwargs)
+
+        wrapper_kwargs = {}
+        init_signature = inspect.signature(cls.__init__)
+        init_arguments = list(init_signature.parameters.keys())
+
+        for argument in ["dtype", "device", "requires_grad"]:
+            if argument in init_arguments:
+                argument_index = init_arguments.index(argument)
+                if len(args) > argument_index:
+                    wrapper_kwargs[argument] = args[argument_index]
+                elif argument in kwargs:
+                    wrapper_kwargs[argument] = kwargs[argument]
+
+        self = torch.Tensor._make_wrapper_subclass(cls, (), **wrapper_kwargs)
+        cls.__init__(self, *args, **kwargs)
+
         return self
 
     @classmethod
@@ -42,10 +56,16 @@ class Cache(torch.Tensor):
 
     def __bool__(self):
         # in many places, past_key_values is checked for not being None using `if past_key_values:`
+        # I think `if past_key_values is not None:` should be used instead
         return True
 
     def __repr__(self):
         return f"{self.__class__.__name__}()"
+
+    def to(self, *args, **kwargs):
+        # We override this method to prevent the cache from being moved to a different device
+        # It can be implemented in a way that moves all contained tensors to the new device/dtype
+        return self
 
     def update(
         self,
