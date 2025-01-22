@@ -213,6 +213,7 @@ jobs:
       - name: Verify merge commit SHA
         env:
           VERIFIED_PR_MERGE_SHA: ${{ needs.get-sha.outputs.PR_MERGE_SHA }}
+        working-directory: /transformers
         run: |
             PR_MERGE_SHA=$(git log -1 --format=%H)
             if [ $PR_MERGE_SHA != $VERIFIED_PR_MERGE_SHA ]; then
