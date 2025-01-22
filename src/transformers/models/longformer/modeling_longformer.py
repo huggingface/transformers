@@ -1790,7 +1790,7 @@ class LongformerForMaskedLM(LongformerPreTrainedModel):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
-        kwargs (`Dict[str, any]`, optional, defaults to *{}*):
+        kwargs (`Dict[str, any]`, *optional*, defaults to `{}`):
             Used to hide legacy arguments that have been deprecated.
 
         Returns:
@@ -2322,3 +2322,15 @@ class LongformerForMultipleChoice(LongformerPreTrainedModel):
             attentions=outputs.attentions,
             global_attentions=outputs.global_attentions,
         )
+
+
+__all__ = [
+    "LongformerForMaskedLM",
+    "LongformerForMultipleChoice",
+    "LongformerForQuestionAnswering",
+    "LongformerForSequenceClassification",
+    "LongformerForTokenClassification",
+    "LongformerModel",
+    "LongformerPreTrainedModel",
+    "LongformerSelfAttention",
+]

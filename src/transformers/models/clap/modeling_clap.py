@@ -195,19 +195,19 @@ class ClapOutput(ModelOutput):
     Args:
         loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `return_loss` is `True`):
             Contrastive loss for audio-text similarity.
-        logits_per_audio:(`torch.FloatTensor` of shape `(audio_batch_size, text_batch_size)`):
+        logits_per_audio (`torch.FloatTensor` of shape `(audio_batch_size, text_batch_size)`):
             The scaled dot product scores between `audio_embeds` and `text_embeds`. This represents the audio-text
             similarity scores.
-        logits_per_text:(`torch.FloatTensor` of shape `(text_batch_size, audio_batch_size)`):
+        logits_per_text (`torch.FloatTensor` of shape `(text_batch_size, audio_batch_size)`):
             The scaled dot product scores between `text_embeds` and `audio_embeds`. This represents the text-audio
             similarity scores.
-        text_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        text_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
             The text embeddings obtained by applying the projection layer to the pooled output of [`ClapTextModel`].
-        audio_embeds(`torch.FloatTensor` of shape `(batch_size, output_dim`):
+        audio_embeds (`torch.FloatTensor` of shape `(batch_size, output_dim`):
             The audio embeddings obtained by applying the projection layer to the pooled output of [`ClapAudioModel`].
-        text_model_output(`BaseModelOutputWithPooling`):
+        text_model_output (`BaseModelOutputWithPooling`):
             The output of the [`ClapTextModel`].
-        audio_model_output(`BaseModelOutputWithPooling`):
+        audio_model_output (`BaseModelOutputWithPooling`):
             The output of the [`ClapAudioModel`].
     """
 
@@ -575,7 +575,7 @@ class ClapAudioOutput(nn.Module):
 
 # Copied from transformers.models.swin.modeling_swin.SwinLayer with SwinDropPath->ClapDropPath, Swin->ClapAudio
 class ClapAudioLayer(nn.Module):
-    def __init__(self, config, dim, input_resolution, num_heads, shift_size=0):
+    def __init__(self, config, dim, input_resolution, num_heads, drop_path_rate=0.0, shift_size=0):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.shift_size = shift_size
@@ -583,7 +583,7 @@ class ClapAudioLayer(nn.Module):
         self.input_resolution = input_resolution
         self.layernorm_before = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.attention = ClapAudioAttention(config, dim, num_heads, window_size=self.window_size)
-        self.drop_path = ClapDropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = ClapDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.intermediate = ClapAudioIntermediate(config, dim)
         self.output = ClapAudioOutput(config, dim)
@@ -712,6 +712,7 @@ class ClapAudioStage(nn.Module):
                     dim=dim,
                     input_resolution=input_resolution,
                     num_heads=num_heads,
+                    drop_path_rate=drop_path[i],
                     shift_size=0 if (i % 2 == 0) else config.window_size // 2,
                 )
                 for i in range(depth)
@@ -1928,13 +1929,13 @@ class ClapModel(ClapPreTrainedModel):
         super().__init__(config)
 
         if not isinstance(config.text_config, ClapTextConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.text_config is expected to be of type ClapTextConfig but is of type"
                 f" {type(config.text_config)}."
             )
 
         if not isinstance(config.audio_config, ClapAudioConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.audio_config is expected to be of type ClapAudioConfig but is of type"
                 f" {type(config.audio_config)}."
             )
@@ -2301,3 +2302,13 @@ class ClapAudioModelWithProjection(ClapPreTrainedModel):
             attentions=audio_outputs.attentions,
             hidden_states=audio_outputs.hidden_states,
         )
+
+
+__all__ = [
+    "ClapModel",
+    "ClapPreTrainedModel",
+    "ClapTextModel",
+    "ClapTextModelWithProjection",
+    "ClapAudioModel",
+    "ClapAudioModelWithProjection",
+]

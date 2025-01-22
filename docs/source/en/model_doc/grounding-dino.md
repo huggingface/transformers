@@ -41,33 +41,41 @@ The original code can be found [here](https://github.com/IDEA-Research/Grounding
 Here's how to use the model for zero-shot object detection:
 
 ```python
-import requests
+>>> import requests
 
-import torch
-from PIL import Image
-from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection, 
+>>> import torch
+>>> from PIL import Image
+>>> from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection
 
-model_id = "IDEA-Research/grounding-dino-tiny"
+>>> model_id = "IDEA-Research/grounding-dino-tiny"
+>>> device = "cuda"
 
-processor = AutoProcessor.from_pretrained(model_id)
-model = AutoModelForZeroShotObjectDetection.from_pretrained(model_id).to(device)
+>>> processor = AutoProcessor.from_pretrained(model_id)
+>>> model = AutoModelForZeroShotObjectDetection.from_pretrained(model_id).to(device)
 
-image_url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-image = Image.open(requests.get(image_url, stream=True).raw)
-# Check for cats and remote controls
-text = "a cat. a remote control."
+>>> image_url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+>>> image = Image.open(requests.get(image_url, stream=True).raw)
+>>> # Check for cats and remote controls
+>>> text_labels = [["a cat", "a remote control"]]
 
-inputs = processor(images=image, text=text, return_tensors="pt").to(device)
-with torch.no_grad():
-    outputs = model(**inputs)
+>>> inputs = processor(images=image, text=text_labels, return_tensors="pt").to(device)
+>>> with torch.no_grad():
+...     outputs = model(**inputs)
 
-results = processor.post_process_grounded_object_detection(
-    outputs,
-    inputs.input_ids,
-    box_threshold=0.4,
-    text_threshold=0.3,
-    target_sizes=[image.size[::-1]]
-)
+>>> results = processor.post_process_grounded_object_detection(
+...     outputs,
+...     threshold=0.4,
+...     text_threshold=0.3,
+...     target_sizes=[(image.height, image.width)]
+... )
+>>> # Retrieve the first image result
+>>> result = results[0]
+>>> for box, score, text_label in zip(result["boxes"], result["scores"], result["text_labels"]):
+...     box = [round(x, 2) for x in box.tolist()]
+...     print(f"Detected {text_label} with confidence {round(score.item(), 3)} at location {box}")
+Detected a cat with confidence 0.479 at location [344.7, 23.11, 637.18, 374.28]
+Detected a cat with confidence 0.438 at location [12.27, 51.91, 316.86, 472.44]
+Detected a remote control with confidence 0.478 at location [38.57, 70.0, 176.78, 118.18]
 ```
 
 ## Grounded SAM

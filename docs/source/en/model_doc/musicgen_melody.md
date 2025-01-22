@@ -266,7 +266,6 @@ Tips:
 ## MusicgenMelodyFeatureExtractor
 
 [[autodoc]] MusicgenMelodyFeatureExtractor
-    - _extract_stem_indices
 
 ## MusicgenMelodyConfig
 

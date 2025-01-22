@@ -14,7 +14,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch Wav2Vec2 model."""
 
-import gc
 import math
 import multiprocessing
 import os
@@ -30,7 +29,8 @@ from pytest import mark
 from transformers import Wav2Vec2Config, is_torch_available
 from transformers.testing_utils import (
     CaptureLogger,
-    backend_empty_cache,
+    cleanup,
+    is_flaky,
     is_pt_flax_cross_test,
     is_pyctcdecode_available,
     is_torchaudio_available,
@@ -864,6 +864,12 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @is_flaky(
+        description="The `codevector_idx` computed with `argmax()` in `Wav2Vec2GumbelVectorQuantizer.forward` is not stable."
+    )
+    def test_batching_equivalence(self):
+        super().test_batching_equivalence()
+
     def test_model_with_adapter(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_with_adapter(*config_and_inputs)
@@ -1460,13 +1466,10 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
-        gc.collect()
-        backend_empty_cache(torch_device)
+        cleanup(torch_device, gc_collect=True)
 
     def _load_datasamples(self, num_samples):
-        ds = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-        )
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").filter(
             lambda x: x["id"] in [f"1272-141231-000{i}" for i in range(num_samples)]

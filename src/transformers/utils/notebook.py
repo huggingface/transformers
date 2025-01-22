@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import re
 import time
 from typing import Optional
@@ -114,6 +115,11 @@ class NotebookProgressBar:
         self.last_value = None
         self.comment = None
         self.output = None
+        self.value = None
+        self.label = None
+        if "VSCODE_PID" in os.environ:
+            self.update_every = 0.5  # Adjusted for smooth updated as html rending is slow on VS Code
+            # This is the only adjustment required to optimize training html rending
 
     def update(self, value: int, force_update: bool = False, comment: str = None):
         """

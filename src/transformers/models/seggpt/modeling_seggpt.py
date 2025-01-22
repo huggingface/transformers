@@ -15,7 +15,6 @@
 """PyTorch SegGpt model."""
 
 import collections.abc
-import math
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -32,6 +31,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
+    torch_int,
 )
 from .configuration_seggpt import SegGptConfig
 
@@ -59,7 +59,7 @@ class SegGptEncoderOutput(ModelOutput):
         attentions (`Tuple[torch.FloatTensor]`, `optional`, returned when `config.output_attentions=True`):
             Tuple of *torch.FloatTensor* (one for each layer) of shape
             `(batch_size, num_heads, seq_len, seq_len)`.
-        intermediate_hidden_states (`Tuple[torch.FloatTensor]`, `optional`, returned when `config.intermediate_hidden_state_indices` is set):
+        intermediate_hidden_states (`Tuple[torch.FloatTensor]`, *optional*, returned when `config.intermediate_hidden_state_indices` is set):
             Tuple of `torch.FloatTensor` of shape `(batch_size, patch_height, patch_width, hidden_size)`.
             Each element in the Tuple corresponds to the output of the layer specified in `config.intermediate_hidden_state_indices`.
             Additionaly, each feature passes through a LayerNorm.
@@ -77,7 +77,7 @@ class SegGptImageSegmentationOutput(ModelOutput):
     Output type of [`SegGptImageSegmentationOutput`].
 
     Args:
-        loss (`torch.FloatTensor`, `optional`, returned when `labels` is provided):
+        loss (`torch.FloatTensor`, *optional*, returned when `labels` is provided):
             The loss value.
         pred_masks (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             The predicted masks.
@@ -155,9 +155,10 @@ class SegGptEmbeddings(nn.Module):
     def interpolate_pos_encoding(self, height: int, width: int) -> torch.Tensor:
         patch_pos_embed = self.position_embeddings[:, 1:]
         num_patches = patch_pos_embed.shape[1]
-        pretrain_patch_size = int(math.sqrt(num_patches))
+        pretrain_patch_size = torch_int(num_patches**0.5)
 
-        if pretrain_patch_size != height or pretrain_patch_size != width:
+        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
+        if torch.jit.is_tracing() or pretrain_patch_size != height or pretrain_patch_size != width:
             patch_pos_embed = F.interpolate(
                 patch_pos_embed.reshape(1, pretrain_patch_size, pretrain_patch_size, -1).permute(0, 3, 1, 2),
                 size=(height, width),
@@ -961,7 +962,7 @@ class SegGptForImageSegmentation(SegGptPreTrainedModel):
 
         >>> inputs = image_processor(images=image_input, prompt_images=image_prompt, prompt_masks=mask_prompt, return_tensors="pt")
         >>> outputs = model(**inputs)
-        >>> result = image_processor.post_process_semantic_segmentation(outputs, target_sizes=[image_input.size[::-1]])[0]
+        >>> result = image_processor.post_process_semantic_segmentation(outputs, target_sizes=[(image_input.height, image_input.width)])[0]
         >>> print(list(result.shape))
         [170, 297]
         ```
@@ -1019,3 +1020,6 @@ class SegGptForImageSegmentation(SegGptPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = ["SegGptModel", "SegGptPreTrainedModel", "SegGptForImageSegmentation"]

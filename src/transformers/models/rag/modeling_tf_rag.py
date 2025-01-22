@@ -886,7 +886,7 @@ class TFRagTokenForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingLoss
         reduce_loss (`bool`, *optional*):
             Only relevant if `labels` is passed. If `True`, the NLL loss is reduced using the `tf.Tensor.sum`
             operation.
-        kwargs (`Dict[str, any]`, optional, defaults to *{}*):
+        kwargs (`Dict[str, any]`, *optional*, defaults to `{}`):
             Legacy dictionary, which is required so that model can use *generate()* function.
 
         Returns:
@@ -1400,7 +1400,7 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         reduce_loss (`bool`, *optional*):
             Only relevant if `labels` is passed. If `True`, the NLL loss is reduced using the `tf.Tensor.sum`
             operation.
-        kwargs (`Dict[str, any]`, optional, defaults to *{}*):
+        kwargs (`Dict[str, any]`, *optional*, defaults to `{}`):
             Legacy dictionary, which is required so that model can use *generate()* function.
 
         Returns:
@@ -1768,3 +1768,6 @@ class TFRagSequenceForGeneration(TFRagPreTrainedModel, TFCausalLanguageModelingL
         if getattr(self, "rag", None) is not None:
             with tf.name_scope(self.rag.name):
                 self.rag.build(None)
+
+
+__all__ = ["TFRagModel", "TFRagPreTrainedModel", "TFRagSequenceForGeneration", "TFRagTokenForGeneration"]

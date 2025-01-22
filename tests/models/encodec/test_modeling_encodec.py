@@ -39,7 +39,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import EncodecModel
+    from transformers import EncodecFeatureExtractor, EncodecModel
 
 
 def prepare_inputs_dict(
@@ -111,6 +111,19 @@ class EncodecModelTester:
 
         return config, inputs_dict
 
+    def prepare_config_and_inputs_for_normalization(self):
+        input_values = floats_tensor([self.batch_size, self.num_channels, self.intermediate_size], scale=1.0)
+        config = self.get_config()
+        config.normalize = True
+
+        processor = EncodecFeatureExtractor(feature_size=config.audio_channels, sampling_rate=config.sampling_rate)
+        input_values = list(input_values.cpu().numpy())
+        inputs_dict = processor(
+            input_values, sampling_rate=config.sampling_rate, padding=True, return_tensors="pt"
+        ).to(torch_device)
+
+        return config, inputs_dict
+
     def get_config(self):
         return EncodecConfig(
             audio_channels=self.num_channels,
@@ -125,9 +138,7 @@ class EncodecModelTester:
 
     def create_and_check_model_forward(self, config, inputs_dict):
         model = EncodecModel(config=config).to(torch_device).eval()
-
-        input_values = inputs_dict["input_values"]
-        result = model(input_values)
+        result = model(**inputs_dict)
         self.parent.assertEqual(
             result.audio_values.shape, (self.batch_size, self.num_channels, self.intermediate_size)
         )
@@ -141,7 +152,6 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     test_headmasking = False
     test_resize_embeddings = False
     pipeline_model_mapping = {"feature-extraction": EncodecModel} if is_torch_available() else {}
-    input_name = "input_values"
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         # model does not have attention and does not support returning hidden states
@@ -436,6 +446,10 @@ class EncodecModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
         config.use_conv_shortcut = False
         self.model_tester.create_and_check_model_forward(config, inputs_dict)
 
+    def test_model_forward_with_normalization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_normalization()
+        self.model_tester.create_and_check_model_forward(config, inputs_dict)
+
 
 def normalize(arr):
     norm = np.linalg.norm(arr)
@@ -461,9 +475,7 @@ class EncodecIntegrationTest(unittest.TestCase):
             "1.5": [371955],
             "24.0": [6659962],
         }
-        librispeech_dummy = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-        )
+        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         model_id = "facebook/encodec_24khz"
 
         model = EncodecModel.from_pretrained(model_id).to(torch_device)
@@ -517,9 +529,7 @@ class EncodecIntegrationTest(unittest.TestCase):
             "3.0": [144259, 146765, 156435, 176871, 161971],
             "24.0": [1568553, 1294948, 1306190, 1464747, 1663150],
         }
-        librispeech_dummy = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-        )
+        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         model_id = "facebook/encodec_48khz"
 
         model = EncodecModel.from_pretrained(model_id).to(torch_device)
@@ -581,9 +591,7 @@ class EncodecIntegrationTest(unittest.TestCase):
                 [85561, 81870, 76953, 48967, 79315, 85442, 81479, 107241],
             ],
         }
-        librispeech_dummy = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-        )
+        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         model_id = "facebook/encodec_48khz"
 
         model = EncodecModel.from_pretrained(model_id).to(torch_device)

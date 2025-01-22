@@ -18,22 +18,34 @@ from ..models.auto.configuration_auto import AutoConfig
 from ..utils.quantization_config import (
     AqlmConfig,
     AwqConfig,
+    BitNetConfig,
     BitsAndBytesConfig,
+    CompressedTensorsConfig,
     EetqConfig,
+    FbgemmFp8Config,
     GPTQConfig,
+    HiggsConfig,
     HqqConfig,
     QuantizationConfigMixin,
     QuantizationMethod,
     QuantoConfig,
+    TorchAoConfig,
+    VptqConfig,
 )
 from .quantizer_aqlm import AqlmHfQuantizer
 from .quantizer_awq import AwqQuantizer
+from .quantizer_bitnet import BitNetHfQuantizer
 from .quantizer_bnb_4bit import Bnb4BitHfQuantizer
 from .quantizer_bnb_8bit import Bnb8BitHfQuantizer
+from .quantizer_compressed_tensors import CompressedTensorsHfQuantizer
 from .quantizer_eetq import EetqHfQuantizer
+from .quantizer_fbgemm_fp8 import FbgemmFp8HfQuantizer
 from .quantizer_gptq import GptqHfQuantizer
+from .quantizer_higgs import HiggsHfQuantizer
 from .quantizer_hqq import HqqHfQuantizer
 from .quantizer_quanto import QuantoHfQuantizer
+from .quantizer_torchao import TorchAoHfQuantizer
+from .quantizer_vptq import VptqHfQuantizer
 
 
 AUTO_QUANTIZER_MAPPING = {
@@ -44,7 +56,13 @@ AUTO_QUANTIZER_MAPPING = {
     "aqlm": AqlmHfQuantizer,
     "quanto": QuantoHfQuantizer,
     "eetq": EetqHfQuantizer,
+    "higgs": HiggsHfQuantizer,
     "hqq": HqqHfQuantizer,
+    "compressed-tensors": CompressedTensorsHfQuantizer,
+    "fbgemm_fp8": FbgemmFp8HfQuantizer,
+    "torchao": TorchAoHfQuantizer,
+    "bitnet": BitNetHfQuantizer,
+    "vptq": VptqHfQuantizer,
 }
 
 AUTO_QUANTIZATION_CONFIG_MAPPING = {
@@ -56,6 +74,12 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "aqlm": AqlmConfig,
     "quanto": QuantoConfig,
     "hqq": HqqConfig,
+    "compressed-tensors": CompressedTensorsConfig,
+    "fbgemm_fp8": FbgemmFp8Config,
+    "higgs": HiggsConfig,
+    "torchao": TorchAoConfig,
+    "bitnet": BitNetConfig,
+    "vptq": VptqConfig,
 }
 
 
@@ -96,7 +120,7 @@ class AutoQuantizationConfig:
         quantization_config_dict = model_config.quantization_config
         quantization_config = cls.from_dict(quantization_config_dict)
         # Update with potential kwargs that are passed through from_pretrained.
-        quantization_config.update(kwargs)
+        quantization_config.update(**kwargs)
         return quantization_config
 
 
@@ -156,11 +180,15 @@ class AutoHfQuantizer:
         if isinstance(quantization_config, dict):
             quantization_config = AutoQuantizationConfig.from_dict(quantization_config)
 
-        if isinstance(quantization_config, (GPTQConfig, AwqConfig)) and quantization_config_from_args is not None:
-            # special case for GPTQ / AWQ config collision
+        if (
+            isinstance(quantization_config, (GPTQConfig, AwqConfig, FbgemmFp8Config, CompressedTensorsConfig))
+            and quantization_config_from_args is not None
+        ):
+            # special case for GPTQ / AWQ / FbgemmFp8 config collision
             loading_attr_dict = quantization_config_from_args.get_loading_attributes()
             for attr, val in loading_attr_dict.items():
                 setattr(quantization_config, attr, val)
+
             warning_msg += f"However, loading attributes (e.g. {list(loading_attr_dict.keys())}) will be overwritten with the one you passed to `from_pretrained`. The rest will be ignored."
 
         if warning_msg != "":

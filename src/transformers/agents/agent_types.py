@@ -19,7 +19,7 @@ import uuid
 
 import numpy as np
 
-from ..utils import is_soundfile_availble, is_torch_available, is_vision_available, logging
+from ..utils import is_soundfile_available, is_torch_available, is_vision_available, logging
 
 
 logger = logging.get_logger(__name__)
@@ -36,7 +36,7 @@ if is_torch_available():
 else:
     Tensor = object
 
-if is_soundfile_availble():
+if is_soundfile_available():
     import soundfile as sf
 
 
@@ -105,9 +105,9 @@ class AgentImage(AgentType, ImageType):
         elif isinstance(value, torch.Tensor):
             self._tensor = value
         elif isinstance(value, np.ndarray):
-            self._tensor = torch.tensor(value)
+            self._tensor = torch.from_numpy(value)
         else:
-            raise ValueError(f"Unsupported type for {self.__class__.__name__}: {type(value)}")
+            raise TypeError(f"Unsupported type for {self.__class__.__name__}: {type(value)}")
 
     def _ipython_display_(self, include=None, exclude=None):
         """
@@ -179,7 +179,7 @@ class AgentAudio(AgentType, str):
     def __init__(self, value, samplerate=16_000):
         super().__init__(value)
 
-        if not is_soundfile_availble():
+        if not is_soundfile_available():
             raise ImportError("soundfile must be installed in order to handle audio.")
 
         self._path = None
@@ -192,7 +192,10 @@ class AgentAudio(AgentType, str):
             self._tensor = value
         elif isinstance(value, tuple):
             self.samplerate = value[0]
-            self._tensor = torch.tensor(value[1])
+            if isinstance(value[1], np.ndarray):
+                self._tensor = torch.from_numpy(value[1])
+            else:
+                self._tensor = torch.tensor(value[1])
         else:
             raise ValueError(f"Unsupported audio type: {type(value)}")
 
@@ -231,7 +234,7 @@ class AgentAudio(AgentType, str):
             return self._path
 
 
-AGENT_TYPE_MAPPING = {"text": AgentText, "image": AgentImage, "audio": AgentAudio}
+AGENT_TYPE_MAPPING = {"string": AgentText, "image": AgentImage, "audio": AgentAudio}
 INSTANCE_TYPE_MAPPING = {str: AgentText, ImageType: AgentImage}
 
 if is_torch_available():

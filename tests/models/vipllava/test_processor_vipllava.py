@@ -38,4 +38,4 @@ class LlavaProcessorTest(unittest.TestCase):
         ]
 
         formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
-        self.assertEquals(expected_prompt, formatted_prompt)
+        self.assertEqual(expected_prompt, formatted_prompt)

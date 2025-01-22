@@ -81,12 +81,14 @@ just use the button at the top-right of that framework's block!
 
 🤗 Transformers provides a [`Trainer`] class optimized for training 🤗 Transformers models, making it easier to start training without manually writing your own training loop. The [`Trainer`] API supports a wide range of training options and features such as logging, gradient accumulation, and mixed precision.
 
-Start by loading your model and specify the number of expected labels. From the Yelp Review [dataset card](https://huggingface.co/datasets/yelp_review_full#data-fields), you know there are five labels:
+Start by loading your model and specify the number of expected labels. From the Yelp Review [dataset card](https://huggingface.co/datasets/yelp_review_full#data-fields), you know there are five labels.
+
+By default, the weights are loaded in full precision (torch.float32) regardless of the actual data type the weights are stored in such as torch.float16. Set `torch_dtype="auto"` to load the weights in the data type defined in a model's `config.json` file to automatically load the most memory-optimal data type.
 
 ```py
 >>> from transformers import AutoModelForSequenceClassification
 
->>> model = AutoModelForSequenceClassification.from_pretrained("google-bert/bert-base-cased", num_labels=5)
+>>> model = AutoModelForSequenceClassification.from_pretrained("google-bert/bert-base-cased", num_labels=5, torch_dtype="auto")
 ```
 
 <Tip>
@@ -287,9 +289,10 @@ model.fit(tf_dataset)
 At this point, you may need to restart your notebook or execute the following code to free some memory:
 
 ```py
+from accelerate.utils.memory import clear_device_cache
 del model
 del trainer
-torch.cuda.empty_cache()
+clear_device_cache()
 ```
 
 Next, manually postprocess `tokenized_dataset` to prepare it for training.
@@ -364,8 +367,9 @@ Lastly, specify `device` to use a GPU if you have access to one. Otherwise, trai
 
 ```py
 >>> import torch
+>>> from accelerate.test_utils.testing import get_backend
 
->>> device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
+>>> device, _, _ = get_backend() # automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
 >>> model.to(device)
 ```
 

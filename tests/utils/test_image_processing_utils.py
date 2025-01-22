@@ -19,15 +19,15 @@ import unittest
 import unittest.mock as mock
 from pathlib import Path
 
-from huggingface_hub import HfFolder, delete_repo
+from huggingface_hub import HfFolder
 from requests.exceptions import HTTPError
 
 from transformers import AutoImageProcessor, ViTImageProcessor
 from transformers.image_processing_utils import get_size_dict
-from transformers.testing_utils import TOKEN, USER, get_tests_dir, is_staging_test
+from transformers.testing_utils import TOKEN, TemporaryHubRepo, get_tests_dir, is_staging_test
 
 
-sys.path.append(str(Path(__file__).parent.parent / "utils"))
+sys.path.append(str(Path(__file__).parent.parent.parent / "utils"))
 
 from test_module.custom_image_processing import CustomImageProcessor  # noqa E402
 
@@ -71,88 +71,62 @@ class ImageProcessorPushToHubTester(unittest.TestCase):
         cls._token = TOKEN
         HfFolder.save_token(TOKEN)
 
-    @classmethod
-    def tearDownClass(cls):
-        try:
-            delete_repo(token=cls._token, repo_id="test-image-processor")
-        except HTTPError:
-            pass
-
-        try:
-            delete_repo(token=cls._token, repo_id="valid_org/test-image-processor-org")
-        except HTTPError:
-            pass
-
-        try:
-            delete_repo(token=cls._token, repo_id="test-dynamic-image-processor")
-        except HTTPError:
-            pass
-
     def test_push_to_hub(self):
-        image_processor = ViTImageProcessor.from_pretrained(SAMPLE_IMAGE_PROCESSING_CONFIG_DIR)
-        image_processor.push_to_hub("test-image-processor", token=self._token)
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
+            image_processor = ViTImageProcessor.from_pretrained(SAMPLE_IMAGE_PROCESSING_CONFIG_DIR)
+            image_processor.push_to_hub(tmp_repo.repo_id, token=self._token)
 
-        new_image_processor = ViTImageProcessor.from_pretrained(f"{USER}/test-image-processor")
-        for k, v in image_processor.__dict__.items():
-            self.assertEqual(v, getattr(new_image_processor, k))
+            new_image_processor = ViTImageProcessor.from_pretrained(tmp_repo.repo_id)
+            for k, v in image_processor.__dict__.items():
+                self.assertEqual(v, getattr(new_image_processor, k))
 
-        try:
-            # Reset repo
-            delete_repo(token=self._token, repo_id="test-image-processor")
-        except:  # noqa E722
-            pass
+    def test_push_to_hub_via_save_pretrained(self):
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
+            image_processor = ViTImageProcessor.from_pretrained(SAMPLE_IMAGE_PROCESSING_CONFIG_DIR)
+            # Push to hub via save_pretrained
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                image_processor.save_pretrained(tmp_dir, repo_id=tmp_repo.repo_id, push_to_hub=True, token=self._token)
 
-        # Push to hub via save_pretrained
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            image_processor.save_pretrained(
-                tmp_dir, repo_id="test-image-processor", push_to_hub=True, token=self._token
-            )
-
-        new_image_processor = ViTImageProcessor.from_pretrained(f"{USER}/test-image-processor")
-        for k, v in image_processor.__dict__.items():
-            self.assertEqual(v, getattr(new_image_processor, k))
+            new_image_processor = ViTImageProcessor.from_pretrained(tmp_repo.repo_id)
+            for k, v in image_processor.__dict__.items():
+                self.assertEqual(v, getattr(new_image_processor, k))
 
     def test_push_to_hub_in_organization(self):
-        image_processor = ViTImageProcessor.from_pretrained(SAMPLE_IMAGE_PROCESSING_CONFIG_DIR)
-        image_processor.push_to_hub("valid_org/test-image-processor", token=self._token)
+        with TemporaryHubRepo(namespace="valid_org", token=self._token) as tmp_repo:
+            image_processor = ViTImageProcessor.from_pretrained(SAMPLE_IMAGE_PROCESSING_CONFIG_DIR)
+            image_processor.push_to_hub(tmp_repo.repo_id, token=self._token)
 
-        new_image_processor = ViTImageProcessor.from_pretrained("valid_org/test-image-processor")
-        for k, v in image_processor.__dict__.items():
-            self.assertEqual(v, getattr(new_image_processor, k))
+            new_image_processor = ViTImageProcessor.from_pretrained(tmp_repo.repo_id)
+            for k, v in image_processor.__dict__.items():
+                self.assertEqual(v, getattr(new_image_processor, k))
 
-        try:
-            # Reset repo
-            delete_repo(token=self._token, repo_id="valid_org/test-image-processor")
-        except:  # noqa E722
-            pass
+    def test_push_to_hub_in_organization_via_save_pretrained(self):
+        with TemporaryHubRepo(namespace="valid_org", token=self._token) as tmp_repo:
+            image_processor = ViTImageProcessor.from_pretrained(SAMPLE_IMAGE_PROCESSING_CONFIG_DIR)
+            # Push to hub via save_pretrained
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                image_processor.save_pretrained(tmp_dir, repo_id=tmp_repo.repo_id, push_to_hub=True, token=self._token)
 
-        # Push to hub via save_pretrained
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            image_processor.save_pretrained(
-                tmp_dir, repo_id="valid_org/test-image-processor-org", push_to_hub=True, token=self._token
-            )
-
-        new_image_processor = ViTImageProcessor.from_pretrained("valid_org/test-image-processor-org")
-        for k, v in image_processor.__dict__.items():
-            self.assertEqual(v, getattr(new_image_processor, k))
+            new_image_processor = ViTImageProcessor.from_pretrained(tmp_repo.repo_id)
+            for k, v in image_processor.__dict__.items():
+                self.assertEqual(v, getattr(new_image_processor, k))
 
     def test_push_to_hub_dynamic_image_processor(self):
-        CustomImageProcessor.register_for_auto_class()
-        image_processor = CustomImageProcessor.from_pretrained(SAMPLE_IMAGE_PROCESSING_CONFIG_DIR)
+        with TemporaryHubRepo(token=self._token) as tmp_repo:
+            CustomImageProcessor.register_for_auto_class()
+            image_processor = CustomImageProcessor.from_pretrained(SAMPLE_IMAGE_PROCESSING_CONFIG_DIR)
 
-        image_processor.push_to_hub("test-dynamic-image-processor", token=self._token)
+            image_processor.push_to_hub(tmp_repo.repo_id, token=self._token)
 
-        # This has added the proper auto_map field to the config
-        self.assertDictEqual(
-            image_processor.auto_map,
-            {"AutoImageProcessor": "custom_image_processing.CustomImageProcessor"},
-        )
+            # This has added the proper auto_map field to the config
+            self.assertDictEqual(
+                image_processor.auto_map,
+                {"AutoImageProcessor": "custom_image_processing.CustomImageProcessor"},
+            )
 
-        new_image_processor = AutoImageProcessor.from_pretrained(
-            f"{USER}/test-dynamic-image-processor", trust_remote_code=True
-        )
-        # Can't make an isinstance check because the new_image_processor is from the CustomImageProcessor class of a dynamic module
-        self.assertEqual(new_image_processor.__class__.__name__, "CustomImageProcessor")
+            new_image_processor = AutoImageProcessor.from_pretrained(tmp_repo.repo_id, trust_remote_code=True)
+            # Can't make an isinstance check because the new_image_processor is from the CustomImageProcessor class of a dynamic module
+            self.assertEqual(new_image_processor.__class__.__name__, "CustomImageProcessor")
 
 
 class ImageProcessingUtilsTester(unittest.TestCase):

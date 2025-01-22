@@ -34,10 +34,9 @@ from ...image_utils import (
     make_list_of_images,
     to_numpy_array,
     valid_images,
-    validate_kwargs,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_vision_available, logging
+from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 
 
 if is_vision_available():
@@ -302,41 +301,6 @@ class FlavaImageProcessor(BaseImageProcessor):
         self.codebook_image_mean = codebook_image_mean
         self.codebook_image_mean = codebook_image_mean if codebook_image_mean is not None else FLAVA_CODEBOOK_MEAN
         self.codebook_image_std = codebook_image_std if codebook_image_std is not None else FLAVA_CODEBOOK_STD
-        self._valid_processor_keys = [
-            "images",
-            "do_resize",
-            "size",
-            "resample",
-            "do_center_crop",
-            "crop_size",
-            "do_rescale",
-            "rescale_factor",
-            "do_normalize",
-            "image_mean",
-            "image_std",
-            "return_image_mask",
-            "input_size_patches",
-            "total_mask_patches",
-            "mask_group_min_patches",
-            "mask_group_max_patches",
-            "mask_group_min_aspect_ratio",
-            "mask_group_max_aspect_ratio",
-            "return_codebook_pixels",
-            "codebook_do_resize",
-            "codebook_size",
-            "codebook_resample",
-            "codebook_do_center_crop",
-            "codebook_crop_size",
-            "codebook_do_rescale",
-            "codebook_rescale_factor",
-            "codebook_do_map_pixels",
-            "codebook_do_normalize",
-            "codebook_image_mean",
-            "codebook_image_std",
-            "return_tensors",
-            "data_format",
-            "input_data_format",
-        ]
 
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
@@ -457,7 +421,7 @@ class FlavaImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         image = to_numpy_array(image)
 
-        if is_scaled_image(image) and do_rescale:
+        if do_rescale and is_scaled_image(image):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -486,6 +450,7 @@ class FlavaImageProcessor(BaseImageProcessor):
             image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
         return image
 
+    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: ImageInput,
@@ -523,7 +488,6 @@ class FlavaImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -672,8 +636,6 @@ class FlavaImageProcessor(BaseImageProcessor):
 
         images = make_list_of_images(images)
 
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
-
         if not valid_images(images):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
@@ -736,3 +698,6 @@ class FlavaImageProcessor(BaseImageProcessor):
             data["bool_masked_pos"] = masks
 
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+
+__all__ = ["FlavaImageProcessor"]

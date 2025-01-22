@@ -794,13 +794,13 @@ class TFBlipMainLayer(keras.layers.Layer):
         super().__init__(*args, **kwargs)
 
         if not isinstance(config.text_config, BlipTextConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.text_config is expected to be of type BlipTextConfig but is of type"
                 f" {type(config.text_config)}."
             )
 
         if not isinstance(config.vision_config, BlipVisionConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.vision_config is expected to be of type BlipVisionConfig but is of type"
                 f" {type(config.vision_config)}."
             )
@@ -1696,3 +1696,14 @@ class TFBlipForImageTextRetrieval(TFBlipPreTrainedModel):
         if getattr(self, "itm_head", None) is not None:
             with tf.name_scope(self.itm_head.name):
                 self.itm_head.build([None, None, self.config.text_config.hidden_size])
+
+
+__all__ = [
+    "TFBlipModel",
+    "TFBlipPreTrainedModel",
+    "TFBlipForConditionalGeneration",
+    "TFBlipForQuestionAnswering",
+    "TFBlipVisionModel",
+    "TFBlipTextModel",
+    "TFBlipForImageTextRetrieval",
+]

@@ -26,6 +26,8 @@ from transformers.testing_utils import (
 )
 from transformers.utils import is_tf_available, is_torch_available, is_vision_available
 
+from ...test_processing_common import ProcessorTesterMixin, prepare_image_inputs
+
 
 if is_vision_available():
     from PIL import Image
@@ -41,7 +43,9 @@ if is_tf_available():
 
 @require_vision
 @require_torchvision
-class SamProcessorTest(unittest.TestCase):
+class SamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    processor_class = SamProcessor
+
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
         image_processor = SamImageProcessor()
@@ -54,14 +58,6 @@ class SamProcessorTest(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
-    def prepare_image_inputs(self):
-        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
-        or a list of PyTorch tensors if one specifies torchify=True.
-        """
-        image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
-        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
-        return image_inputs
-
     def prepare_mask_inputs(self):
         """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
         or a list of PyTorch tensors if one specifies torchify=True.
@@ -69,6 +65,21 @@ class SamProcessorTest(unittest.TestCase):
         mask_inputs = [np.random.randint(255, size=(30, 400), dtype=np.uint8)]
         mask_inputs = [Image.fromarray(x) for x in mask_inputs]
         return mask_inputs
+
+    def test_chat_template_save_loading(self):
+        self.skipTest("SamProcessor does not have a tokenizer")
+
+    def test_image_processor_defaults_preserved_by_image_kwargs(self):
+        self.skipTest("SamProcessor does not have a tokenizer")
+
+    def test_kwargs_overrides_default_image_processor_kwargs(self):
+        self.skipTest("SamProcessor does not have a tokenizer")
+
+    def test_kwargs_overrides_default_tokenizer_kwargs(self):
+        self.skipTest("SamProcessor does not have a tokenizer")
+
+    def test_tokenizer_defaults_preserved_by_kwargs(self):
+        self.skipTest("SamProcessor does not have a tokenizer")
 
     def test_save_load_pretrained_additional_features(self):
         processor = SamProcessor(image_processor=self.get_image_processor())
@@ -166,16 +177,10 @@ class TFSamProcessorTest(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
+    # This is to avoid repeating the skipping of the common tests
     def prepare_image_inputs(self):
-        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
-        or a list of PyTorch tensors if one specifies torchify=True.
-        """
-
-        image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
-
-        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
-
-        return image_inputs
+        """This function prepares a list of PIL images."""
+        return prepare_image_inputs()
 
     def test_save_load_pretrained_additional_features(self):
         processor = SamProcessor(image_processor=self.get_image_processor())
@@ -255,16 +260,10 @@ class SamProcessorEquivalenceTest(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
+    # This is to avoid repeating the skipping of the common tests
     def prepare_image_inputs(self):
-        """This function prepares a list of PIL images, or a list of numpy arrays if one specifies numpify=True,
-        or a list of PyTorch tensors if one specifies torchify=True.
-        """
-
-        image_inputs = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)]
-
-        image_inputs = [Image.fromarray(np.moveaxis(x, 0, -1)) for x in image_inputs]
-
-        return image_inputs
+        """This function prepares a list of PIL images."""
+        return prepare_image_inputs()
 
     @is_pt_tf_cross_test
     def test_post_process_masks_equivalence(self):

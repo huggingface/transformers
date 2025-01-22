@@ -47,7 +47,7 @@ from transformers.utils import PaddingStrategy, check_min_version, send_example_
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
-check_min_version("4.43.0.dev0")
+check_min_version("4.49.0.dev0")
 
 logger = logging.getLogger(__name__)
 
@@ -440,7 +440,7 @@ def main():
         args=training_args,
         train_dataset=train_dataset if training_args.do_train else None,
         eval_dataset=eval_dataset if training_args.do_eval else None,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
         data_collator=data_collator,
         compute_metrics=compute_metrics,
     )

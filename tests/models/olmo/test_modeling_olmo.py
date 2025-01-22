@@ -16,16 +16,16 @@
 
 import unittest
 
+from packaging import version
 from parameterized import parameterized
 
 from transformers import OlmoConfig, is_torch_available, set_seed
+from transformers.generation.configuration_utils import GenerationConfig
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.models.gpt_neox.tokenization_gpt_neox_fast import GPTNeoXTokenizerFast
 from transformers.testing_utils import (
-    is_flaky,
     require_tokenizers,
     require_torch,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -101,7 +101,7 @@ class OlmoModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = torch.tril(torch.ones(self.batch_size, self.seq_length)).to(torch_device)
+            input_mask = torch.tril(torch.ones_like(input_ids).to(torch_device))
 
         token_type_ids = None
         if self.use_token_type_ids:
@@ -315,13 +315,6 @@ class OlmoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_save_load_fast_init_from_base(self):
         pass
 
-    # TODO: @Fxmarty
-    @is_flaky(max_attempts=3, description="flaky on some models.")
-    @require_torch_sdpa
-    @slow
-    def test_eager_matches_sdpa_generate(self):
-        super().test_eager_matches_sdpa_generate()
-
     @parameterized.expand([("linear",), ("dynamic",)])
     def test_model_rope_scaling(self, scaling_type):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -360,7 +353,7 @@ class OlmoIntegrationTest(unittest.TestCase):
     def test_model_1b_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
         model = OlmoForCausalLM.from_pretrained("allenai/OLMo-1B-hf", device_map="auto")
-        out = model(torch.tensor(input_ids)).logits
+        out = model(torch.tensor(input_ids)).logits.float()
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([[2.2869, 0.3315, 0.9876, 1.4146, 1.8804, 2.0430, 1.7055, 1.2065]])
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
@@ -372,7 +365,7 @@ class OlmoIntegrationTest(unittest.TestCase):
     def test_model_7b_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
         model = OlmoForCausalLM.from_pretrained("allenai/OLMo-7B-hf", device_map="auto")
-        out = model(torch.tensor(input_ids)).logits
+        out = model(torch.tensor(input_ids)).logits.float()
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([[0.0271, 0.0249, -0.0578, -0.0870, 0.0167, 0.0710, 0.1002, 0.0677]])
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
@@ -384,7 +377,7 @@ class OlmoIntegrationTest(unittest.TestCase):
     def test_model_7b_twin_2t_logits(self):
         input_ids = [[1, 306, 4658, 278, 6593, 310, 2834, 338]]
         model = OlmoForCausalLM.from_pretrained("allenai/OLMo-7B-Twin-2T-hf", device_map="auto")
-        out = model(torch.tensor(input_ids)).logits
+        out = model(torch.tensor(input_ids)).logits.float()
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([[-0.3636, -0.3825, -0.4800, -0.3696, -0.8388, -0.9737, -0.9849, -0.8356]])
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, atol=1e-2, rtol=1e-2)
@@ -449,3 +442,65 @@ class OlmoIntegrationTest(unittest.TestCase):
         self.assertEqual(rust_tokenizer.encode("  "), [50276])
 
         self.assertEqual(rust_tokenizer.encode(" Hello"), [24387])
+
+    @slow
+    def test_export_static_cache(self):
+        if version.parse(torch.__version__) < version.parse("2.4.0"):
+            self.skipTest(reason="This test requires torch >= 2.4 to run.")
+
+        from transformers.integrations.executorch import (
+            TorchExportableModuleWithStaticCache,
+            convert_and_export_with_cache,
+        )
+
+        olmo_model = "allenai/OLMo-1B-hf"
+
+        tokenizer = AutoTokenizer.from_pretrained(olmo_model, pad_token="</s>", padding_side="right")
+        EXPECTED_TEXT_COMPLETION = [
+            "Simply put, the theory of relativity states that \nthe speed of light is the same in all reference frames.\n\nThe speed of light",
+        ]
+        max_generation_length = tokenizer(EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True)[
+            "input_ids"
+        ].shape[-1]
+
+        # Load model
+        device = "cpu"
+        dtype = torch.bfloat16
+        cache_implementation = "static"
+        attn_implementation = "sdpa"
+        batch_size = 1
+        model = OlmoForCausalLM.from_pretrained(
+            olmo_model,
+            device_map=device,
+            torch_dtype=dtype,
+            attn_implementation=attn_implementation,
+            generation_config=GenerationConfig(
+                use_cache=True,
+                cache_implementation=cache_implementation,
+                max_length=max_generation_length,
+                cache_config={
+                    "batch_size": batch_size,
+                    "max_cache_len": max_generation_length,
+                },
+            ),
+        )
+
+        prompts = ["Simply put, the theory of relativity states that "]
+        prompt_tokens = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
+        prompt_token_ids = prompt_tokens["input_ids"]
+        max_new_tokens = max_generation_length - prompt_token_ids.shape[-1]
+
+        # Static Cache + eager
+        eager_generated_ids = model.generate(
+            **prompt_tokens, max_new_tokens=max_new_tokens, do_sample=False, cache_implementation=cache_implementation
+        )
+        eager_generated_text = tokenizer.batch_decode(eager_generated_ids, skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, eager_generated_text)
+
+        # Static Cache + export
+        exported_program = convert_and_export_with_cache(model)
+        ep_generated_ids = TorchExportableModuleWithStaticCache.generate(
+            exported_program=exported_program, prompt_token_ids=prompt_token_ids, max_new_tokens=max_new_tokens
+        )
+        ep_generated_text = tokenizer.batch_decode(ep_generated_ids, skip_special_tokens=True)
+        self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)

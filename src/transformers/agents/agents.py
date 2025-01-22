@@ -17,15 +17,28 @@
 import json
 import logging
 import re
+import time
 from typing import Any, Callable, Dict, List, Optional, Tuple, Union
 
 from .. import is_torch_available
 from ..utils import logging as transformers_logging
 from ..utils.import_utils import is_pygments_available
-from .agent_types import AgentAudio, AgentImage, AgentText
+from .agent_types import AgentAudio, AgentImage
 from .default_tools import BASE_PYTHON_TOOLS, FinalAnswerTool, setup_default_tools
-from .llm_engine import HfEngine, MessageRole
-from .prompts import DEFAULT_CODE_SYSTEM_PROMPT, DEFAULT_REACT_CODE_SYSTEM_PROMPT, DEFAULT_REACT_JSON_SYSTEM_PROMPT
+from .llm_engine import HfApiEngine, MessageRole
+from .monitoring import Monitor
+from .prompts import (
+    DEFAULT_CODE_SYSTEM_PROMPT,
+    DEFAULT_REACT_CODE_SYSTEM_PROMPT,
+    DEFAULT_REACT_JSON_SYSTEM_PROMPT,
+    PLAN_UPDATE_FINAL_PLAN_REDACTION,
+    PROMPTS_FOR_INITIAL_PLAN,
+    PROMPTS_FOR_PLAN_UPDATE,
+    SUPPORTED_PLAN_TYPES,
+    SYSTEM_PROMPT_FACTS,
+    SYSTEM_PROMPT_FACTS_UPDATE,
+    USER_PROMPT_FACTS_UPDATE,
+)
 from .python_interpreter import LIST_SAFE_MODULES, evaluate_python_code
 from .tools import (
     DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
@@ -46,8 +59,11 @@ class CustomFormatter(logging.Formatter):
     bold_yellow = "\x1b[33;1m"
     red = "\x1b[31;20m"
     green = "\x1b[32;20m"
+    bold_green = "\x1b[32;20;1m"
     bold_red = "\x1b[31;1m"
     bold_white = "\x1b[37;1m"
+    orange = "\x1b[38;5;214m"
+    bold_orange = "\x1b[38;5;214;1m"
     reset = "\x1b[0m"
     format = "%(message)s"
 
@@ -55,11 +71,14 @@ class CustomFormatter(logging.Formatter):
         logging.DEBUG: grey + format + reset,
         logging.INFO: format,
         logging.WARNING: bold_yellow + format + reset,
-        31: reset + format + reset,
-        32: green + format + reset,
-        33: bold_white + format + reset,
         logging.ERROR: red + format + reset,
         logging.CRITICAL: bold_red + format + reset,
+        31: reset + format + reset,
+        32: green + format + reset,
+        33: bold_green + format + reset,
+        34: bold_white + format + reset,
+        35: orange + format + reset,
+        36: bold_orange + format + reset,
     }
 
     def format(self, record):
@@ -99,12 +118,19 @@ def parse_json_blob(json_blob: str) -> Dict[str, str]:
 
 def parse_code_blob(code_blob: str) -> str:
     try:
-        pattern = r"```(?:py|python)?\n(.*?)```"
+        pattern = r"```(?:py|python)?\n(.*?)\n```"
         match = re.search(pattern, code_blob, re.DOTALL)
         return match.group(1).strip()
     except Exception as e:
         raise ValueError(
-            f"The code blob you used is invalid: due to the following error: {e}. This means that the regex pattern {pattern} was not respected. Make sure to correct its formatting. Code blob was: {code_blob}"
+            f"""
+The code blob you used is invalid: due to the following error: {e}
+This means that the regex pattern {pattern} was not respected: make sure to include code with the correct pattern, for instance:
+Thoughts: Your thoughts
+Code:
+```py
+# Your python code here
+```<end_action>"""
         )
 
 
@@ -113,6 +139,8 @@ def parse_json_tool_call(json_blob: str) -> Tuple[str, Dict[str, str]]:
     tool_call = parse_json_blob(json_blob)
     if "action" in tool_call and "action_input" in tool_call:
         return tool_call["action"], tool_call["action_input"]
+    elif "action" in tool_call:
+        return tool_call["action"], None
     else:
         raise ValueError(
             f"Missing keys: {[key for key in ['action', 'action_input'] if key not in tool_call]} in blob {tool_call}"
@@ -208,7 +236,7 @@ class Toolbox:
                 The tool to add to the toolbox.
         """
         if tool.name in self._tools:
-            raise KeyError(f"Error: tool {tool.name} already exists in the toolbox.")
+            raise KeyError(f"Error: tool '{tool.name}' already exists in the toolbox.")
         self._tools[tool.name] = tool
 
     def remove_tool(self, tool_name: str):
@@ -291,10 +319,30 @@ class AgentGenerationError(AgentError):
 def format_prompt_with_tools(toolbox: Toolbox, prompt_template: str, tool_description_template: str) -> str:
     tool_descriptions = toolbox.show_tool_descriptions(tool_description_template)
     prompt = prompt_template.replace("<<tool_descriptions>>", tool_descriptions)
+
     if "<<tool_names>>" in prompt:
         tool_names = [f"'{tool_name}'" for tool_name in toolbox.tools.keys()]
         prompt = prompt.replace("<<tool_names>>", ", ".join(tool_names))
+
     return prompt
+
+
+def show_agents_descriptions(managed_agents: list):
+    managed_agents_descriptions = """
+You can also give requests to team members.
+Calling a team member works the same as for calling a tool: simply, the only argument you can give in the call is 'request', a long string explaning your request.
+Given that this team member is a real human, you should be very verbose in your request.
+Here is a list of the team members that you can call:"""
+    for agent in managed_agents.values():
+        managed_agents_descriptions += f"\n- {agent.name}: {agent.description}"
+    return managed_agents_descriptions
+
+
+def format_prompt_with_managed_agents_descriptions(prompt_template, managed_agents=None) -> str:
+    if managed_agents is not None:
+        return prompt_template.replace("<<managed_agents_descriptions>>", show_agents_descriptions(managed_agents))
+    else:
+        return prompt_template.replace("<<managed_agents_descriptions>>", "")
 
 
 def format_prompt_with_imports(prompt_template: str, authorized_imports: List[str]) -> str:
@@ -307,16 +355,23 @@ class Agent:
     def __init__(
         self,
         tools: Union[List[Tool], Toolbox],
-        llm_engine: Callable = HfEngine(),
-        system_prompt=DEFAULT_REACT_JSON_SYSTEM_PROMPT,
-        tool_description_template=None,
-        additional_args={},
+        llm_engine: Callable = None,
+        system_prompt: Optional[str] = None,
+        tool_description_template: Optional[str] = None,
+        additional_args: Dict = {},
         max_iterations: int = 6,
-        tool_parser=parse_json_tool_call,
+        tool_parser: Optional[Callable] = None,
         add_base_tools: bool = False,
         verbose: int = 0,
-        memory_verbose: bool = False,
+        grammar: Optional[Dict[str, str]] = None,
+        managed_agents: Optional[List] = None,
+        step_callbacks: Optional[List[Callable]] = None,
+        monitor_metrics: bool = True,
     ):
+        if system_prompt is None:
+            system_prompt = DEFAULT_REACT_CODE_SYSTEM_PROMPT
+        if tool_parser is None:
+            tool_parser = parse_json_tool_call
         self.agent_name = self.__class__.__name__
         self.llm_engine = llm_engine
         self.system_prompt_template = system_prompt
@@ -327,6 +382,11 @@ class Agent:
         self.max_iterations = max_iterations
         self.logger = logger
         self.tool_parser = tool_parser
+        self.grammar = grammar
+
+        self.managed_agents = None
+        if managed_agents is not None:
+            self.managed_agents = {agent.name: agent for agent in managed_agents}
 
         if isinstance(tools, Toolbox):
             self._toolbox = tools
@@ -342,10 +402,10 @@ class Agent:
         self.system_prompt = format_prompt_with_tools(
             self._toolbox, self.system_prompt_template, self.tool_description_template
         )
+        self.system_prompt = format_prompt_with_managed_agents_descriptions(self.system_prompt, self.managed_agents)
         self.prompt = None
         self.logs = []
         self.task = None
-        self.memory_verbose = memory_verbose
 
         if verbose == 0:
             logger.setLevel(logging.WARNING)
@@ -354,33 +414,39 @@ class Agent:
         elif verbose == 2:
             logger.setLevel(logging.DEBUG)
 
+        # Initialize step callbacks
+        self.step_callbacks = step_callbacks if step_callbacks is not None else []
+
+        # Initialize Monitor if monitor_metrics is True
+        self.monitor = None
+        if monitor_metrics:
+            self.monitor = Monitor(self.llm_engine)
+            self.step_callbacks.append(self.monitor.update_metrics)
+
     @property
     def toolbox(self) -> Toolbox:
         """Get the toolbox currently available to the agent"""
         return self._toolbox
 
-    def initialize_for_run(self, task: str, **kwargs):
+    def initialize_for_run(self):
         self.token_count = 0
-        self.task = task
-        if len(kwargs) > 0:
-            self.task += f"\nYou have been provided with these initial arguments: {str(kwargs)}."
-        self.state = kwargs.copy()
         self.system_prompt = format_prompt_with_tools(
             self._toolbox,
             self.system_prompt_template,
             self.tool_description_template,
         )
+        self.system_prompt = format_prompt_with_managed_agents_descriptions(self.system_prompt, self.managed_agents)
         if hasattr(self, "authorized_imports"):
             self.system_prompt = format_prompt_with_imports(
                 self.system_prompt, list(set(LIST_SAFE_MODULES) | set(self.authorized_imports))
             )
         self.logs = [{"system_prompt": self.system_prompt, "task": self.task}]
-        self.logger.warn("======== New task ========")
-        self.logger.log(33, self.task)
+        self.logger.log(33, "======== New task ========")
+        self.logger.log(34, self.task)
         self.logger.debug("System prompt is as follows:")
         self.logger.debug(self.system_prompt)
 
-    def write_inner_memory_from_logs(self) -> List[Dict[str, str]]:
+    def write_inner_memory_from_logs(self, summary_mode: Optional[bool] = False) -> List[Dict[str, str]]:
         """
         Reads past llm_outputs, actions, and observations or errors from the logs into a series of messages
         that can be used as input to the LLM.
@@ -390,43 +456,51 @@ class Agent:
             "role": MessageRole.USER,
             "content": "Task: " + self.logs[0]["task"],
         }
-        memory = [prompt_message, task_message]
+        if summary_mode:
+            memory = [task_message]
+        else:
+            memory = [prompt_message, task_message]
         for i, step_log in enumerate(self.logs[1:]):
-            if "llm_output" in step_log:
-                thought_message = {"role": MessageRole.ASSISTANT, "content": step_log["llm_output"] + "\n"}
+            if "llm_output" in step_log and not summary_mode:
+                thought_message = {"role": MessageRole.ASSISTANT, "content": step_log["llm_output"].strip()}
+                memory.append(thought_message)
+            if "facts" in step_log:
+                thought_message = {
+                    "role": MessageRole.ASSISTANT,
+                    "content": "[FACTS LIST]:\n" + step_log["facts"].strip(),
+                }
                 memory.append(thought_message)
 
-            if "error" in step_log:
-                message_content = (
-                    "Error: "
-                    + str(step_log["error"])
-                    + "\nNow let's retry: take care not to repeat previous errors! If you have retried several times, try a completely different approach.\n"
-                )
-            elif "observation" in step_log:
-                message_content = f"Observation: {step_log['observation']}"
-            tool_response_message = {"role": MessageRole.TOOL_RESPONSE, "content": message_content}
-            memory.append(tool_response_message)
+            if "plan" in step_log and not summary_mode:
+                thought_message = {"role": MessageRole.ASSISTANT, "content": "[PLAN]:\n" + step_log["plan"].strip()}
+                memory.append(thought_message)
 
-            if len(memory) % 3 == 0:
-                reminder_content = (
-                    "Reminder: you are working towards solving the following task: " + self.logs[0]["task"]
-                )
-                reminder_content += "\nHere is a summary of your past tool calls and their results:"
-                for j in range(i + 1):
-                    reminder_content += "\nStep " + str(j + 1)
-                    if "tool_call" in self.logs[j]:
-                        reminder_content += "\nTool call:" + str(self.logs[j]["tool_call"])
-                    if self.memory_verbose:
-                        if "observation" in self.logs[j]:
-                            reminder_content += "\nObservation:" + str(self.logs[j]["observation"])
-                    if "error" in self.logs[j]:
-                        reminder_content += "\nError:" + str(self.logs[j]["error"])
-                memory.append(
-                    {
-                        "role": MessageRole.USER,
-                        "content": reminder_content,
-                    }
-                )
+            if "tool_call" in step_log and summary_mode:
+                tool_call_message = {
+                    "role": MessageRole.ASSISTANT,
+                    "content": f"[STEP {i} TOOL CALL]: " + str(step_log["tool_call"]).strip(),
+                }
+                memory.append(tool_call_message)
+
+            if "task" in step_log:
+                tool_call_message = {
+                    "role": MessageRole.USER,
+                    "content": "New task:\n" + step_log["task"],
+                }
+                memory.append(tool_call_message)
+
+            if "error" in step_log or "observation" in step_log:
+                if "error" in step_log:
+                    message_content = (
+                        f"[OUTPUT OF STEP {i}] -> Error:\n"
+                        + str(step_log["error"])
+                        + "\nNow let's retry: take care not to repeat previous errors! If you have retried several times, try a completely different approach.\n"
+                    )
+                elif "observation" in step_log:
+                    message_content = f"[OUTPUT OF STEP {i}] -> Observation:\n{step_log['observation']}"
+                tool_response_message = {"role": MessageRole.TOOL_RESPONSE, "content": message_content}
+                memory.append(tool_response_message)
+
         return memory
 
     def get_succinct_logs(self):
@@ -451,7 +525,7 @@ class Agent:
             raise AgentParsingError(
                 f"Error: No '{split_token}' token provided in your output.\nYour output:\n{llm_output}\n. Be sure to include an action, prefaced with '{split_token}'!"
             )
-        return rationale, action
+        return rationale.strip(), action.strip()
 
     def execute_tool_call(self, tool_name: str, arguments: Dict[str, str]) -> Any:
         """
@@ -459,32 +533,47 @@ class Agent:
         This method replaces arguments with the actual values from the state if they refer to state variables.
 
         Args:
-            tool_name (`str`): Name of the Tool to execute (shoulde be one from self.toolbox).
+            tool_name (`str`): Name of the Tool to execute (should be one from self.toolbox).
             arguments (Dict[str, str]): Arguments passed to the Tool.
         """
-        if tool_name not in self.toolbox.tools:
-            error_msg = f"Error: unknown tool {tool_name}, should be instead one of {list(self.toolbox.tools.keys())}."
+        available_tools = self.toolbox.tools
+        if self.managed_agents is not None:
+            available_tools = {**available_tools, **self.managed_agents}
+        if tool_name not in available_tools:
+            error_msg = f"Error: unknown tool {tool_name}, should be instead one of {list(available_tools.keys())}."
             self.logger.error(error_msg, exc_info=1)
             raise AgentExecutionError(error_msg)
 
         try:
             if isinstance(arguments, str):
-                observation = self.toolbox.tools[tool_name](arguments)
-            else:
+                observation = available_tools[tool_name](arguments)
+            elif isinstance(arguments, dict):
                 for key, value in arguments.items():
                     # if the value is the name of a state variable like "image.png", replace it with the actual value
                     if isinstance(value, str) and value in self.state:
                         arguments[key] = self.state[value]
-                observation = self.toolbox.tools[tool_name](**arguments)
+                observation = available_tools[tool_name](**arguments)
+            else:
+                raise AgentExecutionError(
+                    f"Arguments passed to tool should be a dict or string: got a {type(arguments)}."
+                )
             return observation
         except Exception as e:
-            raise AgentExecutionError(
-                f"Error in tool call execution: {e}\nYou should only use this tool with a correct input.\n"
-                f"As a reminder, this tool's description is the following:\n{get_tool_description_with_args(self.toolbox.tools[tool_name])}"
-            )
+            if tool_name in self.toolbox.tools:
+                raise AgentExecutionError(
+                    f"Error in tool call execution: {e}\nYou should only use this tool with a correct input.\n"
+                    f"As a reminder, this tool's description is the following:\n{get_tool_description_with_args(available_tools[tool_name])}"
+                )
+            elif tool_name in self.managed_agents:
+                raise AgentExecutionError(
+                    f"Error in calling team member: {e}\nYou should only ask this team member with a correct request.\n"
+                    f"As a reminder, this team member's description is the following:\n{available_tools[tool_name]}"
+                )
 
-    def log_code_action(self, code_action: str) -> None:
-        self.logger.warning("==== Agent is executing the code below:")
+    def log_rationale_code_action(self, rationale: str, code_action: str) -> None:
+        self.logger.warning("=== Agent thoughts:")
+        self.logger.log(31, rationale)
+        self.logger.warning(">>> Agent is executing the code below:")
         if is_pygments_available():
             self.logger.log(
                 31, highlight(code_action, PythonLexer(ensurenl=False), Terminal256Formatter(style="nord"))
@@ -506,17 +595,25 @@ class CodeAgent(Agent):
     def __init__(
         self,
         tools: List[Tool],
-        llm_engine: Callable = HfEngine(),
-        system_prompt: str = DEFAULT_CODE_SYSTEM_PROMPT,
-        tool_description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
+        llm_engine: Optional[Callable] = None,
+        system_prompt: Optional[str] = None,
+        tool_description_template: Optional[str] = None,
+        grammar: Optional[Dict[str, str]] = None,
         additional_authorized_imports: Optional[List[str]] = None,
         **kwargs,
     ):
+        if llm_engine is None:
+            llm_engine = HfApiEngine()
+        if system_prompt is None:
+            system_prompt = DEFAULT_CODE_SYSTEM_PROMPT
+        if tool_description_template is None:
+            tool_description_template = DEFAULT_TOOL_DESCRIPTION_TEMPLATE
         super().__init__(
             tools=tools,
             llm_engine=llm_engine,
             system_prompt=system_prompt,
             tool_description_template=tool_description_template,
+            grammar=grammar,
             **kwargs,
         )
 
@@ -552,14 +649,17 @@ class CodeAgent(Agent):
         Example:
 
         ```py
-        from transformers.agents import CodeAgent, PythonInterpreterTool
+        from transformers.agents import CodeAgent
 
-        python_interpreter = PythonInterpreterTool()
-        agent = CodeAgent(tools=[python_interpreter])
+        agent = CodeAgent(tools=[])
         agent.run("What is the result of 2 power 3.7384?")
         ```
         """
-        self.initialize_for_run(task, **kwargs)
+        self.task = task
+        if len(kwargs) > 0:
+            self.task += f"\nYou have been provided with these initial arguments: {str(kwargs)}."
+        self.state = kwargs.copy()
+        self.initialize_for_run()
 
         # Run LLM
         prompt_message = {"role": MessageRole.SYSTEM, "content": self.system_prompt}
@@ -571,19 +671,21 @@ class CodeAgent(Agent):
         self.prompt = [prompt_message, task_message]
         self.logger.info("====Executing with this prompt====")
         self.logger.info(self.prompt)
-        llm_output = self.llm_engine(self.prompt, stop_sequences=["<end_action>"])
+
+        additional_args = {"grammar": self.grammar} if self.grammar is not None else {}
+        llm_output = self.llm_engine(self.prompt, stop_sequences=["<end_action>"], **additional_args)
 
         if return_generated_code:
             return llm_output
 
         # Parse
         try:
-            _, code_action = self.extract_action(llm_output=llm_output, split_token="Code:")
+            rationale, code_action = self.extract_action(llm_output=llm_output, split_token="Code:")
         except Exception as e:
             self.logger.debug(
                 f"Error in extracting action, trying to parse the whole output as code. Error trace: {e}"
             )
-            code_action = llm_output
+            rationale, code_action = "", llm_output
 
         try:
             code_action = self.parse_code_blob(code_action)
@@ -593,12 +695,13 @@ class CodeAgent(Agent):
             return error_msg
 
         # Execute
-        self.log_code_action(code_action)
+        self.log_rationale_code_action(rationale, code_action)
         try:
             available_tools = {**BASE_PYTHON_TOOLS.copy(), **self.toolbox.tools}
             output = self.python_evaluator(
                 code_action,
-                available_tools,
+                static_tools=available_tools,
+                custom_tools={},
                 state=self.state,
                 authorized_imports=self.authorized_imports,
             )
@@ -620,18 +723,34 @@ class ReactAgent(Agent):
     def __init__(
         self,
         tools: List[Tool],
-        llm_engine: Callable = HfEngine(),
-        system_prompt: str = DEFAULT_REACT_CODE_SYSTEM_PROMPT,
-        tool_description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
+        llm_engine: Optional[Callable] = None,
+        system_prompt: Optional[str] = None,
+        tool_description_template: Optional[str] = None,
+        grammar: Optional[Dict[str, str]] = None,
+        plan_type: Optional[str] = None,
+        planning_interval: Optional[int] = None,
         **kwargs,
     ):
+        if llm_engine is None:
+            llm_engine = HfApiEngine()
+        if system_prompt is None:
+            system_prompt = DEFAULT_REACT_CODE_SYSTEM_PROMPT
+        if tool_description_template is None:
+            tool_description_template = DEFAULT_TOOL_DESCRIPTION_TEMPLATE
+        if plan_type is None:
+            plan_type = SUPPORTED_PLAN_TYPES[0]
+        else:
+            assert plan_type in SUPPORTED_PLAN_TYPES, f"plan type {plan_type} is not supported"
         super().__init__(
             tools=tools,
             llm_engine=llm_engine,
             system_prompt=system_prompt,
             tool_description_template=tool_description_template,
+            grammar=grammar,
             **kwargs,
         )
+        self.planning_interval = planning_interval
+        self.plan_type = plan_type
 
     def provide_final_answer(self, task) -> str:
         """
@@ -655,11 +774,13 @@ class ReactAgent(Agent):
         except Exception as e:
             return f"Error in generating final llm output: {e}."
 
-    def run(self, task: str, stream: bool = False, **kwargs):
+    def run(self, task: str, stream: bool = False, reset: bool = True, **kwargs):
         """
         Runs the agent for the given task.
+
         Args:
             task (`str`): The task to perform
+
         Example:
         ```py
         from transformers.agents import ReactCodeAgent
@@ -667,27 +788,44 @@ class ReactAgent(Agent):
         agent.run("What is the result of 2 power 3.7384?")
         ```
         """
-        if stream:
-            return self.stream_run(task, **kwargs)
+        self.task = task
+        if len(kwargs) > 0:
+            self.task += f"\nYou have been provided with these initial arguments: {str(kwargs)}."
+        self.state = kwargs.copy()
+        if reset:
+            self.initialize_for_run()
         else:
-            return self.direct_run(task, **kwargs)
+            self.logs.append({"task": task})
+        if stream:
+            return self.stream_run(task)
+        else:
+            return self.direct_run(task)
 
-    def stream_run(self, task: str, **kwargs):
-        self.initialize_for_run(task, **kwargs)
-
+    def stream_run(self, task: str):
+        """
+        Runs the agent in streaming mode, yielding steps as they are executed: should be launched only in the `run` method.
+        """
         final_answer = None
         iteration = 0
         while final_answer is None and iteration < self.max_iterations:
+            step_start_time = time.time()
+            step_log_entry = {"iteration": iteration, "start_time": step_start_time}
             try:
-                step_logs = self.step()
-                if "final_answer" in step_logs:
-                    final_answer = step_logs["final_answer"]
+                self.step(step_log_entry)
+                if "final_answer" in step_log_entry:
+                    final_answer = step_log_entry["final_answer"]
             except AgentError as e:
                 self.logger.error(e, exc_info=1)
-                self.logs[-1]["error"] = e
+                step_log_entry["error"] = e
             finally:
+                step_end_time = time.time()
+                step_log_entry["step_end_time"] = step_end_time
+                step_log_entry["step_duration"] = step_end_time - step_start_time
+                self.logs.append(step_log_entry)
+                for callback in self.step_callbacks:
+                    callback(step_log_entry)
                 iteration += 1
-                yield self.logs[-1]
+                yield step_log_entry
 
         if final_answer is None and iteration == self.max_iterations:
             error_message = "Reached max iterations."
@@ -696,24 +834,38 @@ class ReactAgent(Agent):
             self.logger.error(error_message, exc_info=1)
             final_answer = self.provide_final_answer(task)
             final_step_log["final_answer"] = final_answer
+            final_step_log["step_duration"] = 0
+            for callback in self.step_callbacks:
+                callback(final_step_log)
             yield final_step_log
 
         yield final_answer
 
-    def direct_run(self, task: str, **kwargs):
-        self.initialize_for_run(task, **kwargs)
-
+    def direct_run(self, task: str):
+        """
+        Runs the agent in direct mode, returning outputs only at the end: should be launched only in the `run` method.
+        """
         final_answer = None
         iteration = 0
         while final_answer is None and iteration < self.max_iterations:
+            step_start_time = time.time()
+            step_log_entry = {"iteration": iteration, "start_time": step_start_time}
             try:
-                step_logs = self.step()
-                if "final_answer" in step_logs:
-                    final_answer = step_logs["final_answer"]
+                if self.planning_interval is not None and iteration % self.planning_interval == 0:
+                    self.planning_step(task, is_first_step=(iteration == 0), iteration=iteration)
+                self.step(step_log_entry)
+                if "final_answer" in step_log_entry:
+                    final_answer = step_log_entry["final_answer"]
             except AgentError as e:
                 self.logger.error(e, exc_info=1)
-                self.logs[-1]["error"] = e
+                step_log_entry["error"] = e
             finally:
+                step_end_time = time.time()
+                step_log_entry["step_end_time"] = step_end_time
+                step_log_entry["step_duration"] = step_end_time - step_start_time
+                self.logs.append(step_log_entry)
+                for callback in self.step_callbacks:
+                    callback(step_log_entry)
                 iteration += 1
 
         if final_answer is None and iteration == self.max_iterations:
@@ -723,8 +875,110 @@ class ReactAgent(Agent):
             self.logger.error(error_message, exc_info=1)
             final_answer = self.provide_final_answer(task)
             final_step_log["final_answer"] = final_answer
+            final_step_log["step_duration"] = 0
+            for callback in self.step_callbacks:
+                callback(final_step_log)
 
         return final_answer
+
+    def planning_step(self, task, is_first_step: bool = False, iteration: int = None):
+        """
+        Used periodically by the agent to plan the next steps to reach the objective.
+
+        Args:
+            task (`str`): The task to perform
+            is_first_step (`bool`): If this step is not the first one, the plan should be an update over a previous plan.
+            iteration (`int`): The number of the current step, used as an indication for the LLM.
+        """
+        if is_first_step:
+            message_prompt_facts = {"role": MessageRole.SYSTEM, "content": SYSTEM_PROMPT_FACTS}
+            message_prompt_task = {
+                "role": MessageRole.USER,
+                "content": f"""Here is the task:
+```
+{task}
+```
+Now begin!""",
+            }
+
+            answer_facts = self.llm_engine([message_prompt_facts, message_prompt_task])
+
+            message_system_prompt_plan = {
+                "role": MessageRole.SYSTEM,
+                "content": PROMPTS_FOR_INITIAL_PLAN[self.plan_type]["system"],
+            }
+            message_user_prompt_plan = {
+                "role": MessageRole.USER,
+                "content": PROMPTS_FOR_INITIAL_PLAN[self.plan_type]["user"].format(
+                    task=task,
+                    tool_descriptions=self._toolbox.show_tool_descriptions(self.tool_description_template),
+                    managed_agents_descriptions=(
+                        show_agents_descriptions(self.managed_agents) if self.managed_agents is not None else ""
+                    ),
+                    answer_facts=answer_facts,
+                ),
+            }
+            answer_plan = self.llm_engine(
+                [message_system_prompt_plan, message_user_prompt_plan], stop_sequences=["<end_plan>"]
+            )
+
+            final_plan_redaction = f"""Here is the plan of action that I will follow to solve the task:
+```
+{answer_plan}
+```"""
+            final_facts_redaction = f"""Here are the facts that I know so far:
+```
+{answer_facts}
+```""".strip()
+            self.logs.append({"plan": final_plan_redaction, "facts": final_facts_redaction})
+            self.logger.log(36, "===== Initial plan =====")
+            self.logger.log(35, final_plan_redaction)
+        else:  # update plan
+            agent_memory = self.write_inner_memory_from_logs(
+                summary_mode=False
+            )  # This will not log the plan but will log facts
+
+            # Redact updated facts
+            facts_update_system_prompt = {
+                "role": MessageRole.SYSTEM,
+                "content": SYSTEM_PROMPT_FACTS_UPDATE,
+            }
+            facts_update_message = {
+                "role": MessageRole.USER,
+                "content": USER_PROMPT_FACTS_UPDATE,
+            }
+            facts_update = self.llm_engine([facts_update_system_prompt] + agent_memory + [facts_update_message])
+
+            # Redact updated plan
+            plan_update_message = {
+                "role": MessageRole.SYSTEM,
+                "content": PROMPTS_FOR_PLAN_UPDATE[self.plan_type]["system"].format(task=task),
+            }
+            plan_update_message_user = {
+                "role": MessageRole.USER,
+                "content": PROMPTS_FOR_PLAN_UPDATE[self.plan_type]["user"].format(
+                    task=task,
+                    tool_descriptions=self._toolbox.show_tool_descriptions(self.tool_description_template),
+                    managed_agents_descriptions=(
+                        show_agents_descriptions(self.managed_agents) if self.managed_agents is not None else ""
+                    ),
+                    facts_update=facts_update,
+                    remaining_steps=(self.max_iterations - iteration),
+                ),
+            }
+            plan_update = self.llm_engine(
+                [plan_update_message] + agent_memory + [plan_update_message_user], stop_sequences=["<end_plan>"]
+            )
+
+            # Log final facts and plan
+            final_plan_redaction = PLAN_UPDATE_FINAL_PLAN_REDACTION.format(task=task, plan_update=plan_update)
+            final_facts_redaction = f"""Here is the updated list of the facts that I know:
+```
+{facts_update}
+```"""
+            self.logs.append({"plan": final_plan_redaction, "facts": final_facts_redaction})
+            self.logger.log(36, "===== Updated plan =====")
+            self.logger.log(35, final_plan_redaction)
 
 
 class ReactJsonAgent(ReactAgent):
@@ -737,20 +991,30 @@ class ReactJsonAgent(ReactAgent):
     def __init__(
         self,
         tools: List[Tool],
-        llm_engine: Callable = HfEngine(),
-        system_prompt: str = DEFAULT_REACT_JSON_SYSTEM_PROMPT,
-        tool_description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
+        llm_engine: Optional[Callable] = None,
+        system_prompt: Optional[str] = None,
+        tool_description_template: Optional[str] = None,
+        grammar: Optional[Dict[str, str]] = None,
+        planning_interval: Optional[int] = None,
         **kwargs,
     ):
+        if llm_engine is None:
+            llm_engine = HfApiEngine()
+        if system_prompt is None:
+            system_prompt = DEFAULT_REACT_JSON_SYSTEM_PROMPT
+        if tool_description_template is None:
+            tool_description_template = DEFAULT_TOOL_DESCRIPTION_TEMPLATE
         super().__init__(
             tools=tools,
             llm_engine=llm_engine,
             system_prompt=system_prompt,
             tool_description_template=tool_description_template,
+            grammar=grammar,
+            planning_interval=planning_interval,
             **kwargs,
         )
 
-    def step(self):
+    def step(self, log_entry: Dict[str, Any]):
         """
         Perform one step in the ReAct framework: the agent thinks, acts, and observes the result.
         The errors are raised here, they are caught and logged in the run() method.
@@ -761,20 +1025,21 @@ class ReactJsonAgent(ReactAgent):
         self.logger.debug("===== New step =====")
 
         # Add new step in logs
-        current_step_logs = {}
-        self.logs.append(current_step_logs)
-        current_step_logs["agent_memory"] = agent_memory.copy()
+        log_entry["agent_memory"] = agent_memory.copy()
 
         self.logger.info("===== Calling LLM with this last message: =====")
         self.logger.info(self.prompt[-1])
 
         try:
-            llm_output = self.llm_engine(self.prompt, stop_sequences=["<end_action>", "Observation:"])
+            additional_args = {"grammar": self.grammar} if self.grammar is not None else {}
+            llm_output = self.llm_engine(
+                self.prompt, stop_sequences=["<end_action>", "Observation:"], **additional_args
+            )
         except Exception as e:
             raise AgentGenerationError(f"Error in generating llm output: {e}.")
         self.logger.debug("===== Output message of the LLM: =====")
         self.logger.debug(llm_output)
-        current_step_logs["llm_output"] = llm_output
+        log_entry["llm_output"] = llm_output
 
         # Parse
         self.logger.debug("===== Extracting action =====")
@@ -785,40 +1050,46 @@ class ReactJsonAgent(ReactAgent):
         except Exception as e:
             raise AgentParsingError(f"Could not parse the given action: {e}.")
 
-        current_step_logs["rationale"] = rationale
-        current_step_logs["tool_call"] = {"tool_name": tool_name, "tool_arguments": arguments}
+        log_entry["rationale"] = rationale
+        log_entry["tool_call"] = {"tool_name": tool_name, "tool_arguments": arguments}
 
         # Execute
-        self.logger.warning(f"Calling tool: '{tool_name}' with arguments: {arguments}")
+        self.logger.warning("=== Agent thoughts:")
+        self.logger.log(31, rationale)
+        self.logger.warning(f">>> Calling tool: '{tool_name}' with arguments: {arguments}")
         if tool_name == "final_answer":
             if isinstance(arguments, dict):
-                answer = arguments["answer"]
+                if "answer" in arguments:
+                    answer = arguments["answer"]
+                    if (
+                        isinstance(answer, str) and answer in self.state.keys()
+                    ):  # if the answer is a state variable, return the value
+                        answer = self.state[answer]
+                else:
+                    answer = arguments
             else:
                 answer = arguments
-            if answer in self.state:  # if the answer is a state variable, return the value
-                answer = self.state[answer]
-            current_step_logs["final_answer"] = answer
-            return current_step_logs
+            log_entry["final_answer"] = answer
+            return answer
         else:
+            if arguments is None:
+                arguments = {}
             observation = self.execute_tool_call(tool_name, arguments)
             observation_type = type(observation)
-            if observation_type == AgentText:
-                updated_information = str(observation).strip()
-            else:
-                # TODO: observation naming could allow for different names of same type
+            if observation_type in [AgentImage, AgentAudio]:
                 if observation_type == AgentImage:
                     observation_name = "image.png"
                 elif observation_type == AgentAudio:
                     observation_name = "audio.mp3"
-                else:
-                    observation_name = "object.object"
+                # TODO: observation naming could allow for different names of same type
 
                 self.state[observation_name] = observation
                 updated_information = f"Stored '{observation_name}' in memory."
-
+            else:
+                updated_information = str(observation).strip()
             self.logger.info(updated_information)
-            current_step_logs["observation"] = updated_information
-            return current_step_logs
+            log_entry["observation"] = updated_information
+            return log_entry
 
 
 class ReactCodeAgent(ReactAgent):
@@ -831,17 +1102,27 @@ class ReactCodeAgent(ReactAgent):
     def __init__(
         self,
         tools: List[Tool],
-        llm_engine: Callable = HfEngine(),
-        system_prompt: str = DEFAULT_REACT_CODE_SYSTEM_PROMPT,
-        tool_description_template: str = DEFAULT_TOOL_DESCRIPTION_TEMPLATE,
+        llm_engine: Optional[Callable] = None,
+        system_prompt: Optional[str] = None,
+        tool_description_template: Optional[str] = None,
+        grammar: Optional[Dict[str, str]] = None,
         additional_authorized_imports: Optional[List[str]] = None,
+        planning_interval: Optional[int] = None,
         **kwargs,
     ):
+        if llm_engine is None:
+            llm_engine = HfApiEngine()
+        if system_prompt is None:
+            system_prompt = DEFAULT_REACT_CODE_SYSTEM_PROMPT
+        if tool_description_template is None:
+            tool_description_template = DEFAULT_TOOL_DESCRIPTION_TEMPLATE
         super().__init__(
             tools=tools,
             llm_engine=llm_engine,
             system_prompt=system_prompt,
             tool_description_template=tool_description_template,
+            grammar=grammar,
+            planning_interval=planning_interval,
             **kwargs,
         )
 
@@ -856,12 +1137,9 @@ class ReactCodeAgent(ReactAgent):
         self.additional_authorized_imports = additional_authorized_imports if additional_authorized_imports else []
         self.authorized_imports = list(set(LIST_SAFE_MODULES) | set(self.additional_authorized_imports))
         self.system_prompt = self.system_prompt.replace("<<authorized_imports>>", str(self.authorized_imports))
-        self.available_tools = {
-            **BASE_PYTHON_TOOLS.copy(),
-            **self.toolbox.tools,
-        }  # This list can be augmented by the code agent creating some new functions
+        self.custom_tools = {}
 
-    def step(self):
+    def step(self, log_entry: Dict[str, Any]):
         """
         Perform one step in the ReAct framework: the agent thinks, acts, and observes the result.
         The errors are raised here, they are caught and logged in the run() method.
@@ -869,28 +1147,28 @@ class ReactCodeAgent(ReactAgent):
         agent_memory = self.write_inner_memory_from_logs()
 
         self.prompt = agent_memory.copy()
-
         self.logger.debug("===== New step =====")
 
         # Add new step in logs
-        current_step_logs = {}
-        self.logs.append(current_step_logs)
-        current_step_logs["agent_memory"] = agent_memory.copy()
+        log_entry["agent_memory"] = agent_memory.copy()
 
         self.logger.info("===== Calling LLM with these last messages: =====")
         self.logger.info(self.prompt[-2:])
 
         try:
-            llm_output = self.llm_engine(self.prompt, stop_sequences=["<end_action>", "Observation:"])
+            additional_args = {"grammar": self.grammar} if self.grammar is not None else {}
+            llm_output = self.llm_engine(
+                self.prompt, stop_sequences=["<end_action>", "Observation:"], **additional_args
+            )
         except Exception as e:
             raise AgentGenerationError(f"Error in generating llm output: {e}.")
 
-        self.logger.debug("===== Output message of the LLM: =====")
+        self.logger.debug("=== Output message of the LLM:")
         self.logger.debug(llm_output)
-        current_step_logs["llm_output"] = llm_output
+        log_entry["llm_output"] = llm_output
 
         # Parse
-        self.logger.debug("===== Extracting action =====")
+        self.logger.debug("=== Extracting action ===")
         try:
             rationale, raw_code_action = self.extract_action(llm_output=llm_output, split_token="Code:")
         except Exception as e:
@@ -903,30 +1181,98 @@ class ReactCodeAgent(ReactAgent):
             error_msg = f"Error in code parsing: {e}. Make sure to provide correct code"
             raise AgentParsingError(error_msg)
 
-        current_step_logs["rationale"] = rationale
-        current_step_logs["tool_call"] = {"tool_name": "code interpreter", "tool_arguments": code_action}
+        log_entry["rationale"] = rationale
+        log_entry["tool_call"] = {"tool_name": "code interpreter", "tool_arguments": code_action}
 
         # Execute
-        self.log_code_action(code_action)
+        self.log_rationale_code_action(rationale, code_action)
         try:
+            static_tools = {
+                **BASE_PYTHON_TOOLS.copy(),
+                **self.toolbox.tools,
+            }
+            if self.managed_agents is not None:
+                static_tools = {**static_tools, **self.managed_agents}
             result = self.python_evaluator(
                 code_action,
-                tools=self.available_tools,
+                static_tools=static_tools,
+                custom_tools=self.custom_tools,
                 state=self.state,
                 authorized_imports=self.authorized_imports,
             )
-            information = self.state["print_outputs"]
             self.logger.warning("Print outputs:")
-            self.logger.log(32, information)
-            current_step_logs["observation"] = information
+            self.logger.log(32, self.state["print_outputs"])
+            observation = "Print outputs:\n" + self.state["print_outputs"]
+            if result is not None:
+                self.logger.warning("Last output from code snippet:")
+                self.logger.log(32, str(result))
+                observation += "Last output from code snippet:\n" + str(result)[:100000]
+            log_entry["observation"] = observation
         except Exception as e:
-            error_msg = f"Failed while trying to execute the code below:\n{CustomFormatter.reset + code_action + CustomFormatter.reset}\nThis failed due to the following error:\n{str(e)}"
+            error_msg = f"Code execution failed due to the following error:\n{str(e)}"
             if "'dict' object has no attribute 'read'" in str(e):
                 error_msg += "\nYou get this error because you passed a dict as input for one of the arguments instead of a string."
             raise AgentExecutionError(error_msg)
         for line in code_action.split("\n"):
             if line[: len("final_answer")] == "final_answer":
-                self.logger.warning(">>> Final answer:")
+                self.logger.log(33, "Final answer:")
                 self.logger.log(32, result)
-                current_step_logs["final_answer"] = result
-        return current_step_logs
+                log_entry["final_answer"] = result
+        return result
+
+
+LENGTH_TRUNCATE_REPORTS = 1000
+
+
+class ManagedAgent:
+    def __init__(self, agent, name, description, additional_prompting=None, provide_run_summary=False):
+        self.agent = agent
+        self.name = name
+        self.description = description
+        self.additional_prompting = additional_prompting
+        self.provide_run_summary = provide_run_summary
+
+    def write_full_task(self, task):
+        full_task = f"""You're a helpful agent named '{self.name}'.
+You have been submitted this task by your manager.
+---
+Task:
+{task}
+---
+You're helping your manager solve a wider task: so make sure to not provide a one-line answer, but give as much information as possible so that they have a clear understanding of the answer.
+
+Your final_answer WILL HAVE to contain these parts:
+### 1. Task outcome (short version):
+### 2. Task outcome (extremely detailed version):
+### 3. Additional context (if relevant):
+
+Put all these in your final_answer tool, everything that you do not pass as an argument to final_answer will be lost.
+And even if your task resolution is not successful, please return as much context as possible, so that your manager can act upon this feedback.
+<<additional_prompting>>"""
+        if self.additional_prompting:
+            full_task = full_task.replace("\n<<additional_prompting>>", self.additional_prompting).strip()
+        else:
+            full_task = full_task.replace("\n<<additional_prompting>>", "").strip()
+        return full_task
+
+    def __call__(self, request, **kwargs):
+        full_task = self.write_full_task(request)
+        output = self.agent.run(full_task, **kwargs)
+        if self.provide_run_summary:
+            answer = f"Here is the final answer from your managed agent '{self.name}':\n"
+            answer += str(output)
+            answer += f"\n\nFor more detail, find below a summary of this agent's work:\nSUMMARY OF WORK FROM AGENT '{self.name}':\n"
+            for message in self.agent.write_inner_memory_from_logs(summary_mode=True):
+                content = message["content"]
+                if len(str(content)) < LENGTH_TRUNCATE_REPORTS or "[FACTS LIST]" in str(content):
+                    answer += "\n" + str(content) + "\n---"
+                else:
+                    answer += (
+                        "\n"
+                        + str(content)[:LENGTH_TRUNCATE_REPORTS]
+                        + "\n(...Step was truncated because too long)...\n---"
+                    )
+            answer += f"\nEND OF SUMMARY OF WORK FROM AGENT '{self.name}'."
+            return answer
+        else:
+            return output

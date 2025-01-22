@@ -513,7 +513,7 @@ class LoadImageTester(unittest.TestCase):
 
     def test_load_img_base64_prefix(self):
         try:
-            tmp_file = tempfile.mktemp()
+            tmp_file = tempfile.NamedTemporaryFile(delete=False).name
             with open(tmp_file, "wb") as f:
                 http_get(
                     "https://huggingface.co/datasets/hf-internal-testing/dummy-base64-images/raw/main/image_0.txt", f
@@ -530,7 +530,7 @@ class LoadImageTester(unittest.TestCase):
 
     def test_load_img_base64(self):
         try:
-            tmp_file = tempfile.mktemp()
+            tmp_file = tempfile.NamedTemporaryFile(delete=False).name
             with open(tmp_file, "wb") as f:
                 http_get(
                     "https://huggingface.co/datasets/hf-internal-testing/dummy-base64-images/raw/main/image_1.txt", f
@@ -547,7 +547,7 @@ class LoadImageTester(unittest.TestCase):
 
     def test_load_img_base64_encoded_bytes(self):
         try:
-            tmp_file = tempfile.mktemp()
+            tmp_file = tempfile.NamedTemporaryFile(delete=False).name
             with open(tmp_file, "wb") as f:
                 http_get(
                     "https://huggingface.co/datasets/hf-internal-testing/dummy-base64-images/raw/main/image_2.txt", f

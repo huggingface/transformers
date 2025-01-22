@@ -414,10 +414,6 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    @unittest.skip(reason="The `input_embeds` when fed don't produce the same results.")
-    def test_beam_sample_generate(self):
-        pass
-
 
 @require_torch
 class BioGptModelIntegrationTest(unittest.TestCase):

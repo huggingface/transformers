@@ -34,7 +34,7 @@ if is_tf_available():
     from transformers.models.lxmert.modeling_tf_lxmert import TFLxmertForPreTraining, TFLxmertModel
 
 
-class TFLxmertModelTester(object):
+class TFLxmertModelTester:
     def __init__(
         self,
         parent,

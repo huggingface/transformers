@@ -18,11 +18,11 @@ import unittest
 from parameterized import parameterized
 
 from transformers import GPTBigCodeConfig, is_torch_available
-from transformers.testing_utils import require_torch, slow, torch_device
+from transformers.testing_utils import cleanup, require_torch, slow, torch_device
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -37,9 +37,6 @@ if is_torch_available():
         GPTBigCodeModel,
     )
     from transformers.models.gpt_bigcode.modeling_gpt_bigcode import GPTBigCodeAttention
-    from transformers.pytorch_utils import is_torch_greater_or_equal_than_1_12
-else:
-    is_torch_greater_or_equal_than_1_12 = False
 
 
 class GPTBigCodeModelTester:
@@ -177,35 +174,6 @@ class GPTBigCodeModelTester:
         config = self.get_config()
         config.vocab_size = 300
         return config
-
-    def prepare_config_and_inputs_for_decoder(self):
-        (
-            config,
-            input_ids,
-            input_mask,
-            head_mask,
-            token_type_ids,
-            mc_token_ids,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = self.prepare_config_and_inputs()
-
-        encoder_hidden_states = floats_tensor([self.batch_size, self.seq_length, self.hidden_size])
-        encoder_attention_mask = ids_tensor([self.batch_size, self.seq_length], vocab_size=2)
-
-        return (
-            config,
-            input_ids,
-            input_mask,
-            head_mask,
-            token_type_ids,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-            encoder_hidden_states,
-            encoder_attention_mask,
-        )
 
     def create_and_check_gpt_bigcode_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
         model = GPTBigCodeModel(config=config)
@@ -451,9 +419,9 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         self.config_tester = ConfigTester(self, config_class=GPTBigCodeConfig, n_embd=37)
 
     def tearDown(self):
-        import gc
-
-        gc.collect()
+        super().tearDown()
+        # clean-up as much as possible GPU memory occupied by PyTorch
+        cleanup(torch_device)
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -533,10 +501,6 @@ class GPTBigCodeMHAModelTest(GPTBigCodeModelTest):
     multi_query = False
 
 
-@unittest.skipIf(
-    not is_torch_greater_or_equal_than_1_12,
-    reason="`GPTBigCode` checkpoints use `PytorchGELUTanh` which requires `torch>=1.12.0`.",
-)
 @slow
 @require_torch
 class GPTBigCodeModelLanguageGenerationTest(unittest.TestCase):

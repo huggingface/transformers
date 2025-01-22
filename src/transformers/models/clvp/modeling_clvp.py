@@ -26,7 +26,7 @@ from torch import nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...generation import GenerationConfig
+from ...generation import GenerationConfig, GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -35,7 +35,7 @@ from ...modeling_outputs import (
     CausalLMOutputWithCrossAttentions,
 )
 from ...modeling_utils import PreTrainedModel, SequenceSummary
-from ...pytorch_utils import Conv1D
+from ...pytorch_utils import Conv1D, isin_mps_friendly
 from ...utils import (
     ModelOutput,
     add_start_docstrings,
@@ -132,7 +132,7 @@ def _pad_extra_bos_eos_tokens(
         )
         for i, each_input_id in enumerate(input_ids):
             # locate where the valid tokens end and then add the eos token
-            if torch.isin(each_input_id, pad_token_id).sum():
+            if isin_mps_friendly(each_input_id, pad_token_id).sum():
                 pos = torch.where(each_input_id == pad_token_id)[0].min()
                 modified_input_ids[i] = torch.concatenate(
                     [each_input_id[:pos], torch.tensor([eos_token_id], device=input_ids.device), each_input_id[pos:]]
@@ -238,6 +238,9 @@ class ClvpRMSNorm(nn.Module):
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
         return self.weight * hidden_states.to(input_dtype)
+
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
 class ClvpRotaryPositionalEmbedding(nn.Module):
@@ -732,7 +735,7 @@ class ClvpPreTrainedModel(PreTrainedModel):
             nn.init.normal_(module.fc1.proj.weight if getattr(module.fc1, "proj") else module.fc1.weight, std=fc_std)
             nn.init.normal_(module.fc2.weight, std=in_proj_std)
         elif isinstance(module, ClvpEncoder):
-            config = self.config.text_config if hasattr(self.config, "text_config") else self.config
+            config = self.config.get_text_config()
             factor = config.initializer_factor
             module.projection.weight.data.normal_(mean=0.0, std=factor * (config.hidden_size**-0.5))
         elif isinstance(module, ClvpConditioningEncoder):
@@ -1275,7 +1278,7 @@ class ClvpModel(ClvpPreTrainedModel):
     "The CLVP decoder model with a language modelling head on top.",
     CLVP_START_DOCSTRING,
 )
-class ClvpForCausalLM(ClvpPreTrainedModel):
+class ClvpForCausalLM(ClvpPreTrainedModel, GenerationMixin):
     def __init__(self, config):
         super().__init__(config)
 
@@ -1364,6 +1367,8 @@ class ClvpForCausalLM(ClvpPreTrainedModel):
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, inputs_embeds=None, conditioning_embeds=None, **kwargs
     ):
+        # Overwritten: has `conditioning_embeds`-related logic
+
         input_ids_length = input_ids.shape[-1]
         token_type_ids = kwargs.get("token_type_ids", None)
         # only last token for inputs_ids if past is defined in kwargs
@@ -1506,26 +1511,26 @@ class ClvpForCausalLM(ClvpPreTrainedModel):
     "together to filter out the best speech_ids.",
     CLVP_START_DOCSTRING,
 )
-class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
+class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
     config_class = ClvpConfig
 
     def __init__(self, config: ClvpConfig):
         super().__init__(config)
 
         if not isinstance(config.text_config, ClvpEncoderConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.text_config is expected to be of type `ClvpEncoderConfig` but is of type"
                 f" {type(config.text_config)}."
             )
 
         if not isinstance(config.speech_config, ClvpEncoderConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.speech_config is expected to be of type `ClvpEncoderConfig` but is of type"
                 f" {type(config.speech_config)}."
             )
 
         if not isinstance(config.decoder_config, ClvpDecoderConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.decoder_config is expected to be of type `ClvpDecoderConfig` but is of type"
                 f" {type(config.decoder_config)}."
             )
@@ -1681,7 +1686,7 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
 
         >>> # Define the Text and Load the Audio (We are taking an audio example from HuggingFace Hub using `datasets` library)
         >>> text = "This is an example text."
-        >>> ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
+        >>> ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.cast_column("audio", datasets.Audio(sampling_rate=22050))
         >>> _, audio, sr = ds.sort("id").select(range(1))[:1]["audio"][0].values()
 
@@ -1754,7 +1759,7 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
         >>> # Define the Text and Load the Audio (We are taking an audio example from HuggingFace Hub using `datasets` library)
         >>> text = "This is an example text."
 
-        >>> ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
+        >>> ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.cast_column("audio", datasets.Audio(sampling_rate=22050))
         >>> _, audio, sr = ds.sort("id").select(range(1))[:1]["audio"][0].values()
 
@@ -2016,3 +2021,13 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel):
             text_encoder_hidden_states=text_outputs.hidden_states,
             speech_encoder_hidden_states=speech_outputs.hidden_states,
         )
+
+
+__all__ = [
+    "ClvpModelForConditionalGeneration",
+    "ClvpForCausalLM",
+    "ClvpModel",
+    "ClvpPreTrainedModel",
+    "ClvpEncoder",
+    "ClvpDecoder",
+]

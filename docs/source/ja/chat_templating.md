@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Templates for Chat Models
+# Chat Templates
 
 ## Introduction
 
@@ -85,7 +85,7 @@ LLM（Language Model）のますます一般的な使用事例の1つは「チ�
 >>> from transformers import AutoTokenizer
 >>> tokenizer = AutoTokenizer.from_pretrained("facebook/blenderbot-400M-distill")
 
->>> tokenizer.default_chat_template
+>>> tokenizer.chat_template
 "{% for message in messages %}{% if message['role'] == 'user' %}{{ ' ' }}{% endif %}{{ message['content'] }}{% if not loop.last %}{{ '  ' }}{% endif %}{% endfor %}{{ eos_token }}"
 ```
 

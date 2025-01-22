@@ -15,7 +15,30 @@
 import inspect
 import json
 import re
-from typing import Any, Callable, Dict, Optional, Tuple, Union, get_args, get_origin, get_type_hints
+import types
+from contextlib import contextmanager
+from datetime import datetime
+from functools import lru_cache
+from types import NoneType
+from typing import Any, Callable, Dict, List, Optional, Tuple, Union, get_args, get_origin, get_type_hints
+
+from packaging import version
+
+from .import_utils import is_jinja_available, is_torch_available, is_vision_available
+
+
+if is_jinja_available():
+    import jinja2
+    from jinja2.ext import Extension
+    from jinja2.sandbox import ImmutableSandboxedEnvironment
+else:
+    jinja2 = None
+
+if is_vision_available():
+    from PIL.Image import Image
+
+if is_torch_available():
+    from torch import Tensor
 
 
 BASIC_TYPES = (int, float, str, bool, Any, type(None), ...)
@@ -55,8 +78,13 @@ def _get_json_schema_type(param_type: str) -> Dict[str, str]:
         float: {"type": "number"},
         str: {"type": "string"},
         bool: {"type": "boolean"},
+        NoneType: {"type": "null"},
         Any: {},
     }
+    if is_vision_available():
+        type_mapping[Image] = {"type": "image"}
+    if is_torch_available():
+        type_mapping[Tensor] = {"type": "audio"}
     return type_mapping.get(param_type, {"type": "object"})
 
 
@@ -72,9 +100,9 @@ def _parse_type_hint(hint: str) -> Dict:
                 "Couldn't parse this type hint, likely due to a custom class or object: ", hint
             )
 
-    elif origin is Union:
+    elif origin is Union or (hasattr(types, "UnionType") and origin is types.UnionType):
         # Recurse into each of the subtypes in the Union, except None, which is handled separately at the end
-        subtypes = [_parse_type_hint(t) for t in args if t != type(None)]
+        subtypes = [_parse_type_hint(t) for t in args if t is not type(None)]
         if len(subtypes) == 1:
             # A single non-null type can be expressed directly
             return_dict = subtypes[0]
@@ -314,3 +342,95 @@ def get_json_schema(func: Callable) -> Dict:
     if return_dict is not None:
         output["return"] = return_dict
     return {"type": "function", "function": output}
+
+
+def _render_with_assistant_indices(
+    compiled_template, messages, tools, documents, add_generation_prompt, **template_kwargs
+):
+    rendered_blocks = []
+    generation_indices = []
+    with compiled_template.environment.activate_tracker(rendered_blocks, generation_indices):
+        for block in compiled_template.generate(
+            messages=messages,
+            tools=tools,
+            documents=documents,
+            add_generation_prompt=add_generation_prompt,
+            **template_kwargs,
+        ):
+            rendered_blocks.append(block)
+        rendered_chat = "".join(rendered_blocks)
+    return rendered_chat, generation_indices
+
+
+@lru_cache
+def _compile_jinja_template(chat_template):
+    if not is_jinja_available():
+        raise ImportError(
+            "apply_chat_template requires jinja2 to be installed. Please install it using `pip install jinja2`."
+        )
+
+    class AssistantTracker(Extension):
+        # This extension is used to track the indices of assistant-generated tokens in the rendered chat
+        tags = {"generation"}
+
+        def __init__(self, environment: ImmutableSandboxedEnvironment):
+            # The class is only initiated by jinja.
+            super().__init__(environment)
+            environment.extend(activate_tracker=self.activate_tracker)
+            self._rendered_blocks = None
+            self._generation_indices = None
+
+        def parse(self, parser: jinja2.parser.Parser) -> jinja2.nodes.CallBlock:
+            lineno = next(parser.stream).lineno
+            body = parser.parse_statements(["name:endgeneration"], drop_needle=True)
+            return jinja2.nodes.CallBlock(self.call_method("_generation_support"), [], [], body).set_lineno(lineno)
+
+        @jinja2.pass_eval_context
+        def _generation_support(self, context: jinja2.nodes.EvalContext, caller: jinja2.runtime.Macro) -> str:
+            rv = caller()
+            if self.is_active():
+                # Only track generation indices if the tracker is active
+                start_index = len("".join(self._rendered_blocks))
+                end_index = start_index + len(rv)
+                self._generation_indices.append((start_index, end_index))
+            return rv
+
+        def is_active(self) -> bool:
+            return self._rendered_blocks or self._generation_indices
+
+        @contextmanager
+        def activate_tracker(self, rendered_blocks: List[int], generation_indices: List[int]):
+            try:
+                if self.is_active():
+                    raise ValueError("AssistantTracker should not be reused before closed")
+                self._rendered_blocks = rendered_blocks
+                self._generation_indices = generation_indices
+
+                yield
+            finally:
+                self._rendered_blocks = None
+                self._generation_indices = None
+
+    if version.parse(jinja2.__version__) < version.parse("3.1.0"):
+        raise ImportError(
+            "apply_chat_template requires jinja2>=3.1.0 to be installed. Your version is " f"{jinja2.__version__}."
+        )
+
+    def raise_exception(message):
+        raise jinja2.exceptions.TemplateError(message)
+
+    def tojson(x, ensure_ascii=False, indent=None, separators=None, sort_keys=False):
+        # We override the built-in tojson filter because Jinja's default filter escapes HTML characters
+        # We also expose some options like custom indents and separators
+        return json.dumps(x, ensure_ascii=ensure_ascii, indent=indent, separators=separators, sort_keys=sort_keys)
+
+    def strftime_now(format):
+        return datetime.now().strftime(format)
+
+    jinja_env = ImmutableSandboxedEnvironment(
+        trim_blocks=True, lstrip_blocks=True, extensions=[AssistantTracker, jinja2.ext.loopcontrols]
+    )
+    jinja_env.filters["tojson"] = tojson
+    jinja_env.globals["raise_exception"] = raise_exception
+    jinja_env.globals["strftime_now"] = strftime_now
+    return jinja_env.from_string(chat_template)

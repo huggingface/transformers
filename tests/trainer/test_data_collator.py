@@ -26,6 +26,7 @@ from transformers import (
     DataCollatorForSeq2Seq,
     DataCollatorForTokenClassification,
     DataCollatorForWholeWordMask,
+    DataCollatorWithFlattening,
     DataCollatorWithPadding,
     default_data_collator,
     is_tf_available,
@@ -298,7 +299,7 @@ class DataCollatorIntegrationTest(unittest.TestCase):
         self.assertEqual(batch["input_ids"].shape, torch.Size((2, 16)))
         self.assertEqual(batch["labels"].shape, torch.Size((2, 16)))
 
-        tokenizer._pad_token = None
+        tokenizer.pad_token = None
         data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False)
         with self.assertRaises(ValueError):
             # Expect error due to padding token missing
@@ -977,7 +978,7 @@ class TFDataCollatorIntegrationTest(unittest.TestCase):
         self.assertEqual(batch["input_ids"].shape.as_list(), [2, 16])
         self.assertEqual(batch["labels"].shape.as_list(), [2, 16])
 
-        tokenizer._pad_token = None
+        tokenizer.pad_token = None
         data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False, return_tensors="tf")
         with self.assertRaises(ValueError):
             # Expect error due to padding token missing
@@ -1018,6 +1019,52 @@ class TFDataCollatorIntegrationTest(unittest.TestCase):
         masked_tokens = batch["input_ids"] == tokenizer.mask_token_id
         self.assertTrue(tf.reduce_any(masked_tokens))
         # self.assertTrue(all(x == -100 for x in batch["labels"].numpy()[~masked_tokens.numpy()].tolist()))
+
+    def test_probability_sum_error(self):
+        """Test that the sum of mask_replace_prob and random_replace_prob exceeding 1 raises an error."""
+        tokenizer = BertTokenizer(self.vocab_file)
+        with self.assertRaises(ValueError):
+            DataCollatorForLanguageModeling(tokenizer=tokenizer, mask_replace_prob=0.9, random_replace_prob=0.2)
+
+    def test_all_mask_replacement(self):
+        """Test behavior when mask_replace_prob=1."""
+        tokenizer = BertTokenizer(self.vocab_file)
+
+        # pytorch call
+        collator = DataCollatorForLanguageModeling(
+            tokenizer=tokenizer, mask_replace_prob=1, random_replace_prob=0, return_tensors="pt"
+        )
+
+        inputs = torch.tensor([0, 1, 2, 3, 4, 5])
+        features = [{"input_ids": inputs} for _ in range(8)]
+        batch = collator(features)
+
+        # confirm that every token is either the original token or [MASK]
+        self.assertTrue(torch.all((batch["input_ids"] == inputs) | (batch["input_ids"] == tokenizer.mask_token_id)))
+
+        # tf call
+        collator = DataCollatorForLanguageModeling(
+            tokenizer=tokenizer, mask_replace_prob=1, random_replace_prob=0, return_tensors="tf"
+        )
+        inputs = tf.constant([0, 1, 2, 3, 4, 5])
+        features = [{"input_ids": inputs} for _ in range(8)]
+        batch = collator(features)
+
+        # confirm that every token is either the original token or [MASK]
+        self.assertTrue(
+            tf.reduce_all((batch["input_ids"] == inputs) | (batch["input_ids"] == tokenizer.mask_token_id))
+        )
+
+        # numpy call
+        collator = DataCollatorForLanguageModeling(
+            tokenizer=tokenizer, mask_replace_prob=1, random_replace_prob=0, return_tensors="np"
+        )
+        inputs = np.array([0, 1, 2, 3, 4, 5])
+        features = [{"input_ids": inputs} for _ in range(8)]
+        batch = collator(features)
+
+        # confirm that every token is either the original token or [MASK]
+        self.assertTrue(np.all((batch["input_ids"] == inputs) | (batch["input_ids"] == tokenizer.mask_token_id)))
 
     def test_data_collator_for_language_modeling(self):
         no_pad_features = [{"input_ids": list(range(10))}, {"input_ids": list(range(10))}]
@@ -1531,6 +1578,24 @@ class NumpyDataCollatorIntegrationTest(unittest.TestCase):
         batch = data_collator(features)
         self.assertEqual(batch["input_ids"].shape, (2, 8))
 
+    def test_data_collator_with_flattening(self):
+        features = [
+            {"input_ids": [10, 11, 12]},
+            {"input_ids": [20, 21, 22, 23, 24, 25]},
+            {"input_ids": [30, 31, 32, 33, 34, 35, 36]},
+        ]
+
+        data_collator = DataCollatorWithFlattening(return_tensors="np")
+        batch = data_collator(features)
+        self.assertEqual(batch["input_ids"].shape, (1, 16))
+        self.assertEqual(
+            batch["input_ids"][0].tolist(), [10, 11, 12, 20, 21, 22, 23, 24, 25, 30, 31, 32, 33, 34, 35, 36]
+        )
+        self.assertNotIn("attention_mask", batch)
+        self.assertIn("position_ids", batch)
+        self.assertEqual(batch["position_ids"].shape, (1, 16))
+        self.assertEqual(batch["position_ids"][0].tolist(), [0, 1, 2, 0, 1, 2, 3, 4, 5, 0, 1, 2, 3, 4, 5, 6])
+
     def test_data_collator_for_token_classification(self):
         tokenizer = BertTokenizer(self.vocab_file)
         features = [
@@ -1654,7 +1719,7 @@ class NumpyDataCollatorIntegrationTest(unittest.TestCase):
         self.assertEqual(batch["input_ids"].shape, (2, 16))
         self.assertEqual(batch["labels"].shape, (2, 16))
 
-        tokenizer._pad_token = None
+        tokenizer.pad_token = None
         data_collator = DataCollatorForLanguageModeling(tokenizer, mlm=False, return_tensors="np")
         with self.assertRaises(ValueError):
             # Expect error due to padding token missing

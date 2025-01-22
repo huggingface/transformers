@@ -68,6 +68,7 @@ else:
                 ),
             ),
             ("align", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+            ("aria", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("bark", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("bart", ("BartTokenizer", "BartTokenizerFast")),
             (
@@ -146,6 +147,8 @@ else:
             ),
             ("codegen", ("CodeGenTokenizer", "CodeGenTokenizerFast" if is_tokenizers_available() else None)),
             ("cohere", (None, "CohereTokenizerFast" if is_tokenizers_available() else None)),
+            ("cohere2", (None, "CohereTokenizerFast" if is_tokenizers_available() else None)),
+            ("colpali", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("convbert", ("ConvBertTokenizer", "ConvBertTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "cpm",
@@ -167,6 +170,13 @@ else:
                     "DebertaV2TokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            (
+                "diffllama",
+                (
+                    "LlamaTokenizer" if is_sentencepiece_available() else None,
+                    "LlamaTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             ("distilbert", ("DistilBertTokenizer", "DistilBertTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "dpr",
@@ -176,10 +186,12 @@ else:
                 ),
             ),
             ("electra", ("ElectraTokenizer", "ElectraTokenizerFast" if is_tokenizers_available() else None)),
+            ("emu3", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("ernie", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("ernie_m", ("ErnieMTokenizer" if is_sentencepiece_available() else None, None)),
             ("esm", ("EsmTokenizer", None)),
             ("falcon", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
+            ("falcon_mamba", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "fastspeech2_conformer",
                 ("FastSpeech2ConformerTokenizer" if is_g2p_en_available() else None, None),
@@ -203,6 +215,7 @@ else:
                 ),
             ),
             ("git", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
+            ("glm", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
             ("gpt-sw3", ("GPTSw3Tokenizer" if is_sentencepiece_available() else None, None)),
             ("gpt2", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("gpt_bigcode", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
@@ -213,11 +226,13 @@ else:
             ("gptsan-japanese", ("GPTSanJapaneseTokenizer", None)),
             ("grounding-dino", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("groupvit", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
+            ("helium", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
             ("herbert", ("HerbertTokenizer", "HerbertTokenizerFast" if is_tokenizers_available() else None)),
             ("hubert", ("Wav2Vec2CTCTokenizer", None)),
             ("ibert", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
             ("idefics", (None, "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("idefics2", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
+            ("idefics3", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("instructblip", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             ("instructblipvideo", ("GPT2Tokenizer", "GPT2TokenizerFast" if is_tokenizers_available() else None)),
             (
@@ -256,8 +271,9 @@ else:
                 ),
             ),
             ("llava", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
-            ("llava-next-video", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("llava_next", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
+            ("llava_next_video", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
+            ("llava_onevision", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("longformer", ("LongformerTokenizer", "LongformerTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "longt5",
@@ -270,6 +286,7 @@ else:
             ("lxmert", ("LxmertTokenizer", "LxmertTokenizerFast" if is_tokenizers_available() else None)),
             ("m2m_100", ("M2M100Tokenizer" if is_sentencepiece_available() else None, None)),
             ("mamba", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
+            ("mamba2", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
             ("marian", ("MarianTokenizer" if is_sentencepiece_available() else None, None)),
             (
                 "mbart",
@@ -302,8 +319,12 @@ else:
                     "LlamaTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            ("mllama", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("mluke", ("MLukeTokenizer" if is_sentencepiece_available() else None, None)),
             ("mobilebert", ("MobileBertTokenizer", "MobileBertTokenizerFast" if is_tokenizers_available() else None)),
+            ("modernbert", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
+            ("moonshine", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
+            ("moshi", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
             ("mpnet", ("MPNetTokenizer", "MPNetTokenizerFast" if is_tokenizers_available() else None)),
             ("mpt", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
             ("mra", ("RobertaTokenizer", "RobertaTokenizerFast" if is_tokenizers_available() else None)),
@@ -317,6 +338,7 @@ else:
             ("musicgen", ("T5Tokenizer", "T5TokenizerFast" if is_tokenizers_available() else None)),
             ("musicgen_melody", ("T5Tokenizer", "T5TokenizerFast" if is_tokenizers_available() else None)),
             ("mvp", ("MvpTokenizer", "MvpTokenizerFast" if is_tokenizers_available() else None)),
+            ("myt5", ("MyT5Tokenizer", None)),
             ("nezha", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "nllb",
@@ -340,6 +362,12 @@ else:
                 ),
             ),
             ("olmo", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
+            ("olmo2", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
+            ("olmoe", (None, "GPTNeoXTokenizerFast" if is_tokenizers_available() else None)),
+            (
+                "omdet-turbo",
+                ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None),
+            ),
             ("oneformer", ("CLIPTokenizer", "CLIPTokenizerFast" if is_tokenizers_available() else None)),
             (
                 "openai-gpt",
@@ -379,8 +407,10 @@ else:
             ),
             ("phi", ("CodeGenTokenizer", "CodeGenTokenizerFast" if is_tokenizers_available() else None)),
             ("phi3", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
+            ("phimoe", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("phobert", ("PhobertTokenizer", None)),
             ("pix2struct", ("T5Tokenizer", "T5TokenizerFast" if is_tokenizers_available() else None)),
+            ("pixtral", (None, "PreTrainedTokenizerFast" if is_tokenizers_available() else None)),
             ("plbart", ("PLBartTokenizer" if is_sentencepiece_available() else None, None)),
             ("prophetnet", ("ProphetNetTokenizer", None)),
             ("qdqbert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
@@ -391,6 +421,7 @@ else:
                     "Qwen2TokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            ("qwen2_audio", ("Qwen2Tokenizer", "Qwen2TokenizerFast" if is_tokenizers_available() else None)),
             (
                 "qwen2_moe",
                 (
@@ -398,6 +429,7 @@ else:
                     "Qwen2TokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            ("qwen2_vl", ("Qwen2Tokenizer", "Qwen2TokenizerFast" if is_tokenizers_available() else None)),
             ("rag", ("RagTokenizer", None)),
             ("realm", ("RealmTokenizer", "RealmTokenizerFast" if is_tokenizers_available() else None)),
             (
@@ -540,6 +572,13 @@ else:
                 (
                     "AlbertTokenizer" if is_sentencepiece_available() else None,
                     "AlbertTokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
+            (
+                "zamba",
+                (
+                    "LlamaTokenizer" if is_sentencepiece_available() else None,
+                    "LlamaTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
         ]

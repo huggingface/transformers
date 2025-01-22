@@ -295,18 +295,5 @@ class GPTSw3Tokenizer(PreTrainedTokenizer):
 
         return self.sp_model.decode(token_ids)
 
-    @property
-    def default_chat_template(self):
-        """
-        This chat template formats messages like an instant messenger chat log, with "User:" and "Bot:" strings
-        preceding messages. BOS tokens are added between all messages.
-        """
-        return (
-            "{{ eos_token }}{{ bos_token }}"
-            "{% for message in messages %}"
-            "{% if message['role'] == 'user' %}{{ 'User: ' + message['content']}}"
-            "{% else %}{{ 'Bot: ' + message['content']}}{% endif %}"
-            "{{ message['text'] }}{{ bos_token }}"
-            "{% endfor %}"
-            "Bot:"
-        )
+
+__all__ = ["GPTSw3Tokenizer"]

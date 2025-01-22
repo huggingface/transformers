@@ -1635,7 +1635,7 @@ class FlaxMBartForSequenceClassificationModule(nn.Module):
         eos_mask = jnp.where(input_ids == self.config.eos_token_id, 1, 0)
 
         # The first condition is necessary to overcome jax._src.errors.ConcretizationTypeError during JIT compilation
-        if type(eos_mask) != jax.interpreters.partial_eval.DynamicJaxprTracer:
+        if not isinstance(eos_mask, jax.interpreters.partial_eval.DynamicJaxprTracer):
             if len(jnp.unique(eos_mask.sum(1))) > 1:
                 raise ValueError("All examples must have the same number of <eos> tokens.")
 
@@ -1769,3 +1769,12 @@ append_call_sample_docstring(
     FlaxSeq2SeqQuestionAnsweringModelOutput,
     _CONFIG_FOR_DOC,
 )
+
+
+__all__ = [
+    "FlaxMBartForConditionalGeneration",
+    "FlaxMBartForQuestionAnswering",
+    "FlaxMBartForSequenceClassification",
+    "FlaxMBartModel",
+    "FlaxMBartPreTrainedModel",
+]

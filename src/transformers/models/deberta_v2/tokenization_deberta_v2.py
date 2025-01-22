@@ -518,4 +518,7 @@ def convert_to_unicode(text):
     elif isinstance(text, bytes):
         return text.decode("utf-8", "ignore")
     else:
-        raise ValueError(f"Unsupported string type: {type(text)}")
+        raise TypeError(f"Unsupported string type: {type(text)}")
+
+
+__all__ = ["DebertaV2Tokenizer"]

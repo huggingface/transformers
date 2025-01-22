@@ -423,7 +423,6 @@ class Wav2Vec2BertModelTester:
 
 
 @require_torch
-# Copied from tests.models.wav2vec2_conformer.test_modeling_wav2vec2_conformer.Wav2Vec2ConformerModelTest with Conformer->Bert, input_values->input_features
 class Wav2Vec2BertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     # Ignore copy
     all_model_classes = (
@@ -855,9 +854,7 @@ class Wav2Vec2BertUtilsTest(unittest.TestCase):
 @slow
 class Wav2Vec2BertModelIntegrationTest(unittest.TestCase):
     def _load_datasamples(self, num_samples):
-        ds = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-        )
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").filter(lambda x: x["id"] in [f"1272-141231-000{i}" for i in range(num_samples)])
         speech_samples = speech_samples[:num_samples]["audio"]

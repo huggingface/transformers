@@ -87,8 +87,12 @@ class UnivNetKernelPredictorResidualBlock(nn.Module):
         return hidden_states + residual
 
     def apply_weight_norm(self):
-        nn.utils.weight_norm(self.conv1)
-        nn.utils.weight_norm(self.conv2)
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
+        weight_norm(self.conv1)
+        weight_norm(self.conv2)
 
     def remove_weight_norm(self):
         nn.utils.remove_weight_norm(self.conv1)
@@ -197,11 +201,15 @@ class UnivNetKernelPredictor(nn.Module):
         return kernels, biases
 
     def apply_weight_norm(self):
-        nn.utils.weight_norm(self.input_conv)
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
+        weight_norm(self.input_conv)
         for layer in self.resblocks:
             layer.apply_weight_norm()
-        nn.utils.weight_norm(self.kernel_conv)
-        nn.utils.weight_norm(self.bias_conv)
+        weight_norm(self.kernel_conv)
+        weight_norm(self.bias_conv)
 
     def remove_weight_norm(self):
         nn.utils.remove_weight_norm(self.input_conv)
@@ -328,7 +336,11 @@ class UnivNetLvcResidualBlock(nn.Module):
         return output_hidden_states
 
     def apply_weight_norm(self):
-        nn.utils.weight_norm(self.conv)
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
+        weight_norm(self.conv)
 
     def remove_weight_norm(self):
         nn.utils.remove_weight_norm(self.conv)
@@ -398,7 +410,11 @@ class UnivNetLvcBlock(nn.Module):
         return hidden_states
 
     def apply_weight_norm(self):
-        nn.utils.weight_norm(self.convt_pre)
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
+        weight_norm(self.convt_pre)
         self.kernel_predictor.apply_weight_norm()
         for layer in self.resblocks:
             layer.apply_weight_norm()
@@ -525,7 +541,7 @@ class UnivNetModel(PreTrainedModel):
          >>> model = UnivNetModel.from_pretrained("dg845/univnet-dev")
          >>> feature_extractor = UnivNetFeatureExtractor.from_pretrained("dg845/univnet-dev")
 
-         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
+         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
          >>> # Resample the audio to the feature extractor's sampling rate.
          >>> ds = ds.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
          >>> inputs = feature_extractor(
@@ -619,13 +635,20 @@ class UnivNetModel(PreTrainedModel):
                 module.bias.data.zero_()
 
     def apply_weight_norm(self):
-        nn.utils.weight_norm(self.conv_pre)
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
+        weight_norm(self.conv_pre)
         for layer in self.resblocks:
             layer.apply_weight_norm()
-        nn.utils.weight_norm(self.conv_post)
+        weight_norm(self.conv_post)
 
     def remove_weight_norm(self):
         nn.utils.remove_weight_norm(self.conv_pre)
         for layer in self.resblocks:
             layer.remove_weight_norm()
         nn.utils.remove_weight_norm(self.conv_post)
+
+
+__all__ = ["UnivNetModel"]

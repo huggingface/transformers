@@ -84,13 +84,6 @@ class WhisperProcessor(ProcessorMixin):
         This method forwards all its arguments to WhisperTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
         refer to the docstring of this method for more information.
         """
-
-        # If segments are present in args, we are performing long-form generation and need to return long form timestamps.
-        # The long-form timestamps are already present in segments and should be passed as kwargs to batch_decode.
-        if isinstance(args[0], dict) and "segments" in args[0]:
-            kwargs["longform_timestamps"] = args[0].pop("segments")
-            args = tuple(args[0]["sequences"].unsqueeze(0))
-
         return self.tokenizer.batch_decode(*args, **kwargs)
 
     def decode(self, *args, **kwargs):
@@ -102,3 +95,6 @@ class WhisperProcessor(ProcessorMixin):
 
     def get_prompt_ids(self, text: str, return_tensors="np"):
         return self.tokenizer.get_prompt_ids(text, return_tensors=return_tensors)
+
+
+__all__ = ["WhisperProcessor"]

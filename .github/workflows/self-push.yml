@@ -32,31 +32,33 @@ jobs:
     name: Setup
     strategy:
       matrix:
-        machine_type: [single-gpu, multi-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, push-ci]
+        machine_type: [aws-g4dn-2xlarge-cache, aws-g4dn-12xlarge-cache]
+    runs-on:
+      group: '${{ matrix.machine_type }}'
     container:
       image: huggingface/transformers-all-latest-gpu-push-ci
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
       test_map: ${{ steps.set-matrix.outputs.test_map }}
+    env:
+      # `CI_BRANCH_PUSH`: The branch name from the push event
+      # `CI_BRANCH_WORKFLOW_RUN`: The name of the branch on which this workflow is triggered by `workflow_run` event
+      # `CI_SHA_PUSH`: The commit SHA from the push event
+      # `CI_SHA_WORKFLOW_RUN`: The commit SHA that triggers this workflow by `workflow_run` event
+      CI_BRANCH_PUSH: ${{ github.event.ref }}
+      CI_BRANCH_WORKFLOW_RUN: ${{ github.event.workflow_run.head_branch }}
+      CI_SHA_PUSH: ${{ github.event.head_commit.id }}
+      CI_SHA_WORKFLOW_RUN: ${{ github.event.workflow_run.head_sha }}
     steps:
       # Necessary to get the correct branch name and commit SHA for `workflow_run` event
       # We also take into account the `push` event (we might want to test some changes in a branch)
       - name: Prepare custom environment variables
         shell: bash
-        # `CI_BRANCH_PUSH`: The branch name from the push event
-        # `CI_BRANCH_WORKFLOW_RUN`: The name of the branch on which this workflow is triggered by `workflow_run` event
         # `CI_BRANCH`: The non-empty branch name from the above two (one and only one of them is empty)
-        # `CI_SHA_PUSH`: The commit SHA from the push event
-        # `CI_SHA_WORKFLOW_RUN`: The commit SHA that triggers this workflow by `workflow_run` event
         # `CI_SHA`: The non-empty commit SHA from the above two (one and only one of them is empty)
         run: |
-          CI_BRANCH_PUSH=${{ github.event.ref }}
           CI_BRANCH_PUSH=${CI_BRANCH_PUSH/'refs/heads/'/''}
-          CI_BRANCH_WORKFLOW_RUN=${{ github.event.workflow_run.head_branch }}
-          CI_SHA_PUSH=${{ github.event.head_commit.id }}
-          CI_SHA_WORKFLOW_RUN=${{ github.event.workflow_run.head_sha }}
           echo $CI_BRANCH_PUSH
           echo $CI_BRANCH_WORKFLOW_RUN
           echo $CI_SHA_PUSH
@@ -130,11 +132,18 @@ jobs:
       fail-fast: false
       matrix:
         folders: ${{ fromJson(needs.setup.outputs.matrix) }}
-        machine_type: [single-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, push-ci]
+        machine_type: [aws-g4dn-2xlarge-cache]
+    runs-on:
+      group: '${{ matrix.machine_type }}'
     container:
       image: huggingface/transformers-all-latest-gpu-push-ci
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    env:
+      # For the meaning of these environment variables, see the job `Setup`
+      CI_BRANCH_PUSH: ${{ github.event.ref }}
+      CI_BRANCH_WORKFLOW_RUN: ${{ github.event.workflow_run.head_branch }}
+      CI_SHA_PUSH: ${{ github.event.head_commit.id }}
+      CI_SHA_WORKFLOW_RUN: ${{ github.event.workflow_run.head_sha }}
     steps:
       # Necessary to get the correct branch name and commit SHA for `workflow_run` event
       # We also take into account the `push` event (we might want to test some changes in a branch)
@@ -142,11 +151,7 @@ jobs:
         shell: bash
         # For the meaning of these environment variables, see the job `Setup`
         run: |
-          CI_BRANCH_PUSH=${{ github.event.ref }}
           CI_BRANCH_PUSH=${CI_BRANCH_PUSH/'refs/heads/'/''}
-          CI_BRANCH_WORKFLOW_RUN=${{ github.event.workflow_run.head_branch }}
-          CI_SHA_PUSH=${{ github.event.head_commit.id }}
-          CI_SHA_WORKFLOW_RUN=${{ github.event.workflow_run.head_sha }}
           echo $CI_BRANCH_PUSH
           echo $CI_BRANCH_WORKFLOW_RUN
           echo $CI_SHA_PUSH
@@ -158,6 +163,23 @@ jobs:
         run: |
           echo "env.CI_BRANCH = ${{ env.CI_BRANCH }}"
           echo "env.CI_SHA = ${{ env.CI_SHA }}"
+
+      - name: Set `machine_type` for report and artifact names
+        working-directory: /transformers
+        shell: bash
+        run: |
+          echo "${{ matrix.machine_type }}"
+
+          if [ "${{ matrix.machine_type }}" = "aws-g4dn-2xlarge-cache" ]; then
+            machine_type=single-gpu
+          elif [ "${{ matrix.machine_type }}" = "aws-g4dn-12xlarge-cache" ]; then
+            machine_type=multi-gpu
+          else
+            machine_type=${{ matrix.machine_type }}
+          fi
+
+          echo "$machine_type"
+          echo "machine_type=$machine_type" >> $GITHUB_ENV
 
       - name: Update clone using environment variables
         working-directory: /transformers
@@ -200,19 +222,19 @@ jobs:
       - name: Run all non-slow selected tests on GPU
         working-directory: /transformers
         run: |
-          python3 -m pytest -n 2 --dist=loadfile -v --make-reports=${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }} ${{ fromJson(needs.setup.outputs.test_map)[matrix.folders] }}
+          python3 -m pytest -n 2 --dist=loadfile -v --make-reports=${{ env.machine_type }}_tests_gpu_${{ matrix.folders }} ${{ fromJson(needs.setup.outputs.test_map)[matrix.folders] }}
 
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
-        run: cat /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}/failures_short.txt
+        run: cat /transformers/reports/${{ env.machine_type }}_tests_gpu_${{ matrix.folders }}/failures_short.txt
 
-      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports"
+      - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports"
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports
-          path: /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}
+          name: ${{ env.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports
+          path: /transformers/reports/${{ env.machine_type }}_tests_gpu_${{ matrix.folders }}
 
   run_tests_multi_gpu:
     name: Model tests
@@ -223,11 +245,18 @@ jobs:
       fail-fast: false
       matrix:
         folders: ${{ fromJson(needs.setup.outputs.matrix) }}
-        machine_type: [multi-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, push-ci]
+        machine_type: [aws-g4dn-12xlarge-cache]
+    runs-on:
+      group: '${{ matrix.machine_type }}'
     container:
       image: huggingface/transformers-all-latest-gpu-push-ci
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    env:
+      # For the meaning of these environment variables, see the job `Setup`
+      CI_BRANCH_PUSH: ${{ github.event.ref }}
+      CI_BRANCH_WORKFLOW_RUN: ${{ github.event.workflow_run.head_branch }}
+      CI_SHA_PUSH: ${{ github.event.head_commit.id }}
+      CI_SHA_WORKFLOW_RUN: ${{ github.event.workflow_run.head_sha }}
     steps:
       # Necessary to get the correct branch name and commit SHA for `workflow_run` event
       # We also take into account the `push` event (we might want to test some changes in a branch)
@@ -235,11 +264,7 @@ jobs:
         shell: bash
         # For the meaning of these environment variables, see the job `Setup`
         run: |
-          CI_BRANCH_PUSH=${{ github.event.ref }}
           CI_BRANCH_PUSH=${CI_BRANCH_PUSH/'refs/heads/'/''}
-          CI_BRANCH_WORKFLOW_RUN=${{ github.event.workflow_run.head_branch }}
-          CI_SHA_PUSH=${{ github.event.head_commit.id }}
-          CI_SHA_WORKFLOW_RUN=${{ github.event.workflow_run.head_sha }}
           echo $CI_BRANCH_PUSH
           echo $CI_BRANCH_WORKFLOW_RUN
           echo $CI_SHA_PUSH
@@ -252,6 +277,23 @@ jobs:
           echo "env.CI_BRANCH = ${{ env.CI_BRANCH }}"
           echo "env.CI_SHA = ${{ env.CI_SHA }}"
 
+      - name: Set `machine_type` for report and artifact names
+        working-directory: /transformers
+        shell: bash
+        run: |
+          echo "${{ matrix.machine_type }}"
+
+          if [ "${{ matrix.machine_type }}" = "aws-g4dn-2xlarge-cache" ]; then
+            machine_type=single-gpu
+          elif [ "${{ matrix.machine_type }}" = "aws-g4dn-12xlarge-cache" ]; then
+            machine_type=multi-gpu
+          else
+            machine_type=${{ matrix.machine_type }}
+          fi
+
+          echo "$machine_type"
+          echo "machine_type=$machine_type" >> $GITHUB_ENV
+          
       - name: Update clone using environment variables
         working-directory: /transformers
         run: |
@@ -295,19 +337,19 @@ jobs:
           MKL_SERVICE_FORCE_INTEL: 1
         working-directory: /transformers
         run: |
-          python3 -m pytest -n 2 --dist=loadfile -v --make-reports=${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }} ${{ fromJson(needs.setup.outputs.test_map)[matrix.folders] }}
+          python3 -m pytest -n 2 --dist=loadfile -v --make-reports=${{ env.machine_type }}_tests_gpu_${{ matrix.folders }} ${{ fromJson(needs.setup.outputs.test_map)[matrix.folders] }}
 
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
-        run: cat /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}/failures_short.txt
+        run: cat /transformers/reports/${{ env.machine_type }}_tests_gpu_${{ matrix.folders }}/failures_short.txt
 
-      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports"
+      - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports"
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports
-          path: /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}
+          name: ${{ env.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports
+          path: /transformers/reports/${{ env.machine_type }}_tests_gpu_${{ matrix.folders }}
 
   run_tests_torch_cuda_extensions_single_gpu:
     name: Torch CUDA extension tests
@@ -316,11 +358,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [single-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, push-ci]
+        machine_type: [aws-g4dn-2xlarge-cache]
+    runs-on:
+      group: '${{ matrix.machine_type }}'
     container:
       image: huggingface/transformers-pytorch-deepspeed-latest-gpu-push-ci
       options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    env:
+      # For the meaning of these environment variables, see the job `Setup`
+      CI_BRANCH_PUSH: ${{ github.event.ref }}
+      CI_BRANCH_WORKFLOW_RUN: ${{ github.event.workflow_run.head_branch }}
+      CI_SHA_PUSH: ${{ github.event.head_commit.id }}
+      CI_SHA_WORKFLOW_RUN: ${{ github.event.workflow_run.head_sha }}
     steps:
       # Necessary to get the correct branch name and commit SHA for `workflow_run` event
       # We also take into account the `push` event (we might want to test some changes in a branch)
@@ -328,11 +377,7 @@ jobs:
         shell: bash
         # For the meaning of these environment variables, see the job `Setup`
         run: |
-          CI_BRANCH_PUSH=${{ github.event.ref }}
           CI_BRANCH_PUSH=${CI_BRANCH_PUSH/'refs/heads/'/''}
-          CI_BRANCH_WORKFLOW_RUN=${{ github.event.workflow_run.head_branch }}
-          CI_SHA_PUSH=${{ github.event.head_commit.id }}
-          CI_SHA_WORKFLOW_RUN=${{ github.event.workflow_run.head_sha }}
           echo $CI_BRANCH_PUSH
           echo $CI_BRANCH_WORKFLOW_RUN
           echo $CI_SHA_PUSH
@@ -345,6 +390,23 @@ jobs:
           echo "env.CI_BRANCH = ${{ env.CI_BRANCH }}"
           echo "env.CI_SHA = ${{ env.CI_SHA }}"
 
+      - name: Set `machine_type` for report and artifact names
+        working-directory: /workspace/transformers
+        shell: bash
+        run: |
+          echo "${{ matrix.machine_type }}"
+
+          if [ "${{ matrix.machine_type }}" = "aws-g4dn-2xlarge-cache" ]; then
+            machine_type=single-gpu
+          elif [ "${{ matrix.machine_type }}" = "aws-g4dn-12xlarge-cache" ]; then
+            machine_type=multi-gpu
+          else
+            machine_type=${{ matrix.machine_type }}
+          fi
+
+          echo "$machine_type"
+          echo "machine_type=$machine_type" >> $GITHUB_ENV
+          
       - name: Update clone using environment variables
         working-directory: /workspace/transformers
         run: |
@@ -385,19 +447,19 @@ jobs:
         working-directory: /workspace/transformers
         # TODO: Here we pass all tests in the 2 folders for simplicity. It's better to pass only the identified tests.
         run: |
-          python -m pytest -n 1 --dist=loadfile -v --make-reports=${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports tests/deepspeed tests/extended
+          python -m pytest -n 1 --dist=loadfile -v --make-reports=${{ env.machine_type }}_run_torch_cuda_extensions_gpu_test_reports tests/deepspeed tests/extended
 
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
-        run: cat /workspace/transformers/reports/${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports/failures_short.txt
+        run: cat /workspace/transformers/reports/${{ env.machine_type }}_run_torch_cuda_extensions_gpu_test_reports/failures_short.txt
 
-      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports"
+      - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_torch_cuda_extensions_gpu_test_reports"
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports
-          path: /workspace/transformers/reports/${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports
+          name: ${{ env.machine_type }}_run_torch_cuda_extensions_gpu_test_reports
+          path: /workspace/transformers/reports/${{ env.machine_type }}_run_torch_cuda_extensions_gpu_test_reports
 
   run_tests_torch_cuda_extensions_multi_gpu:
     name: Torch CUDA extension tests
@@ -406,11 +468,18 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        machine_type: [multi-gpu]
-    runs-on: ['${{ matrix.machine_type }}', nvidia-gpu, t4, push-ci]
+        machine_type: [aws-g4dn-12xlarge-cache]
+    runs-on:
+      group: '${{ matrix.machine_type }}'
     container:
       image: huggingface/transformers-pytorch-deepspeed-latest-gpu-push-ci
       options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
+    env:
+      # For the meaning of these environment variables, see the job `Setup`
+      CI_BRANCH_PUSH: ${{ github.event.ref }}
+      CI_BRANCH_WORKFLOW_RUN: ${{ github.event.workflow_run.head_branch }}
+      CI_SHA_PUSH: ${{ github.event.head_commit.id }}
+      CI_SHA_WORKFLOW_RUN: ${{ github.event.workflow_run.head_sha }}
     steps:
       # Necessary to get the correct branch name and commit SHA for `workflow_run` event
       # We also take into account the `push` event (we might want to test some changes in a branch)
@@ -418,11 +487,7 @@ jobs:
         shell: bash
         # For the meaning of these environment variables, see the job `Setup`
         run: |
-          CI_BRANCH_PUSH=${{ github.event.ref }}
           CI_BRANCH_PUSH=${CI_BRANCH_PUSH/'refs/heads/'/''}
-          CI_BRANCH_WORKFLOW_RUN=${{ github.event.workflow_run.head_branch }}
-          CI_SHA_PUSH=${{ github.event.head_commit.id }}
-          CI_SHA_WORKFLOW_RUN=${{ github.event.workflow_run.head_sha }}
           echo $CI_BRANCH_PUSH
           echo $CI_BRANCH_WORKFLOW_RUN
           echo $CI_SHA_PUSH
@@ -435,6 +500,23 @@ jobs:
           echo "env.CI_BRANCH = ${{ env.CI_BRANCH }}"
           echo "env.CI_SHA = ${{ env.CI_SHA }}"
 
+      - name: Set `machine_type` for report and artifact names
+        working-directory: /workspace/transformers
+        shell: bash
+        run: |
+          echo "${{ matrix.machine_type }}"
+
+          if [ "${{ matrix.machine_type }}" = "aws-g4dn-2xlarge-cache" ]; then
+            machine_type=single-gpu
+          elif [ "${{ matrix.machine_type }}" = "aws-g4dn-12xlarge-cache" ]; then
+            machine_type=multi-gpu
+          else
+            machine_type=${{ matrix.machine_type }}
+          fi
+
+          echo "$machine_type"
+          echo "machine_type=$machine_type" >> $GITHUB_ENV
+          
       - name: Update clone using environment variables
         working-directory: /workspace/transformers
         run: |
@@ -475,19 +557,19 @@ jobs:
         working-directory: /workspace/transformers
         # TODO: Here we pass all tests in the 2 folders for simplicity. It's better to pass only the identified tests.
         run: |
-          python -m pytest -n 1 --dist=loadfile -v --make-reports=${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports tests/deepspeed tests/extended
+          python -m pytest -n 1 --dist=loadfile -v --make-reports=${{ env.machine_type }}_run_torch_cuda_extensions_gpu_test_reports tests/deepspeed tests/extended
 
       - name: Failure short reports
         if: ${{ failure() }}
         continue-on-error: true
-        run: cat /workspace/transformers/reports/${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports/failures_short.txt
+        run: cat /workspace/transformers/reports/${{ env.machine_type }}_run_torch_cuda_extensions_gpu_test_reports/failures_short.txt
 
-      - name: "Test suite reports artifacts: ${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports"
+      - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_torch_cuda_extensions_gpu_test_reports"
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports
-          path: /workspace/transformers/reports/${{ matrix.machine_type }}_run_torch_cuda_extensions_gpu_test_reports
+          name: ${{ env.machine_type }}_run_torch_cuda_extensions_gpu_test_reports
+          path: /workspace/transformers/reports/${{ env.machine_type }}_run_torch_cuda_extensions_gpu_test_reports
 
   send_results:
     name: Send results to webhook
@@ -500,6 +582,12 @@ jobs:
         run_tests_torch_cuda_extensions_single_gpu,
         run_tests_torch_cuda_extensions_multi_gpu
     ]
+    env:
+      # For the meaning of these environment variables, see the job `Setup`
+      CI_BRANCH_PUSH: ${{ github.event.ref }}
+      CI_BRANCH_WORKFLOW_RUN: ${{ github.event.workflow_run.head_branch }}
+      CI_SHA_PUSH: ${{ github.event.head_commit.id }}
+      CI_SHA_WORKFLOW_RUN: ${{ github.event.workflow_run.head_sha }}
     steps:
       - name: Preliminary job status
         shell: bash
@@ -513,11 +601,7 @@ jobs:
         shell: bash
         # For the meaning of these environment variables, see the job `Setup`
         run: |
-          CI_BRANCH_PUSH=${{ github.event.ref }}
           CI_BRANCH_PUSH=${CI_BRANCH_PUSH/'refs/heads/'/''}
-          CI_BRANCH_WORKFLOW_RUN=${{ github.event.workflow_run.head_branch }}
-          CI_SHA_PUSH=${{ github.event.head_commit.id }}
-          CI_SHA_WORKFLOW_RUN=${{ github.event.workflow_run.head_sha }}
           echo $CI_BRANCH_PUSH
           echo $CI_BRANCH_WORKFLOW_RUN
           echo $CI_SHA_PUSH
@@ -563,6 +647,7 @@ jobs:
         # We pass `needs.setup.outputs.matrix` as the argument. A processing in `notification_service.py` to change
         # `models/bert` to `models_bert` is required, as the artifact names use `_` instead of `/`.
         run: |
-          pip install slack_sdk
+          pip install huggingface_hub
+          pip install slack_sdk 
           pip show slack_sdk
           python utils/notification_service.py "${{ needs.setup.outputs.matrix }}"

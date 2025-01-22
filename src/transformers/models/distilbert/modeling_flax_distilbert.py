@@ -304,7 +304,7 @@ class FlaxTransformerBlock(nn.Module):
         if output_attentions:
             sa_output, sa_weights = sa_output
         else:
-            assert type(sa_output) == tuple
+            assert type(sa_output) is tuple
             sa_output = sa_output[0]
         sa_output = self.sa_layer_norm(sa_output + hidden_states)
 
@@ -893,3 +893,14 @@ append_call_sample_docstring(
     FlaxQuestionAnsweringModelOutput,
     _CONFIG_FOR_DOC,
 )
+
+
+__all__ = [
+    "FlaxDistilBertForMaskedLM",
+    "FlaxDistilBertForMultipleChoice",
+    "FlaxDistilBertForQuestionAnswering",
+    "FlaxDistilBertForSequenceClassification",
+    "FlaxDistilBertForTokenClassification",
+    "FlaxDistilBertModel",
+    "FlaxDistilBertPreTrainedModel",
+]

@@ -166,7 +166,7 @@ This model was contributed by [thomwolf](https://huggingface.co/thomwolf). The o
 [[autodoc]] TFXLNetForSequenceClassification
     - call
 
-## TFLNetForMultipleChoice
+## TFXLNetForMultipleChoice
 
 [[autodoc]] TFXLNetForMultipleChoice
     - call

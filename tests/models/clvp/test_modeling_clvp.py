@@ -14,7 +14,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch Clvp model."""
 
-import gc
 import tempfile
 import unittest
 
@@ -23,6 +22,7 @@ import numpy as np
 
 from transformers import ClvpConfig, ClvpDecoderConfig, ClvpEncoderConfig
 from transformers.testing_utils import (
+    cleanup,
     require_torch,
     slow,
     torch_device,
@@ -174,8 +174,7 @@ class ClvpEncoderTest(ModelTesterMixin, unittest.TestCase):
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device)
 
     def test_config(self):
         self.encoder_config_tester.run_common_tests()
@@ -294,8 +293,7 @@ class ClvpDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -371,9 +369,7 @@ class ClvpModelForConditionalGenerationTester:
     def prepare_config_and_inputs(self):
         _, input_ids, attention_mask = self.clvp_encoder_tester.prepare_config_and_inputs()
 
-        ds = datasets.load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-        )
+        ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=22050))
         _, audio, sr = ds.sort("id").select(range(1))[:1]["audio"][0].values()
 
@@ -418,13 +414,18 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
 
     def setUp(self):
         self.model_tester = ClvpModelForConditionalGenerationTester(self)
-        self.clvp_config_tester = ConfigTester(self, config_class=ClvpConfig, hidden_size=32)
+        common_properties = ["projection_dim", "logit_scale_init_value"]
+        self.clvp_config_tester = ConfigTester(
+            self, config_class=ClvpConfig, has_text_modality=False, common_properties=common_properties, hidden_size=32
+        )
+
+    def test_config(self):
+        self.clvp_config_tester.run_common_tests()
 
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device)
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -555,9 +556,7 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
 class ClvpIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.text = "This is an example text."
-        ds = datasets.load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-        )
+        ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=22050))
         _, self.speech_samples, self.sr = ds.sort("id").select(range(1))[:1]["audio"][0].values()
 
@@ -575,8 +574,7 @@ class ClvpIntegrationTest(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     def test_conditional_encoder(self):
         with torch.no_grad():

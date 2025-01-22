@@ -1072,6 +1072,22 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
             }
         self.visual_losses = visual_losses
 
+    def resize_token_embeddings(self, new_num_tokens: int, pad_to_multiple_of: Optional[int] = None) -> nn.Embedding:
+        # Adding the following steps to resize bias to match the shape of resized embeddings
+        new_embeddings = super().resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
+        self.cls.predictions.bias = self._resize_bias(self.cls.predictions.bias, new_num_tokens)
+        return new_embeddings
+
+    def _resize_bias(self, bias, new_num_tokens: int):
+        old_num_tokens = bias.shape[0]
+        if new_num_tokens <= old_num_tokens:
+            new_bias = bias[:new_num_tokens]
+        else:
+            extra_bias = torch.zeros(new_num_tokens - old_num_tokens, device=bias.device)
+            new_bias = torch.cat([bias, extra_bias])
+        new_bias = nn.Parameter(new_bias)
+        return new_bias
+
     def resize_num_qa_labels(self, num_labels):
         """
         Build a resized question answering linear layer Module from a provided new linear layer. Increasing the size
@@ -1432,3 +1448,14 @@ class LxmertForQuestionAnswering(LxmertPreTrainedModel):
             vision_attentions=lxmert_output.vision_attentions,
             cross_encoder_attentions=lxmert_output.cross_encoder_attentions,
         )
+
+
+__all__ = [
+    "LxmertEncoder",
+    "LxmertForPreTraining",
+    "LxmertForQuestionAnswering",
+    "LxmertModel",
+    "LxmertPreTrainedModel",
+    "LxmertVisualFeatureEncoder",
+    "LxmertXLayer",
+]

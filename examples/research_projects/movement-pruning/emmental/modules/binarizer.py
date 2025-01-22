@@ -108,7 +108,7 @@ class TopKBinarizer(autograd.Function):
         return gradOutput, None
 
 
-class MagnitudeBinarizer(object):
+class MagnitudeBinarizer:
     """
     Magnitude Binarizer.
     Computes a binary mask M from a real value matrix S such that `M_{i,j} = 1` if and only if `S_{i,j}`

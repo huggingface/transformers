@@ -409,31 +409,26 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         """
         images = make_list_of_images(images)
 
-        if do_resize:
-            images = [
-                self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
-                for image in images
-            ]
+        all_images = []
+        for image in images:
+            if do_resize:
+                image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
 
-        if do_center_crop:
-            images = [
-                self.center_crop(image=image, size=crop_size, input_data_format=input_data_format) for image in images
-            ]
+            if do_center_crop:
+                image = self.center_crop(image=image, size=crop_size, input_data_format=input_data_format)
 
-        if do_rescale:
-            images = [
-                self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
-                for image in images
-            ]
+            if do_rescale:
+                image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
 
-        if do_normalize:
-            images = [
-                self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
-                for image in images
-            ]
+            if do_normalize:
+                image = self.normalize(
+                    image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
+                )
 
+            all_images.append(image)
         images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
+            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+            for image in all_images
         ]
 
         return images
@@ -513,7 +508,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
             List[np.array]: A list of NumPy arrays containing the processed image patches.
         """
         if not isinstance(grid_pinpoints, list):
-            raise ValueError("grid_pinpoints must be a list of possible resolutions.")
+            raise TypeError("grid_pinpoints must be a list of possible resolutions.")
 
         possible_resolutions = grid_pinpoints
 
@@ -702,7 +697,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
-        if is_scaled_image(images[0]) and do_rescale:
+        if do_rescale and is_scaled_image(images[0]):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -720,7 +715,9 @@ class LlavaNextImageProcessor(BaseImageProcessor):
             image_patches = self.get_image_patches(
                 image,
                 image_grid_pinpoints,
-                size=(size["shortest_edge"], size["shortest_edge"]),
+                size=(size["shortest_edge"], size["shortest_edge"])
+                if "shortest_edge" in size
+                else (min(size["height"], size["width"]), min(size["height"], size["width"])),
                 patch_size=crop_size["height"],
                 resample=resample,
                 data_format=input_data_format,
@@ -752,3 +749,6 @@ class LlavaNextImageProcessor(BaseImageProcessor):
         return BatchFeature(
             data={"pixel_values": processed_images, "image_sizes": image_sizes}, tensor_type=return_tensors
         )
+
+
+__all__ = ["LlavaNextImageProcessor"]

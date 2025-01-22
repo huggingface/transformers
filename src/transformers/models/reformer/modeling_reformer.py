@@ -29,6 +29,7 @@ from torch.autograd.function import Function
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...modeling_outputs import CausalLMOutput, MaskedLMOutput, QuestionAnsweringModelOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward
@@ -2183,7 +2184,7 @@ class ReformerModel(ReformerPreTrainedModel):
 
 
 @add_start_docstrings("""Reformer Model with a `language modeling` head on top.""", REFORMER_START_DOCSTRING)
-class ReformerModelWithLMHead(ReformerPreTrainedModel):
+class ReformerModelWithLMHead(ReformerPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.decoder.weight", "lm_head.decoder.bias"]
 
     def __init__(self, config):
@@ -2281,6 +2282,8 @@ class ReformerModelWithLMHead(ReformerPreTrainedModel):
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, use_cache=None, num_hashes=None, **kwargs
     ):
+        # Overitten -- different expected inputs/outputs
+
         # only last token for inputs_ids if past is defined in kwargs
         if past_key_values is not None:
             input_ids = input_ids[:, -1:]
@@ -2680,3 +2683,15 @@ class ReformerForQuestionAnswering(ReformerPreTrainedModel):
             hidden_states=reformer_outputs.hidden_states,
             attentions=reformer_outputs.attentions,
         )
+
+
+__all__ = [
+    "ReformerAttention",
+    "ReformerForMaskedLM",
+    "ReformerForQuestionAnswering",
+    "ReformerForSequenceClassification",
+    "ReformerLayer",
+    "ReformerModel",
+    "ReformerModelWithLMHead",
+    "ReformerPreTrainedModel",
+]

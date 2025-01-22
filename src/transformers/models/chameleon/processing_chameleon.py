@@ -20,9 +20,25 @@ from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ProcessorMixin
-from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from ...utils import TensorType
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack, _validate_images_text_input_order
+from ...tokenization_utils_base import PreTokenizedInput, TextInput
+
+
+class ChameleonTextKwargs(TextKwargs, total=False):
+    return_for_text_completion: bool
+
+
+class ChameleonProcessorKwargs(ProcessingKwargs, total=False):
+    text_kwargs: ChameleonTextKwargs
+    _defaults = {
+        "text_kwargs": {
+            "padding": False,
+            "return_for_text_completion": False,
+        },
+        "common_kwargs": {
+            "return_tensors": "pt",
+        },
+    }
 
 
 class ChameleonProcessor(ProcessorMixin):
@@ -46,24 +62,26 @@ class ChameleonProcessor(ProcessorMixin):
 
     attributes = ["image_processor", "tokenizer"]
     tokenizer_class = ("LlamaTokenizer", "LlamaTokenizerFast")
+    valid_kwargs = ["image_seq_length", "image_token"]
     image_processor_class = "ChameleonImageProcessor"
 
     def __init__(self, image_processor, tokenizer, image_seq_length: int = 1024, image_token: str = "<image>"):
         self.image_seq_length = image_seq_length
-        self.image_token = image_token
-        self.image_start_token = "<racm3:break>"  # fixed tokens for start and end, so can hardcode
-        self.image_end_token = "<eoss>"
+        self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
+        self.image_start_token = (
+            tokenizer.boi_token if hasattr(tokenizer, "boi_token") else "<racm3:break>"
+        )  # fixed tokens for start and end, so can hardcode
+        self.image_end_token = tokenizer.eoi_token if hasattr(tokenizer, "eoi_token") else "<eoss>"
+
         super().__init__(image_processor, tokenizer)
 
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]] = None,
-        images: ImageInput = None,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: int = None,
-        return_tensors: Optional[Union[str, TensorType]] = TensorType.PYTORCH,
-        return_for_text_completion: bool = False,
+        images: Optional[ImageInput] = None,
+        text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
+        audio=None,
+        videos=None,
+        **kwargs: Unpack[ChameleonProcessorKwargs],
     ) -> BatchFeature:
         """
         Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
@@ -73,26 +91,13 @@ class ChameleonProcessor(ProcessorMixin):
         of the above two methods for more information.
 
         Args:
+            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
+                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+                tensor. Both channels-first and channels-last formats are supported.
             text (`str`, `List[str]`, `List[List[str]]`):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
-                Select a strategy to pad the returned sequences (according to the model's padding side and padding
-                index) among:
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
-                  sequence if provided).
-                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
-                  acceptable input length for the model if that argument is not provided.
-                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
-                  lengths).
-            max_length (`int`, *optional*):
-                Maximum length of the returned list and optionally padding length (see above).
-            truncation (`bool`, *optional*):
-                Activates truncation to cut input sequences longer than `max_length` to `max_length`.
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors of a particular framework. Acceptable values are:
 
@@ -110,10 +115,21 @@ class ChameleonProcessor(ProcessorMixin):
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
+        # check if images and text inputs are reversed for BC
+        images, text = _validate_images_text_input_order(images, text)
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
-            raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+            raise TypeError("Invalid input text. Please provide a string, or a list of strings")
+        if text is None and images is None:
+            raise ValueError("You must provide either text or images")
+
+        output_kwargs = self._merge_kwargs(
+            ChameleonProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+        return_for_text_completion = output_kwargs["text_kwargs"].pop("return_for_text_completion", False)
 
         # Replace the image token with the expanded image token sequence
         prompt_strings = []
@@ -124,19 +140,12 @@ class ChameleonProcessor(ProcessorMixin):
                 sample += self.tokenizer.sep_token  # special Chameleon treatment to add sep for chat mode
             prompt_strings.append(sample)
 
-        data = self.tokenizer(
-            prompt_strings,
-            return_tensors=return_tensors,
-            padding=padding,
-            truncation=truncation,
-            max_length=max_length,
-        )
+        data = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
 
         if images is not None:
-            pixel_values = self.image_processor(images, return_tensors=return_tensors)["pixel_values"]
-            data["pixel_values"] = pixel_values
+            data["pixel_values"] = self.image_processor(images, **output_kwargs["images_kwargs"])["pixel_values"]
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data=data, tensor_type=output_kwargs["common_kwargs"]["return_tensors"])
 
     # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Llama
     def batch_decode(self, *args, **kwargs):
@@ -160,3 +169,6 @@ class ChameleonProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+
+__all__ = ["ChameleonProcessor"]

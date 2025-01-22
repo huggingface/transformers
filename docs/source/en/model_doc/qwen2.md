@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-Qwen2 is the new model series of large language models from the Qwen team. Previously, we released the Qwen series, including Qwen-72B, Qwen-1.8B, Qwen-VL, Qwen-Audio, etc.
+Qwen2 is the new model series of large language models from the Qwen team. Previously, we released the Qwen series, including Qwen2-0.5B, Qwen2-1.5B, Qwen2-7B, Qwen2-57B-A14B, Qwen2-72B, Qwen2-Audio, etc.
 
 ### Model Details
 
@@ -27,16 +27,16 @@ Qwen2 is a language model series including decoder language models of different 
 
 ## Usage tips
 
-`Qwen2-7B-beta` and `Qwen2-7B-Chat-beta` can be found on the [Huggingface Hub](https://huggingface.co/Qwen)
+`Qwen2-7B` and `Qwen2-7B-Instruct` can be found on the [Huggingface Hub](https://huggingface.co/Qwen)
 
-In the following, we demonstrate how to use `Qwen2-7B-Chat-beta` for the inference. Note that we have used the ChatML format for dialog, in this demo we show how to leverage `apply_chat_template` for this purpose.
+In the following, we demonstrate how to use `Qwen2-7B-Instruct` for the inference. Note that we have used the ChatML format for dialog, in this demo we show how to leverage `apply_chat_template` for this purpose.
 
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
 >>> device = "cuda" # the device to load the model onto
 
->>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen1.5-7B-Chat", device_map="auto")
->>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen1.5-7B-Chat")
+>>> model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2-7B-Instruct", device_map="auto")
+>>> tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-7B-Instruct")
 
 >>> prompt = "Give me a short introduction to large language model."
 
@@ -84,4 +84,9 @@ In the following, we demonstrate how to use `Qwen2-7B-Chat-beta` for the inferen
 ## Qwen2ForTokenClassification
 
 [[autodoc]] Qwen2ForTokenClassification
+    - forward
+
+## Qwen2ForQuestionAnswering
+
+[[autodoc]] Qwen2ForQuestionAnswering
     - forward

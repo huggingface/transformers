@@ -985,7 +985,7 @@ class FlaxWhisperPreTrainedModel(FlaxPreTrainedModel):
 
         >>> processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
         >>> model = FlaxWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en", from_pt=True)
-        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="np")
         >>> input_features = inputs.input_features
         >>> encoder_outputs = model.encode(input_features=input_features)
@@ -1045,7 +1045,7 @@ class FlaxWhisperPreTrainedModel(FlaxPreTrainedModel):
 
         >>> processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
         >>> model = FlaxWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en", from_pt=True)
-        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> input_features = processor(ds[0]["audio"]["array"], return_tensors="np").input_features
 
         >>> encoder_outputs = model.encode(input_features=input_features)
@@ -1297,7 +1297,7 @@ class FlaxWhisperForConditionalGeneration(FlaxWhisperPreTrainedModel):
 
         >>> processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
         >>> model = FlaxWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en", from_pt=True)
-        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="np")
         >>> input_features = inputs.input_features
         >>> encoder_outputs = model.encode(input_features=input_features)
@@ -1516,7 +1516,7 @@ FLAX_WHISPER_CONDITIONAL_GENERATION_DOCSTRING = r"""
 
     >>> processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
     >>> model = FlaxWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en", from_pt=True)
-    >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
+    >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
     >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="np")
     >>> input_features = inputs.input_features
     >>> generated_ids = model.generate(input_ids=input_features)
@@ -1694,3 +1694,11 @@ overwrite_call_docstring(
 append_replace_return_docstrings(
     FlaxWhisperForAudioClassification, output_type=FlaxSequenceClassifierOutput, config_class=_CONFIG_FOR_DOC
 )
+
+
+__all__ = [
+    "FlaxWhisperForConditionalGeneration",
+    "FlaxWhisperModel",
+    "FlaxWhisperPreTrainedModel",
+    "FlaxWhisperForAudioClassification",
+]

@@ -46,16 +46,30 @@ The initial supported quantization types are decided according to the popular qu
 on the Hub.
 
 - F32
+- F16
+- BF16
+- Q4_0
+- Q4_1
+- Q5_0
+- Q5_1
+- Q8_0
 - Q2_K
 - Q3_K
-- Q4_0
 - Q4_K
 - Q5_K
 - Q6_K
-- Q8_0
+- IQ1_S
+- IQ1_M
+- IQ2_XXS
+- IQ2_XS
+- IQ2_S
+- IQ3_XXS
+- IQ3_S
+- IQ4_XS
+- IQ4_NL
 
-We take example from the excellent [99991/pygguf](https://github.com/99991/pygguf) Python parser to dequantize the 
-weights.
+> [!NOTE]
+> To support gguf dequantization, `gguf>=0.10.0` installation is required.
 
 ### Supported model architectures
 
@@ -64,6 +78,17 @@ For now the supported model architectures are the architectures that have been v
 - LLaMa
 - Mistral
 - Qwen2
+- Qwen2Moe
+- Phi3
+- Bloom
+- Falcon
+- StableLM
+- GPT2
+- Starcoder2
+- T5
+- Mamba
+- Nemotron
+- Gemma2
 
 ## Example usage
 
@@ -85,7 +110,7 @@ Now you have access to the full, unquantized version of the model in the PyTorch
 with a plethora of other tools.
 
 In order to convert back to a `gguf` file, we recommend using the 
-[`convert-hf-to-gguf.py` file](https://github.com/ggerganov/llama.cpp/blob/master/convert-hf-to-gguf.py) from llama.cpp.
+[`convert-hf-to-gguf.py` file](https://github.com/ggerganov/llama.cpp/blob/master/convert_hf_to_gguf.py) from llama.cpp.
 
 Here's how you would complete the script above to save the model and export it back to `gguf`:
 

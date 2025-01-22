@@ -48,6 +48,8 @@ limitations under the License.
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_fr.md">Français</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_de.md">Deutsch</a> |
         <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_vi.md">Tiếng Việt</a> |
+        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ar.md">العربية</a> |
+        <a href="https://github.com/huggingface/transformers/blob/main/i18n/README_ur.md">اردو</a> |
     </p>
 </h4>
 
@@ -126,10 +128,10 @@ incredible projects built in the vicinity of transformers.
 
 If you own or use a project that you believe should be part of the list, please open a PR to add it!
 
-## If you are looking for custom support from the Hugging Face team
+## Serious about AI in your organisation? Build faster with the Hugging Face Enterprise Hub.
 
-<a target="_blank" href="https://huggingface.co/support">
-    <img alt="HuggingFace Expert Acceleration Program" src="https://cdn-media.huggingface.co/marketing/transformers/new-support-improved.png" style="max-width: 600px; border: 1px solid #eee; border-radius: 4px; box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);">
+<a target="_blank" href="https://huggingface.co/enterprise">
+    <img alt="Hugging Face Enterprise Hub" src="https://github.com/user-attachments/assets/247fb16d-d251-4583-96c4-d3d76dda4925">
 </a><br>
 
 ## Quick tour
@@ -247,22 +249,42 @@ The model itself is a regular [Pytorch `nn.Module`](https://pytorch.org/docs/sta
 
 ### With pip
 
-This repository is tested on Python 3.8+, Flax 0.4.1+, PyTorch 1.11+, and TensorFlow 2.6+.
+This repository is tested on Python 3.9+, Flax 0.4.1+, PyTorch 2.0+, and TensorFlow 2.6+.
 
 You should install 🤗 Transformers in a [virtual environment](https://docs.python.org/3/library/venv.html). If you're unfamiliar with Python virtual environments, check out the [user guide](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/).
 
 First, create a virtual environment with the version of Python you're going to use and activate it.
 
-Then, you will need to install at least one of Flax, PyTorch, or TensorFlow.
-Please refer to [TensorFlow installation page](https://www.tensorflow.org/install/), [PyTorch installation page](https://pytorch.org/get-started/locally/#start-locally) and/or [Flax](https://github.com/google/flax#quick-install) and [Jax](https://github.com/google/jax#installation) installation pages regarding the specific installation command for your platform.
+**macOS/Linux**
+
+```python -m venv env
+source env/bin/activate
+```
+
+**Windows**
+
+``` python -m venv env
+env\Scripts\activate
+```
+
+To use 🤗 Transformers, you must install at least one of Flax, PyTorch, or TensorFlow. Refer to the official installation guides for platform-specific commands:
+
+[TensorFlow installation page](https://www.tensorflow.org/install/), 
+[PyTorch installation page](https://pytorch.org/get-started/locally/#start-locally) and/or [Flax](https://github.com/google/flax#quick-install) and [Jax](https://github.com/google/jax#installation) 
 
 When one of those backends has been installed, 🤗 Transformers can be installed using pip as follows:
 
-```bash
+```
 pip install transformers
 ```
 
 If you'd like to play with the examples or need the bleeding edge of the code and can't wait for a new release, you must [install the library from source](https://huggingface.co/docs/transformers/installation#installing-from-source).
+
+```
+git clone https://github.com/huggingface/transformers.git
+cd transformers
+pip install
+```
 
 ### With conda
 

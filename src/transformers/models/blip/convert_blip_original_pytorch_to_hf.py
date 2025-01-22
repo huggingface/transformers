@@ -188,4 +188,4 @@ if __name__ == "__main__":
     parser.add_argument("--config_path", default=None, type=str, help="Path to hf config.json of model to convert")
     args = parser.parse_args()
 
-    convert_blip_checkpoint(args.checkpoint_path, args.pytorch_dump_folder_path, args.config_path)
+    convert_blip_checkpoint(args.pytorch_dump_folder_path, args.config_path)

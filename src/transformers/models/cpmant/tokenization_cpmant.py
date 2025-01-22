@@ -44,7 +44,7 @@ def load_vocab(vocab_file):
     return vocab
 
 
-class WordpieceTokenizer(object):
+class WordpieceTokenizer:
     def __init__(self, vocab, unk_token="<unk>", max_input_chars_per_word=200):
         self.vocab = vocab
         self.unk_token = unk_token
@@ -265,3 +265,6 @@ class CpmAntTokenizer(PreTrainedTokenizer):
         if token_ids_1 is not None:
             return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1))
         return [1] + ([0] * len(token_ids_0))
+
+
+__all__ = ["CpmAntTokenizer"]

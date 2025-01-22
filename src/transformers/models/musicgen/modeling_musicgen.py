@@ -26,9 +26,14 @@ import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
-from ...generation.configuration_utils import GenerationConfig, GenerationMode
-from ...generation.logits_process import ClassifierFreeGuidanceLogitsProcessor, LogitsProcessorList
-from ...generation.stopping_criteria import StoppingCriteriaList
+from ...generation import (
+    ClassifierFreeGuidanceLogitsProcessor,
+    GenerationConfig,
+    GenerationMixin,
+    GenerationMode,
+    LogitsProcessorList,
+    StoppingCriteriaList,
+)
 from ...modeling_attn_mask_utils import (
     _prepare_4d_attention_mask,
     _prepare_4d_attention_mask_for_sdpa,
@@ -319,7 +324,6 @@ class MusicgenFlashAttention2(MusicgenAttention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -425,7 +429,7 @@ class MusicgenFlashAttention2(MusicgenAttention):
             value_states,
             attention_mask,
             q_len,
-            dropout=self.dropout,
+            dropout=self.dropout if self.training else 0.0,
             is_causal=self.is_causal,
             use_top_left_mask=self._flash_attn_uses_top_left_mask,
         )
@@ -1206,7 +1210,7 @@ class MusicgenModel(MusicgenPreTrainedModel):
     "The MusicGen decoder model with a language modelling head on top.",
     MUSICGEN_START_DOCSTRING,
 )
-class MusicgenForCausalLM(MusicgenPreTrainedModel):
+class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
     def __init__(self, config: MusicgenDecoderConfig):
         super().__init__(config)
 
@@ -1340,6 +1344,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
         guidance_scale=None,
         **kwargs,
     ):
+        # Overwritten -- MusicGen has custom processing
         if delay_pattern_mask is None:
             input_ids, delay_pattern_mask = self.build_delay_pattern_mask(
                 input_ids,
@@ -1501,7 +1506,8 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
                 generation config. If a stopping criteria is passed that is already created with the arguments or a
                 generation config an error is thrown. This feature is intended for advanced users.
             synced_gpus (`bool`, *optional*, defaults to `False`):
-                Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
+                Whether to continue running the while loop until max_length (needed to avoid deadlocking with
+                `FullyShardedDataParallel` and DeepSpeed ZeRO Stage 3).
             streamer (`BaseStreamer`, *optional*):
                 Streamer object that will be used to stream the generated sequences. Generated tokens are passed
                 through `streamer.put(token_ids)` and the streamer is responsible for any further processing.
@@ -1539,75 +1545,43 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
 
-        if generation_config.pad_token_id is None and generation_config.eos_token_id is not None:
-            if model_kwargs.get("attention_mask", None) is None:
-                logger.warning(
-                    "The attention mask and the pad token id were not set. As a consequence, you may observe "
-                    "unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results."
-                )
-            eos_token_id = generation_config.eos_token_id
-            if isinstance(eos_token_id, list):
-                eos_token_id = eos_token_id[0]
-            logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.")
-            generation_config.pad_token_id = eos_token_id
+        requires_attention_mask = "encoder_outputs" not in model_kwargs
+        kwargs_has_attention_mask = model_kwargs.get("attention_mask", None) is not None
 
-        # 3. Define model inputs
-        # inputs_tensor has to be defined
-        # model_input_name is defined if model-specific keyword input is passed
-        # otherwise model_input_name is None
-        # all model-specific keyword inputs are removed from `model_kwargs`
+        # 3. Define model inputs`
         input_ids, model_input_name, model_kwargs = self._prepare_model_inputs(
             inputs, generation_config.bos_token_id, model_kwargs
         )
         batch_size = input_ids.shape[0] // self.num_codebooks
-        kwargs_has_attention_mask = model_kwargs.get("attention_mask", None) is not None
         self._prepare_special_tokens(generation_config, kwargs_has_attention_mask, device=input_ids.device)
 
         # 4. Define other model kwargs
         model_kwargs["use_cache"] = generation_config.use_cache
         model_kwargs["guidance_scale"] = generation_config.guidance_scale
 
-        requires_attention_mask = "encoder_outputs" not in model_kwargs
         if model_kwargs.get("attention_mask", None) is None and requires_attention_mask:
             model_kwargs["attention_mask"] = self._prepare_attention_mask_for_generation(
-                input_ids, generation_config.pad_token_id, generation_config.eos_token_id
+                input_ids, generation_config, model_kwargs
             )
 
         # 5. Prepare `max_length` depending on other stopping criteria.
-        input_ids_seq_length = input_ids.shape[-1]
+        input_ids_length = input_ids.shape[-1]
         has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
-        if has_default_max_length and generation_config.max_new_tokens is None and generation_config.max_length == 20:
-            logger.warning(
-                f"Using the model-agnostic default `max_length` (={generation_config.max_length}) "
-                "to control the generation length.  recommend setting `max_new_tokens` to control the maximum length of the generation."
-            )
-        elif generation_config.max_new_tokens is not None:
-            if not has_default_max_length:
-                logger.warning(
-                    f"Both `max_new_tokens` (={generation_config.max_new_tokens}) and `max_length`(="
-                    f"{generation_config.max_length}) seem to have been set. `max_new_tokens` will take precedence. "
-                    "Please refer to the documentation for more information. "
-                    "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
-                )
-            generation_config.max_length = generation_config.max_new_tokens + input_ids_seq_length
-
-        if generation_config.min_length is not None and generation_config.min_length > generation_config.max_length:
-            raise ValueError(
-                f"Unfeasible length constraints: the minimum length ({generation_config.min_length}) is larger than"
-                f" the maximum length ({generation_config.max_length})"
-            )
-        if input_ids_seq_length >= generation_config.max_length:
-            logger.warning(
-                f"Input length of decoder_input_ids is {input_ids_seq_length}, but `max_length` is set to"
-                f" {generation_config.max_length}. This can lead to unexpected behavior. You should consider"
-                " increasing `max_new_tokens`."
-            )
+        has_default_min_length = kwargs.get("min_length") is None and generation_config.min_length is not None
+        generation_config = self._prepare_generated_length(
+            generation_config=generation_config,
+            has_default_max_length=has_default_max_length,
+            has_default_min_length=has_default_min_length,
+            model_input_name=model_input_name,
+            inputs_tensor=input_ids,
+            input_ids_length=input_ids_length,
+        )
 
         # 6. Prepare `input_ids` which will be used for auto-regressive generation
         # Build the delay pattern mask for offsetting each codebook prediction by 1 (this behaviour is specific to MusicGen)
         input_ids, delay_pattern_mask = self.build_delay_pattern_mask(
             input_ids,
-            pad_token_id=generation_config.decoder_start_token_id,
+            pad_token_id=generation_config._decoder_start_token_tensor,
             max_length=generation_config.max_length,
         )
 
@@ -1628,7 +1602,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
         # 9. prepare distribution pre_processing samplers
         logits_processor = self._get_logits_processor(
             generation_config=generation_config,
-            input_ids_seq_length=input_ids_seq_length,
+            input_ids_seq_length=input_ids_length,
             encoder_input_ids=input_ids,
             prefix_allowed_tokens_fn=None,
             logits_processor=logits_processor,
@@ -1641,13 +1615,6 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
         )
 
         if generation_mode in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
-            # 11. prepare logits warper
-            prepared_logits_warper = (
-                self._get_logits_warper(generation_config, device=input_ids.device)
-                if generation_config.do_sample
-                else None
-            )
-
             # expand input_ids with `num_return_sequences` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
                 input_ids=input_ids,
@@ -1655,11 +1622,10 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
                 **model_kwargs,
             )
 
-            # 12. run sample
+            # 11. run sample
             outputs = self._sample(
                 input_ids,
                 logits_processor=logits_processor,
-                logits_warper=prepared_logits_warper,
                 stopping_criteria=stopping_criteria,
                 generation_config=generation_config,
                 synced_gpus=synced_gpus,
@@ -1682,7 +1648,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
         output_ids = self.apply_delay_pattern_mask(output_ids, model_kwargs["delay_pattern_mask"])
 
         # revert the pattern delay mask by filtering the pad token id
-        output_ids = output_ids[output_ids != generation_config.pad_token_id].reshape(
+        output_ids = output_ids[output_ids != generation_config._pad_token_tensor].reshape(
             batch_size, self.num_codebooks, -1
         )
 
@@ -1698,7 +1664,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel):
     "for music generation tasks with one or both of text and audio prompts.",
     MUSICGEN_START_DOCSTRING,
 )
-class MusicgenForConditionalGeneration(PreTrainedModel):
+class MusicgenForConditionalGeneration(PreTrainedModel, GenerationMixin):
     config_class = MusicgenConfig
     base_model_prefix = "encoder_decoder"
     main_input_name = "input_ids"
@@ -1746,7 +1712,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
             audio_encoder = AutoModel.from_config(config.audio_encoder)
 
         if decoder is None:
-            decoder = MusicgenForCausalLM(config.decoder)
+            decoder = MusicgenForCausalLM._from_config(config.decoder)
 
         self.text_encoder = text_encoder
         self.audio_encoder = audio_encoder
@@ -1770,6 +1736,9 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
 
         # make sure that the individual model's config refers to the shared config
         # so that the updates to the config will be synced
+        self.config.text_encoder._attn_implementation = self.text_encoder.config._attn_implementation
+        self.config.audio_encoder._attn_implementation = self.audio_encoder.config._attn_implementation
+        self.config.decoder._attn_implementation = self.decoder.config._attn_implementation
         self.text_encoder.config = self.config.text_encoder
         self.audio_encoder.config = self.config.audio_encoder
         self.decoder.config = self.config.decoder
@@ -2214,6 +2183,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         guidance_scale=None,
         **kwargs,
     ):
+        # Overwritten -- MusicGen has custom processing
         if decoder_delay_pattern_mask is None:
             decoder_input_ids, decoder_delay_pattern_mask = self.decoder.build_delay_pattern_mask(
                 decoder_input_ids,
@@ -2548,7 +2518,8 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 generation config. If a stopping criteria is passed that is already created with the arguments or a
                 generation config an error is thrown. This feature is intended for advanced users.
             synced_gpus (`bool`, *optional*, defaults to `False`):
-                Whether to continue running the while loop until max_length (needed for ZeRO stage 3)
+                Whether to continue running the while loop until max_length (needed to avoid deadlocking with
+                `FullyShardedDataParallel` and DeepSpeed ZeRO Stage 3).
             streamer (`BaseStreamer`, *optional*):
                 Streamer object that will be used to stream the generated sequences. Generated tokens are passed
                 through `streamer.put(token_ids)` and the streamer is responsible for any further processing.
@@ -2582,7 +2553,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         generation_config.validate()
         self._validate_model_kwargs(model_kwargs.copy())
 
-        if model_kwargs.get("encoder_outputs") is not None and type(model_kwargs["encoder_outputs"]) == tuple:
+        if model_kwargs.get("encoder_outputs") is not None and type(model_kwargs["encoder_outputs"]) is tuple:
             # wrap the unconditional outputs as a BaseModelOutput for compatibility with the rest of generate
             model_kwargs["encoder_outputs"] = BaseModelOutput(last_hidden_state=model_kwargs["encoder_outputs"][0])
 
@@ -2590,39 +2561,23 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         logits_processor = logits_processor if logits_processor is not None else LogitsProcessorList()
         stopping_criteria = stopping_criteria if stopping_criteria is not None else StoppingCriteriaList()
 
-        if generation_config.pad_token_id is None and generation_config.eos_token_id is not None:
-            if model_kwargs.get("attention_mask", None) is None:
-                logger.warning(
-                    "The attention mask and the pad token id were not set. As a consequence, you may observe "
-                    "unexpected behavior. Please pass your input's `attention_mask` to obtain reliable results."
-                )
-            eos_token_id = generation_config.eos_token_id
-            if isinstance(eos_token_id, list):
-                eos_token_id = eos_token_id[0]
-            logger.warning(f"Setting `pad_token_id` to `eos_token_id`:{eos_token_id} for open-end generation.")
-            generation_config.pad_token_id = eos_token_id
+        requires_attention_mask = "encoder_outputs" not in model_kwargs
+        kwargs_has_attention_mask = model_kwargs.get("attention_mask", None) is not None
 
         # 3. Define model inputs
-        # inputs_tensor has to be defined
-        # model_input_name is defined if model-specific keyword input is passed
-        # otherwise model_input_name is None
-        # all model-specific keyword inputs are removed from `model_kwargs`
         inputs_tensor, model_input_name, model_kwargs = self._prepare_model_inputs(
             inputs, generation_config.bos_token_id, model_kwargs
         )
         batch_size = inputs_tensor.shape[0]
-        kwargs_has_attention_mask = model_kwargs.get("attention_mask", None) is not None
         self._prepare_special_tokens(generation_config, kwargs_has_attention_mask, device=inputs_tensor.device)
 
         # 4. Define other model kwargs
         model_kwargs["use_cache"] = generation_config.use_cache
         model_kwargs["guidance_scale"] = generation_config.guidance_scale
 
-        requires_attention_mask = "encoder_outputs" not in model_kwargs
-
         if model_kwargs.get("attention_mask", None) is None and requires_attention_mask:
             model_kwargs["attention_mask"] = self._prepare_attention_mask_for_generation(
-                inputs_tensor, generation_config.pad_token_id, generation_config.eos_token_id
+                inputs_tensor, generation_config, model_kwargs
             )
 
         if "encoder_outputs" not in model_kwargs:
@@ -2642,45 +2597,28 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
             batch_size=batch_size,
             model_input_name=model_input_name,
             model_kwargs=model_kwargs,
-            decoder_start_token_id=generation_config.decoder_start_token_id,
-            bos_token_id=generation_config.bos_token_id,
+            decoder_start_token_id=generation_config._decoder_start_token_tensor,
+            bos_token_id=generation_config._bos_token_tensor,
             device=inputs_tensor.device,
         )
 
         # 6. Prepare `max_length` depending on other stopping criteria.
-        input_ids_seq_length = input_ids.shape[-1]
+        input_ids_length = input_ids.shape[-1]
         has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
-        if has_default_max_length and generation_config.max_new_tokens is None:
-            logger.warning(
-                f"Using the model-agnostic default `max_length` (={generation_config.max_length}) "
-                "to control the generation length. We recommend setting `max_new_tokens` to control the maximum length of the generation."
-            )
-        elif generation_config.max_new_tokens is not None:
-            if not has_default_max_length:
-                logger.warning(
-                    f"Both `max_new_tokens` (={generation_config.max_new_tokens}) and `max_length`(="
-                    f"{generation_config.max_length}) seem to have been set. `max_new_tokens` will take precedence. "
-                    "Please refer to the documentation for more information. "
-                    "(https://huggingface.co/docs/transformers/main/en/main_classes/text_generation)"
-                )
-            generation_config.max_length = generation_config.max_new_tokens + input_ids_seq_length
-
-        if generation_config.min_length is not None and generation_config.min_length > generation_config.max_length:
-            raise ValueError(
-                f"Unfeasible length constraints: the minimum length ({generation_config.min_length}) is larger than"
-                f" the maximum length ({generation_config.max_length})"
-            )
-        if input_ids_seq_length >= generation_config.max_length:
-            logger.warning(
-                f"Input length of decoder_input_ids is {input_ids_seq_length}, but `max_length` is set to"
-                f" {generation_config.max_length}. This can lead to unexpected behavior. You should consider"
-                " increasing `max_new_tokens`."
-            )
+        has_default_min_length = kwargs.get("min_length") is None and generation_config.min_length is not None
+        generation_config = self._prepare_generated_length(
+            generation_config=generation_config,
+            has_default_max_length=has_default_max_length,
+            has_default_min_length=has_default_min_length,
+            model_input_name=model_input_name,
+            inputs_tensor=inputs_tensor,
+            input_ids_length=input_ids_length,
+        )
 
         # build the delay pattern mask for offsetting each codebook prediction by 1 (this behaviour is specific to MusicGen)
         input_ids, decoder_delay_pattern_mask = self.decoder.build_delay_pattern_mask(
             input_ids,
-            pad_token_id=generation_config.decoder_start_token_id,
+            pad_token_id=generation_config._decoder_start_token_tensor,
             max_length=generation_config.max_length,
         )
         # stash the delay mask so that we don't have to recompute in each forward pass
@@ -2701,7 +2639,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         # 9. prepare distribution pre_processing samplers
         logits_processor = self._get_logits_processor(
             generation_config=generation_config,
-            input_ids_seq_length=input_ids_seq_length,
+            input_ids_seq_length=input_ids_length,
             encoder_input_ids=inputs_tensor,
             prefix_allowed_tokens_fn=None,
             logits_processor=logits_processor,
@@ -2714,13 +2652,6 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         )
 
         if generation_mode in (GenerationMode.SAMPLE, GenerationMode.GREEDY_SEARCH):
-            # 11. prepare logits warper
-            prepared_logits_warper = (
-                self._get_logits_warper(generation_config, device=input_ids.device)
-                if generation_config.do_sample
-                else None
-            )
-
             # expand input_ids with `num_return_sequences` additional sequences per batch
             input_ids, model_kwargs = self._expand_inputs_for_generation(
                 input_ids=input_ids,
@@ -2729,11 +2660,10 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
                 **model_kwargs,
             )
 
-            # 12. run sample
+            # 11. run sample
             outputs = self._sample(
                 input_ids,
                 logits_processor=logits_processor,
-                logits_warper=prepared_logits_warper,
                 stopping_criteria=stopping_criteria,
                 generation_config=generation_config,
                 synced_gpus=synced_gpus,
@@ -2756,7 +2686,7 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
         output_ids = self.decoder.apply_delay_pattern_mask(output_ids, model_kwargs["decoder_delay_pattern_mask"])
 
         # revert the pattern delay mask by filtering the pad token id
-        output_ids = output_ids[output_ids != generation_config.pad_token_id].reshape(
+        output_ids = output_ids[output_ids != generation_config._pad_token_tensor].reshape(
             batch_size, self.decoder.num_codebooks, -1
         )
 
@@ -2820,3 +2750,6 @@ class MusicgenForConditionalGeneration(PreTrainedModel):
             attention_mask=attention_mask,
             guidance_scale=1.0,
         )
+
+
+__all__ = ["MusicgenForConditionalGeneration", "MusicgenForCausalLM", "MusicgenModel", "MusicgenPreTrainedModel"]

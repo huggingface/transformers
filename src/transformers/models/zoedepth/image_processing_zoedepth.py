@@ -15,9 +15,13 @@
 """Image processor class for ZoeDepth."""
 
 import math
-from typing import Dict, Iterable, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
+
+
+if TYPE_CHECKING:
+    from .modeling_zoedepth import ZoeDepthDepthEstimatorOutput
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import PaddingMode, pad, to_channel_dimension_format
@@ -35,7 +39,14 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_torch_available, is_vision_available, logging, requires_backends
+from ...utils import (
+    TensorType,
+    filter_out_non_signature_kwargs,
+    is_torch_available,
+    is_vision_available,
+    logging,
+    requires_backends,
+)
 
 
 if is_vision_available():
@@ -119,10 +130,10 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
             Defines the resampling filter to use if resizing the image. Can be overidden by `resample` in `preprocess`.
         keep_aspect_ratio (`bool`, *optional*, defaults to `True`):
-            If `True`, the image is resized by choosing the smaller of the height and width scaling factors and using it for
-            both dimensions. This ensures that the image is scaled down as little as possible while still fitting within the
-            desired output size. In case `ensure_multiple_of` is also set, the image is further resized to a size that is a
-            multiple of this value by flooring the height and width to the nearest multiple of this value.
+            If `True`, the image is resized by choosing the smaller of the height and width scaling factors and using it
+            for both dimensions. This ensures that the image is scaled down as little as possible while still fitting
+            within the desired output size. In case `ensure_multiple_of` is also set, the image is further resized to a
+            size that is a multiple of this value by flooring the height and width to the nearest multiple of this value.
             Can be overidden by `keep_aspect_ratio` in `preprocess`.
         ensure_multiple_of (`int`, *optional*, defaults to 32):
             If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Works by flooring
@@ -163,24 +174,6 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         self.keep_aspect_ratio = keep_aspect_ratio
         self.ensure_multiple_of = ensure_multiple_of
         self.resample = resample
-
-        self._valid_processor_keys = [
-            "images",
-            "do_resize",
-            "size",
-            "keep_aspect_ratio",
-            "ensure_multiple_of",
-            "resample",
-            "do_rescale",
-            "rescale_factor",
-            "do_normalize",
-            "image_mean",
-            "image_std",
-            "do_pad",
-            "return_tensors",
-            "data_format",
-            "input_data_format",
-        ]
 
     def resize(
         self,
@@ -301,6 +294,7 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
             input_data_format=input_data_format,
         )
 
+    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         images: ImageInput,
@@ -341,19 +335,21 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
-                Size of the image after resizing. If `keep_aspect_ratio` is `True`, he image is resized by choosing the smaller of
-                the height and width scaling factors and using it for both dimensions. If `ensure_multiple_of` is also set,
-                the image is further resized to a size that is a multiple of this value.
+                Size of the image after resizing. If `keep_aspect_ratio` is `True`, he image is resized by choosing the
+                smaller of the height and width scaling factors and using it for both dimensions. If `ensure_multiple_of`
+                is also set, the image is further resized to a size that is a multiple of this value.
             keep_aspect_ratio (`bool`, *optional*, defaults to `self.keep_aspect_ratio`):
-                If `True` and `do_resize=True`, the image is resized by choosing the smaller of the height and width scaling factors and using it for
-                both dimensions. This ensures that the image is scaled down as little as possible while still fitting within the
-                desired output size. In case `ensure_multiple_of` is also set, the image is further resized to a size that is a
-                multiple of this value by flooring the height and width to the nearest multiple of this value.
+                If `True` and `do_resize=True`, the image is resized by choosing the smaller of the height and width
+                scaling factors and using it for both dimensions. This ensures that the image is scaled down as little
+                as possible while still fitting within the desired output size. In case `ensure_multiple_of` is also
+                set, the image is further resized to a size that is a multiple of this value by flooring the height and
+                width to the nearest multiple of this value.
             ensure_multiple_of (`int`, *optional*, defaults to `self.ensure_multiple_of`):
-                If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Works by flooring
-                the height and width to the nearest multiple of this value.
+                If `do_resize` is `True`, the image is resized to a size that is a multiple of this value. Works by
+                flooring the height and width to the nearest multiple of this value.
 
-                Works both with and without `keep_aspect_ratio` being set to `True`. Can be overidden by `ensure_multiple_of` in `preprocess`.
+                Works both with and without `keep_aspect_ratio` being set to `True`. Can be overidden by
+                `ensure_multiple_of` in `preprocess`.
             resample (`int`, *optional*, defaults to `self.resample`):
                 Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`, Only
                 has an effect if `do_resize` is set to `True`.
@@ -408,7 +404,7 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
-        if is_scaled_image(images[0]) and do_rescale:
+        if do_rescale and is_scaled_image(images[0]):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -452,3 +448,114 @@ class ZoeDepthImageProcessor(BaseImageProcessor):
 
         data = {"pixel_values": images}
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+    def post_process_depth_estimation(
+        self,
+        outputs: "ZoeDepthDepthEstimatorOutput",
+        source_sizes: Optional[Union[TensorType, List[Tuple[int, int]], None]] = None,
+        target_sizes: Optional[Union[TensorType, List[Tuple[int, int]], None]] = None,
+        outputs_flipped: Optional[Union["ZoeDepthDepthEstimatorOutput", None]] = None,
+        do_remove_padding: Optional[Union[bool, None]] = None,
+    ) -> List[Dict[str, TensorType]]:
+        """
+        Converts the raw output of [`ZoeDepthDepthEstimatorOutput`] into final depth predictions and depth PIL images.
+        Only supports PyTorch.
+
+        Args:
+            outputs ([`ZoeDepthDepthEstimatorOutput`]):
+                Raw outputs of the model.
+            source_sizes (`TensorType` or `List[Tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the source size
+                (height, width) of each image in the batch before preprocessing. This argument should be dealt as
+                "required" unless the user passes `do_remove_padding=False` as input to this function.
+            target_sizes (`TensorType` or `List[Tuple[int, int]]`, *optional*):
+                Tensor of shape `(batch_size, 2)` or list of tuples (`Tuple[int, int]`) containing the target size
+                (height, width) of each image in the batch. If left to None, predictions will not be resized.
+            outputs_flipped ([`ZoeDepthDepthEstimatorOutput`], *optional*):
+                Raw outputs of the model from flipped input (averaged out in the end).
+            do_remove_padding (`bool`, *optional*):
+                By default ZoeDepth addes padding equal to `int(√(height / 2) * 3)` (and similarly for width) to fix the
+                boundary artifacts in the output depth map, so we need remove this padding during post_processing. The
+                parameter exists here in case the user changed the image preprocessing to not include padding.
+
+        Returns:
+            `List[Dict[str, TensorType]]`: A list of dictionaries of tensors representing the processed depth
+            predictions.
+        """
+        requires_backends(self, "torch")
+
+        predicted_depth = outputs.predicted_depth
+
+        if (outputs_flipped is not None) and (predicted_depth.shape != outputs_flipped.predicted_depth.shape):
+            raise ValueError("Make sure that `outputs` and `outputs_flipped` have the same shape")
+
+        if (target_sizes is not None) and (len(predicted_depth) != len(target_sizes)):
+            raise ValueError(
+                "Make sure that you pass in as many target sizes as the batch dimension of the predicted depth"
+            )
+
+        if do_remove_padding is None:
+            do_remove_padding = self.do_pad
+
+        if source_sizes is None and do_remove_padding:
+            raise ValueError(
+                "Either `source_sizes` should be passed in, or `do_remove_padding` should be set to False"
+            )
+
+        if (source_sizes is not None) and (len(predicted_depth) != len(source_sizes)):
+            raise ValueError(
+                "Make sure that you pass in as many source image sizes as the batch dimension of the logits"
+            )
+
+        if outputs_flipped is not None:
+            predicted_depth = (predicted_depth + torch.flip(outputs_flipped.predicted_depth, dims=[-1])) / 2
+
+        predicted_depth = predicted_depth.unsqueeze(1)
+
+        # Zoe Depth model adds padding around the images to fix the boundary artifacts in the output depth map
+        # The padding length is `int(np.sqrt(img_h/2) * fh)` for the height and similar for the width
+        # fh (and fw respectively) are equal to '3' by default
+        # Check [here](https://github.com/isl-org/ZoeDepth/blob/edb6daf45458569e24f50250ef1ed08c015f17a7/zoedepth/models/depth_model.py#L57)
+        # for the original implementation.
+        # In this section, we remove this padding to get the final depth image and depth prediction
+        padding_factor_h = padding_factor_w = 3
+
+        results = []
+        target_sizes = [None] * len(predicted_depth) if target_sizes is None else target_sizes
+        source_sizes = [None] * len(predicted_depth) if source_sizes is None else source_sizes
+        for depth, target_size, source_size in zip(predicted_depth, target_sizes, source_sizes):
+            # depth.shape = [1, H, W]
+            if source_size is not None:
+                pad_h = pad_w = 0
+
+                if do_remove_padding:
+                    pad_h = int(np.sqrt(source_size[0] / 2) * padding_factor_h)
+                    pad_w = int(np.sqrt(source_size[1] / 2) * padding_factor_w)
+
+                depth = nn.functional.interpolate(
+                    depth.unsqueeze(1),
+                    size=[source_size[0] + 2 * pad_h, source_size[1] + 2 * pad_w],
+                    mode="bicubic",
+                    align_corners=False,
+                )
+
+                if pad_h > 0:
+                    depth = depth[:, :, pad_h:-pad_h, :]
+                if pad_w > 0:
+                    depth = depth[:, :, :, pad_w:-pad_w]
+
+                depth = depth.squeeze(1)
+            # depth.shape = [1, H, W]
+            if target_size is not None:
+                target_size = [target_size[0], target_size[1]]
+                depth = nn.functional.interpolate(
+                    depth.unsqueeze(1), size=target_size, mode="bicubic", align_corners=False
+                )
+            depth = depth.squeeze()
+            # depth.shape = [H, W]
+            results.append({"predicted_depth": depth})
+
+        return results
+
+
+__all__ = ["ZoeDepthImageProcessor"]

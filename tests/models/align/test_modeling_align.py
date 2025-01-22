@@ -457,10 +457,19 @@ class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = AlignModelTester(self)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=AlignConfig,
+            has_text_modality=False,
+            common_properties=["projection_dim", "temperature_init_value"],
+        )
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="Start to fail after using torch `cu118`.")
     def test_multi_gpu_data_parallel_forward(self):
@@ -626,7 +635,7 @@ class AlignModelIntegrationTest(unittest.TestCase):
 
         image = prepare_img()
         texts = ["a photo of a cat", "a photo of a dog"]
-        inputs = processor(text=texts, images=image, return_tensors="pt").to(torch_device)
+        inputs = processor(images=image, text=texts, return_tensors="pt").to(torch_device)
 
         # forward pass
         with torch.no_grad():

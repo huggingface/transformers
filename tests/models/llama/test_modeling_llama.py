@@ -14,22 +14,18 @@
 # limitations under the License.
 """Testing suite for the PyTorch LLaMA model."""
 
-import gc
-import tempfile
 import unittest
 
-import pytest
 from packaging import version
 from parameterized import parameterized
 
-from transformers import LlamaConfig, StaticCache, is_torch_available, set_seed
+from transformers import AutoTokenizer, LlamaConfig, StaticCache, is_torch_available, set_seed
+from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
-    require_bitsandbytes,
-    require_flash_attn,
+    cleanup,
     require_read_token,
     require_torch,
-    require_torch_gpu,
-    require_torch_sdpa,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -51,11 +47,7 @@ if is_torch_available():
         LlamaModel,
         LlamaTokenizer,
     )
-    from transformers.models.llama.modeling_llama import (
-        LlamaDynamicNTKScalingRotaryEmbedding,
-        LlamaLinearScalingRotaryEmbedding,
-        LlamaRotaryEmbedding,
-    )
+    from transformers.models.llama.modeling_llama import LlamaRotaryEmbedding
 
 
 class LlamaModelTester:
@@ -114,7 +106,7 @@ class LlamaModelTester:
 
         input_mask = None
         if self.use_input_mask:
-            input_mask = torch.tril(torch.ones(self.batch_size, self.seq_length)).to(torch_device)
+            input_mask = torch.tril(torch.ones_like(input_ids).to(torch_device))
 
         token_type_ids = None
         if self.use_token_type_ids:
@@ -312,14 +304,14 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     )
     test_headmasking = False
     test_pruning = False
-    fx_compatible = True
+    fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
     model_split_percents = [0.5, 0.7, 0.8]
 
-    # used in `test_torch_compile`
-    _torch_compile_test_ckpt = "meta-llama/Llama-2-7b-hf"
+    # used in `test_torch_compile_for_training`
+    _torch_compile_train_cls = LlamaForCausalLM if is_torch_available() else None
 
     def setUp(self):
         self.model_tester = LlamaModelTester(self)
@@ -397,7 +389,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_save_load_fast_init_from_base(self):
         pass
 
-    @parameterized.expand([("linear",), ("dynamic",)])
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
     def test_model_rope_scaling_from_config(self, scaling_type):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
         short_input = ids_tensor([1, 10], config.vocab_size)
@@ -430,9 +422,6 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     def test_model_rope_scaling(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        hidden_size = config.hidden_size
-        num_heads = config.num_attention_heads
-        head_dim = hidden_size // num_heads
         scaling_factor = 10
         short_input_length = 10
         long_input_length = int(config.max_position_embeddings * 1.5)
@@ -445,11 +434,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         position_ids_long = position_ids_long.unsqueeze(0)
 
         # Sanity check original RoPE
-        original_rope = LlamaRotaryEmbedding(
-            head_dim,
-            max_position_embeddings=config.max_position_embeddings,
-            base=config.rope_theta,
-        ).to(torch_device)
+        original_rope = LlamaRotaryEmbedding(config=config).to(torch_device)
         original_cos_short, original_sin_short = original_rope(x, position_ids_short)
         original_cos_long, original_sin_long = original_rope(x, position_ids_long)
         torch.testing.assert_close(original_cos_short, original_cos_long[:, :short_input_length, :])
@@ -457,12 +442,8 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
         # Sanity check linear RoPE scaling
         # New position "x" should match original position with index "x/scaling_factor"
-        linear_scaling_rope = LlamaLinearScalingRotaryEmbedding(
-            head_dim,
-            max_position_embeddings=config.max_position_embeddings,
-            base=config.rope_theta,
-            scaling_factor=scaling_factor,
-        ).to(torch_device)
+        config.rope_scaling = {"type": "linear", "factor": scaling_factor}
+        linear_scaling_rope = LlamaRotaryEmbedding(config=config).to(torch_device)
         linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short)
         linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long)
         torch.testing.assert_close(linear_cos_short, linear_cos_long[:, :short_input_length, :])
@@ -475,12 +456,8 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         # Sanity check Dynamic NTK RoPE scaling
         # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
         # with scaling_factor (or that `inv_freq` decreases)
-        ntk_scaling_rope = LlamaDynamicNTKScalingRotaryEmbedding(
-            head_dim,
-            max_position_embeddings=config.max_position_embeddings,
-            base=config.rope_theta,
-            scaling_factor=scaling_factor,
-        ).to(torch_device)
+        config.rope_scaling = {"type": "dynamic", "factor": scaling_factor}
+        ntk_scaling_rope = LlamaRotaryEmbedding(config=config).to(torch_device)
         ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short)
         ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long)
         torch.testing.assert_close(ntk_cos_short, original_cos_short)
@@ -491,133 +468,79 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             torch.testing.assert_close(ntk_sin_long, original_sin_long)
         self.assertTrue((ntk_scaling_rope.inv_freq <= original_rope.inv_freq).all())
 
-    @require_flash_attn
-    @require_torch_gpu
-    @require_bitsandbytes
-    @pytest.mark.flash_attn_test
-    @require_read_token
-    @slow
-    def test_flash_attn_2_generate_padding_right(self):
-        """
-        Overwritting the common test as the test is flaky on tiny models
-        """
-        model = LlamaForCausalLM.from_pretrained(
-            "meta-llama/Llama-2-7b-hf",
-            load_in_4bit=True,
-            device_map={"": 0},
+        # Sanity check Yarn RoPE scaling
+        # Scaling should be over the entire input
+        config.rope_scaling = {"type": "yarn", "factor": scaling_factor}
+        yarn_scaling_rope = LlamaRotaryEmbedding(config=config).to(torch_device)
+        yarn_cos_short, yarn_sin_short = yarn_scaling_rope(x, position_ids_short)
+        yarn_cos_long, yarn_sin_long = yarn_scaling_rope(x, position_ids_long)
+        torch.testing.assert_close(yarn_cos_short, yarn_cos_long[:, :short_input_length, :])
+        torch.testing.assert_close(yarn_sin_short, yarn_sin_long[:, :short_input_length, :])
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(yarn_cos_short, original_cos_short)
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(yarn_sin_short, original_sin_short)
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(yarn_cos_long, original_cos_long)
+        with self.assertRaises(AssertionError):
+            torch.testing.assert_close(yarn_sin_long, original_sin_long)
+
+    def test_model_loading_old_rope_configs(self):
+        def _reinitialize_config(base_config, new_kwargs):
+            # Reinitialize the config with the new kwargs, forcing the config to go through its __init__ validation
+            # steps.
+            base_config_dict = base_config.to_dict()
+            new_config = LlamaConfig.from_dict(config_dict={**base_config_dict, **new_kwargs})
+            return new_config
+
+        # from untouched config -> ✅
+        base_config, model_inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        original_model = LlamaForCausalLM(base_config).to(torch_device)
+        original_model(**model_inputs)
+
+        # from a config with the expected rope configuration -> ✅
+        config = _reinitialize_config(base_config, {"rope_scaling": {"rope_type": "linear", "factor": 10.0}})
+        original_model = LlamaForCausalLM(config).to(torch_device)
+        original_model(**model_inputs)
+
+        # from a config with the old rope configuration ('type' instead of 'rope_type')  -> ✅ we gracefully handle BC
+        config = _reinitialize_config(base_config, {"rope_scaling": {"type": "linear", "factor": 10.0}})
+        original_model = LlamaForCausalLM(config).to(torch_device)
+        original_model(**model_inputs)
+
+        # from a config with both 'type' and 'rope_type'  -> ✅ they can coexist (and both are present in the config)
+        config = _reinitialize_config(
+            base_config, {"rope_scaling": {"type": "linear", "rope_type": "linear", "factor": 10.0}}
         )
+        self.assertTrue(config.rope_scaling["type"] == "linear")
+        self.assertTrue(config.rope_scaling["rope_type"] == "linear")
+        original_model = LlamaForCausalLM(config).to(torch_device)
+        original_model(**model_inputs)
 
-        tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf")
+        # from a config with parameters in a bad range ('factor' should be >= 1.0) -> ⚠️ throws a warning
+        with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
+            config = _reinitialize_config(base_config, {"rope_scaling": {"rope_type": "linear", "factor": -999.0}})
+            original_model = LlamaForCausalLM(config).to(torch_device)
+            original_model(**model_inputs)
+            self.assertEqual(len(logs.output), 1)
+            self.assertIn("factor field", logs.output[0])
 
-        texts = ["hi", "Hello this is a very long sentence"]
+        # from a config with unknown parameters ('foo' isn't a rope option) -> ⚠️ throws a warning
+        with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
+            config = _reinitialize_config(
+                base_config, {"rope_scaling": {"rope_type": "linear", "factor": 10.0, "foo": "bar"}}
+            )
+            original_model = LlamaForCausalLM(config).to(torch_device)
+            original_model(**model_inputs)
+            self.assertEqual(len(logs.output), 1)
+            self.assertIn("Unrecognized keys", logs.output[0])
 
-        tokenizer.padding_side = "right"
-        tokenizer.pad_token = tokenizer.eos_token
-
-        inputs = tokenizer(texts, return_tensors="pt", padding=True).to(0)
-
-        output_native = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_native = tokenizer.batch_decode(output_native)
-
-        model = LlamaForCausalLM.from_pretrained(
-            "meta-llama/Llama-2-7b-hf", load_in_4bit=True, device_map={"": 0}, attn_implementation="flash_attention_2"
-        )
-
-        output_fa_2 = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_fa_2 = tokenizer.batch_decode(output_fa_2)
-
-        self.assertListEqual(output_native, output_fa_2)
-
-    @require_flash_attn
-    @require_torch_gpu
-    @slow
-    def test_use_flash_attention_2_true(self):
-        """
-        NOTE: this is the only test testing that the legacy `use_flash_attention=2` argument still works as intended.
-        """
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                model = model_class(config)
-                model.save_pretrained(tmp_dir)
-
-                new_model = LlamaForCausalLM.from_pretrained(
-                    tmp_dir, use_flash_attention_2=True, torch_dtype=torch.float16
-                ).to("cuda")
-
-                self.assertTrue(new_model.config._attn_implementation == "flash_attention_2")
-
-                has_flash = False
-                for name, submodule in new_model.named_modules():
-                    if "FlashAttention" in submodule.__class__.__name__:
-                        has_flash = True
-                        break
-                if not has_flash:
-                    raise ValueError("The flash model should have flash attention layers")
-
-    @require_torch_sdpa
-    @slow
-    def test_eager_matches_sdpa_generate(self):
-        """
-        Overwritting the common test as the test is flaky on tiny models
-        """
-        max_new_tokens = 30
-
-        tokenizer = LlamaTokenizer.from_pretrained("saibo/llama-1B")
-
-        model_sdpa = LlamaForCausalLM.from_pretrained(
-            "saibo/llama-1B",
-            torch_dtype=torch.float16,
-            low_cpu_mem_usage=True,
-        ).to(torch_device)
-
-        self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
-
-        model_eager = LlamaForCausalLM.from_pretrained(
-            "saibo/llama-1B",
-            torch_dtype=torch.float16,
-            low_cpu_mem_usage=True,
-            attn_implementation="eager",
-        ).to(torch_device)
-
-        self.assertTrue(model_eager.config._attn_implementation == "eager")
-
-        for name, submodule in model_eager.named_modules():
-            if "SdpaAttention" in submodule.__class__.__name__:
-                raise ValueError("The eager model should not have SDPA attention layers")
-
-        has_sdpa = False
-        for name, submodule in model_sdpa.named_modules():
-            if "SdpaAttention" in submodule.__class__.__name__:
-                has_sdpa = True
-                break
-        if not has_sdpa:
-            raise ValueError("The SDPA model should have SDPA attention layers")
-
-        texts = [
-            "hi here's a longer context, getting longer and",
-            "Hello this is a very long sentence my friend, very long for real",
-            "Today I am in Paris and",
-        ]
-
-        for padding_side in ["left", "right"]:
-            tokenizer.padding_side = padding_side
-            tokenizer.pad_token = tokenizer.eos_token
-
-            inputs = tokenizer(texts, return_tensors="pt", padding=True).to(torch_device)
-
-            res_eager = model_eager.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
-            res_sdpa = model_sdpa.generate(**inputs, max_new_tokens=max_new_tokens, do_sample=False)
-
-            with self.subTest(f"{padding_side}"):
-                torch.testing.assert_close(
-                    res_eager,
-                    res_sdpa,
-                    msg=f"\n{tokenizer.batch_decode(res_eager)} \nvs\n{tokenizer.batch_decode(res_sdpa)}",
-                )
+        # from a config with specific rope type but missing one of its mandatory parameters -> ❌ throws exception
+        with self.assertRaises(KeyError):
+            config = _reinitialize_config(base_config, {"rope_scaling": {"rope_type": "linear"}})  # missing "factor"
 
 
-@require_torch_gpu
+@require_torch_accelerator
 class LlamaIntegrationTest(unittest.TestCase):
     # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
     # Depending on the hardware we get different logits / generations
@@ -628,6 +551,36 @@ class LlamaIntegrationTest(unittest.TestCase):
         if is_torch_available() and torch.cuda.is_available():
             # 8 is for A100 / A10 and 7 for T4
             cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
+
+    @slow
+    @require_read_token
+    def test_llama_3_1_hard(self):
+        """
+        An integration test for llama 3.1. It tests against a long output to ensure the subtle numerical differences
+        from llama 3.1.'s RoPE can be detected
+        """
+        # diff on `EXPECTED_TEXT`:
+        # 2024-08-26: updating from torch 2.3.1 to 2.4.0 slightly changes the results.
+        EXPECTED_TEXT = (
+            "Tell me about the french revolution. The french revolution was a period of radical political and social "
+            "upheaval in France that lasted from 1789 until 1799. It was a time of great change and upheaval, marked "
+            "by the overthrow of the monarchy, the rise of the middle class, and the eventual establishment of the "
+            "First French Republic.\nThe revolution began in 1789 with the Estates-General, a representative "
+            "assembly that had not met since 1614. The Third Estate, which represented the common people, "
+            "demanded greater representation and eventually broke away to form the National Assembly. This marked "
+            "the beginning of the end of the absolute monarchy and the rise of the middle class.\n"
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3.1-8B-Instruct")
+        model = LlamaForCausalLM.from_pretrained(
+            "meta-llama/Meta-Llama-3.1-8B-Instruct", device_map="auto", torch_dtype=torch.bfloat16
+        )
+        input_text = ["Tell me about the french revolution."]
+        model_inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
+
+        generated_ids = model.generate(**model_inputs, max_new_tokens=128, do_sample=False)
+        generated_text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
+        self.assertEqual(generated_text, EXPECTED_TEXT)
 
     @slow
     @require_read_token
@@ -648,7 +601,14 @@ class LlamaIntegrationTest(unittest.TestCase):
             8: torch.tensor([[-6.5208, -4.1218, -4.9377, -3.2536,  0.8127, -2.9811,  1.2918, -3.3848]])
         }
 
-        self.assertTrue(torch.allclose(EXPECTED_MEAN[self.cuda_compute_capability_major_version].to(torch_device), out.logits.mean(-1), atol=1e-2, rtol=1e-2))
+        self.assertTrue(
+            torch.allclose(
+                EXPECTED_MEAN[self.cuda_compute_capability_major_version].to(torch_device),
+                out.logits.float().mean(-1),
+                atol=1e-2,
+                rtol=1e-2
+            )
+        )
 
         # slicing logits[0, 0, 0:15]
         EXPECTED_SLICE = {
@@ -660,9 +620,9 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.assertTrue(
             torch.allclose(
                 EXPECTED_SLICE[self.cuda_compute_capability_major_version].to(torch_device),
-                out.logits[0, 0, :15],
-                atol=1e-3,
-                rtol=1e-3,
+                out.logits[0, 0, :15].float(),
+                atol=1e-2,
+                rtol=1e-2,
             )
         )
 
@@ -685,7 +645,14 @@ class LlamaIntegrationTest(unittest.TestCase):
             8: torch.tensor([[-6.6544, -4.1259, -4.9840, -3.2456,  0.8261, -3.0124,  1.2971, -3.3641]])
         }
 
-        self.assertTrue(torch.allclose(EXPECTED_MEAN[self.cuda_compute_capability_major_version].to(torch_device), out.logits.mean(-1), atol=1e-2, rtol=1e-2))
+        self.assertTrue(
+            torch.allclose(
+                EXPECTED_MEAN[self.cuda_compute_capability_major_version].to(torch_device),
+                out.logits.float().mean(-1),
+                atol=1e-2,
+                rtol=1e-2
+            )
+        )
 
         # slicing logits[0, 0, 0:15]
         EXPECTED_SLICE = {
@@ -697,9 +664,9 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.assertTrue(
             torch.allclose(
                 EXPECTED_SLICE[self.cuda_compute_capability_major_version].to(torch_device),
-                out.logits[0, 0, :15],
-                atol=1e-3,
-                rtol=1e-3,
+                out.logits[0, 0, :15].float(),
+                atol=1e-2,
+                rtol=1e-2,
             )
         )
 
@@ -727,7 +694,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_read_token
     def test_compile_static_cache(self):
         # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
@@ -752,7 +719,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         ]
         tokenizer = LlamaTokenizer.from_pretrained("meta-llama/Llama-2-7b-hf", pad_token="</s>", padding_side="right")
         model = LlamaForCausalLM.from_pretrained(
-            "meta-llama/Llama-2-7b-hf", device_map="sequential", torch_dtype=torch.float16
+            "meta-llama/Llama-2-7b-hf", device_map=torch_device, torch_dtype=torch.float16
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
@@ -769,6 +736,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
 
         # Static Cache + compile
+        model._cache = None  # clear cache object, initialized when we pass `cache_implementation="static"`
         model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
         generated_ids = model.generate(
             **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
@@ -776,13 +744,80 @@ class LlamaIntegrationTest(unittest.TestCase):
         static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)
 
+    @slow
+    @require_read_token
+    def test_export_static_cache(self):
+        if version.parse(torch.__version__) < version.parse("2.4.0"):
+            self.skipTest(reason="This test requires torch >= 2.4 to run.")
+
+        from transformers.integrations.executorch import (
+            TorchExportableModuleWithStaticCache,
+            convert_and_export_with_cache,
+        )
+
+        llama_models = {
+            "meta-llama/Llama-3.2-1B": [
+                "Simply put, the theory of relativity states that 1) the speed of light is the same for all "
+                "observers, regardless of their location, and 2) the laws of physics are the same for all observers"
+            ],
+            "meta-llama/Llama-3.2-3B": [
+                "Simply put, the theory of relativity states that 1. the speed of light is constant, and 2. "
+                "the speed of light is the fastest speed possible"
+            ],
+            "meta-llama/Llama-2-7b-hf": [
+                "Simply put, the theory of relativity states that 1) the speed of light is a constant, and 2) "
+                "the laws of physics are the same for all",
+            ],
+        }
+
+        for llama_model_ckp, EXPECTED_TEXT_COMPLETION in llama_models.items():
+            # Load tokenizer
+            tokenizer = AutoTokenizer.from_pretrained(llama_model_ckp, pad_token="</s>", padding_side="right")
+            max_generation_length = tokenizer(EXPECTED_TEXT_COMPLETION, return_tensors="pt", padding=True)[
+                "input_ids"
+            ].shape[-1]
+
+            # Load model
+            device = "cpu"
+            dtype = torch.bfloat16
+            cache_implementation = "static"
+            attn_implementation = "sdpa"
+            batch_size = 1
+            model = LlamaForCausalLM.from_pretrained(
+                llama_model_ckp,
+                device_map=device,
+                torch_dtype=dtype,
+                attn_implementation=attn_implementation,
+                generation_config=GenerationConfig(
+                    use_cache=True,
+                    cache_implementation=cache_implementation,
+                    max_length=max_generation_length,
+                    cache_config={
+                        "batch_size": batch_size,
+                        "max_cache_len": max_generation_length,
+                    },
+                ),
+            )
+
+            prompts = ["Simply put, the theory of relativity states that "]
+            prompt_tokens = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
+            prompt_token_ids = prompt_tokens["input_ids"]
+            max_new_tokens = max_generation_length - prompt_token_ids.shape[-1]
+
+            # Static Cache + export
+            exported_program = convert_and_export_with_cache(model)
+            ep_generated_ids = TorchExportableModuleWithStaticCache.generate(
+                exported_program=exported_program, prompt_token_ids=prompt_token_ids, max_new_tokens=max_new_tokens
+            )
+            ep_generated_text = tokenizer.batch_decode(ep_generated_ids, skip_special_tokens=True)
+            self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)
+
 
 @slow
-@require_torch_gpu
+@require_torch_accelerator
 class Mask4DTestHard(unittest.TestCase):
     def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     def setUp(self):
         model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
@@ -922,7 +957,7 @@ class Mask4DTestHard(unittest.TestCase):
         max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
         past_key_values = StaticCache(
             config=self.model.config,
-            max_batch_size=1,
+            batch_size=1,
             max_cache_len=max_cache_len,
             device=torch_device,
             dtype=self.model.dtype,
@@ -970,7 +1005,7 @@ class Mask4DTestHard(unittest.TestCase):
         max_cache_len = 16  # note that max_cache_len is greater than the attention_mask.shape[-1]
         past_key_values = StaticCache(
             config=self.model.config,
-            max_batch_size=1,
+            batch_size=1,
             max_cache_len=max_cache_len,
             device=torch_device,
             dtype=self.model.dtype,

@@ -1,3 +1,18 @@
+[tool.coverage.run]
+source = ["transformers"]
+omit = [
+    "*/convert_*",
+    "*/__main__.py"
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise",
+    "except",
+    "register_parameter"
+]
+
 [tool.ruff]
 line-length = 119
 
@@ -30,9 +45,10 @@ skip-magic-trailing-comma = false
 line-ending = "auto"
 
 [tool.pytest.ini_options]
+addopts = "--doctest-glob='**/*.md'"
 doctest_optionflags="NUMBER NORMALIZE_WHITESPACE ELLIPSIS"
-doctest_glob="**/*.md"
 markers = [
     "flash_attn_test: marks tests related to flash attention (deselect with '-m \"not flash_attn_test\"')",
     "bitsandbytes: select (or deselect with `not`) bitsandbytes integration tests",
+    "generate: marks tests that use the GenerationTesterMixin"
 ]

@@ -37,9 +37,11 @@ class DbrxAttentionConfig(PretrainedConfig):
             The dropout probability for the attention layers.
         clip_qkv (`float`, *optional*):
             If set, clip the queries, keys, and values in the attention layer to this value.
-        kv_n_heads (`Optional[int]`, defaults to 1): For grouped_query_attention only, allow user to specify number of kv heads.
-        rope_theta (`float`, defaults to 10000.0): The base frequency for rope.
+        kv_n_heads (`int`, *optional*, defaults to 1): For grouped_query_attention only, allow user to specify number of kv heads.
+        rope_theta (`float`, *optional*, defaults to 10000.0): The base frequency for rope.
     """
+
+    base_config_key = "attn_config"
 
     def __init__(
         self,
@@ -55,28 +57,11 @@ class DbrxAttentionConfig(PretrainedConfig):
         self.kv_n_heads = kv_n_heads
         self.rope_theta = rope_theta
 
-        for k in ["model_type"]:
+        for k in ["model_type", "attn_implementation", "transformers_version", "_commit_hash"]:
             if k in kwargs:
                 kwargs.pop(k)
         if len(kwargs) != 0:
             raise ValueError(f"Found unknown {kwargs=}")
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: str, **kwargs: Any) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        if config_dict.get("model_type") == "dbrx":
-            config_dict = config_dict["attn_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                + f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
 
 
 class DbrxFFNConfig(PretrainedConfig):
@@ -92,13 +77,15 @@ class DbrxFFNConfig(PretrainedConfig):
         ffn_act_fn (`dict`, *optional*, defaults to `None`): A dict specifying activation function for the FFN.
             The dict should have a key 'name' with the value being the name of the activation function along with
             any additional keyword arguments. If `None`, then set to `{"name": "silu"}`.
-        ffn_hidden_size (`int`, defaults to 3584): The hidden size of the feedforward network.
-        moe_num_experts (`int`, defaults to 4): The number of experts in the mixture of experts layer.
-        moe_top_k (`int`, defaults to 1): The number of experts to use in the mixture of experts layer.
+        ffn_hidden_size (`int`, *optional*, defaults to 3584): The hidden size of the feedforward network.
+        moe_num_experts (`int`, *optional*, defaults to 4): The number of experts in the mixture of experts layer.
+        moe_top_k (`int`, *optional*, defaults to 1): The number of experts to use in the mixture of experts layer.
         moe_jitter_eps (`float`, *optional*, defaults to `None`): If not `None`, the jitter epsilon for the mixture of experts layer.
-        moe_loss_weight (`float`, defaults to 0.01): The loss weight for the mixture of experts layer.
+        moe_loss_weight (`float`, *optional*, defaults to 0.01): The loss weight for the mixture of experts layer.
         moe_normalize_expert_weights (`float`, *optional*, defaults to 1.0): The normalization factor for the expert weights.
     """
+
+    base_config_key = "ffn_config"
 
     def __init__(
         self,
@@ -122,28 +109,11 @@ class DbrxFFNConfig(PretrainedConfig):
         self.moe_loss_weight = moe_loss_weight
         self.moe_normalize_expert_weights = moe_normalize_expert_weights
 
-        for k in ["model_type"]:
+        for k in ["model_type", "attn_implementation", "transformers_version", "_commit_hash"]:
             if k in kwargs:
                 kwargs.pop(k)
         if len(kwargs) != 0:
             raise ValueError(f"Found unknown {kwargs=}")
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: str, **kwargs: Any) -> "PretrainedConfig":
-        cls._set_token_in_kwargs(kwargs)
-
-        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
-
-        if config_dict.get("model_type") == "dbrx":
-            config_dict = config_dict["ffn_config"]
-
-        if "model_type" in config_dict and hasattr(cls, "model_type") and config_dict["model_type"] != cls.model_type:
-            logger.warning(
-                f"You are using a model of type {config_dict['model_type']} to instantiate a model of type "
-                + f"{cls.model_type}. This is not supported for all configurations of models and can yield errors."
-            )
-
-        return cls.from_dict(config_dict, **kwargs)
 
 
 class DbrxConfig(PretrainedConfig):
@@ -202,6 +172,7 @@ class DbrxConfig(PretrainedConfig):
     """
 
     model_type = "dbrx"
+    sub_configs = {"attn_config": DbrxAttentionConfig, "ffn_config": DbrxFFNConfig}
     attribute_map = {
         "num_attention_heads": "n_heads",
         "hidden_size": "d_model",
@@ -249,9 +220,13 @@ class DbrxConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.initializer_range = initializer_range
         self.output_router_logits = output_router_logits
+        self.num_key_value_heads = self.attn_config.kv_n_heads
 
         tie_word_embeddings = kwargs.pop("tie_word_embeddings", False)
         if tie_word_embeddings:
             raise ValueError("tie_word_embeddings is not supported for DBRX models.")
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+
+
+__all__ = ["DbrxConfig"]

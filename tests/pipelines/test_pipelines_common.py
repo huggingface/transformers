@@ -22,14 +22,18 @@ from pathlib import Path
 
 import datasets
 import numpy as np
-from huggingface_hub import HfFolder, delete_repo
+from huggingface_hub import HfFolder, Repository, delete_repo
 from requests.exceptions import HTTPError
 
 from transformers import (
+    AutomaticSpeechRecognitionPipeline,
     AutoModelForSequenceClassification,
     AutoTokenizer,
     DistilBertForSequenceClassification,
+    MaskGenerationPipeline,
+    T5ForConditionalGeneration,
     TextClassificationPipeline,
+    TextGenerationPipeline,
     TFAutoModelForSequenceClassification,
     pipeline,
 )
@@ -222,6 +226,39 @@ class CommonPipelineTest(unittest.TestCase):
         # If underlying model doesn't have dtype property, simply return None
         pipe.model = None
         self.assertIsNone(pipe.torch_dtype)
+
+    @require_torch
+    def test_auto_model_pipeline_registration_from_local_dir(self):
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            _ = Repository(local_dir=tmp_dir, clone_from="hf-internal-testing/tiny-random-custom-architecture")
+            pipe = pipeline("text-generation", tmp_dir, trust_remote_code=True)
+
+            self.assertIsInstance(pipe, TextGenerationPipeline)  # Assert successful load
+
+    @require_torch
+    def test_pipeline_with_task_parameters_no_side_effects(self):
+        """
+        Regression test: certain pipeline flags, like `task`, modified the model configuration, causing unexpected
+        side-effects
+        """
+        # This checkpoint has task-specific parameters that will modify the behavior of the pipeline
+        model = T5ForConditionalGeneration.from_pretrained("t5-small")
+        self.assertTrue(model.config.num_beams == 1)
+
+        # The task-specific parameters used to cause side-effects on `model.config` -- not anymore
+        pipe = pipeline(model=model, tokenizer=AutoTokenizer.from_pretrained("t5-small"), task="translation_en_to_de")
+        self.assertTrue(model.config.num_beams == 1)
+        self.assertTrue(model.generation_config.num_beams == 1)
+
+        # Under the hood: we now store a generation config in the pipeline. This generation config stores the
+        # task-specific paremeters.
+        self.assertTrue(pipe.generation_config.num_beams == 4)
+
+        # We can confirm that the task-specific parameters have an effect. (In this case, the default is `num_beams=1`,
+        # which would crash when `num_return_sequences=4` is passed.)
+        pipe("Hugging Face doesn't sell hugs.", num_return_sequences=4)
+        with self.assertRaises(ValueError):
+            pipe("Hugging Face doesn't sell hugs.", num_return_sequences=4, num_beams=1)
 
 
 @is_pipeline_test
@@ -840,9 +877,7 @@ class CustomPipelineTest(unittest.TestCase):
     def test_chunk_pipeline_batching_single_file(self):
         # Make sure we have cached the pipeline.
         pipe = pipeline(model="hf-internal-testing/tiny-random-Wav2Vec2ForCTC")
-        ds = datasets.load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-        ).sort("id")
+        ds = datasets.load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation").sort("id")
         audio = ds[40]["audio"]["array"]
 
         pipe = pipeline(model="hf-internal-testing/tiny-random-Wav2Vec2ForCTC")
@@ -860,6 +895,42 @@ class CustomPipelineTest(unittest.TestCase):
             pass
 
         self.assertEqual(self.COUNT, 1)
+
+    @require_torch
+    def test_custom_code_with_string_tokenizer(self):
+        # This test checks for an edge case - tokenizer loading used to fail when using a custom code model
+        # with a separate tokenizer that was passed as a repo name rather than a tokenizer object.
+        # See https://github.com/huggingface/transformers/issues/31669
+        text_generator = pipeline(
+            "text-generation",
+            model="hf-internal-testing/tiny-random-custom-architecture",
+            tokenizer="hf-internal-testing/tiny-random-custom-architecture",
+            trust_remote_code=True,
+        )
+
+        self.assertIsInstance(text_generator, TextGenerationPipeline)  # Assert successful loading
+
+    @require_torch
+    def test_custom_code_with_string_feature_extractor(self):
+        speech_recognizer = pipeline(
+            "automatic-speech-recognition",
+            model="hf-internal-testing/fake-custom-wav2vec2",
+            feature_extractor="hf-internal-testing/fake-custom-wav2vec2",
+            trust_remote_code=True,
+        )
+
+        self.assertIsInstance(speech_recognizer, AutomaticSpeechRecognitionPipeline)  # Assert successful loading
+
+    @require_torch
+    def test_custom_code_with_string_preprocessor(self):
+        mask_generator = pipeline(
+            "mask-generation",
+            model="hf-internal-testing/fake-custom-sam",
+            processor="hf-internal-testing/fake-custom-sam",
+            trust_remote_code=True,
+        )
+
+        self.assertIsInstance(mask_generator, MaskGenerationPipeline)  # Assert successful loading
 
 
 @require_torch
@@ -879,6 +950,7 @@ class DynamicPipelineTester(unittest.TestCase):
         except HTTPError:
             pass
 
+    @unittest.skip("Broken, TODO @Yih-Dar")
     def test_push_to_hub_dynamic_pipeline(self):
         from transformers import BertConfig, BertForSequenceClassification, BertTokenizer
 

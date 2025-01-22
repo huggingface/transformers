@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import contextlib
 import warnings
 from copy import deepcopy
 from pathlib import Path
@@ -19,17 +20,28 @@ from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Tuple, Un
 
 import torch
 from torch import nn
+from torch.distributed.fsdp import FullyShardedDataParallel
 from torch.utils.data import Dataset
 
 from .generation.configuration_utils import GenerationConfig
 from .integrations.deepspeed import is_deepspeed_zero3_enabled
+from .integrations.fsdp import is_fsdp_managed_module
 from .trainer import Trainer
-from .utils import logging
+from .utils import is_datasets_available, logging
+from .utils.deprecation import deprecate_kwarg
 
+
+if is_datasets_available():
+    import datasets
 
 if TYPE_CHECKING:
+    from torch.utils.data import IterableDataset
+
     from .data.data_collator import DataCollator
+    from .feature_extraction_utils import FeatureExtractionMixin
+    from .image_processing_utils import BaseImageProcessor
     from .modeling_utils import PreTrainedModel
+    from .processing_utils import ProcessorMixin
     from .tokenization_utils_base import PreTrainedTokenizerBase
     from .trainer_callback import TrainerCallback
     from .trainer_utils import EvalPrediction, PredictionOutput
@@ -40,15 +52,19 @@ logger = logging.get_logger(__name__)
 
 
 class Seq2SeqTrainer(Trainer):
+    @deprecate_kwarg("tokenizer", new_name="processing_class", version="5.0.0", raise_if_both_names=True)
     def __init__(
         self,
         model: Union["PreTrainedModel", nn.Module] = None,
         args: "TrainingArguments" = None,
         data_collator: Optional["DataCollator"] = None,
-        train_dataset: Optional[Dataset] = None,
+        train_dataset: Optional[Union[Dataset, "IterableDataset", "datasets.Dataset"]] = None,
         eval_dataset: Optional[Union[Dataset, Dict[str, Dataset]]] = None,
-        tokenizer: Optional["PreTrainedTokenizerBase"] = None,
+        processing_class: Optional[
+            Union["PreTrainedTokenizerBase", "BaseImageProcessor", "FeatureExtractionMixin", "ProcessorMixin"]
+        ] = None,
         model_init: Optional[Callable[[], "PreTrainedModel"]] = None,
+        compute_loss_func: Optional[Callable] = None,
         compute_metrics: Optional[Callable[["EvalPrediction"], Dict]] = None,
         callbacks: Optional[List["TrainerCallback"]] = None,
         optimizers: Tuple[torch.optim.Optimizer, torch.optim.lr_scheduler.LambdaLR] = (None, None),
@@ -60,8 +76,9 @@ class Seq2SeqTrainer(Trainer):
             data_collator=data_collator,
             train_dataset=train_dataset,
             eval_dataset=eval_dataset,
-            tokenizer=tokenizer,
+            processing_class=processing_class,
             model_init=model_init,
+            compute_loss_func=compute_loss_func,
             compute_metrics=compute_metrics,
             callbacks=callbacks,
             optimizers=optimizers,
@@ -80,7 +97,7 @@ class Seq2SeqTrainer(Trainer):
         Loads a `~generation.GenerationConfig` from the `Seq2SeqTrainingArguments.generation_config` arguments.
 
         Args:
-            gen_config_arg (`str` or [`~generation.GenerationConfig`]):
+            gen_config_arg (`str` or [`~generation.GenerationConfig]`):
                 `Seq2SeqTrainingArguments.generation_config` argument.
 
         Returns:
@@ -291,10 +308,8 @@ class Seq2SeqTrainer(Trainer):
         if "max_length" in gen_kwargs and gen_kwargs["max_length"] is None:
             gen_kwargs.pop("max_length")
 
-        default_synced_gpus = True if is_deepspeed_zero3_enabled() else False
-        gen_kwargs["synced_gpus"] = (
-            gen_kwargs["synced_gpus"] if gen_kwargs.get("synced_gpus") is not None else default_synced_gpus
-        )
+        default_synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self.model)
+        gen_kwargs["synced_gpus"] = gen_kwargs.get("synced_gpus", default_synced_gpus)
 
         generation_inputs = inputs.copy()
         # If the `decoder_input_ids` was created from `labels`, evict the former, so that the model can freely generate
@@ -307,7 +322,15 @@ class Seq2SeqTrainer(Trainer):
             generation_inputs = {
                 k: v for k, v in inputs.items() if k not in ("decoder_input_ids", "decoder_attention_mask")
             }
-        generated_tokens = self.model.generate(**generation_inputs, **gen_kwargs)
+
+        summon_full_params_context = (
+            FullyShardedDataParallel.summon_full_params(self.model)
+            if isinstance(self.model, FullyShardedDataParallel)
+            else contextlib.nullcontext()
+        )
+
+        with summon_full_params_context:
+            generated_tokens = self.model.generate(**generation_inputs, **gen_kwargs)
 
         # Temporary hack to ensure the generation config is not initialized for each iteration of the evaluation loop
         # TODO: remove this hack when the legacy code that initializes generation_config from a model config is
@@ -349,10 +372,12 @@ class Seq2SeqTrainer(Trainer):
         return loss, generated_tokens, labels
 
     def _pad_tensors_to_max_len(self, tensor, max_length):
-        if self.tokenizer is not None and hasattr(self.tokenizer, "pad_token_id"):
+        if self.processing_class is not None and hasattr(self.processing_class, "pad_token_id"):
             # If PAD token is not defined at least EOS token has to be defined
             pad_token_id = (
-                self.tokenizer.pad_token_id if self.tokenizer.pad_token_id is not None else self.tokenizer.eos_token_id
+                self.processing_class.pad_token_id
+                if self.processing_class.pad_token_id is not None
+                else self.processing_class.eos_token_id
             )
         else:
             if self.model.config.pad_token_id is not None:

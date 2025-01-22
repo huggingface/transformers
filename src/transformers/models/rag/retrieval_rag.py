@@ -204,7 +204,7 @@ class HFIndexBase(Index):
 
     def _check_dataset_format(self, with_index: bool):
         if not isinstance(self.dataset, Dataset):
-            raise ValueError(f"Dataset should be a datasets.Dataset object, but got {type(self.dataset)}")
+            raise TypeError(f"Dataset should be a datasets.Dataset object, but got {type(self.dataset)}")
         if len({"title", "text", "embeddings"} - set(self.dataset.column_names)) > 0:
             raise ValueError(
                 "Dataset should be a dataset with the following columns: "
@@ -672,3 +672,6 @@ class RagRetriever:
                 },
                 tensor_type=return_tensors,
             )
+
+
+__all__ = ["RagRetriever"]

@@ -211,7 +211,7 @@ class BarkProcessor(ProcessorMixin):
                 raise ValueError(f"Voice preset unrecognized, missing {key} as a key.")
 
             if not isinstance(voice_preset[key], np.ndarray):
-                raise ValueError(f"{key} voice preset must be a {str(self.preset_shape[key])}D ndarray.")
+                raise TypeError(f"{key} voice preset must be a {str(self.preset_shape[key])}D ndarray.")
 
             if len(voice_preset[key].shape) != self.preset_shape[key]:
                 raise ValueError(f"{key} voice preset must be a {str(self.preset_shape[key])}D ndarray.")
@@ -285,3 +285,6 @@ class BarkProcessor(ProcessorMixin):
             encoded_text["history_prompt"] = voice_preset
 
         return encoded_text
+
+
+__all__ = ["BarkProcessor"]

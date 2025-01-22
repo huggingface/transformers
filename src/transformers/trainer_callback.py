@@ -16,7 +16,6 @@
 Callbacks to use with the Trainer class and customize the training loop.
 """
 
-import copy
 import dataclasses
 import json
 from dataclasses import dataclass
@@ -25,7 +24,7 @@ from typing import Dict, List, Optional, Union
 import numpy as np
 from tqdm.auto import tqdm
 
-from .trainer_utils import IntervalStrategy, has_length
+from .trainer_utils import IntervalStrategy, SaveStrategy, has_length
 from .training_args import TrainingArguments
 from .utils import logging
 
@@ -65,7 +64,8 @@ class TrainerState:
             The batch size for the training dataloader. Only needed when
             `auto_find_batch_size` has been used.
         num_input_tokens_seen (`int`, *optional*, defaults to 0):
-            The number of tokens seen during training (number of input tokens, not the number of prediction tokens).
+            When tracking the inputs tokens, the number of tokens seen during training (number of input tokens, not the
+            number of prediction tokens).
         total_flos (`float`, *optional*, defaults to 0):
             The total number of floating operations done by the model since the beginning of training (stored as floats
             to avoid overflow).
@@ -273,7 +273,9 @@ class TrainerCallback:
         model ([`PreTrainedModel`] or `torch.nn.Module`):
             The model being trained.
         tokenizer ([`PreTrainedTokenizer`]):
-            The tokenizer used for encoding the data.
+            The tokenizer used for encoding the data. This is deprecated in favour of `processing_class`.
+        processing_class ([`PreTrainedTokenizer` or `BaseImageProcessor` or `ProcessorMixin` or `FeatureExtractionMixin`]):
+            The processing class used for encoding the data. Can be a tokenizer, a processor, an image processor or a feature extractor.
         optimizer (`torch.optim.Optimizer`):
             The optimizer used for the training steps.
         lr_scheduler (`torch.optim.lr_scheduler.LambdaLR`):
@@ -345,6 +347,12 @@ class TrainerCallback:
         """
         pass
 
+    def on_pre_optimizer_step(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        """
+        Event called before the optimizer step but after gradient clipping. Useful for monitoring gradients.
+        """
+        pass
+
     def on_optimizer_step(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
         """
         Event called after the optimizer step but before gradients are zeroed out. Useful for monitoring gradients.
@@ -398,12 +406,12 @@ class TrainerCallback:
 class CallbackHandler(TrainerCallback):
     """Internal class that just calls the list of callbacks in order."""
 
-    def __init__(self, callbacks, model, tokenizer, optimizer, lr_scheduler):
+    def __init__(self, callbacks, model, processing_class, optimizer, lr_scheduler):
         self.callbacks = []
         for cb in callbacks:
             self.add_callback(cb)
         self.model = model
-        self.tokenizer = tokenizer
+        self.processing_class = processing_class
         self.optimizer = optimizer
         self.lr_scheduler = lr_scheduler
         self.train_dataloader = None
@@ -476,6 +484,9 @@ class CallbackHandler(TrainerCallback):
         control.should_save = False
         return self.call_event("on_step_begin", args, state, control)
 
+    def on_pre_optimizer_step(self, args: TrainingArguments, state: TrainerState, control: TrainerControl):
+        return self.call_event("on_pre_optimizer_step", args, state, control)
+
     def on_optimizer_step(self, args: TrainingArguments, state: TrainerState, control: TrainerControl):
         return self.call_event("on_optimizer_step", args, state, control)
 
@@ -510,7 +521,7 @@ class CallbackHandler(TrainerCallback):
                 state,
                 control,
                 model=self.model,
-                tokenizer=self.tokenizer,
+                processing_class=self.processing_class,
                 optimizer=self.optimizer,
                 lr_scheduler=self.lr_scheduler,
                 train_dataloader=self.train_dataloader,
@@ -545,7 +556,7 @@ class DefaultFlowCallback(TrainerCallback):
 
         # Save
         if (
-            args.save_strategy == IntervalStrategy.STEPS
+            args.save_strategy == SaveStrategy.STEPS
             and state.save_steps > 0
             and state.global_step % state.save_steps == 0
         ):
@@ -555,7 +566,7 @@ class DefaultFlowCallback(TrainerCallback):
         if state.global_step >= state.max_steps:
             control.should_training_stop = True
             # Save the model at the end if we have a save strategy
-            if args.save_strategy != IntervalStrategy.NO:
+            if args.save_strategy not in [SaveStrategy.NO, SaveStrategy.BEST]:
                 control.should_save = True
 
         return control
@@ -570,7 +581,7 @@ class DefaultFlowCallback(TrainerCallback):
             control.should_evaluate = True
 
         # Save
-        if args.save_strategy == IntervalStrategy.EPOCH:
+        if args.save_strategy == SaveStrategy.EPOCH:
             control.should_save = True
 
         return control
@@ -579,11 +590,21 @@ class DefaultFlowCallback(TrainerCallback):
 class ProgressCallback(TrainerCallback):
     """
     A [`TrainerCallback`] that displays the progress of training or evaluation.
+    You can modify `max_str_len` to control how long strings are truncated when logging.
     """
 
-    def __init__(self):
+    def __init__(self, max_str_len: int = 100):
+        """
+        Initialize the callback with optional max_str_len parameter to control string truncation length.
+
+        Args:
+            max_str_len (`int`):
+                Maximum length of strings to display in logs.
+                Longer strings will be truncated with a message.
+        """
         self.training_bar = None
         self.prediction_bar = None
+        self.max_str_len = max_str_len
 
     def on_train_begin(self, args, state, control, **kwargs):
         if state.is_world_process_zero:
@@ -617,13 +638,22 @@ class ProgressCallback(TrainerCallback):
 
     def on_log(self, args, state, control, logs=None, **kwargs):
         if state.is_world_process_zero and self.training_bar is not None:
-            # avoid modifying the logs object as it is shared between callbacks
-            logs = copy.deepcopy(logs)
-            _ = logs.pop("total_flos", None)
+            # make a shallow copy of logs so we can mutate the fields copied
+            # but avoid doing any value pickling.
+            shallow_logs = {}
+            for k, v in logs.items():
+                if isinstance(v, str) and len(v) > self.max_str_len:
+                    shallow_logs[k] = (
+                        f"[String too long to display, length: {len(v)} > {self.max_str_len}. "
+                        "Consider increasing `max_str_len` if needed.]"
+                    )
+                else:
+                    shallow_logs[k] = v
+            _ = shallow_logs.pop("total_flos", None)
             # round numbers so that it looks better in console
-            if "epoch" in logs:
-                logs["epoch"] = round(logs["epoch"], 2)
-            self.training_bar.write(str(logs))
+            if "epoch" in shallow_logs:
+                shallow_logs["epoch"] = round(shallow_logs["epoch"], 2)
+            self.training_bar.write(str(shallow_logs))
 
     def on_train_end(self, args, state, control, **kwargs):
         if state.is_world_process_zero:
@@ -677,10 +707,14 @@ class EarlyStoppingCallback(TrainerCallback, ExportableState):
             self.early_stopping_patience_counter += 1
 
     def on_train_begin(self, args, state, control, **kwargs):
-        assert args.load_best_model_at_end, "EarlyStoppingCallback requires load_best_model_at_end = True"
+        if not args.load_best_model_at_end:
+            logger.warning(
+                "Using EarlyStoppingCallback without load_best_model_at_end=True. "
+                "Once training is finished, the best model will not be loaded automatically."
+            )
         assert (
             args.metric_for_best_model is not None
-        ), "EarlyStoppingCallback requires metric_for_best_model is defined"
+        ), "EarlyStoppingCallback requires metric_for_best_model to be defined"
         assert (
             args.eval_strategy != IntervalStrategy.NO
         ), "EarlyStoppingCallback requires IntervalStrategy of steps or epoch"

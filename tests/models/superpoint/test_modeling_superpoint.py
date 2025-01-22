@@ -16,7 +16,7 @@ import unittest
 from typing import List
 
 from transformers.models.superpoint.configuration_superpoint import SuperPointConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import is_flaky, require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -134,6 +134,10 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    @is_flaky(description="The `indices` computed with `topk()` in `top_k_keypoints` is not stable.")
+    def test_batching_equivalence(self):
+        super().test_batching_equivalence()
 
     @unittest.skip(reason="SuperPointForKeypointDetection does not use inputs_embeds")
     def test_inputs_embeds(self):
@@ -260,7 +264,7 @@ class SuperPointModelIntegrationTest(unittest.TestCase):
         inputs = preprocessor(images=images, return_tensors="pt").to(torch_device)
         with torch.no_grad():
             outputs = model(**inputs)
-        expected_number_keypoints_image0 = 567
+        expected_number_keypoints_image0 = 568
         expected_number_keypoints_image1 = 830
         expected_max_number_keypoints = max(expected_number_keypoints_image0, expected_number_keypoints_image1)
         expected_keypoints_shape = torch.Size((len(images), expected_max_number_keypoints, 2))
@@ -275,11 +279,13 @@ class SuperPointModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.keypoints.shape, expected_keypoints_shape)
         self.assertEqual(outputs.scores.shape, expected_scores_shape)
         self.assertEqual(outputs.descriptors.shape, expected_descriptors_shape)
-        expected_keypoints_image0_values = torch.tensor([[480.0, 9.0], [494.0, 9.0], [489.0, 16.0]]).to(torch_device)
+        expected_keypoints_image0_values = torch.tensor([[0.75, 0.0188], [0.7719, 0.0188], [0.7641, 0.0333]]).to(
+            torch_device
+        )
         expected_scores_image0_values = torch.tensor(
-            [0.0064, 0.0137, 0.0589, 0.0723, 0.5166, 0.0174, 0.1515, 0.2054, 0.0334]
+            [0.0064, 0.0139, 0.0591, 0.0727, 0.5170, 0.0175, 0.1526, 0.2057, 0.0335]
         ).to(torch_device)
-        expected_descriptors_image0_value = torch.tensor(-0.1096).to(torch_device)
+        expected_descriptors_image0_value = torch.tensor(-0.1095).to(torch_device)
         predicted_keypoints_image0_values = outputs.keypoints[0, :3]
         predicted_scores_image0_values = outputs.scores[0, :9]
         predicted_descriptors_image0_value = outputs.descriptors[0, 0, 0]

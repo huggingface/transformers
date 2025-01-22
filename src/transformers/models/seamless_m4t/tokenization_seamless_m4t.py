@@ -463,9 +463,8 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
         `unk_token`. Here is an example with `unk_token = "<unk>"` and `unk_token_length = 4`.
         `self.tokenizer.sp_model.encode("<unk> Hey", out_type = str)[4:]`.
         """
-        tokens = self.sp_model.encode(text, out_type=str)
         if self.legacy or not text.startswith((SPIECE_UNDERLINE, " ")):
-            return tokens
+            return self.sp_model.encode(text, out_type=str)
 
         # 1. Encode string + prefix ex: "<unk> Hey"
         tokens = self.sp_model.encode(self.unk_token + text, out_type=str)
@@ -561,3 +560,6 @@ class SeamlessM4TTokenizer(PreTrainedTokenizer):
 
         self.prefix_tokens = [self.eos_token_id, self.cur_lang_code]
         self.suffix_tokens = [self.eos_token_id]
+
+
+__all__ = ["SeamlessM4TTokenizer"]

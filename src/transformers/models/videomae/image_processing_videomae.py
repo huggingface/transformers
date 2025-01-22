@@ -35,10 +35,9 @@ from ...image_utils import (
     is_valid_image,
     to_numpy_array,
     valid_images,
-    validate_kwargs,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_vision_available, logging
+from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
 
 
 if is_vision_available():
@@ -131,22 +130,6 @@ class VideoMAEImageProcessor(BaseImageProcessor):
         self.do_normalize = do_normalize
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
-        self._valid_processor_keys = [
-            "videos",
-            "do_resize",
-            "size",
-            "resample",
-            "do_center_crop",
-            "crop_size",
-            "do_rescale",
-            "rescale_factor",
-            "do_normalize",
-            "image_mean",
-            "image_std",
-            "return_tensors",
-            "data_format",
-            "input_data_format",
-        ]
 
     def resize(
         self,
@@ -225,7 +208,7 @@ class VideoMAEImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         image = to_numpy_array(image)
 
-        if is_scaled_image(image) and do_rescale:
+        if do_rescale and is_scaled_image(image):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -249,6 +232,7 @@ class VideoMAEImageProcessor(BaseImageProcessor):
         image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
         return image
 
+    @filter_out_non_signature_kwargs()
     def preprocess(
         self,
         videos: ImageInput,
@@ -265,7 +249,6 @@ class VideoMAEImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -328,8 +311,6 @@ class VideoMAEImageProcessor(BaseImageProcessor):
         crop_size = crop_size if crop_size is not None else self.crop_size
         crop_size = get_size_dict(crop_size, param_name="crop_size")
 
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
-
         if not valid_images(videos):
             raise ValueError(
                 "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
@@ -362,3 +343,6 @@ class VideoMAEImageProcessor(BaseImageProcessor):
 
         data = {"pixel_values": videos}
         return BatchFeature(data=data, tensor_type=return_tensors)
+
+
+__all__ = ["VideoMAEImageProcessor"]

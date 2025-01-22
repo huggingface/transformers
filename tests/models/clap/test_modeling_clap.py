@@ -515,10 +515,17 @@ class ClapModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = ClapModelTester(self)
+        common_properties = ["logit_scale_init_value", "projection_hidden_act", "projection_dim"]
+        self.config_tester = ConfigTester(
+            self, config_class=ClapConfig, has_text_modality=False, common_properties=common_properties
+        )
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
@@ -665,9 +672,7 @@ class ClapModelIntegrationTest(unittest.TestCase):
             "repeat": 0.0023,
         }
 
-        librispeech_dummy = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-        )
+        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         audio_sample = librispeech_dummy[-1]
 
         model_id = "laion/clap-htsat-unfused"
@@ -694,9 +699,7 @@ class ClapModelIntegrationTest(unittest.TestCase):
             "pad": -0.000379,
         }
 
-        librispeech_dummy = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-        )
+        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         audio_sample = librispeech_dummy[-1]
 
         model_id = "laion/clap-htsat-fused"
@@ -723,9 +726,7 @@ class ClapModelIntegrationTest(unittest.TestCase):
             "pad": 0.0006,
         }
 
-        librispeech_dummy = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-        )
+        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         audio_samples = [sample["array"] for sample in librispeech_dummy[0:4]["audio"]]
 
         model_id = "laion/clap-htsat-fused"
@@ -752,9 +753,7 @@ class ClapModelIntegrationTest(unittest.TestCase):
             "pad": 0.0019,
         }
 
-        librispeech_dummy = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-        )
+        librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         audio_samples = [sample["array"] for sample in librispeech_dummy[0:4]["audio"]]
 
         model_id = "laion/clap-htsat-unfused"

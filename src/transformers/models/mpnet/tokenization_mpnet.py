@@ -108,6 +108,9 @@ class MPNetTokenizer(PreTrainedTokenizer):
         strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for `lowercase` (as in the original BERT).
+        clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
+            Whether or not to cleanup spaces after decoding, cleanup consists in removing potential artifacts like
+            extra spaces.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -128,6 +131,7 @@ class MPNetTokenizer(PreTrainedTokenizer):
         mask_token="<mask>",
         tokenize_chinese_chars=True,
         strip_accents=None,
+        clean_up_tokenization_spaces=True,
         **kwargs,
     ):
         bos_token = AddedToken(bos_token, special=True) if isinstance(bos_token, str) else bos_token
@@ -170,6 +174,7 @@ class MPNetTokenizer(PreTrainedTokenizer):
             mask_token=mask_token,
             tokenize_chinese_chars=tokenize_chinese_chars,
             strip_accents=strip_accents,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             **kwargs,
         )
 
@@ -310,7 +315,7 @@ class MPNetTokenizer(PreTrainedTokenizer):
 
 
 # Copied from transformers.models.bert.tokenization_bert.BasicTokenizer
-class BasicTokenizer(object):
+class BasicTokenizer:
     """
     Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
 
@@ -472,7 +477,7 @@ class BasicTokenizer(object):
 
 
 # Copied from transformers.models.bert.tokenization_bert.WordpieceTokenizer
-class WordpieceTokenizer(object):
+class WordpieceTokenizer:
     """Runs WordPiece tokenization."""
 
     def __init__(self, vocab, unk_token, max_input_chars_per_word=100):
@@ -527,3 +532,6 @@ class WordpieceTokenizer(object):
             else:
                 output_tokens.extend(sub_tokens)
         return output_tokens
+
+
+__all__ = ["MPNetTokenizer"]

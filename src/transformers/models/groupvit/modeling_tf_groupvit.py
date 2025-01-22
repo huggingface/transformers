@@ -1443,13 +1443,13 @@ class TFGroupViTMainLayer(keras.layers.Layer):
         super().__init__(**kwargs)
 
         if not isinstance(config.text_config, GroupViTTextConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.text_config is expected to be of type GroupViTTextConfig but is of type"
                 f" {type(config.text_config)}."
             )
 
         if not isinstance(config.vision_config, GroupViTVisionConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.vision_config is expected to be of type GroupViTVisionConfig but is of type"
                 f" {type(config.vision_config)}."
             )
@@ -2136,3 +2136,6 @@ class TFGroupViTModel(TFGroupViTPreTrainedModel):
         if getattr(self, "groupvit", None) is not None:
             with tf.name_scope(self.groupvit.name):
                 self.groupvit.build(None)
+
+
+__all__ = ["TFGroupViTModel", "TFGroupViTPreTrainedModel", "TFGroupViTTextModel", "TFGroupViTVisionModel"]

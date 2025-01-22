@@ -111,7 +111,7 @@ class TextToAudioPipeline(Pipeline):
         if self.model.config.model_type == "bark":
             # bark Tokenizer is called with BarkProcessor which uses those kwargs
             new_kwargs = {
-                "max_length": self.model.generation_config.semantic_config.get("max_input_semantic_length", 256),
+                "max_length": self.generation_config.semantic_config.get("max_input_semantic_length", 256),
                 "add_special_tokens": False,
                 "return_attention_mask": True,
                 "return_token_type_ids": False,
@@ -137,6 +137,10 @@ class TextToAudioPipeline(Pipeline):
             # we expect some kwargs to be additional tensors which need to be on the right device
             generate_kwargs = self._ensure_tensor_on_device(generate_kwargs, device=self.device)
 
+            # User-defined `generation_config` passed to the pipeline call take precedence
+            if "generation_config" not in generate_kwargs:
+                generate_kwargs["generation_config"] = self.generation_config
+
             # generate_kwargs get priority over forward_params
             forward_params.update(generate_kwargs)
 
@@ -144,10 +148,9 @@ class TextToAudioPipeline(Pipeline):
         else:
             if len(generate_kwargs):
                 raise ValueError(
-                    f"""You're using the `TextToAudioPipeline` with a forward-only model, but `generate_kwargs` is non empty.
-                                 For forward-only TTA models, please use `forward_params` instead of of
-                                 `generate_kwargs`. For reference, here are the `generate_kwargs` used here:
-                                 {generate_kwargs.keys()}"""
+                    "You're using the `TextToAudioPipeline` with a forward-only model, but `generate_kwargs` is non "
+                    "empty. For forward-only TTA models, please use `forward_params` instead of `generate_kwargs`. "
+                    f"For reference, the `generate_kwargs` used here are: {generate_kwargs.keys()}"
                 )
             output = self.model(**model_inputs, **forward_params)[0]
 
@@ -187,6 +190,12 @@ class TextToAudioPipeline(Pipeline):
         forward_params=None,
         generate_kwargs=None,
     ):
+        if self.assistant_model is not None:
+            generate_kwargs["assistant_model"] = self.assistant_model
+        if self.assistant_tokenizer is not None:
+            generate_kwargs["tokenizer"] = self.tokenizer
+            generate_kwargs["assistant_tokenizer"] = self.assistant_tokenizer
+
         params = {
             "forward_params": forward_params if forward_params else {},
             "generate_kwargs": generate_kwargs if generate_kwargs else {},

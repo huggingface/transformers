@@ -31,9 +31,12 @@ from PIL import Image
 
 from transformers import (
     AutoTokenizer,
+    BertTokenizer,
     Blip2Config,
     Blip2ForConditionalGeneration,
+    Blip2ForImageTextRetrieval,
     Blip2Processor,
+    Blip2QFormerConfig,
     Blip2VisionConfig,
     BlipImageProcessor,
     OPTConfig,
@@ -51,7 +54,7 @@ def load_demo_image():
 
 
 # here we list all keys to be renamed (original name on the left, our name on the right)
-def create_rename_keys(config):
+def create_rename_keys(config, model_name):
     rename_keys = []
     # fmt: off
 
@@ -79,6 +82,13 @@ def create_rename_keys(config):
     # QFormer
     rename_keys.append(("Qformer.bert.embeddings.LayerNorm.weight", "qformer.layernorm.weight"))
     rename_keys.append(("Qformer.bert.embeddings.LayerNorm.bias", "qformer.layernorm.bias"))
+    if "itm" in model_name:
+        rename_keys.append(("Qformer.bert.embeddings.word_embeddings.weight", "embeddings.word_embeddings.weight"))
+        rename_keys.append(("Qformer.bert.embeddings.position_embeddings.weight", "embeddings.position_embeddings.weight"))
+        rename_keys.append(("vision_proj.weight", "vision_projection.weight"))
+        rename_keys.append(("vision_proj.bias", "vision_projection.bias"))
+        rename_keys.append(("text_proj.weight", "text_projection.weight"))
+        rename_keys.append(("text_proj.bias", "text_projection.bias"))
 
     # fmt: on
     return rename_keys
@@ -114,26 +124,47 @@ def get_blip2_config(model_name, eos_token_id):
         text_config = T5Config.from_pretrained("google/flan-t5-xl", dense_act_fn="gelu", bos_token_id=1).to_dict()
     elif "t5-xxl" in model_name:
         text_config = T5Config.from_pretrained("google/flan-t5-xxl", dense_act_fn="gelu", bos_token_id=1).to_dict()
+    elif "itm" in model_name:
+        text_config = {}
+    else:
+        raise ValueError("Model name not supported")
 
-    config = Blip2Config(vision_config=vision_config, text_config=text_config)
+    if "itm" in model_name:
+        config = Blip2Config(
+            vision_config=vision_config,
+            qformer_config=Blip2QFormerConfig(vocab_size=30523, use_qformer_text_input=True).to_dict(),
+        )
+    else:
+        config = Blip2Config(vision_config=vision_config, text_config=text_config)
 
     return config, image_size
 
 
 @torch.no_grad()
-def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_hub=False):
+def convert_blip2_checkpoint(
+    model_name, pytorch_dump_folder_path=None, push_to_hub=False, lavis_device="cpu", hf_model_device="cpu"
+):
     """
     Copy/paste/tweak model's weights to Transformers design.
     """
-    tokenizer = (
-        AutoTokenizer.from_pretrained("facebook/opt-2.7b")
-        if "opt" in model_name
-        else AutoTokenizer.from_pretrained("google/flan-t5-xl")
-    )
-    eos_token_id = tokenizer("\n", add_special_tokens=False).input_ids[0]
+    if "opt" in model_name:
+        tokenizer = AutoTokenizer.from_pretrained("facebook/opt-2.7b")
+    elif "itm" in model_name:
+        tokenizer = BertTokenizer.from_pretrained("bert-base-uncased", truncation_side="right")
+        tokenizer.add_special_tokens({"bos_token": "[DEC]"})
+    else:
+        tokenizer = AutoTokenizer.from_pretrained("google/flan-t5-xl")
+
+    if "itm" in model_name:
+        eos_token_id = None
+    else:
+        eos_token_id = tokenizer("\n", add_special_tokens=False).input_ids[0]
     config, image_size = get_blip2_config(model_name, eos_token_id=eos_token_id)
 
-    hf_model = Blip2ForConditionalGeneration(config).eval()
+    if "itm" in model_name:
+        hf_model = Blip2ForImageTextRetrieval(config).eval()
+    else:
+        hf_model = Blip2ForConditionalGeneration(config).eval()
 
     model_name_to_original = {
         "blip2-opt-2.7b": ("blip2_opt", "pretrain_opt2.7b"),
@@ -143,15 +174,11 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
         "blip2-flan-t5-xl": ("blip2_t5", "pretrain_flant5xl"),
         "blip2-flan-t5-xl-coco": ("blip2_t5", "caption_coco_flant5xl"),
         "blip2-flan-t5-xxl": ("blip2_t5", "pretrain_flant5xxl"),
+        "blip2-itm-vit-g": ("blip2_image_text_matching", "pretrain"),
+        "blip2-itm-vit-g-coco": ("blip2_image_text_matching", "coco"),
     }
 
     name, type = model_name_to_original[model_name]
-
-    # note: this script is tested on 2 GPUs, as models are compared in float32,
-    # which requires quite some memory. Hence loading both on a
-    # separate device is the easiest to compare
-    hf_model_device = "cuda:0" if torch.cuda.is_available() else "cpu"
-    lavis_device = "cuda:1" if torch.cuda.is_available() else "cpu"
 
     # load original model
     print("Loading original model...")
@@ -163,7 +190,7 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
 
     # update state dict keys
     state_dict = original_model.state_dict()
-    rename_keys = create_rename_keys(config)
+    rename_keys = create_rename_keys(config, model_name)
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest)
 
@@ -189,11 +216,15 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
 
     missing_keys, unexpected_keys = hf_model.load_state_dict(state_dict, strict=False)
     assert len(missing_keys) == 0
-    assert unexpected_keys == ["qformer.embeddings.position_ids"]
+
+    if "itm" in model_name:
+        unexpected_keys = list(filter(lambda x: not x.startswith("Qformer.cls"), unexpected_keys))
+        assert unexpected_keys == ["temp", "qformer.embeddings.position_ids"]
+    else:
+        assert unexpected_keys == ["qformer.embeddings.position_ids"]
 
     image = load_demo_image()
     original_pixel_values = vis_processors["eval"](image).unsqueeze(0).to(lavis_device)
-    input_ids = tokenizer(["\n"], return_tensors="pt").input_ids.to(hf_model_device)
 
     # create processor
     image_processor = BlipImageProcessor(
@@ -207,50 +238,105 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
 
     original_model.to(lavis_device)
     hf_model.to(hf_model_device)
-    with torch.no_grad():
-        if "opt" in model_name:
-            original_logits = original_model({"image": original_pixel_values, "text_input": [""]}).logits
-            logits = hf_model(pixel_values, input_ids).logits
-        else:
+
+    if "itm" in model_name:
+        caption = "a large fountain spewing water into the air"
+        input_ids = tokenizer([caption], return_tensors="pt").input_ids.to(hf_model_device)
+        attention_mask = processor(text=caption, return_tensors="pt").attention_mask.to(hf_model_device)
+
+        with torch.no_grad():
             original_logits = original_model(
-                {"image": original_pixel_values, "text_input": ["\n"], "text_output": ["\n"]}
-            ).logits
-            labels = input_ids.masked_fill(input_ids == tokenizer.pad_token_id, -100)
-            logits = hf_model(pixel_values, input_ids, labels=labels).logits
+                {"image": original_pixel_values, "text_input": [caption]}, match_head="itm"
+            )
+            logits = hf_model(
+                pixel_values=pixel_values,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                use_image_text_matching_head=True,
+            )
 
-    assert original_logits.shape == logits.shape
-    print("First values of original logits:", original_logits[0, :3, :3])
-    print("First values of HF logits:", logits[0, :3, :3])
+        assert original_logits.shape == logits.logits_per_image.shape
+        print("First values of original logits:", original_logits[0, :3])
+        print("First values of HF logits:", logits.logits_per_image[0, :3])
 
-    # assert values
-    assert torch.allclose(original_logits.to(logits.device), logits, atol=1e-4)
-    print("Looks ok!")
+        # assert values
+        # cast to same type
+        target_dtype = logits.logits_per_image.dtype
+        assert torch.allclose(original_logits.to(target_dtype), logits.logits_per_image, atol=1e-4)
 
-    print("Generating a caption...")
-    prompt = "Question: what object is in this image? Answer:"
-    input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(hf_model_device)
+        original_itm_scores = torch.nn.functional.softmax(original_logits, dim=1)
+        itm_scores = torch.nn.functional.softmax(logits.logits_per_image, dim=1)
+        assert torch.allclose(original_itm_scores.to(target_dtype), itm_scores, atol=1e-4)
+        print("Looks ok!")
 
-    set_seed(42)
+        with torch.no_grad():
+            original_logits = original_model(
+                {"image": original_pixel_values, "text_input": [caption]}, match_head="itc"
+            )
+            logits = hf_model(
+                pixel_values=pixel_values,
+                input_ids=input_ids,
+                attention_mask=attention_mask,
+                use_image_text_matching_head=False,
+            )
 
-    original_outputs = original_model.generate(
-        {"image": original_pixel_values, "prompt": prompt}, use_nucleus_sampling=True
-    )
-    outputs = hf_model.generate(
-        pixel_values,
-        input_ids,
-        do_sample=True,
-        num_beams=5,
-        max_length=30,
-        min_length=1,
-        top_p=0.9,
-        repetition_penalty=1.0,
-        length_penalty=1.0,
-        temperature=1,
-    )
-    output_text = processor.batch_decode(outputs, skip_special_tokens=True)
-    output_text = [text.strip() for text in output_text]
-    print("Original generation:", original_outputs)
-    print("HF generation:", output_text)
+        assert original_logits.shape == logits.logits_per_image.shape
+        print("First values of original logits:", original_logits[0, :3])
+        print("First values of HF logits:", logits.logits_per_image[0, :3])
+
+        # assert values
+        # cast to same type
+        target_dtype = logits.logits_per_image.dtype
+        assert torch.allclose(original_logits.to(target_dtype), logits.logits_per_image, atol=1e-4)
+        print("Looks ok!")
+
+    else:
+        input_ids = tokenizer(["\n"], return_tensors="pt").input_ids.to(hf_model_device)
+
+        with torch.no_grad():
+            if "opt" in model_name:
+                original_logits = original_model({"image": original_pixel_values, "text_input": [""]}).logits
+                logits = hf_model(pixel_values, input_ids).logits
+            else:
+                original_logits = original_model(
+                    {"image": original_pixel_values, "text_input": ["\n"], "text_output": ["\n"]}
+                ).logits
+                labels = input_ids.masked_fill(input_ids == tokenizer.pad_token_id, -100)
+                logits = hf_model(pixel_values, input_ids, labels=labels).logits
+
+        assert original_logits.shape == logits.shape
+        print("First values of original logits:", original_logits[0, :3, :3])
+        print("First values of HF logits:", logits[0, :3, :3])
+
+        # assert values
+        assert torch.allclose(original_logits.to(logits.device), logits, atol=1e-4)
+        print("Looks ok!")
+
+        print("Generating a caption...")
+        prompt = "Question: what object is in this image? Answer:"
+        input_ids = tokenizer(prompt, return_tensors="pt").input_ids.to(hf_model_device)
+
+        set_seed(42)
+
+        original_outputs = original_model.generate(
+            {"image": original_pixel_values, "prompt": prompt}, use_nucleus_sampling=True, max_length=50
+        )
+        outputs = hf_model.generate(
+            pixel_values,
+            input_ids,
+            do_sample=True,
+            num_beams=5,
+            max_length=30,
+            min_length=1,
+            top_p=0.9,
+            repetition_penalty=1.0,
+            length_penalty=1.0,
+            temperature=1,
+        )
+        output_text = processor.batch_decode(outputs, skip_special_tokens=True)
+        output_text = [text.strip() for text in output_text]
+        print("Original generation:", original_outputs)
+        print("HF generation:", output_text)
 
     if pytorch_dump_folder_path is not None:
         processor.save_pretrained(pytorch_dump_folder_path)
@@ -271,6 +357,8 @@ if __name__ == "__main__":
         "blip2-flan-t5-xl",
         "blip2-flan-t5-xl-coco",
         "blip2-flan-t5-xxl",
+        "blip2-itm-vit-g",
+        "blip2-itm-vit-g-coco",
     ]
     parser.add_argument(
         "--model_name",
@@ -285,7 +373,18 @@ if __name__ == "__main__":
         action="store_true",
         help="Whether to push the model and processor to the hub after converting",
     )
+    # note: this script is tested on 2 GPUs, as models are compared in float32,
+    # which requires quite some memory. Hence loading both on a
+    # separate device is the easiest to compare
+    parser.add_argument(
+        "--lavis_device", default="cpu", type=str, help="Torch device to run the conversion, either cpu or cuda."
+    )
+    parser.add_argument(
+        "--hf_model_device", default="cpu", type=str, help="Torch device to run the conversion, either cpu or cuda."
+    )
 
     args = parser.parse_args()
 
-    convert_blip2_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub)
+    convert_blip2_checkpoint(
+        args.model_name, args.pytorch_dump_folder_path, args.push_to_hub, args.lavis_device, args.hf_model_device
+    )

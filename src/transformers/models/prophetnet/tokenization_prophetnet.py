@@ -38,7 +38,7 @@ def whitespace_tokenize(text):
 
 
 # Copied from transformers.models.bert.tokenization_bert.BasicTokenizer
-class BasicTokenizer(object):
+class BasicTokenizer:
     """
     Constructs a BasicTokenizer that will run basic tokenization (punctuation splitting, lower casing, etc.).
 
@@ -200,7 +200,7 @@ class BasicTokenizer(object):
 
 
 # Copied from transformers.models.bert.tokenization_bert.WordpieceTokenizer
-class WordpieceTokenizer(object):
+class WordpieceTokenizer:
     """Runs WordPiece tokenization."""
 
     def __init__(self, vocab, unk_token, max_input_chars_per_word=100):
@@ -308,6 +308,9 @@ class ProphetNetTokenizer(PreTrainedTokenizer):
         strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for `lowercase` (as in the original BERT).
+        clean_up_tokenization_spaces (`bool`, *optional*, defaults to `True`):
+            Whether or not to cleanup spaces after decoding, cleanup consists in removing potential artifacts like
+            extra spaces.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -330,6 +333,7 @@ class ProphetNetTokenizer(PreTrainedTokenizer):
         mask_token: Optional[str] = "[MASK]",
         tokenize_chinese_chars: Optional[bool] = True,
         strip_accents: Optional[bool] = None,
+        clean_up_tokenization_spaces: bool = True,
         **kwargs,
     ):
         if not os.path.isfile(vocab_file):
@@ -360,6 +364,7 @@ class ProphetNetTokenizer(PreTrainedTokenizer):
             mask_token=mask_token,
             tokenize_chinese_chars=tokenize_chinese_chars,
             strip_accents=strip_accents,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
             **kwargs,
         )
 
@@ -497,3 +502,6 @@ class ProphetNetTokenizer(PreTrainedTokenizer):
             return token_ids_0 + [self.sep_token_id]
         sep = [self.sep_token_id]
         return token_ids_0 + sep + token_ids_1 + sep
+
+
+__all__ = ["ProphetNetTokenizer"]

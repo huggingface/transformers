@@ -175,7 +175,7 @@ class TFConvNextV2Layer(keras.layers.Layer):
             Model configuration class.
         dim (`int`):
             Number of input channels.
-        drop_path (`float`, defaults to 0.0):
+        drop_path (`float`, *optional*, defaults to 0.0):
             Stochastic depth rate.
     """
 
@@ -678,3 +678,6 @@ class TFConvNextV2ForImageClassification(TFConvNextV2PreTrainedModel, TFSequence
         if getattr(self, "classifier", None) is not None:
             with tf.name_scope(self.classifier.name):
                 self.classifier.build([None, None, self.config.hidden_sizes[-1]])
+
+
+__all__ = ["TFConvNextV2ForImageClassification", "TFConvNextV2Model", "TFConvNextV2PreTrainedModel"]

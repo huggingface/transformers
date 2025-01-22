@@ -5,7 +5,6 @@ docs/source/en/add_new_pipeline.md
 docs/source/en/agents.md
 docs/source/en/agents.md
 docs/source/en/attention.md
-docs/source/en/benchmarks.md
 docs/source/en/bertology.md
 docs/source/en/big_models.md
 docs/source/en/community.md
@@ -340,18 +339,11 @@ src/transformers/agents/text_to_speech.py
 src/transformers/agents/tools.py
 src/transformers/agents/translation.py
 src/transformers/audio_utils.py
-src/transformers/benchmark/benchmark.py
-src/transformers/benchmark/benchmark_args.py
-src/transformers/benchmark/benchmark_args_tf.py
-src/transformers/benchmark/benchmark_args_utils.py
-src/transformers/benchmark/benchmark_tf.py
-src/transformers/benchmark/benchmark_utils.py
 src/transformers/commands/add_new_model_like.py
 src/transformers/commands/convert.py
 src/transformers/commands/download.py
 src/transformers/commands/env.py
 src/transformers/commands/lfs.py
-src/transformers/commands/pt_to_tf.py
 src/transformers/commands/run.py
 src/transformers/commands/serving.py
 src/transformers/commands/train.py
@@ -373,7 +365,6 @@ src/transformers/data/processors/squad.py
 src/transformers/data/processors/utils.py
 src/transformers/data/processors/xnli.py
 src/transformers/debug_utils.py
-src/transformers/deepspeed.py
 src/transformers/dependency_versions_check.py
 src/transformers/dependency_versions_table.py
 src/transformers/dynamic_module_utils.py
@@ -907,6 +898,8 @@ src/transformers/models/xmod/convert_xmod_original_pytorch_checkpoint_to_pytorch
 src/transformers/models/yolos/convert_yolos_to_pytorch.py
 src/transformers/models/yoso/convert_yoso_pytorch_to_pytorch.py
 src/transformers/models/yoso/modeling_yoso.py
+src/transformers/models/zamba/configuration_zamba.py
+src/transformers/models/zamba/modeling_zamba.py
 src/transformers/onnx/__main__.py
 src/transformers/onnx/config.py
 src/transformers/onnx/convert.py

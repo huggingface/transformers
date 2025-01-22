@@ -18,6 +18,7 @@ import unittest
 
 from transformers import DepthAnythingConfig, Dinov2Config
 from transformers.file_utils import is_torch_available, is_vision_available
+from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_4
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 
 from ...test_configuration_common import ConfigTester
@@ -246,6 +247,7 @@ def prepare_img():
 @slow
 class DepthAnythingModelIntegrationTest(unittest.TestCase):
     def test_inference(self):
+        # -- `relative` depth model --
         image_processor = DPTImageProcessor.from_pretrained("LiheYoung/depth-anything-small-hf")
         model = DepthAnythingForDepthEstimation.from_pretrained("LiheYoung/depth-anything-small-hf").to(torch_device)
 
@@ -262,7 +264,57 @@ class DepthAnythingModelIntegrationTest(unittest.TestCase):
         self.assertEqual(predicted_depth.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[8.8204, 8.6468, 8.6195], [8.3313, 8.6027, 8.7526], [8.6526, 8.6866, 8.7453]],
+            [[8.8223, 8.6483, 8.6216], [8.3332, 8.6047, 8.7545], [8.6547, 8.6885, 8.7472]],
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.predicted_depth[0, :3, :3], expected_slice, atol=1e-6))
+        self.assertTrue(torch.allclose(predicted_depth[0, :3, :3], expected_slice, atol=1e-6))
+
+        # -- `metric` depth model --
+        image_processor = DPTImageProcessor.from_pretrained("depth-anything/depth-anything-V2-metric-indoor-small-hf")
+        model = DepthAnythingForDepthEstimation.from_pretrained(
+            "depth-anything/depth-anything-V2-metric-indoor-small-hf"
+        ).to(torch_device)
+
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs)
+            predicted_depth = outputs.predicted_depth
+
+        # verify the predicted depth
+        expected_shape = torch.Size([1, 518, 686])
+        self.assertEqual(predicted_depth.shape, expected_shape)
+
+        expected_slice = torch.tensor(
+            [[1.3349, 1.2947, 1.2802], [1.2794, 1.2338, 1.2901], [1.2630, 1.2219, 1.2478]],
+        ).to(torch_device)
+
+        self.assertTrue(torch.allclose(predicted_depth[0, :3, :3], expected_slice, atol=1e-4))
+
+    def test_export(self):
+        for strict in [True, False]:
+            with self.subTest(strict=strict):
+                if not is_torch_greater_or_equal_than_2_4:
+                    self.skipTest(reason="This test requires torch >= 2.4 to run.")
+                model = (
+                    DepthAnythingForDepthEstimation.from_pretrained("LiheYoung/depth-anything-small-hf")
+                    .to(torch_device)
+                    .eval()
+                )
+                image_processor = DPTImageProcessor.from_pretrained("LiheYoung/depth-anything-small-hf")
+                image = prepare_img()
+                inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
+
+                exported_program = torch.export.export(
+                    model,
+                    args=(inputs["pixel_values"],),
+                    strict=strict,
+                )
+                with torch.no_grad():
+                    eager_outputs = model(**inputs)
+                    exported_outputs = exported_program.module().forward(inputs["pixel_values"])
+                self.assertEqual(eager_outputs.predicted_depth.shape, exported_outputs.predicted_depth.shape)
+                self.assertTrue(
+                    torch.allclose(eager_outputs.predicted_depth, exported_outputs.predicted_depth, atol=1e-4)
+                )

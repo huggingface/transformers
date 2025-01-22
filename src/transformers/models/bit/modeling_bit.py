@@ -870,8 +870,8 @@ class BitBackbone(BitPreTrainedModel, BackboneMixin):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> processor = AutoImageProcessor.from_pretrained("google/resnetnv2-50")
-        >>> model = AutoBackbone.from_pretrained("google/resnetnv2-50")
+        >>> processor = AutoImageProcessor.from_pretrained("google/bit-50")
+        >>> model = AutoBackbone.from_pretrained("google/bit-50")
 
         >>> inputs = processor(image, return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -901,3 +901,6 @@ class BitBackbone(BitPreTrainedModel, BackboneMixin):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=None,
         )
+
+
+__all__ = ["BitForImageClassification", "BitModel", "BitPreTrainedModel", "BitBackbone"]

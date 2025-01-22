@@ -31,7 +31,6 @@ from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import (
     apply_chunking_to_forward,
     find_pruneable_heads_and_indices,
-    is_torch_greater_or_equal_than_1_12,
     prune_linear_layer,
 )
 from ...utils import (
@@ -45,12 +44,6 @@ from .configuration_tapas import TapasConfig
 
 
 logger = logging.get_logger(__name__)
-
-if not is_torch_greater_or_equal_than_1_12:
-    logger.warning(
-        f"You are using torch=={torch.__version__}, but torch>=1.12.0 is required to use "
-        "TapasModel. Please upgrade torch."
-    )
 
 _CONFIG_FOR_DOC = "TapasConfig"
 _CHECKPOINT_FOR_DOC = "google/tapas-base"
@@ -724,6 +717,7 @@ class TapasPreTrainedModel(PreTrainedModel):
     config_class = TapasConfig
     base_model_prefix = "tapas"
     supports_gradient_checkpointing = True
+    _supports_param_buffer_assignment = False
 
     # Copied from transformers.models.bert.modeling_bert.BertPreTrainedModel._init_weights
     def _init_weights(self, module):
@@ -1549,7 +1543,7 @@ class AverageApproximationFunction(str, enum.Enum):
 # Beginning of everything related to segmented tensors
 
 
-class IndexMap(object):
+class IndexMap:
     """Index grouping entries within a tensor."""
 
     def __init__(self, indices, num_segments, batch_dims=0):
@@ -2386,3 +2380,13 @@ def _calculate_regression_loss(
     per_example_answer_loss_scaled = config.answer_loss_importance * (per_example_answer_loss * aggregate_mask)
 
     return per_example_answer_loss_scaled, large_answer_loss_mask
+
+
+__all__ = [
+    "TapasForMaskedLM",
+    "TapasForQuestionAnswering",
+    "TapasForSequenceClassification",
+    "TapasModel",
+    "TapasPreTrainedModel",
+    "load_tf_weights_in_tapas",
+]

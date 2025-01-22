@@ -23,8 +23,10 @@
     title: 使用🤗 PEFT加载和训练adapters
   - local: model_sharing
     title: 分享您的模型
-  - local: transformers_agents
-    title: agents教程
+  - local: agents
+    title: 智能体和工具
+  - local: agents_advanced
+    title: 智能体，超强版 - 多智能体、外部工具等
   - local: llm_tutorial
     title: 使用LLMs进行生成
   title: 教程
@@ -50,6 +52,12 @@
     title: 导出为 TFLite
   - local: torchscript
     title: 导出为 TorchScript
+  - local: gguf
+    title: 与 GGUF 格式的互操作性
+  - local: tiktoken
+    title: 与 Tiktoken 文件的互操作性
+  - local: community
+    title: 社区资源
   title: 开发者指南
 - sections:
   - local: performance
@@ -57,6 +65,12 @@
   - sections:
     - local: fsdp
       title: 完全分片数据并行
+    - local: perf_train_special
+      title: 在 Apple silicon 芯片上进行 PyTorch 训练
+    - local: perf_infer_gpu_multi
+      title: 多GPU推理
+    - local: perf_train_cpu
+      title: 在CPU上进行高效训练
     - local: perf_hardware
       title: 用于训练的定制硬件
     - local: hpo_train
@@ -78,15 +92,21 @@
     title: 如何将流水线添加到 🤗 Transformers？
   title: 贡献
 - sections:
+  - local: philosophy
+    title: Transformers的设计理念
   - local: task_summary
     title: 🤗Transformers能做什么
   - local: tokenizer_summary
     title: 分词器的摘要
+  - local: attention
+    title: 注意力机制
+  - local: bertology
+    title: 基于BERT进行的相关研究
   title: 概念指南
 - sections:
   - sections:
     - local: main_classes/agent
-      title: Agents和工具
+      title: 智能体和工具
     - local: main_classes/callback
       title: Callbacks
     - local: main_classes/configuration
@@ -144,7 +164,4 @@
     - local: internal/time_series_utils
       title: 时序数据工具
     title: 内部辅助工具
-  title: 应用程序接口 (API) 
-
-
-
+  title: 应用程序接口 (API)

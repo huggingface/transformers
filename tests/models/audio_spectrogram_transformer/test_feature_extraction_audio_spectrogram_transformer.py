@@ -50,7 +50,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
     return values
 
 
-class ASTFeatureExtractionTester(unittest.TestCase):
+class ASTFeatureExtractionTester:
     def __init__(
         self,
         parent,
@@ -153,9 +153,7 @@ class ASTFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Test
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
 
-        ds = load_dataset(
-            "hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True
-        )
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
         speech_samples = ds.sort("id").select(range(num_samples))[:num_samples]["audio"]
 

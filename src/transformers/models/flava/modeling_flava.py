@@ -34,6 +34,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     logging,
     replace_return_docstrings,
+    torch_int,
 )
 from .configuration_flava import (
     FlavaConfig,
@@ -176,7 +177,7 @@ class FlavaForPreTrainingOutput(ModelOutput):
             The output of the [`FlavaTextModel`].
         multimodal_masked_embeddings (`torch.FloatTensor` of shape `(batch_size, output_dim)`, *optional*, returned when `input_ids` and `pixel_values` are present):
             The multimodal embeddings which are basically the pooled output of [`FlavaTextModel`].
-        multimodal_masked_output (`BaseModelOutputWithPooling`, returned when `input_ids_masked` and `pixel_values` are present):
+        multimodal_masked_output (`BaseModelOutputWithPooling`, *optional*, returned when `input_ids_masked` and `pixel_values` are present):
             The output of the [`FlavaMultimodalModel`].
 
         mim_logits (`torch.FloatTensor` of shape `(batch_size, num_image_patches, image_vocab_size)` or of shape `(total_masked_patches, image_vocab_size)` , *optional*, returned when `pixel_values` are present and `input_ids_masked` are not):
@@ -259,42 +260,49 @@ class FlavaImageEmbeddings(nn.Module):
         num_patches = self.patch_embeddings.num_patches
         self.position_embeddings = nn.Parameter(torch.zeros(1, num_patches + 1, config.hidden_size))
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.patch_size = config.patch_size
         self.config = config
 
+    # Copied from transformers.models.vit.modeling_vit.ViTEmbeddings.interpolate_pos_encoding
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
         """
-        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher
-        resolution images.
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
+        images. This method is also adapted to support torch.jit tracing.
 
-        Source:
-        https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/image_transformer.py#L174
+        Adapted from:
+        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
+        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
         """
 
-        npatch = embeddings.shape[1] - 1
-        num_pos = self.position_embeddings.shape[1] - 1
-        if npatch == num_pos and height == width:
+        num_patches = embeddings.shape[1] - 1
+        num_positions = self.position_embeddings.shape[1] - 1
+
+        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
+        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
             return self.position_embeddings
-        class_pos_embed = self.position_embeddings[:, 0]
+
+        class_pos_embed = self.position_embeddings[:, :1]
         patch_pos_embed = self.position_embeddings[:, 1:]
+
         dim = embeddings.shape[-1]
-        num_h_patches = height // self.config.patch_size
-        num_w_patches = width // self.config.patch_size
-        # we add a small number to avoid floating point error in the interpolation
-        # see discussion at https://github.com/facebookresearch/dino/issues/8
-        num_h_patches, num_w_patches = num_h_patches + 0.1, num_w_patches + 0.1
+
+        new_height = height // self.patch_size
+        new_width = width // self.patch_size
+
+        sqrt_num_positions = torch_int(num_positions**0.5)
+        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
+        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+
         patch_pos_embed = nn.functional.interpolate(
-            patch_pos_embed.reshape(1, int(math.sqrt(num_pos)), int(math.sqrt(num_pos)), dim).permute(0, 3, 1, 2),
-            scale_factor=(num_h_patches / math.sqrt(num_pos), num_w_patches / math.sqrt(num_pos)),
+            patch_pos_embed,
+            size=(new_height, new_width),
             mode="bicubic",
             align_corners=False,
         )
-        if int(num_h_patches) != patch_pos_embed.shape[-2] or int(num_w_patches) != patch_pos_embed.shape[-1]:
-            raise ValueError(
-                f"Number of patches for images ({int(num_h_patches), int(num_w_patches)}) don't match the "
-                f"shape of position embedding ({patch_pos_embed.shape[-2], patch_pos_embed.shape[-1]})"
-            )
+
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
-        return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1)
+
+        return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
 
     def forward(
         self,
@@ -1181,19 +1189,19 @@ class FlavaModel(FlavaPreTrainedModel):
         super().__init__(config)
 
         if not isinstance(config.text_config, FlavaTextConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.text_config is expected to be of type FlavaTextConfig but is of type"
                 f" {type(config.text_config)}."
             )
 
         if not isinstance(config.image_config, FlavaImageConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.image_config is expected to be of type FlavaImageConfig but is of type"
                 f" {type(config.image_config)}."
             )
 
         if not isinstance(config.multimodal_config, FlavaMultimodalConfig):
-            raise ValueError(
+            raise TypeError(
                 "config.multimodal_config is expected to be of type FlavaMultimodalConfig but "
                 + f"is of type {type(config.multimodal_config)}."
             )
@@ -2094,3 +2102,14 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
             mmm_image_logits=mmm_image_logits,
             mmm_text_logits=mmm_text_logits,
         )
+
+
+__all__ = [
+    "FlavaForPreTraining",
+    "FlavaImageCodebook",
+    "FlavaImageModel",
+    "FlavaModel",
+    "FlavaMultimodalModel",
+    "FlavaPreTrainedModel",
+    "FlavaTextModel",
+]

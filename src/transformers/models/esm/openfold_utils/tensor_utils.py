@@ -134,7 +134,7 @@ def tree_map(fn, tree, leaf_type):
         return fn(tree)
     else:
         print(type(tree))
-        raise ValueError("Not supported")
+        raise TypeError("Not supported")
 
 
 tensor_tree_map = partial(tree_map, leaf_type=torch.Tensor)

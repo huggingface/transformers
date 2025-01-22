@@ -152,7 +152,7 @@ class DPTViTHybridEmbeddings(nn.Module):
         posemb_tok = posemb[:, :start_index]
         posemb_grid = posemb[0, start_index:]
 
-        old_grid_size = int(math.sqrt(len(posemb_grid)))
+        old_grid_size = torch_int(len(posemb_grid) ** 0.5)
 
         posemb_grid = posemb_grid.reshape(1, old_grid_size, old_grid_size, -1).permute(0, 3, 1, 2)
         posemb_grid = nn.functional.interpolate(posemb_grid, size=(grid_size_height, grid_size_width), mode="bilinear")
@@ -626,7 +626,7 @@ class DPTReassembleStage(nn.Module):
                 if patch_height is not None and patch_width is not None:
                     hidden_state = hidden_state.reshape(batch_size, patch_height, patch_width, num_channels)
                 else:
-                    size = int(math.sqrt(sequence_length))
+                    size = torch_int(sequence_length**0.5)
                     hidden_state = hidden_state.reshape(batch_size, size, size, num_channels)
                 hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
 
@@ -689,12 +689,13 @@ class DPTFeatureFusionStage(nn.Module):
         hidden_states = hidden_states[::-1]
 
         fused_hidden_states = []
-        # first layer only uses the last hidden_state
-        fused_hidden_state = self.layers[0](hidden_states[0])
-        fused_hidden_states.append(fused_hidden_state)
-        # looping from the last layer to the second
-        for hidden_state, layer in zip(hidden_states[1:], self.layers[1:]):
-            fused_hidden_state = layer(fused_hidden_state, hidden_state)
+        fused_hidden_state = None
+        for hidden_state, layer in zip(hidden_states, self.layers):
+            if fused_hidden_state is None:
+                # first layer only uses the last hidden_state
+                fused_hidden_state = layer(hidden_state)
+            else:
+                fused_hidden_state = layer(fused_hidden_state, hidden_state)
             fused_hidden_states.append(fused_hidden_state)
 
         return fused_hidden_states
@@ -1002,7 +1003,7 @@ class DPTNeck(nn.Module):
                 List of hidden states from the backbone.
         """
         if not isinstance(hidden_states, (tuple, list)):
-            raise ValueError("hidden_states should be a tuple or list of tensors")
+            raise TypeError("hidden_states should be a tuple or list of tensors")
 
         if len(hidden_states) != len(self.config.neck_hidden_sizes):
             raise ValueError("The number of hidden states should be equal to the number of neck hidden sizes.")
@@ -1121,20 +1122,18 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
 
         >>> with torch.no_grad():
         ...     outputs = model(**inputs)
-        ...     predicted_depth = outputs.predicted_depth
 
         >>> # interpolate to original size
-        >>> prediction = torch.nn.functional.interpolate(
-        ...     predicted_depth.unsqueeze(1),
-        ...     size=image.size[::-1],
-        ...     mode="bicubic",
-        ...     align_corners=False,
+        >>> post_processed_output = image_processor.post_process_depth_estimation(
+        ...     outputs,
+        ...     target_sizes=[(image.height, image.width)],
         ... )
 
         >>> # visualize the prediction
-        >>> output = prediction.squeeze().cpu().numpy()
-        >>> formatted = (output * 255 / np.max(output)).astype("uint8")
-        >>> depth = Image.fromarray(formatted)
+        >>> predicted_depth = post_processed_output[0]["predicted_depth"]
+        >>> depth = predicted_depth * 255 / predicted_depth.max()
+        >>> depth = depth.detach().cpu().numpy()
+        >>> depth = Image.fromarray(depth.astype("uint8"))
         ```"""
         loss = None
         if labels is not None:
@@ -1372,3 +1371,6 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
             hidden_states=outputs.hidden_states if output_hidden_states else None,
             attentions=outputs.attentions,
         )
+
+
+__all__ = ["DPTForDepthEstimation", "DPTForSemanticSegmentation", "DPTModel", "DPTPreTrainedModel"]

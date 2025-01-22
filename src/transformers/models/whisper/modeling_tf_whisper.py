@@ -1147,7 +1147,7 @@ class TFWhisperMainLayer(keras.layers.Layer):
 
          >>> model = TFWhisperModel.from_pretrained("openai/whisper-base")
          >>> feature_extractor = AutoFeatureExtractor.from_pretrained("openai/whisper-base")
-         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
+         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
          >>> inputs = feature_extractor(ds[0]["audio"]["array"], return_tensors="tf")
          >>> input_features = inputs.input_features
          >>> decoder_input_ids = tf.convert_to_tensor([[1, 1]]) * model.config.decoder_start_token_id
@@ -1283,7 +1283,7 @@ class TFWhisperModel(TFWhisperPreTrainedModel):
 
          >>> model = TFWhisperModel.from_pretrained("openai/whisper-base")
          >>> feature_extractor = AutoFeatureExtractor.from_pretrained("openai/whisper-base")
-         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
+         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
          >>> inputs = feature_extractor(ds[0]["audio"]["array"], return_tensors="tf")
          >>> input_features = inputs.input_features
          >>> decoder_input_ids = tf.convert_to_tensor([[1, 1]]) * model.config.decoder_start_token_id
@@ -1413,7 +1413,7 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
         >>> processor = AutoProcessor.from_pretrained("openai/whisper-tiny.en")
         >>> model = TFWhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")
 
-        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation", trust_remote_code=True)
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
         >>> inputs = processor(ds[0]["audio"]["array"], return_tensors="tf")
         >>> input_features = inputs.input_features
@@ -1646,7 +1646,7 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
             prompt_ids = prompt_ids.tolist()
             decoder_start_token_id, *text_prompt_ids = prompt_ids
             # Slicing the text prompt ids in a manner consistent with the OpenAI implementation
-            # to accomodate context space for the prefix (see https://github.com/openai/whisper/blob/c09a7ae299c4c34c5839a76380ae407e7d785914/whisper/decoding.py#L599)
+            # to accommodate context space for the prefix (see https://github.com/openai/whisper/blob/c09a7ae299c4c34c5839a76380ae407e7d785914/whisper/decoding.py#L599)
             text_prompt_ids = text_prompt_ids[-self.config.max_length // 2 - 1 :]
             # Set the decoder_start_token_id to <|startofprev|>
             kwargs.update({"decoder_start_token_id": decoder_start_token_id})
@@ -1756,3 +1756,6 @@ class TFWhisperForConditionalGeneration(TFWhisperPreTrainedModel, TFCausalLangua
         if getattr(self, "model", None) is not None:
             with tf.name_scope(self.model.name):
                 self.model.build(None)
+
+
+__all__ = ["TFWhisperForConditionalGeneration", "TFWhisperModel", "TFWhisperPreTrainedModel"]

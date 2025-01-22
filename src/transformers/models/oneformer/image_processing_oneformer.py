@@ -617,7 +617,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         """Preprocesses a single image."""
         # All transformations expect numpy arrays.
         image = to_numpy_array(image)
-        if is_scaled_image(image) and do_rescale:
+        if do_rescale and is_scaled_image(image):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -1160,7 +1160,7 @@ class OneFormerImageProcessor(BaseImageProcessor):
         Args:
             outputs ([`OneFormerForUniversalSegmentationOutput`]):
                 The outputs from [`OneFormerForUniversalSegmentationOutput`].
-            task_type (`str`, *optional)*, defaults to "instance"):
+            task_type (`str`, *optional*, defaults to "instance"):
                 The post processing depends on the task token input. If the `task_type` is "panoptic", we need to
                 ignore the stuff predictions.
             is_demo (`bool`, *optional)*, defaults to `True`):
@@ -1351,3 +1351,6 @@ class OneFormerImageProcessor(BaseImageProcessor):
 
             results.append({"segmentation": segmentation, "segments_info": segments})
         return results
+
+
+__all__ = ["OneFormerImageProcessor"]

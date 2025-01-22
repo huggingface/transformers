@@ -96,6 +96,12 @@ distribution over the entire vocabulary with various strategy-specific adjustmen
 the decoding strategies that support multiple sequence candidates, e.g. variations of beam search and sampling. Decoding
 strategies like greedy search and contrastive search return a single output sequence.
 
+It is also possible to extend `generate()` with external libraries or handcrafted code. The `logits_processor` argument
+allows you to pass custom [`LogitsProcessor`] instances, allowing you to manipulate the next token probability
+distributions. Likewise, the `stopping_criteria` argument lets you set custom [`StoppingCriteria`] to stop text generation.
+The [`logits-processor-zoo`](https://github.com/NVIDIA/logits-processor-zoo) library contains examples of external
+`generate()`-compatible extensions.
+
 ## Save a custom decoding strategy with your model
 
 If you would like to share your fine-tuned model with a specific generation configuration, you can:
@@ -174,43 +180,6 @@ An increasing sequence: one, two, three, four, five, six, seven, eight, nine, te
 ```
 
 
-## KV Cache Quantization
-
-The `generate()` method supports caching keys and values to enhance efficiency and avoid re-computations. However the key and value
-cache can occupy a large portion of memory, becoming a bottleneck for long-context generation, especially for Large Language Models.
-Quantizing the cache when using `generate()` can significantly reduce memory requirements at the cost of speed.
-
-KV Cache quantization in `transformers` is largely inspired by the paper [KIVI: A Tuning-Free Asymmetric 2bit Quantization for KV Cache]
-(https://arxiv.org/abs/2402.02750) and currently supports `quanto` and `HQQ` as backends. For more information on the inner workings see the paper.
-
-To enable quantization of the key-value cache, one needs to indicate `cache_implementation="quantized"` in the `generation_config`.
-Quantization related arguments should be passed to the `generation_config` either as a `dict` or an instance of a [`QuantizedCacheConfig`] class.
-One has to indicate which quantization backend to use in the [`QuantizedCacheConfig`], the default is `quanto`.
-
-<Tip warning={true}>
-
-Cache quantization can be detrimental if the context length is short and there is enough GPU VRAM available to run without cache quantization.
-
-</Tip>
-
-
-```python
->>> import torch
->>> from transformers import AutoTokenizer, AutoModelForCausalLM
-
->>> tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
->>> model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", torch_dtype=torch.float16).to("cuda:0")
->>> inputs = tokenizer("I like rock music because", return_tensors="pt").to(model.device)
-
->>> out = model.generate(**inputs, do_sample=False, max_new_tokens=20, cache_implementation="quantized", cache_config={"nbits": 4, "backend": "quanto"})
->>> print(tokenizer.batch_decode(out, skip_special_tokens=True)[0])
-I like rock music because it's loud and energetic. It's a great way to express myself and rel
-
->>> out = model.generate(**inputs, do_sample=False, max_new_tokens=20)
->>> print(tokenizer.batch_decode(out, skip_special_tokens=True)[0])
-I like rock music because it's loud and energetic. I like to listen to it when I'm feeling
-```
-
 ## Watermarking
 
 The `generate()` supports watermarking the generated text by randomly marking a portion of tokens as "green".
@@ -262,9 +231,20 @@ array([True, True])
 ## Decoding strategies
 
 Certain combinations of the `generate()` parameters, and ultimately `generation_config`, can be used to enable specific
-decoding strategies. If you are new to this concept, we recommend reading [this blog post that illustrates how common decoding strategies work](https://huggingface.co/blog/how-to-generate).
+decoding strategies. If you are new to this concept, we recommend reading
+[this blog post that illustrates how common decoding strategies work](https://huggingface.co/blog/how-to-generate).
 
 Here, we'll show some of the parameters that control the decoding strategies and illustrate how you can use them.
+
+<Tip>
+
+Selecting a given decoding strategy is not the only way you can influence the outcome of `generate()` with your model.
+The decoding strategies act based (mostly) on the logits, the distribution of probabilities for the next token, and
+thus selecting a good logits manipulation strategy can go a long way! In other words, manipulating the logits is another
+dimension you can act upon, in addition to selecting a decoding strategy. Popular logits manipulation strategies include
+`top_p`, `min_p`, and `repetition_penalty` -- you can check the full list in the [`GenerationConfig`] class.
+
+</Tip>
 
 ### Greedy Search
 
@@ -429,15 +409,15 @@ culture, and they allow us to design the'
 
 This guide illustrates the main parameters that enable various decoding strategies. More advanced parameters exist for the
 [`generate`] method, which gives you even further control over the [`generate`] method's behavior.
-For the complete list of the available parameters, refer to the [API documentation](./main_classes/text_generation.md).
+For the complete list of the available parameters, refer to the [API documentation](./main_classes/text_generation).
 
 ### Speculative Decoding
 
 Speculative decoding (also known as assisted decoding) is a modification of the decoding strategies above, that uses an
-assistant model (ideally a much smaller one) with the same tokenizer, to generate a few candidate tokens. The main
-model then validates the candidate tokens in a single forward pass, which speeds up the decoding process. If
-`do_sample=True`, then the token validation with resampling introduced in the
-[speculative decoding paper](https://arxiv.org/pdf/2211.17192.pdf) is used.
+assistant model (ideally a much smaller one), to generate a few candidate tokens. The main model then validates the candidate
+tokens in a single forward pass, which speeds up the decoding process. If `do_sample=True`, then the token validation with
+resampling introduced in the [speculative decoding paper](https://arxiv.org/pdf/2211.17192.pdf) is used.
+Assisted decoding assumes the main and assistant models have the same tokenizer, otherwise, see Universal Assisted Decoding below.
 
 Currently, only greedy search and sampling are supported with assisted decoding, and assisted decoding doesn't support batched inputs.
 To learn more about assisted decoding, check [this blog post](https://huggingface.co/blog/assisted-generation).
@@ -461,6 +441,28 @@ To enable assisted decoding, set the `assistant_model` argument with a model.
 ['Alice and Bob are sitting in a bar. Alice is drinking a beer and Bob is drinking a']
 ```
 
+<Tip>
+
+If you're using a `pipeline` object, all you need to do is to pass the assistant checkpoint under `assistant_model`
+
+```python
+>>> from transformers import pipeline
+>>> import torch
+
+>>> pipe = pipeline(
+...     "text-generation",
+...     model="meta-llama/Llama-3.1-8B",
+...     assistant_model="meta-llama/Llama-3.2-1B",  # This extra line is all that's needed, also works with UAD
+...     torch_dtype=torch.bfloat16
+>>> )
+>>> pipe_output = pipe("Once upon a time, ", max_new_tokens=50, do_sample=False)
+>>> pipe_output[0]["generated_text"]
+'Once upon a time, 3D printing was a niche technology that was only'
+```
+
+</Tip>
+
+
 When using assisted decoding with sampling methods, you can use the `temperature` argument to control the randomness,
 just like in multinomial sampling. However, in assisted decoding, reducing the temperature may help improve the latency.
 
@@ -482,8 +484,65 @@ just like in multinomial sampling. However, in assisted decoding, reducing the t
 ['Alice and Bob, a couple of friends of mine, who are both in the same office as']
 ```
 
-Alternativelly, you can also set the `prompt_lookup_num_tokens` to trigger n-gram based assisted decoding, as opposed
+We recommend to install `scikit-learn` library to enhance the candidate generation strategy and achieve additional speedup.
+
+#### Universal Assisted Decoding
+
+Universal Assisted Decoding (UAD) adds support for main and assistant models with different tokenizers.
+To use it, simply pass the tokenizers using the `tokenizer` and `assistant_tokenizer` arguments (see below).
+Internally, the main model input tokens are re-encoded into assistant model tokens, then candidate tokens are generated in the assistant encoding, which are
+in turn re-encoded into main model candidate tokens. Validation then proceeds as explained above.
+The re-encoding steps involve decoding token ids into text and then encoding the text using a different tokenizer.
+Since re-encoding the tokens may result in tokenization discrepancies, UAD finds the longest common subsequence between the source and target encodings,
+to ensure the new tokens include the correct prompt suffix.
+
+```python
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer
+
+>>> prompt = "Alice and Bob"
+>>> checkpoint = "google/gemma-2-9b"
+>>> assistant_checkpoint = "double7/vicuna-68m"
+
+>>> assistant_tokenizer = AutoTokenizer.from_pretrained(assistant_checkpoint)
+>>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+>>> inputs = tokenizer(prompt, return_tensors="pt")
+
+>>> model = AutoModelForCausalLM.from_pretrained(checkpoint)
+>>> assistant_model = AutoModelForCausalLM.from_pretrained(assistant_checkpoint)
+>>> outputs = model.generate(**inputs, assistant_model=assistant_model, tokenizer=tokenizer, assistant_tokenizer=assistant_tokenizer)
+>>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
+['Alice and Bob are sitting in a bar. Alice is drinking a beer and Bob is drinking a']
+```
+
+#### Prompt Lookup
+
+Alternatively, you can also set the `prompt_lookup_num_tokens` to trigger n-gram based assisted decoding, as opposed
 to model based assisted decoding. You can read more about it [here](https://twitter.com/joao_gante/status/1747322413006643259).
+
+#### Self-Speculative Decoding
+
+An LLM can be trained to also use its language modeling head with earlier hidden states as input, effectively
+skipping layers to yield a lower-quality output -- a technique called early exiting.
+We use the lower-quality early exit output as an assistant output, and apply self-speculation to fix the output using the remaining layers. The final generation of that self-speculative solution is the same (or has the same distribution) as the original model's generation.
+If the model you're using was trained to do early exit, you can pass
+`assistant_early_exit` (integer). In this case, the assistant model will be the same model but exiting early, hence the
+"self-speculative" name. Because the assistant model is a portion of the target model, caches and weights can be shared, which results in lower memory requirements. As in other assisted generation methods, the final generated result has the same quality as if no assistant had been used.
+
+```python
+>>> from transformers import AutoModelForCausalLM, AutoTokenizer
+
+>>> prompt = "Alice and Bob"
+>>> checkpoint = "facebook/layerskip-llama3.2-1B"
+
+>>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+>>> inputs = tokenizer(prompt, return_tensors="pt")
+
+>>> model = AutoModelForCausalLM.from_pretrained(checkpoint)
+>>> outputs = model.generate(**inputs, assistant_early_exit=4, do_sample=False, max_new_tokens=20)
+>>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
+['Alice and Bob are sitting in a bar. Alice is drinking a beer and Bob is drinking a']
+```
+
 ### DoLa Decoding
 
 **D**ecoding by C**o**ntrasting **La**yers (DoLa) is a contrastive decoding strategy to improve the factuality and reduce the
@@ -503,10 +562,11 @@ See the following examples for DoLa decoding with the 32-layer LLaMA-7B model.
 ```python
 >>> from transformers import AutoTokenizer, AutoModelForCausalLM, set_seed
 >>> import torch
+>>> from accelerate.test_utils.testing import get_backend
 
 >>> tokenizer = AutoTokenizer.from_pretrained("huggyllama/llama-7b")
 >>> model = AutoModelForCausalLM.from_pretrained("huggyllama/llama-7b", torch_dtype=torch.float16)
->>> device = 'cuda' if torch.cuda.is_available() else 'cpu'
+>>> device, _, _ = get_backend() # automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
 >>> model.to(device)
 >>> set_seed(42)
 

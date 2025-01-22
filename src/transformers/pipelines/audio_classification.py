@@ -92,7 +92,7 @@ class AudioClassificationPipeline(Pipeline):
 
     def __init__(self, *args, **kwargs):
         # Default, might be overriden by the model.config.
-        kwargs["top_k"] = 5
+        kwargs["top_k"] = kwargs.get("top_k", 5)
         super().__init__(*args, **kwargs)
 
         if self.framework != "pt":
@@ -126,6 +126,11 @@ class AudioClassificationPipeline(Pipeline):
                 The number of top labels that will be returned by the pipeline. If the provided number is `None` or
                 higher than the number of labels available in the model configuration, it will default to the number of
                 labels.
+            function_to_apply(`str`, *optional*, defaults to "softmax"):
+                The function to apply to the model output. By default, the pipeline will apply the softmax function to
+                the output of the model. Valid options: ["softmax", "sigmoid", "none"]. Note that passing Python's
+                built-in `None` will default to "softmax", so you need to pass the string "none" to disable any
+                post-processing.
 
         Return:
             A list of `dict` with the following keys:
@@ -135,13 +140,22 @@ class AudioClassificationPipeline(Pipeline):
         """
         return super().__call__(inputs, **kwargs)
 
-    def _sanitize_parameters(self, top_k=None, **kwargs):
+    def _sanitize_parameters(self, top_k=None, function_to_apply=None, **kwargs):
         # No parameters on this pipeline right now
         postprocess_params = {}
         if top_k is not None:
             if top_k > self.model.config.num_labels:
                 top_k = self.model.config.num_labels
             postprocess_params["top_k"] = top_k
+        if function_to_apply is not None:
+            if function_to_apply not in ["softmax", "sigmoid", "none"]:
+                raise ValueError(
+                    f"Invalid value for `function_to_apply`: {function_to_apply}. "
+                    "Valid options are ['softmax', 'sigmoid', 'none']"
+                )
+            postprocess_params["function_to_apply"] = function_to_apply
+        else:
+            postprocess_params["function_to_apply"] = "softmax"
         return {}, {}, postprocess_params
 
     def preprocess(self, inputs):
@@ -158,6 +172,7 @@ class AudioClassificationPipeline(Pipeline):
             inputs = ffmpeg_read(inputs, self.feature_extractor.sampling_rate)
 
         if isinstance(inputs, dict):
+            inputs = inputs.copy()  # So we don't mutate the original dictionary outside the pipeline
             # Accepting `"array"` which is the key defined in `datasets` for
             # better integration
             if not ("sampling_rate" in inputs and ("raw" in inputs or "array" in inputs)):
@@ -190,21 +205,28 @@ class AudioClassificationPipeline(Pipeline):
                 ).numpy()
 
         if not isinstance(inputs, np.ndarray):
-            raise ValueError("We expect a numpy ndarray as input")
+            raise TypeError("We expect a numpy ndarray as input")
         if len(inputs.shape) != 1:
             raise ValueError("We expect a single channel audio input for AudioClassificationPipeline")
 
         processed = self.feature_extractor(
             inputs, sampling_rate=self.feature_extractor.sampling_rate, return_tensors="pt"
         )
+        if self.torch_dtype is not None:
+            processed = processed.to(dtype=self.torch_dtype)
         return processed
 
     def _forward(self, model_inputs):
         model_outputs = self.model(**model_inputs)
         return model_outputs
 
-    def postprocess(self, model_outputs, top_k=5):
-        probs = model_outputs.logits[0].softmax(-1)
+    def postprocess(self, model_outputs, top_k=5, function_to_apply="softmax"):
+        if function_to_apply == "softmax":
+            probs = model_outputs.logits[0].softmax(-1)
+        elif function_to_apply == "sigmoid":
+            probs = model_outputs.logits[0].sigmoid()
+        else:
+            probs = model_outputs.logits[0]
         scores, ids = probs.topk(top_k)
 
         scores = scores.tolist()
