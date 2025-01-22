@@ -25,7 +25,6 @@ def get_file_owners(file_path, codeowners_lines):
     return []  # Should never happen, but just in case
 
 def main():
-    print("Starting assignment...")
     g = Github(os.environ['GITHUB_TOKEN'])
     repo = g.get_repo("huggingface/transformers")
     with open(os.environ['GITHUB_EVENT_PATH']) as f:
@@ -52,6 +51,7 @@ def main():
 
     # Assign the top 2 based on locs changed as reviewers
     top_owners = locs_per_owner.most_common(2)
+    print("Top owners", top_owners)
     for owner, _ in top_owners:
         try:
             pr.add_to_assignees(owner)
