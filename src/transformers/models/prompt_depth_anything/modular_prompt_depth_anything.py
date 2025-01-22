@@ -237,7 +237,11 @@ class PromptDepthAnythingReassembleStage(DepthAnythingReassembleStage):
 
 class PromptDepthAnythingNeck(DepthAnythingNeck):
     def forward(
-        self, hidden_states: List[torch.Tensor], patch_height=None, patch_width=None, prompt_depth=None
+        self,
+        hidden_states: List[torch.Tensor],
+        patch_height: Optional[int] = None,
+        patch_width: Optional[int] = None,
+        prompt_depth: Optional[torch.Tensor] = None,
     ) -> List[torch.Tensor]:
         """
         Args:
