@@ -316,6 +316,10 @@ def check_models_equal(model1, model2):
     return models_are_equal
 
 
+def fake_from_config(*args, **kwargs):
+    raise RuntimeError()
+
+
 @require_torch
 class ModelUtilsTest(TestCasePlus):
     @slow
@@ -1817,6 +1821,45 @@ class ModelUtilsTest(TestCasePlus):
         model_outputs = model(**model_inputs, use_cache=False)
         self.assertIsNone(model_outputs.past_key_values)
         self.assertTrue(model.training)
+
+    def test_restore_default_torch_dtype_from_pretrained(self):
+        """
+        Tests that the default torch dtype is restored
+        when an error happens during the loading of a model.
+        """
+        old_dtype = torch.get_default_dtype()
+        # set default type to float32
+        torch.set_default_dtype(torch.float32)
+        # Mock injection point which is right after the call to `_set_default_torch_dtype`
+        with mock.patch("transformers.modeling_utils.test_injection", side_effect=RuntimeError()):
+            with self.assertRaises(RuntimeError):
+                _ = AutoModelForCausalLM.from_pretrained(TINY_MISTRAL, device_map="auto", torch_dtype=torch.float16)
+        # default should still be float32
+        assert torch.get_default_dtype() == torch.float32
+        torch.set_default_dtype(old_dtype)
+
+    def test_restore_default_torch_dtype_from_config(self):
+        """
+        Tests that the default torch dtype is restored
+        when an error happens during the loading of a model.
+        """
+        old_dtype = torch.get_default_dtype()
+        # set default type to float32
+        torch.set_default_dtype(torch.float32)
+
+        config = AutoConfig.from_pretrained(
+            TINY_MISTRAL,
+        )
+        # Mock injection point which is right after the call to `_set_default_torch_dtype`
+        with mock.patch("transformers.modeling_utils.test_injection", side_effect=RuntimeError()):
+            with self.assertRaises(RuntimeError):
+                config.torch_dtype = torch.float16
+                _ = AutoModelForCausalLM.from_config(
+                    config,
+                )
+        # default should still be float32
+        assert torch.get_default_dtype() == torch.float32
+        torch.set_default_dtype(old_dtype)
 
 
 @slow
