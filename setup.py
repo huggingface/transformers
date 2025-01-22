@@ -97,7 +97,7 @@ if stale_egg_info.exists():
 _deps = [
     "Pillow>=10.0.1,<=15.0",
     "accelerate>=0.26.0",
-    "av==9.2.0",  # Latest version of PyAV (10.0.0) has issues with audio stream.
+    "av",
     "beautifulsoup4",
     "blobfile",
     "codecarbon>=2.8.1",
