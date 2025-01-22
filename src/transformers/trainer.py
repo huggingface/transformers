@@ -3714,10 +3714,11 @@ class Trainer:
             if not self.model_accepts_loss_kwargs and self.compute_loss_func is None:
                 loss = loss / self.args.gradient_accumulation_steps
 
+            # Turning off loss scaling w.r.t. gradient accumulation when DeepSpeed is enabled
             if self.accelerator.distributed_type == DistributedType.DEEPSPEED:
-                self.accelerator.backward(loss * self.args.gradient_accumulation_steps, **kwargs)
-            else:
-                self.accelerator.backward(loss, **kwargs)
+                kwargs["scale_wrt_gas"] = False
+
+            self.accelerator.backward(loss, **kwargs)
 
             return loss.detach()
 
