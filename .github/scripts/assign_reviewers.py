@@ -37,6 +37,11 @@ def main():
     pr_number = event['pull_request']['number']
     pr = repo.get_pull(pr_number)
 
+    existing_reviews = list(pr.get_reviews())
+    if existing_reviews:
+        print(f"Already has reviews: {[r.user.login for r in existing_reviews]}")
+        return
+
     users_requested, teams_requested = pr.get_review_requests()
     users_requested = list(users_requested)
     if users_requested:
@@ -54,9 +59,9 @@ def main():
     print("Top owners", top_owners)
     for owner, _ in top_owners:
         try:
-            pr.add_to_assignees(owner.removeprefix('@'))
+            pr.create_review_request(owner.removeprefix('@'))
         except github.GithubException as e:
-            print(f"Failed to assign {owner}: {e}")
+            print(f"Failed to request review from {owner}: {e}")
 
 
 
