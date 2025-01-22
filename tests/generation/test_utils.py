@@ -2019,20 +2019,27 @@ class GenerationTesterMixin:
             # get eager + dynamic cache results for future comparison
             dynamic_outputs = []
             for model_inputs in main_input_sets:
-                dynamic_outputs.append(model.generate(**model_inputs, **generation_kwargs))
+                gen_out = model.generate(**model_inputs, **generation_kwargs)
+                dynamic_outputs.append(gen_out)
+                # sanity checks
+                self.assertTrue(isinstance(gen_out.past_key_values, DynamicCache))
+                self.assertFalse(gen_out.past_key_values.is_compileable)
+                self.assertFalse(hasattr(model, "_compiled_call"))  # our auto compile should NOT have been called
 
+            # get compiled results -- relies on the automatic compilation triggered by specific "cache_implementation"
             if "gemma2" in model_class.__name__.lower():
                 generation_kwargs["cache_implementation"] = "hybrid"
             else:
                 generation_kwargs["cache_implementation"] = "static"
 
-            # get compiled results
-            torch.compiler.reset()
-            model.forward = torch.compile(model.forward, fullgraph=True, mode="reduce-overhead")
-
             compiled_outputs = []
             for model_inputs in main_input_sets:
-                compiled_outputs.append(model.generate(**model_inputs, **generation_kwargs))
+                gen_out = model.generate(**model_inputs, **generation_kwargs)
+                compiled_outputs.append(gen_out)
+                # sanity checks
+                self.assertFalse(isinstance(gen_out.past_key_values, DynamicCache))
+                self.assertTrue(gen_out.past_key_values.is_compileable)
+                self.assertTrue(hasattr(model, "_compiled_call"))  # our auto compile should have been called
 
             for dynamic_result, compiled_result in zip(dynamic_outputs, compiled_outputs):
                 self._check_similar_generate_outputs(dynamic_result, compiled_result)

@@ -1222,6 +1222,8 @@ class AriaTextPreTrainedModel(PreTrainedModel):
 
 
 class AriaPreTrainedModel(LlamaPreTrainedModel):
+    _supports_static_cache = False  # MoE models don't work with torch.compile (dynamic slicing)
+
     def _init_weights(self, module):
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):
@@ -1530,6 +1532,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             num_logits_to_keep=num_logits_to_keep,
+            cache_position=cache_position,
         )
 
         logits = outputs[0]

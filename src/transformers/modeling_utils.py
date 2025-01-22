@@ -5177,23 +5177,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         non-compiled/compiled `forward` during inference, especially to switch between prefill (where we don't
         want to use compiled version to avoid recomputing the graph with new shapes) and iterative decoding
         (where we want the speed-ups of compiled version with static shapes)."""
-        # Edge case: the user has manually specified compilation, and it may clash with this automatic compilation
-        # method. Compiled functions have a `get_compiler_config` method.
-        if not hasattr(self, "_compiled_call"):
-            user_has_manually_specified_compilation = (
-                hasattr(self.__call__, "get_compiler_config") or hasattr(self.forward, "get_compiler_config")
-            )
-            if user_has_manually_specified_compilation:
-                return self.__call__
-
-        breakpoint()
         # Only reset it if not present or different from previous config
         default_config = getattr(self.generation_config, "compile_config", CompileConfig())
         if (
             not hasattr(self, "_compiled_call")
             or getattr(self, "_last_compile_config", default_config) != compile_config
         ):
-            logger.warning_once("Using `torch.compile` on the model's `__call__`")
             self._last_compile_config = compile_config
             self._compiled_call = torch.compile(self.__call__, **compile_config.to_dict())
         return self._compiled_call
