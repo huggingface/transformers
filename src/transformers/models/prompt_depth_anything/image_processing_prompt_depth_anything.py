@@ -436,7 +436,6 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
             # prompt_depth is a list of images with shape (height, width)
             # we need to convert it to a list of images with shape (1, height, width)
             prompt_depths = make_list_of_images(prompt_depth, expected_ndims=2)
-            assert len(prompt_depths) == len(images)
 
             # Validate prompt_depths has same length as images
             if len(prompt_depths) != len(images):
