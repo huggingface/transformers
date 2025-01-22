@@ -180,30 +180,29 @@ class SwitchTransformersTop1Router(nn.Module):
             self.classifier = self.classifier.to(self.dtype)
 
     def forward(self, hidden_states: torch.Tensor) -> Tuple:
-        r"""
-        Generic forward function for every Router class. Each Router expects to have the same input hidden states
-        (`hidden_states`) corresponding to the hidden states for each token, the `expert_capacity` corresponding to the
-        number of tokens the Router will send to each expert, some Routers can send up to few tokens to each expert.
-
-        Each Router works as the following: it expects the hidden states for each token, gets the `router_probs` and
-        `router_logits` from the `router_weights`. This will assign for each token, the raw probability to be assigned
-        to an expert. Then each Router class will have to define its own `_compute_routing_instructions`.
-
-        Args:
-            hidden_states (`torch.Tensor`) :
-                [num_groups, tokens_per_group, hidden_dim] inputs to send to experts.
-        Returns:
-            Tuple[`torch.Tensor`, `torch.Tensor`, `torch.Tensor`] Tuple containing the expert index, the router probs
-            and the router logits. The router probabilities and logits are required to compute the loss.
         """
-        router_probs, router_logits = self._compute_router_probabilities(hidden_states)
-
+        Args:
+            hidden_states (`torch.FloatTensor`): [batch_size, sequence_length, hidden_size]
+        """
+        # Create a copy for applying jitter noise
+        routing_states = hidden_states.clone()
+        
+        if self.training and self.jitter_noise > 0:
+            # Apply jitter noise only to the routing copy
+            routing_states *= torch.empty_like(routing_states).uniform_(
+                1.0 - self.jitter_noise, 
+                1.0 + self.jitter_noise
+            )
+        
+        # Use jittered states for routing decisions
+        router_logits = self.classifier(routing_states)
+        
+        router_probs = nn.functional.softmax(router_logits, dim=-1)
         expert_index = torch.argmax(router_probs, dim=-1)
         expert_index = torch.nn.functional.one_hot(expert_index, num_classes=self.num_experts)
 
-        # Mask tokens outside expert capacity. Sum over each sequence
+        # Mask tokens outside expert capacity
         token_priority = torch.cumsum(expert_index, dim=-2)
-        # mask if the token routed to to the expert will overflow
         expert_capacity_mask = token_priority <= self.expert_capacity
         expert_index = expert_index * expert_capacity_mask
 
@@ -279,35 +278,24 @@ class SwitchTransformersSparseMLP(nn.Module):
             self.experts[f"expert_{idx}"] = expert_class(config)
 
     def forward(self, hidden_states):
-        r"""
-        Hold on, this will be slightly tricky to understand In the correct order, a MoE layer does the following:
-
-        1- Gets the `router_mask` from the router. The shape of the mask is `(batch_size, sequence_length, num_expert)`
-        and corresponds to the argmax of the `router_probs`. The probabilities are needed in the computation of the
-        hidden states : they are broadcasted to the hidden states values (can be interpreted as a scaling factor).
-
-        2- Dispatch the tokens to its associated experts. We do a classic for loop over the experts and assign for each
-        expert the corresponding hidden states.
-
-        """
-        # Step 1: Get the router_mask from the router as wel as the probabilities
+        # Store original hidden states for expert processing
+        expert_hidden_states = hidden_states.clone()
+        
+        # Get router outputs using potentially jittered states
         router_mask, router_probs, router_logits = self.router(hidden_states)
         expert_index = torch.argmax(router_mask, dim=-1)
 
-        # The routers introduced might not always map all the tokens, to a router, which means that some hidden states
-        # can be unchanged from one layer to another. That is why the hidden states are cloned before updating only the seleced ones.
-
-        next_states = hidden_states.clone()
-
+        # Use original hidden states for expert processing
+        next_states = expert_hidden_states.clone()
+        
         router_mask = router_mask.bool()
         batch_size, seq_len, num_experts = router_mask.shape
-        idx_mask = router_mask.reshape(batch_size * seq_len, num_experts).sum(dim=0)
-        idx_mask = torch.nonzero(idx_mask, as_tuple=True)[
-            0
-        ].tolist()  # length: number of "activated" expert / value: index
+        idx_mask = router_mask.transpose(1, 2).reshape(batch_size * seq_len, num_experts).sum(dim=0)
+        idx_mask = torch.nonzero(idx_mask, as_tuple=True)[0].tolist()
+        
         for idx in idx_mask:
-            next_states[router_mask[:, :, idx]] = getattr(self.experts, "expert_{}".format(idx))(
-                hidden_states[router_mask[:, :, idx]]
+            next_states[router_mask[:, :, idx]] = getattr(self.experts, f"expert_{idx}")(
+                expert_hidden_states[router_mask[:, :, idx]]
             )
 
         hidden_states = router_probs * next_states
@@ -1711,7 +1699,7 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         ...     "summarize: studies have shown that owning a dog is good for you", return_tensors="pt"
         ... ).input_ids  # Batch size 1
         >>> outputs = model.generate(input_ids)
-        >>> # . To, let’s say you have a dog. To summarize:
+        >>> # . To, let's say you have a dog. To summarize:
         >>> # Since the model has been trained on MLM, this will output gibberish
         ```"""
         use_cache = use_cache if use_cache is not None else self.config.use_cache
