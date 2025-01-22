@@ -1,7 +1,7 @@
 name: Assign PR Reviewers
 on:
   pull_request:
-    types: [opened]
+#    types: [opened]
 
 jobs:
   assign_reviewers:
