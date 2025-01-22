@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # GPU
 
-GPUs are the standard hardware for machine learning because they're optimized for memory bandwidth and parallelism. With the increasing sizes of modern models, it's more important than ever to make sure GPUs are capable of efficiently handling them and able to deliver the best possible performance.
+GPUs are the standard hardware for machine learning because they're optimized for memory bandwidth and parallelism. With the increasing sizes of modern models, it's more important than ever to make sure GPUs are capable of efficiently handling and delivering the best possible performance.
 
 This guide will demonstrate a few ways to optimize inference on a GPU. The optimization methods shown below can be combined with each other to achieve even better performance, and they also work for distributed GPUs.
 
@@ -34,7 +34,7 @@ pip install bitsandbytes accelerate
 
 For text generation with 8-bit quantization, you should use [`~GenerationMixin.generate`] instead of the high-level [`Pipeline`] API. The [`Pipeline`] returns slower performance because it isn't optimized for 8-bit models, and some sampling strategies (nucleus sampling) also aren't supported.
 
-Set up a [`BitsAndBytesConfg`] and set `load_in_8bit=True` to load a model in 8-bit precision. The [`BitsAndBytesConfig`] is passed to the `quantization_config` parameter in [`~PreTrainedModel.from_pretrained`].
+Set up a [`BitsAndBytesConfig`] and set `load_in_8bit=True` to load a model in 8-bit precision. The [`BitsAndBytesConfig`] is passed to the `quantization_config` parameter in [`~PreTrainedModel.from_pretrained`].
 
 Allow Accelerate to automatically distribute the model across your available hardware by setting [device_map="auto"](https://hf.co/docs/accelerate/concept_guides/big_model_inference#designing-a-device-map).
 
@@ -67,9 +67,9 @@ Learn in more detail the concepts underlying 8-bit quantization in the [Gentle I
 </hfoption>
 <hfoption id="4-bit">
 
-Set up a [`BitsAndBytesConfg`] and set `load_in_4bit=True` to load a model in 4-bit precision. The [`BitsAndBytesConfig`] is passed to the `quantization_config` parameter in [`~PreTrainedModel.from_pretrained`].
+Set up a [`BitsAndBytesConfig`] and set `load_in_4bit=True` to load a model in 4-bit precision. The [`BitsAndBytesConfig`] is passed to the `quantization_config` parameter in [`~PreTrainedModel.from_pretrained`].
 
-Allow Accelerate to automatically distribute the model across your available hardware by setting device_map=“auto”.
+Allow Accelerate to automatically distribute the model across your available hardware by setting `device_map=“auto”`.
 
 Place all inputs on the same device as the model.
 
@@ -119,7 +119,7 @@ from optimum.onnxruntime import ORTModelForSequenceClassification
 
 ort_model = ORTModelForSequenceClassification.from_pretrained(
   "distilbert/distilbert-base-uncased-finetuned-sst-2-english",
-#   export=True,
+  #export=True,
   provider="CUDAExecutionProvider",
 )
 ```
@@ -145,9 +145,9 @@ Learn more details about using ORT with Optimum in the [Accelerated inference on
 - skipping unnecessary computation of padding tokens with nested tensors
 
 > [!WARNING]
-> Some BetterTransformer features are being upstreamed to Transformers with default support for native [torch.nn.scaled_dot_product_attention](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) (SDPA). BetterTransformer has than the Transformers SDPA integration, but you can expect more and more architectures to natively support SDPA in Transformers.
+> Some BetterTransformer features are being upstreamed to Transformers with default support for native [torch.nn.functional.scaled_dot_product_attention](https://pytorch.org/docs/stable/generated/torch.nn.functional.scaled_dot_product_attention.html) (SDPA). BetterTransformer has a wider coverage than the Transformers SDPA integration, but you can expect more and more architectures to natively support SDPA in Transformers.
 
-BetterTransformer is available through Optimum with the [`~PreTrainedModel.to_bettertransformer`] method.
+BetterTransformer is available through Optimum with [`~PreTrainedModel.to_bettertransformer`].
 
 ```py
 from transformers import AutoModelForCausalLM
@@ -183,10 +183,11 @@ from transformers import AutoModelForCausalLM
 model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.1-8B", device_map="auto", attn_implementation="sdpa")
 ```
 
-SDPA selects the most performant implementation available, but you can also explicitly select an implementation with [torch.backends.cuda.sdp_kernel](https://pytorch.org/docs/master/backends.html#torch.backends.cuda.sdp_kernel) as a context manager. The example below shows how to enable the FlashAttention2 implementation with `enable_flash=True`.
+SDPA selects the most performant implementation available, but you can also explicitly select an implementation with [torch.nn.attention.sdpa_kernel](https://pytorch.org/docs/master/backends.html#torch.backends.cuda.sdp_kernel) as a context manager. The example below shows how to enable the FlashAttention2 implementation with `enable_flash=True`.
 
 ```py
 import torch
+from torch.nn.attention import SDPBackend, sdpa_kernel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-3.1-8B")
@@ -195,7 +196,7 @@ model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.1-8B", device_m
 input_text = "Hello, my llama is cute"
 inputs = tokenizer(input_text, return_tensors="pt").to("cuda")
 
-with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
+with sdpa_kernel(SDPBackend.FLASH_ATTENTION)::
     outputs = model.generate(**inputs)
 
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
@@ -238,10 +239,10 @@ Enable FlashAttention2 by setting `attn_implementation="flash_attention_2"` in [
 ```py
 from transformers import AutoModelForCausalLM
 
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.1-8B", device_map="auto", torch_dtype=torch.bfloat16, attn_implementation="sdpa")
+model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-3.1-8B", device_map="auto", torch_dtype=torch.bfloat16, attn_implementation="flash_attention_2")
 ```
 
-### Benchmark results
+### Benchmarks
 
 FlashAttention2 speeds up inference considerably especially for inputs with long sequences. However, since FlashAttention2 doesn't support computing attention scores with padding tokens, you must manually pad and unpad the attention scores for batched inference if a sequence contains padding tokens. The downside is batched generation is slower with padding tokens. 
 

@@ -34,7 +34,7 @@ model.compile(jit_compile=True)
 
 XLA can be used to accelerate any arbitrary [tf.function](https://www.tensorflow.org/api_docs/python/tf/function).
 
-Models with a TensorFlow implementation like [GPT2](./model_doc/gpt2), [T5](./model_doc/t5), [OPT](./model_doc/opt), and [Whisper](./model_doc/whisper) are XLA compatible. The amount of speed up depends on a model, but in general, TensorFlow models in Transformers get a ~100x speed up.
+Models with a TensorFlow implementation like [GPT2](./model_doc/gpt2), [T5](./model_doc/t5), [OPT](./model_doc/opt), and [Whisper](./model_doc/whisper) are XLA compatible. The speed up depends on a model, but in general, TensorFlow models in Transformers get a ~100x speed up.
 
 ### Functions
 
@@ -65,7 +65,7 @@ my_xla_fn = tf.function(model.my_xla_fn, jit_compile=True)
 
 ### Text generation
 
-You could also compile other model functions with XLA. For example, enable XLA for text generation by wrapping the [`~TFGenerationMixin.generate`] method with [tf.function](https://www.tensorflow.org/api_docs/python/tf/function).
+You could also compile other model functions with XLA. For example, enable XLA for text generation by wrapping [`~TFGenerationMixin.generate`] with [tf.function](https://www.tensorflow.org/api_docs/python/tf/function).
 
 ```py
 import tensorflow as tf
@@ -95,7 +95,7 @@ When executing an XLA-enabled function for the first time, it tries to infer the
 
 To ensure a function is only traced once, the inputs must have the same shape as when the graph was built. This usually isn't an issue for fixed input shapes like images, but it can be an issue for inputs with variable shapes like text.
 
-One way to handle this is to pad your text so it always has the same shape. Configure the padding options such as [pad_to_multiple_of](https://hf.co/docs/transformers/internal/tokenization_utils#transformers.PreTrainedTokenizerBase.pad.pad_to_multiple_of) in the tokenizer.
+One way to handle this is to pad your text so it always has the same shape. Configure padding options such as [pad_to_multiple_of](https://hf.co/docs/transformers/internal/tokenization_utils#transformers.PreTrainedTokenizerBase.pad.pad_to_multiple_of) in the tokenizer.
 
 ```py
 import tensorflow as tf
