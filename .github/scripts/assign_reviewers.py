@@ -25,6 +25,7 @@ def get_file_owners(file_path, codeowners_lines):
     return []  # Should never happen, but just in case
 
 def main():
+    print("Starting assignment...")
     g = Github(os.environ['GITHUB_TOKEN'])
     repo = g.get_repo("huggingface/transformers")
     with open(os.environ['GITHUB_EVENT_PATH']) as f:
