@@ -371,13 +371,7 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
             size_tuple = (
                 (size.height, size.width) if size.height and size.width else (size.shortest_edge, size.shortest_edge)
             )
-            patch_size = (
-                crop_size.height
-                if crop_size is not None and crop_size.height
-                else size.height
-                if size.height
-                else size.shortest_edge
-            )
+            patch_size = size.height
             image_patches = self._get_image_patches(
                 image,
                 image_grid_pinpoints,
