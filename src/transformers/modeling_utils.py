@@ -1546,6 +1546,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 torch.version.hip is not None
                 and config._attn_implementation == "sdpa"
                 and torch.cuda.device_count() > 1
+                and version.parse(torch.__version__) < version.parse("2.4.1")
             ):
                 logger.warning_once(
                     "Using the `SDPA` attention implementation on multi-gpu setup with ROCM may lead to performance issues due to the FA backend. Disabling it to use alternative backends."
