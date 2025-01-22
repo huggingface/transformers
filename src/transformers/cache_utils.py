@@ -1221,8 +1221,6 @@ class StaticCache(Cache):
             self.key_cache.append(new_layer_key_cache)
             self.value_cache.append(new_layer_value_cache)
 
-        print("init key_cache.device", self.key_cache[0].device)
-
     def update(
         self,
         key_states: torch.Tensor,
@@ -1267,9 +1265,6 @@ class StaticCache(Cache):
             # `tensor[:, :, index] = tensor`, but the first one is compile-friendly and it does explicitly an in-place
             # operation, that avoids copies and uses less memory.
             try:
-                print("kout.device", k_out.device)
-                print("key_states.device", key_states.device)
-                print("cache_position.device", cache_position.device)
                 k_out.index_copy_(2, cache_position, key_states)
                 v_out.index_copy_(2, cache_position, value_states)
             except NotImplementedError:
