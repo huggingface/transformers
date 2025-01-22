@@ -57,11 +57,11 @@ def main():
     # Assign the top 2 based on locs changed as reviewers
     top_owners = locs_per_owner.most_common(2)
     print("Top owners", top_owners)
-    for owner, _ in top_owners:
-        try:
-            pr.create_review_request(owner.removeprefix('@'))
-        except github.GithubException as e:
-            print(f"Failed to request review from {owner}: {e}")
+    top_owners = [owner[0].removeprefix("@") for owner in top_owners]
+    try:
+        pr.create_review_request(top_owners)
+    except github.GithubException as e:
+        print(f"Failed to request review for {top_owners}: {e}")
 
 
 
