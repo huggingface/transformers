@@ -309,18 +309,18 @@ jobs:
       - name: Checkout to PR merge commit
         working-directory: /transformers
         run: |
-            git fetch origin refs/pull/${{ needs.get-pr-number.outputs.PR_NUMBER }}/merge:refs/remotes/pull/${{ needs.get-pr-number.outputs.PR_NUMBER }}/merge
-            git checkout refs/remotes/pull/${{ needs.get-pr-number.outputs.PR_NUMBER }}/merge
-            git log -1 --format=%H
+          git fetch origin refs/pull/${{ needs.get-pr-number.outputs.PR_NUMBER }}/merge:refs/remotes/pull/${{ needs.get-pr-number.outputs.PR_NUMBER }}/merge
+          git checkout refs/remotes/pull/${{ needs.get-pr-number.outputs.PR_NUMBER }}/merge
+          git log -1 --format=%H
 
-    - name: Verify merge commit SHA
-      env:
-        VERIFIED_PR_MERGE_SHA: ${{ needs.get-sha.outputs.PR_MERGE_SHA }}
-      run: |
-        PR_MERGE_SHA=$(git log -1 --format=%H)
-        if [ $PR_MERGE_SHA != $VERIFIED_PR_MERGE_SHA ]; then
-          echo "The merged commit SHA is not the same as the verified one! Security issue detected, abort the workflow!";
-          exit -1;
+      - name: Verify merge commit SHA
+        env:
+          VERIFIED_PR_MERGE_SHA: ${{ needs.get-sha.outputs.PR_MERGE_SHA }}
+        run: |
+          PR_MERGE_SHA=$(git log -1 --format=%H)
+          if [ $PR_MERGE_SHA != $VERIFIED_PR_MERGE_SHA ]; then
+            echo "The merged commit SHA is not the same as the verified one! Security issue detected, abort the workflow!";
+            exit -1;
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
