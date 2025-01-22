@@ -1678,7 +1678,7 @@ class HybridCache(Cache):
         config: PretrainedConfig,
         batch_size: int = None,
         max_cache_len: int = None,
-        device: Union[torch.device, str] = torch.device("meta"),
+        device: Union[torch.device, str] = None,
         dtype: torch.dtype = torch.float32,
         max_batch_size: Optional[int] = None,
         layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
@@ -1707,6 +1707,7 @@ class HybridCache(Cache):
             config.num_attention_heads if config.num_key_value_heads is None else config.num_key_value_heads
         )
 
+        self.device = torch.device(device) if device is not None else torch.device("meta")
         layer_switch = config.sliding_window_pattern if hasattr(config, "sliding_window_pattern") else 2  # 2 is for BC
         self.is_sliding = torch.tensor(
             [bool((i + 1) % layer_switch) for i in range(config.num_hidden_layers)], dtype=torch.bool
@@ -1904,11 +1905,12 @@ class MambaCache:
                 f"The 'batch_size' argument of {self.__class__.__name__} is deprecated and will be removed in "
                 "v4.49. Use the more precisely named 'max_batch_size' argument instead."
             )
-
+        self.dtype = dtype
         self.max_batch_size = batch_size or max_batch_size
         self.intermediate_size = config.intermediate_size
         self.ssm_state_size = config.state_size
         self.conv_kernel_size = config.conv_kernel
+        self.device = torch.device(device) if device is not None else torch.device("meta")
 
         self.conv_states: List[torch.Tensor] = []
         self.ssm_states: List[torch.Tensor] = []
