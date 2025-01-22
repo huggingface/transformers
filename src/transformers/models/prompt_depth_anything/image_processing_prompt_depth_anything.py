@@ -453,11 +453,8 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
                 depth = depth * prompt_scale_to_meter
                 if depth.min() == depth.max():
                     # Prompt depth is invalid, min and max are the same.
-                    # We can simply randomly select one pixel and set it to a small value.
-                    EPS = 1e-6
-                    random_x = np.random.randint(0, depth.shape[0])
-                    random_y = np.random.randint(0, depth.shape[1])
-                    depth[random_x, random_y] = depth[0, 0] + EPS
+                    # We can simply select one pixel and set it to a small value.
+                    depth[0, 0] = depth[0, 0] + 1e-6
                 depth = depth[..., None].astype(np.float32)
                 depth = to_channel_dimension_format(depth, data_format, input_channel_dim=input_data_format)
 
