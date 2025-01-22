@@ -1670,9 +1670,7 @@ class ModernBertForMultipleChoice(ModernBertPreTrainedModel):
         )
 
     def _flatten(tensor: Optional[torch.Tensor]) -> Optional[torch.Tensor]:
-        if tensor is None:
-            return None
-        return tensor.view(-1, tensor.size(-1)) if tensor.dim() > 2 else tensor.view(-1)
+        return tensor.view(-1, tensor.size(-1)) if tensor is not None else None
 
 
 __all__ = [
