@@ -316,7 +316,7 @@ class PromptDepthAnythingImageProcessor(BaseImageProcessor):
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
-                Size of the image after reszing. If `keep_aspect_ratio` is `True`, the image is resized to the largest
+                Size of the image after resizing. If `keep_aspect_ratio` is `True`, the image is resized to the largest
                 possible size such that the aspect ratio is preserved. If `ensure_multiple_of` is set, the image is
                 resized to a size that is a multiple of this value.
             keep_aspect_ratio (`bool`, *optional*, defaults to `self.keep_aspect_ratio`):
