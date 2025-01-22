@@ -136,8 +136,8 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
                 Optional list of dictionaries containing additional information about vision inputs.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
-            resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
-                Resampling filter to use if resizing the image. This can be one of the `PILImageResampling` enums.
+            interpolation (`InterpolationMode`):
+                Resampling filter to use if resizing the image.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
                 Whether to rescale the image.
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):

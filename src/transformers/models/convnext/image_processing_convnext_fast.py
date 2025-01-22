@@ -177,41 +177,41 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
             images (`ImageInput`):
                 Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            do_resize (`bool`, *optional*, defaults to `True`):
+            do_resize (`bool):
                 Controls whether to resize the image's (height, width) dimensions to the specified `size`. Can be overriden
                 by `do_resize` in the `preprocess` method.
-            size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 384}`):
+            size (`Dict[str, int]`):
                 Resolution of the output image after `resize` is applied. If `size["shortest_edge"]` >= 384, the image is
                 resized to `(size["shortest_edge"], size["shortest_edge"])`. Otherwise, the smaller edge of the image will
                 be matched to `int(size["shortest_edge"]/crop_pct)`, after which the image is cropped to
                 `(size["shortest_edge"], size["shortest_edge"])`. Only has an effect if `do_resize` is set to `True`. Can
                 be overriden by `size` in the `preprocess` method.
-            default_to_square (`bool`, *optional*):
+            default_to_square (`bool`):
                 Whether to default to a square image when resizing, if size is an int.
-            resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
-                Resampling filter to use if resizing the image. Can be overriden by `resample` in the `preprocess` method.
-            do_center_crop (`bool`, *optional*, defaults to `True`):
+            interpolation (`InterpolationMode`):
+                Resampling filter to use if resizing the image.
+            do_center_crop (`bool`):
                 Whether to center crop the image to the specified `crop_size`. Can be overridden by `do_center_crop` in the
                 `preprocess` method.
-            crop_size (`Dict[str, int]` *optional*, defaults to 224):
+            crop_size (`Dict[str, int]`):
                 Size of the output image after applying `center_crop`. Can be overridden by `crop_size` in the `preprocess`
                 method.
-            do_rescale (`bool`, *optional*, defaults to `True`):
+            do_rescale (`bool`):
                 Whether to rescale the image by the specified scale `rescale_factor`. Can be overriden by `do_rescale` in
                 the `preprocess` method.
-            rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
+            rescale_factor (`int` or `float`):
                 Scale factor to use if rescaling the image. Can be overriden by `rescale_factor` in the `preprocess`
                 method.
-            do_normalize (`bool`, *optional*, defaults to `True`):
+            do_normalize (`bool`):
                 Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
                 method.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
+            image_mean (`float` or `List[float]`):
                 Mean to use if normalizing the image. This is a float or list of floats the length of the number of
                 channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-            image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
+            image_std (`float` or `List[float]`):
                 Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
                 number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
-            return_tensors (`str` or `TensorType`, *optional*):
+            return_tensors (`str` or `TensorType`):
                 Returns stacked tensors if set to `pt, returns a list of tensors if unset.
         """
 

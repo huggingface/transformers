@@ -331,8 +331,8 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
                 of the form `(height, width)`.
             default_to_square (`bool`, *optional*):
                 Whether to default to a square image when resizing, if size is an int.
-            resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
-                Resampling filter to use if resizing the image. Can be overridden by `resample` in the `preprocess` method.
+            interpolation (`InterpolationMode`):
+                Resampling filter to use if resizing the image.
             do_center_crop (`bool`, *optional*, defaults to `True`):
                 Whether to center crop the image to the specified `crop_size`. Can be overridden by `do_center_crop` in the
                 `preprocess` method.

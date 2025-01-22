@@ -170,9 +170,8 @@ class ViTImageProcessorFast(BaseImageProcessorFast):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
                 Describes the maximum input dimensions to the model.
-            resample (`PILImageResampling` or `InterpolationMode`, *optional*, defaults to self.resample):
-                Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`. Only
-                has an effect if `do_resize` is set to `True`.
+            interpolation (`InterpolationMode`):
+                Resampling filter to use if resizing the image.
             do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
                 Whether to center crop the image.
             crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):

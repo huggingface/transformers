@@ -482,8 +482,8 @@ class RTDetrImageProcessorFast(BaseImageProcessorFast):
                     - `{"max_height": int, "max_width": int}`: The image will be resized to the maximum size respecting the
                         aspect ratio and keeping the height less or equal to `max_height` and the width less or equal to
                         `max_width`.
-            resample (`PILImageResampling` or `InterpolationMode`, *optional*, defaults to self.resample):
-                Resampling filter to use when resizing the image.
+            interpolation (`InterpolationMode`):
+                Resampling filter to use if resizing the image.
             do_rescale (`bool`, *optional*, defaults to self.do_rescale):
                 Whether to rescale the image.
             rescale_factor (`float`, *optional*, defaults to self.rescale_factor):

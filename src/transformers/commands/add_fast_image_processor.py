@@ -119,7 +119,7 @@ def add_import_statement_init(content: str, fast_image_processor_name: str, mode
     """
     # Step 1: Find the block
     block_regex = re.compile(
-        r"if not is_torchvision_available\(\):\s+raise OptionalDependencyNotAvailable\(\)\s+except OptionalDependencyNotAvailable:\s+from \.utils\.dummy_torchvision_objects import \*\s+else:(?P<else_block>\s*(\n\s*from .+ import .*\n)+)(?=\s*# Modeling)",
+        r"if not is_torchvision_available\(\):\s+raise OptionalDependencyNotAvailable\(\)\s+except OptionalDependencyNotAvailable:\s+from \.utils\.dummy_torchvision_objects import \*\s+else:(?P<else_block>\s*(\n\s*from .+ import .*\n)+)(?=\s*try:\s+if not \(is_torchvision_available\(\) and is_timm_available\(\)\):)",
         re.DOTALL,
     )
     match = block_regex.search(content)
@@ -560,6 +560,7 @@ def add_fast_image_processor_file(
         "    # if the image processor is only used for simple augmentations, such as resizing, center cropping, rescaling, or normalizing,\n"
         "    # only the default values should be set in the class.\n"
         "    # If the image processor requires more complex augmentations, methods from BaseImageProcessorFast can be overridden.\n"
+        "    # In most cases, only the `_preprocess` method should be overridden.\n\n"
         "    # For an example of a fast image processor requiring more complex augmentations, see `LlavaOnevisionImageProcessorFast`.\n\n"
         "    # Default values should be checked against the slow image processor\n"
         "    # None values left after checking can be removed\n"
