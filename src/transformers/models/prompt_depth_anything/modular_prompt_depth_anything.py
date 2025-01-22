@@ -129,7 +129,7 @@ class PromptDepthAnythingFeatureFusionStage(DepthAnythingFeatureFusionStage):
 
 
 class PromptDepthAnythingDepthEstimationHead(DepthAnythingDepthEstimationHead):
-    def forward(self, hidden_states: List[torch.Tensor], patch_height, patch_width) -> torch.Tensor:
+    def forward(self, hidden_states: List[torch.Tensor], patch_height: int, patch_width: int) -> torch.Tensor:
         hidden_states = hidden_states[-1]
 
         predicted_depth = self.conv1(hidden_states)
