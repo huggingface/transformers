@@ -380,7 +380,7 @@ class ChatArguments:
         metadata={"help": "Specific model version to use (can be a branch name, tag name or commit id)."},
     )
     torch_dtype: Optional[str] = field(
-        default=None,
+        default="auto",
         metadata={
             "help": "Override the default `torch.dtype` and load the model under this dtype. If `'auto'` is passed, "
             "the dtype will be automatically derived from the model's weights.",
