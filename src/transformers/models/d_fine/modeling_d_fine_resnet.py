@@ -23,10 +23,11 @@
 import math
 from typing import Optional
 
+import torch
 from torch import Tensor, nn
 
 from ...activations import ACT2FN
-from ...modeling_outputs import BackboneOutput, BaseModelOutputWithNoAttention
+from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, replace_return_docstrings
 from ...utils.backbone_utils import BackboneMixin
@@ -65,11 +66,23 @@ class DFineResNetPreTrainedModel(PreTrainedModel):
 
 class DFineResNetConvLayer(nn.Module):
     def __init__(
-        self, in_channels: int, out_channels: int, kernel_size: int = 3, stride: int = 1, activation: str = "relu"
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int = 3,
+        stride: int = 1,
+        groups: int = 1,
+        activation: str = "relu",
     ):
         super().__init__()
         self.convolution = nn.Conv2d(
-            in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=kernel_size // 2, bias=False
+            in_channels,
+            out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
+            groups=groups,
+            padding=kernel_size // 2,
+            bias=False,
         )
         self.normalization = nn.BatchNorm2d(out_channels)
         self.activation = ACT2FN[activation] if activation is not None else nn.Identity()
@@ -79,6 +92,43 @@ class DFineResNetConvLayer(nn.Module):
         hidden_state = self.normalization(hidden_state)
         hidden_state = self.activation(hidden_state)
         return hidden_state
+
+
+class DFineResNetConvLayerLight(nn.Module):
+    def __init__(
+        self,
+        in_chs,
+        out_chs,
+        kernel_size,
+    ):
+        super().__init__()
+        self.conv1 = DFineResNetConvLayer(in_chs, out_chs, kernel_size=1, activation=None)
+        self.conv2 = DFineResNetConvLayer(out_chs, out_chs, kernel_size=kernel_size, groups=out_chs)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.conv2(x)
+        return x
+
+
+class EseModule(nn.Module):
+    def __init__(self, chs):
+        super().__init__()
+        self.conv = nn.Conv2d(
+            chs,
+            chs,
+            kernel_size=1,
+            stride=1,
+            padding=0,
+        )
+        self.sigmoid = nn.Sigmoid()
+
+    def forward(self, x):
+        identity = x
+        x = x.mean((2, 3), keepdim=True)
+        x = self.conv(x)
+        x = self.sigmoid(x)
+        return torch.mul(identity, x)
 
 
 class DFineResNetEmbeddings(nn.Module):
@@ -142,198 +192,111 @@ class DFineResNetEmbeddings(nn.Module):
         return embedding
 
 
-class DFineResNetShortCut(nn.Module):
-    """
-    ResNet shortcut, used to project the residual features to the correct size. If needed, it is also used to
-    downsample the input using `stride=2`.
-    """
-
-    def __init__(self, in_channels: int, out_channels: int, stride: int = 2):
-        super().__init__()
-        self.convolution = nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=stride, bias=False)
-        self.normalization = nn.BatchNorm2d(out_channels)
-
-    def forward(self, input: Tensor) -> Tensor:
-        hidden_state = self.convolution(input)
-        hidden_state = self.normalization(hidden_state)
-        return hidden_state
-
-
 class DFineResNetBasicLayer(nn.Module):
-    """
-    A classic ResNet's residual layer composed by two `3x3` convolutions.
-    See https://github.com/lyuwenyu/RT-DETR/blob/5b628eaa0a2fc25bdafec7e6148d5296b144af85/DFine_pytorch/src/nn/backbone/presnet.py#L34.
-    """
-
     def __init__(
-        self,
-        config: DFineResNetConfig,
-        in_channels: int,
-        out_channels: int,
-        stride: int = 1,
-        should_apply_shortcut: bool = False,
+        self, in_chs, mid_chs, out_chs, layer_num, kernel_size=3, residual=False, light_block=False, agg="ese"
     ):
         super().__init__()
-        if in_channels != out_channels:
-            self.shortcut = (
-                nn.Sequential(
-                    *[nn.AvgPool2d(2, 2, 0, ceil_mode=True), DFineResNetShortCut(in_channels, out_channels, stride=1)]
+        self.residual = residual
+
+        self.layers = nn.ModuleList()
+        for i in range(layer_num):
+            if light_block:
+                self.layers.append(
+                    DFineResNetConvLayerLight(in_chs if i == 0 else mid_chs, mid_chs, kernel_size=kernel_size)
                 )
-                if should_apply_shortcut
-                else nn.Identity()
+            else:
+                self.layers.append(
+                    DFineResNetConvLayer(
+                        in_chs if i == 0 else mid_chs,
+                        mid_chs,
+                        kernel_size=kernel_size,
+                        stride=1,
+                    )
+                )
+
+        # feature aggregation
+        total_chs = in_chs + layer_num * mid_chs
+        if agg == "se":
+            aggregation_squeeze_conv = DFineResNetConvLayer(total_chs, out_chs // 2, kernel_size=1, stride=1)
+            aggregation_excitation_conv = DFineResNetConvLayer(out_chs // 2, out_chs, kernel_size=1, stride=1)
+            self.aggregation = nn.Sequential(
+                aggregation_squeeze_conv,
+                aggregation_excitation_conv,
             )
         else:
-            self.shortcut = (
-                DFineResNetShortCut(in_channels, out_channels, stride=stride)
-                if should_apply_shortcut
-                else nn.Identity()
+            aggregation_conv = DFineResNetConvLayer(total_chs, out_chs, kernel_size=1, stride=1)
+            att = EseModule(out_chs)
+            self.aggregation = nn.Sequential(
+                aggregation_conv,
+                att,
             )
-        self.layer = nn.Sequential(
-            DFineResNetConvLayer(in_channels, out_channels, stride=stride),
-            DFineResNetConvLayer(out_channels, out_channels, activation=None),
-        )
-        self.activation = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_state):
-        residual = hidden_state
-        hidden_state = self.layer(hidden_state)
-        residual = self.shortcut(residual)
-        hidden_state += residual
-        hidden_state = self.activation(hidden_state)
-        return hidden_state
-
-
-class DFineResNetBottleNeckLayer(nn.Module):
-    """
-    A classic DFineResNet's bottleneck layer composed by three `3x3` convolutions.
-
-    The first `1x1` convolution reduces the input by a factor of `reduction` in order to make the second `3x3`
-    convolution faster. The last `1x1` convolution remaps the reduced features to `out_channels`. If
-    `downsample_in_bottleneck` is true, downsample will be in the first layer instead of the second layer.
-    """
-
-    def __init__(
-        self,
-        config: DFineResNetConfig,
-        in_channels: int,
-        out_channels: int,
-        stride: int = 1,
-    ):
-        super().__init__()
-        reduction = 4
-        should_apply_shortcut = in_channels != out_channels or stride != 1
-        reduces_channels = out_channels // reduction
-        if stride == 2:
-            self.shortcut = nn.Sequential(
-                *[
-                    nn.AvgPool2d(2, 2, 0, ceil_mode=True),
-                    DFineResNetShortCut(in_channels, out_channels, stride=1)
-                    if should_apply_shortcut
-                    else nn.Identity(),
-                ]
-            )
-        else:
-            self.shortcut = (
-                DFineResNetShortCut(in_channels, out_channels, stride=stride)
-                if should_apply_shortcut
-                else nn.Identity()
-            )
-        self.layer = nn.Sequential(
-            DFineResNetConvLayer(
-                in_channels, reduces_channels, kernel_size=1, stride=stride if config.downsample_in_bottleneck else 1
-            ),
-            DFineResNetConvLayer(
-                reduces_channels, reduces_channels, stride=stride if not config.downsample_in_bottleneck else 1
-            ),
-            DFineResNetConvLayer(reduces_channels, out_channels, kernel_size=1, activation=None),
-        )
-        self.activation = ACT2FN[config.hidden_act]
-
-    def forward(self, hidden_state):
-        residual = hidden_state
-        hidden_state = self.layer(hidden_state)
-        residual = self.shortcut(residual)
-        hidden_state += residual
-        hidden_state = self.activation(hidden_state)
-        return hidden_state
+    def forward(self, x):
+        identity = x
+        output = [x]
+        for layer in self.layers:
+            x = layer(x)
+            output.append(x)
+        x = torch.cat(output, dim=1)
+        x = self.aggregation(x)
+        if self.residual:
+            x = self.drop_path(x) + identity
+        return x
 
 
 class DFineResNetStage(nn.Module):
-    """
-    A DFineResNet stage composed by stacked layers.
-    """
-
     def __init__(
         self,
-        config: DFineResNetConfig,
-        in_channels: int,
-        out_channels: int,
-        stride: int = 2,
-        depth: int = 2,
+        in_chs,
+        mid_chs,
+        out_chs,
+        block_num,
+        layer_num,
+        downsample=True,
+        light_block=False,
+        kernel_size=3,
+        agg="se",
     ):
         super().__init__()
-
-        layer = DFineResNetBottleNeckLayer if config.layer_type == "bottleneck" else DFineResNetBasicLayer
-
-        if config.layer_type == "bottleneck":
-            first_layer = layer(
-                config,
-                in_channels,
-                out_channels,
-                stride=stride,
-            )
+        if downsample:
+            self.downsample = DFineResNetConvLayer(in_chs, in_chs, kernel_size=3, stride=2)
         else:
-            first_layer = layer(config, in_channels, out_channels, stride=stride, should_apply_shortcut=True)
-        self.layers = nn.Sequential(
-            first_layer, *[layer(config, out_channels, out_channels) for _ in range(depth - 1)]
-        )
+            self.downsample = nn.Identity()
 
-    def forward(self, input: Tensor) -> Tensor:
-        hidden_state = input
-        for layer in self.layers:
-            hidden_state = layer(hidden_state)
-        return hidden_state
+        blocks_list = []
+        for i in range(block_num):
+            blocks_list.append(
+                DFineResNetBasicLayer(
+                    in_chs if i == 0 else out_chs,
+                    mid_chs,
+                    out_chs,
+                    layer_num,
+                    residual=False if i == 0 else True,
+                    kernel_size=kernel_size,
+                    light_block=light_block,
+                    agg=agg,
+                )
+            )
+        self.blocks = nn.Sequential(*blocks_list)
+
+    def forward(self, x):
+        x = self.downsample(x)
+        x = self.blocks(x)
+        return x
 
 
 class DFineResNetEncoder(nn.Module):
     def __init__(self, config: DFineResNetConfig):
         super().__init__()
         self.stages = nn.ModuleList([])
-        # based on `downsample_in_first_stage` the first layer of the first stage may or may not downsample the input
-        self.stages.append(
-            DFineResNetStage(
-                config,
-                config.embedding_size,
-                config.hidden_sizes[0],
-                stride=2 if config.downsample_in_first_stage else 1,
-                depth=config.depths[0],
+        for _, stage in enumerate(config.stage_config):
+            in_channels, mid_channels, out_channels, block_num, downsample, light_block, kernel_size, layer_num = stage
+            self.stages.append(
+                DFineResNetStage(
+                    in_channels, mid_channels, out_channels, block_num, layer_num, downsample, light_block, kernel_size
+                )
             )
-        )
-        in_out_channels = zip(config.hidden_sizes, config.hidden_sizes[1:])
-        for (in_channels, out_channels), depth in zip(in_out_channels, config.depths[1:]):
-            self.stages.append(DFineResNetStage(config, in_channels, out_channels, depth=depth))
-
-    def forward(
-        self, hidden_state: Tensor, output_hidden_states: bool = False, return_dict: bool = True
-    ) -> BaseModelOutputWithNoAttention:
-        hidden_states = () if output_hidden_states else None
-
-        for stage_module in self.stages:
-            if output_hidden_states:
-                hidden_states = hidden_states + (hidden_state,)
-
-            hidden_state = stage_module(hidden_state)
-
-        if output_hidden_states:
-            hidden_states = hidden_states + (hidden_state,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_state, hidden_states] if v is not None)
-
-        return BaseModelOutputWithNoAttention(
-            last_hidden_state=hidden_state,
-            hidden_states=hidden_states,
-        )
 
 
 DFine_RESNET_START_DOCSTRING = r"""
@@ -374,7 +337,7 @@ class DFineResNetBackbone(DFineResNetPreTrainedModel, BackboneMixin):
 
         self.num_features = [config.embedding_size] + config.hidden_sizes
         self.embedder = DFineResNetEmbeddings(config=config)
-        self.encoder = DFineResNetEncoder(config)
+        self.encoder = DFineResNetEncoder(config=config)
 
         # initialize weights and apply final processing
         self.post_init()
