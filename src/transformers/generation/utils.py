@@ -3179,7 +3179,6 @@ class GenerationMixin:
         model_forward = self.__call__
         if isinstance(model_kwargs.get("past_key_values"), StaticCache):
             if self.device.type == "cuda":
-                logger.warning_once("Using `torch.compile`.")
                 os.environ["TOKENIZERS_PARALLELISM"] = "0"
                 model_forward = self.get_compiled_call(generation_config.compile_config)
 

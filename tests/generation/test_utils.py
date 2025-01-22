@@ -1978,7 +1978,6 @@ class GenerationTesterMixin:
                 model.generate(**generation_kwargs, **inputs_dict)
 
     @pytest.mark.generate
-    @require_torch_accelerator
     def test_generate_compile_model_forward(self):
         """
         Tests that `.generate` is compatible with torch.compile without graph breaks, keeping the same results.
@@ -1988,7 +1987,7 @@ class GenerationTesterMixin:
             if not model_class._supports_static_cache:
                 self.skipTest("This model doesn't support static cache (= no expectations of compilation support)")
 
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=4)
 
             model = model_class(config).to(torch_device)
             model.eval()  # otherwise `self.training` is `True` -- this flag is used at attn mask creation time
@@ -1996,36 +1995,44 @@ class GenerationTesterMixin:
             main_input = inputs_dict[model.main_input_name].to(torch_device)
             # creates two sets of *different* inputs with the same shape
             half_batch_size = main_input.shape[0] // 2
-            main_input_sets = [main_input[:half_batch_size, :], main_input[half_batch_size : half_batch_size * 2, :]]
-            self.assertTrue(main_input_sets[0].shape == main_input_sets[1].shape)
+            input_1 = {}
+            input_2 = {}
+            for key, value in inputs_dict.items():
+                if isinstance(value, torch.Tensor):
+                    input_1[key] = value[:half_batch_size, :].to(torch_device)
+                    input_2[key] = value[half_batch_size : half_batch_size * 2, :].to(torch_device)
+                else:
+                    input_1[key] = value
+                    input_2[key] = value
+            main_input_sets = [input_1, input_2]
+            self.assertTrue(
+                main_input_sets[0][model.main_input_name].shape == main_input_sets[1][model.main_input_name].shape
+            )
 
             generation_kwargs = {
                 "do_sample": False,
-                "max_new_tokens": 10,
+                "max_new_tokens": 5,
                 "return_dict_in_generate": True,
                 "output_scores": True,
             }
+
+            # get eager + dynamic cache results for future comparison
+            dynamic_outputs = []
+            for model_inputs in main_input_sets:
+                dynamic_outputs.append(model.generate(**model_inputs, **generation_kwargs))
 
             if "gemma2" in model_class.__name__.lower():
                 generation_kwargs["cache_implementation"] = "hybrid"
             else:
                 generation_kwargs["cache_implementation"] = "static"
 
-            # get eager + dynamic cache results for future comparison
-            dynamic_outputs = []
-            for model_inputs in main_input_sets:
-                dynamic_outputs.append(model.generate(model_inputs, **generation_kwargs))
-
             # get compiled results
-            generation_config = copy.deepcopy(model.generation_config)
-            generation_config.update(**generation_kwargs)
             torch.compiler.reset()
-
             model.forward = torch.compile(model.forward, fullgraph=True, mode="reduce-overhead")
 
             compiled_outputs = []
             for model_inputs in main_input_sets:
-                compiled_outputs.append(model.generate(model_inputs, generation_config=generation_config))
+                compiled_outputs.append(model.generate(**model_inputs, **generation_kwargs))
 
             for dynamic_result, compiled_result in zip(dynamic_outputs, compiled_outputs):
                 self._check_similar_generate_outputs(dynamic_result, compiled_result)
