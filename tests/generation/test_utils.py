@@ -1978,7 +1978,6 @@ class GenerationTesterMixin:
             with self.assertRaises(ValueError):
                 model.generate(**generation_kwargs, **inputs_dict)
 
-
     @pytest.mark.generate
     @require_torch_accelerator
     def test_generate_compile_model_forward(self):
