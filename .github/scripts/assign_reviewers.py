@@ -1,0 +1,54 @@
+import os
+import github
+from github import Github
+from fnmatch import fnmatch
+from collections import Counter
+
+def get_file_owners(file_path, codeowners_lines):
+    # Process lines in reverse (last matching pattern takes precedence)
+    for line in reversed(codeowners_lines):
+        # Skip comments and empty lines
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+
+        # Split into pattern and owners
+        parts = line.split()
+        pattern = parts[0]
+        owners = parts[1:]  # Can be empty, e.g. for dummy files with explicitly no owner!
+
+        # Check if file matches pattern
+        if fnmatch(file_path, pattern):
+            return owners  # Remember, can still be empty!
+    return []  # Should never happen, but just in case
+
+def main():
+    g = Github(os.environ['GITHUB_TOKEN'])
+    repo = g.get_repo("huggingface/transformers")
+    with open(os.environ['GITHUB_EVENT_PATH']) as f:
+        event = json.load(f)
+    with open("codeowners_for_review_action") as f:
+        codeowners_lines = f.readlines()
+
+    # The PR number is available in the event payload
+    pr_number = event['pull_request']['number']
+    pr = repo.get_pull(pr_number)
+
+    locs_per_owner = Counter()
+    for file in pr.get_files():
+        owners = get_file_owners(file.filename, codeowners_lines)
+        for owner in owners:
+            locs_per_owner[owner] += file.changes
+
+    # Assign the top 2 based on locs changed as reviewers
+    top_owners = locs_per_owner.most_common(2)
+    for owner, _ in top_owners:
+        try:
+            pr.add_to_assignees(owner)
+        except github.GithubException as e:
+            print(f"Failed to assign {owner}: {e}")
+
+
+
+if __name__ == "__main__":
+    main()
