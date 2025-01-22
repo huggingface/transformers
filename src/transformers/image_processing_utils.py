@@ -163,8 +163,6 @@ VALID_SIZE_DICT_KEYS = (
     {"shortest_edge"},
     {"shortest_edge", "longest_edge"},
     {"longest_edge"},
-    {"max_height", "max_width"},
-    {"min_pixels", "max_pixels"},
 )
 
 

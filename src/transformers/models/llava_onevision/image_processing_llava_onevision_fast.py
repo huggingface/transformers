@@ -64,9 +64,6 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
             Size of the image after resizing. The shortest edge of the image is resized to size["shortest_edge"], with
             the longest edge resized to keep the input aspect ratio. Can be overridden by `size` in the `preprocess`
             method.
-        image_grid_pinpoints (`List`, *optional*):
-            A list of possible resolutions to use for processing high resolution images. Each item in the list should be a tuple or list
-            of the form `(height, width)`.
         default_to_square (`bool`, *optional*):
             Whether to default to a square image when resizing, if size is an int.
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):

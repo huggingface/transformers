@@ -72,8 +72,18 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
             Whether to resize the image's (height, width) dimensions.
+        size (`Dict`, *optional*):
+            Size of the output image after resizing. Can be overridden by the `size` parameter in the `preprocess`
+            method.
+        default_to_square (`bool`, *optional*): <fill_docstring>
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
             Resampling filter to use when resizing the image.
+        do_center_crop (`bool`, *optional*):
+            Whether to center crop the image to the specified `crop_size`. Can be overridden by `do_center_crop` in the
+            `preprocess` method.
+        crop_size (`Dict`, *optional*):
+            Size of the output image after applying `center_crop`. Can be overridden by `crop_size` in the `preprocess`
+            method.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the image by the specified scale `rescale_factor`.
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
@@ -86,21 +96,11 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
             Standard deviation to use if normalizing the image. This is a float or list of floats for each channel in the image.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
-        min_pixels (`int`, *optional*, defaults to `56 * 56`):
-            The min pixels of the image to resize the image.
-        max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):
-            The max pixels of the image to resize the image.
-        patch_size (`int`, *optional*, defaults to 14):
-            The spacial patch size of the vision encoder.
-        temporal_patch_size (`int`, *optional*, defaults to 2):
-            The temporal patch size of the vision encoder.
-        merge_size (`int`, *optional*, defaults to 2):
-            The merge size of the vision encoder to llm encoder.
     """
 
     do_resize = True
     resample = PILImageResampling.BICUBIC
-    size = {"min_pixels": 56 * 56, "max_pixels": 28 * 28 * 1280}
+    size = {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 1280}
     do_rescale = True
     do_normalize = True
     image_mean = OPENAI_CLIP_MEAN
@@ -109,7 +109,16 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
     patch_size = 14
     temporal_patch_size = 2
     merge_size = 2
-    model_input_names = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw"]
+    min_pixels = 56 * 56
+    max_pixels = 28 * 28 * 1280
+    model_input_names = [
+        "pixel_values",
+        "image_grid_thw",
+        "pixel_values_videos",
+        "video_grid_thw",
+        "min_pixels",
+        "max_pixels",
+    ]
 
     def _preprocess(
         self,
@@ -177,8 +186,8 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
                     height,
                     width,
                     factor=self.patch_size * self.merge_size,
-                    min_pixels=size.min_pixels,
-                    max_pixels=size.max_pixels,
+                    min_pixels=self.min_pixels,
+                    max_pixels=self.max_pixels,
                 )
                 stacked_images = F.resize(
                     stacked_images, size=(resized_height, resized_width), interpolation=interpolation

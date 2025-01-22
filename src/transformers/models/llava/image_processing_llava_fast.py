@@ -65,11 +65,11 @@ class LlavaImageProcessorFast(BaseImageProcessorFast):
         size (`dict`, *optional*):
             Size of the output image after resizing. Can be overridden by the `size` parameter in the `preprocess`
             method.
+        default_to_square (`bool`, *optional*):
+            Whether to default to a square image when resizing, if size is an int.
         resample (`PILImageResampling`, *optional*):
             Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`. Can be
             overridden by the `resample` parameter in the `preprocess` method.
-        do_pad (`bool`, *optional*):
-            Whether to pad the image to a square based on the longest edge. Can be overridden by the `do_pad` parameter
         do_center_crop (`bool`, *optional*, defaults to `True`):
             Whether to center crop the image to the specified `crop_size`. Can be overridden by `do_center_crop` in the
             `preprocess` method.
