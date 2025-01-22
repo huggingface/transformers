@@ -28,7 +28,7 @@ InternLM3 is an 8-billion parameter instruction model designed for general-purpo
 
 Model weights can be requested [here](https://huggingface.co/internlm/internlm3-8b-instruct).
 
-In the following, we demonstrate how to use `InternLM3-8B-Instruct` for the inference.
+In the following, we demonstrate how to use `InternLM3-8B-Instruct` for inference.
 
 ```python
 >>> from transformers import AutoModelForCausalLM, AutoTokenizer
