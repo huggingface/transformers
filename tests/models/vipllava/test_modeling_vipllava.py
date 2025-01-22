@@ -273,7 +273,7 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTest
         """
         # NOTE: vipllava uses vision_feature_layers instead of vision_feature_layer as the
         # config key. The reason is that other llava classes supported one vision feature layer
-        # and added support for a list of layers with multimodal granite support, while vipllava
+        # and added support for a list of layers with granite vision support, while vipllava
         # originally supported multiple feature layers, and added support for a single layer for
         # for compatibility reasons.
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()

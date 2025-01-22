@@ -134,6 +134,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("gptsan-japanese", "GPTSanJapaneseConfig"),
         ("granite", "GraniteConfig"),
         ("granitemoe", "GraniteMoeConfig"),
+        ("granitevision", "LlavaNextConfig"),
         ("graphormer", "GraphormerConfig"),
         ("grounding-dino", "GroundingDinoConfig"),
         ("groupvit", "GroupViTConfig"),
@@ -456,6 +457,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("gptsan-japanese", "GPTSAN-japanese"),
         ("granite", "Granite"),
         ("granitemoe", "GraniteMoeMoe"),
+        ("granitevision", "LLaVA-NeXT"),
         ("graphormer", "Graphormer"),
         ("grounding-dino", "Grounding DINO"),
         ("groupvit", "GroupViT"),
@@ -725,6 +727,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("siglip_vision_model", "siglip"),
         ("chinese_clip_vision_model", "chinese_clip"),
         ("rt_detr_resnet", "rt_detr"),
+        ("granitevision", "llava_next"),
     ]
 )
 
