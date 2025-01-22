@@ -7716,6 +7716,8 @@ if TYPE_CHECKING:
         )
         from .models.modernbert import (
             ModernBertForMaskedLM,
+            ModernBertForMultipleChoice,
+            ModernBertForQuestionAnswering,
             ModernBertForSequenceClassification,
             ModernBertForTokenClassification,
             ModernBertModel,

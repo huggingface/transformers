@@ -81,6 +81,16 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 [[autodoc]] ModernBertForMaskedLM
     - forward
 
+## ModernBertForMultipleChoice
+
+[[autodoc]] ModernBertForMultipleChoice
+    - forward
+
+## ModernBertForQuestionAnswering
+
+[[autodoc]] ModernBertForQuestionAnswering
+    - forward
+
 ## ModernBertForSequenceClassification
 
 [[autodoc]] ModernBertForSequenceClassification

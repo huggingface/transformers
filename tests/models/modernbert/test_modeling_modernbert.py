@@ -41,6 +41,8 @@ if is_torch_available():
     from transformers import (
         MODEL_FOR_PRETRAINING_MAPPING,
         ModernBertForMaskedLM,
+        ModernBertForMultipleChoice,
+        ModernBertForQuestionAnswering,
         ModernBertForSequenceClassification,
         ModernBertForTokenClassification,
         ModernBertModel,
@@ -225,6 +227,8 @@ class ModernBertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             ModernBertForMaskedLM,
             ModernBertForSequenceClassification,
             ModernBertForTokenClassification,
+            ModernBertForQuestionAnswering,
+            ModernBertForMultipleChoice,
         )
         if is_torch_available()
         else ()
@@ -237,6 +241,8 @@ class ModernBertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
             "text-classification": ModernBertForSequenceClassification,
             "token-classification": ModernBertForTokenClassification,
             "zero-shot": ModernBertForSequenceClassification,
+            "question-answering": ModernBertForQuestionAnswering,
+            "multiple-choice": ModernBertForMultipleChoice,
         }
         if is_torch_available()
         else {}
