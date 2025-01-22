@@ -73,7 +73,7 @@ class MaskCropPipelineTests(unittest.TestCase):
         pipe = self.get_test_pipeline()
         image = self.get_test_image()
 
-        
+
         # Then use these crops for mask generation
         masks = pipe(image, points_per_batch=32, crops_n_layers=1)
 
