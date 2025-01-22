@@ -22,7 +22,7 @@ InternLM3 is an 8-billion parameter instruction model designed for general-purpo
 
 - Enhanced performance at reduced cost: State-of-the-art performance on reasoning and knowledge-intensive tasks that surpass models like Llama3.1-8B and Qwen2.5-7B. Remarkably, InternLM3 is trained on only 4 trillion high-quality tokens, saving more than 75% of the training cost compared to other LLMs of similar scale.
 
-- Deep thinking capability: InternLM3 supports both the deep thinking mode for solving complicated reasoning tasks via the long chain-of-thought and the normal response mode for fluent user interactions.
+- Deep thinking capability: InternLM3 supports both deep thinking mode for solving complicated reasoning tasks with the long chain-of-thought technique and normal response mode for fluent user interactions.
 
 ## Usage tips
 
