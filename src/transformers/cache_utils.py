@@ -1183,7 +1183,6 @@ class StaticCache(Cache):
                 f"The 'batch_size' argument of {self.__class__.__name__} is deprecated and will be removed in "
                 "v4.49. Use the more precisely named 'max_batch_size' argument instead."
             )
-        self.dtype = dtype
         self.max_batch_size = batch_size or max_batch_size
         self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
 
