@@ -64,7 +64,7 @@ for you, allowing you to write universal code that works for any model.
 
 <Tip>
 
-Chat templates are a critical component of our [`transformers-cli chat` CLI](quicktour#chat-with-text-generation-models).
+Chat templates are a critical component of our [chat CLI](quicktour#chat-with-text-generation-models).
 You can apply the learnings of this guide there as well.
 
 </Tip>

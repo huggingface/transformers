@@ -25,7 +25,7 @@ Autoregressive generation is the inference-time procedure of iteratively calling
 
 <Tip>
 
-If you want to jump straight to chatting with a model, [try our `transformers-cli chat` CLI](quicktour#chat-with-text-generation-models).
+If you want to jump straight to chatting with a model, [try our chat CLI](quicktour#chat-with-text-generation-models).
 
 </Tip>
 
