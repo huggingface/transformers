@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # InternLM3
 
-## Introduction
+## Overview
 
 InternLM3 has open-sourced an 8-billion parameter instruction model, InternLM3-8B-Instruct, designed for general-purpose usage and advanced reasoning. This model has the following characteristics:
 
