@@ -32,6 +32,9 @@ class Cache(torch.Tensor):
         wrapper_kwargs = {}
         init_signature = inspect.signature(cls.__init__)
         init_arguments = list(init_signature.parameters.keys())
+        init_defaults = {
+            k: v.default for k, v in init_signature.parameters.items() if v.default is not inspect.Parameter.empty
+        }
 
         for argument in ["dtype", "device", "requires_grad"]:
             if argument in init_arguments:
@@ -40,6 +43,8 @@ class Cache(torch.Tensor):
                     wrapper_kwargs[argument] = args[argument_index]
                 elif argument in kwargs:
                     wrapper_kwargs[argument] = kwargs[argument]
+                elif argument in init_defaults:
+                    wrapper_kwargs[argument] = init_defaults[argument]
 
         self = torch.Tensor._make_wrapper_subclass(cls, (), **wrapper_kwargs)
         cls.__init__(self, *args, **kwargs)
@@ -61,29 +66,42 @@ class Cache(torch.Tensor):
         # I think `if past_key_values is not None:` should be used instead
         return self is not None  # True
 
-    def to(self, *args, **kwargs):
-        def reccursive_to(elm):
-            if isinstance(elm, dict):
-                return {k: reccursive_to(v) for k, v in elm.items()}
-            elif isinstance(elm, (list, tuple, set)):
-                return type(elm)(reccursive_to(t) for t in elm)
-            elif isinstance(elm, torch.Tensor):
-                return elm.to(*args, **kwargs)
-            else:
-                return elm
+    def __setattr__(self, name, value):
+        # for the many places where `self.device` or `self.dtype` is set
+        if name in ["dtype", "device"]:
+            self.to(value)
+        else:
+            return super().__setattr__(name, value)
 
-        self.__dict__ = reccursive_to(self.__dict__)
+    def to(self, *args, **kwargs):
+        # originals
+        wrapper_kwargs = {
+            "dtype": getattr(self, "dtype", None),
+            "device": getattr(self, "device", None),
+            "requires_grad": getattr(self, "requires_grad", False),
+        }
+
+        # overrides
+        for arg in list(args) + list(kwargs.values()):
+            if isinstance(arg, torch.device):
+                wrapper_kwargs["device"] = arg
+            elif isinstance(arg, torch.dtype):
+                wrapper_kwargs["dtype"] = arg
+
+        new_tensor_wrapper = torch.Tensor._make_wrapper_subclass(self.__class__, (), **wrapper_kwargs)
+        new_tensor_wrapper.__dict__ = self.__dict__
+        self = new_tensor_wrapper
         return self
 
     def clone(self):
         wrapper_kwargs = {
             "dtype": getattr(self, "dtype", None),
             "device": getattr(self, "device", None),
-            "requires_grad": getattr(self, "requires_grad", None),
+            "requires_grad": getattr(self, "requires_grad", False),
         }
-        new_self = torch.Tensor._make_wrapper_subclass(self.__class__, (), **wrapper_kwargs)
-        new_self.__dict__ = copy.deepcopy(self.__dict__)
-        return new_self
+        new_tensor_wrapper = torch.Tensor._make_wrapper_subclass(self.__class__, (), **wrapper_kwargs)
+        new_tensor_wrapper.__dict__ = copy.deepcopy(self.__dict__)
+        return new_tensor_wrapper
 
     def update(
         self,
@@ -285,6 +303,7 @@ class QuantizedCacheConfig(CacheConfig):
         q_group_size: Optional[int] = 64,
         residual_length: Optional[int] = 128,
         compute_dtype: Optional[torch.dtype] = torch.float16,
+        device: Optional[str] = "cpu",
     ):
         self.backend = backend
         self.nbits = nbits
@@ -293,6 +312,7 @@ class QuantizedCacheConfig(CacheConfig):
         self.q_group_size = q_group_size
         self.residual_length = residual_length
         self.compute_dtype = compute_dtype
+        self.device = device
 
     def validate(self):
         """Validates if the arguments passed are correct"""
@@ -355,9 +375,10 @@ class StaticCacheConfig(CacheConfig):
 
     cache_implementation = "static"
 
-    def __init__(self, batch_size: int, max_cache_len: int):
+    def __init__(self, batch_size: int, max_cache_len: int, device="cpu"):
         self.batch_size = batch_size
         self.max_cache_len = max_cache_len
+        self.device = device
 
     def validate(self):
         """Validates if the arguments passed are correct"""
@@ -715,7 +736,6 @@ class QuantizedCache(DynamicCache):
     """
 
     def __init__(self, cache_config: QuantizedCacheConfig) -> None:
-        super().__init__()
         self._quantized_key_cache: List[torch.Tensor] = []
         self._quantized_value_cache: List[torch.Tensor] = []
 
@@ -725,7 +745,7 @@ class QuantizedCache(DynamicCache):
         self.axis_key = cache_config.axis_key
         self.axis_value = cache_config.axis_value
         self.compute_dtype = cache_config.compute_dtype
-        self.to(cache_config.device)
+        self.device = cache_config.device
 
     def update(
         self,
@@ -1158,13 +1178,12 @@ class StaticCache(Cache):
         max_batch_size: Optional[int] = None,
         layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
     ) -> None:
-        super().__init__()
         if batch_size is not None:
             logger.warning_once(
                 f"The 'batch_size' argument of {self.__class__.__name__} is deprecated and will be removed in "
                 "v4.49. Use the more precisely named 'max_batch_size' argument instead."
             )
-
+        self.dtype = dtype
         self.max_batch_size = batch_size or max_batch_size
         self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
 
@@ -1173,6 +1192,8 @@ class StaticCache(Cache):
             config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
         )
 
+        self.dtype = dtype
+        self.device = torch.device(device) if device is not None else torch.device("meta")
         self.num_key_value_heads = (
             config.num_attention_heads
             if getattr(config, "num_key_value_heads", None) is None
@@ -1657,7 +1678,7 @@ class HybridCache(Cache):
         config: PretrainedConfig,
         batch_size: int = None,
         max_cache_len: int = None,
-        device: Union[torch.device, str] = None,
+        device: Union[torch.device, str] = torch.device("meta"),
         dtype: torch.dtype = torch.float32,
         max_batch_size: Optional[int] = None,
         layer_device_map: Optional[Dict[int, Union[str, torch.device, int]]] = None,
@@ -1681,11 +1702,11 @@ class HybridCache(Cache):
             config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
         )
 
+        self.dtype = dtype
         self.num_key_value_heads = (
             config.num_attention_heads if config.num_key_value_heads is None else config.num_key_value_heads
         )
 
-        self.device = torch.device(device) if device is not None else torch.device("meta")
         layer_switch = config.sliding_window_pattern if hasattr(config, "sliding_window_pattern") else 2  # 2 is for BC
         self.is_sliding = torch.tensor(
             [bool((i + 1) % layer_switch) for i in range(config.num_hidden_layers)], dtype=torch.bool
@@ -1888,7 +1909,6 @@ class MambaCache:
         self.intermediate_size = config.intermediate_size
         self.ssm_state_size = config.state_size
         self.conv_kernel_size = config.conv_kernel
-        self.device = torch.device(device) if device is not None else torch.device("meta")
 
         self.conv_states: List[torch.Tensor] = []
         self.ssm_states: List[torch.Tensor] = []
@@ -2026,7 +2046,9 @@ class OffloadedStaticCache(StaticCache):
         super(Cache, self).__init__()
         self.max_batch_size = max_batch_size
         self.max_cache_len = config.max_position_embeddings if max_cache_len is None else max_cache_len
+        self.device = torch.device(device) if layer_device_map is None else torch.device(layer_device_map[0])
         self.offload_device = torch.device(offload_device)
+        self.dtype = dtype if dtype is not None else torch.float32
 
         # Some model define a custom `head_dim` != config.hidden_size // config.num_attention_heads
         head_dim = config.head_dim if hasattr(config, "head_dim") else config.hidden_size // config.num_attention_heads
