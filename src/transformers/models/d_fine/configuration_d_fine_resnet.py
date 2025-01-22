@@ -20,8 +20,22 @@
 # limitations under the License.
 
 
+from typing import Any, Iterator, List, NamedTuple
+
 from ...configuration_utils import PretrainedConfig
 from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
+
+
+class DFineResNetStageConfig(NamedTuple):
+    # stage: [in_channels, mid_channels, out_channels, num_blocks, downsample, light_block, kernel_size, layer_num]
+    stage1: List[Any] = [48, 48, 128, 1, False, False, 3, 6]
+    stage2: List[Any] = [128, 96, 512, 1, True, False, 3, 6]
+    stage3: List[Any] = [512, 192, 1024, 3, True, True, 5, 6]
+    stage4: List[Any] = [1024, 384, 2048, 1, True, True, 5, 6]
+
+    def __iter__(self) -> Iterator[List[Any]]:
+        # Create an iterator over the stages
+        return iter([self.stage1, self.stage2, self.stage3, self.stage4])
 
 
 class DFineResNetConfig(BackboneConfigMixin, PretrainedConfig):
@@ -95,6 +109,7 @@ class DFineResNetConfig(BackboneConfigMixin, PretrainedConfig):
         out_features=None,
         out_indices=None,
         stem_channels=[3, 32, 48],
+        stage_config=DFineResNetStageConfig(),
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -113,6 +128,7 @@ class DFineResNetConfig(BackboneConfigMixin, PretrainedConfig):
             out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
         )
         self.stem_channels = stem_channels
+        self.stage_config = stage_config
 
 
 __all__ = ["DFineResNetConfig"]
