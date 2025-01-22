@@ -215,6 +215,7 @@ def convert_fast_checkpoint(checkpoint_url, checkpoint_config_filename, pytorch_
     state_dict_changed = OrderedDict()
     for key in state_dict:
         #TODO: see if we add more
+
         if "backbone" or "textnet" in key:
             val = state_dict[key]
             new_key = key
@@ -255,7 +256,7 @@ def convert_fast_checkpoint(checkpoint_url, checkpoint_config_filename, pytorch_
     # assert torch.allclose(output["feature_maps"][-1][0][10][12][:10].detach(), expected_slice_backbone, atol=1e-3)
     #TODO: fix the safetensor sharing problem to use safetensors
     # same to remove it, gonna be reassigned in inference
-    del model.text_detection_head.final.fused_conv.weight
+    # del model.text_detection_head.final.fused_conv.weight
     model.save_pretrained(pytorch_dump_folder_path)
     if save_backbone_separately:
         model.backbone.save_pretrained(pytorch_dump_folder_path + "/textnet/")

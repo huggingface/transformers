@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2023 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 the Fast authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,66 +14,12 @@
 # limitations under the License.
 """Image processor class for FAST."""
 import math
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, Tuple
 
 from ...utils.import_utils import is_cv2_available
 
-
 if is_cv2_available():
     import cv2
-import numpy as np
-
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
-from ...image_transforms import resize, to_channel_dimension_format
-from ...image_utils import (
-    ChannelDimension,
-    ImageInput,
-    PILImageResampling,
-    infer_channel_dimension_format,
-    is_scaled_image,
-    make_list_of_images,
-    to_numpy_array,
-    valid_images,
-)
-from ...utils import (
-    IMAGENET_DEFAULT_MEAN,
-    IMAGENET_DEFAULT_STD,
-    TensorType,
-    is_torch_available,
-    is_vision_available,
-    logging,
-)
-
-
-if is_vision_available():
-    import PIL
-
-if is_torch_available():
-    import torch
-    import torch.nn as nn
-    import torch.nn.functional as F
-
-logger = logging.get_logger(__name__)
-
-
-# coding=utf-8
-# Copyright 2024 the Fast authors and The HuggingFace Inc. team. All rights reserved.
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-"""Image processor class for Fast."""
-
-from typing import Dict, List, Optional, Union
-
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
@@ -97,13 +43,17 @@ from ...image_utils import (
     validate_kwargs,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_vision_available, logging
-
-
-logger = logging.get_logger(__name__)
+from ...utils import TensorType, is_torch_available, is_vision_available, logging
 
 if is_vision_available():
     import PIL
+
+if is_torch_available():
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
+
+logger = logging.get_logger(__name__)
 
 
 class FastImageProcessor(BaseImageProcessor):
@@ -145,6 +95,8 @@ class FastImageProcessor(BaseImageProcessor):
             Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_convert_rgb (`bool`, *optional*, defaults to `True`):
             Whether to convert the image to RGB.
+        img_size (`Tuple[int, int]`, *optional*, defaults to `(640, 400)`):
+            Size of the image after resizing.
     """
 
     model_input_names = ["pixel_values"]
@@ -163,6 +115,7 @@ class FastImageProcessor(BaseImageProcessor):
         image_mean: Optional[Union[float, List[float]]] = IMAGENET_DEFAULT_MEAN,
         image_std: Optional[Union[float, List[float]]] = IMAGENET_DEFAULT_STD,
         do_convert_rgb: bool = True,
+        img_size: Optional[Tuple[int, int]] = (640, 400),
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -183,6 +136,7 @@ class FastImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_convert_rgb = do_convert_rgb
+        self.img_size = img_size
 
         self._valid_processor_keys = [
             "images",
@@ -249,7 +203,8 @@ class FastImageProcessor(BaseImageProcessor):
         if width % self.size_divisor != 0:
             width += self.size_divisor - (width % self.size_divisor)
 
-            
+        #TODO: check if working
+        self.img_size = (height, width)
         return resize(
             image,
             size=(height, width),
@@ -419,11 +374,10 @@ class FastImageProcessor(BaseImageProcessor):
             )
         return x
 
-    def post_process_text_detection(self, output, target_sizes, threshold, bbox_type="rect"):
+    def post_process_text_detection(self, output, target_sizes, threshold, bbox_type="rect", img_size=None):
         scale = 2
-        # img_size = (self.size["height"], self.size["width"])
         #TODO: fix resizing bug
-        img_size = (640, 864)
+        img_size = img_size if img_size is not None else self.img_size
         out = output["last_hidden_state"]
         batch_size = out.size(0)
         final_results = {}

@@ -105,16 +105,18 @@ class FASTConvLayer(nn.Module):
         )
 
     def forward(self, hidden_states):
-        if self.training:
-            if hasattr(self, "fused_conv"):
-                delattr(self, "fused_conv")
-            hidden_states = self.conv(hidden_states)
-            return hidden_states
-        else:
-            if not hasattr(self, "fused_conv"):
-                setattr(self, "fused_conv", self.conv)
-            hidden_states = self.fused_conv(hidden_states)
-            return hidden_states
+        # if self.training:
+        # if True:
+            # if hasattr(self, "fused_conv"):
+            #     delattr(self, "fused_conv")
+        hidden_states = self.conv(hidden_states)
+        return hidden_states
+        # else:
+        #     if not hasattr(self, "fused_conv"):
+        #         setattr(self, "fused_conv", self.conv)
+        #         #TODO: check the fused conv logic
+        #     hidden_states = self.fused_conv(hidden_states)
+        #     return hidden_states
 
     def fuse_conv_batch_norm(self, conv, batch_norm):
         """During inference, the functionary of batch norm layers is turned off but
@@ -188,34 +190,32 @@ class FASTRepConvLayer(nn.Module):
         )
 
     def forward(self, hidden_states):
-        if self.training:
-            if hasattr(self, "fused_conv"):
-                self.__delattr__("fused_conv")
+        # if self.training:
 
-            main_outputs = self.main_conv(hidden_states)
-            main_outputs = self.main_batch_norm(main_outputs)
-            if self.vertical_conv is not None:
-                vertical_outputs = self.vertical_conv(hidden_states)
-                vertical_outputs = self.vertical_batch_norm(vertical_outputs)
-            else:
-                vertical_outputs = 0
-
-            if self.horizontal_conv is not None:
-                horizontal_outputs = self.horizontal_conv(hidden_states)
-                horizontal_outputs = self.horizontal_batch_norm(horizontal_outputs)
-            else:
-                horizontal_outputs = 0
-
-            if self.rbr_identity is None:
-                id_out = 0
-            else:
-                id_out = self.rbr_identity(hidden_states)
-
-            return self.activation(main_outputs + vertical_outputs + horizontal_outputs + id_out)
+        main_outputs = self.main_conv(hidden_states)
+        main_outputs = self.main_batch_norm(main_outputs)
+        if self.vertical_conv is not None:
+            vertical_outputs = self.vertical_conv(hidden_states)
+            vertical_outputs = self.vertical_batch_norm(vertical_outputs)
         else:
-            if not hasattr(self, "fused_conv"):
-                self.prepare_for_eval()
-            return self.activation(self.fused_conv(hidden_states))
+            vertical_outputs = 0
+
+        if self.horizontal_conv is not None:
+            horizontal_outputs = self.horizontal_conv(hidden_states)
+            horizontal_outputs = self.horizontal_batch_norm(horizontal_outputs)
+        else:
+            horizontal_outputs = 0
+
+        if self.rbr_identity is None:
+            id_out = 0
+        else:
+            id_out = self.rbr_identity(hidden_states)
+
+        return self.activation(main_outputs + vertical_outputs + horizontal_outputs + id_out)
+        # else:
+        #     if not hasattr(self, "fused_conv"):
+        #         self.prepare_for_eval()
+        #     return self.activation(self.fused_conv(hidden_states))
 
     def _identity_to_conv(self, identity):
         if identity is None:
@@ -281,8 +281,11 @@ class FASTRepConvLayer(nn.Module):
             padding=self.main_conv.padding,
             bias=True,
         )
-        self.fused_conv.weight.data = kernel
-        self.fused_conv.bias.data = bias
+        # self.fused_conv.weight.data = kernel
+        # self.fused_conv.bias.data = bias
+        #TODO: check if valid fixup
+        self.fused_conv.weight.data = kernel.clone()
+        self.fused_conv.bias.data = bias.clone()
         for para in self.fused_conv.parameters():
             para.detach_()
 
