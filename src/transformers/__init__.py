@@ -2930,6 +2930,8 @@ else:
     _import_structure["models.modernbert"].extend(
         [
             "ModernBertForMaskedLM",
+            "ModernBertForMultipleChoice",
+            "ModernBertForQuestionAnswering",
             "ModernBertForSequenceClassification",
             "ModernBertForTokenClassification",
             "ModernBertModel",
