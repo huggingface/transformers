@@ -54,7 +54,7 @@ def main():
     print("Top owners", top_owners)
     for owner, _ in top_owners:
         try:
-            pr.add_to_assignees(owner)
+            pr.add_to_assignees(owner.removeprefix('@'))
         except github.GithubException as e:
             print(f"Failed to assign {owner}: {e}")
 
