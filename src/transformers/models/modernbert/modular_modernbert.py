@@ -29,6 +29,8 @@ from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
     MaskedLMOutput,
+    MultipleChoiceModelOutput,
+    QuestionAnsweringModelOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
@@ -1369,26 +1371,7 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
+            loss = self.loss_function(pooled_logits=logits, labels=labels, config=self.config)
 
         if not return_dict:
             output = (logits,)
@@ -1472,8 +1455,7 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
 
         loss = None
         if labels is not None:
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
+            loss = self.loss_function(logits=logits, labels=labels, config=self.config)
 
         if not return_dict:
             output = (logits,) + outputs[1:]
@@ -1487,6 +1469,212 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
         )
 
 
+@add_start_docstrings(
+    "The ModernBert Model with a question answering head on top for extractive question-answering tasks (e.g., SQuAD).",
+    MODERNBERT_START_DOCSTRING,
+)
+class ModernBertForQuestionAnswering(ModernBertPreTrainedModel):
+    def __init__(self, config: ModernBertConfig):
+        super().__init__(config)
+        self.num_labels = config.num_labels
+
+        self.model = ModernBertModel(config)
+        self.head = ModernBertPredictionHead(config)
+        self.drop = torch.nn.Dropout(config.classifier_dropout)
+        self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(MODERNBERT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=QuestionAnsweringModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        sliding_window_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        start_positions: Optional[torch.LongTensor] = None,
+        end_positions: Optional[torch.LongTensor] = None,
+        indices: Optional[torch.Tensor] = None,
+        cu_seqlens: Optional[torch.Tensor] = None,
+        max_seqlen: Optional[int] = None,
+        batch_size: Optional[int] = None,
+        seq_len: Optional[int] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        **kwargs,
+    ) -> Union[Tuple[torch.Tensor], QuestionAnsweringModelOutput]:
+        r"""
+        start_positions (torch.LongTensor of shape (batch_size,), optional):
+            Labels for position (index) of the start of the extracted answer.
+            Positions are clamped to the length of the sequence (sequence_length).
+            Positions outside of the sequence are not considered in the loss.
+        end_positions (torch.LongTensor of shape (batch_size,), optional):
+            Labels for position (index) of the end of the extracted answer.
+            Positions are clamped to the length of the sequence (sequence_length).
+            Positions outside of the sequence are not considered in the loss.
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        self._maybe_set_compile()
+
+        outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            sliding_window_mask=sliding_window_mask,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            indices=indices,
+            cu_seqlens=cu_seqlens,
+            max_seqlen=max_seqlen,
+            batch_size=batch_size,
+            seq_len=seq_len,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        last_hidden_state = outputs[0]
+
+        last_hidden_state = self.head(last_hidden_state)
+        last_hidden_state = self.drop(last_hidden_state)
+        logits = self.qa_outputs(last_hidden_state)
+
+        start_logits, end_logits = logits.split(1, dim=-1)
+        start_logits = start_logits.squeeze(-1).contiguous()
+        end_logits = end_logits.squeeze(-1).contiguous()
+
+        loss = None
+        if start_positions is not None and end_positions is not None:
+            loss = self.loss_function(
+                start_logits=start_logits,
+                end_logits=end_logits,
+                start_positions=start_positions,
+                end_positions=end_positions,
+            )
+
+        if not return_dict:
+            output = (start_logits, end_logits) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return QuestionAnsweringModelOutput(
+            loss=loss,
+            start_logits=start_logits,
+            end_logits=end_logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+
+@add_start_docstrings(
+    "The ModernBert Model with a multiple choice classification head on top e.g. for RocStories/SWAG tasks.",
+    MODERNBERT_START_DOCSTRING,
+)
+class ModernBertForMultipleChoice(ModernBertPreTrainedModel):
+    def __init__(self, config: ModernBertConfig):
+        super().__init__(config)
+        self.config = config
+
+        self.model = ModernBertModel(config)
+        self.head = ModernBertPredictionHead(config)
+        self.drop = torch.nn.Dropout(config.classifier_dropout)
+        self.classifier = nn.Linear(config.hidden_size, 1)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    @add_start_docstrings_to_model_forward(MODERNBERT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=MultipleChoiceModelOutput,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        sliding_window_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        **kwargs,
+    ) -> Union[Tuple[torch.Tensor], MultipleChoiceModelOutput]:
+        r"""
+        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Labels for computing the multiple choice classification loss. Indices should be in `[0, ..., num_choices-1]`,
+            where `num_choices` is the size of the second dimension of the input tensors (see `input_ids` above).
+        """
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+        self._maybe_set_compile()
+
+        flat_input_ids = self._flatten(input_ids)
+        flat_attention_mask = self._flatten(attention_mask)
+        flat_position_ids = self._flatten(position_ids)
+        flat_slide_mask = self._flatten(sliding_window_mask)
+        flat_inputs_embeds = (
+            inputs_embeds.view(-1, inputs_embeds.size(-2), inputs_embeds.size(-1))
+            if inputs_embeds is not None
+            else None
+        )
+
+        outputs = self.model(
+            input_ids=flat_input_ids,
+            attention_mask=flat_attention_mask,
+            sliding_window_mask=flat_slide_mask,
+            position_ids=flat_position_ids,
+            inputs_embeds=flat_inputs_embeds,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        last_hidden_state = outputs[0]
+        # Reshape back to (batch_size, seq_len, num_choices).
+        reshaped_hidden_state = last_hidden_state.view(-1, num_choices)
+
+        if self.config.classifier_pooling == "cls":
+            reshaped_hidden_state = reshaped_hidden_state[:, 0]
+        elif self.config.classifier_pooling == "mean":
+            reshaped_hidden_state = (reshaped_hidden_state * attention_mask.unsqueeze(-1)).sum(
+                dim=1
+            ) / attention_mask.sum(dim=1, keepdim=True)
+
+        pooled_output = self.head(reshaped_hidden_state)
+        pooled_output = self.drop(pooled_output)
+        logits = self.classifier(pooled_output)
+
+        loss = None
+        if labels is not None:
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits, labels)
+
+        if not return_dict:
+            output = (logits,) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return MultipleChoiceModelOutput(
+            loss=loss,
+            logits=logits,
+            hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
+        )
+
+    def _flatten(tensor: Optional[torch.Tensor]) -> Optional[torch.Tensor]:
+        if tensor is None:
+            return None
+        return tensor.view(-1, tensor.size(-1)) if tensor.dim() > 2 else tensor.view(-1)
+
+
 __all__ = [
     "ModernBertConfig",
     "ModernBertModel",
@@ -1494,4 +1682,6 @@ __all__ = [
     "ModernBertForMaskedLM",
     "ModernBertForSequenceClassification",
     "ModernBertForTokenClassification",
+    "ModernBertForQuestionAnswering",
+    "ModernBertForMultipleChoice",
 ]
