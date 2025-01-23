@@ -3451,6 +3451,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # childs processes at parallelization time, resulting in excessive memory usage on device 0 and OOMs.
         # And temporarily setting the default device to current process rank result in the following error
         # `torch.distributed.DistBackendError: Attempt to perform collective on tensor not on device passed to init_process_group`
+        tp_device = None
         if tp_plan is not None:
             if not torch.distributed.is_initialized():
                 raise ValueError("Tensor Parallel requires torch.distributed to be initialized first.")
@@ -4110,7 +4111,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Instantiate model.
         init_contexts = [no_init_weights(_enable=_fast_init)]
-        tp_device = None
 
         if is_deepspeed_zero3_enabled() and not is_quantized and not _is_ds_init_called:
             import deepspeed
