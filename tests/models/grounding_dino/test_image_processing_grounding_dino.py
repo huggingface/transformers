@@ -309,8 +309,8 @@ class GroundingDinoImageProcessingTest(AnnotationFormatTestMixin, ImageProcessin
                     [0.5790, 0.4115, 0.3430, 0.7161],
                 ]
             )
-            torch.testing.assert_close(encoding["labels"][0]["boxes"], expected_boxes_0, rtol=1e-3)
-            torch.testing.assert_close(encoding["labels"][1]["boxes"], expected_boxes_1, rtol=1e-3)
+            torch.testing.assert_close(encoding["labels"][0]["boxes"], expected_boxes_0, atol=1e-3, rtol=1e-3)
+            torch.testing.assert_close(encoding["labels"][1]["boxes"], expected_boxes_1, atol=1e-3, rtol=1e-3)
 
             # Check the masks have also been padded
             self.assertEqual(encoding["labels"][0]["masks"].shape, torch.Size([6, 800, 1066]))
@@ -485,8 +485,8 @@ class GroundingDinoImageProcessingTest(AnnotationFormatTestMixin, ImageProcessin
                     [0.2997, 0.2994, 0.5994, 0.5987],
                 ]
             )
-            torch.testing.assert_close(encoding["labels"][0]["boxes"], expected_boxes_0, rtol=1e-3)
-            torch.testing.assert_close(encoding["labels"][1]["boxes"], expected_boxes_1, rtol=1e-3)
+            torch.testing.assert_close(encoding["labels"][0]["boxes"], expected_boxes_0, atol=1e-3, rtol=1e-3)
+            torch.testing.assert_close(encoding["labels"][1]["boxes"], expected_boxes_1, atol=1e-3, rtol=1e-3)
 
             # Check the masks have also been padded
             self.assertEqual(encoding["labels"][0]["masks"].shape, torch.Size([6, 800, 1066]))

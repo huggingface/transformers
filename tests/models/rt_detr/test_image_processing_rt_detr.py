@@ -321,8 +321,8 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                     [0.7715, 0.4115, 0.4570, 0.7161],
                 ]
             )
-            torch.testing.assert_close(encoding["labels"][0]["boxes"], expected_boxes_0, rtol=1e-3)
-            torch.testing.assert_close(encoding["labels"][1]["boxes"], expected_boxes_1, rtol=1e-3)
+            torch.testing.assert_close(encoding["labels"][0]["boxes"], expected_boxes_0, atol=1e-3, rtol=1e-3)
+            torch.testing.assert_close(encoding["labels"][1]["boxes"], expected_boxes_1, atol=1e-3, rtol=1e-3)
 
             # Check if do_convert_annotations=False, then the annotations are not converted to centre_x, centre_y, width, height
             # format and not in the range [0, 1]
