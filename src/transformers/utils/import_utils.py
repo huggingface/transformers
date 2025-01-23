@@ -2283,7 +2283,7 @@ def clear_import_cache():
         mod_name for mod_name in sys.modules
         if mod_name.startswith('transformers.')
     ]
-    
+
     # Remove them from sys.modules
     for mod_name in transformers_modules:
         module = sys.modules[mod_name]
@@ -2291,7 +2291,7 @@ def clear_import_cache():
         if isinstance(module, _LazyModule):
             module._objects = {}  # Clear cached objects
         del sys.modules[mod_name]
-    
+
     # Force reload main transformers module
     if 'transformers' in sys.modules:
         main_module = sys.modules['transformers']
