@@ -214,14 +214,14 @@ class StoppingCriteriaTestCase(unittest.TestCase):
 
         # Positions inside the stop string where the token matches (excluding end overlaps)
         valid_positions = embedding_vec[:, 0].tolist()
-        self.assertEqual(valid_positions, [2, -1, -1, 3, -1])
+        self.assertEqual(valid_positions, [2, -1, -1, 3, -1, -1])
 
         # Overlap lengths between end of stop string and start of token
         end_overlaps = embedding_vec[:, 1].tolist()
-        self.assertEqual(end_overlaps, [-1, 3, 3, -1, 1])
+        self.assertEqual(end_overlaps, [-1, 3, 3, -1, 1, -1])
 
         # Length of each token
-        token_lengths = embedding_vec[:, 2].tolist()
+        token_lengths = embedding_vec[:-1, 2].tolist()
         self.assertEqual(token_lengths, [len(token) for token in token_list])
 
     def test_single_letter_stop_string(self):
