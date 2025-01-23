@@ -14,20 +14,20 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Finetuning
+# Fine-tuning
 
 [[open-in-colab]]
 
-Finetuning adapts a pretrained model to a specific task with a smaller specialized dataset. This approach requires far less data and compute compared to training a model from scratch, which makes it a more accessible option for many users.
+Fine-tuning adapts a pretrained model to a specific task with a smaller specialized dataset. This approach requires far less data and compute compared to training a model from scratch, which makes it a more accessible option for many users.
 
-Transformers provides the [`Trainer`] API, which offers a comprehensive set of training features, for finetuning any of the models on the [Hub](https://hf.co/models).
+Transformers provides the [`Trainer`] API, which offers a comprehensive set of training features, for fine-tuning any of the models on the [Hub](https://hf.co/models).
 
 > [!TIP]
-> Learn how to finetune models for other tasks in our Task Recipes section!
+> Learn how to fine-tune models for other tasks in our Task Recipes section in Resources!
 
-This guide will show you how to finetune a model with [`Trainer`] to classify Yelp reviews.
+This guide will show you how to fine-tune a model with [`Trainer`] to classify Yelp reviews.
 
-Login to your Hugging Face account with your user token to ensure you can access gated models and share your models on the Hub.
+Log in to your Hugging Face account with your user token to ensure you can access gated models and share your models on the Hub.
 
 ```py
 from huggingface_hub import login
@@ -35,7 +35,7 @@ from huggingface_hub import login
 login()
 ```
 
-Start by loading the [Yelp Reviews](https://hf.co/datasets/yelp_review_full) dataset and [preprocess](./fast_tokenizers) (tokenize, pad, and truncate) it for training. Use [`~datasets.Dataset.map`] to preprocess the entire dataset in one step.
+Start by loading the [Yelp Reviews](https://hf.co/datasets/yelp_review_full) dataset and [preprocess](./fast_tokenizers#preprocess) (tokenize, pad, and truncate) it for training. Use [`~datasets.Dataset.map`] to preprocess the entire dataset in one step.
 
 ```py
 from datasets import load_dataset
@@ -51,7 +51,7 @@ dataset = dataset.map(tokenize, batched=True)
 ```
 
 > [!TIP]
-> Finetune on a smaller subset of the full dataset to reduce the time it takes, but the results won't be as good compared to finetuning on the full dataset.
+> Fine-tune on a smaller subset of the full dataset to reduce the time it takes. The results won't be as good compared to fine-tuning on the full dataset, but it is useful to make sure everything works as expected first before committing to training on the full dataset.
 > ```py
 > small_train = dataset["train"].shuffle(seed=42).select(range(1000))
 > small_eval = dataset["test"].shuffle(seed=42).select(range(1000))
@@ -61,9 +61,9 @@ dataset = dataset.map(tokenize, batched=True)
 
 <Youtube id="nvBXf7s7vTI"/>
 
-[`Trainer`] is an optimized training loop for Transformers models, making it easy to start training right away without manually writing your own training loop. Pick and choose from a wide range of training features in [`TrainingArguments`] such as gradient accumulation, mixed precision, and options for reporting and logging training metrics.
+[Trainer](./trainer) is an optimized training loop for Transformers models, making it easy to start training right away without manually writing your own training code. Pick and choose from a wide range of training features in [`TrainingArguments`] such as gradient accumulation, mixed precision, and options for reporting and logging training metrics.
 
-Load a model and provide the number of expected labels (find this information on the Yelp Review [dataset card](https://huggingface.co/datasets/yelp_review_full#data-fields)):
+Load a model and provide the number of expected labels (you can find this information on the Yelp Review [dataset card](https://huggingface.co/datasets/yelp_review_full#data-fields)).
 
 ```py
 from transformers import AutoModelForSequenceClassification
@@ -74,7 +74,7 @@ model = AutoModelForSequenceClassification.from_pretrained("google-bert/bert-bas
 ```
 
 > [!TIP]
-> The message above is a reminder that the models pretrained head is discarded and replaced with a randomly initialized classification head. The randomly initialized head needs to be finetuned on your specific task to output meanginful predictions.
+> The message above is a reminder that the models pretrained head is discarded and replaced with a randomly initialized classification head. The randomly initialized head needs to be fine-tuned on your specific task to output meanginful predictions.
 
 With the model loaded, set up your training hyperparameters in [`TrainingArguments`]. Hyperparameters are variables that control the training process - such as the learning rate, batch size, number of epochs - which in turn impacts model performance. Selecting the correct hyperparameters is important and you should experiment with them to find the best configuration for your task.
 
@@ -107,7 +107,7 @@ training_args = TrainingArguments(
 )
 ```
 
-Create a [`Trainer`] instance and pass it the model, training arguments, training and test datasets, and evaluation function. Then call [`~Trainer.train`] to start training.
+Create a [`Trainer`] instance and pass it the model, training arguments, training and test datasets, and evaluation function. Call [`~Trainer.train`] to start training.
 
 ```py
 trainer = Trainer(
@@ -120,7 +120,7 @@ trainer = Trainer(
 trainer.train()
 ```
 
-Finally, call [`~Trainer.push_to_hub`] to upload your model and tokenizer to the Hub.
+Finally, use [`~Trainer.push_to_hub`] to upload your model and tokenizer to the Hub.
 
 ```py
 trainer.push_to_hub()
@@ -128,7 +128,7 @@ trainer.push_to_hub()
 
 ## TensorFlow
 
-[`Trainer`] is incompatible with Transformers TensorFlow models. Instead, finetune these models with [Keras](https://keras.io/) since they're implemented as standard [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model).
+[`Trainer`] is incompatible with Transformers TensorFlow models. Instead, fine-tune these models with [Keras](https://keras.io/) since they're implemented as a standard [tf.keras.Model](https://www.tensorflow.org/api_docs/python/tf/keras/Model).
 
 ```py
 from transformers import TFAutoModelForSequenceClassification

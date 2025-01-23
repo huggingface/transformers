@@ -110,8 +110,6 @@
     title: Agents
   - local: tools
     title: Tools
-  - local: multilingual
-    title: Run inference with multilingual models
 - title: Training
   isExpanded: False
   sections:
@@ -120,23 +118,25 @@
     - local: trainer
       title: Trainer
     - local: training
-      title: Finetuning
+      title: Fine-tuning
     - local: optimizers
       title: Optimizers
     - local: hpo_train
       title: Hyperparameter search
   - title: Distributed training
     sections:
+    - local: gpu_selection
+      title: GPU selection
     - local: accelerate
       title: Accelerate
     - local: fsdp
       title: FullyShardedDataParallel
     - local: deepspeed
       title: DeepSpeed
-    - local: perf_train_cpu_many
-      title: Distributed CPUs
     - local: debugging
       title: Multi-GPU debugging
+    - local: perf_train_cpu_many
+      title: Distributed CPUs
     - local: perf_train_gpu_many
       title: Parallelism methods
   - title: Hardware
