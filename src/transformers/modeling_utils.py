@@ -3444,6 +3444,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             raise ValueError(f"tp_plan supports 'auto' only for now but got {tp_plan}.")
 
         if tp_plan is not None and device_map is not None:
+            raise ValueError(
                 "`tp_plan` and `device_map` are mutually exclusive. Choose either one for parallelization."
             )
 
