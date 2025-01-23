@@ -383,7 +383,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         causal_mask *= torch.arange(target_length, device=cache_position.device) > cache_position.reshape(-1, 1)
         causal_mask = causal_mask[None, None, :, :].expand(inputs_lead_dim, 1, -1, -1)
         if attention_mask is not None:
-            causal_mask = causal_mask.clone()
+            causal_mask = causal_mask.clone() # copy to contiguous memory for in-place edit
             mask_length = attention_mask.shape[-1]
             
             # First unmask prefix tokens during training
