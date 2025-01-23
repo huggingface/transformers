@@ -2456,10 +2456,10 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         # Add tokenizer class to the tokenizer config to be able to reload it with from_pretrained
         tokenizer_class = self.__class__.__name__
-        # import here to prevent circular import error
-        from .tokenization_utils_fast import PreTrainedTokenizerFast
-        # Remove the Fast at the end unless we have a special `PreTrainedTokenizerFast`
-        if tokenizer_class.endswith("Fast") and not isinstance(self, PreTrainedTokenizerFast):
+        # Remove the Fast at the end if we can save the slow tokenizer
+        if tokenizer_class.endswith("Fast") and (
+            hasattr(self, "can_save_slow_tokenizer") and self.can_save_slow_tokenizer
+        ):
             tokenizer_class = tokenizer_class[:-4]
         tokenizer_config["tokenizer_class"] = tokenizer_class
         if getattr(self, "_auto_map", None) is not None:
