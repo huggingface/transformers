@@ -3442,10 +3442,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if tp_plan is not None and tp_plan != "auto":
             # TODO: we can relax this check when we support taking tp_plan from a json file, for example.
             raise ValueError(f"tp_plan supports 'auto' only for now but got {tp_plan}.")
-        
+
         if tp_plan is not None and device_map is not None:
-            raise ValueError(f"`tp_plan` and `device_map` are mutually exclusive. Choose either one for parallelization.")
-        
+                "`tp_plan` and `device_map` are mutually exclusive. Choose either one for parallelization."
+            )
+
         # We need to correctly dispatch the model on the current process device. The easiest way for this is to use a simple
         # `device_map` pointing to the correct device. If we don't, torch will use the default device (index 0) for all
         # childs processes at parallelization time, resulting in excessive memory usage on device 0 and OOMs.
