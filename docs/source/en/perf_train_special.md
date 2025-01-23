@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # Apple Silicon
 
-Apple Silicon (M series) features a unified memory architecture making it possible to efficiently train large models locally and improves performance by reducing latency associated with data retrieval. You can take advantage of Apple Silicon for training with PyTorch due to its integration with [Metal Performance Shaders (MPS)](https://pytorch.org/docs/stable/notes/mps.html).
+Apple Silicon (M series) features a unified memory architecture, making it possible to efficiently train large models locally and improves performance by reducing latency associated with data retrieval. You can take advantage of Apple Silicon for training with PyTorch due to its integration with [Metal Performance Shaders (MPS)](https://pytorch.org/docs/stable/notes/mps.html).
 
 The `mps` backend requires macOS 12.3 or later.
 

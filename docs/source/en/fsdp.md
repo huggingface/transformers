@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 Unlike [DistributedDataParallel (DDP)](./perf_train_gpu_many#distributeddataparallel), FSDP saves more memory because it doesn't replicate a model on each GPU. It shards the models parameters, gradients and optimizer states across GPUs. Each model shard processes a portion of the data and the results are synchronized to speed up training.
 
-This guide covers how to setup training a model with FSDP using [Accelerate](https://hf.co/docs/accelerate/index), a library for managing distributed training.
+This guide covers how to set up training a model with FSDP and [Accelerate](https://hf.co/docs/accelerate/index), a library for managing distributed training.
 
 ```bash
 pip install accelerate
@@ -28,7 +28,7 @@ pip install accelerate
 
 ## Configuration options
 
-Always start by running the [accelerate config](https://hf.co/docs/accelerate/package_reference/cli#accelerate-config) command to help Accelerate setup the correct distributed training environment.
+Always start by running the [accelerate config](https://hf.co/docs/accelerate/package_reference/cli#accelerate-config) command to help Accelerate set up the correct distributed training environment.
 
 ```bash
 accelerate config
@@ -66,7 +66,7 @@ Size-based wrapping is also available. If a layer exceeds a certain number of pa
 
 Intermediate checkpoints should be saved as a sharded state dict because saving the full state dict - even with CPU offloading - is time consuming and can cause `NCCL Timeout` errors due to indefinite hanging during broadcasting.
 
-Specify `fsdp_state_dict_type: SHARDED_STATE_DICT` in the configuration file to save the sharded state dict. Now you can resume training from the sharded state dict with the [`~accelerate.Accelerator.load_state`] method.
+Specify `fsdp_state_dict_type: SHARDED_STATE_DICT` in the configuration file to save the sharded state dict. Now you can resume training from the sharded state dict with [`~accelerate.Accelerator.load_state`].
 
 ```py
 accelerator.load_state("directory/containing/checkpoints")
@@ -93,7 +93,7 @@ xla_fsdp_grad_ckpt: True # enable gradient checkpointing
 
 ## Training
 
-After running [accelerate config](https://hf.co/docs/accelerate/package_reference/cli#accelerate-config), your configuration file should be ready. An example configuration file is show below that fully shards the parameter, gradient and optimizer states on two GPUs. Your file may look different depending on how you setup your configuration.
+After running [accelerate config](https://hf.co/docs/accelerate/package_reference/cli#accelerate-config), your configuration file should be ready. An example configuration file is shown below that fully shards the parameter, gradient and optimizer states on two GPUs. Your file may look different depending on how you set up your configuration.
 
 ```yaml
 compute_environment: LOCAL_MACHINE
@@ -138,7 +138,7 @@ accelerate launch --fsdp="full shard" --fsdp_config="path/to/fsdp_config/" my-tr
 
 ## Resources
 
-FSDP is a powerful tool for training large models with fewer GPUs compared to some other parallelism strategies. Refer to the following resources below to learn even more about FSDP.
+FSDP is a powerful tool for training large models with fewer GPUs compared to other parallelism strategies. Refer to the following resources below to learn even more about FSDP.
 
 - Follow along with the more in-depth Accelerate guide for [FSDP](https://hf.co/docs/accelerate/usage_guides/fsdp).
 - Read the [Introducing PyTorch Fully Sharded Data Parallel (FSDP) API](https://pytorch.org/blog/introducing-pytorch-fully-sharded-data-parallel-api/) blog post.

@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # DeepSpeed
 
-[DeepSpeed](https://www.deepspeed.ai/) is designed to optimize distributed training for large models with data, model, pipeline, and even a combination of all three [parallelism](./perf_train_gpu_many) strategies to provide better memory efficiency and faster training speeds. This is achieved by the [Zero Redundancy Optimizer (ZeRO)](https://hf.co/papers/1910.02054) which consists of three stages.
+[DeepSpeed](https://www.deepspeed.ai/) is designed to optimize distributed training for large models with data, model, pipeline, and even a combination of all three [parallelism](./perf_train_gpu_many) strategies to provide better memory efficiency and faster training speeds. This is achieved with the [Zero Redundancy Optimizer (ZeRO)](https://hf.co/papers/1910.02054) which consists of three stages.
 
 | ZeRO stage | description |
 |---|---|
@@ -24,9 +24,9 @@ rendered properly in your Markdown viewer.
 | 2 | partition optimizer and gradient states |
 | 3 | partition optimizer, gradient, and parameters |
 
-Each stage progressively saves more memory, allowing really large models to fit and be trained on a single GPU. DeepSpeed is integrated with [`Trainer`] for all ZeRO stages and offloading optimizer memory and computations from the GPU to the CPU. Provide a config file or one of the example templates to [`Trainer`] to enable DeepSpeed features.
+Each stage progressively saves more memory, allowing really large models to fit and train on a single GPU. All ZeRO stages, offloading optimizer memory and computations from the GPU to the CPU are integrated with [`Trainer`]. Provide a config file or one of the example templates to [`Trainer`] to enable DeepSpeed features.
 
-This guide walks you through setting up a DeepSpeed config file, how to enable its features in [`Trainer`], and deploy training.
+This guide walks you through setting up a DeepSpeed config file, how to enable its features in [`Trainer`], and deploy for training.
 
 Install DeepSpeed from either PyPI or Transformers. For more detailed installation instructions, refer to the DeepSpeed [installation](https://www.deepspeed.ai/tutorials/advanced-install/) or GitHUB [README](https://github.com/microsoft/deepspeed#installation).
 
@@ -50,7 +50,7 @@ pip install transformers[deepspeed]
 > [!WARNING]
 > Refer to the [DeepSpeed CUDA installation](./debugging#deepspeed-cuda-issues) if you're having trouble with your installation. While DeepSpeed has a pip installable package, it is highly recommended to [install it from source](https://www.deepspeed.ai/tutorials/advanced-install/#install-deepspeed-from-source) to ensure it matches your hardware and to support certain features which aren't available in the PyPI distribution.
 
-DeepSpeed provides a tool for estimating the required CPU and GPU memory for the parameters, optimizer and gradient states. You'll also need some memory for the CUDA kernels and activations.
+DeepSpeed provides a tool for estimating the required CPU and GPU memory for the parameters, optimizer and gradient states. You'll also to need to reserve some memory for the CUDA kernels and activations.
 
 Run the command below to check the memory requirements for [bigscience/T0_3B](https://huggingface.co/docs/transformers/main/en/bigscience/T0_3B) on a single GPU.
 
@@ -75,11 +75,11 @@ SW: Model with 2783M total params, 65M largest layer params.
 > [!TIP]
 > If you have enough GPU memory, disable CPU and NVMe offload to speed everything up.
 
-## Choose a ZeRO stage
+## Choosing a ZeRO stage
 
 Consider the table below to help you choose the appropriate ZeRO stage for training because there is a trade-off between training speed and memory usage. The table orders the ZeRO stages from fastest to slowest and from least memory usage to most.
 
-| fastest | memory usage |
+| fastest | least memory usage |
 |---|---|
 | ZeRO-1 | ZeRO-3 + offload |
 | ZeRO-2 | ZeRO-3 |
@@ -91,7 +91,7 @@ Decide the type of performance you're optimizing for, speed or memory, and then 
 
 ## Config file
 
-Enable DeepSpeed in [`Trainer`] with a config file containing all the parameters for how to configure and setup your training. When the training script is executed, DeepSpeed logs the configuration from [`Trainer`] to the console so you can see exactly what's being used.
+Once you've decided on a ZeRO stage, set up a config file to enable DeepSpeed with [`Trainer`]. The config file contains all the parameters for how to configure and set up your training. When the training script is executed, DeepSpeed logs the configuration from [`Trainer`] to the console so you can see exactly what's being used.
 
 > [!TIP]
 > Find a complete list of DeepSpeed configuration options on the [DeepSpeed Configuration JSON](https://www.deepspeed.ai/docs/config-json/) reference. There are also practical examples of various DeepSpeed configuration examples in the [DeepSpeedExamples](https://github.com/microsoft/DeepSpeedExamples) main [DeepSpeed](https://github.com/microsoft/DeepSpeed) repository. Run the command below to quickly find specific examples.
@@ -146,16 +146,16 @@ There are three types of config parameters.
 There are two ways to modify the config parameters.
 
 > [!TIP]
-> Some values, such as `scheduler.params.total_num_steps`, are calculated by the [`Trainer`] during training.
+> Some values, such as `scheduler.params.total_num_steps`, are calculated by [`Trainer`] during training.
 
 1. Create or load a DeepSpeed config to use as the main config.
 1. Create a [`TrainingArguments`] object based on the DeepSpeed config values.
 
 ### ZeRO stage
 
-Each ZeRO stage has its own config, as defined in `zero_optimization`.
+Each ZeRO stage config is defined in `zero_optimization`.
 
-For a more detailed explanation of each parameter, refer to the [DeepSpeed Configuration JSON](https://www.deepspeed.ai/docs/config-json/) reference. These parameters must be setup with DeepSpeed because [`Trainer`] doesn't provide equivalent command line arguments.
+For a more detailed explanation of each parameter, refer to the [DeepSpeed Configuration JSON](https://www.deepspeed.ai/docs/config-json/) reference. These parameters must be set up with DeepSpeed because [`Trainer`] doesn't provide equivalent command line arguments.
 
 > [!WARNING]
 > DeepSpeed doesn't validate parameter names and any typos will fallback on the parameters default setting. Observe the DeepSpeed engine startup log messages to see what values are being used.
@@ -179,7 +179,7 @@ ZeRO-1 shards the optimizer states across GPUs and you can expect a small speed 
 ZeRO-2 shards the optimizer and gradient states across GPUs. This stage is primarily used for training since its features are not relevant to inference. Some important parameters to configure for better performance include the following.
 
 * `offload_optimizer` should be enabled to reduce GPU memory usage.
-* `overlap_comm` when set to `true` uses increased GPU memory usage in exchange for lower allreduce latency. This feature uses 4.5x the `allgather_bucket_size` and `reduce_bucket_size` values. In this example, they're set to `5e8` which means it requires 9GB of GPU memory. If your GPU memory is 8GB or less, you should reduce `overlap_comm` to lower the memory requirements and prevent an out-of-memory (OOM) error.
+* `overlap_comm` when set to `true` uses more GPU memory in exchange for lower allreduce latency. This feature uses 4.5x the `allgather_bucket_size` and `reduce_bucket_size` values. In this example, they're set to `5e8` which means it requires 9GB of GPU memory. If your GPU memory is 8GB or less, you should reduce `overlap_comm` to lower the memory requirements and prevent an out-of-memory (OOM) error.
 * `allgather_bucket_size` and `reduce_bucket_size` trade-off available GPU memory for communication speed. The smaller their values, the slower communication is and the more GPU memory is available. You can balance, for example, whether a bigger batch size is more important than a slightly slower training time.
 * `round_robin_gradients` is available in DeepSpeed 0.4.4 for CPU offloading. It parallelizes gradient copying to CPU memory among ranks by fine-grained gradient partitioning. Performance benefit grows with gradient accumulation steps (more copying between optimizer steps) or GPU count (increased parallelism).
 
@@ -210,14 +210,14 @@ ZeRO-3 shards the optimizer and gradient states, and parameters across GPUs. Unl
 * `device: "cpu"` can help if you're running out of GPU memory and if you have free CPU memory available. This offloads model parameters to the CPU.
 * `pin_memory: true` can improve throughput, but less memory becomes available for other processes because the pinned memory is reserved for the specific process that requested it and it's typically accessed much faster than normal CPU memory.
 * `stage3_max_live_parameters` is the upper limit on how many full parameters to keep on the GPU at any given time. Reduce this value if you encounter an OOM error.
-* `stage3_max_reuse_distance` is a value for determining when a parameter is used again in the future, and it helps decide whether to throw the parameter away or to keep it. If the parameter is going to be reused (if the value is less than `stage3_max_reuse_distance`), then it is kept to reduce communication overhead. This is helpful when activation checkpointing is enabled and you want to keep the parameter in the forward recompute until the backward pass. But reduce this value if you encounter an OOM error.
+* `stage3_max_reuse_distance` is a value for determining when a parameter is used again in the future, and it helps decide whether to throw the parameter away or to keep it. If the parameter is going to be reused (if the value is less than `stage3_max_reuse_distance`), then it is kept to reduce communication overhead. This is helpful when activation checkpointing is enabled and you want to keep the parameter in the forward recompute until the backward pass. Reduce this value if you encounter an OOM error.
 * `stage3_gather_16bit_weights_on_model_save` consolidates fp16 weights when a model is saved. For large models and multiple GPUs, this is expensive in terms of memory and speed. You should enable it if you're planning on resuming training.
 * `sub_group_size` controls which parameters are updated during the optimizer step. Parameters are grouped into buckets of `sub_group_size` and each bucket is updated one at a time. When used with NVMe offload, `sub_group_size` determines when model states are moved in and out of CPU memory during the optimization step. This prevents running out of CPU memory for extremely large models. `sub_group_size` can be left to its default value if you aren't using NVMe offload, but you may want to change it if you:
 
     1. Run into an OOM error during the optimization step. In this case, reduce `sub_group_size` to reduce memory usage of the temporary buffers.
     2. The optimization step is taking a really long time. In this case, increase `sub_group_size` to improve bandwidth utilization as a result of increased data buffers.
 
-* `reduce_bucket_size`, `stage3_prefetch_bucket_size`, and `stage3_param_persistence_threshold` are dependent on a models hidden size. It is recommended to set these values to `auto` and allow the [`Trainer`] to automatically assign the values.
+* `reduce_bucket_size`, `stage3_prefetch_bucket_size`, and `stage3_param_persistence_threshold` are dependent on a models hidden size. It is recommended to set these values to `auto` and allow [`Trainer`] to automatically assign the values.
 
 ```yml
 {
@@ -244,7 +244,7 @@ ZeRO-3 shards the optimizer and gradient states, and parameters across GPUs. Unl
 }
 ```
 
-#### Initialize large models
+### Initialize large models
 
 With ZeRO-3, use the [deepspeed.zero.Init](https://deepspeed.readthedocs.io/en/latest/zero3.html#deepspeed.zero.Init) context manager to initialize a model faster.
 
@@ -278,7 +278,7 @@ If you encounter a model parameter weight where `tensor([1.])` or the parameter 
 tensor([1.0], device="cuda:0", dtype=torch.float16, requires_grad=True)
 ```
 
-[!TIP]
+> [!TIP]
 > For more information about initializing large models with ZeRO-3 and accessing the parameters, take a look at the [Constructing Massive Models](https://deepspeed.readthedocs.io/en/latest/zero3.html#constructing-massive-models) and [Gathering Parameters](https://deepspeed.readthedocs.io/en/latest/zero3.html#gathering-parameters) guides.
 
 </hfoption>
@@ -374,10 +374,10 @@ DeepSpeed supports many training features that can be configured in the config f
 
 ### Gradient checkpointing
 
-Gradient checkpointing saves memory by only storing some of the intermediate activations instead of storing *all* of them. It is useful for fitting larger models on the GPU without running out of memory or to increase the batch size for better performance. Training speed is slower though.
+Gradient checkpointing saves memory by only storing *some* of the intermediate activations instead of storing *all* of them. It is useful for fitting larger models on the GPU without running out of memory or to increase the batch size for better performance. Training speed is slower though.
 
-* For a Hugging Face model, set `model.gradient_checkpointing_enable()` or add `--gradient_checkpointing` in the [`TrainingArguments`].
-* For a non-Hugging Face model, use the DeepSpeed [Activation Checkpointing API](https://deepspeed.readthedocs.io/en/latest/activation-checkpointing.html). Replacing Transformers modeling code and [torch.utils.checkpoint](https://pytorch.org/docs/stable/checkpoint.html) with the DeepSpeed API gives you more flexibility because you can offload the forward activations to the CPU memory instead of recalculating them.
+* For a Transformers model, set `model.gradient_checkpointing_enable()` or add `--gradient_checkpointing` in the [`TrainingArguments`].
+* For a non-Transformers model, use the DeepSpeed [Activation Checkpointing API](https://deepspeed.readthedocs.io/en/latest/activation-checkpointing.html). Replacing Transformers modeling code and [torch.utils.checkpoint](https://pytorch.org/docs/stable/checkpoint.html) with the DeepSpeed API gives you more flexibility because you can offload the forward activations to the CPU memory instead of recalculating them.
 
 ### Batch size
 
@@ -396,7 +396,7 @@ A separate data type is used for communication collectives like reduction, gathe
 
 All gather and scatter operations are performed in the same data type the data is in. For example, if you're training in bf16, the data is also gathered in bf16 because gathering is a non-lossy operation.
 
-Reduce operations are lossy, for example, when gradients are averaged across multiple GPUs. When the communication is done if fp16 or bf16, it's more likely to be lossy because adding multiple numbers in low precision isn't exact. This is especially the case with bf16 which has a lower precision than fp16. For this reason, fp16 is the default for reduction operations because the loss is minimal when averaging gradients.
+Reduce operations are lossy, for example, when gradients are averaged across multiple GPUs. When the communication is done in fp16 or bf16, it's more likely to be lossy because adding multiple numbers in low precision isn't exact. This is especially the case with bf16 which has a lower precision than fp16. For this reason, fp16 is the default for reduction operations because the loss is minimal when averaging gradients.
 
 Choose the communication data type by setting the `communication_data_type` parameter in the config file. For example, choosing fp32 adds a small amount of overhead but ensures the reduction operation is accumulated in fp32 and when it is ready, it's downcasted to whichever half-precision data type you're training in.
 
@@ -447,7 +447,7 @@ Train in fp32 if a model wasn't pretrained in mixed precision because it may cau
 }
 ```
 
-For Ampere GPUs and PyTorch 1.7+, the more efficient [tf32](https://pytorch.org/docs/stable/notes/cuda.html#tensorfloat-32-tf32-on-ampere-devices) mode is automatically enabled for some operations but the results are still in fp32. Configure it from the [`Trainer`] by setting `--tf32` to enable it, and `--tf32 0` or `--no_tf32` to disable it.
+For Ampere GPUs and PyTorch 1.7+, the more efficient [tf32](https://pytorch.org/docs/stable/notes/cuda.html#tensorfloat-32-tf32-on-ampere-devices) mode is automatically enabled for some operations but the results are still in fp32. Configure it in [`Trainer`] by setting `--tf32` to enable it, and `--tf32 0` or `--no_tf32` to disable it.
 
 </hfoption>
 <hfoption id="fp16">
@@ -486,7 +486,7 @@ To configure Apex-like fp16 mixed precision, set up the config as shown below wi
 > [!TIP]
 > bf16 requires DeepSpeed 0.6.0.
 
-bf16 has the same dynamic range as fp32, and doesn’t require loss scaling unlike fp16. However, if you use [gradient accumulation](#gradient-accumulation) with bf16, gradients are accumulated in bf16 which may not be desirable because bf16s low precision can lead to lossy accumulation.
+bf16 has the same dynamic range as fp32, and doesn’t require loss scaling unlike fp16. However, if you use [gradient accumulation](#gradient-accumulation) with bf16, gradients are accumulated in bf16 which may not be desirable because the lower precision can lead to lossy accumulation.
 
 bf16 can be set up in the config file or enabled from the command line when the following arguments are passed: `--bf16` or `--bf16_full_eval`.
 
@@ -575,11 +575,25 @@ You can set the parameters to `"auto"` or manually input your own values.
 </hfoption>
 </hfoptions>
 
+### Universal checkpointing
+
+[Universal Checkpointing](https://www.deepspeed.ai/tutorials/universal-checkpointing) saves and loads model, optimizer and training scheduler states across different model architectures, parallelism techniques, and training configurations. By saving them in a Universal format, it enables easier model training continuation and fine-tuning.
+
+Resume training with a Universal checkpoint by setting `load_universal` to `true` in the config file.
+
+```yaml
+{
+    "checkpoint": {
+        "load_universal": true
+    }
+}
+```
+
 ## Deploy
 
 DeepSpeed can be deployed with its native launcher, [torchrun](https://pytorch.org/docs/stable/elastic/run.html) or [Accelerate](https://huggingface.co/docs/accelerate/basic_tutorials/launch#using-accelerate-launch).
 
-Add the `--deepspeed ds_config.json` argument to the [`Trainer`] command line. It is recommended to use DeepSpeeds [add_config_arguments](https://deepspeed.readthedocs.io/en/latest/initialize.html#argument-parsing) utility to add any other command line arguments to your code.
+Add the `--deepspeed ds_config.json` argument to [`Trainer`] in the command line. It is recommended to use DeepSpeeds [add_config_arguments](https://deepspeed.readthedocs.io/en/latest/initialize.html#argument-parsing) utility to add any other command line arguments to your code.
 
 <hfoptions id="deploy">
 <hfoption id="multi-GPU">
@@ -636,7 +650,7 @@ A multi-node setup consists of multiple nodes, where each node has one of more G
 
 You could also use the `--save_on_each_node` parameter in [`TrainingArguments`] to automatically add the above `checkpoint` to your config.
 
-The examples below for the torchrun and DeepSpeed launcher shows how to deploy two nodes with eight GPUs each. Access the first node with `ssh hotname1` and the second node with `ssh hostname2`. Both nodes must be able to communicate with each other locally over ssh without a password.
+The examples below for the torchrun and DeepSpeed launcher shows how to deploy two nodes with eight GPUs each. Access the first node with `ssh hostname1` and the second node with `ssh hostname2`. Both nodes must be able to communicate with each other locally over ssh without a password.
 
 <hfoptions id="multinode">
 <hfoption id="torchrun">
@@ -808,7 +822,7 @@ DeepSpeed stores the main fp32 weights in custom checkpoint optimizer files (`gl
 
 ZeRO-2 saves the model weights in fp16. To save the weights in fp16 for ZeRO-3, set `"stage3_gather_16bit_weights_on_model_save": true` in the config file, because the weights are distributed across multiple GPUs.
 
-If you don't, [`Trainer`] won't save the weights in fp16 and it won't create a `pytorch_model.bin` file. This is because DeepSpeed's state_dict contains a placeholder instead of the real weights, so you won't be able to load it.
+If you don't, [`Trainer`] won't save the weights in fp16 and won't create a `pytorch_model.bin` file. This is because DeepSpeed's state_dict contains a placeholder instead of the real weights, so you won't be able to load it.
 
 ```yaml
 {
@@ -821,7 +835,7 @@ If you don't, [`Trainer`] won't save the weights in fp16 and it won't create a `
 
 ### fp32
 
-fp32 weights shouldn't be saved during training because it can require a lot of memory, unless you have a lot of free CPU memory. It is usually best to save the fp32 weights offline after training is complete.
+Unless you have a lot of free CPU memory, fp32 weights shouldn't be saved during training because it can require a lot of memory. It is usually best to save the fp32 weights offline after training is complete.
 
 <hfoptions id="save">
 <hfoption id="offline">
@@ -896,7 +910,7 @@ model.load_state_dict(state_dict)
 
 DeepSpeed also works with Transformers without [`Trainer`]. The [`~integrations.HfDeepSpeedConfig`] is responsible for gathering ZeRO-3 parameters and partitioning a model across multiple GPUs when [`~PreTrainedModel.from_pretrained`] is called.
 
-You must instantiate [`HfDeepSpeedConfig`] before loading a model to efficiently deploy ZeRO-3.
+You must instantiate [`~integrations.HfDeepSpeedConfig`] before loading a model to efficiently deploy ZeRO-3.
 
 <hfoptions id="models">
 <hfoption id="pretrained model">
@@ -917,7 +931,7 @@ engine = deepspeed.initialize(model=model, config_params=ds_config, ...)
 </hfoption>
 <hfoption id="non-pretrained model">
 
-[`HfDeepSpeedConfig`] is not required for ZeRO-1 or ZeRO-2.
+[`~integrations.HfDeepSpeedConfig`] is not required for ZeRO-1 or ZeRO-2.
 
 ```py
 from transformers.integrations import HfDeepSpeedConfig
@@ -939,7 +953,7 @@ engine = deepspeed.initialize(model=model, config_params=ds_config, ...)
 
 ## Troubleshoot
 
-One of the first things to check when you encounter an error is whether DeepSpeed is the cause because often it isn't. Retry your setup without DeepSpeed, and if the error persists, report the issue. If the issue is unrelated to the Transformers integration, please open the issue on the DeepSpeed [repository](https://github.com/microsoft/DeepSpeed).
+One of the first things to check when you encounter an error is whether DeepSpeed is the cause (because often it isn't). Retry your setup without DeepSpeed, and if the error persists, report the issue. If the issue is unrelated to the Transformers integration, please open the issue on the DeepSpeed [repository](https://github.com/microsoft/DeepSpeed).
 
 For issues related to the Transformers integration, please provide the following information.
 
@@ -960,7 +974,7 @@ The following sections provide a guide for resolving two of the most common issu
 
 ### Process killed at startup
 
-When the DeepSpeed process is killed during launch without a traceback, that usually means the program tried to allocate more CPU memory than is available on your system. Or the process may have tried to allocate more CPU memory than allowed, leading the OS kernel to termine the process.
+When the DeepSpeed process is killed during launch without a traceback, that usually means the program tried to allocate more CPU memory than is available on your system. Or the process may have tried to allocate more CPU memory than allowed, leading the OS kernel to terminate the process.
 
 In this case, check whether your config file has either `offload_optimizer`, `offlload_param`, or both configured to offload to the CPU.
 

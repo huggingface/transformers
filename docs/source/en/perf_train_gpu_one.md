@@ -17,7 +17,7 @@ rendered properly in your Markdown viewer.
 
 GPUs are commonly used to train deep learning models due to their high memory bandwidth and parallel processing capabilities. Depending on your GPU and model size, it is possible to even train models with billions of parameters. The key is to find the right balance between GPU memory utilization (data throughput/training time) and training speed.
 
-This guide will show you the features available in Transformers for efficiently training a model on a single GPU. In many cases, you'll want to use a combination of these features to optimize training.
+This guide will show you the features available in Transformers and PyTorch for efficiently training a model on GPUs. In many cases, you'll want to use a combination of these features to optimize training.
 
 Refer to the table below to quickly help you identify the features relevant to your training scenario.
 
@@ -39,7 +39,7 @@ Refer to the table below to quickly help you identify the features relevant to y
 
 ### Batch size
 
-Batch size is one of the most important hyperparameters for efficient GPU training because it affects memory usage and training speed. Larger batch sizes lead to faster training because it takes advantage of GPUs parallel processing power. It is recommended to use batch sizes that are powers of 2, such as 8, 64, 128, 256, 512, etc. The batch size depends on your GPU and the models data type.
+Batch size is one of the most important hyperparameters for efficient GPU training because it affects memory usage and training speed. Larger batch sizes lead to faster training because it takes advantage of a GPUs parallel processing power. It is recommended to use batch sizes that are powers of 2, such as 8, 64, 128, 256, 512, etc. The batch size depends on your GPU and the models data type.
 
 Configure [`~TrainingArguments.per_device_train_batch_size`] in [`TrainingArguments`].
 
@@ -54,7 +54,7 @@ args = TrainingArguments(
 
 Refer to the NVIDIA [Performance](https://docs.nvidia.com/deeplearning/performance/dl-performance-fully-connected/index.html#input-features) guide to learn more about how input features and output neuron counts and batch size affect performance. These are involved in the General Matrix Multiplications (GEMMs) performed by the GPU. Larger parameters are better for parallelization and efficiency.
 
-The [Tensor Core Requirements](https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#requirements-tc) section is also useful for selecting a batch size that maximizes the speed of tensor multiplication based on the data type and GPU. For example, multiples of 8 are recommended for fp16, unless it's an A100 GPU, in which case use multiples of 65.
+The [Tensor Core Requirements](https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#requirements-tc) section is also useful for selecting a batch size that maximizes the speed of tensor multiplication based on the data type and GPU. For example, multiples of 8 are recommended for fp16, unless it's an A100 GPU, in which case use multiples of 64.
 
 Finally, consider [Dimension Quantization Effects](https://docs.nvidia.com/deeplearning/performance/dl-performance-matrix-multiplication/index.html#dim-quantization) for smaller parameters. Tile quantization results when matrix dimensions aren't divisible by a GPUs thread block tile size, causing the GPU to underutilize its resources. Selecting the correct batch size multiplier, such that the matrix is divisible by the tile size, can significantly speed up training.
 
@@ -121,7 +121,7 @@ args = TrainingArguments(
 )
 ```
 
-fp16 doesn't memory-optimized because the gradients that are computed in fp16 are converted back to fp32 during the optimization step. You may end up using more GPU memory, especially for small batch sizes, because there are now two versions (fp16 and fp32) of the model on the GPU.
+fp16 isn't memory-optimized because the gradients that are computed in fp16 are converted back to fp32 during the optimization step. You may end up using more GPU memory, especially for small batch sizes, because there are now two versions (fp16 and fp32) of the model on the GPU.
 
 </hfoption>
 <hfoption id="bf16">
@@ -224,7 +224,7 @@ PyTorch provides several features for reducing memory requirements and increasin
 
 The [torch.cuda.empty_cache](https://pytorch.org/docs/stable/generated/torch.cuda.empty_cache.html#torch.cuda.empty_cache) function releases unused cached memory, which can help avoid out-of-memory (OOM) errors at the cost of ~10% slower training.
 
-Configure [torch_empty_cache_steps()](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.torch_empty_cache_steps) in [`TrainingArguments`] to enable torch.empty_cache after a certain number of training steps.
+Use [torch_empty_cache_steps()](https://huggingface.co/docs/transformers/main_classes/trainer#transformers.TrainingArguments.torch_empty_cache_steps) in [`TrainingArguments`] to enable it after a certain number of training steps.
 
 ```py
 from transformers import TrainingArguments
@@ -234,7 +234,7 @@ args = TrainingArguments(
     gradient_accumulation_steps=16,
     gradient_checkpointing=True,
     bf16=True,
-    optim="adamw_bnb_8bit,
+    optim="adamw_bnb_8bit",
     dataloader_pin_memory=True,
     dataloader_num_workers=4,
     torch_empty_cache_steps=4,

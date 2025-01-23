@@ -18,15 +18,12 @@ rendered properly in your Markdown viewer.
 
 [`Trainer`] is a complete training and evaluation loop for Transformers' PyTorch models. Plug a model, preprocessor, dataset, and training arguments into [`Trainer`] and let it handle the rest to start training faster.
 
+[`Trainer`] is also powered by [Accelerate](https://hf.co/docs/accelerate/index), a library for handling large models for distributed training.
+
 This guide will show you how [`Trainer`] works and how to customize it for your use case with a callback.
 
-[`Trainer`] is powered by [Accelerate](https://hf.co/docs/accelerate/index), a library for handling large models for distributed training, so make sure it is installed.
-
 ```bash
-!pip install accelerate
-
-# upgrade to the latest version
-# !pip install accelerate --upgrade
+!pip install accelerate --upgrade
 ```
 
 [`Trainer`] contains all the necessary components of a training loop.
@@ -38,12 +35,12 @@ This guide will show you how [`Trainer`] works and how to customize it for your 
 
 Manually coding this training loop everytime can be inconvenient or a barrier if you're just getting started with machine learning. [`Trainer`] abstracts this process, allowing you to focus on the model, dataset, and training design choices.
 
-Configure your training with hyperparameters and options from [`TrainingArguments`] which supports a ton of features such as distributed training, torch.compile, mixed precision training, and saving the model to the Hub.
+Configure your training with hyperparameters and options from [`TrainingArguments`] which supports many features such as distributed training, torch.compile, mixed precision training, and saving the model to the Hub.
 
 > [!TIP]
 > The number of available parameters available in [`TrainingArguments`] may be intimidating at first. If there is a specific hyperparameter or feature you want to use, try searching for it directly. Otherwise, feel free to start with the default values and gradually customize them as you become more familiar with the training process.
 
-The example below demonstrates an example instance of [`TrainingArguments`] that evaluates and saves the model at the end of each epoch. It also loads the best model found during training and pushes it to the Hub.
+The example below demonstrates an example of [`TrainingArguments`] that evaluates and saves the model at the end of each epoch. It also loads the best model found during training and pushes it to the Hub.
 
 ```py
 from transformers import TrainingArguments
@@ -62,10 +59,10 @@ training_args = TrainingArguments(
 )
 ```
 
-Pass your model, dataset, preprocessor, and [`TrainingArguments`] to [`Trainer`] and call [`~Trainer.train`] to start training.
+Pass your model, dataset, preprocessor, and [`TrainingArguments`] to [`Trainer`], and call [`~Trainer.train`] to start training.
 
 > [!TIP]
-> Refer to the [Finetuning](./training) guide for a more complete overview of the training process.
+> Refer to the [Fine-tuning](./training) guide for a more complete overview of the training process.
 
 ```py
 from transformers import Trainer
@@ -85,7 +82,7 @@ trainer.train()
 
 ## Checkpoints
 
-[`Trainer`] saves checkpoints (the optimizer state is not saved by default) to the directory set to `output_dir` in [`TrainingArguments`] to a subfolder named `checkpoint-000`. The number at the end is the training step at which the checkpoint was saved.
+[`Trainer`] saves checkpoints (the optimizer state is not saved by default) to the directory in `output_dir` in [`TrainingArguments`] to a subfolder named `checkpoint-000`. The number at the end is the training step at which the checkpoint was saved.
 
 Saving checkpoints are useful for resuming training or recovering your training progress if you encounter an error. Set the `resume_from_checkpoint` parameter in [`~Trainer.train`] to resume training from the last checkpoint or a specific checkpoint.
 
@@ -106,7 +103,7 @@ trainer.train(resume_from_checkpoint="your-model/checkpoint-1000")
 </hfoption>
 </hfoptions>
 
-Checkpoints can be saved to the Hub by setting `push_to_hub=True` in [`TrainingArguments`]. The default method (`"every_save"`) saves a checkpoint to the Hub is every time a model is saved, which is typically the final model at the end of training. Some other options for deciding how to save checkpoints to the Hub include:
+Checkpoints can be saved to the Hub by setting `push_to_hub=True` in [`TrainingArguments`]. The default method (`"every_save"`) saves a checkpoint to the Hub every time a model is saved, which is typically the final model at the end of training. Some other options for deciding how to save checkpoints to the Hub include the following.
 
 - `hub_strategy="end"` only pushes a checkpoint when [`~Trainer.save_model`] is called
 - `hub_strategy="checkpoint"` pushes the latest checkpoint to a subfolder named *last-checkpoint* from which training can be resumed
@@ -164,7 +161,7 @@ my_app.py ... --log_level error --log_level_replica error --log_on_each_node 0
 </hfoptions>
 
 > [!TIP]
-> [`Trainer`] sets the log level separately for each node in the [`~Trainer.__init__`] method, so you may want to consider setting this sooner if you're using other Transformers functionalities before creating the [`Trainer`] instance.
+> The log level is separately set for each node in the [`~Trainer.__init__`] method. Consider setting this sooner if you're using other Transformers functionalities before creating the [`Trainer`] instance.
 
 ## Customize
 
@@ -176,14 +173,14 @@ Tailor [`Trainer`] to your use case by subclassing or overriding its methods to 
 | [`~Trainer.get_eval_dataloader`] | create an evaluation DataLoader |
 | [`~Trainer.get_test_dataloader`] | create a test DataLoader |
 | [`~Trainer.log`] | log information about the training process |
-| [`~Trainer.create_optimizer_and_scheduler`] | create an optimizer and learning rate scheduler (can also be separately customized with [`~Trainer.create_optimizer`] and [`~Trainer.screate_scheduler`] if they weren't passed in `__init__` |
+| [`~Trainer.create_optimizer_and_scheduler`] | create an optimizer and learning rate scheduler (can also be separately customized with [`~Trainer.create_optimizer`] and [`~Trainer.create_scheduler`] if they weren't passed in `__init__`) |
 | [`~Trainer.compute_loss`] | compute the loss of a batch of training inputs |
 | [`~Trainer.training_step`] | perform the training step |
 | [`~Trainer.prediction_step`] | perform the prediction and test step |
 | [`~Trainer.evaluate`] | evaluate the model and return the evaluation metric |
 | [`~Trainer.predict`] | make a prediction (with metrics if labels are available) on the test set |
 
-For example, to use weighted loss, rewrite [`~Trainer.compute_loss`] inside your custom [`Trainer`].
+For example, to use weighted loss, rewrite [`~Trainer.compute_loss`] inside [`Trainer`].
 
 ```py
 from torch import nn
@@ -203,9 +200,9 @@ class CustomTrainer(Trainer):
 
 ### Callbacks
 
-[Callbacks](./main_classes/callback) are another way to customize [`Trainer`], but they *don't change anything* inside the training loop. Instead, a callback inspects the training loop state and then executes some action (early stopping, logging, etc.) depending on the state. For example, you can't implement a custom loss function with a callback because that requires overriding [`~Trainer.compute_loss`].
+[Callbacks](./main_classes/callback) are another way to customize [`Trainer`], but they don't change anything *inside the training loop*. Instead, a callback inspects the training loop state and executes some action (early stopping, logging, etc.) depending on the state. For example, you can't implement a custom loss function with a callback because that requires overriding [`~Trainer.compute_loss`].
 
-To use a callback, create a class that inherits from [`TrainerCallback`] and implements the functionality you want. Then you can pass the callback to the `callback` parameter in [`Trainer`]. The example below implements an early stopping callback that stops training after 10 steps.
+To use a callback, create a class that inherits from [`TrainerCallback`] and implements the functionality you want. Then pass the callback to the `callback` parameter in [`Trainer`]. The example below implements an early stopping callback that stops training after 10 steps.
 
 ```py
 from transformers import TrainerCallback, Trainer
@@ -368,7 +365,7 @@ accelerate launch \
 > [!TIP]
 > Refer to the [Launching your Accelerate scripts](https://hf.co/docs/accelerate/basic_tutorials/launch) tutorial to learn more about `accelerate_launch` and custom configurations.
 
-## Optimization
+## Optimizations
 
 [`Trainer`] supports various optimizations to improve *training* performance - reduce memory and increase training speed - and *model* performance.
 
@@ -382,11 +379,11 @@ Install the [GaLore](https://github.com/jiaweizzhao/GaLore) library, [TRL](https
 pip install galore-torch trl datasets
 ```
 
-Then pick a GaLore optimizer (`"galore_adamw"`, `"galore_adafactor"`, `"galore_adamw_8bit`") and pass it to the `optim` parameter in [`TrainingArguments`]. Use the `optim_target_modules` parameter to specify which modules to adapt (can be a list of strings, regex, or a full path).
+Pick a GaLore optimizer (`"galore_adamw"`, `"galore_adafactor"`, `"galore_adamw_8bit`") and pass it to the `optim` parameter in [`TrainingArguments`]. Use the `optim_target_modules` parameter to specify which modules to adapt (can be a list of strings, regex, or a full path).
 
-Extra parameters supported by GaLore, `rank`, `update_proj_gap`, and `scale` should be passed to the `optim_args` parameter in [`TrainingArguments`].
+Extra parameters supported by GaLore, `rank`, `update_proj_gap`, and `scale`, should be passed to the `optim_args` parameter in [`TrainingArguments`].
 
-The example below shows how to enable GaLore with [`~trl.SFTTrainer`] that targets the `attn` and `mlp` layers with regex.
+The example below enables GaLore with [`~trl.SFTTrainer`] that targets the `attn` and `mlp` layers with regex.
 
 > [!TIP]
 > It can take some time before training starts (~3 minutes for a 2B model on a NVIDIA A100).
@@ -462,7 +459,7 @@ Only linear layers that are considered GaLore layers can be trained with low-ran
 
 ### Liger
 
-[Liger Kernel](https://github.com/linkedin/Liger-Kernel) is a collection of layers such as RMSNorm, RoPE, SwiGLU, CrossEntropy, FusedLinearCrossEntropy and more that have been fused into a single Triton kernel for training LLMs. These kernels are also compatible with FlashAttention, FSDP, and DeepSpeed. As a result, Liger Kernel can increase multi-GPU training throughput and reduce memory usage. This is useful for multi-head training and supporting larger vocabulary sizes, larger batch sizes and longer context lengths.
+[Liger Kernel](https://github.com/linkedin/Liger-Kernel) is a collection of layers such as RMSNorm, RoPE, SwiGLU, CrossEntropy, FusedLinearCrossEntropy, and more that have been fused into a single Triton kernel for training LLMs. These kernels are also compatible with FlashAttention, FSDP, and DeepSpeed. As a result, Liger Kernel can increase multi-GPU training throughput and reduce memory usage. This is useful for multi-head training and supporting larger vocabulary sizes, larger batch sizes, and longer context lengths.
 
 ```bash
 pip install liger-kernel
