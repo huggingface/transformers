@@ -645,7 +645,7 @@ def is_g2p_en_available():
     return _g2p_en_available
 
 
-@lru_cache()
+@lru_cache
 def is_torch_tpu_available(check_device=True):
     "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
     warnings.warn(
@@ -2270,3 +2270,31 @@ def define_import_structure(module_path: str) -> IMPORT_STRUCTURE_T:
     """
     import_structure = create_import_structure_from_path(module_path)
     return spread_import_structure(import_structure)
+
+
+def clear_import_cache():
+    """
+    Clear cached Transformers modules to allow reloading modified code.
+    
+    This is useful when actively developing/modifying Transformers code.
+    """
+    # Get all transformers modules
+    transformers_modules = [
+        mod_name for mod_name in sys.modules
+        if mod_name.startswith('transformers.')
+    ]
+    
+    # Remove them from sys.modules
+    for mod_name in transformers_modules:
+        module = sys.modules[mod_name]
+        # Clear _LazyModule caches if applicable
+        if isinstance(module, _LazyModule):
+            module._objects = {}  # Clear cached objects
+        del sys.modules[mod_name]
+    
+    # Force reload main transformers module
+    if 'transformers' in sys.modules:
+        main_module = sys.modules['transformers']
+        if isinstance(main_module, _LazyModule):
+            main_module._objects = {}  # Clear cached objects
+        importlib.reload(main_module)
