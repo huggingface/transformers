@@ -42,7 +42,7 @@ _CONFIG_FOR_DOC = "TeleChat2Config"
 
 
 class TeleChat2MLP(nn.Module):
-    def __init__(self, config: TeleChat2Config):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
