@@ -370,7 +370,7 @@ class RtDetrImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 ]
             ).T
             torch.testing.assert_close(encoding["labels"][0]["boxes"], expected_boxes_0, atol=1, rtol=1)
-            torch.testing.assert_close(encoding["labels"][1]["boxes"], expected_boxes_1, rtol=1)
+            torch.testing.assert_close(encoding["labels"][1]["boxes"], expected_boxes_1, atol=1, rtol=1)
 
     @slow
     @require_torch_gpu

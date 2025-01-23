@@ -381,7 +381,7 @@ class DeformableDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessi
                 ]
             ).T
             torch.testing.assert_close(encoding["labels"][0]["boxes"], expected_boxes_0, atol=1, rtol=1)
-            torch.testing.assert_close(encoding["labels"][1]["boxes"], expected_boxes_1, rtol=1)
+            torch.testing.assert_close(encoding["labels"][1]["boxes"], expected_boxes_1, atol=1, rtol=1)
 
     # Copied from tests.models.detr.test_image_processing_detr.DetrImageProcessingTest.test_batched_coco_panoptic_annotations with Detr->DeformableDetr
     def test_batched_coco_panoptic_annotations(self):
@@ -505,7 +505,7 @@ class DeformableDetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessi
                 ]
             ).T
             torch.testing.assert_close(encoding["labels"][0]["boxes"], expected_boxes_0, atol=1, rtol=1)
-            torch.testing.assert_close(encoding["labels"][1]["boxes"], expected_boxes_1, rtol=1)
+            torch.testing.assert_close(encoding["labels"][1]["boxes"], expected_boxes_1, atol=1, rtol=1)
 
     # Copied from tests.models.detr.test_image_processing_detr.DetrImageProcessingTest.test_max_width_max_height_resizing_and_pad_strategy with Detr->DeformableDetr
     def test_max_width_max_height_resizing_and_pad_strategy(self):

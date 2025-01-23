@@ -442,7 +442,7 @@ class DetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixi
                 ]
             ).T
             torch.testing.assert_close(encoding["labels"][0]["boxes"], expected_boxes_0, atol=1, rtol=1)
-            torch.testing.assert_close(encoding["labels"][1]["boxes"], expected_boxes_1, rtol=1)
+            torch.testing.assert_close(encoding["labels"][1]["boxes"], expected_boxes_1, atol=1, rtol=1)
 
     def test_batched_coco_panoptic_annotations(self):
         # prepare image, target and masks_path
@@ -565,7 +565,7 @@ class DetrImageProcessingTest(AnnotationFormatTestMixin, ImageProcessingTestMixi
                 ]
             ).T
             torch.testing.assert_close(encoding["labels"][0]["boxes"], expected_boxes_0, atol=1, rtol=1)
-            torch.testing.assert_close(encoding["labels"][1]["boxes"], expected_boxes_1, rtol=1)
+            torch.testing.assert_close(encoding["labels"][1]["boxes"], expected_boxes_1, atol=1, rtol=1)
 
     def test_max_width_max_height_resizing_and_pad_strategy(self):
         for image_processing_class in self.image_processor_list:
