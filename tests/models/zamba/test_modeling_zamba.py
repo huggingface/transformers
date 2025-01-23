@@ -342,7 +342,9 @@ class ZambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                     if "A_log" in name:
                         A = torch.arange(1, config.mamba_d_state + 1, dtype=torch.float32)[None, :]
                         intermediate_dim = config.mamba_expand * config.hidden_size
-                        A = A.expand(intermediate_dim, -1).reshape(config.n_mamba_heads, intermediate_dim // config.n_mamba_heads, -1)
+                        A = A.expand(intermediate_dim, -1).reshape(
+                            config.n_mamba_heads, intermediate_dim // config.n_mamba_heads, -1
+                        )
                         torch.testing.assert_close(param.data, torch.log(A), rtol=1e-5, atol=1e-5)
                     elif "D" in name:
                         # check if it's a ones like
