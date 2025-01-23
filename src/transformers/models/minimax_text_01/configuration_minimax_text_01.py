@@ -132,6 +132,15 @@ class MiniMaxText01Config(PretrainedConfig):
         output_router_logits=False,
         router_aux_loss_coef=0.001,
         router_jitter_noise=0.0,
+        attn_type_list=None,
+        block_size=256,
+        residual_post_norm=False,
+        layernorm_attention_alpha=1,
+        layernorm_attention_beta=1,
+        layernorm_lightning_attention_alpha=1,
+        layernorm_lightning_attention_beta=1,
+        layernorm_mlp_alpha=1,
+        layernorm_mlp_beta=1,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -141,11 +150,6 @@ class MiniMaxText01Config(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.sliding_window = sliding_window
-
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
@@ -160,6 +164,33 @@ class MiniMaxText01Config(PretrainedConfig):
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
         self.router_jitter_noise = router_jitter_noise
+
+        # use softmax-attention after `interval` lightning-attentions
+        interval = num_hidden_layers // 10
+        self.attn_type_list = (
+            [1 if i % interval == interval - 1 else 0 for i in range(num_hidden_layers)]
+            if attn_type_list is None
+            else attn_type_list
+        )
+
+        self.block_size = block_size
+        self.residual_post_norm = residual_post_norm
+        self.layernorm_attention_alpha = layernorm_attention_alpha
+        self.layernorm_attention_beta = layernorm_attention_beta
+        self.layernorm_lightning_attention_alpha = layernorm_lightning_attention_alpha
+        self.layernorm_lightning_attention_beta = layernorm_lightning_attention_beta
+        self.layernorm_mlp_alpha = layernorm_mlp_alpha
+        self.layernorm_mlp_beta = layernorm_mlp_beta
+
+        # TODO: move these to saved config
+        self.residual_post_norm = True
+        self.layernorm_attention_alpha = 3.5565588200778455
+        self.layernorm_attention_beta = 1.0
+        self.layernorm_lightning_attention_alpha = 3.5565588200778455
+        self.layernorm_lightning_attention_beta = 1.0
+        self.layernorm_mlp_alpha = 3.5565588200778455
+        self.layernorm_mlp_beta = 1.0
+
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,

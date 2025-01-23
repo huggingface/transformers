@@ -20,12 +20,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import math
 from typing import Callable, List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
-from einops import rearrange
 from torch import nn
 
 from ...activations import ACT2FN
@@ -61,6 +59,140 @@ logger = logging.get_logger(__name__)
 
 _CHECKPOINT_FOR_DOC = "mistralai/Mixtral-8x7B-v0.1"
 _CONFIG_FOR_DOC = "MixtralConfig"
+
+
+class MiniMaxText01LightningAttentionDecay(nn.Module):
+    def __init__(self, config: MiniMaxText01Config, layer_idx: int):
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.num_heads = config.num_attention_heads
+        self.num_hidden_layers = config.num_hidden_layers
+        self.block_size = config.block_size
+
+    def forward(self, x, seq_len):
+        num_blocks = (seq_len + self.block_size - 1) // self.block_size
+        padding = num_blocks * self.block_size - seq_len
+
+        num_heads_range = torch.arange(self.num_heads).to(x) + 1
+        block_size_range = torch.arange(self.block_size).to(x) + 1
+
+        slope_rate = (1 / (2 ** (8 / self.num_heads))) ** num_heads_range
+        slope_rate *= 1 - self.layer_idx / (self.num_hidden_layers - 1) + 1e-5  # check small addition
+        slope_rate = slope_rate[:, None, None]
+
+        query_decay = torch.exp(-slope_rate * block_size_range[:, None])
+        query_decay = query_decay[:, None, :, :]
+
+        key_decay = torch.exp(-slope_rate * (self.block_size - block_size_range[:, None]))
+        key_decay = key_decay[:, None, :, :]
+        key_decay = key_decay.repeat(1, num_blocks, 1, 1)
+        key_decay[:, -1, : self.block_size - padding] = key_decay[:, -1, padding:]
+
+        diagonal_decay = block_size_range[:, None] - block_size_range[None, :]
+        diagonal_decay = slope_rate * diagonal_decay[None, :, :]
+        diagonal_decay = torch.where(diagonal_decay >= 0, -diagonal_decay, float("-inf"))
+        diagonal_decay = torch.exp(diagonal_decay)
+        diagonal_decay = diagonal_decay[:, None, :, :]
+
+        block_lengths = torch.cat(
+            (torch.full((num_blocks - 1,), self.block_size), torch.tensor([self.block_size - padding]))
+        ).to(x)
+        block_decay = torch.exp(-slope_rate[:, None, :, :] * block_lengths[:, None, None])
+
+        return key_decay, query_decay, diagonal_decay, block_decay
+
+
+class MiniMaxText01LightningAttention(nn.Module):
+    def __init__(self, config: MiniMaxText01Config, layer_idx: int):
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.num_heads = config.num_attention_heads
+        self.num_hidden_layers = config.num_hidden_layers
+        self.block_size = config.block_size
+
+        self.act_fn = ACT2FN[config.hidden_act]
+        self.norm = MixtralRMSNorm(self.head_dim * self.num_heads)
+        self.qkv_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim * 3, bias=False)
+        self.out_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=False)
+        self.output_gate = nn.Linear(config.hidden_size, self.num_heads * self.num_heads, bias=False)
+        self.decay_factors = MiniMaxText01LightningAttentionDecay(config, layer_idx)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
+        attention_mask: Optional[torch.Tensor],
+        past_key_value: Optional[Cache] = None,
+        cache_position: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
+        batch_size, seq_len, hidden_size = hidden_states.shape
+        num_blocks = (seq_len + self.block_size - 1) // self.block_size
+        padding = num_blocks * self.block_size - seq_len
+
+        qkv_states = self.act_fn(self.qkv_proj(hidden_states))
+        qkv_states = qkv_states.reshape(batch_size, seq_len, self.num_heads, 3 * self.head_dim)
+
+        query_states, key_states, value_states = torch.split(qkv_states, [self.head_dim] * 3, dim=3)
+
+        query_states = query_states.transpose(1, 2)
+        key_states = key_states.transpose(1, 2)
+        value_states = value_states.transpose(1, 2)
+
+        # TODO: apply attention_mask
+
+        query_states = F.pad(query_states, (0, 0, 0, padding))
+        key_states = F.pad(key_states, (0, 0, 0, padding))
+        value_states = F.pad(value_states, (0, 0, 0, padding))
+
+        query_states = query_states.reshape(batch_size, self.num_heads, num_blocks, self.block_size, self.head_dim)
+        key_states = key_states.reshape(batch_size, self.num_heads, num_blocks, self.block_size, self.head_dim)
+        value_states = value_states.reshape(batch_size, self.num_heads, num_blocks, self.block_size, self.head_dim)
+
+        # TODO: get from past_key_value[layer_idx]
+        next_cache = torch.zeros(batch_size, self.num_heads, 1, self.head_dim, self.head_dim).to(value_states)
+
+        # get decay factors
+        key_decay, query_decay, diagonal_decay, block_decay = self.decay_factors(query_states, seq_len)
+
+        # intra: ( Q @ K.T ) @ V -> QK * V
+        attn_weights_intra = torch.matmul(query_states, key_states.transpose(-1, -2))
+        attn_output_intra = torch.matmul(attn_weights_intra * diagonal_decay, value_states)
+
+        # inter: Q @ ( K.T @ V ) -> Q * KV
+        attn_weights_inter = torch.matmul((key_states * key_decay).transpose(-1, -2), value_states)
+        attn_weights_inter = torch.cat([next_cache, attn_weights_inter], dim=2)
+        for i in range(num_blocks):
+            attn_weights_inter[:, :, i + 1, :, :] += attn_weights_inter[:, :, i, :, :] * block_decay[:, i, :, :]
+        next_cache = attn_weights_inter[:, :, -1, :, :]
+        attn_weights_inter = attn_weights_inter[:, :, :-1, :, :]
+        attn_output_inter = torch.matmul(query_states * query_decay, attn_weights_inter)
+
+        # inter + intra
+        attn_output = attn_output_inter + attn_output_intra
+        attn_output = attn_output.reshape(batch_size, self.num_heads, seq_len + padding, self.head_dim)
+        attn_output = attn_output[:, :, :seq_len, :]
+
+        # final output projection
+        attn_output = attn_output.transpose(1, 2)
+        attn_output = attn_output.reshape(batch_size, seq_len, self.num_heads * self.head_dim)
+        attn_output = self.norm(attn_output)
+        attn_output = F.sigmoid(self.output_gate(hidden_states)) * attn_output
+        attn_output = self.out_proj(attn_output)
+
+        # TODO: put to past_key_value[layer_idx]
+        next_cache
+
+        # TODO: remove these
+        print()
+        print(self.layer_idx)
+        print(next_cache)
+
+        return attn_output, None
 
 
 def rotate_half(x):
@@ -226,161 +358,6 @@ class MiniMaxText01Attention(nn.Module):
         return attn_output, attn_weights
 
 
-def get_slopes(head_dim):
-    equ = lambda x: 1 / (2 ** (8 / x))
-
-    log2 = math.log2(head_dim)
-    if log2.is_integer():
-        return [equ(head_dim) ** i for i in range(1, head_dim + 1)]
-
-    lower_bound = 2 ** math.floor(log2)
-    upper_bound = 2 ** math.ceil(log2)
-
-    lower_bound_slopes = get_slopes(lower_bound)
-    upper_bound_slopes = get_slopes(upper_bound)
-    slopes = lower_bound_slopes + upper_bound_slopes[::2][: head_dim - lower_bound]
-
-    return slopes
-
-
-# TODO: clean and refactor
-# TODO: lightning + eager = attention_mask is not None = fails
-def lightning_attention_forward(
-    module,
-    query_states,
-    key_states,
-    value_states,
-    attention_mask,
-    **kwargs,
-):
-    batch_size, hidden_size, seq_len, head_dim = query_states.shape
-    batch_size, hidden_size, seq_len, kv_head_dim = value_states.shape
-
-    BLOCK = 256
-    num_blocks = (seq_len + BLOCK - 1) // BLOCK
-
-    if attention_mask is not None:
-        value_states = value_states.masked_fill((1 - attention_mask).unsqueeze(1).unsqueeze(-1).to(torch.bool), 0)
-
-    slope_rate = get_slopes(head_dim)
-    slope_rate = torch.tensor(slope_rate, device=query_states.device, dtype=torch.float32)
-    # TODO: check for a different batch size
-    slope_rate = slope_rate.unsqueeze(1).unsqueeze(1)
-    slope_rate *= 1 - module.layer_idx / (module.num_hidden_layers - 1) + 1e-5
-
-    array = torch.arange(BLOCK).to(query_states) + 1
-    query_states_decay = torch.exp(-slope_rate * array.reshape(-1, 1))
-    key_states_decay = torch.exp(-slope_rate * (BLOCK - array.reshape(-1, 1)))
-    index = array[:, None] - array[None, :]
-    s_index = (
-        slope_rate
-        * index[
-            None,
-            None,
-        ]
-    )
-    s_index = torch.where(index >= 0, -s_index, float("-inf"))
-    diag_decay = torch.exp(s_index)
-
-    # TODO: remove unused kv
-    kv = torch.zeros(batch_size, hidden_size, head_dim, kv_head_dim).to(torch.float32).to(query_states.device)
-    output = torch.empty(
-        (batch_size, hidden_size, seq_len, kv_head_dim), dtype=query_states.dtype, device=query_states.device
-    )
-
-    for i in range(num_blocks):
-        si = i * BLOCK
-        ei = min(si + BLOCK, seq_len)
-        m = ei - si
-        query_states_i = query_states[:, :, si:ei].contiguous()
-        key_states_i = key_states[:, :, si:ei].contiguous()
-        value_states_i = value_states[:, :, si:ei].contiguous()
-        qkv_none_diag = torch.matmul(query_states_i * query_states_decay[:, :m], kv).to(torch.float32)
-
-        # diag
-        qk = torch.matmul(query_states_i, key_states_i.transpose(-1, -2)).to(torch.float32) * diag_decay[:, :, :m, :m]
-        qkv_diag = torch.matmul(qk, value_states_i.to(torch.float32))
-        block_decay = torch.exp(-slope_rate * m)
-        output[:, :, si:ei] = qkv_none_diag + qkv_diag
-        kv = block_decay * kv + torch.matmul(
-            (key_states_i * key_states_decay[:, -m:]).transpose(-1, -2).to(value_states_i.dtype), value_states_i
-        )
-
-    return output, None
-
-
-# TODO
-class MiniMaxText01LightningAttention(nn.Module):
-    def __init__(self, config: MiniMaxText01Config, layer_idx: int):
-        super().__init__()
-        self.config = config
-        self.layer_idx = layer_idx
-        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
-        self.num_heads = config.num_attention_heads
-        self.num_hidden_layers = config.num_hidden_layers
-
-        self.act_fn = ACT2FN[config.hidden_act]
-        self.norm = MixtralRMSNorm(self.head_dim * self.num_heads)
-        self.qkv_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim * 3, bias=False)
-        # TODO: separate q,k,v
-        # self.q_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
-        # self.k_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
-        # self.v_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
-        self.out_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=False)
-        self.output_gate = nn.Linear(config.hidden_size, self.num_heads * self.num_heads, bias=False)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        position_embeddings: Tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
-        past_key_value: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
-        input_shape = hidden_states.shape[:-1]
-        hidden_shape = (*input_shape, -1, self.head_dim)
-
-        # TODO: separate q,k,v
-        # query_states = self.act_fn(self.q_proj(hidden_states)).view(hidden_shape).transpose(1, 2)
-        # key_states = self.act_fn(self.k_proj(hidden_states)).view(hidden_shape).transpose(1, 2)
-        # value_states = self.act_fn(self.v_proj(hidden_states)).view(hidden_shape).transpose(1, 2)
-
-        qkv_mixed = self.act_fn(self.qkv_proj(hidden_states))
-        new_shape = qkv_mixed.size()[:-1] + (self.num_heads, -1)
-        qkv_mixed = qkv_mixed.view(*new_shape)
-        query_states, key_states, value_states = torch.split(qkv_mixed, [self.head_dim] * 3, dim=3)
-        query_states = query_states.transpose(1, 2)
-        key_states = key_states.transpose(1, 2)
-        value_states = value_states.transpose(1, 2)
-
-        if past_key_value is not None:
-            cache_kwargs = {"cache_position": cache_position}
-            key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
-
-        # show_tensor(key_states, False, True)
-
-        # TODO: store following computed in cache
-        attn_output, attn_weights = lightning_attention_forward(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            **kwargs,
-        )
-
-        attn_output = rearrange(attn_output, "b h n d -> b n (h d)")
-        attn_output = self.norm(attn_output)
-        attn_output = F.sigmoid(self.output_gate(hidden_states)) * attn_output
-        attn_output = self.out_proj(attn_output)
-
-        # ic(self.layer_idx)
-        # show_tensor(attn_output, False, True)
-
-        return attn_output, attn_weights
-
-
 class MiniMaxText01BlockSparseTop2MLP(nn.Module):
     def __init__(self, config: MiniMaxText01Config):
         super().__init__()
@@ -498,26 +475,15 @@ class MiniMaxText01DecoderLayer(nn.Module):
         self.input_layernorm = MiniMaxText01RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = MiniMaxText01RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-        # TODO: add each of these to config
-        self.residual_post_norm = getattr(config, "residual_post_norm", False)
-        self.layernorm_attention_alpha = getattr(config, "layernorm_attention_alpha", 1)
-        self.layernorm_attention_beta = getattr(config, "layernorm_attention_beta", 1)
-        self.layernorm_lightning_attention_alpha = getattr(config, "layernorm_lightning_attention_alpha", 1)
-        self.layernorm_lightning_attention_beta = getattr(config, "layernorm_lightning_attention_beta", 1)
-        self.layernorm_mlp_alpha = getattr(config, "layernorm_mlp_alpha", 1)
-        self.layernorm_mlp_beta = getattr(config, "layernorm_mlp_beta", 1)
-
-        # TODO: remove these
         self.layer_idx = layer_idx
-        self.residual_post_norm = True
-        self.layernorm_attention_alpha = 3.5565588200778455
-        self.layernorm_attention_beta = 1.0
-        self.layernorm_lightning_attention_alpha = 3.5565588200778455
-        self.layernorm_lightning_attention_beta = 1.0
-        self.layernorm_mlp_alpha = 3.5565588200778455
-        self.layernorm_mlp_beta = 1.0
+        self.residual_post_norm = config.residual_post_norm
+        self.layernorm_attention_alpha = config.layernorm_attention_alpha
+        self.layernorm_attention_beta = config.layernorm_attention_beta
+        self.layernorm_lightning_attention_alpha = config.layernorm_lightning_attention_alpha
+        self.layernorm_lightning_attention_beta = config.layernorm_lightning_attention_beta
+        self.layernorm_mlp_alpha = config.layernorm_mlp_alpha
+        self.layernorm_mlp_beta = config.layernorm_mlp_beta
 
-        # TODO: attn_type_list to config
         if config.attn_type_list[layer_idx] == 0:
             self.self_attn = MiniMaxText01LightningAttention(config, layer_idx)
             self.layernorm_alpha = self.layernorm_lightning_attention_alpha
@@ -526,8 +492,6 @@ class MiniMaxText01DecoderLayer(nn.Module):
             self.self_attn = MiniMaxText01Attention(config, layer_idx)
             self.layernorm_alpha = self.layernorm_attention_alpha
             self.layernorm_beta = self.layernorm_attention_beta
-
-        # TODO: shared_moe
 
     def forward(
         self,
@@ -563,9 +527,6 @@ class MiniMaxText01DecoderLayer(nn.Module):
                 Arbitrary kwargs to be ignored, used for FSDP and other methods that injects code
                 into the model
         """
-        # print()
-        # ic(self.layer_idx)
-        # show_tensor(hidden_states, False, True)
 
         residual = hidden_states
 
@@ -603,8 +564,6 @@ class MiniMaxText01DecoderLayer(nn.Module):
         if output_router_logits:
             outputs += (router_logits,)
 
-        # show_tensor(hidden_states, False, True)
-
         return outputs
 
 
@@ -633,7 +592,7 @@ class MiniMaxText01RotaryEmbedding(nn.Module):
         2 - the current sequence length is in the original scale (avoid losing precision with small sequences)
         """
         seq_len = torch.max(position_ids) + 1
-        if seq_len > self.max_seq_len_cached:  # growth
+        if seq_len > self.max_seq_len_cached:  # growth_dynamic_frequency_update
             inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
             self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
             self.max_seq_len_cached = seq_len
@@ -861,6 +820,7 @@ class MiniMaxText01Model(MiniMaxText01PreTrainedModel):
                 )
                 use_cache = False
 
+        # TODO: raise exception here?
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache()
 
