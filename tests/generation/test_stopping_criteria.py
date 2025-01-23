@@ -181,12 +181,12 @@ class StoppingCriteriaTestCase(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
         tokenizer.pad_token_id = tokenizer.eos_token_id
         tokenizer.padding_side = "left"
-        
+
         # Create input_ids with tokens above len(tokenizer)
         input_ids = torch.tensor([[len(tokenizer) + 5, 1, 2]], device=torch_device)  # token above vocab size
         scores = None
         criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings=["test"])
-        
+
         # This should not raise an error and should return False since no stop string is matched
         self.assertFalse(criteria(input_ids, scores))
 
