@@ -1,4 +1,3 @@
-import torch.nn.functional as F
 from torch import nn
 
 from ...utils import logging

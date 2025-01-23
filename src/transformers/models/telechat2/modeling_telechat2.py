@@ -7,9 +7,9 @@
 from typing import Callable, List, Optional, Tuple, Union
 
 import torch
-import torch.nn.functional as F
 from torch import nn
 
+from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
