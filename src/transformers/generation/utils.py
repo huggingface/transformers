@@ -406,23 +406,28 @@ class GenerationMixin:
             model_inputs[input_ids_key] = input_ids.clone(memory_format=torch.contiguous_format)
 
         # 4. Create missing `position_ids` on the fly
+        attention_mask = (
+            kwargs.pop("decoder_attention_mask", None) if self.config.is_encoder_decoder else attention_mask
+        )
+        attention_mask_key = "decoder_attention_mask" if self.config.is_encoder_decoder else "attention_mask"
+        position_ids_key = "decoder_position_ids" if self.config.is_encoder_decoder else "position_ids"
         if (
             attention_mask is not None
-            and kwargs.get("position_ids") is None
-            and "position_ids" in set(inspect.signature(self.forward).parameters.keys())
+            and kwargs.get(position_ids_key) is None
+            and position_ids_key in set(inspect.signature(self.forward).parameters.keys())
         ):
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
-            kwargs["position_ids"] = position_ids  # placed in kwargs for further processing (see below)
+            kwargs[position_ids_key] = position_ids  # placed in kwargs for further processing (see below)
 
         # 5. Slice model inputs if it's an input that should have the same length as `input_ids`
-        for model_input_name in ["position_ids", "token_type_ids"]:
+        for model_input_name in ["position_ids", "token_type_ids", "decoder_position_ids"]:
             model_input = kwargs.get(model_input_name)
             if model_input is not None:
                 if past_key_values is not None:
                     current_input_length = (
                         model_inputs["inputs_embeds"].shape[1]
-                        if model_inputs["inputs_embeds"] is not None
+                        if model_inputs.get("inputs_embeds") is not None
                         else model_inputs[input_ids_key].shape[1]
                     )
                     model_input = model_input[:, -current_input_length:]
@@ -469,7 +474,7 @@ class GenerationMixin:
                     past_key_values=past_key_values,
                 )
         if attention_mask is not None:
-            model_inputs["attention_mask"] = attention_mask
+            model_inputs[attention_mask_key] = attention_mask
 
         # 7. Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
         for key, value in kwargs.items():
