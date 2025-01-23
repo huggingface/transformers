@@ -25,6 +25,7 @@ def get_file_owners(file_path, codeowners_lines):
     return []  # Should never happen, but just in case
 
 def main():
+    # TODO Remove PR owner from owners list so they don't tag themselves
     g = Github(os.environ['GITHUB_TOKEN'])
     repo = g.get_repo("huggingface/transformers")
     with open(os.environ['GITHUB_EVENT_PATH']) as f:
