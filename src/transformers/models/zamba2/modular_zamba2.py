@@ -755,6 +755,59 @@ class Zamba2AttentionDecoderLayer(ZambaAttentionDecoderLayer):
         self.self_attn = Zamba2Attention(config, layer_idx=-1, num_fwd_mem_blocks=num_gs, block_id=block_id)
         self.feed_forward = Zamba2MLP(config, num_fwd_mem_blocks=num_gs, block_id=block_id)
 
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        original_hidden_states: torch.Tensor,
+        layer_idx: int,
+        attention_mask: Optional[torch.Tensor] = None,
+        past_key_value: Optional[Zamba2HybridDynamicCache] = None,
+        output_attentions: Optional[bool] = False,
+        position_embeddings: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        """
+        Args:
+            hidden_states (`torch.FloatTensor`): output of previous Mamba layer of shape `(batch, seq_len, embed_dim)`
+            original_hidden_states (`torch.FloatTensor`): word embedding output of shape `(batch, seq_len, embed_dim)`.
+                This is concatenated with `hidden_states` (which is the output of the previous (mamba) layer). The
+                concatenated tensor is then used as input of the pre-attention RMSNorm
+                (see fig. 2 in https://arxiv.org/pdf/2405.16712).
+            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
+                `(batch, sequence_length)` where padding elements are indicated by 0.
+            past_key_value (`Zamba2HybridDynamicCache`, *optional*): cached past key and value projection states
+            output_attentions (`bool`, *optional*):
+                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
+                returned tensors for more detail.
+            use_cache (`bool`, *optional*):
+                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
+                (see `past_key_values`).
+            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
+                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
+                with `head_dim` being the embedding dimension of each attention head.
+        """
+        hidden_states = torch.concatenate([hidden_states, original_hidden_states], dim=-1)
+        hidden_states = self.input_layernorm(hidden_states)
+        hidden_states, self_attn_weights = self.self_attn(
+            hidden_states=hidden_states,
+            layer_idx=layer_idx,
+            attention_mask=attention_mask,
+            past_key_value=past_key_value,
+            output_attentions=output_attentions,
+            position_embeddings=position_embeddings,
+            **kwargs,
+        )
+
+        hidden_states = self.pre_ff_layernorm(hidden_states)
+        hidden_states = self.feed_forward(hidden_states, layer_idx)
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (self_attn_weights,)
+
+        return outputs
+
 
 class Zamba2MambaDecoderLayer(ZambaMambaDecoderLayer):
     def __init__(self, config: Zamba2Config, layer_idx: int):
