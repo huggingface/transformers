@@ -764,68 +764,6 @@ class Zamba2MambaDecoderLayer(ZambaMambaDecoderLayer):
         self.mamba = Zamba2MambaMixer(config=config, layer_idx=layer_idx)
         self.input_layernorm = Zamba2RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        original_hidden_states: Optional[torch.Tensor] = None,
-        layer_idx: int = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        causal_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Zamba2HybridDynamicCache] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = False,
-        position_embeddings: Optional[torch.LongTensor] = None,
-        transformer_hidden_states: Optional[torch.Tensor] = None,
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
-                `(batch, sequence_length)` where padding elements are indicated by 0.
-            past_key_value (`Zamba2HybridDynamicCache`, *optional*): cached past key and value projection states
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
-                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
-                with `head_dim` being the embedding dimension of each attention head.
-            transformer_hidden_states (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
-                Output of the previous shared transformer layer (if present) of shape `(batch_size, seq_len, embed_dim)`.
-        """
-
-        residual = hidden_states
-
-        # `transformer_hidden_states` is the output from shared transformer + linear layer (see fig. 2 in https://arxiv.org/pdf/2405.16712).
-        # `transformer_hidden_states` is then added to the input to the mamba layer below (as described in eq. (6) of https://arxiv.org/pdf/2405.16712).
-        hidden_states = (
-            hidden_states + transformer_hidden_states if transformer_hidden_states is not None else hidden_states
-        )
-        hidden_states = self.input_layernorm(hidden_states)
-
-        hidden_states = self.mamba(
-            hidden_states=hidden_states,
-            cache_params=past_key_value,
-            attention_mask=attention_mask,
-        )
-
-        self_attn_weights = None
-
-        # residual connection after mamba
-        hidden_states = residual + hidden_states
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (self_attn_weights,)
-
-        if use_cache:
-            outputs += (past_key_value,)
-
-        return outputs
-
 
 class Zamba2HybridLayer(ZambaHybridLayer):
     def __init__(
