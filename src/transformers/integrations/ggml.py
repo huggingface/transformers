@@ -198,6 +198,9 @@ GGUF_CONFIG_MAPPING = {
         "embedding_length": "hidden_size",
         "rope.dimension_count": None,
         "rope.freq_base": "rope_theta",
+        # NOTE: Gemma2 has key_length==value_length==head_dim
+        # See: https://github.com/ggerganov/llama.cpp/blob/2e2f8f093cd4fb6bbb87ba84f6b9684fa082f3fa/convert_hf_to_gguf.py#L3293-L3294
+        "attention.key_length": "head_dim",
         "attention.head_count": "num_attention_heads",
         "attention.head_count_kv": "num_key_value_heads",
         "attention.layer_norm_rms_epsilon": "rms_norm_eps",

@@ -18,7 +18,7 @@
 from typing import Any, Dict
 
 from ...configuration_utils import PretrainedConfig
-from ...utils import is_timm_available, logging
+from ...utils import is_timm_available, logging, requires_backends
 
 
 if is_timm_available():
@@ -72,6 +72,7 @@ class TimmWrapperConfig(PretrainedConfig):
 
         # if no labels added to config, use imagenet labeller in timm
         if label_names is None and not is_custom_model:
+            requires_backends(cls, ["timm"])
             imagenet_subset = infer_imagenet_subset(config_dict)
             if imagenet_subset:
                 dataset_info = ImageNetInfo(imagenet_subset)
