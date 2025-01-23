@@ -1855,7 +1855,7 @@ class WhisperForConditionalGeneration(WhisperGenerationMixin, WhisperPreTrainedM
 
         # The `contiguous()` here is necessary to have a static stride during decoding. torchdynamo otherwise
         # recompiles graphs as the stride of the inputs is a guard. Ref: https://github.com/huggingface/transformers/pull/29114
-        decoder_input_ids = decoder_input_ids.contiguous()
+        decoder_input_ids = decoder_input_ids.clone(memory_format=torch.contiguous_format)
 
         if (
             isinstance(past_key_values, EncoderDecoderCache)
