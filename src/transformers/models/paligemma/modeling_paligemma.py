@@ -383,18 +383,22 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         causal_mask *= torch.arange(target_length, device=cache_position.device) > cache_position.reshape(-1, 1)
         causal_mask = causal_mask[None, None, :, :].expand(inputs_lead_dim, 1, -1, -1)
         if attention_mask is not None:
-            causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
+            causal_mask = causal_mask.clone()
             mask_length = attention_mask.shape[-1]
+            
+            # First unmask prefix tokens during training
+            if is_training:
+                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
+                    token_type_ids[:, None, None, :].to(causal_mask.device) == 0, 0
+                )
+            
+            # Then apply padding mask (will mask pad tokens)
             padding_mask = causal_mask[:, :, :, :mask_length] + attention_mask[:, None, None, :].to(causal_mask.device)
             padding_mask = padding_mask == 0
             causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
                 padding_mask, min_dtype
             )
-            # we are training thus we need to create a full mask on the image + prefix but causal on suffix
-            if is_training:
-                causal_mask[:, :, :, :mask_length] = causal_mask[:, :, :, :mask_length].masked_fill(
-                    token_type_ids[:, None, None, :].to(causal_mask.device) == 0, 0
-                )
+        
         return causal_mask
 
     def get_image_features(self, pixel_values: torch.FloatTensor):
