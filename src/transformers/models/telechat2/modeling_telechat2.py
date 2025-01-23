@@ -42,17 +42,13 @@ _CONFIG_FOR_DOC = "TeleChat2Config"
 
 
 class TeleChat2MLP(nn.Module):
-    """
-    TeleChat2 MLP block with a gated activation function.
-    """
-
     def __init__(self, config: TeleChat2Config):
         super().__init__()
-        hidden_size = config.hidden_size
+        self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(hidden_size, config.intermediate_size, bias=False)
-        self.up_proj = nn.Linear(hidden_size, config.intermediate_size, bias=False)
-        self.down_proj = nn.Linear(config.intermediate_size, hidden_size, bias=True)
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=True)
         self.hidden_dropout = config.hidden_dropout
 
     def forward(self, hidden_states):

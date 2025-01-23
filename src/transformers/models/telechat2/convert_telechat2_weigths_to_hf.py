@@ -148,11 +148,6 @@ if __name__ == "__main__":
         type=str,
         help="Location to write HF model and tokenizer",
     )
-    parser.add_argument(
-        "--use_post_processor",
-        action="store_true",
-        help="Whether to apply post processor with special tokens",
-    )
 
     args = parser.parse_args()
     convert_telechat2_model(args.input_dir, args.output_dir, args.use_post_processor)

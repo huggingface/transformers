@@ -1,4 +1,4 @@
-<!--Copyright 2024 The HuggingFace Team. All rights reserved.
+<!--Copyright 2025 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
-The TeleChat2 model was proposed in [TELECHAT TECHNICAL REPORT](https://arxiv.org/pdf/2401.03804) by TeleAI.
+The TeleChat2 model was proposed in [TeleChat Technical Report](https://arxiv.org/pdf/2401.03804) by TeleAI.
 
 The abstract from the paper is the following:
 *TeleChat is a series of large language models, offering decoder-based language models in various sizes (3B, 7B, and 12B). For each size, we provide both the base pretrained model and the fine-tuned chat model aligned with human preferences. TeleChat leverages a Transformer architecture with features such as SwiGLU activation, advanced attention mechanisms (QKV bias, group query attention), and support for sliding window attention. The models are optimized for bilingual proficiency (English and Chinese) and include an enhanced tokenizer adaptable to diverse natural languages and coding formats.*
