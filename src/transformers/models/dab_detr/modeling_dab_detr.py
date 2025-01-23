@@ -892,7 +892,14 @@ class DabDetrPreTrainedModel(PreTrainedModel):
             # init prior_prob setting for focal loss
             prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
             bias_value = -math.log((1 - prior_prob) / prior_prob)
-            module.class_embed.bias.data = torch.ones(self.config.num_labels) * bias_value
+            module.class_embed.bias.data = (
+                torch.ones(
+                    self.config.num_labels,
+                    device=module.class_embed.bias.data.device,
+                    dtype=module.class_embed.bias.data.dtype,
+                )
+                * bias_value
+            )
 
 
 DAB_DETR_START_DOCSTRING = r"""
