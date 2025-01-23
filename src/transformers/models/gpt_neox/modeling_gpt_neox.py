@@ -148,6 +148,7 @@ def flash_attention_forward(
     norm_factor,
     attention_dropout,
     training,
+    position_ids=None,
     target_dtype=None,
     **_kwargs,
 ):
@@ -173,6 +174,7 @@ def flash_attention_forward(
         attention_mask,
         query_length,
         dropout=attention_dropout,
+        position_ids=position_ids,
         softmax_scale=norm_factor,
         is_causal=True,
         use_top_left_mask=flash_attn_uses_top_left_mask,
@@ -353,6 +355,7 @@ class GPTNeoXAttention(nn.Module):
             key,
             value,
             attention_mask=attention_mask,
+            position_ids=position_ids,
             head_mask=head_mask,
             norm_factor=self.norm_factor,
             attention_dropout=self.config.attention_dropout,
@@ -464,37 +467,10 @@ class GPTNeoXAttention(nn.Module):
         return target_dtype
 
 
-# TODO Remove in deprecation cycle
-class GPTNeoXFlashAttention2(GPTNeoXAttention):
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        logger.warning_once(
-            "The `GPTNeoXFlashAttention2` class is deprecated in favor of simply modifying the `config._attn_implementation`"
-            "attribute of the `GPTNeoXAttention` class! It will be removed in v4.48"
-        )
-
-
-# TODO Remove in deprecation cycle
-class GPTNeoXSdpaAttention(GPTNeoXAttention):
-    def __init__(self, config, layer_idx=None):
-        super().__init__(config, layer_idx=layer_idx)
-
-        logger.warning_once(
-            "The `GPTNeoXSdpaAttention` class is deprecated in favor of simply modifying the `config._attn_implementation`"
-            "attribute of the `GPTNeoXAttention` class! It will be removed in v4.48"
-        )
-
-
 # Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->GPTNeoX
 class GPTNeoXRotaryEmbedding(nn.Module):
-    def __init__(
-        self,
-        config: GPTNeoXConfig,
-        device=None,
-    ):
+    def __init__(self, config: GPTNeoXConfig, device=None):
         super().__init__()
-        self.rope_kwargs = {}
         # BC: "rope_type" was originally "type"
         if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
             self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
@@ -506,7 +482,7 @@ class GPTNeoXRotaryEmbedding(nn.Module):
         self.config = config
         self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, **self.rope_kwargs)
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
         self.original_inv_freq = self.inv_freq
 
@@ -518,13 +494,14 @@ class GPTNeoXRotaryEmbedding(nn.Module):
         """
         seq_len = torch.max(position_ids) + 1
         if seq_len > self.max_seq_len_cached:  # growth
-            inv_freq, self.attention_scaling = self.rope_init_fn(
-                self.config, device, seq_len=seq_len, **self.rope_kwargs
-            )
+            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
             self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
             self.max_seq_len_cached = seq_len
 
         if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
+            # This .to() is needed if the model has been moved to a device after being initialized (because
+            # the buffer is automatically moved, but not the original copy)
+            self.original_inv_freq = self.original_inv_freq.to(device)
             self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
             self.max_seq_len_cached = self.original_max_seq_len
 
@@ -601,14 +578,6 @@ class GPTNeoXMLP(nn.Module):
         return hidden_states
 
 
-GPT_NEOX_ATTENTION_CLASSES = {
-    "eager": GPTNeoXAttention,
-    "flash_attention_2": GPTNeoXFlashAttention2,
-    "sdpa": GPTNeoXSdpaAttention,
-    "flex_attention": GPTNeoXAttention,
-}
-
-
 class GPTNeoXLayer(nn.Module):
     def __init__(self, config, layer_idx):
         super().__init__()
@@ -617,7 +586,7 @@ class GPTNeoXLayer(nn.Module):
         self.post_attention_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.post_attention_dropout = nn.Dropout(config.hidden_dropout)
         self.post_mlp_dropout = nn.Dropout(config.hidden_dropout)
-        self.attention = GPT_NEOX_ATTENTION_CLASSES[config._attn_implementation](config, layer_idx)
+        self.attention = GPTNeoXAttention(config, layer_idx)
         self.mlp = GPTNeoXMLP(config)
 
     def forward(
@@ -931,7 +900,7 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
         output_attentions: bool,
     ):
         if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and 0.0 in attention_mask:
+            if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
 
@@ -1462,3 +1431,14 @@ class GPTNeoXForQuestionAnswering(GPTNeoXPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "GPTNeoXForCausalLM",
+    "GPTNeoXForQuestionAnswering",
+    "GPTNeoXForSequenceClassification",
+    "GPTNeoXForTokenClassification",
+    "GPTNeoXLayer",
+    "GPTNeoXModel",
+    "GPTNeoXPreTrainedModel",
+]

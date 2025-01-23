@@ -856,6 +856,9 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
         self.multi_modal_projector = Qwen2AudioMultiModalProjector(config)
         self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModelForCausalLM.from_config(config.text_config)
+        if self.language_model._tied_weights_keys is not None:
+            self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
+
         self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self._padding_side = "left"  # set it to left by default, user can use setter to change padding_sides
         self.post_init()
@@ -893,18 +896,6 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
     # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.get_decoder
     def get_decoder(self):
         return self.language_model.get_decoder()
-
-    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.tie_weights
-    def tie_weights(self):
-        return self.language_model.tie_weights()
-
-    # Copied from transformers.models.llava.modeling_llava.LlavaForConditionalGeneration.resize_token_embeddings
-    def resize_token_embeddings(self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None) -> nn.Embedding:
-        model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of)
-        # update vocab size
-        self.config.text_config.vocab_size = model_embeds.num_embeddings
-        self.vocab_size = model_embeds.num_embeddings
-        return model_embeds
 
     def _merge_input_ids_with_audio_features(
         self, audio_features, num_audio_tokens, inputs_embeds, input_ids, attention_mask, labels
@@ -1197,9 +1188,34 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
                 selected_audio_feature = audio_outputs.last_hidden_state
                 audio_features = self.multi_modal_projector(selected_audio_feature)
 
-                inputs_embeds, attention_mask, labels, position_ids, _ = self._merge_input_ids_with_audio_features(
-                    audio_features, audio_output_lengths, inputs_embeds, input_ids, attention_mask, labels
-                )
+                # if we have consecutive audio tokens, then it means we expanded input_ids in processing
+                audio_tokens = input_ids == self.config.audio_token_index
+                legacy_processing = (audio_tokens[:, :-1] & audio_tokens[:, 1:]).sum() == 0
+
+                if legacy_processing:
+                    logger.warning_once(
+                        "Expanding inputs for audio tokens in Qwen2Audio should be done in processing."
+                    )
+                    inputs_embeds, attention_mask, labels, position_ids, _ = self._merge_input_ids_with_audio_features(
+                        audio_features, audio_output_lengths, inputs_embeds, input_ids, attention_mask, labels
+                    )
+                else:
+                    num_audios, max_audio_tokens, embed_dim = audio_features.shape
+                    audio_features_mask = torch.arange(max_audio_tokens, device=audio_output_lengths.device)[None, :]
+                    audio_features_mask = audio_features_mask < audio_output_lengths[:, None]
+                    audio_features = audio_features[audio_features_mask]
+
+                    n_audio_tokens = (input_ids == self.config.audio_token_index).sum().item()
+                    n_audio_features = audio_features.shape[0]
+
+                    if n_audio_tokens != n_audio_features:
+                        raise ValueError(
+                            f"Audio features and audio tokens do not match: tokens: {n_audio_tokens}, features {n_audio_features}"
+                        )
+                    special_audio_mask = (input_ids == self.config.audio_token_index).to(inputs_embeds.device)
+                    special_audio_mask = special_audio_mask.unsqueeze(-1).expand_as(inputs_embeds)
+                    audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
+                    inputs_embeds = inputs_embeds.masked_scatter(special_audio_mask, audio_features)
 
         outputs = self.language_model(
             attention_mask=attention_mask,
@@ -1363,3 +1379,6 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
 
     def _reorder_cache(self, *args, **kwargs):
         return self.language_model._reorder_cache(*args, **kwargs)
+
+
+__all__ = ["Qwen2AudioForConditionalGeneration", "Qwen2AudioPreTrainedModel", "Qwen2AudioEncoder"]
