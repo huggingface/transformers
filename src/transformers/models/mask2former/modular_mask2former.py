@@ -14,9 +14,6 @@ from ...image_utils import (
 from ...utils import (
     TensorType,
     is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
-    is_vision_available,
     logging,
 )
 from .image_processing_mask2former import (
@@ -29,15 +26,6 @@ from .image_processing_mask2former import (
 if is_torch_available():
     import torch
     from torch import nn
-
-if is_vision_available():
-    pass
-
-
-if is_torchvision_v2_available():
-    pass
-elif is_torchvision_available():
-    pass
 
 
 logger = logging.get_logger(__name__)
