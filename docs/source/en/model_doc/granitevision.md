@@ -44,19 +44,24 @@ model = LlavaNextForConditionalGeneration.from_pretrained(model_path).to("cuda")
 
 # prepare image and text prompt, using the appropriate prompt template
 url = "https://github.com/haotian-liu/LLaVA/blob/1a91fc274d7c35a9b50b3cb29c4247ae5837ce39/images/llava_v1_5_radar.jpg?raw=true"
-image = Image.open(requests.get(url, stream=True).raw)
 
 conversation = [
     {
         "role": "user",
         "content": [
-            {"type": "image"},
+            {"type": "image", "url": url},
             {"type": "text", "text": "What is shown in this image?"},
         ],
     },
 ]
-prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
-inputs = processor(image, prompt, return_tensors="pt").to("cuda")
+inputs = processor.apply_chat_template(
+    conversation,
+    add_generation_prompt=True,
+    tokenize=True,
+    return_dict=True,
+    return_tensors="pt"
+).to("cuda")
+
 
 # autoregressively complete prompt
 output = model.generate(**inputs, max_new_tokens=100)
