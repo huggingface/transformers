@@ -312,8 +312,7 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             for name, param in model.named_parameters():
                 if param.requires_grad:
                     if "A_log" in name:
-                        A = torch.arange(1, config.mamba_n_heads + 1, dtype=torch.float32)[None, :]
-                        A = A.expand(config.intermediate_size, -1).contiguous()
+                        A = torch.arange(1, config.mamba_n_heads + 1, dtype=torch.float32)
                         torch.testing.assert_close(param.data, torch.log(A), rtol=1e-5, atol=1e-5)
                     elif "D" in name:
                         D = torch.ones(config.mamba_n_heads, dtype=torch.float32)
