@@ -179,11 +179,9 @@ class StoppingCriteriaTestCase(unittest.TestCase):
     def test_stop_string_criteria_vocab_size_mismatch(self):
         """Test that StopStringCriteria handles tokens above len(tokenizer) correctly."""
         tokenizer = AutoTokenizer.from_pretrained("openai-community/gpt2")
-        tokenizer.pad_token_id = tokenizer.eos_token_id
-        tokenizer.padding_side = "left"
 
         # Create input_ids with tokens above len(tokenizer)
-        input_ids = torch.tensor([[len(tokenizer) + 5, 1, 2]], device=torch_device)  # token above vocab size
+        input_ids = torch.tensor([[len(tokenizer) + 1024, 1, 2]], device=torch_device)
         scores = None
         criteria = StopStringCriteria(tokenizer=tokenizer, stop_strings=["test"])
 
