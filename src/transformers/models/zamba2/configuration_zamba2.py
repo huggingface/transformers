@@ -234,6 +234,7 @@ class Zamba2Config(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.num_logits_to_keep = num_logits_to_keep
+        self.hybrid_layer_ids = [index for index, type in enumerate(self.layers_block_type) if type == "hybrid"]
 
 
 __all__ = ["Zamba2Config"]

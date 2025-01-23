@@ -21,6 +21,7 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
+from ...activations import ACT2FN
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -44,7 +45,6 @@ from ..zamba.modeling_zamba import (
     ZambaHybridDynamicCache,
     ZambaHybridLayer,
     ZambaMambaDecoderLayer,
-    ZambaMLP,
     ZambaModel,
     ZambaRMSNorm,
     eager_attention_forward,
@@ -79,28 +79,6 @@ class Zamba2RMSNorm(ZambaRMSNorm):
     pass
 
 
-def count_mem_blocks_in_config(config: Zamba2Config):
-    """
-    Count number of shared blocks
-    """
-    num_gs = 0
-    for val in config.layers_block_type:
-        if val == "hybrid":
-            num_gs += 1
-    return num_gs
-
-
-def layer_type_list(config: Zamba2Config):
-    """
-    Returns list of layer ids containing hybrid layers
-    """
-    output_list = []
-    for index, type in enumerate(config.layers_block_type):
-        if type == "hybrid":
-            output_list.append(index)
-    return output_list
-
-
 class Zamba2HybridDynamicCache(ZambaHybridDynamicCache):
     """
     A dynamic cache that can handle both the attention cache (which has a seq_len dimension) and the mamba cache
@@ -129,23 +107,19 @@ class Zamba2HybridDynamicCache(ZambaHybridDynamicCache):
         self._modules = {}
         self._parameters = {}
         self._buffers = {}
-        self.conv_states = {
-            i: torch.zeros(
+        self.conv_states = {}
+        self.ssm_states = {}
+        for i in range(config.num_hidden_layers):
+            self.conv_states[i] = torch.zeros(
                 batch_size,
                 self.intermediate_size + 2 * config.mamba_ngroups * config.mamba_d_state,
                 self.conv_kernel_size,
                 device=device,
                 dtype=dtype,
             )
-            for i in range(config.num_hidden_layers)
-        }
-        self.ssm_states = {
-            i: torch.zeros(
+            self.ssm_states[i] = torch.zeros(
                 batch_size, self.n_mamba_heads, config.mamba_headdim, self.ssm_state_size, device=device, dtype=dtype
             )
-            for i in range(config.num_hidden_layers)
-        }
-        for i in range(config.num_hidden_layers):
             if self.layers_block_type[i] == "hybrid":
                 self.transformer_layers.append(i)
         self.key_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
@@ -214,7 +188,7 @@ class Zamba2Attention(ZambaAttention):
     ):
         super().__init__(config, layer_idx)
         self.num_fwd_mem_blocks = num_fwd_mem_blocks
-        self.layer_block_map = layer_type_list(config)
+        self.layer_block_map = config.hybrid_layer_ids
         self.block_id = block_id
 
         if config.use_shared_attention_adapter:
@@ -731,20 +705,22 @@ class Zamba2MambaMixer(nn.Module):
         return self.torch_forward(hidden_states, cache_params, attention_mask)
 
 
-class Zamba2MLP(ZambaMLP):
+class Zamba2MLP(nn.Module):
     def __init__(self, config: Zamba2Config, num_fwd_mem_blocks=None, block_id: int = None):
         """
         This MLP layer contributes to tied transformer blocks aimed to increasing compute without increasing model size. Because this layer
         is tied, un-tied adapter modules (formally same as LoRA, but used in the base model) are added to the up and gate projectors to increase expressivity with a small memory overhead.
         """
-        super().__init__(config)
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
         self.num_fwd_mem_blocks = num_fwd_mem_blocks
         self.block_id = block_id
 
-        del self.gate_proj
-        del self.up_proj
         self.gate_up_proj = nn.Linear(self.hidden_size, 2 * self.intermediate_size, bias=config.add_bias_linear)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.add_bias_linear)
+        self.act_fn = ACT2FN[config.hidden_act]
 
         if self.config.use_shared_mlp_adapter:
             self.gate_up_proj_adapter_list = nn.ModuleList([])
@@ -758,7 +734,7 @@ class Zamba2MLP(ZambaMLP):
                     gate_up_proj_adapter = nn.Identity()
                 self.gate_up_proj_adapter_list.append(gate_up_proj_adapter)
 
-        layer_block_map = layer_type_list(config)
+        layer_block_map = config.hybrid_layer_ids
         self.layer_dic = {value: index for index, value in enumerate(layer_block_map)}
 
     def forward(self, hidden_state, layer_idx=None):
@@ -776,63 +752,10 @@ class Zamba2MLP(ZambaMLP):
 class Zamba2AttentionDecoderLayer(ZambaAttentionDecoderLayer):
     def __init__(self, config: Zamba2Config, block_id: int = None, layer_idx: Optional[int] = None):
         self.block_id = block_id
-        num_gs = count_mem_blocks_in_config(config)
+        num_gs = len(config.hybrid_layer_ids)
         super().__init__(config, layer_idx)
         self.self_attn = Zamba2Attention(config, layer_idx=-1, num_fwd_mem_blocks=num_gs, block_id=block_id)
         self.feed_forward = Zamba2MLP(config, num_fwd_mem_blocks=num_gs, block_id=block_id)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        original_hidden_states: torch.Tensor,
-        layer_idx: int,
-        attention_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Zamba2HybridDynamicCache] = None,
-        output_attentions: Optional[bool] = False,
-        position_embeddings: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
-        """
-        Args:
-            hidden_states (`torch.FloatTensor`): output of previous Mamba layer of shape `(batch, seq_len, embed_dim)`
-            original_hidden_states (`torch.FloatTensor`): word embedding output of shape `(batch, seq_len, embed_dim)`.
-                This is concatenated with `hidden_states` (which is the output of the previous (mamba) layer). The
-                concatenated tensor is then used as input of the pre-attention RMSNorm
-                (see fig. 2 in https://arxiv.org/pdf/2405.16712).
-            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
-                `(batch, sequence_length)` where padding elements are indicated by 0.
-            past_key_value (`Zamba2HybridDynamicCache`, *optional*): cached past key and value projection states
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            use_cache (`bool`, *optional*):
-                If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
-                (see `past_key_values`).
-            position_embeddings (`Tuple[torch.FloatTensor, torch.FloatTensor]`, *optional*):
-                Tuple containing the cosine and sine positional embeddings of shape `(batch_size, seq_len, head_dim)`,
-                with `head_dim` being the embedding dimension of each attention head.
-        """
-        hidden_states = torch.concatenate([hidden_states, original_hidden_states], dim=-1)
-        hidden_states = self.input_layernorm(hidden_states)
-        hidden_states, self_attn_weights = self.self_attn(
-            hidden_states=hidden_states,
-            layer_idx=layer_idx,
-            attention_mask=attention_mask,
-            past_key_value=past_key_value,
-            output_attentions=output_attentions,
-            position_embeddings=position_embeddings,
-            **kwargs,
-        )
-
-        hidden_states = self.pre_ff_layernorm(hidden_states)
-        hidden_states = self.feed_forward(hidden_states, layer_idx)
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (self_attn_weights,)
-
-        return outputs
 
 
 class Zamba2MambaDecoderLayer(ZambaMambaDecoderLayer):
@@ -1163,7 +1086,7 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
                 if self.first_transformer_layer_id == 0:
                     self.first_transformer_layer_id = layer_id
                 block = next(blocks)
-                if self.config.num_mem_blocks * len(layer_type_list(self.config)) > 1:
+                if self.config.num_mem_blocks * len(self.config.hybrid_layer_ids) > 1:
                     prefix_name = f"layers.{layer_id}."
                     tied_keys = [
                         "shared_transformer.self_attn.q_proj.weight",
