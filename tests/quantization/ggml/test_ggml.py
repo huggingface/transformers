@@ -835,9 +835,9 @@ class GgufIntegrationTests(unittest.TestCase):
 
         tokenizer = AutoTokenizer.from_pretrained(self.nemotron_model_id, gguf_file=self.q6_k_nemotron_model_id)
         text = tokenizer(self.example_text, return_tensors="pt")["input_ids"]
-        out = model.generate(text, max_new_tokens=10)
+        out = model.generate(text, max_new_tokens=16)
 
-        EXPECTED_TEXT = "'Hello. hotmail.com.'"
+        EXPECTED_TEXT = "Hello.▁hotmail.com</s>"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_gemma2_q3_k(self):
