@@ -17,6 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import inspect
 from typing import Callable, List, Optional, Tuple, Union
 
 import torch
@@ -759,6 +760,9 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+        if inspect.signature(self.loss_function).parameters.get("num_items_in_batch", None) is None:
+            self.accepts_loss_kwargs = False
 
     def get_input_embeddings(self):
         return self.model.embed_tokens

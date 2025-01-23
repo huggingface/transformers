@@ -487,6 +487,7 @@ class ModelTesterMixin:
                         m.gradient_checkpointing, f"Module {n} does not have gradient_checkpointing set to False"
                     )
 
+
     @is_flaky(description="low likelihood of failure, reason not yet discovered")
     def test_save_load_fast_init_from_base(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -921,6 +922,31 @@ class ModelTesterMixin:
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             loss = model(**inputs).loss
             loss.backward()
+
+    def test_training_gradient_accumulation(self):
+        if not getattr(self.model_tester, "is_training", False):
+            self.skipTest(reason="ModelTester is not configured to run training tests")
+
+        if len(self.all_generative_model_classes) == 0:
+            self.skipTest(f"No generative model classes for {self.__class__.__name__}")
+
+        for model_class in self.all_generative_model_classes:
+            if model_class in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES:
+                config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    with torch.device(torch_device):
+                        model_eager = AutoModelForCausalLM.from_config(
+                            config, torch_dtype=torch.float32
+                        )
+
+                    model_eager.save_pretrained(tmpdir)
+                    with torch.device(torch_device):
+                        model = AutoModelForCausalLM.from_pretrained(
+                            tmpdir, torch_dtype=torch.float32
+                        )
+                        inputs_dict["num_items_in_batch"] = inputs_dict["input_ids"].shape[0]
+                        res = model(**inputs_dict, return_dict=False)[0]
 
     def test_training_gradient_checkpointing(self):
         # Scenario - 1 default behaviour
