@@ -27,8 +27,6 @@ from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
     logging,
 )
 from ...utils.import_utils import (
@@ -838,27 +836,6 @@ class Zamba2HybridLayer(ZambaHybridLayer):
         return layer_outputs
 
 
-ZAMBA2_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`Zamba2Config`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The bare Zamba2 Model outputting raw hidden-states without any specific head on top.",
-    ZAMBA2_START_DOCSTRING,
-)
 class Zamba2PreTrainedModel(PreTrainedModel):
     config_class = Zamba2Config
     base_model_prefix = "model"
@@ -898,79 +875,6 @@ class Zamba2PreTrainedModel(PreTrainedModel):
             module.dt_bias._no_reinit = True
 
 
-ZAMBA2_INPUTS_DOCSTRING = r"""
-    Args:
-        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
-            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
-            it.
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            [What are input IDs?](../glossary#input-ids)
-        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
-
-            - 1 for tokens that are **not masked**,
-            - 0 for tokens that are **masked**.
-
-            [What are attention masks?](../glossary#attention-mask)
-
-            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
-            [`PreTrainedTokenizer.__call__`] for details.
-
-            If `past_key_values` is used, optionally only the last `input_ids` have to be input (see
-            `past_key_values`).
-
-            If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
-            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
-            information on the default strategy.
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
-            config.n_positions - 1]`.
-
-            [What are position IDs?](../glossary#position-ids)
-        past_key_values (`Zamba2HybridDynamicCache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-            A Zamba2HybridDynamicCache object containing pre-computed hidden-states (keys and values in the
-            self-attention blocks and convolution and ssm states in the mamba blocks) that can be used (see
-            `past_key_values` input) to speed up sequential decoding.
-            Key and value cache tensors have shape `(batch_size, num_heads, seq_len, head_dim)`.
-            Convolution and ssm states tensors have shape `(batch_size, d_inner, d_conv)` and
-            `(batch_size, d_inner, d_state)` respectively.
-            See the `Zamba2HybridDynamicCache` class for more details.
-
-            If `past_key_values` are used, the user can optionally input only the last `input_ids` (those that
-            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
-            `input_ids` of shape `(batch_size, sequence_length)`.
-        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
-            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
-            model's internal embedding lookup matrix.
-        use_cache (`bool`, *optional*):
-            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
-            `past_key_values`).
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
-        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
-            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
-            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
-            the complete sequence length.
-"""
-
-
-@add_start_docstrings(
-    "The bare Zamba2 Model outputting raw hidden-states without any specific head on top.",
-    ZAMBA2_START_DOCSTRING,
-)
 class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
     """
     Model consisting of *config.num_hidden_layers* layers.
@@ -1096,7 +1000,6 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
                 layers.append(next(mamba_layers))
         return layers
 
-    @add_start_docstrings_to_model_forward(ZAMBA2_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1222,21 +1125,6 @@ class Zamba2ForCausalLM(ZambaForCausalLM):
     pass
 
 
-@add_start_docstrings(
-    """
-    The Zamba2 Model with a sequence classification head on top (linear layer).
-
-    [`Zamba2ForSequenceClassification`] uses the last token in order to do the classification, as other causal models
-    (e.g. GPT-2) do.
-
-    Since it does classification on the last token, it requires to know the position of the last token. If a
-    `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If
-    no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot guess the
-    padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
-    each row of the batch).
-    """,
-    ZAMBA2_START_DOCSTRING,
-)
 class Zamba2ForSequenceClassification(ZambaForSequenceClassification):
     pass
 
