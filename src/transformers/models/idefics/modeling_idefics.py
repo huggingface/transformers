@@ -870,7 +870,7 @@ class IdeficsGatedCrossAttentionLayer(nn.Module):
         # Fill in zeros for cross_attention hidden_states of tokens attending to no images
         # (This cause torch.compile to fail with `torch._dynamo.exc.Unsupported: dynamic shape operator: aten.nonzero.default`)
         # (set torch._dynamo.config.capture_dynamic_output_shape_ops = True may help but not tested)
-        hidden_states[cross_attention_gate == 0] = hidden_states[cross_attention_gate == 0].fill_(0)
+        hidden_states = hidden_states.masked_fill((cross_attention_gate == 0)[:, :, None], 0.0)
         hidden_states = residual + self.act_cross_attn(self.alpha_cross_attn) * hidden_states
 
         # Fully Connected
