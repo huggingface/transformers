@@ -645,7 +645,7 @@ def is_g2p_en_available():
     return _g2p_en_available
 
 
-@lru_cache
+@lru_cache()
 def is_torch_tpu_available(check_device=True):
     "Checks if `torch_xla` is installed and potentially if a TPU is in the environment"
     warnings.warn(
