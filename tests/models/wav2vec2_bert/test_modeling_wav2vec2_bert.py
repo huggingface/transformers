@@ -423,7 +423,6 @@ class Wav2Vec2BertModelTester:
 
 
 @require_torch
-# Copied from tests.models.wav2vec2_conformer.test_modeling_wav2vec2_conformer.Wav2Vec2ConformerModelTest with Conformer->Bert, input_values->input_features
 class Wav2Vec2BertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     # Ignore copy
     all_model_classes = (

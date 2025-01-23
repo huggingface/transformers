@@ -770,15 +770,6 @@ class ModelTesterMixin:
         different results: https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535)
         """
 
-        def get_tensor_equivalence_function(batched_input):
-            # models operating on continuous spaces have higher abs difference than LMs
-            # instead, we can rely on cos distance for image/speech models, similar to `diffusers`
-            if "input_ids" not in batched_input:
-                return lambda tensor1, tensor2: (
-                    1.0 - F.cosine_similarity(tensor1.float().flatten(), tensor2.float().flatten(), dim=0, eps=1e-38)
-                )
-            return lambda tensor1, tensor2: torch.max(torch.abs(tensor1 - tensor2))
-
         def recursive_check(batched_object, single_row_object, model_name, key):
             if isinstance(batched_object, (list, tuple)):
                 for batched_object_value, single_row_object_value in zip(batched_object, single_row_object):
@@ -792,6 +783,10 @@ class ModelTesterMixin:
             elif batched_object is None or not isinstance(batched_object, torch.Tensor):
                 return
             elif batched_object.dim() == 0:
+                return
+            # do not compare int or bool outputs as they are mostly computed with max/argmax/topk methods which are
+            # very sensitive to the inputs (e.g. tiny differences may give totally different results)
+            elif not torch.is_floating_point(batched_object):
                 return
             else:
                 # indexing the first element does not always work
@@ -810,19 +805,17 @@ class ModelTesterMixin:
                 self.assertFalse(
                     torch.isinf(single_row_object).any(), f"Single row output has `inf` in {model_name} for key={key}"
                 )
-                self.assertTrue(
-                    (equivalence(batched_row, single_row_object)) <= 1e-03,
-                    msg=(
-                        f"Batched and Single row outputs are not equal in {model_name} for key={key}. "
-                        f"Difference={equivalence(batched_row, single_row_object)}."
-                    ),
-                )
+                try:
+                    torch.testing.assert_close(batched_row, single_row_object, atol=1e-5, rtol=1e-5)
+                except AssertionError as e:
+                    msg = f"Batched and Single row outputs are not equal in {model_name} for key={key}.\n\n"
+                    msg += str(e)
+                    raise AssertionError(msg)
 
         set_model_tester_for_less_flaky_test(self)
 
         config, batched_input = self.model_tester.prepare_config_and_inputs_for_common()
         set_config_for_less_flaky_test(config)
-        equivalence = get_tensor_equivalence_function(batched_input)
 
         for model_class in self.all_model_classes:
             config.output_hidden_states = True
@@ -2283,7 +2276,7 @@ class ModelTesterMixin:
 
     def test_tied_weights_keys(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        config.tie_word_embeddings = True
+        config.get_text_config().tie_word_embeddings = True
         for model_class in self.all_model_classes:
             model_tied = model_class(config)
 
@@ -4642,6 +4635,11 @@ class ModelTesterMixin:
                     fa2_correctly_converted = True
                     break
 
+            fa2_correctly_converted = (
+                fa2_correctly_converted
+                if not model_class._supports_flex_attn
+                else fa2_model.config._attn_implementation == "flash_attention_2"
+            )
             self.assertTrue(fa2_correctly_converted)
 
             _ = fa2_model(input_ids=dummy_input, attention_mask=dummy_attention_mask)
@@ -4660,6 +4658,11 @@ class ModelTesterMixin:
                         fa2_correctly_converted = True
                         break
 
+                fa2_correctly_converted = (
+                    fa2_correctly_converted
+                    if not model_class._supports_flex_attn
+                    else model_from_pretrained.config._attn_implementation == "flash_attention_2"
+                )
                 self.assertFalse(fa2_correctly_converted)
 
     def _get_custom_4d_mask_test_data(self):

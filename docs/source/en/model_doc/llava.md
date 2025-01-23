@@ -162,6 +162,16 @@ For multiple turns conversation:
 "USER: <image>\n<prompt1> ASSISTANT: <answer1></s>USER: <prompt2> ASSISTANT: <answer2></s>USER: <prompt3> ASSISTANT:"
 ```
 
+## Note regarding reproducing original implementation
+
+In order to match the logits of the [original implementation](https://github.com/haotian-liu/LLaVA/tree/main), one needs to additionally specify `do_pad=True` when instantiating `LLavaImageProcessor`:
+
+```python
+from transformers import LLavaImageProcessor
+
+image_processor = LLavaImageProcessor.from_pretrained("https://huggingface.co/llava-hf/llava-1.5-7b-hf", do_pad=True)
+```
+
 ### Using Flash Attention 2
 
 Flash Attention 2 is an even faster, optimized version of the previous optimization, please refer to the [Flash Attention 2 section of performance docs](https://huggingface.co/docs/transformers/perf_infer_gpu_one).
@@ -179,6 +189,11 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 ## LlavaConfig
 
 [[autodoc]] LlavaConfig
+
+## LlavaImageProcessor
+
+[[autodoc]] LlavaImageProcessor
+    - preprocess
 
 ## LlavaProcessor
 
