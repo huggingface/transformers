@@ -448,6 +448,8 @@
         title: Granite
       - local: model_doc/granitemoe
         title: GraniteMoe
+      - local: model_doc/granitevision
+        title: GraniteVision
       - local: model_doc/helium
         title: Helium
       - local: model_doc/herbert
@@ -930,6 +932,8 @@
         title: Pix2Struct
       - local: model_doc/pixtral
         title: Pixtral
+      - local: model_doc/qwen2_5_vl
+        title: Qwen2.5-VL
       - local: model_doc/qwen2_audio
         title: Qwen2Audio
       - local: model_doc/qwen2_vl
