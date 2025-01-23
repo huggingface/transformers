@@ -320,10 +320,3 @@ def get_available_devices() -> FrozenSet[str]:
         devices.add("musa")
 
     return frozenset(devices)
-
-
-def test_injection():
-    """
-    An injection point for testing hard-to-mock functions
-    """
-    return True

@@ -39,6 +39,7 @@ from transformers import (
     AutoModelForSequenceClassification,
     DynamicCache,
     LlavaForConditionalGeneration,
+    MistralForCausalLM,
     OwlViTForObjectDetection,
     PretrainedConfig,
     is_torch_available,
@@ -1826,8 +1827,21 @@ class ModelUtilsTest(TestCasePlus):
         old_dtype = torch.get_default_dtype()
         # set default type to float32
         torch.set_default_dtype(torch.float32)
+
         # Mock injection point which is right after the call to `_set_default_torch_dtype`
-        with mock.patch("transformers.modeling_utils.test_injection", side_effect=RuntimeError()):
+        original_set_default_torch_dtype = MistralForCausalLM._set_default_torch_dtype
+
+        def debug(*args, **kwargs):
+            # call the method as usual, than raise a RuntimeError
+            original_set_default_torch_dtype(*args, **kwargs)
+            raise RuntimeError
+
+        AutoModelForCausalLM._set_default_torch_dtype = debug
+
+        with mock.patch(
+            "transformers.models.mistral.modeling_mistral.MistralForCausalLM._set_default_torch_dtype",
+            side_effect=debug,
+        ):
             with self.assertRaises(RuntimeError):
                 _ = AutoModelForCausalLM.from_pretrained(TINY_MISTRAL, device_map="auto", torch_dtype=torch.float16)
         # default should still be float32
@@ -1846,8 +1860,21 @@ class ModelUtilsTest(TestCasePlus):
         config = AutoConfig.from_pretrained(
             TINY_MISTRAL,
         )
+
         # Mock injection point which is right after the call to `_set_default_torch_dtype`
-        with mock.patch("transformers.modeling_utils.test_injection", side_effect=RuntimeError()):
+        original_set_default_torch_dtype = MistralForCausalLM._set_default_torch_dtype
+
+        def debug(*args, **kwargs):
+            # call the method as usual, than raise a RuntimeError
+            original_set_default_torch_dtype(*args, **kwargs)
+            raise RuntimeError
+
+        AutoModelForCausalLM._set_default_torch_dtype = debug
+
+        with mock.patch(
+            "transformers.models.mistral.modeling_mistral.MistralForCausalLM._set_default_torch_dtype",
+            side_effect=debug,
+        ):
             with self.assertRaises(RuntimeError):
                 config.torch_dtype = torch.float16
                 _ = AutoModelForCausalLM.from_config(

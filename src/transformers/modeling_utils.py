@@ -98,7 +98,6 @@ from .utils import (
     logging,
     replace_return_docstrings,
     strtobool,
-    test_injection,
 )
 from .utils.hub import create_and_tag_model_card, get_checkpoint_shard_files
 from .utils.import_utils import (
@@ -1443,7 +1442,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         dtype_orig = None
         if torch_dtype is not None:
             dtype_orig = cls._set_default_torch_dtype(torch_dtype)
-        test_injection()
 
         config = copy.deepcopy(config)  # We do not want to modify the config inplace in _from_config.
 
@@ -4082,7 +4080,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 for key in config.sub_configs.keys():
                     value = getattr(config, key)
                     value.torch_dtype = default_dtype
-            test_injection()
 
             # Check if `_keep_in_fp32_modules` is not None
             use_keep_in_fp32_modules = (cls._keep_in_fp32_modules is not None) and (
