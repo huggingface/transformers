@@ -250,8 +250,8 @@ def restore_default_torch_dtype(func):
     """
     Decorator to restore the default torch dtype
     at the end of the function. Serves
-    as a backup in case loading a model in raises
-    an error.
+    as a backup in case calling the function raises
+    an error after the function has changed the default dtype but before it could restore it.
     """
 
     @wraps(func)
