@@ -245,26 +245,26 @@ class StopStringCriteria(StoppingCriteria):
         vocab = tokenizer.get_vocab()
         token_list, token_indices = tuple(vocab.keys()), tuple(vocab.values())
         self.embedding_vec, self.max_valid_positions, self.max_valid_end_lens = self.clean_and_embed_tokens_with_cache(
-            token_list, token_indices, self.stop_strings, tokenizer
+            token_list, token_indices, tokenizer
         )
 
         self.maximum_token_len = max([len(stop_string) for stop_string in self.stop_strings])
         self.num_stop_strings = len(self.stop_strings)
         self.target_lens = torch.tensor([len(stop_string) for stop_string in stop_strings], dtype=torch.int32)
 
-    def clean_and_embed_tokens_with_cache(self, token_list, token_indices, stop_strings, tokenizer):
+    def clean_and_embed_tokens_with_cache(self, token_list, token_indices, tokenizer):
         # We don't use the tokenizer in the cache key, because I don't trust it to have well-behaved equality
-        if (token_list, token_indices, stop_strings) in STOP_STRING_EMBEDDING_CACHE:
+        if (token_list, token_indices, self.stop_strings) in STOP_STRING_EMBEDDING_CACHE:
             embedding_vec, max_valid_positions, max_valid_end_lens = STOP_STRING_EMBEDDING_CACHE[
                 (token_list, token_indices, self.stop_strings)
             ]
-            STOP_STRING_EMBEDDING_CACHE.move_to_end((token_list, token_indices, stop_strings))
+            STOP_STRING_EMBEDDING_CACHE.move_to_end((token_list, token_indices, self.stop_strings))
         else:
             clean_token_list, clean_token_indices = self.clean_tokenizer_vocab(tokenizer)
             embedding_vec, max_valid_positions, max_valid_end_lens = self._stop_string_create_embedding_vec(
-                clean_token_list, clean_token_indices, stop_strings
+                clean_token_list, clean_token_indices, self.stop_strings
             )
-            STOP_STRING_EMBEDDING_CACHE[(token_list, token_indices, stop_strings)] = (
+            STOP_STRING_EMBEDDING_CACHE[(token_list, token_indices, self.stop_strings)] = (
                 embedding_vec,
                 max_valid_positions,
                 max_valid_end_lens,
