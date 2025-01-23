@@ -44,17 +44,17 @@ _CONFIG_FOR_DOC = "TeleChat2Config"
 class TeleChat2MLP(nn.Module):
     def __init__(self, config: TeleChat2Config):
         super().__init__()
+        self.config = config
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=True)
-        self.hidden_dropout = config.hidden_dropout
+        self.act_fn = ACT2FN[config.hidden_act]
 
-    def forward(self, hidden_states):
-        intermediate_output = self.down_proj(F.silu(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
-        output = F.dropout(intermediate_output, p=self.hidden_dropout, training=self.training)
-        return output
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
 
 
 def rotate_half(x):

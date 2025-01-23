@@ -51,6 +51,8 @@ class TeleChat2Config(PretrainedConfig):
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
             `num_attention_heads`.
+        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+            The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with. TeleChat2 1 supports up to 8192 tokens.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -155,6 +157,7 @@ class TeleChat2Config(PretrainedConfig):
         num_hidden_layers=30,
         num_attention_heads=32,
         num_key_value_heads=32,
+        hidden_act="silu",
         max_position_embeddings=2048,
         initializer_range=0.02,
         rms_norm_eps=1e-6,
@@ -184,6 +187,7 @@ class TeleChat2Config(PretrainedConfig):
             num_key_value_heads = num_attention_heads
 
         self.num_key_value_heads = num_key_value_heads
+        self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.pretraining_tp = pretraining_tp
