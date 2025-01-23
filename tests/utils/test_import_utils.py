@@ -1,3 +1,30 @@
 import sys
 import pytest
 from transformers.utils.import_utils import clear_import_cache, _LazyModule
+
+def test_clear_import_cache():
+    # Import some transformers modules
+    from transformers import AutoModel, AutoTokenizer
+    
+    # Get initial module count
+    initial_modules = {
+        name: mod for name, mod in sys.modules.items() 
+        if name.startswith('transformers.')
+    }
+    
+    # Verify we have some modules loaded
+    assert len(initial_modules) > 0
+    
+    # Clear cache
+    clear_import_cache()
+    
+    # Check modules were removed
+    remaining_modules = {
+        name: mod for name, mod in sys.modules.items() 
+        if name.startswith('transformers.')
+    }
+    assert len(remaining_modules) < len(initial_modules)
+    
+    # Verify we can reimport
+    from transformers import AutoModel, AutoTokenizer
+    assert 'transformers.models.auto.modeling_auto' in sys.modules 
