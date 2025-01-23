@@ -16,9 +16,9 @@ rendered properly in your Markdown viewer.
 
 # Optimizers
 
-Transformers offers two optimizers natively, AdamW and AdaFactor. But it also provides integrations for other more specialized optimizers. Install the library that offers the optimizer and drop it in to the `optim` parameter in [`TrainingArguments`].
+Transformers offers two native optimizers, AdamW and AdaFactor. It also provides integrations for more specialized optimizers. Install the library that offers the optimizer and drop it in the `optim` parameter in [`TrainingArguments`].
 
-This guide will show you how to use these optimizers with [`Trainer`] using the [`TrainingArguments`] shown below.
+This guide will show you how to use these optimizers with [`Trainer`] using [`TrainingArguments`] shown below.
 
 ```py
 import torch

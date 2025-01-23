@@ -16,9 +16,11 @@ rendered properly in your Markdown viewer.
 
 # Multi-GPU debugging
 
-Distributed training can be tricky because you have to ensure you're using the correct CUDA version across your system, you may encounter inter-communication issues between GPUs, and there may be underflow or overflow problems in your model. This guide covers how to debug these issues, especially as it relates to DeepSpeed and PyTorch.
+Distributed training can be tricky because you have to ensure you're using the correct CUDA version across your system. You may encounter inter-communication issues between GPUs, and there may be underflow or overflow problems in your model.
 
-## DeepSpeed CUDA issues
+This guide covers how to debug these issues, especially as it relates to DeepSpeed and PyTorch.
+
+## DeepSpeed CUDA
 
 DeepSpeed compiles CUDA C++ which can be a potential source of errors when building PyTorch extensions that require CUDA. These errors depend on how CUDA is installed on your system. This section focuses on PyTorch built with *CUDA 10.2*
 
@@ -29,17 +31,17 @@ pip install deepspeed
 > [!TIP]
 > For any other installation issues, please [open an issue](https://github.com/microsoft/DeepSpeed/issues) with the DeepSpeed team.
 
-### Non-identical CUDA toolkits
+### Non-identical toolkits
 
 PyTorch comes with its own CUDA toolkit, but to use DeepSpeed with PyTorch, you need to have an identical version of CUDA installed system-wide. For example, if you installed PyTorch with `cudatoolkit==10.2` in your Python environment, then you'll also need to have CUDA 10.2 installed everywhere.
 
-The exact location can vary from system to system, but `usr/local/cuda-10.2` is the most common location on many Unix systems. When CUDA is correctly setup and added to your `PATH` environment variable, you can find the installation location with the following command.
+The exact location can vary from system to system, but `usr/local/cuda-10.2` is the most common location on many Unix systems. When CUDA is correctly set up and added to your `PATH` environment variable, you can find the installation location with the following command.
 
 ```bash
 which nvcc
 ```
 
-### Multiple CUDA toolkits
+### Multiple toolkits
 
 You may also have more than one CUDA toolkit installed on your system.
 
@@ -65,9 +67,9 @@ export PATH=/usr/local/cuda-10.2/bin:$PATH
 export LD_LIBRARY_PATH=/usr/local/cuda-10.2/lib64:$LD_LIBRARY_PATH
 ```
 
-In addition, you should also check that the assigned directories you actually exist. The `lib64` sub-directory contains various CUDA `.so` objects (like `libcudart.so`), and while it is unlikely your system names them differently, you should check the actual names and change them accordingly.
+In addition, you should also check that the assigned directories actually exist. The `lib64` sub-directory contains various CUDA `.so` objects (like `libcudart.so`), and while it is unlikely your system names them differently, you should check the actual names and change them accordingly.
 
-### Older CUDA versions
+### Older versions
 
 Sometimes, older CUDA versions may refuse to build with newer compilers. For example, if you have `gcc-9` but CUDA wants `gcc-7`. Usually, installing the latest CUDA toolkit enables support for the newer compiler.
 
@@ -95,7 +97,7 @@ TORCH_CUDA_ARCH_LIST="8.6" DS_BUILD_CPU_ADAM=1 DS_BUILD_UTILS=1 pip install . \
 > [!TIP]
 > Add the `DS_BUILD_AIO=1` parameter to the build command to use NVMe offload. Make sure you install the libaio-dev package across your system.
 
-Next, specify your GPU's architecture by editing the `TORCH_CUDA_ARCH_LIST` variable (find a complete list of NVIDIA GPUs and their corresponding architectures on this [page](https://developer.nvidia.com/cuda-gpus)). To check the PyTorch version that corresponds to your architecture, run the following command.
+Next, specify your GPUs architecture by editing the `TORCH_CUDA_ARCH_LIST` variable (find a complete list of NVIDIA GPUs and their corresponding architectures on this [page](https://developer.nvidia.com/cuda-gpus)). To check the PyTorch version that corresponds to your architecture, run the following command.
 
 ```bash
 python -c "import torch; print(torch.cuda.get_arch_list())"
@@ -144,7 +146,7 @@ This command generates a binary wheel that'll look something like `dist/deepspee
 pip install deepspeed-0.3.13+8cd046f-cp38-cp38-linux_x86_64.whl
 ```
 
-## Communication issues
+## Communication
 
 Distributed training involves communication between processes and or nodes and this can be a potential source of errors.
 
@@ -193,7 +195,7 @@ debug_overflow = DebugUnderflowOverflow(model)
 
 The [`~debug_utils.DebugUnderflowOverflow`] module inserts hooks into the model to test the input and output variables and the corresponding model weights after each forward call. If `inf` or `nan` is detected in at least one element of the activations or weights, the module prints a report like the one shown below.
 
-The example below is for fp16 mixed precision training with a [google/mt5-small](https://huggingface.co/google/mt5-small).
+The example below is for fp16 mixed precision training with [google/mt5-small](https://huggingface.co/google/mt5-small).
 
 ```shell
 Detected inf/nan during batch_number=0
@@ -280,7 +282,7 @@ class T5DenseGatedGeluDense(nn.Module):
         return hidden_states
 ```
 
-One solution is to back a few steps before the values started growing too large and switch to fp32 so the numbers don't overflow when multiplied or summed. Another potential solution is to temporarily disable mixed precision training (`amp`).
+One solution is to go back a few steps before the values started growing too large and switch to fp32 so the numbers don't overflow when multiplied or summed. Another potential solution is to temporarily disable mixed precision training (`amp`).
 
 ```py
 import torch

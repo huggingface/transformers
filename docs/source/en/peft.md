@@ -13,9 +13,9 @@ rendered properly in your Markdown viewer.
 
 [[open-in-colab]]
 
-[PEFT](https://huggingface.co/docs/peft/index), a library of parameter-efficient finetuning methods, enable training and storing large models often on consumer GPUs. These methods only finetune a small number of extra model parameters, also known as adapters, on top of the pretrained model. A significant amount of memory is saved because the GPU doesn't need to store the optimizer states and gradients for the pretrained base model. Adapters are very lightweight, making it convenient to share, store, and load them.
+[PEFT](https://huggingface.co/docs/peft/index), a library of parameter-efficient fine-tuning methods, enables training and storing large models on consumer GPUs. These methods only fine-tune a small number of extra model parameters, also known as adapters, on top of the pretrained model. A significant amount of memory is saved because the GPU doesn't need to store the optimizer states and gradients for the pretrained base model. Adapters are very lightweight, making it convenient to share, store, and load them.
 
-This guide provides a short overview of the PEFT library and how to use it for training with Transformers. For more details, refer to the PEFT [documentation](https://huggingface.co/docs/peft/index).
+This guide provides a short introduction to the PEFT library and how to use it for training with Transformers. For more details, refer to the PEFT [documentation](https://huggingface.co/docs/peft/index).
 
 Install PEFT with the command below.
 
@@ -37,9 +37,9 @@ pip install git+https://github.com/huggingface/peft.git
 </hfoptions>
 
 > [!TIP]
-> PEFT currently supports the LoRA, IA3, and AdaLoRA methods for Transformers. To use another PEFT method, such as prompt learniing or prompt tuning, you'll need to use the PEFT library directly.
+> PEFT currently supports the LoRA, IA3, and AdaLoRA methods for Transformers. To use another PEFT method, such as prompt learning or prompt tuning, use the PEFT library directly.
 
-[Low-Rank Adaptation (LoRA)](https://huggingface.co/docs/peft/conceptual_guides/adapter#low-rank-adaptation-lora) is a very common PEFT method that decomposes the weight matrix into two smaller trainable matrices. Start by defining a [`~peft.LoraConfig`] object with the parameters shown below.
+[Low-Rank Adaptation (LoRA)](https://huggingface.co/docs/peft/conceptual_guides/adapter#low-rank-adaptation-lora) is a very common PEFT method that decomposes the weight matrix into two smaller trainable matrices. Start by defining a [LoraConfig](https://huggingface.co/docs/peft/package_reference/lora#peft.LoraConfig) object with the parameters shown below.
 
 ```py
 from peft import LoraConfig, TaskType, get_peft_model
@@ -55,7 +55,7 @@ lora_config = LoraConfig(
 )
 ```
 
-Add [`~peft.LoraConfig`] to the model with [`~integrations.PeftAdapterMixin.add_adapter`]. The model is ready to be passed to [`Trainer`] for training.
+Add [LoraConfig](https://huggingface.co/docs/peft/package_reference/lora#peft.LoraConfig) to the model with [`~integrations.PeftAdapterMixin.add_adapter`]. The model is now ready to be passed to [`Trainer`] for training.
 
 ```py
 model.add_adapter(lora_config, adapter_name="lora_1")
@@ -108,6 +108,9 @@ model = AutoModelForCausalLM.from_pretrained("google/gemma-7b")
 model.load_adapter("klcsp/gemma7b-lora-alpaca-11-v1")
 ```
 
+</hfoption>
+</hfoptions>
+
 For very large models, it is helpful to load a quantized version of the model in 8 or 4-bit precision to save memory. Transformers supports quantization with its [bitsandbytes](https://huggingface.co/docs/bitsandbytes/index) integration. Specify in [`BitsAndBytesConfig`] whether you want to load a model in 8 or 4-bit precision.
 
 For multiple devices, add `device_map="auto"` to automatically distribute the model across your hardware.
@@ -124,7 +127,7 @@ model = AutoModelForCausalLM.from_pretrained(
 
 ## Set adapter
 
-[`~integrations.PeftAdapterMixin.add_adapter`] adds a new adapter to a model. To add a second adapter, the new adapter must be the same type as the first adapter. Use the [`~integrations.PeftAdapterMixin.add_adapter.adapter_name`] parameter to assign a name to the adapter.
+[`~integrations.PeftAdapterMixin.add_adapter`] adds a new adapter to a model. To add a second adapter, the new adapter must be the same type as the first adapter. Use the `adapter_name` parameter to assign a name to the adapter.
 
 ```py
 model.add_adapter(lora_config, adapter_name="lora_2")

@@ -70,7 +70,7 @@ The following examples demonstrate how to perform a hyperparameter search for th
 <hfoptions id="backends">
 <hfoption id="Optuna">
 
-[Optuna](https://optuna.readthedocs.io/en/stable/tutorial/10_key_features/002_configurations.html#sphx-glr-tutorial-10-key-features-002-configurations-py) optimizes categorical, integers, and floats.
+[Optuna](https://optuna.readthedocs.io/en/stable/tutorial/10_key_features/002_configurations.html#sphx-glr-tutorial-10-key-features-002-configurations-py) optimizes categories, integers, and floats.
 
 ```py
 def optuna_hp_space(trial):
@@ -91,7 +91,7 @@ best_trials = trainer.hyperparameter_search(
 </hfoption>
 <hfoption id="Ray Tune">
 
-[Ray Tune](https://docs.ray.io/en/latest/tune/api/search_space.html) optimizes floats, integers, and categorical parameters but it also offers multiple sampling distributions for each parameter such as uniform and log-uniform.
+[Ray Tune](https://docs.ray.io/en/latest/tune/api/search_space.html) optimizes floats, integers, and categorical parameters. It also offers multiple sampling distributions for each parameter such as uniform and log-uniform.
 
 ```py
 def ray_hp_space(trial):
@@ -137,7 +137,7 @@ best_trials = trainer.hyperparameter_search(
 </hfoption>
 <hfoption id="Weights & Biases">
 
-[Weights & Biases](https://docs.wandb.ai/guides/sweeps/sweep-config-keys) also optimizes integers, floats, and categorical parameters but it also includes support for different search strategies and distribution options.
+[Weights & Biases](https://docs.wandb.ai/guides/sweeps/sweep-config-keys) also optimizes integers, floats, and categorical parameters. It also includes support for different search strategies and distribution options.
 
 ```py
 def wandb_hp_space(trial):

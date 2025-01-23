@@ -30,7 +30,7 @@ Start by running [accelerate config](https://hf.co/docs/accelerate/main/en/packa
 accelerate config
 ```
 
-Depending on your setup and the answers you provide, an example configuration file for distributing training with FSDP on one machine with two GPUs.
+Depending on your setup and the answers you provide, an example configuration file for distributing training with FSDP on one machine with two GPUs may look like the following.
 
 ```yaml
 compute_environment: LOCAL_MACHINE
@@ -107,7 +107,7 @@ accelerator = Accelerator()
 device = accelerator.device
 ```
 
-All PyTorch objects (model, optimizer, scheduler, dataloaders) should be passed to the [`~accelerate.Accelerator.prepare`] method now. This method moves your model to the appropriate device or devices, adapts the optimizer and scheduler to use [`~accelerate.AcceleratedOptimizer`] and [`~accelerate.AcceleratedScheduler`], and creates a new shardable dataloader.
+All PyTorch objects (model, optimizer, scheduler, dataloaders) should be passed to the [`~accelerate.Accelerator.prepare`] method now. This method moves your model to the appropriate device or devices, adapts the optimizer and scheduler to use [`~accelerate.optimizer.AcceleratedOptimizer`] and [`~accelerate.scheduler.AcceleratedScheduler`], and creates a new shardable dataloader.
 
 ```py
 train_dataloader, eval_dataloader, model, optimizer = accelerator.prepare(

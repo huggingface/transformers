@@ -15,13 +15,13 @@ rendered properly in your Markdown viewer.
 
 # Distributed CPUs
 
-CPUs are commonly available and can be a cost-effective option for training when GPUs are unavailable. When training large models or if a single CPU is too slow, distributed training with CPUs can help speed up training.
+CPUs are commonly available and can be a cost-effective training option when GPUs are unavailable. When training large models or if a single CPU is too slow, distributed training with CPUs can help speed up training.
 
 This guide demonstrates how to perform distributed training with multiple CPUs using a [DistributedDataParallel (DDP)](./perf_train_gpu_many#distributeddataparallel) strategy on bare metal with [`Trainer`] and a Kubernetes cluster. All examples shown in this guide depend on the [Intel oneAPI HPC Toolkit](https://www.intel.com/content/www/us/en/developer/tools/oneapi/hpc-toolkit.html).
 
 There are two toolkits you'll need from Intel oneAPI.
 
-1. [oneCCL](https://www.intel.com/content/www/us/en/developer/tools/oneapi/oneccl.html) is a toolkit that includes efficient implementations of collectives commonly used in deep learning such as all-gather, all-reduce, and reduce-scatter. To install from a prebuilt wheel, make sure you always use the latest release. Refer to the table [here](https://github.com/intel/torch-ccl#install-prebuilt-wheel) to check if a version of oneCCL is supported for a Python and PyTorch version.
+1. [oneCCL](https://www.intel.com/content/www/us/en/developer/tools/oneapi/oneccl.html) includes efficient implementations of collectives commonly used in deep learning such as all-gather, all-reduce, and reduce-scatter. To install from a prebuilt wheel, make sure you always use the latest release. Refer to the table [here](https://github.com/intel/torch-ccl#install-prebuilt-wheel) to check if a version of oneCCL is supported for a Python and PyTorch version.
 
 ```bash
 # installs oneCCL for PyTorch 2.4.0

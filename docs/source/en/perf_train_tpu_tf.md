@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 
 # TPU
 
-TPU, Tensor Processing Unit, is a type of hardware designed to accelerate tensor computations for training and inference. TPUs are generally accessed through Google's cloud services, but smaller TPUs are also available for free from [Google Colab](https://colab.research.google.com/notebooks/tpu.ipynb) or [Kaggle](https://www.kaggle.com/docs/tpu).
+TPU (Tensor Processing Unit) is a type of hardware designed to accelerate tensor computations for training and inference. TPUs are generally accessed through Google cloud services, but smaller TPUs are also available for free from [Google Colab](https://colab.research.google.com/notebooks/tpu.ipynb) or [Kaggle](https://www.kaggle.com/docs/tpu).
 
 This guide focuses on training a Keras model for sequence classification on a TPU from Google Colab. Make sure the TPU runtime is enabled by going to **Runtime > Change runtime type** and selecting a TPU.
 
@@ -41,7 +41,7 @@ There are various distribution strategies for running your model on multiple TPU
 strategy = tf.distribute.TPUStrategy(resolver)
 ```
 
-Load and tokenize a dataset - this example uses [CoLA](https://huggingface.co/datasets/nyu-mll/glue/viewer/cola) from the GLUE benchmark - and pad all samples to the maximum length so it is easier to load as an array and to avoid XLA compilation issues.
+Load and tokenize a dataset - this example uses [CoLA](https://huggingface.co/datasets/nyu-mll/glue/viewer/cola) from the GLUE benchmark - and pad all samples to the maximum length so it is easier to load as an array and to avoid [XLA compilation issues](#xla).
 
 ```py
 from transformers import AutoTokenizer
@@ -90,7 +90,7 @@ model.fit(tf_dataset)
 
 ## Large datasets
 
-The dataset created above pads every sample to the maximum length and loads the whole dataset into memory. This may not be possible if you're working with larger datasets. When training on large datasets, you may want to create a [tf.TFRecord](https://www.tensorflow.org/tutorials/load_data/tfrecord) instead of stream the data.
+The dataset created above pads every sample to the maximum length and loads the whole dataset into memory. This may not be possible if you're working with larger datasets. When training on large datasets, you may want to create a [tf.TFRecord](https://www.tensorflow.org/tutorials/load_data/tfrecord) or stream the data.
 
 ### tf.TFRecord
 
@@ -246,18 +246,18 @@ with strategy.scope():
 model.fit(tf_dataset)
 ```
 
-### Stream dataset with prepare_tf_dataset
+### Stream with prepare_tf_dataset
 
-[`~TFPreTrainedModel.prepare_tf_dataset`] creates a `tf.data` pipeline that loads samples from [tf.data.Dataset](https://www.tensorflow.org/api_docs/python/tf/data/Dataset). The pipeline uses [tf.numpy_function]() or [`~datasets.Dataset.from_generator`], which can't be compiled by TensorFlow, to access the underlying `tf.data.Dataset`. It also won't work on a Colab TPU or TPU Nodes because the pipeline stream data from a local disk. Refer to the table below to help you decide whether this approach is helpful for you.
+[`~TFPreTrainedModel.prepare_tf_dataset`] creates a `tf.data` pipeline that loads samples from [tf.data.Dataset](https://www.tensorflow.org/api_docs/python/tf/data/Dataset). The pipeline uses [tf.numpy_function]() or [`~datasets.Dataset.from_generator`], which can't be compiled by TensorFlow, to access the underlying `tf.data.Dataset`. It also won't work on a Colab TPU or TPU Nodes because the pipeline streams data from a local disk. Refer to the table below to help you decide whether this approach is helpful for you.
 
-| pros | cons |  |  |  |
-|---|---|---|---|---|
-| simple code | only works on TPU VM |  |  |  |
-| same approach on TPU/GPU | data must be available as a Hugging Face Dataset |  |  |  |
-| dataset doesn't have to fit in memory | data must fit on local storage |  |  |  |
-| supports variable padding | data loading may be a bottleneck on a big TPU pod slice |  |  |  |
+| pros | cons |
+|---|---|
+| simple code | only works on TPU VM |
+| same approach on TPU/GPU | data must be available as a Hugging Face Dataset |
+| dataset doesn't have to fit in memory | data must fit on local storage |
+| supports variable padding | data loading may be a bottleneck on a big TPU pod slice |
 
-[`~TFPreTrainedModel.prepare_tf_dataset`] only works on **TPU VM**. Add the tokenizer output as columns in the dataset since the dataset is stored on disk, which means it can handle data larger than the available memory. Use [`~TFPreTrainedModel.prepare_tf_dataset`] to stream data from the dataset by wrapping it with a `tf.data` pipeline.
+[`~TFPreTrainedModel.prepare_tf_dataset`] only works on [TPU VM](#tpu-types). Add the tokenizer output as columns in the dataset since the dataset is stored on disk, which means it can handle data larger than the available memory. Use [`~TFPreTrainedModel.prepare_tf_dataset`] to stream data from the dataset by wrapping it with a `tf.data` pipeline.
 
 ```py
 def tokenize_function(examples):
@@ -289,7 +289,7 @@ model.fit(tf_dataset)
 
 There are two types of TPUs, a TPU Node and a TPU VM.
 
-A TPU Node indirectly accesses a remote TPU. It requires a separate VM to initialize your network and data pipeline and then forwards it to the remote node. Google Colab TPUs are an example of a TPU Node. You can't use local data because the TPU is remotely located, and data must be stored in Google Cloud Storage where the data pipeline can access it.
+A TPU Node indirectly accesses a remote TPU. It requires a separate VM to initialize your network and data pipeline, and then forwards it to the remote node. Google Colab TPUs are an example of a TPU Node. You can't use local data because the TPU is remotely located, and data must be stored in Google Cloud Storage where the data pipeline can access it.
 
 TPU VM are connected directly to the machine the TPU is located on, and they are generally easier to work with, especially when it comes to your data pipeline.
 

@@ -15,11 +15,17 @@ rendered properly in your Markdown viewer.
 
 # CPU
 
-A modern CPU is capable of efficiently training large models by leveraging the underlying optimizations built into the hardware and training on fp16 or bf16 datatypes.
+A modern CPU is capable of efficiently training large models by leveraging the underlying optimizations built into the hardware and training on fp16 or bf16 data types.
 
 This guide focuses on how to train large models on an Intel CPU using mixed precision and the [Intel Extension for PyTorch (IPEX)](https://intel.github.io/intel-extension-for-pytorch/index.html) library.
 
-Install IPEX with the command below. You can find your PyTorch version by running `pip list | grep torch` in the command line.
+You can Find your PyTorch version by running the command below.
+
+```bash
+pip list | grep torch
+```
+
+Install IPEX with the PyTorch version from above.
 
 ```bash
 pip install intel_extension_for_pytorch==<version_name> -f https://developer.intel.com/ipex-whl-stable-cpu
@@ -30,7 +36,7 @@ pip install intel_extension_for_pytorch==<version_name> -f https://developer.int
 
 IPEX provides additional performance optimizations for Intel CPUs. These include additional CPU instruction level architecture (ISA) support such as [Intel AVX512-VNNI](https://en.wikichip.org/wiki/x86/avx512_vnni) and [Intel AMX](https://www.intel.com/content/www/us/en/products/docs/accelerator-engines/what-is-intel-amx.html). Both of these features are designed to accelerate matrix multiplication. Older AMD and Intel CPUs with only Intel AVX2, however, aren't guaranteed better performance with IPEX.
 
-IPEX also supports [Auto Mixed Precision (AMP)](https://intel.github.io/intel-extension-for-pytorch/cpu/latest/tutorials/features/amp.html) training with the fp16 and bf16 datatypes. Reducing precision speeds up training and reduces memory usage because it requires less computation. The loss in accuracy from using full-precision is minimal. 3rd, 4th, and 5th generation Intel Xeon Scalable processors natively support bf16, and the 6th generation processor also natively supports fp16 in addition to bf16.
+IPEX also supports [Auto Mixed Precision (AMP)](https://intel.github.io/intel-extension-for-pytorch/cpu/latest/tutorials/features/amp.html) training with the fp16 and bf16 data types. Reducing precision speeds up training and reduces memory usage because it requires less computation. The loss in accuracy from using full-precision is minimal. 3rd, 4th, and 5th generation Intel Xeon Scalable processors natively support bf16, and the 6th generation processor also natively supports fp16 in addition to bf16.
 
 AMP is enabled for CPU backends training with PyTorch.
 
