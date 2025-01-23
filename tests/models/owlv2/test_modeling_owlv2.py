@@ -974,8 +974,9 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
         processor = OwlViTProcessor.from_pretrained(model_name)
 
         image = prepare_img()
+        text_labels = [["a photo of a cat", "a photo of a dog"]]
         inputs = processor(
-            text=[["a photo of a cat", "a photo of a dog"]],
+            text=text_labels,
             images=image,
             max_length=16,
             padding="max_length",
@@ -996,6 +997,24 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
             [[0.241309, 0.051896, 0.453267], [0.139474, 0.045701, 0.250660], [0.233022, 0.050479, 0.427671]],
         ).to(torch_device)
         torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, rtol=1e-4, atol=1e-4)
+        resulted_slice_boxes = outputs.pred_boxes[0, :3, :3]
+        max_diff = torch.max(torch.abs(resulted_slice_boxes - expected_slice_boxes)).item()
+        self.assertLess(max_diff, 3e-4)
+
+        # test post-processing
+        post_processed_output = processor.post_process_grounded_object_detection(outputs)
+        self.assertIsNone(post_processed_output[0]["text_labels"])
+
+        post_processed_output_with_text_labels = processor.post_process_grounded_object_detection(
+            outputs, text_labels=text_labels
+        )
+
+        objects_labels = post_processed_output_with_text_labels[0]["labels"].cpu().tolist()
+        self.assertListEqual(objects_labels, [0, 0])
+
+        objects_text_labels = post_processed_output_with_text_labels[0]["text_labels"]
+        self.assertIsNotNone(objects_text_labels)
+        self.assertListEqual(objects_text_labels, ["a photo of a cat", "a photo of a cat"])
 
     @slow
     def test_inference_one_shot_object_detection(self):

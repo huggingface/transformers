@@ -18,7 +18,6 @@ import inspect
 import unittest
 
 import pytest
-from parameterized import parameterized
 
 from transformers import AutoTokenizer, BambaConfig, is_torch_available
 from transformers.testing_utils import (
@@ -395,11 +394,6 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 [self.model_tester.num_attention_heads, encoder_seq_length, encoder_key_length],
             )
 
-    @unittest.skip(reason="Bamba has its own special cache type")
-    @parameterized.expand([(1, False), (1, True), (4, False)])
-    def test_new_cache_format(self, num_beams, do_sample):
-        pass
-
     def test_batching_equivalence(self):
         # need to disable the tril input mask
         orig = self.model_tester.use_input_mask
@@ -537,7 +531,7 @@ class BambaModelIntegrationTest(unittest.TestCase):
         # TODO: there are significant differences in the logits across major cuda versions, which shouldn't exist
         if self.cuda_compute_capability_major_version == 8:
             with torch.no_grad():
-                logits = self.model(input_ids=input_ids, num_logits_to_keep=40).logits
+                logits = self.model(input_ids=input_ids, logits_to_keep=40).logits
 
             EXPECTED_LOGITS_NO_GRAD = torch.tensor(
                 [

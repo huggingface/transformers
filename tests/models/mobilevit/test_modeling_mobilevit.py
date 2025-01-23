@@ -17,7 +17,7 @@
 import unittest
 
 from transformers import MobileViTConfig
-from transformers.testing_utils import is_flaky, require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -273,10 +273,6 @@ class MobileViTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         model_name = "apple/mobilevit-small"
         model = MobileViTModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
-
-    @is_flaky(description="is_flaky https://github.com/huggingface/transformers/issues/29516")
-    def test_batching_equivalence(self):
-        super().test_batching_equivalence()
 
 
 # We will verify our results on an image of cute cats

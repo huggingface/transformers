@@ -23,6 +23,7 @@ import numpy as np
 from tests.test_modeling_common import floats_tensor
 from transformers import OneFormerConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
+    is_flaky,
     require_timm,
     require_torch,
     require_torch_accelerator,
@@ -267,6 +268,12 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    @is_flaky(
+        description="The `attention_mask` computed with `< 0.5` in `OneFormerTransformerDecoder.forward_prediction_heads` is sensitive to input values."
+    )
+    def test_batching_equivalence(self):
+        super().test_batching_equivalence()
 
     def test_oneformer_model(self):
         config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
