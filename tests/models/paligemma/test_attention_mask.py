@@ -16,7 +16,7 @@ class TestPaliGemmaAttentionMask(unittest.TestCase):
             torch_dtype=torch.float16,
             device_map="auto"
         )
-
+    
     def test_pad_tokens_remain_masked(self):
         # Test with different length prompts to force padding
         prompts = ["<image>caption en", "<image>caption en " + "w" * 50]
