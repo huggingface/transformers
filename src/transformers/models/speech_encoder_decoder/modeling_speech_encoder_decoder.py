@@ -261,6 +261,9 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.decoder
 
+    def get_input_embeddings(self):
+        return self.decoder.get_input_embeddings()
+
     def get_output_embeddings(self):
         return self.decoder.get_output_embeddings()
 
@@ -590,3 +593,6 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
     def _reorder_cache(self, past_key_values, beam_idx):
         # apply decoder cache reordering here
         return self.decoder._reorder_cache(past_key_values, beam_idx)
+
+
+__all__ = ["SpeechEncoderDecoderModel"]

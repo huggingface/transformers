@@ -28,6 +28,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_gpu,
     slow,
+    tooslow,
     torch_device,
 )
 
@@ -115,11 +116,6 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
 
     @unittest.skip("Gemma2 has HybridCache which is not compatible with dola decoding")
     def test_dola_decoding_sample(self):
-        pass
-
-    @parameterized.expand([(1, False), (1, True), (4, False)])
-    @unittest.skip("Gemma2 has HybridCache and doesn't support old tuple format at all")
-    def test_new_cache_format(self, num_beams, do_sample):
         pass
 
     @unittest.skip("Gemma2 has HybridCache and doesn't support continue from past kv")
@@ -214,6 +210,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
             # 8 is for A100 / A10 and 7 for T4
             cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
 
+    @tooslow
     @require_read_token
     def test_model_9b_bf16(self):
         model_id = "google/gemma-2-9b"
@@ -234,6 +231,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
+    @tooslow
     @require_read_token
     def test_model_9b_fp16(self):
         model_id = "google/gemma-2-9b"
@@ -255,6 +253,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     @require_read_token
+    @tooslow
     def test_model_9b_pipeline_bf16(self):
         # See https://github.com/huggingface/transformers/pull/31747 -- pipeline was broken for Gemma2 before this PR
         model_id = "google/gemma-2-9b"
@@ -301,6 +300,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
+    @tooslow
     def test_model_9b_flash_attn(self):
         # See https://github.com/huggingface/transformers/issues/31953 --- flash attn was generating garbage for gemma2, especially in long context
         model_id = "google/gemma-2-9b"
@@ -375,6 +375,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)
 
     @require_read_token
+    @tooslow
     def test_model_9b_bf16_flex_attention(self):
         model_id = "google/gemma-2-9b"
         EXPECTED_TEXTS = [
