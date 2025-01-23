@@ -52,10 +52,14 @@ class AwqQuantizer(HfQuantizer):
         if not is_accelerate_available():
             raise ImportError("Loading an AWQ quantized model requires accelerate (`pip install accelerate`)")
 
+        if self.quantization_config.version == AWQLinearVersion.GEMM and not torch.cuda.is_available():
+            logger.warning_once("No CUDA found, replace GEMM with IPEX version to support non-cuda AWQ model.")
+            self.quantization_config.version = AWQLinearVersion.IPEX
+
         if self.quantization_config.version == AWQLinearVersion.IPEX:
             if version.parse(importlib.metadata.version("autoawq")) < version.parse("0.2.6"):
                 raise RuntimeError(
-                    "To use IPEX backend, you need autoawq>0.6.2. Please install the latest version or from source."
+                    "To use IPEX backend, you need autoawq>0.2.6. Please install the latest version or from source."
                 )
             if device_map is None:
                 logger.warning_once(
@@ -87,6 +91,7 @@ class AwqQuantizer(HfQuantizer):
     def update_torch_dtype(self, torch_dtype):
         if torch_dtype is None:
             torch_dtype = torch.float16
+            logger.info("Loading the model in `torch.float16`. To overwrite it, set `torch_dtype` manually.")
         elif torch_dtype != torch.float16:
             logger.warning("We suggest you to set `torch_dtype=torch.float16` for better efficiency with AWQ.")
         return torch_dtype

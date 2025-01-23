@@ -163,6 +163,16 @@ class Qwen2VLConfig(PretrainedConfig):
     model_type = "qwen2_vl"
     sub_configs = {"vision_config": Qwen2VLVisionConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
+    # Default tensor parallel plan for base model `Qwen2VL`
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
 
     def __init__(
         self,
@@ -188,9 +198,9 @@ class Qwen2VLConfig(PretrainedConfig):
         **kwargs,
     ):
         if isinstance(vision_config, dict):
-            self.vision_config = Qwen2VLVisionConfig(**vision_config)
+            self.vision_config = self.sub_configs["vision_config"](**vision_config)
         elif vision_config is None:
-            self.vision_config = Qwen2VLVisionConfig()
+            self.vision_config = self.sub_configs["vision_config"]()
 
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
@@ -227,3 +237,6 @@ class Qwen2VLConfig(PretrainedConfig):
         rope_config_validation(self, ignore_keys={"mrope_section"})
 
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+
+
+__all__ = ["Qwen2VLConfig"]

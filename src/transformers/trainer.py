@@ -75,7 +75,6 @@ from .optimization import Adafactor, get_scheduler
 from .processing_utils import ProcessorMixin
 from .pytorch_utils import (
     ALL_LAYERNORM_LAYERS,
-    is_torch_greater_or_equal_than_1_13,
     is_torch_greater_or_equal_than_2_3,
 )
 from .tokenization_utils_base import PreTrainedTokenizerBase
@@ -231,6 +230,7 @@ if is_accelerate_available():
     from accelerate import __version__ as accelerate_version
     from accelerate.state import AcceleratorState
     from accelerate.utils import (
+        AutocastKwargs,
         DistributedDataParallelKwargs,
         DistributedType,
         load_fsdp_model,
@@ -522,6 +522,9 @@ class Trainer:
                 if isinstance(model, PreTrainedModel):
                     # Patch the model with liger kernels. Use the default kernel configurations.
                     _apply_liger_kernel_to_instance(model=model)
+                elif hasattr(model, "get_base_model") and isinstance(model.get_base_model(), PreTrainedModel):
+                    # Patch the base model with liger kernels where model is a PeftModel. Use the default kernel configurations.
+                    _apply_liger_kernel_to_instance(model=model.get_base_model())
                 else:
                     logger.warning(
                         "The model is not an instance of PreTrainedModel. No liger kernels will be applied."
@@ -623,7 +626,15 @@ class Trainer:
             else unwrapped_model.get_base_model().forward
         )
         forward_params = inspect.signature(model_forward).parameters
-        self.model_accepts_loss_kwargs = any(k.kind == inspect.Parameter.VAR_KEYWORD for k in forward_params.values())
+
+        # Check if the model has explicit setup for loss kwargs,
+        # if not, check if `**kwargs` are in model.forward
+        if hasattr(model, "accepts_loss_kwargs"):
+            self.model_accepts_loss_kwargs = model.accepts_loss_kwargs
+        else:
+            self.model_accepts_loss_kwargs = any(
+                k.kind == inspect.Parameter.VAR_KEYWORD for k in forward_params.values()
+            )
 
         self.neftune_noise_alpha = args.neftune_noise_alpha
 
@@ -1607,7 +1618,10 @@ class Trainer:
                     "gradient_clipping": float(optim_args.get("gradient_clipping", 1.0)),
                 }
             )
-        elif args.optim == OptimizerNames.ADAMW_TORCH_4BIT:
+        elif args.optim in [
+            OptimizerNames.ADAMW_TORCH_4BIT,
+            OptimizerNames.ADAMW_TORCH_8BIT,
+        ]:
             if not is_torchao_available() or version.parse(importlib.metadata.version("torchao")) < version.parse(
                 "0.4.0"
             ):
@@ -1620,9 +1634,14 @@ class Trainer:
                     "You need to have `torch>2.4` in order to use torch 4-bit optimizers. "
                     "Install it with `pip install --upgrade torch` it is available on pipy. Otherwise, you need to install torch nightly."
                 )
-            from torchao.prototype.low_bit_optim import AdamW4bit
+            from torchao.prototype.low_bit_optim import AdamW4bit, AdamW8bit
 
-            optimizer_cls = AdamW4bit
+            if args.optim == OptimizerNames.ADAMW_TORCH_4BIT:
+                optimizer_cls = AdamW4bit
+            elif args.optim == OptimizerNames.ADAMW_TORCH_8BIT:
+                optimizer_cls = AdamW8bit
+            else:
+                raise ValueError("Invalid optimizer")
             optimizer_kwargs.update(adam_kwargs)
         elif args.optim in [
             OptimizerNames.SCHEDULE_FREE_ADAMW,
@@ -1825,7 +1844,8 @@ class Trainer:
                 # remove mixed precision hooks from the model
                 if original_forward:
                     jit_model.forward = original_forward
-                with self.accelerator.autocast(cache_enabled=False), torch.no_grad():
+                autocast_handler = AutocastKwargs(cache_enabled=False)
+                with self.accelerator.autocast(autocast_handler=autocast_handler), torch.no_grad():
                     if version.parse(version.parse(torch.__version__).base_version) >= version.parse("2.0.0"):
                         if isinstance(example_batch, dict):
                             jit_model = torch.jit.trace(jit_model, example_kwarg_inputs=example_batch, strict=False)
@@ -2778,7 +2798,7 @@ class Trainer:
                 )
 
         if os.path.isfile(weights_file) or os.path.isfile(safe_weights_file) or is_fsdp_ckpt:
-            weights_only_kwarg = {"weights_only": True} if is_torch_greater_or_equal_than_1_13 else {}
+            weights_only_kwarg = {"weights_only": True}
             # If the model is on the GPU, it still works!
             if is_sagemaker_mp_enabled():
                 if os.path.isfile(os.path.join(resume_from_checkpoint, "user_content.pt")):
@@ -2899,7 +2919,7 @@ class Trainer:
             or os.path.exists(best_safe_adapter_model_path)
         ):
             has_been_loaded = True
-            weights_only_kwarg = {"weights_only": True} if is_torch_greater_or_equal_than_1_13 else {}
+            weights_only_kwarg = {"weights_only": True}
             if is_sagemaker_mp_enabled():
                 if os.path.isfile(os.path.join(self.state.best_model_checkpoint, "user_content.pt")):
                     # If the 'user_content.pt' file exists, load with the new smp api.
@@ -3149,7 +3169,6 @@ class Trainer:
     def _determine_best_metric(self, metrics, trial):
         """
         Determine if the model should be saved based on the evaluation metrics.
-        If args.metric_for_best_model is not set, the loss is used.
 
         Returns:
             bool: True if a new best metric was found, else False
@@ -3699,10 +3718,17 @@ class Trainer:
             with amp.scale_loss(loss, self.optimizer) as scaled_loss:
                 scaled_loss.backward()
         else:
-            self.accelerator.backward(loss, **kwargs)
             # Finally we need to normalize the loss for reporting
-            if num_items_in_batch is None:
-                return loss.detach() / self.args.gradient_accumulation_steps
+            if not self.model_accepts_loss_kwargs and self.compute_loss_func is None:
+                loss = loss / self.args.gradient_accumulation_steps
+
+            # Turning off loss scaling w.r.t. gradient accumulation when DeepSpeed is enabled
+            # https://github.com/huggingface/transformers/pull/35808
+            if self.accelerator.distributed_type == DistributedType.DEEPSPEED:
+                kwargs["scale_wrt_gas"] = False
+
+            self.accelerator.backward(loss, **kwargs)
+
             return loss.detach()
 
     def compute_loss(self, model, inputs, return_outputs=False, num_items_in_batch=None):
@@ -5153,7 +5179,7 @@ class Trainer:
             except (TypeError, AttributeError):
                 pass
 
-        if self.args.average_tokens_across_devices:
+        if self.args.average_tokens_across_devices and num_items_in_batch is not None:
             num_items_in_batch = self.accelerator.gather(num_items_in_batch).sum().item()
 
         if torch.is_tensor(num_items_in_batch):
