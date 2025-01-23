@@ -4629,7 +4629,6 @@ class ModelTesterMixin:
             dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [0, 1, 1, 1]]).to(torch_device)
 
             _ = fa2_model(input_ids=dummy_input, attention_mask=dummy_attention_mask)
-
             with tempfile.TemporaryDirectory() as tmpdirname:
                 fa2_model.save_pretrained(tmpdirname)
                 model_from_pretrained = model_class.from_pretrained(tmpdirname)
