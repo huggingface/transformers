@@ -18,6 +18,7 @@ import unittest
 
 import requests
 from huggingface_hub import hf_hub_download
+from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
@@ -321,6 +322,32 @@ class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
             image_sizes = torch.cat([image_sizes, image_sizes], dim=0)
             _ = model(input_ids=input_ids, pixel_values=pixel_values, image_sizes=image_sizes)
 
+    @parameterized.expand(
+        [
+            (-1,),
+            ([-1],),
+            ([-1, -2],),
+        ],
+    )
+    def test_vision_feature_layers(self, vision_feature_layer):
+        """
+        Test that we can use either one vision feature layer, or a list of
+        vision feature layers.
+        """
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.vision_feature_layer = vision_feature_layer
+
+        num_feature_layers = 1 if isinstance(vision_feature_layer, int) else len(vision_feature_layer)
+        hidden_size = config.vision_config.hidden_size
+        expected_features = hidden_size * num_feature_layers
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            # We should have the right number of input features,
+            # and should be able to run a forward pass without exploding
+            assert model.multi_modal_projector.linear_1.in_features == expected_features
+            model(**input_dict)
+
     @unittest.skip(
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
@@ -554,6 +581,28 @@ class LlavaNextForConditionalGenerationIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30)
         EXPECTED_DECODED_TEXT = '[INST]  \nWhat is shown in this image? [/INST] The image appears to be a radar chart, which is a type of multi-dimensional plot that displays values for multiple quantitative variables represented on axes'  # fmt: skip
 
+        self.assertEqual(
+            self.processor.decode(output[0], skip_special_tokens=True),
+            EXPECTED_DECODED_TEXT,
+        )
+
+    @unittest.skip(reason="Granite multimodal [vision] models are not yet released")
+    @slow
+    def test_granite_vision(self):
+        """
+        Check the expected output of a granite vision model, which leverages
+        multiple vision feature layers and a visual encoder with no CLS (siglip).
+        """
+        # TODO @alex-jw-brooks - update the path and enable this test once the 2b model is released
+        granite_model_path = "llava-granite-2b"
+        model = LlavaNextForConditionalGeneration.from_pretrained(granite_model_path)
+        self.processor = AutoProcessor.from_pretrained(granite_model_path)
+        prompt = "<|user|>\n<image>\nWhat is shown in this image?\n<|assistant|>\n"
+        inputs = self.processor(prompt, self.image, return_tensors="pt").to(model.device)
+
+        # verify generation
+        output = model.generate(**inputs, max_new_tokens=30)
+        EXPECTED_DECODED_TEXT = "<|user|>\n\nWhat is shown in this image?\n<|assistant|>\nThe image depicts a diagram."
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
