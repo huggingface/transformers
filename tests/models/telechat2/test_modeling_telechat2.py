@@ -33,7 +33,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 
-from ...models.cohere.test_modeling_cohere import LlamaModelTest, LlamaModelTester
+from ...models.llama.test_modeling_llama import LlamaModelTest, LlamaModelTester
 from ...test_configuration_common import ConfigTester
 
 
