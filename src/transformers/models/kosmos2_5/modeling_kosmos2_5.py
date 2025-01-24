@@ -1212,8 +1212,10 @@ class Kosmos2_5TextSdpaAttention(Kosmos2_5TextAttention):
 
 KOSMOS2_5_TEXT_ATTENTION_CLASSES = {
     "eager": Kosmos2_5TextAttention,
-    "flash_attention_2": Kosmos2_5TextFlashAttention2,
-    "sdpa": Kosmos2_5TextSdpaAttention,
+    "flash_attention_2": Kosmos2_5TextAttention,
+    "sdpa": Kosmos2_5TextAttention,
+    # "flash_attention_2": Kosmos2_5TextFlashAttention2,
+    # "sdpa": Kosmos2_5TextSdpaAttention,
 }
 
 
