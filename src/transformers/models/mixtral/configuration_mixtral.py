@@ -116,7 +116,7 @@ class MixtralConfig(PretrainedConfig):
         "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.block_sparse_moe.gate": "colwise",
         "layers.*.block_sparse_moe.experts.*.w1": "colwise",
-        "layers.*.block_sparse_moe.experts.*.w2": "colwise",
+        "layers.*.block_sparse_moe.experts.*.w2": "rowwise",
         "layers.*.block_sparse_moe.experts.*.w3": "colwise",
     }
 
