@@ -633,14 +633,15 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
 class PaliGemmaAttentionMaskTest(unittest.TestCase):
     def setUp(self):
         self.config = PaliGemmaConfig(
-            _vocab_size=257152,  # Using the correct vocab size from PaliGemma
-            hidden_size=32,
-            intermediate_size=37,
-            num_hidden_layers=2,
-            num_attention_heads=4,
+            _vocab_size=100,        # Small vocab for dummy model
+            hidden_size=32,         # Tiny hidden size
+            intermediate_size=37,    
+            num_hidden_layers=2,    # Just 2 layers
+            num_attention_heads=4,  # Few attention heads
             max_position_embeddings=512
         )
         self.model = PaliGemmaForConditionalGeneration(self.config)
+        self.model.init_weights()  # Explicitly initialize weights
         
     def test_pad_tokens_remain_masked(self):
         batch_size = 2
