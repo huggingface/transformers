@@ -45,14 +45,20 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def get_image_processor(self, **kwargs):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
 
+    def get_video_processor(self, **kwargs):
+        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).video_processor
+
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
 
     def test_save_load_pretrained_default(self):
         tokenizer = self.get_tokenizer()
         image_processor = self.get_image_processor()
+        video_processor = self.get_video_processor()
 
-        processor = Qwen2_5_VLProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = Qwen2_5_VLProcessor(
+            tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
+        )
         processor.save_pretrained(self.tmpdirname)
         processor = Qwen2_5_VLProcessor.from_pretrained(self.tmpdirname, use_fast=False)
 
@@ -64,8 +70,11 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_image_processor(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
+        video_processor = self.get_video_processor()
 
-        processor = Qwen2_5_VLProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = Qwen2_5_VLProcessor(
+            tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
+        )
 
         image_input = self.prepare_image_inputs()
 
@@ -78,8 +87,11 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_processor(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
+        video_processor = self.get_video_processor()
 
-        processor = Qwen2_5_VLProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = Qwen2_5_VLProcessor(
+            tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
+        )
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
@@ -101,8 +113,11 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_model_input_names(self):
         image_processor = self.get_image_processor()
         tokenizer = self.get_tokenizer()
+        video_processor = self.get_video_processor()
 
-        processor = Qwen2_5_VLProcessor(tokenizer=tokenizer, image_processor=image_processor)
+        processor = Qwen2_5_VLProcessor(
+            tokenizer=tokenizer, image_processor=image_processor, video_processor=video_processor
+        )
 
         input_str = "lower newer"
         image_input = self.prepare_image_inputs()
