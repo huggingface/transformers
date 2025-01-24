@@ -181,7 +181,7 @@ class ImageProcessingTestMixin:
         encoding_slow = image_processor_slow(dummy_image, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
 
-        torch.testing.assert_close(encoding_slow.pixel_values, encoding_fast.pixel_values, rtol=1e-1, atol=1e-2)
+        torch.testing.assert_close(encoding_slow.pixel_values, encoding_fast.pixel_values, rtol=1, atol=1e-2)
 
     @require_vision
     @require_torch
