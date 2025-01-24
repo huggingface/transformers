@@ -927,6 +927,12 @@ class ModelTesterMixin:
         if not getattr(self.model_tester, "is_training", False):
             self.skipTest(reason="ModelTester is not configured to run training tests")
 
+        valid_model_class = False
+        for model_class in self.all_model_classes:
+            if model_class.__name__ in get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES):
+                valid_model_class = True
+        if not valid_model_class:
+            self.skipTest(reason="No causal lm model classes found")
         for model_class in self.all_model_classes:
             if model_class.__name__ in get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES):
                 config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
