@@ -1564,7 +1564,7 @@ class Kosmos2_5ImageToTextProjection(nn.Module):
         latent_query = self.latent_query.unsqueeze(0).expand(hidden_states.size(0), -1, -1)
         key_value_states = torch.cat([hidden_states, latent_query], dim=1)
 
-        hidden_states, attn_weights, _ = self.x_attn(
+        hidden_states, attn_weights = self.x_attn(
             hidden_states=latent_query,
             encoder_hidden_states=key_value_states,
             past_key_value=None,
