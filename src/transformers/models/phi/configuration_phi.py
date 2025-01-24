@@ -144,7 +144,7 @@ class PhiConfig(PretrainedConfig):
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.dense": "rowwise",
         "layers.*.mlp.fc1": "colwise",
-        "layers.*.mlp.fc2": "colwise",
+        "layers.*.mlp.fc2": "rowwise",
     }
 
     def __init__(
