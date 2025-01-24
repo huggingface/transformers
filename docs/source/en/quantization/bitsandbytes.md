@@ -208,7 +208,8 @@ from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 model_id = "bigscience/bloom-1b7"
 
 quantization_config = BitsAndBytesConfig(
-    llm_int8_threshold=10,
+    llm_int8_threshold=10.0,
+    llm_int8_enable_fp32_cpu_offload=True
 )
 
 model_8bit = AutoModelForCausalLM.from_pretrained(
@@ -307,7 +308,7 @@ from transformers import AutoModelForCausalLM, BitsAndBytesConfig, AutoTokenizer
 
 model_id = "facebook/opt-125m"
 
-model = AutoModelForCausalLM.from_pretrained(model_id, BitsAndBytesConfig(load_in_4bit=True))
+model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=BitsAndBytesConfig(load_in_4bit=True))
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 
 model.dequantize()
