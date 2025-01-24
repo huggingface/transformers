@@ -967,6 +967,8 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
             `labels = input_ids` Indices are selected in `[-100, 0, ..., config.vocab_size]` All labels set to `-100`
             are ignored (masked), the loss is only computed for labels in `[0, ..., config.vocab_size]`
         """
+        # Bloom has deprecated kwargs, so we need to pop num_items_in_batch explicitly
+        num_items_in_batch = deprecated_arguments.pop("num_items_in_batch", None)
         if deprecated_arguments.pop("position_ids", False) is not False:
             # `position_ids` could have been `torch.Tensor` or `None` so defaulting pop to `False` allows to detect if users were passing explicitly `None`
             warnings.warn(
@@ -1004,9 +1006,11 @@ class BloomForCausalLM(BloomPreTrainedModel, GenerationMixin):
             shift_labels = labels[..., 1:].contiguous()
             batch_size, seq_length, vocab_size = shift_logits.shape
             # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(
-                shift_logits.view(batch_size * seq_length, vocab_size), shift_labels.view(batch_size * seq_length)
+            loss = self.loss_function(
+                shift_logits.view(batch_size * seq_length, vocab_size),
+                shift_labels.view(batch_size * seq_length),
+                vocab_size=vocab_size,
+                num_items_in_batch=num_items_in_batch,
             )
 
         if not return_dict:
