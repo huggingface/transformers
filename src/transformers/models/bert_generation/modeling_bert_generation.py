@@ -733,6 +733,7 @@ class BertGenerationEncoder(BertGenerationPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,  # NOOP kwargs, for now
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
         r"""
         encoder_hidden_states  (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
@@ -963,6 +964,7 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
 
         sequence_output = outputs[0]

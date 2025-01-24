@@ -360,6 +360,7 @@ class CTRLModel(CTRLPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,  # NOOP kwargs, for now
     ) -> Union[Tuple[torch.Tensor], BaseModelOutputWithPast]:
         r"""
         Returns:
