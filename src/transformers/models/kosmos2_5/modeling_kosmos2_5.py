@@ -930,6 +930,7 @@ class Kosmos2_5TextAttention(nn.Module):
         layer_idx: Optional[int] = None,
     ):
         super().__init__()
+        self.config = config
         self.layer_idx = layer_idx
         self.embed_dim = embed_dim
         self.num_heads = num_heads
