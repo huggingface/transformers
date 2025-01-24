@@ -30,7 +30,7 @@ _import_structure = {
     "image_processing_auto": ["IMAGE_PROCESSOR_MAPPING", "AutoImageProcessor"],
     "processing_auto": ["PROCESSOR_MAPPING", "AutoProcessor"],
     "tokenization_auto": ["TOKENIZER_MAPPING", "AutoTokenizer"],
-    "video_processing_auto": ["AutoVideoProcessor", "VIDEO_PROCESSOR_MAPPING"],
+    "video_processing_auto": ["VIDEO_PROCESSOR_MAPPING", "AutoVideoProcessor"],
 }
 
 try:
