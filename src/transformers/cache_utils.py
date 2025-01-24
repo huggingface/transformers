@@ -9,12 +9,7 @@ import torch
 from packaging import version
 
 from .configuration_utils import PretrainedConfig
-from .utils import (
-    is_hqq_available,
-    is_optimum_quanto_available,
-    is_torchdynamo_compiling,
-    logging,
-)
+from .utils import is_hqq_available, is_optimum_quanto_available, logging
 from .utils.deprecation import deprecate_kwarg
 
 
@@ -24,7 +19,7 @@ if is_hqq_available():
 logger = logging.get_logger(__name__)
 
 
-class Cache(torch.nn.Module):
+class Cache:
     """
     Base, abstract class for all caches. The actual data structure is specific to each subclass.
     """
@@ -1144,18 +1139,10 @@ class StaticCache(Cache):
                 layer_device = self.device
             new_layer_key_cache = torch.zeros(cache_shape, dtype=self.dtype, device=layer_device)
             new_layer_value_cache = torch.zeros(cache_shape, dtype=self.dtype, device=layer_device)
-            # Notes:
-            # 1. `mark_static_address` is used to tag the cache as an fixed data pointer, preventing cuda graph
-            #     breaks when updating the cache. It can't be used if the cache code is being compiled (but in that case
-            #     it is not needed anyway)
-            # 2. `torch.export()` requires mutations to be registered as buffers.
-            if not is_torchdynamo_compiling():
-                self.register_buffer(f"key_cache_{idx}", torch.zeros(cache_shape, dtype=dtype, device=layer_device))
-                self.register_buffer(f"value_cache_{idx}", torch.zeros(cache_shape, dtype=dtype, device=layer_device))
-                new_layer_key_cache = getattr(self, f"key_cache_{idx}")
-                new_layer_value_cache = getattr(self, f"value_cache_{idx}")
-                torch._dynamo.mark_static_address(new_layer_key_cache)
-                torch._dynamo.mark_static_address(new_layer_value_cache)
+            # Note: `mark_static_address` is used to tag the cache as a fixed data pointer,
+            # preventing compiled graph breaks when updating the cache.
+            torch._dynamo.mark_static_address(new_layer_key_cache)
+            torch._dynamo.mark_static_address(new_layer_value_cache)
             self.key_cache.append(new_layer_key_cache)
             self.value_cache.append(new_layer_value_cache)
 

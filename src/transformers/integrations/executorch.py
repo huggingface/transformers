@@ -16,10 +16,7 @@ from ..utils.import_utils import is_torch_available
 
 
 if is_torch_available():
-    from transformers import (
-        PreTrainedModel,
-        StaticCache,
-    )
+    from transformers import PreTrainedModel, StaticCache
     from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_3
 
 
@@ -72,9 +69,13 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
             config=self.model.config,
             batch_size=self.model.generation_config.cache_config.batch_size,
             max_cache_len=self.model.generation_config.cache_config.max_cache_len,
-            dtype=self.model.dtype,
             device=self.model.generation_config.cache_config.device,
+            dtype=self.model.dtype,
         )
+        for i in range(len(self.static_cache.key_cache)):
+            self.register_buffer(f"key_cache_{i}", self.static_cache.key_cache[i], persistent=False)
+            self.register_buffer(f"value_cache_{i}", self.static_cache.value_cache[i], persistent=False)
+
         self.is_causal = any("CausalLM" in arch for arch in self.model.config.architectures)
         if self.is_causal:
             causal_mask = torch.tril(
@@ -109,12 +110,15 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
         """
         _, seqlen = input_ids.shape
         attn_mask = self.mask[cache_position, :seqlen] if self.is_causal else None
+        position_ids = cache_position.unsqueeze(0)
+        past_key_values = self.static_cache
+
         outs = self.model(
             input_ids=input_ids,
             attention_mask=attn_mask,
-            position_ids=cache_position.unsqueeze(0),
+            position_ids=position_ids,
             cache_position=cache_position,
-            past_key_values=self.static_cache,
+            past_key_values=past_key_values,
             use_cache=True,
         )
         return outs.logits
@@ -143,7 +147,7 @@ class TorchExportableModuleWithStaticCache(torch.nn.Module):
         prompt_token_len = prompt_token_ids.shape[-1]
         max_generation_length = prompt_token_len + max_new_tokens
         for buffer_name, buffer in exported_program.named_buffers():
-            if buffer_name.startswith("static_cache.key_cache"):
+            if buffer_name.startswith("key_cache"):
                 max_cache_len = buffer.shape[2]
                 max_generation_length = min(max_generation_length, max_cache_len)
                 break

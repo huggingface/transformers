@@ -215,11 +215,11 @@ class CacheTest(unittest.TestCase):
         # Check if the exported model is configured with the `StaticCache` correctly
         n_static_key_caches = n_static_value_caches = 0
         for buffer_name, buffer in exported_program.named_buffers():
-            if buffer_name.startswith("static_cache.key_cache"):
+            if buffer_name.startswith("key_cache"):
                 self.assertTrue(buffer.shape[0] == batch_size)
                 self.assertTrue(buffer.shape[2] == max_cache_len)
                 n_static_key_caches = n_static_key_caches + 1
-            if buffer_name.startswith("static_cache.value_cache"):
+            if buffer_name.startswith("value_cache"):
                 self.assertTrue(buffer.shape[0] == batch_size)
                 self.assertTrue(buffer.shape[2] == max_cache_len)
                 n_static_value_caches = n_static_value_caches + 1
@@ -364,7 +364,7 @@ class CacheIntegrationTest(unittest.TestCase):
             input_ids = gen_out
 
         # We went well beyond the cache length
-        self.assertTrue(input_ids.shape[1] > cache.get_max_length() * 1.5)
+        self.assertTrue(input_ids.shape[1] > cache.get_max_cache_shape() * 1.5)
 
         # And it still produces a coherent english
         decoded = tokenizer.batch_decode(input_ids, skip_special_tokens=True)
@@ -619,4 +619,4 @@ class CacheIntegrationTest(unittest.TestCase):
             "You are a helpful assistant. Help me to write a blogpost about travelling.\n\nTraveling is an enriching experience that broadens our horizons and exposes us to new cultures, landscapes, and people. Whether it's a week",
             'You are a helpful assistant. What is the capital of France?\n\n\n## Response:Paris is the capital of France.\n\n\n\n\n\n## Query:\n\nIn a detailed analysis, compare the economic impacts of the introduction of the'
         ]  # fmt: skip
-        self.assertTrue(responses == EXPECTED_DECODED_TEXT)
+        self.assertEqual(responses, EXPECTED_DECODED_TEXT)
