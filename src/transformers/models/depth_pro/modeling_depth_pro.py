@@ -20,6 +20,7 @@ from typing import List, Optional, Tuple, Union
 
 import torch
 from torch import nn
+import torch.nn.functional as F
 
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -266,24 +267,6 @@ class DepthProFeatureProjection(nn.Module):
         return projected_features
 
 
-def interpolate(
-    pixel_values: torch.Tensor,
-    size: Optional[int] = None,
-    scale_factor: Optional[List[float]] = None,
-    mode: str = "bilinear",
-    align_corners: bool = False,
-) -> torch.Tensor:
-    if mode == "nearest":
-        align_corners = None
-    return nn.functional.interpolate(
-        pixel_values,
-        size=size,
-        scale_factor=scale_factor,
-        mode=mode,
-        align_corners=align_corners,
-    )
-
-
 def patch(pixel_values: torch.Tensor, patch_size: int, overlap_ratio: float) -> torch.Tensor:
     """Creates Patches from Batch."""
     batch_size, num_channels, height, width = pixel_values.shape
@@ -295,7 +278,7 @@ def patch(pixel_values: torch.Tensor, patch_size: int, overlap_ratio: float) -> 
     stride = int(patch_size * (1 - overlap_ratio))
 
     # (batch_size, num_channels, height, width)
-    patches = torch.nn.functional.unfold(pixel_values, kernel_size=(patch_size, patch_size), stride=(stride, stride))
+    patches = F.unfold(pixel_values, kernel_size=(patch_size, patch_size), stride=(stride, stride))
     # patches.shape (batch_size, patch_size**2 * num_channels, n_patches_per_batch)
     patches = patches.permute(2, 0, 1)
     # patches.shape (n_patches_per_batch, batch_size, patch_size**2 * C)
@@ -467,7 +450,14 @@ class DepthProEncoder(nn.Module):
 
         scaled_images = []
         for ratio in self.scaled_images_ratios:
-            scaled_images.append(interpolate(pixel_values, scale_factor=ratio))
+            scaled_images.append(
+                F.interpolate(
+                    pixel_values,
+                    scale_factor=ratio,
+                    mode="bilinear",
+                    align_corners=False,
+                )
+            )
             # (batch_size, num_channels, height*ratio, width*ratio)
 
         # STEP 2: create patches
@@ -506,9 +496,11 @@ class DepthProEncoder(nn.Module):
         # -1 (reverse list) as patch encoder returns high res patches first, we need low res first
 
         # scale the image to patch size for image_encoder
-        image_scaled_to_patch_size = interpolate(
+        image_scaled_to_patch_size = F.interpolate(
             pixel_values,
             size=(self.config.patch_size, self.config.patch_size),
+            mode="bilinear",
+            align_corners=False,
         )
         image_encodings = self.image_encoder(
             pixel_values=image_scaled_to_patch_size,
@@ -548,8 +540,11 @@ class DepthProEncoder(nn.Module):
             )  # (batch_size, hidden_size, merge_out_size, merge_out_size)
 
             # d. interpolate patches to base size
-            features = interpolate(
-                features, size=(base_height * 2**i, base_width * 2**i), mode="nearest"
+            features = F.interpolate(
+                features,
+                size=(base_height * 2**i, base_width * 2**i),
+                mode="bilinear",
+                align_corners=False,
             )  # (batch_size, hidden_size, base_height*2**i, base_width*2**i)
 
             scaled_images_features.append(features)
@@ -580,10 +575,11 @@ class DepthProEncoder(nn.Module):
             )  # (batch_size, hidden_size, merge_out_size, merge_out_size)
 
             # d. interpolate patches to base size
-            features = interpolate(
+            features = F.interpolate(
                 features,
                 size=(base_height * 2 ** (self.n_scaled_images - 1), base_width * 2 ** (self.n_scaled_images - 1)),
-                mode="nearest",
+                mode="bilinear",
+                align_corners=False,
             )  # (batch_size, hidden_size, base_height*2**(n_scaled_images - 1), base_width*2**(n_scaled_images - 1))
 
             intermediate_features.append(features)
@@ -601,7 +597,12 @@ class DepthProEncoder(nn.Module):
         # no merge required for image_features as they are already in batches instead of patches
 
         # d. interpolate patches to base size
-        image_features = interpolate(image_features, size=(base_height, base_width), mode="nearest")
+        image_features = F.interpolate(
+            image_features,
+            size=(base_height, base_width),
+            mode="bilinear",
+            align_corners=False,
+        )
         # (batch_size, hidden_size, base_height, base_width)
 
         # STEP 7: combine all features
@@ -934,9 +935,11 @@ class DepthProFOVModel(nn.Module):
         # follow the steps same as with image features in DepthProEncoder
         # except for the extra encoder_neck layer applied
 
-        image_scaled_to_patch_size = interpolate(
+        image_scaled_to_patch_size = F.interpolate(
             pixel_values,
             size=(self.config.patch_size, self.config.patch_size),
+            mode="bilinear",
+            align_corners=False,
         )
         encodings = self.encoder(
             image_scaled_to_patch_size,
@@ -957,10 +960,20 @@ class DepthProFOVModel(nn.Module):
         # no merge required for fov_features as they are already in batches instead of patches
 
         # d. interpolate patches to base size
-        fov_features = interpolate(fov_features, size=(self.out_size, self.out_size), mode="nearest")
+        fov_features = F.interpolate(
+            fov_features,
+            size=(self.out_size, self.out_size),
+            mode="bilinear",
+            align_corners=False,
+        )
 
         global_features = self.global_neck(global_features)
-        global_features = interpolate(global_features, size=(self.out_size, self.out_size), mode="nearest")
+        global_features = F.interpolate(
+            global_features,
+            size=(self.out_size, self.out_size),
+            mode="bilinear",
+            align_corners=False,
+        )
 
         fov_features = fov_features + global_features
         fov_output = self.head(fov_features)
