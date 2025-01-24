@@ -10,7 +10,7 @@ on:
     - cron: '0 0 10 * *'
 jobs:
   run-scheduled-events:
-    runs-on: ready
+    runs-on: self-hosted
     env:
       SCHEDULE_CONFIG: ${{ secrets.SCHEDULE_CONFIG }} # Secret storing the schedule JSON
     steps:
