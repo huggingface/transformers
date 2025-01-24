@@ -547,8 +547,8 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             flash_attn_kwargs = FlashAttentionKwargs(
                 cu_seq_lens_q=cu_seq_lens,
                 cu_seq_lens_k=cu_seq_lens,
-                max_length_q=input_ids.shape[-1],
-                max_length_k=input_ids.shape[-1],
+                max_length_q=seq_lens.max(),
+                max_length_k=seq_lens.max(),
             )
             flash_attn_kwargs_logits = model(input_ids=padding_free_input_ids, **flash_attn_kwargs).logits
 
