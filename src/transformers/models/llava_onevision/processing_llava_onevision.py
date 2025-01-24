@@ -20,6 +20,8 @@ import math
 import os
 from typing import Iterable, List, Union
 
+import numpy as np
+
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils import select_best_resolution
 from ...image_utils import ImageInput, VideoInput, get_image_size, to_numpy_array
@@ -164,7 +166,11 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         if videos is not None:
             video_inputs = self.video_processor(videos, **output_kwargs["videos_kwargs"])
 
-            one_video = to_numpy_array(video_inputs["pixel_values_videos"][0])
+            one_video = video_inputs.get("pixel_values_videos")[0]
+            if isinstance(video_inputs.get("pixel_values_videos")[0], (list, tuple)):
+                one_video = np.array(one_video)
+            else:
+                one_video = to_numpy_array(one_video)
             height, width = get_image_size(one_video[0], channel_dim=output_kwargs["images_kwargs"].get("data_format"))
             num_frames = one_video.shape[0]  # frame dim is always after batch dim
             patches_height_width = int(math.sqrt(self.num_image_tokens))
@@ -219,6 +225,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         num_image_tokens = unpadded_features + newline_features + base_features
         return num_image_tokens
 
+    # Adapted from transformers.models.llava_next.processing_llava_next.LlavaNextProcessor._get_unpadded_features
     def _get_unpadded_features(self, height, width, patches_height, patches_width, scale_height, scale_width):
         """
         Get number of features for a given image with height/width. LLaVA-NeXT is different from LLaVA
@@ -231,11 +238,11 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         original_aspect_ratio = width / height
         current_aspect_ratio = current_width / current_height
         if original_aspect_ratio > current_aspect_ratio:
-            new_height = int(height * (current_width / width))
+            new_height = int(round(height * (current_width / width), 7))
             padding = (current_height - new_height) // 2
             current_height -= padding * 2
         else:
-            new_width = int(width * (current_height / height))
+            new_width = int(round(width * (current_height / height), 7))
             padding = (current_width - new_width) // 2
             current_width -= padding * 2
 

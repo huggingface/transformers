@@ -41,6 +41,13 @@ This guide describes:
 * common decoding strategies and their main parameters
 * saving and sharing custom generation configurations with your fine-tuned model on 🤗 Hub
 
+<Tip>
+
+`generate()` is a critical component of our [chat CLI](quicktour#chat-with-text-generation-models).
+You can apply the learnings of this guide there as well.
+
+</Tip>
+
 ## Default text generation configuration
 
 A decoding strategy for a model is defined in its generation configuration. When using pre-trained models for inference

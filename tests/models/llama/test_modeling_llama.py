@@ -26,7 +26,6 @@ from transformers.testing_utils import (
     require_read_token,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -541,7 +540,7 @@ class LlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             config = _reinitialize_config(base_config, {"rope_scaling": {"rope_type": "linear"}})  # missing "factor"
 
 
-@require_torch_gpu
+@require_torch_accelerator
 class LlamaIntegrationTest(unittest.TestCase):
     # This variable is used to determine which CUDA device are we using for our runners (A10 or T4)
     # Depending on the hardware we get different logits / generations
@@ -695,7 +694,7 @@ class LlamaIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_read_token
     def test_compile_static_cache(self):
         # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
@@ -729,21 +728,12 @@ class LlamaIntegrationTest(unittest.TestCase):
         dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, dynamic_text)
 
-        # Static Cache
+        # Static Cache + compile (`generate()` internally compiles each decoding step when static cache is used)
         generated_ids = model.generate(
             **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
         )
         static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
-
-        # Static Cache + compile
-        model._cache = None  # clear cache object, initialized when we pass `cache_implementation="static"`
-        model.forward = torch.compile(model.forward, mode="reduce-overhead", fullgraph=True)
-        generated_ids = model.generate(
-            **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
-        )
-        static_compiled_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)
 
     @slow
     @require_read_token
@@ -796,6 +786,7 @@ class LlamaIntegrationTest(unittest.TestCase):
                     cache_config={
                         "batch_size": batch_size,
                         "max_cache_len": max_generation_length,
+                        "device": device,
                     },
                 ),
             )
