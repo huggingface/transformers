@@ -203,11 +203,8 @@ _import_structure = {
         "BarkSemanticConfig",
     ],
     "models.style_text_to_speech_2": [
-        "StyleTextToSpeech2CoarseConfig",
         "StyleTextToSpeech2Config",
-        "StyleTextToSpeech2FineConfig",
-        "StyleTextToSpeech2Processor",
-        "StyleTextToSpeech2SemanticConfig",
+        "StyleTextToSpeech2AcousticTextEncoder",
     ],
     "models.bart": ["BartConfig", "BartTokenizer"],
     "models.barthez": [],
@@ -5236,11 +5233,8 @@ if TYPE_CHECKING:
         BarkSemanticConfig,
     )
     from .models.style_text_to_speech_2 import (
-        StyleTextToSpeech2CoarseConfig,
         StyleTextToSpeech2Config,
-        StyleTextToSpeech2FineConfig,
-        StyleTextToSpeech2Processor,
-        StyleTextToSpeech2SemanticConfig,
+        StyleTextToSpeech2AcousticTextEncoder,
     )
     from .models.bart import BartConfig, BartTokenizer
     from .models.beit import BeitConfig
