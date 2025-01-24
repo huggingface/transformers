@@ -984,7 +984,7 @@ class Kosmos2_5TextAttention(nn.Module):
 
         key_states = self._shape(self.k_proj(current_states))
         value_states = self._shape(self.v_proj(current_states))
-        query_states = self._shape(self.q_proj(hidden_states) * self.scaling)
+        query_states = self._shape(self.q_proj(hidden_states))
 
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
