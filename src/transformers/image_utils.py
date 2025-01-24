@@ -247,8 +247,11 @@ def make_list_of_videos(videos) -> List[VideoInput]:
         else:
             return [videos]
 
-    elif is_valid_image(videos) and len(videos.shape) == 4:
-        return [list(videos)]
+    elif is_valid_image(videos):
+        if isinstance(videos, PIL.Image.Image):
+            return [[videos]]  # one frame only passed
+        elif len(videos.shape) == 4:
+            return [list(videos)]
 
     raise ValueError(f"Could not make list of videos from {type(videos)}")
 

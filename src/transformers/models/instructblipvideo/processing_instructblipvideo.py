@@ -176,7 +176,7 @@ class InstructBlipVideoProcessor(ProcessorMixin):
             encoding["qformer_attention_mask"] = qformer_text_encoding.pop("attention_mask")
 
         if images is not None:
-            image_encoding = self.image_processor(images, return_tensors=return_tensors)
+            image_encoding = self.video_processor(images, return_tensors=return_tensors)
             encoding.update(image_encoding)
 
         return encoding

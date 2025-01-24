@@ -17,12 +17,15 @@ import copy
 import json
 import os
 import warnings
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+
+import numpy as np
 
 from .dynamic_module_utils import custom_object_save
-from .image_processing_base import BatchFeature
-from .image_processing_utils import BaseImageProcessor
-from .image_utils import load_video
+from .image_processing_base import BatchFeature, ImageProcessingMixin
+from .image_processing_utils import get_size_dict
+from .image_transforms import center_crop, normalize, rescale
+from .image_utils import ChannelDimension, load_video
 from .utils import (
     VIDEO_PROCESSOR_NAME,
     add_model_info_to_auto_map,
@@ -47,16 +50,128 @@ INIT_SERVICE_KWARGS = [
 
 # For now we start with slow video processor which processed each frame with image processor
 # TODO: @raushan integrate video processor with torchvision to process the whole video at once
-class BaseVideoProcessor(BaseImageProcessor):
+class BaseVideoProcessor(ImageProcessingMixin):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
     def __call__(self, videos, **kwargs) -> BatchFeature:
         """Preprocess a video or a batch of videos."""
+        if "images" in kwargs:
+            raise ValueError(
+                f"{self.__class__.__name__} can process only videos. Please use respective image processor for the model type"
+            )
         return self.preprocess(videos, **kwargs)
 
     def preprocess(self, videos, **kwargs) -> BatchFeature:
         raise NotImplementedError("Each video processor must implement its own preprocess method")
+
+    def rescale(
+        self,
+        video: np.ndarray,
+        scale: float,
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs,
+    ) -> np.ndarray:
+        """
+        Rescale an video by a scale factor. video = video * scale.
+
+        Args:
+            video (`np.ndarray`):
+                Video to rescale.
+            scale (`float`):
+                The scaling factor to rescale pixel values by.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output video. If unset, the channel dimension format of the input
+                video is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: video in (num_frames, num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: video in (num_frames, height, width, num_channels) format.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input video. If unset, the channel dimension format is inferred
+                from the input video. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: video in (num_frames, num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: video in (num_frames, height, width, num_channels) format.
+
+        Returns:
+            `np.ndarray`: The rescaled video.
+        """
+        return rescale(video, scale=scale, data_format=data_format, input_data_format=input_data_format, **kwargs)
+
+    def normalize(
+        self,
+        video: np.ndarray,
+        mean: Union[float, Iterable[float]],
+        std: Union[float, Iterable[float]],
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs,
+    ) -> np.ndarray:
+        """
+        Normalize an video. video = (video - mean) / std.
+
+        Args:
+            video (`np.ndarray`):
+                Video to normalize.
+            mean (`float` or `Iterable[float]`):
+                Mean to use for normalization.
+            std (`float` or `Iterable[float]`):
+                Standard deviation to use for normalization.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output video. If unset, the channel dimension format of the input
+                video is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: video in (num_frames, num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: video in (num_frames, height, width, num_channels) format.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input video. If unset, the channel dimension format is inferred
+                from the input video. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: video in (num_frames, num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: video in (num_frames, height, width, num_channels) format.
+
+        Returns:
+            `np.ndarray`: The normalized video.
+        """
+        return normalize(
+            video, mean=mean, std=std, data_format=data_format, input_data_format=input_data_format, **kwargs
+        )
+
+    def center_crop(
+        self,
+        video: np.ndarray,
+        size: Dict[str, int],
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        **kwargs,
+    ) -> np.ndarray:
+        """
+        Center crop an video to `(size["height"], size["width"])`. If the input size is smaller than `crop_size` along
+        any edge, the video is padded with 0's and then center cropped.
+
+        Args:
+            video (`np.ndarray`):
+                Video to center crop.
+            size (`Dict[str, int]`):
+                Size of the output video.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output video. If unset, the channel dimension format of the input
+                video is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: video in (num_frames, num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: video in (num_frames, height, width, num_channels) format.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input video. If unset, the channel dimension format is inferred
+                from the input video. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: video in (num_frames, num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: video in (num_frames, height, width, num_channels) format.
+        """
+        size = get_size_dict(size)
+        if "height" not in size or "width" not in size:
+            raise ValueError(f"The size dictionary must have keys 'height' and 'width'. Got {size.keys()}")
+        return center_crop(
+            video,
+            size=(size["height"], size["width"]),
+            data_format=data_format,
+            input_data_format=input_data_format,
+            **kwargs,
+        )
 
     @classmethod
     def from_pretrained(

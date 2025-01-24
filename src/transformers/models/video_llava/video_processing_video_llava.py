@@ -52,7 +52,7 @@ if is_vision_available():
 
 class VideoLlavaVideoProcessor(BaseVideoProcessor):
     r"""
-    Constructs a CLIP image processor.
+    Constructs a VideoLlava video processor.
 
     Args:
         do_resize (`bool`, *optional*, defaults to `True`):
@@ -89,7 +89,7 @@ class VideoLlavaVideoProcessor(BaseVideoProcessor):
             Whether to convert the video to RGB.
     """
 
-    model_input_names = ["pixel_values"]
+    model_input_names = ["pixel_values_videos"]
 
     def __init__(
         self,
@@ -231,17 +231,17 @@ class VideoLlavaVideoProcessor(BaseVideoProcessor):
                 - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                 - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
                 - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
-            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output video. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: video in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: video in (height, width, num_channels) format.
-                - Unset: Use the channel dimension format of the input video.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output video. If unset, the channel dimension format of the input
+                video is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: video in (num_frames, num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: video in (num_frames, height, width, num_channels) format.
             input_data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format for the input video. If unset, the channel dimension format is inferred
                 from the input video. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: video in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: video in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: video in (height, width) format.
+                - `"channels_first"` or `ChannelDimension.FIRST`: video in (num_frames, num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: video in (num_frames, height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: video in (num_frames, height, width) format.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
@@ -338,22 +338,20 @@ class VideoLlavaVideoProcessor(BaseVideoProcessor):
             input_data_format = infer_channel_dimension_format(image)
 
         if do_resize:
-            image = self.resize(image=image, size=size, resample=resample, input_data_format=input_data_format)
+            image = self.resize(image, size=size, resample=resample, input_data_format=input_data_format)
 
         if do_center_crop:
-            image = self.center_crop(image=image, size=crop_size, input_data_format=input_data_format)
+            image = self.center_crop(image, size=crop_size, input_data_format=input_data_format)
 
         if do_rescale:
-            image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
+            image = self.rescale(image, scale=rescale_factor, input_data_format=input_data_format)
 
         if do_normalize:
-            image = self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+            image = self.normalize(image, mean=image_mean, std=image_std, input_data_format=input_data_format)
 
         image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
 
         return image
 
 
-# TODO (raushan): can be removed after v5 release. Kept for backwards compatibility
-VideoLlavaImageProcessor = VideoLlavaVideoProcessor
-__all__ = ["VideoLlavaImageProcessor", "VideoLlavaVideoProcessor"]
+__all__ = ["VideoLlavaVideoProcessor"]

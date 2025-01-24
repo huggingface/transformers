@@ -38,7 +38,7 @@ class VideoLlavaProcessor(ProcessorMixin):
     [`~VideoLlavaProcessor.__call__`] and [`~VideoLlavaProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`CLIPImageProcessor`], *optional*):
+        image_processor ([`VideoLlavaImageProcessor`], *optional*):
             The image processor is a required input.
         video_processor ([`VideoLlavaVideoProcessor`], *optional*):
             The video processor is a required input.
@@ -69,7 +69,7 @@ class VideoLlavaProcessor(ProcessorMixin):
         "video_token",
         "num_additional_image_tokens",
     ]
-    image_processor_class = "CLIPImageProcessor"
+    image_processor_class = "VideoLlavaImageProcessor"
     video_processor_class = "VideoLlavaVideoProcessor"
     tokenizer_class = "AutoTokenizer"
 
@@ -152,53 +152,46 @@ class VideoLlavaProcessor(ProcessorMixin):
               `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
+            - **pixel_values_videos** -- Pixel values to be fed to a model. Returned when `videos` is not `None`.
         """
         data = {}
-        if images is not None or videos is not None:
-            encoded_images = self.image_processor(images=images, videos=videos, return_tensors=return_tensors)
+        if images is not None:
+            encoded_images = self.image_processor(images=images, return_tensors=return_tensors)
             data.update(encoded_images)
+
+        if videos is not None:
+            encoded_videos = self.video_processor(videos=videos, return_tensors=return_tensors)
+            data.update(encoded_videos)
 
         if isinstance(text, str):
             text = [text]
         elif not isinstance(text, list) and not isinstance(text[0], str):
             raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
-        prompt_strings = text
-
         if encoded_images is not None:
-            if "pixel_values_images" in encoded_images.keys():
-                height, width = get_image_size(to_numpy_array(encoded_images.get("pixel_values_images")[0]))
-                num_frames = 1
-
-            if "pixel_values_videos" in encoded_images.keys():
-                one_video = encoded_images.get("pixel_values_videos")[0]
-                if isinstance(encoded_images.get("pixel_values_videos")[0], (list, tuple)):
-                    one_video = np.array(one_video)
-                else:
-                    one_video = to_numpy_array(one_video)
-                height, width = get_image_size(one_video[0])
-                num_frames = one_video.shape[0]  # frame dim is always after batch dim
-
-            num_image_tokens = (height // self.patch_size) * (
-                width // self.patch_size
-            ) + self.num_additional_image_tokens
-            num_video_tokens = num_image_tokens * num_frames
-
-            num_image_tokens = (height // self.patch_size) * (
-                width // self.patch_size
-            ) + self.num_additional_image_tokens
-            num_video_tokens = num_image_tokens * num_frames
+            height, width = get_image_size(to_numpy_array(encoded_images.get("pixel_values_images")[0]))
+            num_image_tokens = (height // self.patch_size) * (width // self.patch_size)
+            num_image_tokens += self.num_additional_image_tokens
             if self.vision_feature_select_strategy == "default":
                 num_image_tokens -= 1
+            text = [sample.replace(self.image_token, self.image_token * num_image_tokens) for sample in text]
 
-            prompt_strings = []
-            for sample in text:
-                sample = sample.replace(self.image_token, self.image_token * num_image_tokens)
-                sample = sample.replace(self.video_token, self.video_token * num_video_tokens)
-                prompt_strings.append(sample)
+        if encoded_videos is not None:
+            one_video = encoded_videos.get("pixel_values_videos")[0]
+            if isinstance(encoded_videos.get("pixel_values_videos")[0], (list, tuple)):
+                one_video = np.array(one_video)
+            else:
+                one_video = to_numpy_array(one_video)
+            height, width = get_image_size(one_video[0])
+            num_frames = one_video.shape[0]  # frame dim is always after batch dim
+
+            num_image_tokens = (height // self.patch_size) * (width // self.patch_size)
+            num_image_tokens += self.num_additional_image_tokens
+            num_video_tokens = num_image_tokens * num_frames
+            text = [sample.replace(self.video_token, self.video_token * num_video_tokens) for sample in text]
 
         text_inputs = self.tokenizer(
-            prompt_strings,
+            text,
             return_tensors=return_tensors,
             padding=padding,
             truncation=truncation,
