@@ -1,7 +1,7 @@
 name: Assign PR Reviewers
 on:
-  pull_request:
-#    types: [opened]
+  pull_request_target:
+    types: [opened, ready_for_review, reopened]
 
 jobs:
   assign_reviewers:
