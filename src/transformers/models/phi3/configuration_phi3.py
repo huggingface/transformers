@@ -82,7 +82,7 @@ class Phi3Config(PretrainedConfig):
             the `short_factor` and `long_factor` must be lists of numbers with the same length as the hidden size
             divided by the number of attention heads divided by 2.
         partial_rotary_factor (`float`, *optional*, defaults to 1.0):
-            Percentage of the query and keys which will have rotary embedding.
+            Percentage of the query and keys which will have rotary embedding. Must be between 0.0 and 1.0.
         bos_token_id (`int`, *optional*, defaults to 1):
             The id of the "beginning-of-sequence" token.
         eos_token_id (`int`, *optional*, defaults to 32000):
@@ -130,7 +130,7 @@ class Phi3Config(PretrainedConfig):
         tie_word_embeddings=False,
         rope_theta=10000.0,
         rope_scaling=None,
-        partial_rotary_factor=1,
+        partial_rotary_factor=1.0,
         bos_token_id=1,
         eos_token_id=32000,
         pad_token_id=32000,
