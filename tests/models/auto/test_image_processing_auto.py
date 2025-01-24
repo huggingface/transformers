@@ -131,7 +131,7 @@ class AutoImageProcessorTest(unittest.TestCase):
     def test_image_processor_not_found(self):
         with self.assertRaisesRegex(
             EnvironmentError,
-            "hf-internal-testing/config-no-model does not appear to have a file named image_preprocessor_config.json.",
+            "hf-internal-testing/config-no-model does not appear to have a file named preprocessor_config.json.",
         ):
             _ = AutoImageProcessor.from_pretrained("hf-internal-testing/config-no-model")
 

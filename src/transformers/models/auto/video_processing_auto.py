@@ -55,6 +55,7 @@ else:
             ("instructblipvideo", ("InstructBlipVideoVideoProcessor",)),
             ("llava_next_video", ("LlavaNextVideoVideoProcessor",)),
             ("llava_onevision", ("LlavaOnevisionVideoProcessor",)),
+            ("qwen2_5_vl", ("Qwen2_5_VLVideoProcessor",)),
             ("qwen2_vl", ("Qwen2VLVideoProcessor",)),
             ("video_llava", ("VideoLlavaVideoProcessor",)),
         ]
@@ -159,7 +160,7 @@ def get_video_processor_config(
 
     ```python
     # Download configuration from huggingface.co and cache.
-    video_processor_config = get_video_processor_config("google-bert/bert-base-uncased")
+    video_processor_config = get_video_processor_config("llava-hf/llava-onevision-qwen2-0.5b-ov-hf")
     # This model does not have a video processor config so the result will be an empty dict.
     video_processor_config = get_video_processor_config("FacebookAI/xlm-roberta-base")
 
