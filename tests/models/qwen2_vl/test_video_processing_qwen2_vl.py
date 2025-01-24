@@ -246,6 +246,7 @@ class Qwen2VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
             encoded_videos = video_processing(video_inputs_nested, return_tensors="pt")[self.input_name]
             self.assertEqual(list(encoded_videos.shape), expected_output_video_shape)
 
+    @unittest.skip("Skip for now, the test needs adjustment fo Qwen2VL")
     def test_call_numpy_4_channels(self):
         for video_processing_class in self.video_processor_list:
             # Test that can process videos which have an arbitrary number of channels

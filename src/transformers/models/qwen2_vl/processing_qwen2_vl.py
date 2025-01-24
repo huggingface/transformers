@@ -116,24 +116,20 @@ class Qwen2VLProcessor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
+
+        image_inputs = videos_inputs = {}
         if images is not None:
-            image_inputs = self.image_processor(images=images, videos=None, **output_kwargs["images_kwargs"])
+            image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
             image_grid_thw = image_inputs["image_grid_thw"]
-        else:
-            image_inputs = {}
-            image_grid_thw = None
 
         if videos is not None:
-            videos_inputs = self.image_processor(images=None, videos=videos, **output_kwargs["videos_kwargs"])
+            videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
             video_grid_thw = videos_inputs["video_grid_thw"]
-        else:
-            videos_inputs = {}
-            video_grid_thw = None
 
         if not isinstance(text, list):
             text = [text]
 
-        if image_grid_thw is not None:
+        if images is not None:
             merge_length = self.image_processor.merge_size**2
             index = 0
             for i in range(len(text)):
@@ -144,7 +140,7 @@ class Qwen2VLProcessor(ProcessorMixin):
                     index += 1
                 text[i] = text[i].replace("<|placeholder|>", self.image_token)
 
-        if video_grid_thw is not None:
+        if videos is not None:
             merge_length = self.image_processor.merge_size**2
             index = 0
             for i in range(len(text)):

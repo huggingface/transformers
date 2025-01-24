@@ -42,6 +42,7 @@ from ...image_utils import (
     is_scaled_image,
     is_valid_image,
     make_list_of_images,
+    make_list_of_videos,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -301,6 +302,7 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
+        videos: VideoInput = None,
         do_resize: bool = None,
         size: Dict[str, int] = None,
         resample: PILImageResampling = None,
@@ -319,6 +321,9 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
             images (`ImageInput`):
                 Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
                 passing in images with pixel values between 0 and 1, set `do_rescale=False`.
+            videos (`VideoInput`):
+                Video to preprocess. Expects a single or batch of videos with pixel values ranging from 0 to 255. If
+                passing in videos with pixel values between 0 and 1, set `do_rescale=False`.
             do_resize (`bool`, *optional*, defaults to `self.do_resize`):
                 Whether to resize the image.
             size (`Dict[str, int]`, *optional*, defaults to `self.size`):
@@ -389,29 +394,62 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
             resample=resample,
         )
 
-        pixel_values, vision_grid_thws = [], []
-        for image in images:
-            patches, image_grid_thw = self._preprocess(
-                image,
-                do_resize=do_resize,
-                resample=resample,
-                do_rescale=do_rescale,
-                rescale_factor=rescale_factor,
-                do_normalize=do_normalize,
-                image_mean=image_mean,
-                image_std=image_std,
-                data_format=data_format,
-                do_convert_rgb=do_convert_rgb,
-                input_data_format=input_data_format,
-            )
-            pixel_values.extend(patches)
-            vision_grid_thws.append(image_grid_thw)
-        pixel_values = np.array(pixel_values)
-        vision_grid_thws = np.array(vision_grid_thws)
+        data = {}
+        if images is not None:
+            pixel_values, vision_grid_thws = [], []
+            for image in images:
+                patches, image_grid_thw = self._preprocess(
+                    image,
+                    do_resize=do_resize,
+                    resample=resample,
+                    do_rescale=do_rescale,
+                    rescale_factor=rescale_factor,
+                    do_normalize=do_normalize,
+                    image_mean=image_mean,
+                    image_std=image_std,
+                    data_format=data_format,
+                    do_convert_rgb=do_convert_rgb,
+                    input_data_format=input_data_format,
+                )
+                pixel_values.extend(patches)
+                vision_grid_thws.append(image_grid_thw)
+            pixel_values = np.array(pixel_values)
+            vision_grid_thws = np.array(vision_grid_thws)
+            data.update({"pixel_values": pixel_values, "image_grid_thw": vision_grid_thws})
 
-        return BatchFeature(
-            data={"pixel_values": pixel_values, "image_grid_thw": vision_grid_thws}, tensor_type=return_tensors
-        )
+        # kept for BC only and should be removed after v5.0
+        if videos is not None:
+            logger.warning(
+                "`Qwen2VLImageProcessor` works only with image inputs and doesn't process videos anymore. "
+                "This is a deprecated behavior and will be removed in v5.0. "
+                "Your videos should be forwarded to `Qwen2VLVideoProcessor`. "
+            )
+            videos = make_list_of_videos(videos)
+            pixel_values_videos, vision_grid_thws_videos = [], []
+            for images in videos:
+                patches, video_grid_thw = self._preprocess(
+                    images,
+                    do_resize=do_resize,
+                    resample=resample,
+                    do_rescale=do_rescale,
+                    rescale_factor=rescale_factor,
+                    do_normalize=do_normalize,
+                    image_mean=image_mean,
+                    image_std=image_std,
+                    data_format=data_format,
+                    do_convert_rgb=do_convert_rgb,
+                    input_data_format=input_data_format,
+                )
+                pixel_values_videos.extend(patches)
+                vision_grid_thws_videos.append(video_grid_thw)
+            data.update(
+                {
+                    "pixel_values_videos": np.array(pixel_values_videos),
+                    "video_grid_thw": np.array(vision_grid_thws_videos),
+                }
+            )
+
+        return BatchFeature(data=data, tensor_type=return_tensors)
 
 
 __all__ = ["Qwen2VLImageProcessor"]
