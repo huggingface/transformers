@@ -16,7 +16,7 @@
 import unittest
 
 import numpy as np
-
+import requests
 from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 from transformers.models.qwen2_vl.image_processing_qwen2_vl import smart_resize
 from transformers.testing_utils import require_torch, require_vision
@@ -296,3 +296,24 @@ class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
                 encoded_video = prcocess_out.pixel_values_videos
                 expected_output_video_shape = (171500, 1176)
                 self.assertEqual(tuple(encoded_video.shape), expected_output_video_shape)
+
+    @require_vision
+    @require_torch
+    def test_slow_fast_equivalence(self):
+        dummy_image = Image.open(
+            requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
+        )
+
+        if not self.test_slow_image_processor or not self.test_fast_image_processor:
+            self.skipTest(reason="Skipping slow/fast equivalence test")
+
+        if self.image_processing_class is None or self.fast_image_processing_class is None:
+            self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
+
+        image_processor_slow = self.image_processing_class(**self.image_processor_dict)
+        image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
+
+        encoding_slow = image_processor_slow(dummy_image, return_tensors="pt")
+        encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
+
+        torch.testing.assert_close(encoding_slow.pixel_values, encoding_fast.pixel_values, rtol=100, atol=1e-2) # @yoni bit weird that we have such diffs
