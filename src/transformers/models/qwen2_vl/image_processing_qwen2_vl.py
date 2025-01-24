@@ -413,4 +413,5 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
             data={"pixel_values": pixel_values, "image_grid_thw": vision_grid_thws}, tensor_type=return_tensors
         )
 
+
 __all__ = ["Qwen2VLImageProcessor"]

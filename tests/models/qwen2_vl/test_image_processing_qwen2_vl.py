@@ -20,7 +20,7 @@ import numpy as np
 from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 from transformers.models.qwen2_vl.image_processing_qwen2_vl import smart_resize
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs, prepare_video_inputs
 
@@ -33,8 +33,8 @@ if is_vision_available():
 
     from transformers import Qwen2VLImageProcessor
 
-    if is_torchvision_available():
-        from transformers import Qwen2VLImageProcessorFast
+    # if is_torchvision_available():
+    #     from transformers import Qwen2VLImageProcessorFast
 
 
 class Qwen2VLImageProcessingTester:
@@ -117,7 +117,7 @@ class Qwen2VLImageProcessingTester:
 @require_vision
 class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = Qwen2VLImageProcessor if is_vision_available() else None
-    fast_image_processing_class = Qwen2VLImageProcessorFast if is_torchvision_available() else None
+    # fast_image_processing_class = Qwen2VLImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()

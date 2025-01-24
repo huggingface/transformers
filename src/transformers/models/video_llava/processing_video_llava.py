@@ -89,7 +89,7 @@ class VideoLlavaProcessor(ProcessorMixin):
         self.patch_size = patch_size
         self.num_additional_image_tokens = num_additional_image_tokens
         self.vision_feature_select_strategy = vision_feature_select_strategy
-        elf.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
+        self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
         self.video_token = tokenizer.video_token if hasattr(tokenizer, "video_token") else video_token
         super().__init__(image_processor, video_processor, tokenizer, chat_template=chat_template)
 

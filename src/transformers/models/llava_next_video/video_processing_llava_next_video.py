@@ -403,4 +403,4 @@ class LlavaNextVideoVideoProcessor(BaseVideoProcessor):
 
 # TODO (raushan): can be removed after v5 release. Kept for backwards compatibility
 LlavaNextVideoImageProcessor = LlavaNextVideoVideoProcessor
-__all__ = ["LlavaNextVideoImageProcessor"]
+__all__ = ["LlavaNextVideoImageProcessor", "LlavaNextVideoVideoProcessor"]

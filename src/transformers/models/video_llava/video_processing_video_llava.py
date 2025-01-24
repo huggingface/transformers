@@ -356,4 +356,4 @@ class VideoLlavaVideoProcessor(BaseVideoProcessor):
 
 # TODO (raushan): can be removed after v5 release. Kept for backwards compatibility
 VideoLlavaImageProcessor = VideoLlavaVideoProcessor
-__all__ = ["VideoLlavaImageProcessor"]
+__all__ = ["VideoLlavaImageProcessor", "VideoLlavaVideoProcessor"]

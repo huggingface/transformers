@@ -242,7 +242,7 @@ def make_list_of_videos(videos) -> List[VideoInput]:
         return videos
 
     elif isinstance(videos, (list, tuple)) and is_valid_image(videos[0]):
-        if len(videos[0].shape) == 4:
+        if not isinstance(videos[0], PIL.Image.Image) and len(videos[0].shape) == 4:
             return [list(video) for video in videos]
         else:
             return [videos]
