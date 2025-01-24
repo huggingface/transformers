@@ -149,26 +149,6 @@ class DepthProDepthEstimatorOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 
-def patch_to_batch(data: torch.Tensor, batch_size: int) -> torch.Tensor:
-    """
-    Converts tensor from shape:
-    (num_patches, seq_len, hidden_size) -> (batch_size, n_patches_per_batch, seq_len, hidden_size)
-    """
-    data = data.reshape(-1, batch_size, *data.shape[1:])
-    data = data.transpose(0, 1)
-    return data
-
-
-def batch_to_patch(data: torch.Tensor) -> torch.Tensor:
-    """
-    Converts tensor from shape:
-    (batch_size, n_patches_per_batch, seq_len, hidden_size) -> (num_patches, seq_len, hidden_size)
-    """
-    data = data.transpose(0, 1)
-    data = data.reshape(-1, *data.shape[2:])
-    return data
-
-
 class DepthProFeatureUpsample(nn.Module):
     def __init__(self, config: DepthProConfig):
         super().__init__()
