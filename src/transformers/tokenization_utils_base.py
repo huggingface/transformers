@@ -28,7 +28,7 @@ from collections.abc import Mapping, Sized
 from contextlib import contextmanager
 from dataclasses import dataclass
 from inspect import isfunction
-from typing import TYPE_CHECKING, Any, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, NamedTuple, Optional, Sequence, Tuple, Union
 
 import numpy as np
 from packaging import version
@@ -145,6 +145,7 @@ AudioInput = Union["np.ndarray", "torch.Tensor", List["np.ndarray"], List["torch
 SPECIAL_TOKENS_MAP_FILE = "special_tokens_map.json"
 ADDED_TOKENS_FILE = "added_tokens.json"
 TOKENIZER_CONFIG_FILE = "tokenizer_config.json"
+CHAT_TEMPLATE_FILE = "chat_template.jinja"
 
 # Fast tokenizers (provided by HuggingFace tokenizer's library) can be saved in a single file
 FULL_TOKENIZER_FILE = "tokenizer.json"
@@ -798,12 +799,13 @@ class BatchEncoding(UserDict):
 
         return self
 
-    def to(self, device: Union[str, "torch.device"]) -> "BatchEncoding":
+    def to(self, device: Union[str, "torch.device"], *, non_blocking: bool = False) -> "BatchEncoding":
         """
-        Send all values to device by calling `v.to(device)` (PyTorch only).
+        Send all values to device by calling `v.to(device, non_blocking=non_blocking)` (PyTorch only).
 
         Args:
             device (`str` or `torch.device`): The device to put the tensors on.
+            non_blocking (`bool`): Whether to perform the copy asynchronously.
 
         Returns:
             [`BatchEncoding`]: The same instance after modification.
@@ -815,7 +817,10 @@ class BatchEncoding(UserDict):
         # Otherwise it passes the casts down and casts the LongTensor containing the token idxs
         # into a HalfTensor
         if isinstance(device, str) or is_torch_device(device) or isinstance(device, int):
-            self.data = {k: v.to(device=device) if isinstance(v, torch.Tensor) else v for k, v in self.data.items()}
+            self.data = {
+                k: v.to(device=device, non_blocking=non_blocking) if isinstance(v, torch.Tensor) else v
+                for k, v in self.data.items()
+            }
         else:
             logger.warning(f"Attempting to cast a BatchEncoding to type {str(device)}. This is not supported.")
         return self
@@ -861,16 +866,10 @@ class SpecialTokensMixin:
     ]
 
     def __init__(self, verbose=False, **kwargs):
-        self._bos_token = None
-        self._eos_token = None
-        self._unk_token = None
-        self._sep_token = None
-        self._pad_token = None
-        self._cls_token = None
-        self._mask_token = None
         self._pad_token_type_id = 0
-        self._additional_special_tokens = []
         self.verbose = verbose
+        self._special_tokens_map = {attr: None for attr in self.SPECIAL_TOKENS_ATTRIBUTES}
+        self._special_tokens_map["additional_special_tokens"] = []  # for BC where it defaults to empty list
 
         # We directly set the hidden value to allow initialization with special tokens
         # which are not yet in the vocabulary. Necessary for serialization/de-serialization
@@ -932,7 +931,7 @@ class SpecialTokensMixin:
                 assign the index of the `unk_token` to them).
             replace_additional_special_tokens (`bool`, *optional*,, defaults to `True`):
                 If `True`, the existing list of additional special tokens will be replaced by the list provided in
-                `special_tokens_dict`. Otherwise, `self._additional_special_tokens` is just extended. In the former
+                `special_tokens_dict`. Otherwise, `self._special_tokens_map["additional_special_tokens"]` is just extended. In the former
                 case, the tokens will NOT be removed from the tokenizer's full vocabulary - they are only being flagged
                 as non-special tokens. Remember, this only affects which tokens are skipped during decoding, not the
                 `added_tokens_encoder` and `added_tokens_decoder`. This means that the previous
@@ -983,7 +982,7 @@ class SpecialTokensMixin:
                 if replace_additional_special_tokens and len(to_add) > 0:
                     setattr(self, key, list(to_add))
                 else:
-                    self._additional_special_tokens.extend(to_add)
+                    self._special_tokens_map["additional_special_tokens"].extend(to_add)
                 added_tokens += to_add
 
             else:
@@ -1006,7 +1005,7 @@ class SpecialTokensMixin:
     ) -> int:
         """
         Add a list of new tokens to the tokenizer class. If the new tokens are not in the vocabulary, they are added to
-        it with indices starting from length of the current vocabulary and and will be isolated before the tokenization
+        it with indices starting from length of the current vocabulary and will be isolated before the tokenization
         algorithm is applied. Added tokens and tokens from the vocabulary of the tokenization algorithm are therefore
         not treated in the same way.
 
@@ -1054,259 +1053,61 @@ class SpecialTokensMixin:
         raise NotImplementedError
 
     @property
-    def bos_token(self) -> str:
-        """
-        `str`: Beginning of sentence token. Log an error if used while not having been set.
-        """
-        if self._bos_token is None:
-            if self.verbose:
-                logger.error("Using bos_token, but it is not set yet.")
-            return None
-        return str(self._bos_token)
-
-    @property
-    def eos_token(self) -> str:
-        """
-        `str`: End of sentence token. Log an error if used while not having been set.
-        """
-        if self._eos_token is None:
-            if self.verbose:
-                logger.error("Using eos_token, but it is not set yet.")
-            return None
-        return str(self._eos_token)
-
-    @property
-    def unk_token(self) -> str:
-        """
-        `str`: Unknown token. Log an error if used while not having been set.
-        """
-        if self._unk_token is None:
-            if self.verbose:
-                logger.error("Using unk_token, but it is not set yet.")
-            return None
-        return str(self._unk_token)
-
-    @property
-    def sep_token(self) -> str:
-        """
-        `str`: Separation token, to separate context and query in an input sequence. Log an error if used while not
-        having been set.
-        """
-        if self._sep_token is None:
-            if self.verbose:
-                logger.error("Using sep_token, but it is not set yet.")
-            return None
-        return str(self._sep_token)
-
-    @property
-    def pad_token(self) -> str:
-        """
-        `str`: Padding token. Log an error if used while not having been set.
-        """
-        if self._pad_token is None:
-            if self.verbose:
-                logger.error("Using pad_token, but it is not set yet.")
-            return None
-        return str(self._pad_token)
-
-    @property
-    def cls_token(self) -> str:
-        """
-        `str`: Classification token, to extract a summary of an input sequence leveraging self-attention along the full
-        depth of the model. Log an error if used while not having been set.
-        """
-        if self._cls_token is None:
-            if self.verbose:
-                logger.error("Using cls_token, but it is not set yet.")
-            return None
-        return str(self._cls_token)
-
-    @property
-    def mask_token(self) -> str:
-        """
-        `str`: Mask token, to use when training a model with masked-language modeling. Log an error if used while not
-        having been set.
-        """
-        if self._mask_token is None:
-            if self.verbose:
-                logger.error("Using mask_token, but it is not set yet.")
-            return None
-        return str(self._mask_token)
-
-    @property
-    def additional_special_tokens(self) -> List[str]:
-        """
-        `List[str]`: All the additional special tokens you may want to use. Log an error if used while not having been
-        set.
-        """
-        if self._additional_special_tokens is None:
-            if self.verbose:
-                logger.error("Using additional_special_tokens, but it is not set yet.")
-            return None
-        return [str(tok) for tok in self._additional_special_tokens]
-
-    @bos_token.setter
-    def bos_token(self, value):
-        if not isinstance(value, (str, AddedToken)) and value is not None:
-            raise ValueError("Cannot set a non-string value as the BOS token")
-        self._bos_token = value
-
-    @eos_token.setter
-    def eos_token(self, value):
-        if not isinstance(value, (str, AddedToken)) and value is not None:
-            raise ValueError("Cannot set a non-string value as the EOS token")
-        self._eos_token = value
-
-    @unk_token.setter
-    def unk_token(self, value):
-        if not isinstance(value, (str, AddedToken)) and value is not None:
-            raise ValueError("Cannot set a non-string value as the UNK token")
-        self._unk_token = value
-
-    @sep_token.setter
-    def sep_token(self, value):
-        if not isinstance(value, (str, AddedToken)) and value is not None:
-            raise ValueError("Cannot set a non-string value as the SEP token")
-        self._sep_token = value
-
-    @pad_token.setter
-    def pad_token(self, value):
-        if not isinstance(value, (str, AddedToken)) and value is not None:
-            raise ValueError("Cannot set a non-string value as the PAD token")
-        self._pad_token = value
-
-    @cls_token.setter
-    def cls_token(self, value):
-        if not isinstance(value, (str, AddedToken)) and value is not None:
-            raise ValueError("Cannot set a non-string value as the CLS token")
-        self._cls_token = value
-
-    @mask_token.setter
-    def mask_token(self, value):
-        if not isinstance(value, (str, AddedToken)) and value is not None:
-            raise ValueError("Cannot set a non-string value as the MASK token")
-        self._mask_token = value
-
-    @additional_special_tokens.setter
-    def additional_special_tokens(self, value):
-        self._additional_special_tokens = value if value is not None else None
-
-    @property
-    def bos_token_id(self) -> Optional[int]:
-        """
-        `Optional[int]`: Id of the beginning of sentence token in the vocabulary. Returns `None` if the token has not
-        been set.
-        """
-        if self._bos_token is None:
-            return None
-        return self.convert_tokens_to_ids(self.bos_token)
-
-    @property
-    def eos_token_id(self) -> Optional[int]:
-        """
-        `Optional[int]`: Id of the end of sentence token in the vocabulary. Returns `None` if the token has not been
-        set.
-        """
-        if self._eos_token is None:
-            return None
-        return self.convert_tokens_to_ids(self.eos_token)
-
-    @property
-    def unk_token_id(self) -> Optional[int]:
-        """
-        `Optional[int]`: Id of the unknown token in the vocabulary. Returns `None` if the token has not been set.
-        """
-        if self._unk_token is None:
-            return None
-        return self.convert_tokens_to_ids(self.unk_token)
-
-    @property
-    def sep_token_id(self) -> Optional[int]:
-        """
-        `Optional[int]`: Id of the separation token in the vocabulary, to separate context and query in an input
-        sequence. Returns `None` if the token has not been set.
-        """
-        if self._sep_token is None:
-            return None
-        return self.convert_tokens_to_ids(self.sep_token)
-
-    @property
-    def pad_token_id(self) -> Optional[int]:
-        """
-        `Optional[int]`: Id of the padding token in the vocabulary. Returns `None` if the token has not been set.
-        """
-        if self._pad_token is None:
-            return None
-        return self.convert_tokens_to_ids(self.pad_token)
-
-    @property
     def pad_token_type_id(self) -> int:
         """
         `int`: Id of the padding token type in the vocabulary.
         """
         return self._pad_token_type_id
 
-    @property
-    def cls_token_id(self) -> Optional[int]:
-        """
-        `Optional[int]`: Id of the classification token in the vocabulary, to extract a summary of an input sequence
-        leveraging self-attention along the full depth of the model.
+    def __setattr__(self, key, value):
+        key_without_id = key
+        key_is_special_id = key.endswith("_id") or key.endswith("_ids")
+        if key_is_special_id:
+            key_without_id = key[:-3] if not key.endswith("_ids") else key[:-4]
 
-        Returns `None` if the token has not been set.
-        """
-        if self._cls_token is None:
-            return None
-        return self.convert_tokens_to_ids(self.cls_token)
+        if self.__dict__.get("_special_tokens_map", None) is not None and any(
+            name in self.__dict__["_special_tokens_map"] for name in [key, key_without_id]
+        ):
+            if key_is_special_id:
+                if value is not None:
+                    value = (
+                        self.convert_ids_to_tokens(value)
+                        if key != "additional_special_tokens"
+                        else [self.convert_ids_to_tokens(val) for val in value]
+                    )
+                key = key_without_id
 
-    @property
-    def mask_token_id(self) -> Optional[int]:
-        """
-        `Optional[int]`: Id of the mask token in the vocabulary, used when training a model with masked-language
-        modeling. Returns `None` if the token has not been set.
-        """
-        if self._mask_token is None:
-            return None
-        return self.convert_tokens_to_ids(self.mask_token)
+            if key != "additional_special_tokens" and not isinstance(value, (str, AddedToken)) and value is not None:
+                raise ValueError(f"Cannot set a non-string value as the {key}")
+            self._special_tokens_map[key] = value
+        else:
+            super().__setattr__(key, value)
 
-    @property
-    def additional_special_tokens_ids(self) -> List[int]:
-        """
-        `List[int]`: Ids of all the additional special tokens in the vocabulary. Log an error if used while not having
-        been set.
-        """
-        return self.convert_tokens_to_ids(self.additional_special_tokens)
+    def __getattr__(self, key):
+        key_without_id = key
+        key_is_special_id = key.endswith("_id") or key.endswith("_ids")
+        if key_is_special_id:
+            key_without_id = key[:-3] if not key.endswith("_ids") else key[:-4]
 
-    @bos_token_id.setter
-    def bos_token_id(self, value):
-        self._bos_token = self.convert_ids_to_tokens(value) if value is not None else None
+        if self.__dict__.get("_special_tokens_map", None) is not None and any(
+            name in self.__dict__["_special_tokens_map"] for name in [key, key_without_id]
+        ):
+            _special_tokens_map = self.__dict__["_special_tokens_map"]
+            if not key_is_special_id:
+                if _special_tokens_map[key] is None:
+                    if self.verbose:
+                        logger.error(f"Using {key}, but it is not set yet.")
+                    return None
+                value = _special_tokens_map[key]
+                return str(value) if key != "additional_special_tokens" else [str(tok) for tok in value]
+            else:
+                attr_as_tokens = getattr(self, key_without_id)
+                return self.convert_tokens_to_ids(attr_as_tokens) if attr_as_tokens is not None else None
 
-    @eos_token_id.setter
-    def eos_token_id(self, value):
-        self._eos_token = self.convert_ids_to_tokens(value) if value is not None else None
-
-    @unk_token_id.setter
-    def unk_token_id(self, value):
-        self._unk_token = self.convert_ids_to_tokens(value) if value is not None else None
-
-    @sep_token_id.setter
-    def sep_token_id(self, value):
-        self._sep_token = self.convert_ids_to_tokens(value) if value is not None else None
-
-    @pad_token_id.setter
-    def pad_token_id(self, value):
-        self._pad_token = self.convert_ids_to_tokens(value) if value is not None else None
-
-    @cls_token_id.setter
-    def cls_token_id(self, value):
-        self._cls_token = self.convert_ids_to_tokens(value) if value is not None else None
-
-    @mask_token_id.setter
-    def mask_token_id(self, value):
-        self._mask_token = self.convert_ids_to_tokens(value) if value is not None else None
-
-    @additional_special_tokens_ids.setter
-    def additional_special_tokens_ids(self, values):
-        self._additional_special_tokens = [self.convert_ids_to_tokens(value) for value in values]
+        if key not in self.__dict__:
+            raise AttributeError(f"{self.__class__.__name__} has no attribute {key}")
+        else:
+            return super().__getattr__(key)
 
     @property
     def special_tokens_map(self) -> Dict[str, Union[str, List[str]]]:
@@ -1334,7 +1135,7 @@ class SpecialTokensMixin:
         """
         set_attr = {}
         for attr in self.SPECIAL_TOKENS_ATTRIBUTES:
-            attr_value = getattr(self, "_" + attr)
+            attr_value = self._special_tokens_map[attr]
             if attr_value:
                 set_attr[attr] = attr_value
         return set_attr
@@ -1378,6 +1179,20 @@ class SpecialTokensMixin:
         all_toks = self.all_special_tokens
         all_ids = self.convert_tokens_to_ids(all_toks)
         return all_ids
+
+    def _set_model_specific_special_tokens(self, special_tokens: List[str]):
+        """
+        Adds new special tokens to the "SPECIAL_TOKENS_ATTRIBUTES" list which will be part
+        of "self.special_tokens" and saved as a special token in tokenizer's config.
+        This allows us to dynamically add new model-type specific tokens after initilizing the tokenizer.
+        For example: if the model tokenizers is multimodal, we can support special image or audio tokens.
+        """
+        self.SPECIAL_TOKENS_ATTRIBUTES = self.SPECIAL_TOKENS_ATTRIBUTES + list(special_tokens.keys())
+        for key, value in special_tokens.items():
+            if isinstance(value, (str, AddedToken)):
+                self._special_tokens_map[key] = value
+            else:
+                raise TypeError(f"Special token {key} has to be either str or AddedToken but got: {type(value)}")
 
 
 ENCODE_KWARGS_DOCSTRING = r"""
@@ -1633,6 +1448,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
 
         super().__init__(**kwargs)
 
+        self.extra_special_tokens = kwargs.pop("extra_special_tokens", {})
+        self._set_model_specific_special_tokens(special_tokens=self.extra_special_tokens)
+
     @property
     def max_len_single_sentence(self) -> int:
         """
@@ -1687,8 +1505,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             f"{self.__class__.__name__}(name_or_path='{self.name_or_path}',"
             f" vocab_size={self.vocab_size}, model_max_length={self.model_max_length}, is_fast={self.is_fast},"
             f" padding_side='{self.padding_side}', truncation_side='{self.truncation_side}',"
-            f" special_tokens={self.special_tokens_map}, clean_up_tokenization_spaces={self.clean_up_tokenization_spaces}), "
-            " added_tokens_decoder={\n\t" + added_tokens_decoder_rep + "\n}"
+            f" special_tokens={self.special_tokens_map}, clean_up_tokenization_spaces={self.clean_up_tokenization_spaces},"
+            " added_tokens_decoder={\n\t" + added_tokens_decoder_rep + "\n}\n)"
         )
 
     def __len__(self) -> int:
@@ -1709,13 +1527,13 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
     def apply_chat_template(
         self,
         conversation: Union[List[Dict[str, str]], List[List[Dict[str, str]]]],
-        tools: Optional[List[Dict]] = None,
+        tools: Optional[List[Union[Dict, Callable]]] = None,
         documents: Optional[List[Dict[str, str]]] = None,
         chat_template: Optional[str] = None,
         add_generation_prompt: bool = False,
         continue_final_message: bool = False,
         tokenize: bool = True,
-        padding: bool = False,
+        padding: Union[bool, str, PaddingStrategy] = False,
         truncation: bool = False,
         max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -1759,8 +1577,16 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 the model's response for it. Cannot be used at the same time as `add_generation_prompt`.
             tokenize (`bool`, defaults to `True`):
                 Whether to tokenize the output. If `False`, the output will be a string.
-            padding (`bool`, defaults to `False`):
-                Whether to pad sequences to the maximum length. Has no effect if tokenize is `False`.
+            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
+                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
+                 index) among:
+
+                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+                  sequence if provided).
+                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+                  acceptable input length for the model if that argument is not provided.
+                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+                  lengths).
             truncation (`bool`, defaults to `False`):
                 Whether to truncate sequences at the maximum length. Has no effect if tokenize is `False`.
             max_length (`int`, *optional*):
@@ -1877,8 +1703,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 final_message = chat[-1]["content"]
                 if isinstance(final_message, (list, tuple)):
                     final_message = final_message[-1]["text"]
-                final_message = final_message.strip()
-                rendered_chat = rendered_chat[: rendered_chat.rindex(final_message) + len(final_message)].rstrip()
+                try:
+                    rendered_chat = rendered_chat[: rendered_chat.rindex(final_message) + len(final_message)]
+                except:  # noqa: E722
+                    # Some chat templates like Llama-3.1 trim messages before rendering, so we must do the same here.
+                    final_message = final_message.strip()
+                    rendered_chat = rendered_chat[: rendered_chat.rindex(final_message) + len(final_message)]
             rendered.append(rendered_chat)
 
         if not is_batched:
@@ -1909,7 +1739,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             if start_token is None:
                                 # start_token is out of bounds maybe due to truncation.
                                 break
-                            for token_id in range(start_token, end_token + 1 if end_token else len(input_ids)):
+                            for token_id in range(start_token, end_token + 1 if end_token else len(input_ids[i])):
                                 current_mask[token_id] = 1
                         assistant_masks.append(current_mask)
                     out["assistant_masks"] = assistant_masks if is_batched else assistant_masks[0]
@@ -2124,6 +1954,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     "tokenizer_config_file": TOKENIZER_CONFIG_FILE,
                     # tokenizer_file used to initialize a slow from a fast. Properly copy the `addedTokens` instead of adding in random orders
                     "tokenizer_file": FULL_TOKENIZER_FILE,
+                    "chat_template_file": CHAT_TEMPLATE_FILE,
                 }
                 vocab_files = {**cls.vocab_files_names, **additional_files_names}
                 if "tokenizer_file" in vocab_files:
@@ -2279,6 +2110,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         else:
             config_tokenizer_class = None
             init_kwargs = init_configuration
+
+        # If an independent chat template file exists, it takes priority over template entries in the tokenizer config
+        chat_template_file = resolved_vocab_files.pop("chat_template_file", None)
+        if chat_template_file is not None:
+            with open(chat_template_file) as chat_template_handle:
+                init_kwargs["chat_template"] = chat_template_handle.read()  # Clobbers any template in the config
 
         if not _is_local:
             if "auto_map" in init_kwargs:
@@ -2463,13 +2300,6 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 "Unable to load vocabulary from file. "
                 "Please check that the provided vocabulary is accessible and not corrupted."
             )
-        except RuntimeError as e:
-            if "sentencepiece_processor.cc" in str(e):
-                logger.info(
-                    "Unable to load tokenizer model from SPM, loading from TikToken will be attempted instead."
-                    "(SentencePiece RuntimeError: Tried to load SPM model with non-SPM vocab file).",
-                )
-                return False
 
         if added_tokens_decoder != {} and max(list(added_tokens_decoder.keys())[-1], 0) > tokenizer.vocab_size:
             logger.info(
@@ -2579,6 +2409,9 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         tokenizer_config_file = os.path.join(
             save_directory, (filename_prefix + "-" if filename_prefix else "") + TOKENIZER_CONFIG_FILE
         )
+        chat_template_file = os.path.join(
+            save_directory, (filename_prefix + "-" if filename_prefix else "") + CHAT_TEMPLATE_FILE
+        )
 
         tokenizer_config = copy.deepcopy(self.init_kwargs)
 
@@ -2591,14 +2424,27 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
             if hasattr(self, k):
                 tokenizer_config[k] = getattr(self, k)
 
-        # Let's make sure we properly save the special tokens.
+        # Let's make sure we properly save the special tokens
         tokenizer_config.update(self.special_tokens_map)
+        if "extra_special_tokens" not in tokenizer_config:
+            tokenizer_config["extra_special_tokens"] = self.extra_special_tokens
+            tokenizer_config.update(self.extra_special_tokens)
 
+        saved_raw_chat_template = False
         if self.chat_template is not None:
             if isinstance(self.chat_template, dict):
                 # Chat template dicts are saved to the config as lists of dicts with fixed key names.
                 # They will be reconstructed as a single dict during loading.
+                # We're trying to discourage chat template dicts, and they are always
+                # saved in the config, never as single files.
                 tokenizer_config["chat_template"] = [{"name": k, "template": v} for k, v in self.chat_template.items()]
+            elif kwargs.get("save_raw_chat_template", False):
+                with open(chat_template_file, "w", encoding="utf-8") as f:
+                    f.write(self.chat_template)
+                saved_raw_chat_template = True
+                logger.info(f"chat template saved in {chat_template_file}")
+                if "chat_template" in tokenizer_config:
+                    tokenizer_config.pop("chat_template")  # To ensure it doesn't somehow end up in the config too
             else:
                 tokenizer_config["chat_template"] = self.chat_template
 
@@ -2655,6 +2501,8 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         logger.info(f"Special tokens file saved in {special_tokens_map_file}")
 
         file_names = (tokenizer_config_file, special_tokens_map_file)
+        if saved_raw_chat_template:
+            file_names += (chat_template_file,)
 
         save_files = self._save_pretrained(
             save_directory=save_directory,
@@ -3409,11 +3257,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
                  index) among:
 
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+                - `True` or `'longest'` (default): Pad to the longest sequence in the batch (or no padding if only a single
                   sequence if provided).
                 - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
                   acceptable input length for the model if that argument is not provided.
-                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+                - `False` or `'do_not_pad'`: No padding (i.e., can output a batch with sequences of different
                   lengths).
             max_length (`int`, *optional*):
                 Maximum length of the returned list and optionally padding length (see above).

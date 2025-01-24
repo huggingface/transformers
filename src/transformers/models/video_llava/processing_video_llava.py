@@ -18,6 +18,8 @@ Processor class for VideoLlava.
 
 from typing import List, Optional, Union
 
+import numpy as np
+
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, get_image_size, to_numpy_array
 from ...processing_utils import ProcessorMixin
@@ -42,9 +44,9 @@ class VideoLlavaProcessor(ProcessorMixin):
             The video processor is a required input.
         tokenizer ([`LlamaTokenizerFast`], *optional*):
             The tokenizer is a required input.
-        patch_size (`int`, *optional*):
+        patch_size (`int`, *optional*, defaults to 14):
             Patch size from the vision tower.
-        vision_feature_select_strategy (`str`, *optional*):
+        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             The feature selection strategy used to select the vision feature from the vision backbone.
             Shoudl be same as in model's config
         image_token (`str`, *optional*, defaults to `"<image>"`):
@@ -53,11 +55,21 @@ class VideoLlavaProcessor(ProcessorMixin):
             Special token used to denote video location.
         chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
             in a chat into a tokenizable string.
+        num_additional_image_tokens (`int`, *optional*, defaults to 1):
+            Number of additional tokens added to the image embeddings, such as CLS (+1). If the backbone has no CLS or other
+            extra tokens appended, no need to set this arg.
     """
 
     attributes = ["image_processor", "video_processor", "tokenizer"]
-    valid_kwargs = ["chat_template", "patch_size", "vision_feature_select_strategy", "image_token", "video_token"]
-    image_processor_class = "CLIPImageProcessor"
+    valid_kwargs = [
+        "chat_template",
+        "patch_size",
+        "vision_feature_select_strategy",
+        "image_token",
+        "video_token",
+        "num_additional_image_tokens",
+    ]
+    image_processor_class = "VideoLlavaImageProcessor"
     video_processor_class = "VideoLlavaVideoProcessor"
     tokenizer_class = "AutoTokenizer"
 
@@ -66,17 +78,19 @@ class VideoLlavaProcessor(ProcessorMixin):
         image_processor=None,
         video_processor=None,
         tokenizer=None,
-        patch_size=None,
-        vision_feature_select_strategy=None,
+        patch_size=14,
+        vision_feature_select_strategy="default",
         image_token="<image>",  # set the default and let users change if they have peculiar special tokens in rare cases
         video_token="<video>",
         chat_template=None,
+        num_additional_image_tokens=1,
         **kwargs,
     ):
         self.patch_size = patch_size
+        self.num_additional_image_tokens = num_additional_image_tokens
         self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.image_token = image_token
-        self.video_token = video_token
+        elf.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
+        self.video_token = tokenizer.video_token if hasattr(tokenizer, "video_token") else video_token
         super().__init__(image_processor, video_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
@@ -150,28 +164,29 @@ class VideoLlavaProcessor(ProcessorMixin):
             raise ValueError("Invalid input text. Please provide a string, or a list of strings")
 
         prompt_strings = text
-        if encoded_images is not None and (self.patch_size is None or self.vision_feature_select_strategy is None):
-            logger.warning_once(
-                "Expanding inputs for image tokens in Video-LLaVa should be done in processing. "
-                "Please add `patch_size` and `vision_feature_select_strategy` to the model's processing config or set directly "
-                "with `processor.patch_size = {{patch_size}}` and processor.vision_feature_select_strategy = {{vision_feature_select_strategy}}`. "
-                "Using processors without these attributes in the config is deprecated and will throw an error in v4.44."
-            )
-        # Replace the image/video tokens with the expanded token sequence
-        elif encoded_images is not None:
+
+        if encoded_images is not None:
             if "pixel_values_images" in encoded_images.keys():
                 height, width = get_image_size(to_numpy_array(encoded_images.get("pixel_values_images")[0]))
                 num_frames = 1
 
             if "pixel_values_videos" in encoded_images.keys():
-                one_video = to_numpy_array(encoded_images.get("pixel_values_videos")[0])
+                one_video = encoded_images.get("pixel_values_videos")[0]
+                if isinstance(encoded_images.get("pixel_values_videos")[0], (list, tuple)):
+                    one_video = np.array(one_video)
+                else:
+                    one_video = to_numpy_array(one_video)
                 height, width = get_image_size(one_video[0])
                 num_frames = one_video.shape[0]  # frame dim is always after batch dim
 
-            num_image_tokens = (height // self.patch_size) * (width // self.patch_size) + 1
+            num_image_tokens = (height // self.patch_size) * (
+                width // self.patch_size
+            ) + self.num_additional_image_tokens
             num_video_tokens = num_image_tokens * num_frames
 
-            num_image_tokens = (height // self.patch_size) * (width // self.patch_size) + 1
+            num_image_tokens = (height // self.patch_size) * (
+                width // self.patch_size
+            ) + self.num_additional_image_tokens
             num_video_tokens = num_image_tokens * num_frames
             if self.vision_feature_select_strategy == "default":
                 num_image_tokens -= 1
@@ -215,3 +230,6 @@ class VideoLlavaProcessor(ProcessorMixin):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
         return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+
+__all__ = ["VideoLlavaProcessor"]

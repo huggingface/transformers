@@ -27,7 +27,7 @@ from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -579,9 +579,6 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
     is_encoder_decoder = True
     # The small T5 model needs higher percentages for CPU/MP tests
     model_split_percents = [0.5, 0.8, 0.9]
-
-    # used in `test_torch_compile`
-    _torch_compile_test_ckpt = "google-t5/t5-small"
 
     def setUp(self):
         self.model_tester = T5ModelTester(self)
@@ -1649,7 +1646,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         )
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_compile_static_cache(self):
         NUM_TOKENS_TO_GENERATE = 40
         EXPECTED_TEXT_COMPLETION = [
@@ -1689,7 +1686,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_compiled_text)
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_compile_static_cache_encoder(self):
         prompts = [
             "summarize: Simply put, the theory of relativity states that 1) the speed of light is constant in all inertial "

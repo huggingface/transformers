@@ -15,7 +15,7 @@
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -45,8 +45,8 @@ class VipLlavaConfig(PretrainedConfig):
             The activation function used by the multimodal projector.
         projector_layernorm_eps (`float`, *optional*, defaults to 1e-05):
             The layer norm epsilon of the projector layernorm
-        vision_feature_layers (`List[int]`, *optional*, defaults to `[-2, -5, -8, -11, 6]`):
-            The list of layers to select the vision features from.
+        vision_feature_layers (`Union[int, List[int]]`, *optional*, defaults to `[-2, -5, -8, -11, 6]`):
+            The vision feature layer, or list of layers to select the vision features from.
         image_seq_length (`int`, *optional*, defaults to 576):
             Sequence length of one image embedding.
 
@@ -72,7 +72,7 @@ class VipLlavaConfig(PretrainedConfig):
     ```"""
 
     model_type = "vipllava"
-    is_composition = False
+    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
 
     def __init__(
         self,
@@ -120,3 +120,6 @@ class VipLlavaConfig(PretrainedConfig):
         self.text_config = text_config
 
         super().__init__(**kwargs)
+
+
+__all__ = ["VipLlavaConfig"]

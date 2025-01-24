@@ -17,15 +17,11 @@
 
 import unittest
 
-import pytest
 from parameterized import parameterized
 
 from transformers import PhiConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
-    require_bitsandbytes,
-    require_flash_attn,
     require_torch,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -46,11 +42,7 @@ if is_torch_available():
         PhiForTokenClassification,
         PhiModel,
     )
-    from transformers.models.phi.modeling_phi import (
-        PhiDynamicNTKScalingRotaryEmbedding,
-        PhiLinearScalingRotaryEmbedding,
-        PhiRotaryEmbedding,
-    )
+    from transformers.models.phi.modeling_phi import PhiRotaryEmbedding
 
 
 class PhiModelTester:
@@ -404,12 +396,9 @@ class PhiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         # The output should be different for long inputs
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
-    # Copied from tests.models.falcon.test_modeling_falcon.FalconModelTest.test_model_rope_scaling with Falcon->Phi
+    # Copied from tests.models.gpt_neox.test_modeling_gpt_neox.GPTNeoXModelTest.test_model_rope_scaling with GPTNeoX->Phi
     def test_model_rope_scaling(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        hidden_size = config.hidden_size
-        num_heads = config.num_attention_heads
-        head_dim = hidden_size // num_heads
         scaling_factor = 10
         short_input_length = 10
         long_input_length = int(config.max_position_embeddings * 1.5)
@@ -422,11 +411,7 @@ class PhiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         position_ids_long = position_ids_long.unsqueeze(0)
 
         # Sanity check original RoPE
-        original_rope = PhiRotaryEmbedding(
-            head_dim,
-            max_position_embeddings=config.max_position_embeddings,
-            base=config.rope_theta,
-        ).to(torch_device)
+        original_rope = PhiRotaryEmbedding(config).to(torch_device)
         original_cos_short, original_sin_short = original_rope(x, position_ids_short)
         original_cos_long, original_sin_long = original_rope(x, position_ids_long)
         torch.testing.assert_close(original_cos_short, original_cos_long[:, :short_input_length, :])
@@ -434,12 +419,8 @@ class PhiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
         # Sanity check linear RoPE scaling
         # New position "x" should match original position with index "x/scaling_factor"
-        linear_scaling_rope = PhiLinearScalingRotaryEmbedding(
-            head_dim,
-            max_position_embeddings=config.max_position_embeddings,
-            base=config.rope_theta,
-            scaling_factor=scaling_factor,
-        ).to(torch_device)
+        config.rope_scaling = {"type": "linear", "factor": scaling_factor}
+        linear_scaling_rope = PhiRotaryEmbedding(config).to(torch_device)
         linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short)
         linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long)
         torch.testing.assert_close(linear_cos_short, linear_cos_long[:, :short_input_length, :])
@@ -452,12 +433,8 @@ class PhiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         # Sanity check Dynamic NTK RoPE scaling
         # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
         # with scaling_factor (or that `inv_freq` decreases)
-        ntk_scaling_rope = PhiDynamicNTKScalingRotaryEmbedding(
-            head_dim,
-            max_position_embeddings=config.max_position_embeddings,
-            base=config.rope_theta,
-            scaling_factor=scaling_factor,
-        ).to(torch_device)
+        config.rope_scaling = {"type": "dynamic", "factor": scaling_factor}
+        ntk_scaling_rope = PhiRotaryEmbedding(config).to(torch_device)
         ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short)
         ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long)
         torch.testing.assert_close(ntk_cos_short, original_cos_short)
@@ -467,43 +444,6 @@ class PhiModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(ntk_sin_long, original_sin_long)
         self.assertTrue((ntk_scaling_rope.inv_freq <= original_rope.inv_freq).all())
-
-    @require_flash_attn
-    @require_torch_gpu
-    @require_bitsandbytes
-    @pytest.mark.flash_attn_test
-    @slow
-    # Copied from tests.models.llama.test_modeling_llama.LlamaModelTest.test_flash_attn_2_generate_padding_right with LlamaForCausalLM->PhiForCausalLM,LlamaTokenizer->AutoTokenizer,meta-llama/Llama-2-7b-hf->microsoft/phi-1
-    def test_flash_attn_2_generate_padding_right(self):
-        """
-        Overwritting the common test as the test is flaky on tiny models
-        """
-        model = PhiForCausalLM.from_pretrained(
-            "microsoft/phi-1",
-            load_in_4bit=True,
-            device_map={"": 0},
-        )
-
-        tokenizer = AutoTokenizer.from_pretrained("microsoft/phi-1")
-
-        texts = ["hi", "Hello this is a very long sentence"]
-
-        tokenizer.padding_side = "right"
-        tokenizer.pad_token = tokenizer.eos_token
-
-        inputs = tokenizer(texts, return_tensors="pt", padding=True).to(0)
-
-        output_native = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_native = tokenizer.batch_decode(output_native)
-
-        model = PhiForCausalLM.from_pretrained(
-            "microsoft/phi-1", load_in_4bit=True, device_map={"": 0}, attn_implementation="flash_attention_2"
-        )
-
-        output_fa_2 = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_fa_2 = tokenizer.batch_decode(output_fa_2)
-
-        self.assertListEqual(output_native, output_fa_2)
 
 
 @slow

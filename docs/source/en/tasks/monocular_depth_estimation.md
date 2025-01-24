@@ -53,8 +53,9 @@ Instantiate a pipeline from a [checkpoint on the Hugging Face Hub](https://huggi
 ```py
 >>> from transformers import pipeline
 >>> import torch
-
->>> device = "cuda" if torch.cuda.is_available() else "cpu"
+>>> from accelerate.test_utils.testing import get_backend
+# automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
+>>> device, _, _ = get_backend()
 >>> checkpoint = "depth-anything/Depth-Anything-V2-base-hf"
 >>> pipe = pipeline("depth-estimation", model=checkpoint, device=device)
 ```

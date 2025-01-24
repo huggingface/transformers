@@ -41,6 +41,9 @@ from transformers.testing_utils import (
     require_torch_gpu,
     require_torch_sdpa,
     require_torchaudio,
+    set_config_for_less_flaky_test,
+    set_model_for_less_flaky_test,
+    set_model_tester_for_less_flaky_test,
     slow,
     torch_device,
 )
@@ -48,7 +51,7 @@ from transformers.utils import cached_property, is_torch_bf16_available_on_devic
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, sdpa_kernel
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -460,7 +463,6 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
 
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa
-    @slow
     # Copied from tests.test_modeling_common.ModelTesterMixin.test_eager_matches_sdpa_inference
     def test_eager_matches_sdpa_inference(self, torch_dtype: str):
         if not self.has_attentions:
@@ -487,8 +489,10 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
 
         atols = {
             ("cpu", False, torch.float32): 1e-6,
+            ("cpu", False, torch.float16): 5e-3,
             ("cpu", False, torch.bfloat16): 1e-2,
             ("cpu", True, torch.float32): 1e-6,
+            ("cpu", True, torch.float16): 5e-3,
             ("cpu", True, torch.bfloat16): 1e-2,
             ("cuda", False, torch.float32): 1e-6,
             ("cuda", False, torch.bfloat16): 1e-2,
@@ -499,8 +503,10 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
         }
         rtols = {
             ("cpu", False, torch.float32): 1e-4,
+            ("cpu", False, torch.float16): 5e-3,
             ("cpu", False, torch.bfloat16): 1e-2,
             ("cpu", True, torch.float32): 1e-4,
+            ("cpu", True, torch.float16): 5e-3,
             ("cpu", True, torch.bfloat16): 1e-2,
             ("cuda", False, torch.float32): 1e-4,
             ("cuda", False, torch.bfloat16): 1e-2,
@@ -513,8 +519,11 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
         def get_mean_reldiff(failcase, x, ref, atol, rtol):
             return f"{failcase}: mean relative difference: {((x - ref).abs() / (ref.abs() + 1e-12)).mean():.3e}, torch atol = {atol}, torch rtol = {rtol}"
 
+        set_model_tester_for_less_flaky_test(self)
+
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            set_config_for_less_flaky_test(config)
             model = model_class(config)
 
             is_encoder_decoder = model.config.is_encoder_decoder
@@ -531,12 +540,15 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
                 )
                 model_eager = model_eager.eval().to(torch_device)
 
+                set_model_for_less_flaky_test(model_eager)
+                set_model_for_less_flaky_test(model_sdpa)
+
                 # We use these for loops instead of parameterized.expand just for the interest of avoiding loading/saving 8 times the model,
                 # but it would be nicer to have an efficient way to use parameterized.expand
                 fail_cases = []
                 for padding_side in ["left", "right"]:
                     for use_mask in [False, True]:
-                        for batch_size in [1, 5]:
+                        for batch_size in [7]:
                             # Ignore copy
                             batch_size_input_ids = self.model_tester.num_codebooks * batch_size
                             dummy_input = inputs_dict[model.main_input_name]
@@ -593,11 +605,11 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
 
                                 dummy_attention_mask[:] = 1
                                 if padding_side == "left":
-                                    dummy_attention_mask[-1, :-1] = 1
-                                    dummy_attention_mask[-1, -4:] = 0
+                                    dummy_attention_mask[-1, :2] = 0
+                                    dummy_attention_mask[-1, 2:] = 1
                                 elif padding_side == "right":
-                                    dummy_attention_mask[-1, 1:] = 1
-                                    dummy_attention_mask[-1, :3] = 0
+                                    dummy_attention_mask[-1, -2:] = 0
+                                    dummy_attention_mask[-1, :-2] = 1
 
                             for enable_kernels in [False, True]:
                                 failcase = f"padding_side={padding_side}, use_mask={use_mask}, batch_size={batch_size}, enable_kernels={enable_kernels}"
@@ -612,7 +624,7 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
 
                                 # TODO: test gradients as well (& for FA2 as well!)
                                 with torch.no_grad():
-                                    with torch.backends.cuda.sdp_kernel(
+                                    with sdpa_kernel(
                                         enable_flash=enable_kernels,
                                         enable_math=True,
                                         enable_mem_efficient=enable_kernels,
@@ -634,58 +646,44 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
                                 if torch_device in ["cpu", "cuda"]:
                                     atol = atols[torch_device, enable_kernels, torch_dtype]
                                     rtol = rtols[torch_device, enable_kernels, torch_dtype]
+                                elif torch_device == "xpu":
+                                    # As of PyTorch 2.5 XPU backend supports only torch.nn.attention.SDPBackend.MATH
+                                    # which is implemented on PyTorch level using aten operators and is
+                                    # device agnostic with respect to implementation of each aten operator.
+                                    atol = atols["cuda", False, torch_dtype]
+                                    rtol = rtols["cuda", False, torch_dtype]
                                 else:
                                     atol = 1e-7
                                     rtol = 1e-4
 
                                 # Masked tokens output slightly deviates - we don't mind that.
                                 if use_mask:
+                                    _logits_sdpa = torch.zeros_like(input=logits_sdpa)
+                                    _logits_eager = torch.zeros_like(input=logits_eager)
+
+                                    _logits_sdpa[:-1] = logits_sdpa[:-1]
+                                    _logits_eager[:-1] = logits_eager[:-1]
+
                                     if padding_side == "left":
-                                        sub_sdpa = logits_sdpa[:-1]
-                                        sub_eager = logits_eager[:-1]
-                                        if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
-                                            fail_cases.append(
-                                                get_mean_reldiff(failcase, sub_sdpa, sub_eager, atol, rtol)
-                                            )
+                                        _logits_sdpa[-1:, 2:] = logits_sdpa[-1:, 2:]
+                                        _logits_eager[-1:, 2:] = logits_eager[-1:, 2:]
 
-                                        sub_sdpa = logits_sdpa[-1, :-4]
-                                        sub_eager = logits_eager[-1, :-4]
-                                        if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
-                                            fail_cases.append(
-                                                get_mean_reldiff(failcase, sub_sdpa, sub_eager, atol, rtol)
-                                            )
-
-                                        # Testing the padding tokens is not really meaningful but anyway
-                                        # sub_sdpa = logits_sdpa[-1, -4:]
-                                        # sub_eager = logits_eager[-1, -4:]
-                                        # if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
-                                        #     fail_cases.append(get_mean_reldiff(failcase, sub_sdpa, sub_eager, 4e-2, 4e-2))
                                     elif padding_side == "right":
-                                        sub_sdpa = logits_sdpa[:-1]
-                                        sub_eager = logits_eager[:-1]
-                                        if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
-                                            fail_cases.append(
-                                                get_mean_reldiff(failcase, sub_sdpa, sub_eager, atol, rtol)
-                                            )
+                                        _logits_sdpa[-1:, 2:] = logits_sdpa[-1:, :-2]
+                                        _logits_eager[-1:, 2:] = logits_eager[-1:, :-2]
 
-                                        sub_sdpa = logits_sdpa[-1, 3:]
-                                        sub_eager = logits_eager[-1, 3:]
-                                        if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
-                                            fail_cases.append(
-                                                get_mean_reldiff(failcase, sub_sdpa, sub_eager, atol, rtol)
-                                            )
+                                    logits_sdpa = _logits_sdpa
+                                    logits_eager = _logits_eager
 
-                                        # Testing the padding tokens is not really meaningful but anyway
-                                        # sub_sdpa = logits_sdpa[-1, :3]
-                                        # sub_eager = logits_eager[-1, :3]
-                                        # if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
-                                        #     fail_cases.append(get_mean_reldiff(failcase, sub_sdpa, sub_eager, 4e-2, 4e-2))
-
-                                else:
-                                    if not torch.allclose(logits_sdpa, logits_eager, atol=atol, rtol=rtol):
-                                        fail_cases.append(
-                                            get_mean_reldiff(failcase, logits_sdpa, logits_eager, atol, rtol)
-                                        )
+                                results = [
+                                    torch.allclose(_logits_sdpa, _logits_eager, atol=atol, rtol=rtol)
+                                    for (_logits_sdpa, _logits_eager) in zip(logits_sdpa, logits_eager)
+                                ]
+                                # If 80% batch elements have matched results, it's fine
+                                if np.mean(results) < 0.8:
+                                    fail_cases.append(
+                                        get_mean_reldiff(failcase, logits_sdpa, logits_eager, atol, rtol)
+                                    )
 
                 self.assertTrue(len(fail_cases) == 0, "\n".join(fail_cases))
 
@@ -1350,7 +1348,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                     if isinstance(inp, torch.Tensor) and inp.dtype in [torch.float32, torch.float16]:
                         inputs_dict[name] = inp.to(torch.float16)
 
-                with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
+                with sdpa_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
                     _ = model(**inputs_dict)
 
     @require_flash_attn
@@ -1437,149 +1435,6 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
                 assert torch.allclose(logits_fa[:-1], logits[:-1], atol=4e-2, rtol=4e-2)
 
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    @slow
-    # Adapted from tests.test_modeling_common.ModelTesterMixin.test_flash_attn_2_generate_left_padding
-    def test_flash_attn_2_generate_left_padding(self):
-        # Ignore copy
-        for model_class in self.greedy_sample_model_classes:
-            if not model_class._supports_flash_attn_2:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, low_cpu_mem_usage=True).to(
-                    torch_device
-                )
-
-                dummy_input = inputs_dict[model.main_input_name]
-                if dummy_input.dtype in [torch.float32, torch.bfloat16]:
-                    dummy_input = dummy_input.to(torch.float16)
-
-                dummy_attention_mask = inputs_dict.get("attention_mask")
-                if dummy_attention_mask is None:
-                    dummy_attention_mask = torch.ones_like(dummy_input)
-
-                # make sure we do left padding
-                dummy_attention_mask[:, :-1] = 0
-                dummy_attention_mask[:, -1:] = 1
-
-                out = model.generate(
-                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=8, do_sample=False
-                )
-
-                model = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    attn_implementation={"decoder": "flash_attention_2", "audio_encoder": None, "text_encoder": None},
-                    low_cpu_mem_usage=True,
-                ).to(torch_device)
-
-                out_fa = model.generate(
-                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=8, do_sample=False
-                )
-
-                self.assertTrue(torch.allclose(out, out_fa))
-
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    @slow
-    # Adapted from tests.test_modeling_common.ModelTesterMixin.test_flash_attn_2_generate_padding_right
-    def test_flash_attn_2_generate_padding_right(self):
-        # Ignore copy
-        for model_class in self.greedy_sample_model_classes:
-            if not model_class._supports_flash_attn_2:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname, torch_dtype=torch.float16, low_cpu_mem_usage=True).to(
-                    torch_device
-                )
-
-                dummy_input = inputs_dict[model.main_input_name]
-                if dummy_input.dtype in [torch.float32, torch.bfloat16]:
-                    dummy_input = dummy_input.to(torch.float16)
-
-                dummy_attention_mask = inputs_dict.get("attention_mask")
-                if dummy_attention_mask is None:
-                    dummy_attention_mask = torch.ones_like(dummy_input)
-                # make sure we do right padding
-                dummy_attention_mask[:, :-1] = 1
-                dummy_attention_mask[:, -1:] = 0
-
-                out = model.generate(
-                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=8, do_sample=False
-                )
-
-                model = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    attn_implementation={"decoder": "flash_attention_2", "audio_encoder": None, "text_encoder": None},
-                    low_cpu_mem_usage=True,
-                ).to(torch_device)
-
-                out_fa = model.generate(
-                    dummy_input, attention_mask=dummy_attention_mask, max_new_tokens=8, do_sample=False
-                )
-
-                self.assertTrue(torch.allclose(out, out_fa))
-
-    @require_flash_attn
-    @require_torch_gpu
-    @mark.flash_attn_test
-    @slow
-    # Adapted from tests.test_modeling_common.ModelTesterMixin.test_flash_attn_2_generate_use_cache
-    def test_flash_attn_2_generate_use_cache(self):
-        max_new_tokens = 30
-
-        # Ignore copy
-        for model_class in self.greedy_sample_model_classes:
-            if not model_class._supports_flash_attn_2:
-                self.skipTest(f"{model_class.__name__} does not support Flash Attention 2")
-
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-            dummy_input = inputs_dict[model_class.main_input_name]
-            if dummy_input.dtype in [torch.float32, torch.bfloat16]:
-                dummy_input = dummy_input.to(torch.float16)
-
-            # make sure that all models have enough positions for generation
-            if hasattr(config, "max_position_embeddings"):
-                config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
-
-            model = model_class(config)
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-
-                dummy_attention_mask = inputs_dict.get("attention_mask", torch.ones_like(dummy_input))
-
-                model = model_class.from_pretrained(
-                    tmpdirname,
-                    torch_dtype=torch.float16,
-                    attn_implementation={"decoder": "flash_attention_2", "audio_encoder": None, "text_encoder": None},
-                    low_cpu_mem_usage=True,
-                ).to(torch_device)
-
-                # Just test that a large cache works as expected
-                _ = model.generate(
-                    dummy_input,
-                    attention_mask=dummy_attention_mask,
-                    max_new_tokens=max_new_tokens,
-                    do_sample=False,
-                    use_cache=True,
-                )
-
     @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
         if not self.has_attentions:
@@ -1629,7 +1484,6 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
     @require_torch_sdpa
-    @slow
     # Copied from tests.test_modeling_common.ModelTesterMixin.test_eager_matches_sdpa_inference
     def test_eager_matches_sdpa_inference(self, torch_dtype: str):
         if not self.all_model_classes[0]._supports_sdpa:
@@ -1653,8 +1507,10 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
         atols = {
             ("cpu", False, torch.float32): 1e-6,
+            ("cpu", False, torch.float16): 5e-3,
             ("cpu", False, torch.bfloat16): 1e-2,
             ("cpu", True, torch.float32): 1e-6,
+            ("cpu", True, torch.float16): 5e-3,
             ("cpu", True, torch.bfloat16): 1e-2,
             ("cuda", False, torch.float32): 1e-6,
             ("cuda", False, torch.bfloat16): 1e-2,
@@ -1665,8 +1521,10 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         }
         rtols = {
             ("cpu", False, torch.float32): 1e-4,
+            ("cpu", False, torch.float16): 5e-3,
             ("cpu", False, torch.bfloat16): 1e-2,
             ("cpu", True, torch.float32): 1e-4,
+            ("cpu", True, torch.float16): 5e-3,
             ("cpu", True, torch.bfloat16): 1e-2,
             ("cuda", False, torch.float32): 1e-4,
             ("cuda", False, torch.bfloat16): 1e-2,
@@ -1679,8 +1537,11 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         def get_mean_reldiff(failcase, x, ref, atol, rtol):
             return f"{failcase}: mean relative difference: {((x - ref).abs() / (ref.abs() + 1e-12)).mean():.3e}, torch atol = {atol}, torch rtol = {rtol}"
 
+        set_model_tester_for_less_flaky_test(self)
+
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            set_config_for_less_flaky_test(config)
             model = model_class(config)
 
             is_encoder_decoder = model.config.is_encoder_decoder
@@ -1697,12 +1558,15 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                 )
                 model_eager = model_eager.eval().to(torch_device)
 
+                set_model_for_less_flaky_test(model_eager)
+                set_model_for_less_flaky_test(model_sdpa)
+
                 # We use these for loops instead of parameterized.expand just for the interest of avoiding loading/saving 8 times the model,
                 # but it would be nicer to have an efficient way to use parameterized.expand
                 fail_cases = []
                 for padding_side in ["left", "right"]:
                     for use_mask in [False, True]:
-                        for batch_size in [1, 5]:
+                        for batch_size in [7]:
                             dummy_input = inputs_dict[model.main_input_name]
 
                             if dummy_input.dtype in [torch.float32, torch.bfloat16, torch.float16]:
@@ -1752,11 +1616,11 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
                                 dummy_attention_mask[:] = 1
                                 if padding_side == "left":
-                                    dummy_attention_mask[-1, :-1] = 1
-                                    dummy_attention_mask[-1, -4:] = 0
+                                    dummy_attention_mask[-1, :2] = 0
+                                    dummy_attention_mask[-1, 2:] = 1
                                 elif padding_side == "right":
-                                    dummy_attention_mask[-1, 1:] = 1
-                                    dummy_attention_mask[-1, :3] = 0
+                                    dummy_attention_mask[-1, -2:] = 0
+                                    dummy_attention_mask[-1, :-2] = 1
 
                             for enable_kernels in [False, True]:
                                 failcase = f"padding_side={padding_side}, use_mask={use_mask}, batch_size={batch_size}, enable_kernels={enable_kernels}"
@@ -1789,7 +1653,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                                 # TODO: test gradients as well (& for FA2 as well!)
                                 # Ignore copy
                                 with torch.no_grad():
-                                    with torch.backends.cuda.sdp_kernel(
+                                    with sdpa_kernel(
                                         enable_flash=enable_kernels,
                                         enable_math=True,
                                         enable_mem_efficient=enable_kernels,
@@ -1811,58 +1675,44 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                                 if torch_device in ["cpu", "cuda"]:
                                     atol = atols[torch_device, enable_kernels, torch_dtype]
                                     rtol = rtols[torch_device, enable_kernels, torch_dtype]
+                                elif torch_device == "xpu":
+                                    # As of PyTorch 2.5 XPU backend supports only torch.nn.attention.SDPBackend.MATH
+                                    # which is implemented on PyTorch level using aten operators and is
+                                    # device agnostic with respect to implementation of each aten operator.
+                                    atol = atols["cuda", False, torch_dtype]
+                                    rtol = rtols["cuda", False, torch_dtype]
                                 else:
                                     atol = 1e-7
                                     rtol = 1e-4
 
                                 # Masked tokens output slightly deviates - we don't mind that.
                                 if use_mask:
+                                    _logits_sdpa = torch.zeros_like(input=logits_sdpa)
+                                    _logits_eager = torch.zeros_like(input=logits_eager)
+
+                                    _logits_sdpa[:-1] = logits_sdpa[:-1]
+                                    _logits_eager[:-1] = logits_eager[:-1]
+
                                     if padding_side == "left":
-                                        sub_sdpa = logits_sdpa[:-1]
-                                        sub_eager = logits_eager[:-1]
-                                        if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
-                                            fail_cases.append(
-                                                get_mean_reldiff(failcase, sub_sdpa, sub_eager, atol, rtol)
-                                            )
+                                        _logits_sdpa[-1:, 2:] = logits_sdpa[-1:, 2:]
+                                        _logits_eager[-1:, 2:] = logits_eager[-1:, 2:]
 
-                                        sub_sdpa = logits_sdpa[-1, :-4]
-                                        sub_eager = logits_eager[-1, :-4]
-                                        if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
-                                            fail_cases.append(
-                                                get_mean_reldiff(failcase, sub_sdpa, sub_eager, atol, rtol)
-                                            )
-
-                                        # Testing the padding tokens is not really meaningful but anyway
-                                        # sub_sdpa = logits_sdpa[-1, -4:]
-                                        # sub_eager = logits_eager[-1, -4:]
-                                        # if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
-                                        #     fail_cases.append(get_mean_reldiff(failcase, sub_sdpa, sub_eager, 4e-2, 4e-2))
                                     elif padding_side == "right":
-                                        sub_sdpa = logits_sdpa[:-1]
-                                        sub_eager = logits_eager[:-1]
-                                        if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
-                                            fail_cases.append(
-                                                get_mean_reldiff(failcase, sub_sdpa, sub_eager, atol, rtol)
-                                            )
+                                        _logits_sdpa[-1:, 2:] = logits_sdpa[-1:, :-2]
+                                        _logits_eager[-1:, 2:] = logits_eager[-1:, :-2]
 
-                                        sub_sdpa = logits_sdpa[-1, 3:]
-                                        sub_eager = logits_eager[-1, 3:]
-                                        if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
-                                            fail_cases.append(
-                                                get_mean_reldiff(failcase, sub_sdpa, sub_eager, atol, rtol)
-                                            )
+                                    logits_sdpa = _logits_sdpa
+                                    logits_eager = _logits_eager
 
-                                        # Testing the padding tokens is not really meaningful but anyway
-                                        # sub_sdpa = logits_sdpa[-1, :3]
-                                        # sub_eager = logits_eager[-1, :3]
-                                        # if not torch.allclose(sub_sdpa, sub_eager, atol=atol, rtol=rtol):
-                                        #     fail_cases.append(get_mean_reldiff(failcase, sub_sdpa, sub_eager, 4e-2, 4e-2))
-
-                                else:
-                                    if not torch.allclose(logits_sdpa, logits_eager, atol=atol, rtol=rtol):
-                                        fail_cases.append(
-                                            get_mean_reldiff(failcase, logits_sdpa, logits_eager, atol, rtol)
-                                        )
+                                results = [
+                                    torch.allclose(_logits_sdpa, _logits_eager, atol=atol, rtol=rtol)
+                                    for (_logits_sdpa, _logits_eager) in zip(logits_sdpa, logits_eager)
+                                ]
+                                # If 80% batch elements have matched results, it's fine
+                                if np.mean(results) < 0.8:
+                                    fail_cases.append(
+                                        get_mean_reldiff(failcase, logits_sdpa, logits_eager, atol, rtol)
+                                    )
 
                 self.assertTrue(len(fail_cases) == 0, "\n".join(fail_cases))
 

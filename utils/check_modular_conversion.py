@@ -4,6 +4,8 @@ import glob
 import logging
 from io import StringIO
 
+from create_dependency_mapping import find_priority_list
+
 # Console for rich printing
 from modular_model_converter import convert_modular_file
 from rich.console import Console
@@ -16,7 +18,9 @@ console = Console()
 
 
 def process_file(modular_file_path, generated_modeling_content, file_type="modeling_", fix_and_overwrite=False):
-    file_path = modular_file_path.replace("modular_", f"{file_type}_")
+    file_name_prefix = file_type.split("*")[0]
+    file_name_suffix = file_type.split("*")[-1] if "*" in file_type else ""
+    file_path = modular_file_path.replace("modular_", f"{file_name_prefix}_").replace(".py", f"{file_name_suffix}.py")
     # Read the actual modeling file
     with open(file_path, "r") as modeling_file:
         content = modeling_file.read()
@@ -69,7 +73,7 @@ if __name__ == "__main__":
     if args.files == ["all"]:
         args.files = glob.glob("src/transformers/models/**/modular_*.py", recursive=True)
     non_matching_files = 0
-    for modular_file_path in args.files:
+    for modular_file_path in find_priority_list(args.files):
         non_matching_files += compare_files(modular_file_path, args.fix_and_overwrite)
 
     if non_matching_files and not args.fix_and_overwrite:

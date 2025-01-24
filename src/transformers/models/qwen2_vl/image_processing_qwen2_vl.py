@@ -235,7 +235,7 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
-        if is_scaled_image(images[0]) and do_rescale:
+        if do_rescale and is_scaled_image(images[0]):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -274,8 +274,9 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
         patches = np.array(processed_images)
         if data_format == ChannelDimension.LAST:
             patches = patches.transpose(0, 3, 1, 2)
-        if patches.shape[0] == 1:
-            patches = np.tile(patches, (self.temporal_patch_size, 1, 1, 1))
+        if patches.shape[0] % self.temporal_patch_size != 0:
+            repeats = np.repeat(patches[-1][np.newaxis], self.temporal_patch_size - 1, axis=0)
+            patches = np.concatenate([patches, repeats], axis=0)
         channel = patches.shape[1]
         grid_t = patches.shape[0] // self.temporal_patch_size
         grid_h, grid_w = resized_height // self.patch_size, resized_width // self.patch_size
@@ -411,3 +412,5 @@ class Qwen2VLImageProcessor(BaseImageProcessor):
         return BatchFeature(
             data={"pixel_values": pixel_values, "image_grid_thw": vision_grid_thws}, tensor_type=return_tensors
         )
+
+__all__ = ["Qwen2VLImageProcessor"]
