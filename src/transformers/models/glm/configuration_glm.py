@@ -93,7 +93,6 @@ class GlmConfig(PretrainedConfig):
         "layers.*.mlp.gate_up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
     }
-    
 
     def __init__(
         self,
