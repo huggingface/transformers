@@ -603,9 +603,11 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
                 `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
                 `input_values`, the [`AutoFeatureExtractor`] should be used for padding
                 and conversion into a tensor of type `torch.FloatTensor`.
-            attention_mask (`torch.Tensor`)`, *optional*):
-                Moonshine does not support masking of the `input_values`, this argument is preserved for compatibility,
-                but it is not used.
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding indices in `input_values`. Mask values selected in `[0, 1]`:
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+                [What are attention masks?](../glossary#attention-mask)
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
                 tensors for more detail.
@@ -623,6 +625,13 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
 
         if input_values is None:
             raise ValueError("You must specify input_values.")
+
+        # attention mask downsampling
+        if attention_mask is not None:
+            mask_len = self._get_feat_extract_output_lengths(attention_mask.shape[-1])
+            downsample_stride = 64 * 3 * 2 # conv strides
+            attention_mask = attention_mask[..., ::downsample_stride][..., :mask_len]
+            attention_mask = attention_mask.reshape((attention_mask.shape[0], 1, 1, -1)).to(torch.bool)
 
         # conv downsampling
         input_values = input_values.unsqueeze(1)
@@ -649,7 +658,7 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
                 layer_outputs = self._gradient_checkpointing_func(
                     encoder_layer.__call__,
                     hidden_states,
-                    None,
+                    attention_mask,
                     position_ids,
                     None,
                     output_attentions,
@@ -827,9 +836,11 @@ MOONSHINE_MODEL_INPUTS_DOCSTRING = r"""
             `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
             `input_values`, the [`AutoFeatureExtractor`] should be used for padding
             and conversion into a tensor of type `torch.FloatTensor`.
-        attention_mask (`torch.Tensor`)`, *optional*):
-            Moonshine does not support masking of the `input_values`, this argument is preserved for compatibility,
-            but it is not used.
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding indices in `input_values`. Mask values selected in `[0, 1]`:
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+            [What are attention masks?](../glossary#attention-mask)
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
@@ -956,6 +967,7 @@ class MoonshineModel(WhisperModel):
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_values,
+                attention_mask=attention_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
@@ -1086,6 +1098,7 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
 
         outputs = self.model(
             input_values,
+            attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             encoder_outputs=encoder_outputs,
             decoder_attention_mask=decoder_attention_mask,
