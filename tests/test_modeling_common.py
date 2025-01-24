@@ -770,15 +770,6 @@ class ModelTesterMixin:
         different results: https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535)
         """
 
-        def get_tensor_equivalence_function(batched_input):
-            # models operating on continuous spaces have higher abs difference than LMs
-            # instead, we can rely on cos distance for image/speech models, similar to `diffusers`
-            if "input_ids" not in batched_input:
-                return lambda tensor1, tensor2: (
-                    1.0 - F.cosine_similarity(tensor1.float().flatten(), tensor2.float().flatten(), dim=0, eps=1e-38)
-                )
-            return lambda tensor1, tensor2: torch.max(torch.abs(tensor1 - tensor2))
-
         def recursive_check(batched_object, single_row_object, model_name, key):
             if isinstance(batched_object, (list, tuple)):
                 for batched_object_value, single_row_object_value in zip(batched_object, single_row_object):
@@ -792,6 +783,10 @@ class ModelTesterMixin:
             elif batched_object is None or not isinstance(batched_object, torch.Tensor):
                 return
             elif batched_object.dim() == 0:
+                return
+            # do not compare int or bool outputs as they are mostly computed with max/argmax/topk methods which are
+            # very sensitive to the inputs (e.g. tiny differences may give totally different results)
+            elif not torch.is_floating_point(batched_object):
                 return
             else:
                 # indexing the first element does not always work
@@ -810,19 +805,17 @@ class ModelTesterMixin:
                 self.assertFalse(
                     torch.isinf(single_row_object).any(), f"Single row output has `inf` in {model_name} for key={key}"
                 )
-                self.assertTrue(
-                    (equivalence(batched_row, single_row_object)) <= 1e-03,
-                    msg=(
-                        f"Batched and Single row outputs are not equal in {model_name} for key={key}. "
-                        f"Difference={equivalence(batched_row, single_row_object)}."
-                    ),
-                )
+                try:
+                    torch.testing.assert_close(batched_row, single_row_object, atol=1e-5, rtol=1e-5)
+                except AssertionError as e:
+                    msg = f"Batched and Single row outputs are not equal in {model_name} for key={key}.\n\n"
+                    msg += str(e)
+                    raise AssertionError(msg)
 
         set_model_tester_for_less_flaky_test(self)
 
         config, batched_input = self.model_tester.prepare_config_and_inputs_for_common()
         set_config_for_less_flaky_test(config)
-        equivalence = get_tensor_equivalence_function(batched_input)
 
         for model_class in self.all_model_classes:
             config.output_hidden_states = True
@@ -4635,32 +4628,11 @@ class ModelTesterMixin:
             dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
             dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [0, 1, 1, 1]]).to(torch_device)
 
-            fa2_correctly_converted = False
-
-            for _, module in fa2_model.named_modules():
-                if "FlashAttention" in module.__class__.__name__:
-                    fa2_correctly_converted = True
-                    break
-
-            self.assertTrue(fa2_correctly_converted)
-
             _ = fa2_model(input_ids=dummy_input, attention_mask=dummy_attention_mask)
-
             with tempfile.TemporaryDirectory() as tmpdirname:
                 fa2_model.save_pretrained(tmpdirname)
-
                 model_from_pretrained = model_class.from_pretrained(tmpdirname)
-
                 self.assertTrue(model_from_pretrained.config._attn_implementation != "flash_attention_2")
-
-                fa2_correctly_converted = False
-
-                for _, module in model_from_pretrained.named_modules():
-                    if "FlashAttention" in module.__class__.__name__:
-                        fa2_correctly_converted = True
-                        break
-
-                self.assertFalse(fa2_correctly_converted)
 
     def _get_custom_4d_mask_test_data(self):
         # Sequence in which all but the last token is the same
@@ -4787,21 +4759,21 @@ class ModelTesterMixin:
         for name, param in model._orig_mod.named_parameters():
             torch.testing.assert_close(param.grad.detach().cpu(), params[name], rtol=1e-4, atol=1e-4)
 
-    def test_forward_with_num_logits_to_keep(self):
+    def test_forward_with_logits_to_keep(self):
         for model_class in self.all_generative_model_classes:
-            if "num_logits_to_keep" not in set(inspect.signature(model_class.forward).parameters.keys()):
-                self.skipTest(reason="This model does not support `num_logits_to_keep` argument.")
+            if "logits_to_keep" not in set(inspect.signature(model_class.forward).parameters.keys()):
+                self.skipTest(reason="This model does not support `logits_to_keep` argument.")
 
             config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
             batch_size, sequence_length = inputs["input_ids"].shape
             vocab_size = config.get_text_config().vocab_size
             model = model_class(config).to(device=torch_device).eval()
-            # some models have labels but `num_logits_to_keep` should not be used in train mode
+            # some models have labels but `logits_to_keep` should not be used in train mode
             _ = inputs.pop("labels", None)
 
-            # num_logits_to_keep=0 is a special case meaning "keep all logits"
-            all_logits = model(**inputs, num_logits_to_keep=0).logits
-            last_token_logits = model(**inputs, num_logits_to_keep=1).logits
+            # logits_to_keep=0 is a special case meaning "keep all logits"
+            all_logits = model(**inputs, logits_to_keep=0).logits
+            last_token_logits = model(**inputs, logits_to_keep=1).logits
 
             # Assert all shapes are correct
             self.assertEqual(tuple(all_logits.shape), (batch_size, sequence_length, vocab_size))

@@ -565,13 +565,15 @@ def set_initialized_submodules(model, state_dict_keys):
     Sets the `_is_hf_initialized` flag in all submodules of a given model when all its weights are in the loaded state
     dict.
     """
+    state_dict_keys = set(state_dict_keys)
     not_initialized_submodules = {}
     for module_name, module in model.named_modules():
-        loaded_keys = {k.replace(f"{module_name}.", "") for k in state_dict_keys if k.startswith(f"{module_name}.")}
-        # When checking if the root module is loaded all state_dict_keys must be used.
         if module_name == "":
-            loaded_keys = set(state_dict_keys)
-        if loaded_keys.issuperset(module.state_dict()):
+            # When checking if the root module is loaded there's no need to prepend module_name.
+            module_keys = set(module.state_dict())
+        else:
+            module_keys = {f"{module_name}.{k}" for k in module.state_dict()}
+        if module_keys.issubset(state_dict_keys):
             module._is_hf_initialized = True
         else:
             not_initialized_submodules[module_name] = module
@@ -1290,6 +1292,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     # `config.base_model_tp_plan` during `post_init`.
     _tp_plan = None
 
+    # This flag signal that the model can be used as an efficient backend in TGI and vLLM
+    # In practice, it means that they support attention interface functions, fully pass the kwargs
+    # through all modules up to the Attention layer, and can slice logits with Tensor
+    _supports_attention_backend = False
+
     @property
     def dummy_inputs(self) -> Dict[str, torch.Tensor]:
         """
@@ -1544,6 +1551,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 torch.version.hip is not None
                 and config._attn_implementation == "sdpa"
                 and torch.cuda.device_count() > 1
+                and version.parse(torch.__version__) < version.parse("2.4.1")
             ):
                 logger.warning_once(
                     "Using the `SDPA` attention implementation on multi-gpu setup with ROCM may lead to performance issues due to the FA backend. Disabling it to use alternative backends."
@@ -5184,6 +5192,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             self._last_compile_config = compile_config
             self._compiled_call = torch.compile(self.__call__, **compile_config.to_dict())
         return self._compiled_call
+
+    @classmethod
+    def is_backend_compatible(cls):
+        return cls._supports_attention_backend
 
 
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)

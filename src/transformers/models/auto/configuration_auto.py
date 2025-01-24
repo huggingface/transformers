@@ -134,6 +134,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("gptsan-japanese", "GPTSanJapaneseConfig"),
         ("granite", "GraniteConfig"),
         ("granitemoe", "GraniteMoeConfig"),
+        ("granitevision", "LlavaNextConfig"),
         ("graphormer", "GraphormerConfig"),
         ("grounding-dino", "GroundingDinoConfig"),
         ("groupvit", "GroupViTConfig"),
@@ -237,6 +238,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("pvt_v2", "PvtV2Config"),
         ("qdqbert", "QDQBertConfig"),
         ("qwen2", "Qwen2Config"),
+        ("qwen2_5_vl", "Qwen2_5_VLConfig"),
         ("qwen2_audio", "Qwen2AudioConfig"),
         ("qwen2_audio_encoder", "Qwen2AudioEncoderConfig"),
         ("qwen2_moe", "Qwen2MoeConfig"),
@@ -457,6 +459,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("gptsan-japanese", "GPTSAN-japanese"),
         ("granite", "Granite"),
         ("granitemoe", "GraniteMoeMoe"),
+        ("granitevision", "LLaVA-NeXT"),
         ("graphormer", "Graphormer"),
         ("grounding-dino", "Grounding DINO"),
         ("groupvit", "GroupViT"),
@@ -573,6 +576,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("pvt_v2", "PVTv2"),
         ("qdqbert", "QDQBert"),
         ("qwen2", "Qwen2"),
+        ("qwen2_5_vl", "Qwen2_5_VL"),
         ("qwen2_audio", "Qwen2Audio"),
         ("qwen2_audio_encoder", "Qwen2AudioEncoder"),
         ("qwen2_moe", "Qwen2MoE"),
@@ -727,6 +731,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict(
         ("siglip_vision_model", "siglip"),
         ("chinese_clip_vision_model", "chinese_clip"),
         ("rt_detr_resnet", "rt_detr"),
+        ("granitevision", "llava_next"),
     ]
 )
 
