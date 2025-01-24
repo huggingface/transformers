@@ -357,7 +357,7 @@ class StopStringCriteria(StoppingCriteria):
             )
         max_valid_end_lens = max(valid_end_lens)
         vec_size = len(stop_strings) * (max_valid_positions + max_valid_end_lens) + 1
-        # We use +1 instead of +2 so we can have a dummy entry at the end. We will clamp all token values
+        # We use +2 instead of +1 so we can have a dummy entry at the end. We will clamp all token values
         # over the max to this, ensuring they do not contribute to stop string matching.
         gather_vec = np.full((max(token_indices) + 2, vec_size), dtype=np.int32, fill_value=-1)
 
