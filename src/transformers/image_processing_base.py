@@ -350,8 +350,23 @@ class ImageProcessingMixin(PushToHubMixin):
             resolved_image_processor_file = download_url(pretrained_model_name_or_path)
         else:
             try:
-                # try to load with an old config name first and if not successfull try with
-                # the new file name. In case we can load with old name successfully, raise a deprecation warning
+                # try to load with an new config name first and if not successfull try with
+                # the old file name. In case we can't load with new name successfully, raise a deprecation warning
+                image_processor_file = IMAGE_PROCESSOR_NAME
+                resolved_image_processor_file = cached_file(
+                    pretrained_model_name_or_path,
+                    image_processor_file,
+                    cache_dir=cache_dir,
+                    force_download=force_download,
+                    proxies=proxies,
+                    resume_download=resume_download,
+                    local_files_only=local_files_only,
+                    token=token,
+                    user_agent=user_agent,
+                    revision=revision,
+                    subfolder=subfolder,
+                )
+            except EnvironmentError:
                 image_processor_file = old_image_processor_name
                 resolved_image_processor_file = cached_file(
                     pretrained_model_name_or_path,
@@ -366,21 +381,11 @@ class ImageProcessingMixin(PushToHubMixin):
                     revision=revision,
                     subfolder=subfolder,
                 )
-            except EnvironmentError:
-                image_processor_file = IMAGE_PROCESSOR_NAME
-                # Load from local folder or from cache or download from model Hub and cache
-                resolved_image_processor_file = cached_file(
-                    pretrained_model_name_or_path,
-                    image_processor_file,
-                    cache_dir=cache_dir,
-                    force_download=force_download,
-                    proxies=proxies,
-                    resume_download=resume_download,
-                    local_files_only=local_files_only,
-                    token=token,
-                    user_agent=user_agent,
-                    revision=revision,
-                    subfolder=subfolder,
+                logger.warning_once(
+                    "You have image processor config saved in `preprocessor.json` file which is deprecated. "
+                    "Image processor configs should be saved in their own `image_preprocessor.json` file. You can rename "
+                    "the file or load and save the processor back which renames it automatically. "
+                    "Loading from `preprocessor.json` will be removed in v5.0."
                 )
             except EnvironmentError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
@@ -393,13 +398,6 @@ class ImageProcessingMixin(PushToHubMixin):
                     " it from 'https://huggingface.co/models', make sure you don't have a local directory with the"
                     f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
                     f" directory containing a {image_processor_filename} file"
-                )
-            else:
-                logger.warning_once(
-                    "You have image processor config saved in `preprocessor.json` file which is deprecated. "
-                    "Image processor configs should be saved in their own `image_preprocessor.json` file. You can rename "
-                    "the file or load and save the processor back which renames it automatically. "
-                    "Loading from `preprocessor.json` will be removed in v5.0."
                 )
 
         try:

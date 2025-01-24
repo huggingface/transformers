@@ -315,6 +315,11 @@ model = Qwen2VLForConditionalGeneration.from_pretrained(
 [[autodoc]] Qwen2VLImageProcessor
     - preprocess
 
+## Qwen2VLVideoProcessor
+
+[[autodoc]] Qwen2VLVideoProcessor
+    - preprocess
+
 ## Qwen2VLImageProcessorFast
 
 [[autodoc]] Qwen2VLImageProcessorFast
