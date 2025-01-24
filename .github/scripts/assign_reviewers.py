@@ -25,7 +25,6 @@ def get_file_owners(file_path, codeowners_lines):
     return []  # Should never happen, but just in case
 
 def main():
-    # TODO Remove PR owner from owners list so they don't tag themselves
     g = Github(os.environ['GITHUB_TOKEN'])
     repo = g.get_repo("huggingface/transformers")
     with open(os.environ['GITHUB_EVENT_PATH']) as f:
@@ -37,6 +36,7 @@ def main():
     # The PR number is available in the event payload
     pr_number = event['pull_request']['number']
     pr = repo.get_pull(pr_number)
+    pr_author = pr.user.login
 
     existing_reviews = list(pr.get_reviews())
     if existing_reviews:
@@ -56,9 +56,10 @@ def main():
             locs_per_owner[owner] += file.changes
 
     # Assign the top 2 based on locs changed as reviewers
-    top_owners = locs_per_owner.most_common(2)
+    top_owners = locs_per_owner.most_common(3)
     print("Top owners", top_owners)
     top_owners = [owner[0].removeprefix("@") for owner in top_owners]
+    top_owners = [owner for owner in top_owners if owner != pr_author][:2]  # Max 2, and never ping the author
     try:
         pr.create_review_request(top_owners)
     except github.GithubException as e:
