@@ -923,15 +923,12 @@ class ModelTesterMixin:
             loss = model(**inputs).loss
             loss.backward()
 
-    def test_training_gradient_accumulation(self):
+    def test_causal_lm_can_accept_kwargs(self):
         if not getattr(self.model_tester, "is_training", False):
             self.skipTest(reason="ModelTester is not configured to run training tests")
 
-        if len(self.all_generative_model_classes) == 0:
-            self.skipTest(f"No generative model classes for {self.__class__.__name__}")
-
-        for model_class in self.all_generative_model_classes:
-            if model_class in MODEL_FOR_CAUSAL_LM_MAPPING_NAMES:
+        for model_class in self.all_model_classes:
+            if model_class.__name__ in get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES):
                 config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
                 with tempfile.TemporaryDirectory() as tmpdir:
