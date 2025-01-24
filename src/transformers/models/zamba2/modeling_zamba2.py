@@ -987,26 +987,24 @@ class Zamba2MLP(nn.Module):
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.add_bias_linear)
         self.act_fn = ACT2FN[config.hidden_act]
 
-        if self.config.use_shared_mlp_adapter:
-            self.gate_up_proj_adapter_list = nn.ModuleList([])
-            for i in range(self.num_fwd_mem_blocks):
-                if i % config.num_mem_blocks == block_id:
-                    gate_up_proj_adapter = nn.Sequential(
-                        nn.Linear(self.config.hidden_size, self.config.adapter_rank, bias=False),
-                        nn.Linear(self.config.adapter_rank, 2 * self.intermediate_size, bias=False),
-                    )
-                else:
-                    gate_up_proj_adapter = nn.Identity()
-                self.gate_up_proj_adapter_list.append(gate_up_proj_adapter)
+        self.gate_up_proj_adapter_list = nn.ModuleList([])
+        for i in range(self.num_fwd_mem_blocks):
+            if i % config.num_mem_blocks == block_id:
+                gate_up_proj_adapter = nn.Sequential(
+                    nn.Linear(self.config.hidden_size, self.config.adapter_rank, bias=False),
+                    nn.Linear(self.config.adapter_rank, 2 * self.intermediate_size, bias=False),
+                )
+            else:
+                gate_up_proj_adapter = nn.Identity()
+            self.gate_up_proj_adapter_list.append(gate_up_proj_adapter)
 
         layer_block_map = config.hybrid_layer_ids
         self.layer_dic = {value: index for index, value in enumerate(layer_block_map)}
 
     def forward(self, hidden_state, layer_idx=None):
         gate_up_state = self.gate_up_proj(hidden_state)
-        if self.config.use_shared_mlp_adapter:
-            layer_idx = self.layer_dic[layer_idx]
-            gate_up_state = gate_up_state + self.gate_up_proj_adapter_list[layer_idx](hidden_state)
+        layer_idx = self.layer_dic[layer_idx]
+        gate_up_state = gate_up_state + self.gate_up_proj_adapter_list[layer_idx](hidden_state)
 
         gate_up_state = torch.chunk(gate_up_state, 2, dim=-1)
         hidden_state = self.act_fn(gate_up_state[0]) * gate_up_state[1]
@@ -1576,17 +1574,16 @@ class Zamba2Model(Zamba2PreTrainedModel):
                     )
                     self._tied_weights_keys.append(main_keys_pattern)
 
-                    if self.config.use_shared_mlp_adapter:
-                        adapter_id = 0
-                        for _layer_type in self.layers_block_type:
-                            if _layer_type == "hybrid" and adapter_id % self.config.num_mem_blocks == block.block_id:
-                                adapter_pattern = re.compile(
-                                    r"^shared_transformer\.feed_forward\.gate_up_proj_adapter_list\."
-                                    + str(adapter_id)
-                                    + r"\.(?:0|1)\.weight$"
-                                )
-                                self._tied_weights_keys.append(adapter_pattern)
-                            adapter_id += 1
+                    adapter_id = 0
+                    for _layer_type in self.layers_block_type:
+                        if _layer_type == "hybrid" and adapter_id % self.config.num_mem_blocks == block.block_id:
+                            adapter_pattern = re.compile(
+                                r"^shared_transformer\.feed_forward\.gate_up_proj_adapter_list\."
+                                + str(adapter_id)
+                                + r"\.(?:0|1)\.weight$"
+                            )
+                            self._tied_weights_keys.append(adapter_pattern)
+                        adapter_id += 1
                     if self.config.use_shared_attention_adapter:
                         adapter_id = 0
                         for _layer_type in self.layers_block_type:
