@@ -17,6 +17,7 @@ import unittest
 
 import numpy as np
 import requests
+
 from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 from transformers.models.qwen2_vl.image_processing_qwen2_vl import smart_resize
 from transformers.testing_utils import require_torch, require_vision
@@ -316,4 +317,6 @@ class Qwen2VLImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         encoding_slow = image_processor_slow(dummy_image, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
 
-        torch.testing.assert_close(encoding_slow.pixel_values, encoding_fast.pixel_values, rtol=100, atol=1e-2) # @yoni bit weird that we have such diffs
+        torch.testing.assert_close(
+            encoding_slow.pixel_values, encoding_fast.pixel_values, rtol=100, atol=1e-2
+        )  # @yoni bit weird that we have such diffs
