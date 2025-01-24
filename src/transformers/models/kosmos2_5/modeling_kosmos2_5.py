@@ -993,7 +993,7 @@ class Kosmos2_5TextAttention(nn.Module):
         if not output_attentions:
             attn_weights = None
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights
 
 
 class Kosmos2_5TextFlashAttention2(Kosmos2_5TextAttention):
@@ -1090,7 +1090,7 @@ class Kosmos2_5TextFlashAttention2(Kosmos2_5TextAttention):
         if not output_attentions:
             attn_weights = None
 
-        return attn_output, attn_weights, past_key_value
+        return attn_output, attn_weights
 
 
 class Kosmos2_5TextSdpaAttention(Kosmos2_5TextAttention):
@@ -1177,7 +1177,7 @@ class Kosmos2_5TextSdpaAttention(Kosmos2_5TextAttention):
             attn_output = self.inner_attn_ln(attn_output)
 
         attn_output = self.out_proj(attn_output)
-        return attn_output, None, past_key_value
+        return attn_output, None
 
 
 KOSMOS2_5_TEXT_ATTENTION_CLASSES = {
