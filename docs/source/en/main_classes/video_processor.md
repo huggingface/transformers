@@ -14,12 +14,27 @@ rendered properly in your Markdown viewer.
 
 -->
 
+
 # Video Processor
 
-TODO: add some text
+A **Video Processor** is a utility responsible for preparing input features for Vision Large Language Models (VLMs) that support video data, as well as handling the post-processing of their outputs. It provides transformations such as resizing, normalization, and conversion into PyTorch, TensorFlow, Flax, or NumPy tensors. 
+
+The video processor extends the functionality of image processors by allowing Vision Large Language Models (VLMs) to handle videos with a distinct set of arguments compared to images. It serves as the bridge between raw video data and the model, ensuring that input features are optimized for the VLM.
+
+When adding a new VLM or updating an existing one to enable distinct video preprocessing, saving and reloading the processor configuration will store the video related arguments in a dedicated file named `video_preprocessing_config.json`. Don't worry if you haven't upadted your VLM, the processor will try to load video related configurations from a file named `preprocessing_config.json`.
+
+Currently, the video processor processes video data by treating each frame as an individual image and applying transformations frame-by-frame. While functional, this approach is not highly efficient. Planned updates include the addition of **fast video processors**, leveraging the [torchvision](https://pytorch.org/vision/stable/index.html) library. These updates will introduce GPU acceleration and significantly enhance processing speed, especially for tasks requiring high throughput.
+
+### Usage Example
+Here's an example of how to load a video processor with [`llava-hf/llava-onevision-qwen2-0.5b-ov-hf`](https://huggingface.co/llava-hf/llava-onevision-qwen2-0.5b-ov-hf) model:
+
+```python
+from transformers import AutoVideoProcessor
+
+processor = AutoVideoProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-0.5b-ov-hf")
+```
 
 
 ## BaseVideoProcessor
 
 [[autodoc]] video_processing_utils.BaseVideoProcessor
-
