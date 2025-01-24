@@ -1331,3 +1331,13 @@ class DebertaForQuestionAnswering(DebertaPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
+
+
+__all__ = [
+    "DebertaForMaskedLM",
+    "DebertaForQuestionAnswering",
+    "DebertaForSequenceClassification",
+    "DebertaForTokenClassification",
+    "DebertaModel",
+    "DebertaPreTrainedModel",
+]
