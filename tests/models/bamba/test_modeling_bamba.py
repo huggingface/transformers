@@ -22,7 +22,11 @@ from pytest import mark
 
 from transformers import AutoTokenizer, BambaConfig, is_torch_available
 from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
-from transformers.models.bamba.modular_bamba import get_cu_seq_lens_from_position_ids, get_seq_idx_from_cu_seq_lens
+from transformers.models.bamba.modular_bamba import (
+    get_cu_seq_lens_from_position_ids,
+    get_position_ids_from_cu_seq_lens,
+    get_seq_idx_from_cu_seq_lens,
+)
 from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
@@ -557,9 +561,7 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             )[None]
 
             torch.testing.assert_close(position_ids_logits, attn_mask_logits_reshaped)
-            # A higher tolerance is needed for the position_ids and FlashAttentionKwargs logits to
-            # match, for unknown reasons.
-            torch.testing.assert_close(position_ids_logits, flash_attn_kwargs_logits, atol=1e-3, rtol=1e-1)
+            torch.testing.assert_close(position_ids_logits, flash_attn_kwargs_logits)
 
 
 @slow
@@ -716,3 +718,24 @@ def test_seq_idx_from_cu_seq_lens() -> None:
     )[None]
     seq_idx_pred = get_seq_idx_from_cu_seq_lens(cu_seq_lens)
     assert torch.allclose(seq_idx_pred, seq_idx)
+
+
+def test_pos_ids_from_cu_seq_lens() -> None:
+    n_chunks = 5
+    max_chunk_len = 64
+
+    seq_lens = torch.randint(1, max_chunk_len, size=(n_chunks,))
+    cu_seq_lens = torch.cat([torch.tensor([0]), seq_lens.cumsum(dim=-1)], dim=-1)
+    pos_ids = torch.cat(
+        [
+            torch.arange(
+                s,
+                dtype=torch.int32,
+                device=cu_seq_lens.device,
+            )
+            for s in cu_seq_lens.diff(dim=-1)
+        ],
+        dim=-1,
+    )[None]
+    pos_ids_pred = get_position_ids_from_cu_seq_lens(cu_seq_lens)
+    assert torch.allclose(pos_ids_pred, pos_ids)
