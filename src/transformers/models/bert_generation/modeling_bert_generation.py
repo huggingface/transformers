@@ -20,7 +20,6 @@ from typing import Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
@@ -980,7 +979,6 @@ class BertGenerationDecoder(BertGenerationPreTrainedModel, GenerationMixin):
                 vocab_size=self.config.vocab_size,
                 **kwargs,
             )
-
 
         if not return_dict:
             output = (prediction_scores,) + outputs[1:]

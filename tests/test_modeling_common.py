@@ -487,7 +487,6 @@ class ModelTesterMixin:
                         m.gradient_checkpointing, f"Module {n} does not have gradient_checkpointing set to False"
                     )
 
-
     @is_flaky(description="low likelihood of failure, reason not yet discovered")
     def test_save_load_fast_init_from_base(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -939,15 +938,11 @@ class ModelTesterMixin:
 
                 with tempfile.TemporaryDirectory() as tmpdir:
                     with torch.device(torch_device):
-                        model_eager = AutoModelForCausalLM.from_config(
-                            config, torch_dtype=torch.float32
-                        )
+                        model_eager = AutoModelForCausalLM.from_config(config, torch_dtype=torch.float32)
 
                     model_eager.save_pretrained(tmpdir)
                     with torch.device(torch_device):
-                        model = AutoModelForCausalLM.from_pretrained(
-                            tmpdir, torch_dtype=torch.float32
-                        )
+                        model = AutoModelForCausalLM.from_pretrained(tmpdir, torch_dtype=torch.float32)
                         inputs_dict["num_items_in_batch"] = inputs_dict["input_ids"].shape[0]
                         inputs_dict["labels"] = inputs_dict["input_ids"]
                         _ = model(**inputs_dict, return_dict=False)
