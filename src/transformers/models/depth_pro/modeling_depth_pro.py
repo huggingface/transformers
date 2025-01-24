@@ -275,7 +275,7 @@ def split_to_patches(pixel_values: torch.Tensor, patch_size: int, overlap_ratio:
         # create patches only if scaled image is not already equal to patch size
         return pixel_values
 
-    stride = int(patch_size * (1 - overlap_ratio))
+    stride = torch_int(patch_size * (1 - overlap_ratio))
 
     # (batch_size, num_channels, height, width)
     patches = F.unfold(pixel_values, kernel_size=(patch_size, patch_size), stride=(stride, stride))
@@ -291,7 +291,7 @@ def split_to_patches(pixel_values: torch.Tensor, patch_size: int, overlap_ratio:
 def reshape_feature(hidden_states: torch.Tensor) -> torch.Tensor:
     """Discard class token and reshape 1D feature map to a 2D grid."""
     n_samples, seq_len, hidden_size = hidden_states.shape
-    size = int(math.sqrt(seq_len))
+    size = torch_int(math.sqrt(seq_len))
 
     # (n_samples, seq_len, hidden_size)
     hidden_states = hidden_states[:, -(size**2) :, :]  # remove mask tokens if there are any
@@ -306,7 +306,7 @@ def reshape_feature(hidden_states: torch.Tensor) -> torch.Tensor:
 def merge_patches(patches: torch.Tensor, batch_size: int, padding: int) -> torch.Tensor:
     n_patches, hidden_size, out_size, out_size = patches.shape
     n_patches_per_batch = n_patches // batch_size
-    sqrt_n_patches_per_batch = int(math.sqrt(n_patches_per_batch))
+    sqrt_n_patches_per_batch = torch_int(math.sqrt(n_patches_per_batch))
     new_out_size = sqrt_n_patches_per_batch * out_size
 
     if n_patches == batch_size:
@@ -362,7 +362,7 @@ def merge_patches(patches: torch.Tensor, batch_size: int, padding: int) -> torch
                 *[torch.arange(index, index + out_size - padding * 2) for index in starting_indexes],
                 torch.arange(new_out_size - padding, new_out_size),
             ]
-        )
+        ).to(merged.device)
         merged = merged[:, :, valid_indexes]
         merged = merged[:, :, :, valid_indexes]
 
@@ -478,16 +478,16 @@ class DepthProEncoder(nn.Module):
         patch_encodings = self.patch_encoder(
             patches,
             head_mask=head_mask,
-            output_attentions=output_attentions,
             # required for intermediate features
-            output_hidden_states=self.n_intermediate_hooks or output_hidden_states,
-            return_dict=True,
+            output_hidden_states=self.n_intermediate_hooks > 0,
+            return_dict=return_dict,
         )
+        # TODO: these shapes are wrong
         # patch_encodings.last_hidden_state (batch_size, n_patches/batch_size, seq_len, hidden_size)
         # patch_encodings.hidden_states[i]  (batch_size, n_patches/batch_size, seq_len, hidden_size)
         # patch_encodings.attentions[i]     (batch_size, n_patches/batch_size, num_heads, seq_len, seq_len)
 
-        last_hidden_state = patch_encodings.last_hidden_state
+        last_hidden_state = patch_encodings[0]
         # (n_patches, seq_len, hidden_size)
         scaled_images_last_hidden_state = torch.split_with_sizes(last_hidden_state, n_patches_per_scaled_image[::-1])
         # (n_patches_per_scaled_image[i], seq_len, hidden_size)
@@ -515,8 +515,8 @@ class DepthProEncoder(nn.Module):
 
         # calculate base height and width
         # base height and width are the dimensions of the lowest resolution features
-        out_size = int(math.sqrt(image_encodings.last_hidden_state.shape[1]))
-        exponent_value = int(math.log2(width / out_size))
+        out_size = torch_int(math.sqrt(image_encodings.last_hidden_state.shape[1]))
+        exponent_value = torch_int(math.log2(width / out_size))
         base_height = height // 2**exponent_value
         base_width = width // 2**exponent_value
 
@@ -553,14 +553,14 @@ class DepthProEncoder(nn.Module):
 
         intermediate_features = []
         for i in range(self.n_intermediate_hooks):
-            # a. extract hidden_state
+            # a. extract intermediate hidden_state
+            # +1 to correct index position as hidden_states contain embedding output as well
             layer_id = (
                 self.intermediate_hook_ids[i] + 1
-            )  # +1 to correct index position as hidden_states contain embedding output as well
-            hidden_state = patch_encodings.hidden_states[layer_id]
-            hidden_state = hidden_state[
-                : n_patches_per_scaled_image[-1]
-            ]  # number of patches to be of same length as highest resolution
+            )
+            hidden_state = patch_encodings[2][layer_id]
+            # number of patches are to be of same length as highest resolution
+            hidden_state = hidden_state[:n_patches_per_scaled_image[-1]]
             # (n_patches_per_scaled_image[-1], seq_len, hidden_size)
 
             # b. reshape back to image like
@@ -917,7 +917,7 @@ class DepthProFOVModel(nn.Module):
             self.head.append(nn.ReLU(True))
         # calculate expected shapes to finally generate a scalar output from final head layer
         final_in_channels = math.ceil(self.fusion_hidden_size / 2 ** (config.num_fov_head_layers + 1))
-        final_kernal_size = int((self.out_size - 1) / 2**config.num_fov_head_layers + 1)
+        final_kernal_size = torch_int((self.out_size - 1) / 2**config.num_fov_head_layers + 1)
         self.head.append(
             nn.Conv2d(
                 in_channels=final_in_channels, out_channels=1, kernel_size=final_kernal_size, stride=1, padding=0
@@ -1109,16 +1109,16 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
         fused_hidden_states = self.fusion_stage(features)
         predicted_depth = self.head(fused_hidden_states[-1])
 
-        fov = (
-            self.fov_model(
+        if self.use_fov_model:
+            # frozen features from encoder are used
+            features_for_fov = features[0].detach()
+            fov = self.fov_model(
                 pixel_values=pixel_values,
-                # frozon features from encoder are used
-                global_features=features[0].detach(),
+                global_features=features_for_fov,
                 head_mask=head_mask,
             )
-            if self.use_fov_model
-            else None
-        )
+        else:
+            fov = None
 
         if not return_dict:
             outputs = [loss, predicted_depth, fov, depth_pro_outputs.hidden_states, depth_pro_outputs.attentions]
