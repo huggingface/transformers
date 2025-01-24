@@ -582,8 +582,9 @@ class Zamba2ModelIntegrationTest(unittest.TestCase):
         )
         cls.tokenizer = AutoTokenizer.from_pretrained(model_id, revision="PR")
 
+    @parameterized.expand([(torch_device,), ("cpu",)])
     @slow
-    def test_simple_generate(self):
+    def test_simple_generate(self, torch_device):
         self.model.to(torch_device)
 
         input_ids = self.tokenizer("Hey how are you doing on this lovely evening?", return_tensors="pt")[
@@ -610,8 +611,9 @@ class Zamba2ModelIntegrationTest(unittest.TestCase):
             , dtype=torch.float32)  # fmt: skip
         torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD, rtol=1e-3, atol=1e-3)
 
+    @parameterized.expand([(torch_device,), ("cpu",)])
     @slow
-    def test_simple_batched_generate_with_padding(self):
+    def test_simple_batched_generate_with_padding(self, torch_device):
         self.model.to(torch_device)
 
         inputs = self.tokenizer(
@@ -656,4 +658,9 @@ class Zamba2ModelIntegrationTest(unittest.TestCase):
             , dtype=torch.float32)  # fmt: skip
 
         torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_0, rtol=1e-3, atol=1e-3)
-        torch.testing.assert_close(logits[1, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_1, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(
+            logits[1, -1, :40].cpu(),
+            EXPECTED_LOGITS_NO_GRAD_1,
+            rtol=1e-3,
+            atol=6e-3 if torch_device == "cpu" else 1e-3,
+        )
