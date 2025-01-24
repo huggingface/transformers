@@ -221,17 +221,14 @@ def get_cu_seq_lens_from_position_ids(position_ids: torch.LongTensor) -> torch.L
             torch.tensor(position_ids[0].shape, device=device),
         ),
     )
-    return cu_seq_lens[None]
+    return cu_seq_lens
 
 
 def get_seq_idx_from_cu_seq_lens(cu_seq_lens: torch.Tensor) -> torch.Tensor:
-    batch_size = cu_seq_lens.shape[0]
-    if batch_size != 1:
-        raise ValueError("Only batch size 1 is supported.")
     seq_idx = torch.cat(
         [
             torch.full((n,), idx, dtype=torch.int32, device=cu_seq_lens.device)
-            for idx, n in enumerate(torch.diff(cu_seq_lens[0], dim=-1))
+            for idx, n in enumerate(torch.diff(cu_seq_lens, dim=-1))
         ]
     )
     return seq_idx[None]
@@ -679,6 +676,7 @@ class BambaMixer(nn.Module):
         cache_position: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         seq_idx: Optional[torch.Tensor] = None,
+        **kwargs,
     ):
         batch_size, seq_len, _ = hidden_states.shape
         use_precomputed_states = (
@@ -777,7 +775,7 @@ class BambaDecoderLayer(JambaAttentionDecoderLayer):
                 seq_idx = get_seq_idx_from_cu_seq_lens(kwargs["cu_seq_lens_k"])
             elif position_ids is not None:
                 cu_seq_lens = get_cu_seq_lens_from_position_ids(position_ids)
-                if len(cu_seq_lens[0]) == 2:
+                if len(cu_seq_lens) == 2:
                     # If cu_seq_lens only has two elements, then it is semantically equivalent to
                     # `seq_idx=None`, which is more efficient.
                     seq_idx = None
@@ -993,6 +991,15 @@ class BambaModel(BambaPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutputWithPast]:
+        if (
+            self.training
+            and (position_ids is not None or "cu_seq_lens_k" in flash_attn_kwargs)
+            and (self.config._attn_implementation != "flash_attention_2" or not is_fast_path_available)
+        ):
+            raise ValueError(
+                "Padding-free training using position_ids or FlashAttentionKwargs requires ",
+                "the flash_attention_2 attention implementation and mamba cuda and triton kernels.",
+            )
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
