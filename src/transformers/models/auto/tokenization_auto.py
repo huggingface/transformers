@@ -319,6 +319,13 @@ else:
                     "LlamaTokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
+            (
+                "minimax_text_01",
+                (
+                    "GPT2Tokenizer" if is_sentencepiece_available() else None,
+                    "GPT2TokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
             ("mllama", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
             ("mluke", ("MLukeTokenizer" if is_sentencepiece_available() else None, None)),
             ("mobilebert", ("MobileBertTokenizer", "MobileBertTokenizerFast" if is_tokenizers_available() else None)),

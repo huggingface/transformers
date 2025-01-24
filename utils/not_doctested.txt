@@ -165,6 +165,7 @@ docs/source/en/model_doc/megatron_gpt2.md
 docs/source/en/model_doc/mgp-str.md
 docs/source/en/model_doc/mistral.md
 docs/source/en/model_doc/mixtral.md
+docs/source/en/model_doc/minimax_text_01.md
 docs/source/en/model_doc/mluke.md
 docs/source/en/model_doc/mms.md
 docs/source/en/model_doc/mobilebert.md
@@ -675,6 +676,8 @@ src/transformers/models/mistral/configuration_mistral.py
 src/transformers/models/mistral/modeling_mistral.py
 src/transformers/models/mixtral/configuration_mixtral.py
 src/transformers/models/mixtral/modeling_mixtral.py
+src/transformers/models/minimax_text_01/configuration_minimax_text_01.py
+src/transformers/models/minimax_text_01/modeling_minimax_text_01.py
 src/transformers/models/mluke/convert_mluke_original_pytorch_checkpoint_to_pytorch.py
 src/transformers/models/mobilebert/convert_mobilebert_original_tf_checkpoint_to_pytorch.py
 src/transformers/models/mobilenet_v1/configuration_mobilenet_v1.py

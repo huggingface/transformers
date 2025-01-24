@@ -164,6 +164,7 @@ from . import (
     mimi,
     mistral,
     mixtral,
+    minimax_text_01,
     mllama,
     mluke,
     mobilebert,

@@ -296,7 +296,7 @@ pipe = pipeline("text-generation", "meta-llama/Meta-Llama-3-8B-Instruct", device
 병목 현상이 크게 줄어들고 생성 속도가 빨라집니다.
 
 마지막으로, "Mixture of Experts" (MoE) 모델에 대해서도 짚고 넘어가 보도록 합니다. 
-Mixtral, Qwen-MoE, DBRX와 같은 인기 있는 채팅 모델이 바로 MoE 모델입니다. 
+Mixtral, MiniMaxText01, Qwen-MoE, DBRX와 같은 인기 있는 채팅 모델이 바로 MoE 모델입니다. 
 이 모델들은 토큰을 생성할 때 모든 파라미터가 사용되지 않습니다. 
 이로 인해 MoE 모델은 전체 크기가 상당히 클 수 있지만, 
 차지하는 메모리 대역폭은 낮은 편입니다. 

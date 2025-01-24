@@ -498,6 +498,8 @@
         title: Mistral
       - local: model_doc/mixtral
         title: Mixtral
+      - local: model_doc/minimax_text_01
+        title: MiniMaxText01
       - local: model_doc/mluke
         title: mLUKE
       - local: model_doc/mobilebert

@@ -281,7 +281,7 @@ confirm these generations with the chat model. If the guesses are validated by t
 be generated per forward pass, which greatly alleviates the bandwidth bottleneck and improves generation speed.  
 
 Finally, we should also note the impact of "Mixture of Experts" (MoE) models here. Several popular chat models,
-such as Mixtral, Qwen-MoE and DBRX, are MoE models. In these models, not every parameter is active for every token generated.
+such as Mixtral, MiniMaxText01, Qwen-MoE and DBRX, are MoE models. In these models, not every parameter is active for every token generated.
 As a result, MoE models generally have much lower memory bandwidth requirements, even though their total size
 can be quite large. They can therefore be several times faster than a normal "dense" model of the same size. However,
 techniques like assisted generation are generally ineffective for these models because more parameters will become

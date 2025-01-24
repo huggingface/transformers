@@ -19,6 +19,7 @@ FILES_TO_PARSE = [
     os.path.join(MODEL_ROOT, "granite", "modular_granite.py"),
     os.path.join(MODEL_ROOT, "gemma2", "modular_gemma2.py"),
     os.path.join(MODEL_ROOT, "mixtral", "modular_mixtral.py"),
+    os.path.join(MODEL_ROOT, "minimax_text_01", "modular_minimax_text_01.py"),
     os.path.join(MODEL_ROOT, "olmo", "modular_olmo.py"),
     os.path.join(MODEL_ROOT, "rt_detr", "modular_rt_detr.py"),
     os.path.join(MODEL_ROOT, "qwen2", "modular_qwen2.py"),
@@ -53,6 +54,7 @@ class ConversionOrderTest(unittest.TestCase):
         model_priority_list = [file.rsplit("modular_")[-1].replace(".py", "") for file in priority_list]
 
         # These are based on what the current library order should be (as of 09/01/2025)
+        self.assertTrue(appear_after("minimax_text_01", "mixtral", model_priority_list))
         self.assertTrue(appear_after("mixtral", "mistral", model_priority_list))
         self.assertTrue(appear_after("gemma2", "gemma", model_priority_list))
         self.assertTrue(appear_after("starcoder2", "mistral", model_priority_list))

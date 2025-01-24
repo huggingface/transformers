@@ -602,6 +602,7 @@ _import_structure = {
     "models.mimi": ["MimiConfig"],
     "models.mistral": ["MistralConfig"],
     "models.mixtral": ["MixtralConfig"],
+    "models.minimax_text_01": ["MiniMaxText01Config"],
     "models.mllama": [
         "MllamaConfig",
         "MllamaProcessor",
@@ -2866,6 +2867,16 @@ else:
             "MixtralForTokenClassification",
             "MixtralModel",
             "MixtralPreTrainedModel",
+        ]
+    )
+    _import_structure["models.minimax_text_01"].extend(
+        [
+            "MiniMaxText01ForCausalLM",
+            "MiniMaxText01ForQuestionAnswering",
+            "MiniMaxText01ForSequenceClassification",
+            "MiniMaxText01ForTokenClassification",
+            "MiniMaxText01Model",
+            "MiniMaxText01PreTrainedModel",
         ]
     )
     _import_structure["models.mllama"].extend(
@@ -5657,6 +5668,7 @@ if TYPE_CHECKING:
     )
     from .models.mistral import MistralConfig
     from .models.mixtral import MixtralConfig
+    from .models.minimax_text_01 import MiniMaxText01Config
     from .models.mllama import (
         MllamaConfig,
         MllamaProcessor,
@@ -7660,6 +7672,14 @@ if TYPE_CHECKING:
             MixtralForTokenClassification,
             MixtralModel,
             MixtralPreTrainedModel,
+        )
+        from .models.minimax_text_01 import (
+            MiniMaxText01Model,
+            MiniMaxText01ForCausalLM,
+            MiniMaxText01ForSequenceClassification,
+            MiniMaxText01ForTokenClassification,
+            MiniMaxText01ForQuestionAnswering,
+            MiniMaxText01PreTrainedModel,
         )
         from .models.mllama import (
             MllamaForCausalLM,
