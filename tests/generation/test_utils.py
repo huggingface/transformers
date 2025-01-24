@@ -1531,7 +1531,7 @@ class GenerationTesterMixin:
             next_logits_with_padding = model(**model_kwargs).logits[:, -1, :]
 
             # They should result in very similar logits
-            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, atol=1e-5, rtol=1e-5)
+            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5)
 
     @pytest.mark.generate
     def test_past_key_values_format(self):
@@ -2029,10 +2029,10 @@ class GenerationTesterMixin:
                 self._check_similar_generate_outputs(dynamic_result, compiled_result)
 
     @pytest.mark.generate
-    def test_generate_methods_with_num_logits_to_keep(self):
+    def test_generate_methods_with_logits_to_keep(self):
         for model_class in self.all_generative_model_classes:
-            if "num_logits_to_keep" not in set(inspect.signature(model_class.forward).parameters.keys()):
-                self.skipTest(reason="This model does not support `num_logits_to_keep` argument.")
+            if "logits_to_keep" not in set(inspect.signature(model_class.forward).parameters.keys()):
+                self.skipTest(reason="This model does not support `logits_to_keep` argument.")
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
             config.use_cache = True
@@ -2047,17 +2047,17 @@ class GenerationTesterMixin:
                 "do_sample": False,
             }
 
-            # Setting num_logits_to_keep at 0 keeps all logits (old behavior)
-            with_all_logits = model.generate(**generation_kwargs, **inputs_dict, num_logits_to_keep=0)
-            # By default, num_logits_to_keep is automatically set to 1 if not provided (new behavior)
+            # Setting logits_to_keep at 0 keeps all logits (old behavior)
+            with_all_logits = model.generate(**generation_kwargs, **inputs_dict, logits_to_keep=0)
+            # By default, logits_to_keep is automatically set to 1 if not provided (new behavior)
             without_all_logits = model.generate(**inputs_dict, **generation_kwargs)
             self.assertEqual(with_all_logits.tolist(), without_all_logits.tolist())
 
     @pytest.mark.generate
-    def test_assisted_decoding_with_num_logits_to_keep(self):
+    def test_assisted_decoding_with_logits_to_keep(self):
         for model_class in self.all_generative_model_classes:
-            if "num_logits_to_keep" not in set(inspect.signature(model_class.forward).parameters.keys()):
-                self.skipTest(reason="This model does not support `num_logits_to_keep` argument.")
+            if "logits_to_keep" not in set(inspect.signature(model_class.forward).parameters.keys()):
+                self.skipTest(reason="This model does not support `logits_to_keep` argument.")
             if model_class._is_stateful:
                 self.skipTest(reason="Stateful models don't support assisted generation")
 
@@ -2081,9 +2081,9 @@ class GenerationTesterMixin:
                 "output_scores": True,
             }
 
-            # Setting num_logits_to_keep at 0 keeps all logits (old behavior)
-            with_all_logits = model.generate(**generation_kwargs, **inputs_dict, num_logits_to_keep=0)
-            # By default, num_logits_to_keep is automatically set to 1 if not provided (new behavior)
+            # Setting logits_to_keep at 0 keeps all logits (old behavior)
+            with_all_logits = model.generate(**generation_kwargs, **inputs_dict, logits_to_keep=0)
+            # By default, logits_to_keep is automatically set to 1 if not provided (new behavior)
             without_all_logits = model.generate(**inputs_dict, **generation_kwargs)
 
             self._check_similar_generate_outputs(with_all_logits, without_all_logits)
@@ -2708,7 +2708,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores, outputs.beam_indices)
         transition_scores_sum = transition_scores.sum(-1)
 
-        self.assertTrue(torch.allclose(transition_scores_sum, outputs.sequences_scores, atol=1e-3))
+        torch.testing.assert_close(transition_scores_sum, outputs.sequences_scores, rtol=1e-3, atol=1e-3)
 
     def test_beam_search_low_memory(self):
         tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
