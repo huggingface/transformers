@@ -40,8 +40,7 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
-else:
-    is_torch_greater_or_equal_than_2_0 = False
+
 
 if is_vision_available():
     from PIL import Image
@@ -349,7 +348,7 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
 
     # TODO (joao, raushan): fix me -- the problem is in `cache_position[0] == 0`, i.e. dynamic control flow
     @unittest.skip("PaliGemma is not compatible with end-to-end generation compilation")
-    def test_generate_compile_fullgraph(self):
+    def test_generate_compile_model_forward(self):
         pass
 
 

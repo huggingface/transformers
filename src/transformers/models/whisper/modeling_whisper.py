@@ -1375,7 +1375,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
         output_attentions: bool,
     ):
         if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and 0.0 in attention_mask:
+            if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
 
@@ -2238,3 +2238,12 @@ class WhisperForAudioClassification(WhisperPreTrainedModel):
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
+
+
+__all__ = [
+    "WhisperForCausalLM",
+    "WhisperForConditionalGeneration",
+    "WhisperModel",
+    "WhisperPreTrainedModel",
+    "WhisperForAudioClassification",
+]

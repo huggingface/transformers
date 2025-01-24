@@ -25,7 +25,15 @@ from typing import Any, Dict, List, Optional, Union
 
 from packaging import version
 
-from ..utils import is_auto_awq_available, is_hqq_available, is_torch_available, is_torchao_available, logging
+from ..utils import (
+    is_auto_awq_available,
+    is_gptqmodel_available,
+    is_hqq_available,
+    is_torch_available,
+    is_torchao_available,
+    logging,
+)
+from .import_utils import is_auto_gptq_available
 
 
 if is_torch_available():
@@ -39,8 +47,10 @@ class QuantizationMethod(str, Enum):
     GPTQ = "gptq"
     AWQ = "awq"
     AQLM = "aqlm"
+    VPTQ = "vptq"
     QUANTO = "quanto"
     EETQ = "eetq"
+    HIGGS = "higgs"
     HQQ = "hqq"
     COMPRESSED_TENSORS = "compressed-tensors"
     FBGEMM_FP8 = "fbgemm_fp8"
@@ -222,6 +232,10 @@ class HqqConfig(QuantizationConfigMixin):
     ):
         if is_hqq_available():
             from hqq.core.quantize import BaseQuantizeConfig as HQQBaseQuantizeConfig
+        else:
+            raise ImportError(
+                "A valid HQQ version (>=0.2.1) is not available. Please follow the instructions to install it: `https://github.com/mobiusml/hqq/`."
+            )
 
         for deprecated_key in ["quant_zero", "quant_scale", "offload_meta"]:
             if deprecated_key in kwargs:
@@ -575,8 +589,16 @@ class GPTQConfig(QuantizationConfigMixin):
             Whether to perform sequential quantization even within a single Transformer block. Instead of quantizing
             the entire block at once, we perform layer-wise quantization. As a result, each layer undergoes
             quantization using inputs that have passed through the previously quantized layers.
+        checkpoint_format (`str`, *optional*, defaults to `"gptq"`):
+            GPTQ weight format. `gptq`(v1) is supported by both gptqmodel and auto-gptq. `gptq_v2` is gptqmodel only.
+        meta (`Dict[str, any]`, *optional*):
+            Properties, such as tooling:version, that do not directly contributes to quantization or quant inference are stored in meta.
+            i.e. `meta.quantizer`: ["optimum:_version_", "gptqmodel:_version_"]
+        backend (`str`, *optional*):
+            Controls which gptq kernel to be used. Valid values for gptqmodel are `auto`, `auto_trainable` and more. For auto-gptq, only
+            valid value is None and `auto_trainable`. Ref gptqmodel backends: https://github.com/ModelCloud/GPTQModel/blob/main/gptqmodel/utils/backend.py
         use_cuda_fp16 (`bool`, *optional*, defaults to `False`):
-            Whether or not to use optimized cuda kernel for fp16 model. Need to have model in fp16.
+            Whether or not to use optimized cuda kernel for fp16 model. Need to have model in fp16. Auto-gptq only.
         model_seqlen (`int`, *optional*):
             The maximum sequence length that the model can take.
         block_name_to_quantize (`str`, *optional*):
@@ -616,6 +638,9 @@ class GPTQConfig(QuantizationConfigMixin):
         desc_act: bool = False,
         sym: bool = True,
         true_sequential: bool = True,
+        checkpoint_format: str = "gptq",
+        meta: Optional[Dict[str, any]] = None,
+        backend: Optional[str] = None,
         use_cuda_fp16: bool = False,
         model_seqlen: Optional[int] = None,
         block_name_to_quantize: Optional[str] = None,
@@ -638,6 +663,9 @@ class GPTQConfig(QuantizationConfigMixin):
         self.desc_act = desc_act
         self.sym = sym
         self.true_sequential = true_sequential
+        self.checkpoint_format = checkpoint_format.lower()
+        self.meta = meta
+        self.backend = backend.lower() if isinstance(backend, str) else backend
         self.use_cuda_fp16 = use_cuda_fp16
         self.model_seqlen = model_seqlen
         self.block_name_to_quantize = block_name_to_quantize
@@ -654,7 +682,14 @@ class GPTQConfig(QuantizationConfigMixin):
 
     def get_loading_attributes(self):
         attibutes_dict = copy.deepcopy(self.__dict__)
-        loading_attibutes = ["disable_exllama", "use_exllama", "exllama_config", "use_cuda_fp16", "max_input_length"]
+        loading_attibutes = [
+            "disable_exllama",
+            "use_exllama",
+            "exllama_config",
+            "use_cuda_fp16",
+            "max_input_length",
+            "backend",
+        ]
         loading_attibutes_dict = {i: j for i, j in attibutes_dict.items() if i in loading_attibutes}
         return loading_attibutes_dict
 
@@ -686,6 +721,17 @@ class GPTQConfig(QuantizationConfigMixin):
                     ['wikitext2','c4','c4-new'], but we found {self.dataset}"""
                 )
 
+        # make sure backend is back/forward compatible with both gptqmodel (full) and auto-gptq (partial)
+        if is_gptqmodel_available():
+            # convert auto-gptq control into gptqmodel backend
+            if self.backend is None:
+                self.backend = "auto_trainable" if self.use_exllama is not None and not self.use_exllama else "auto"
+        else:
+            # convert gptqmodel backend `auto_trainable` into auto-gptq control
+            if self.backend == "auto_trainable":
+                self.use_exllama = False
+
+        # auto-gptq specific kernel control logic
         if self.disable_exllama is None and self.use_exllama is None:
             # New default behaviour
             self.use_exllama = True
@@ -719,12 +765,13 @@ class GPTQConfig(QuantizationConfigMixin):
                     "speed using exllamav2 kernel by setting `exllama_config`."
                 )
             elif self.exllama_config["version"] == ExllamaVersion.TWO:
-                optimum_version = version.parse(importlib.metadata.version("optimum"))
-                autogptq_version = version.parse(importlib.metadata.version("auto_gptq"))
-                if optimum_version <= version.parse("1.13.2") or autogptq_version <= version.parse("0.4.2"):
-                    raise ValueError(
-                        f"You need optimum > 1.13.2 and auto-gptq > 0.4.2 . Make sure to have that version installed - detected version : optimum {optimum_version} and autogptq {autogptq_version}"
-                    )
+                if is_auto_gptq_available():
+                    optimum_version = version.parse(importlib.metadata.version("optimum"))
+                    autogptq_version = version.parse(importlib.metadata.version("auto_gptq"))
+                    if optimum_version <= version.parse("1.13.2") or autogptq_version <= version.parse("0.4.2"):
+                        raise ValueError(
+                            f"You need optimum > 1.13.2 and auto-gptq > 0.4.2 . Make sure to have that version installed - detected version : optimum {optimum_version} and autogptq {autogptq_version}"
+                        )
         if self.modules_in_block_to_quantize is not None:
             optimum_version = version.parse(importlib.metadata.version("optimum"))
             if optimum_version < version.parse("1.15.0"):
@@ -995,6 +1042,102 @@ class AqlmConfig(QuantizationConfigMixin):
 
 
 @dataclass
+class VptqLayerConfig(QuantizationConfigMixin):
+    """
+    This is used to explain vptq config params for each layer
+    Args:
+        enable_norm (`bool`, *optional*, defaults to `True`): to control if we have scale/bias for fp-weight
+        enable_perm (`bool`, *optional*, defaults to `True`): to perm input_channel or not
+        group_num (`int`, *optional*, defaults to `1`): how many single groups for vector-quantization
+        group_size (`int`, *optional*, defaults to `-1`): depends on out-features
+        indices_as_float (`bool`, *optional*, defaults to `False`): for Finetuning
+        is_indice_packed (`bool`, *optional*, defaults to `True`): should always be True
+        num_centroids (`list`, *optional*, defaults to `[-1, -1]`): centriod numbers of clusters
+        num_res_centroids (`list`, *optional*, defaults to `[-1, -1]`): ditto for residual
+        outlier_size (`int`, *optional*, defaults to `1`): outliers
+        vector_lens (`list`, *optional*, defaults to `[-1, -1]`): centroid vector length in quantization
+    """
+
+    def __init__(
+        self,
+        enable_norm: bool = True,
+        enable_perm: bool = True,
+        group_num: int = 1,
+        group_size: int = -1,
+        in_features: int = -1,
+        indices_as_float: bool = False,
+        is_indice_packed: bool = True,
+        num_centroids: tuple = [-1, -1],
+        num_res_centroids: tuple = [-1, -1],
+        out_features: int = -1,
+        outlier_size: int = 0,
+        vector_lens: tuple = [-1, -1],
+        **kwargs,
+    ):
+        self.enable_norm = enable_norm
+        self.enable_perm = enable_perm
+        self.group_num = group_num
+        self.group_size = group_size
+        self.in_features = in_features
+        self.indices_as_float = indices_as_float
+        self.is_indice_packed = is_indice_packed
+        self.num_centroids = num_centroids
+        self.num_res_centroids = num_res_centroids
+        self.out_features = out_features
+        self.outlier_size = outlier_size
+        self.vector_lens = vector_lens
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct
+        """
+        if self.is_indice_packed is False:
+            raise ValueError("is_indice_packed should always be True")
+
+
+@dataclass
+class VptqConfig(QuantizationConfigMixin):
+    """
+    This is a wrapper class about `vptq` parameters.
+
+    Args:
+        enable_proxy_error (`bool`, *optional*, defaults to `False`): calculate proxy error for each layer
+        config_for_layers (`Dict`, *optional*, defaults to `{}`): quantization params for each layer
+        shared_layer_config (`Dict`, *optional*, defaults to `{}`): shared quantization params among layers
+        modules_to_not_convert (`list`, *optional*, default to `None`):
+            The list of modules to not quantize, useful for quantizing models that explicitly require to have
+            some modules left in their original precision (e.g. Whisper encoder, Llava encoder, Mixtral gate layers).
+        kwargs (`Dict[str, Any]`, *optional*):
+            Additional parameters from which to initialize the configuration object.
+    """
+
+    def __init__(
+        self,
+        enable_proxy_error: bool = False,
+        config_for_layers: Dict[str, Any] = {},
+        shared_layer_config: Dict[str, Any] = {},
+        modules_to_not_convert: Optional[List] = None,
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.VPTQ
+        self.enable_proxy_error = enable_proxy_error
+        self.config_for_layers: Dict[str, Any] = config_for_layers
+        self.shared_layer_config: Dict[str, Any] = shared_layer_config
+        self.modules_to_not_convert = modules_to_not_convert
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct
+        """
+        for layer_name, layer_param in self.config_for_layers.items():
+            VptqLayerConfig(**layer_param)
+        if self.enable_proxy_error is True:
+            raise ValueError("enable_proxy_error should always be False until we support training")
+
+
+@dataclass
 class QuantoConfig(QuantizationConfigMixin):
     """
     This is a wrapper class about all possible attributes and features that you can play with a model that has been
@@ -1241,6 +1384,58 @@ class FbgemmFp8Config(QuantizationConfigMixin):
         loading_attibutes = ["activation_scale_ub"]
         loading_attibutes_dict = {i: j for i, j in attibutes_dict.items() if i in loading_attibutes}
         return loading_attibutes_dict
+
+
+@dataclass
+class HiggsConfig(QuantizationConfigMixin):
+    """
+    HiggsConfig is a configuration class for quantization using the HIGGS method.
+
+    Args:
+        bits (int, *optional*, defaults to 4):
+            Number of bits to use for quantization. Can be 2, 3 or 4. Default is 4.
+        p (int, *optional*, defaults to 2):
+            Quantization grid dimension. 1 and 2 are supported. 2 is always better in practice. Default is 2.
+        modules_to_not_convert (`list`, *optional*, default to ["lm_head"]):
+            List of linear layers that should not be quantized.
+        hadamard_size (int, *optional*, defaults to 512):
+            Hadamard size for the HIGGS method. Default is 512. Input dimension of matrices is padded to this value. Decreasing this below 512 will reduce the quality of the quantization.
+        group_size (int, *optional*, defaults to 256):
+            Group size for the HIGGS method. Can be 64, 128 or 256. Decreasing it barely affects the performance. Default is 256. Must be a divisor of hadamard_size.
+    """
+
+    def __init__(
+        self,
+        bits: int = 4,
+        p: int = 2,
+        modules_to_not_convert: Optional[List[str]] = None,
+        hadamard_size: int = 512,
+        group_size: int = 256,
+        **kwargs,
+    ):
+        if modules_to_not_convert is None:
+            modules_to_not_convert = ["lm_head"]
+        self.quant_method = QuantizationMethod.HIGGS
+        self.bits = bits
+        self.p = p
+        self.modules_to_not_convert = modules_to_not_convert
+        self.hadamard_size = hadamard_size
+        self.group_size = group_size
+
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
+        """
+        if self.bits not in [2, 3, 4]:
+            raise ValueError("bits must be 2, 3, or 4")
+        if self.p not in [1, 2]:
+            raise ValueError("p must be 1 or 2. 2 is always better in practice")
+        if self.group_size not in [64, 128, 256]:
+            raise ValueError("group_size must be 64, 128, or 256")
+        if self.hadamard_size % self.group_size != 0:
+            raise ValueError("hadamard_size must be divisible by group_size")
 
 
 @dataclass
