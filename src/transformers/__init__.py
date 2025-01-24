@@ -73,7 +73,6 @@ _import_structure = {
         "tool",
     ],
     "audio_utils": [],
-    "benchmark": [],
     "commands": [],
     "configuration_utils": ["PretrainedConfig"],
     "convert_graph_to_onnx": [],
@@ -713,6 +712,10 @@ _import_structure = {
         "Qwen2Config",
         "Qwen2Tokenizer",
     ],
+    "models.qwen2_5_vl": [
+        "Qwen2_5_VLConfig",
+        "Qwen2_5_VLProcessor",
+    ],
     "models.qwen2_audio": [
         "Qwen2AudioConfig",
         "Qwen2AudioEncoderConfig",
@@ -1269,6 +1272,7 @@ else:
     _import_structure["models.pixtral"].append("PixtralImageProcessor")
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
+    _import_structure["models.qwen2_5_vl"].extend(["Qwen2_5_VLImageProcessor"])
     _import_structure["models.qwen2_vl"].extend(["Qwen2VLImageProcessor"])
     _import_structure["models.rt_detr"].extend(["RTDetrImageProcessor"])
     _import_structure["models.sam"].extend(["SamImageProcessor"])
@@ -1304,6 +1308,7 @@ else:
     _import_structure["models.deformable_detr"].append("DeformableDetrImageProcessorFast")
     _import_structure["models.detr"].append("DetrImageProcessorFast")
     _import_structure["models.pixtral"].append("PixtralImageProcessorFast")
+    _import_structure["models.qwen2_vl"].append("Qwen2VLImageProcessorFast")
     _import_structure["models.rt_detr"].append("RTDetrImageProcessorFast")
     _import_structure["models.vit"].append("ViTImageProcessorFast")
 
@@ -1329,8 +1334,6 @@ except OptionalDependencyNotAvailable:
     _import_structure["utils.dummy_pt_objects"] = [name for name in dir(dummy_pt_objects) if not name.startswith("_")]
 else:
     _import_structure["activations"] = []
-    _import_structure["benchmark.benchmark"] = ["PyTorchBenchmark"]
-    _import_structure["benchmark.benchmark_args"] = ["PyTorchBenchmarkArguments"]
     _import_structure["cache_utils"] = [
         "Cache",
         "CacheConfig",
@@ -3290,6 +3293,13 @@ else:
             "Qwen2PreTrainedModel",
         ]
     )
+    _import_structure["models.qwen2_5_vl"].extend(
+        [
+            "Qwen2_5_VLForConditionalGeneration",
+            "Qwen2_5_VLModel",
+            "Qwen2_5_VLPreTrainedModel",
+        ]
+    )
     _import_structure["models.qwen2_audio"].extend(
         [
             "Qwen2AudioEncoder",
@@ -4031,8 +4041,6 @@ except OptionalDependencyNotAvailable:
     _import_structure["utils.dummy_tf_objects"] = [name for name in dir(dummy_tf_objects) if not name.startswith("_")]
 else:
     _import_structure["activations_tf"] = []
-    _import_structure["benchmark.benchmark_args_tf"] = ["TensorFlowBenchmarkArguments"]
-    _import_structure["benchmark.benchmark_tf"] = ["TensorFlowBenchmark"]
     _import_structure["generation"].extend(
         [
             "TFForcedBOSTokenLogitsProcessor",
@@ -5803,6 +5811,10 @@ if TYPE_CHECKING:
     from .models.pvt import PvtConfig
     from .models.pvt_v2 import PvtV2Config
     from .models.qwen2 import Qwen2Config, Qwen2Tokenizer
+    from .models.qwen2_5_vl import (
+        Qwen2_5_VLConfig,
+        Qwen2_5_VLProcessor,
+    )
     from .models.qwen2_audio import (
         Qwen2AudioConfig,
         Qwen2AudioEncoderConfig,
@@ -6383,6 +6395,7 @@ if TYPE_CHECKING:
             PoolFormerImageProcessor,
         )
         from .models.pvt import PvtImageProcessor
+        from .models.qwen2_5_vl import Qwen2_5_VLImageProcessor
         from .models.qwen2_vl import Qwen2VLImageProcessor
         from .models.rt_detr import RTDetrImageProcessor
         from .models.sam import SamImageProcessor
@@ -6414,6 +6427,7 @@ if TYPE_CHECKING:
         from .models.deformable_detr import DeformableDetrImageProcessorFast
         from .models.detr import DetrImageProcessorFast
         from .models.pixtral import PixtralImageProcessorFast
+        from .models.qwen2_vl import Qwen2VLImageProcessorFast
         from .models.rt_detr import RTDetrImageProcessorFast
         from .models.vit import ViTImageProcessorFast
 
@@ -6432,9 +6446,6 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         from .utils.dummy_pt_objects import *
     else:
-        # Benchmarks
-        from .benchmark.benchmark import PyTorchBenchmark
-        from .benchmark.benchmark_args import PyTorchBenchmarkArguments
         from .cache_utils import (
             Cache,
             CacheConfig,
@@ -8008,6 +8019,11 @@ if TYPE_CHECKING:
             Qwen2Model,
             Qwen2PreTrainedModel,
         )
+        from .models.qwen2_5_vl import (
+            Qwen2_5_VLForConditionalGeneration,
+            Qwen2_5_VLModel,
+            Qwen2_5_VLPreTrainedModel,
+        )
         from .models.qwen2_audio import (
             Qwen2AudioEncoder,
             Qwen2AudioForConditionalGeneration,
@@ -8583,10 +8599,6 @@ if TYPE_CHECKING:
         # They will raise an import error if the user tries to instantiate / use them.
         from .utils.dummy_tf_objects import *
     else:
-        from .benchmark.benchmark_args_tf import TensorFlowBenchmarkArguments
-
-        # Benchmarks
-        from .benchmark.benchmark_tf import TensorFlowBenchmark
         from .generation import (
             TFForcedBOSTokenLogitsProcessor,
             TFForcedEOSTokenLogitsProcessor,
