@@ -524,7 +524,7 @@ def deepspeed_ulysses_cross_entropy(
     ).squeeze(1)
 
     if reduction == "mean":
-        loss = loss.nanmean()
+        loss = loss[torch.nonzero(loss)].mean()
 
     if reduction == "sum":
         loss = loss.sum()

@@ -24,6 +24,8 @@ from .loss_rt_detr import RTDetrForObjectDetectionLoss
 
 
 if is_deepspeed_available():
+    from deepspeed.utils import groups as deepspeed_groups
+
     from ..integrations.deepspeed import deepspeed_ulysses_cross_entropy
 
 
@@ -49,8 +51,23 @@ def ForCausalLMLoss(
     # Upcast to float if we need to compute the loss to avoid potential precision issues
     logits = logits.float()
     # Shift so that tokens < n predict n
-    shift_logits = logits[..., :-1, :].contiguous()
-    shift_labels = labels[..., 1:].contiguous()
+    if is_deepspeed_ulysses_enabled():
+        sp_group = deepspeed_groups._get_sequence_parallel_group()
+        sp_size = sp_group.size()
+        sp_rank = sp_group.rank()
+        sp_seqlen = logits.size(1)
+
+        shift_logits = logits.contiguous()
+        if sp_rank == sp_size - 1:
+            # add an ignore_index to the end of the labels
+            shift_labels = torch.cat(
+                (labels[..., -(sp_seqlen - 1) :], torch.full_like(labels[:, :1], ignore_index)), dim=-1
+            ).contiguous()
+        else:
+            shift_labels = labels[..., (sp_seqlen * sp_rank) + 1 : (sp_seqlen * (sp_rank + 1)) + 1].contiguous()
+    else:
+        shift_logits = logits[..., :-1, :].contiguous()
+        shift_labels = labels[..., 1:].contiguous()
 
     # Flatten the tokens
     shift_logits = shift_logits.view(-1, vocab_size)

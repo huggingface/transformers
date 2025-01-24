@@ -918,7 +918,6 @@ def shard_inputs(
                 "loss_mask",
                 "position_ids",
                 "input_embeds",
-                "labels",
             ]
             and value is not None
         ):
