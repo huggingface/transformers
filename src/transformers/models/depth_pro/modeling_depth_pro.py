@@ -267,7 +267,7 @@ class DepthProFeatureProjection(nn.Module):
         return projected_features
 
 
-def patch(pixel_values: torch.Tensor, patch_size: int, overlap_ratio: float) -> torch.Tensor:
+def split_to_patches(pixel_values: torch.Tensor, patch_size: int, overlap_ratio: float) -> torch.Tensor:
     """Creates Patches from Batch."""
     batch_size, num_channels, height, width = pixel_values.shape
 
@@ -303,7 +303,7 @@ def reshape_feature(hidden_states: torch.Tensor) -> torch.Tensor:
     return hidden_states
 
 
-def merge(patches: torch.Tensor, batch_size: int, padding: int) -> torch.Tensor:
+def merge_patches(patches: torch.Tensor, batch_size: int, padding: int) -> torch.Tensor:
     n_patches, hidden_size, out_size, out_size = patches.shape
     n_patches_per_batch = n_patches // batch_size
     sqrt_n_patches_per_batch = int(math.sqrt(n_patches_per_batch))
@@ -463,7 +463,7 @@ class DepthProEncoder(nn.Module):
         # STEP 2: create patches
 
         for i in range(self.n_scaled_images):
-            scaled_images[i] = patch(
+            scaled_images[i] = split_to_patches(
                 scaled_images[i],
                 patch_size=self.config.patch_size,
                 overlap_ratio=self.scaled_images_overlap_ratios[i],
@@ -533,7 +533,7 @@ class DepthProEncoder(nn.Module):
             # (n_patches_per_scaled_image[i], hidden_size, out_size, out_size)
 
             # c. merge patches back together
-            features = merge(
+            features = merge_patches(
                 features,
                 batch_size=batch_size,
                 padding=torch_int(self.merge_padding_value * (1 / self.scaled_images_ratios[i])),
@@ -568,7 +568,7 @@ class DepthProEncoder(nn.Module):
             # (n_patches_per_scaled_image[-1], hidden_size, out_size, out_size)
 
             # c. merge patches back together
-            features = merge(
+            features = merge_patches(
                 features,
                 batch_size=batch_size,
                 padding=torch_int(self.merge_padding_value * (1 / self.scaled_images_ratios[-1])),
