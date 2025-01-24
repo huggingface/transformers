@@ -109,6 +109,16 @@ class MixtralConfig(PretrainedConfig):
 
     model_type = "mixtral"
     keys_to_ignore_at_inference = ["past_key_values"]
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.block_sparse_moe.gate": "colwise",
+        "layers.*.block_sparse_moe.experts.*.w1": "colwise",
+        "layers.*.block_sparse_moe.experts.*.w2": "colwise",
+        "layers.*.block_sparse_moe.experts.*.w3": "colwise",
+    }
 
     def __init__(
         self,
