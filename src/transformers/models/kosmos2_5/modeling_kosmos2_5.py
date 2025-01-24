@@ -991,28 +991,45 @@ class Kosmos2_5TextAttention(nn.Module):
             cache_kwargs = {"cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                pass
-                # TODO: enable
-                # attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        # attention_interface: Callable = eager_attention_forward
+        # if self.config._attn_implementation != "eager":
+        #     if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+        #         logger.warning_once(
+        #             "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+        #             'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+        #         )
+        #     else:
+        #         pass
+        #         # TODO: enable
+        #         # attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+        #
+        # attn_output, attn_weights = attention_interface(
+        #     self,
+        #     query_states,
+        #     key_states,
+        #     value_states,
+        #     attention_mask,
+        #     dropout=0.0 if not self.training else self.dropout,
+        #     scaling=self.scaling,
+        #     **kwargs,
+        # )
 
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.dropout,
-            scaling=self.scaling,
-            **kwargs,
-        )
+
+
+        # this weight maybe overflow with fp16
+        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * self.scaling
+
+        if attention_mask is not None:
+            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+            attn_weights = attn_weights + causal_mask
+
+        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        attn_output = torch.matmul(attn_weights, value_states)
+        attn_output = attn_output.transpose(1, 2).contiguous()
+
+
+
 
         attn_output = attn_output.reshape(batch_size, seq_length, -1)
 
