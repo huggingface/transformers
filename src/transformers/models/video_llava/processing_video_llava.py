@@ -69,7 +69,7 @@ class VideoLlavaProcessor(ProcessorMixin):
         "video_token",
         "num_additional_image_tokens",
     ]
-    image_processor_class = "VideoLlavaImageProcessor"
+    image_processor_class = "CLIPImageProcessor"
     video_processor_class = "VideoLlavaVideoProcessor"
     tokenizer_class = "AutoTokenizer"
 

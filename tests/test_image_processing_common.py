@@ -216,7 +216,6 @@ class ImageProcessingTestMixin:
             image_processor = image_processing_class(**self.image_processor_dict)
             obj = json.loads(image_processor.to_json_string())
             for key, value in self.image_processor_dict.items():
-                print(key, obj[key], value)
                 self.assertEqual(obj[key], value)
 
     def test_image_processor_to_json_file(self):
