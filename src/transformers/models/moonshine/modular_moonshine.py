@@ -360,17 +360,27 @@ class MoonshineAttention(GlmAttention):
                 attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         is_causal = True if self.is_causal and attention_mask is None and q_len > 1 else False
+
+        # Pad head size dimension to next multiple of 8. Q K and V always have equal head sizes.
+        pad_amount = 8 * ((query_states.shape[-1] + 7) // 8) - query_states.shape[-1]
+        query_states = torch.nn.functional.pad(query_states, (0, pad_amount))
+        key_states = torch.nn.functional.pad(key_states, (0, pad_amount))
+        value_states = torch.nn.functional.pad(value_states, (0, pad_amount))
+
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
             key_states,
             value_states,
-            attention_mask,
+            attention_mask=attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             is_causal=is_causal,
             **kwargs,
         )
+
+        # Remove head size padding.
+        attn_output = attn_output[:,:,:,:-pad_amount]
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
         attn_output = self.o_proj(attn_output)
@@ -650,6 +660,7 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
             else:
                 layer_outputs = encoder_layer(
                     hidden_states,
+                    attention_mask=attention_mask,
                     position_ids=position_ids,
                     output_attentions=output_attentions,
                     position_embeddings=position_embeddings,
