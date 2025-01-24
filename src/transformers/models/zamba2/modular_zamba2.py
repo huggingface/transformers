@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
+import re
 from itertools import cycle
 from typing import Callable, Optional, Tuple, Union
 
@@ -982,72 +983,40 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
                     self.first_transformer_layer_id = layer_id
                 block = next(blocks)
                 if self.config.num_mem_blocks * len(self.config.hybrid_layer_ids) > 1:
-                    prefix_name = f"layers.{layer_id}."
-                    tied_keys = [
-                        "shared_transformer.self_attn.q_proj.weight",
-                        "shared_transformer.self_attn.k_proj.weight",
-                        "shared_transformer.self_attn.v_proj.weight",
-                        "shared_transformer.self_attn.o_proj.weight",
-                        "shared_transformer.feed_forward.gate_up_proj.weight",
-                        "shared_transformer.feed_forward.down_proj.weight",
-                        "shared_transformer.input_layernorm.weight",
-                        "shared_transformer.pre_ff_layernorm.weight",
-                    ]
-                    self._tied_weights_keys = [*self._tied_weights_keys, *[prefix_name + key for key in tied_keys]]
+                    prefix_pattern = rf"^layers\.{layer_id}\.shared_transformer\."
+                    main_keys_pattern = re.compile(
+                        prefix_pattern
+                        + r"(?:"
+                        + r"self_attn\.(?:q_proj|k_proj|v_proj|o_proj)\.weight|"
+                        + r"feed_forward\.(?:gate_up_proj|down_proj)\.weight|"
+                        + r"(?:input_layernorm|pre_ff_layernorm)\.weight"
+                        + r")$"
+                    )
+                    self._tied_weights_keys.append(main_keys_pattern)
+
                     if self.config.use_shared_mlp_adapter:
-                        tied_keys_adapter = []
                         adapter_id = 0
                         for _layer_type in self.layers_block_type:
                             if _layer_type == "hybrid" and adapter_id % self.config.num_mem_blocks == block.block_id:
-                                tied_keys_adapter.append(
-                                    "shared_transformer.feed_forward.gate_up_proj_adapter_list."
+                                adapter_pattern = re.compile(
+                                    r"^shared_transformer\.feed_forward\.gate_up_proj_adapter_list\."
                                     + str(adapter_id)
-                                    + ".0.weight"
+                                    + r"\.(?:0|1)\.weight$"
                                 )
-                                tied_keys_adapter.append(
-                                    "shared_transformer.feed_forward.gate_up_proj_adapter_list."
-                                    + str(adapter_id)
-                                    + ".1.weight"
-                                )
+                                self._tied_weights_keys.append(adapter_pattern)
                             adapter_id += 1
-                        self._tied_weights_keys = [*self._tied_weights_keys, *tied_keys_adapter]
                     if self.config.use_shared_attention_adapter:
-                        tied_keys_adapter = []
                         adapter_id = 0
                         for _layer_type in self.layers_block_type:
                             if _layer_type == "hybrid" and adapter_id % self.config.num_mem_blocks == block.block_id:
-                                tied_keys_adapter.append(
-                                    "shared_transformer.self_attn.linear_q_adapter_list."
+                                attn_adapter_pattern = re.compile(
+                                    r"^shared_transformer\.self_attn\."
+                                    + r"(?:linear_q_adapter_list|linear_k_adapter_list|linear_v_adapter_list)\."
                                     + str(adapter_id)
-                                    + ".0.weight"
+                                    + r"\.(?:0|1)\.weight$"
                                 )
-                                tied_keys_adapter.append(
-                                    "shared_transformer.self_attn.linear_k_adapter_list."
-                                    + str(adapter_id)
-                                    + ".0.weight"
-                                )
-                                tied_keys_adapter.append(
-                                    "shared_transformer.self_attn.linear_v_adapter_list."
-                                    + str(adapter_id)
-                                    + ".0.weight"
-                                )
-                                tied_keys_adapter.append(
-                                    "shared_transformer.self_attn.linear_q_adapter_list."
-                                    + str(adapter_id)
-                                    + ".1.weight"
-                                )
-                                tied_keys_adapter.append(
-                                    "shared_transformer.self_attn.linear_k_adapter_list."
-                                    + str(adapter_id)
-                                    + ".1.weight"
-                                )
-                                tied_keys_adapter.append(
-                                    "shared_transformer.self_attn.linear_v_adapter_list."
-                                    + str(adapter_id)
-                                    + ".1.weight"
-                                )
+                                self._tied_weights_keys.append(attn_adapter_pattern)
                             adapter_id += 1
-                        self._tied_weights_keys = [*self._tied_weights_keys, *tied_keys_adapter]
                 layers.append(Zamba2HybridLayer(block, next(linear_layers), next(mamba_layers)))
             else:
                 layers.append(next(mamba_layers))
