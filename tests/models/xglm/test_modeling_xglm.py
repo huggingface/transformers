@@ -356,7 +356,7 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
         model.to(torch_device)
         input_ids = torch.tensor([[2, 268, 9865]], dtype=torch.long, device=torch_device)  # The dog
         # </s> The dog is a very friendly dog. He is very affectionate and loves to play with other
-        expected_output_ids = [2, 268, 9865, 67, 11, 1988, 57252, 9865, 5, 984, 67, 1988, 213838, 1658, 53, 70446, 33, 6657, 278, 1581]  # fmt: skip
+        expected_output_ids = [2, 268, 9865, 67, 11, 1988, 57252, 9865, 5, 984, 67, 1988, 213838, 1658, 53, 70446, 33, 6657, 278, 1581, 72616, 5, 984]  # fmt: skip
         output_ids = model.generate(input_ids, do_sample=False, num_beams=1)
         if verify_outputs:
             self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
