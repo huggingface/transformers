@@ -398,8 +398,7 @@ class StopStringCriteria(StoppingCriteria):
         flipped_ids = torch.flip(input_ids, (1,))
 
         # Clip out-of-vocab values to the dummy value at the end of the embedding vector
-        vocab_size = self.embedding_vec.size(0)
-        flipped_ids = torch.clamp(flipped_ids, max=vocab_size - 1)
+        flipped_ids = torch.clamp(flipped_ids, max=self.embedding_vec.size(0) - 1)
 
         # Size of the vector of positions a single token can match
         max_valid_positions = self.max_valid_positions
