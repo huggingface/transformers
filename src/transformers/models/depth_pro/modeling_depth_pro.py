@@ -297,7 +297,7 @@ def split_to_patches(pixel_values: torch.Tensor, patch_size: int, overlap_ratio:
     return patches
 
 
-def reshape_feature(hidden_states: torch.Tensor) -> torch.Tensor:
+def reshape_features(hidden_states: torch.Tensor) -> torch.Tensor:
     """Discard class token and reshape 1D feature map to a 2D grid."""
     n_samples, seq_len, hidden_size = hidden_states.shape
     size = torch_int(math.sqrt(seq_len))
@@ -310,6 +310,7 @@ def reshape_feature(hidden_states: torch.Tensor) -> torch.Tensor:
 
 
 def merge_patches(patches: torch.Tensor, batch_size: int, padding: int) -> torch.Tensor:
+    """Merges smaller patches into image-like feature map."""
     n_patches, hidden_size, out_size, out_size = patches.shape
     n_patches_per_batch = n_patches // batch_size
     sqrt_n_patches_per_batch = torch_int(math.sqrt(n_patches_per_batch))
@@ -375,6 +376,35 @@ def merge_patches(patches: torch.Tensor, batch_size: int, padding: int) -> torch
         merged = torch.cat(boxes, dim=-2)
 
     return merged
+
+
+def feature_extractor(
+    hidden_state: torch.Tensor,
+    batch_size: int,
+    padding: int,
+    output_size: Tuple[float, float]
+) -> torch.Tensor:
+    """Converts hidden_state to image like feature map."""
+
+    # reshape back to image like
+    features = reshape_features(hidden_state)
+
+    # merge patches back together
+    features = merge_patches(
+        features,
+        batch_size=batch_size,
+        padding=padding,
+    )
+
+    # interpolate patches to base size
+    features = F.interpolate(
+        features,
+        size=output_size,
+        mode="bilinear",
+        align_corners=False,
+    )
+
+    return features
 
 
 class DepthProEncoder(nn.Module):
@@ -516,77 +546,34 @@ class DepthProEncoder(nn.Module):
 
         scaled_images_features = []
         for i in range(self.n_scaled_images):
-            # a. extract hidden_state
-            hidden_state = scaled_images_last_hidden_state[i]
-
-            # b. reshape back to image like
-            features = reshape_feature(hidden_state)
-
-            # c. merge patches back together
-            features = merge_patches(
-                features,
+            features = feature_extractor(
+                scaled_images_last_hidden_state[i],
                 batch_size=batch_size,
                 padding=torch_int(self.merge_padding_value * (1 / self.scaled_images_ratios[i])),
+                output_size=(base_height * 2**i, base_width * 2**i),
             )
-
-            # d. interpolate patches to base size
-            features = F.interpolate(
-                features,
-                size=(base_height * 2**i, base_width * 2**i),
-                mode="bilinear",
-                align_corners=False,
-            )
-
             scaled_images_features.append(features)
 
         # STEP 5: get intermediate features - (1-2) in diagram
 
         intermediate_features = []
         for i in range(self.n_intermediate_hooks):
-            # a. extract intermediate hidden_state
-            # +1 to correct index position as hidden_states contain embedding output as well
-            layer_id = self.intermediate_hook_ids[i] + 1
-            hidden_state = patch_encodings[2][layer_id]
-            # number of patches are to be of same length as highest resolution
-            hidden_state = hidden_state[:n_patches_per_scaled_image[-1]]
-
-            # b. reshape back to image like
-            features = reshape_feature(hidden_state)
-
-            # c. merge patches back together
-            features = merge_patches(
-                features,
+            features = feature_extractor(
+                # +1 to correct index position as hidden_states contain embedding output as well
+                patch_encodings[2][self.intermediate_hook_ids[i] + 1],
                 batch_size=batch_size,
                 padding=torch_int(self.merge_padding_value * (1 / self.scaled_images_ratios[-1])),
+                output_size=(base_height * 2 ** (self.n_scaled_images - 1), base_width * 2 ** (self.n_scaled_images - 1)),
             )
-
-            # d. interpolate patches to base size
-            features = F.interpolate(
-                features,
-                size=(base_height * 2 ** (self.n_scaled_images - 1), base_width * 2 ** (self.n_scaled_images - 1)),
-                mode="bilinear",
-                align_corners=False,
-            )
-
             intermediate_features.append(features)
 
         # STEP 6: get image features - (6) in diagram
 
-        # a. extract hidden_state
-        hidden_state = image_encodings[0]
-
-        # b. reshape back to image like
-        image_features = reshape_feature(hidden_state)
-
-        # c. merge patches back together
-        # no merge required for image_features as they are already in batches instead of patches
-
-        # d. interpolate patches to base size
-        image_features = F.interpolate(
-            image_features,
-            size=(base_height, base_width),
-            mode="bilinear",
-            align_corners=False,
+        image_features = feature_extractor(
+            image_encodings[0],
+            batch_size=batch_size,
+            padding=0,
+            output_size=(base_height, base_width),
         )
 
         # STEP 7: combine all features
@@ -909,9 +896,6 @@ class DepthProFOVModel(nn.Module):
     ) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
 
-        # follow the steps same as with image features in DepthProEncoder
-        # except for the extra encoder_neck layer applied
-
         image_scaled_to_patch_size = F.interpolate(
             pixel_values,
             size=(self.config.patch_size, self.config.patch_size),
@@ -922,24 +906,14 @@ class DepthProFOVModel(nn.Module):
             image_scaled_to_patch_size,
             head_mask=head_mask,
         )
-
-        # a. extract hidden_state
-        hidden_state = encodings.last_hidden_state
-        # extra step
+        hidden_state = encodings[0]
         hidden_state = self.encoder_neck(hidden_state)
 
-        # b. reshape back to image like
-        fov_features = reshape_feature(hidden_state)
-
-        # c. merge patches back together
-        # no merge required for fov_features as they are already in batches instead of patches
-
-        # d. interpolate patches to base size
-        fov_features = F.interpolate(
-            fov_features,
-            size=(self.out_size, self.out_size),
-            mode="bilinear",
-            align_corners=False,
+        fov_features = feature_extractor(
+            hidden_state,
+            batch_size=batch_size,
+            padding=0,
+            output_size=(self.out_size, self.out_size),
         )
 
         global_features = self.global_neck(global_features)
