@@ -26,6 +26,15 @@ def test_invalid_hypothesis_templates():
     ]
 
     for template in invalid_templates:
-        with pytest.raises(ValueError):
-            handler(sequences, labels, template) 
+        with pytest.raises(ValueError, match=".*must contain exactly one simple {} placeholder.*"):
+            handler(sequences, labels, template)
+
+def test_template_without_placeholder_usage():
+    handler = ZeroShotClassificationArgumentHandler()
+    sequences = ["I love this movie"]
+    labels = ["positive"]
+    template = "This template doesn't use the placeholder"
+
+    with pytest.raises(ValueError, match=".*must contain exactly one simple {} placeholder.*"):
+        handler(sequences, labels, template) 
 
