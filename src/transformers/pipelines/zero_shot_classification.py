@@ -24,15 +24,15 @@ class ZeroShotClassificationArgumentHandler(ArgumentHandler):
     def _validate_hypothesis_template(self, template: str) -> None:
         """Validates that the hypothesis template only contains simple {} placeholders."""
         import re
-        
+
         # Check for exactly one simple {} placeholder
-        placeholder_pattern = r'\{[^{}]*\}'
+        placeholder_pattern = r"\{[^{}]*\}"
         matches = re.findall(placeholder_pattern, template)
-        
-        if len(matches) != 1 or matches[0] != '{}':
+
+        if len(matches) != 1 or matches[0] != "{}":
             raise ValueError(
-                'hypothesis_template must contain exactly one simple {} placeholder for security reasons. '
-                'Complex Python string formatting patterns (like {:>10}, {!r}, {0}) are not supported.'
+                "hypothesis_template must contain exactly one simple {} placeholder for security reasons. "
+                "Complex Python string formatting patterns (like {:>10}, {!r}, {0}) are not supported."
             )
 
     def _parse_labels(self, labels):
@@ -43,10 +43,10 @@ class ZeroShotClassificationArgumentHandler(ArgumentHandler):
     def __call__(self, sequences, labels, hypothesis_template):
         if len(labels) == 0 or len(sequences) == 0:
             raise ValueError("You must include at least one label and at least one sequence.")
-        
+
         # Validate the template before using it
         self._validate_hypothesis_template(hypothesis_template)
-        
+
         labels = self._parse_labels(labels)
 
         # Verify the template actually uses the placeholder
@@ -57,7 +57,7 @@ class ZeroShotClassificationArgumentHandler(ArgumentHandler):
                     "Make sure the passed template includes formatting syntax such as {{}} where the label should go."
                 ).format(hypothesis_template)
             )
-        
+
         if isinstance(sequences, str):
             sequences = [sequences]
 
