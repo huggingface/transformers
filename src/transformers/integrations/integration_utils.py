@@ -581,11 +581,18 @@ def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> Bes
 
         return trainer.objective
 
-    sweep_id = wandb.sweep(sweep_config, project=project, entity=entity) if not sweep_id else sweep_id
+    if not sweep_id:
+        sweep_id = wandb.sweep(sweep_config, project=project, entity=entity)
+    else:
+        import wandb.env
+        if entity:
+            wandb.env.set_entity(entity)
+        wandb.env.set_project(project)
+
     logger.info(f"wandb sweep id - {sweep_id}")
     wandb.agent(sweep_id, function=_objective, count=n_trials)
 
-    return BestRun(best_trial["run_id"], best_trial["objective"], best_trial["hyperparameters"])
+    return BestRun(best_trial["run_id"], best_trial["objective"], best_trial["hyperparameters"], sweep_id)
 
 
 def get_available_reporting_integrations():
