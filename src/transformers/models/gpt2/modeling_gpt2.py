@@ -47,6 +47,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.model_parallel_utils import assert_device_map, get_device_map
 from .configuration_gpt2 import GPT2Config
 
@@ -269,6 +270,7 @@ class GPT2Attention(nn.Module):
 
         return attn_output, attn_weights
 
+    @deprecate_kwarg("layer_past", new_name="past_key_value", version="4.49.0", raise_if_both_names=True)
     def forward(
         self,
         hidden_states: Optional[Tuple[torch.FloatTensor]],
@@ -390,6 +392,7 @@ class GPT2Block(nn.Module):
 
         self.mlp = GPT2MLP(inner_dim, config)
 
+    @deprecate_kwarg("layer_past", new_name="past_key_value", version="4.49.0", raise_if_both_names=True)
     def forward(
         self,
         hidden_states: Optional[Tuple[torch.FloatTensor]],
