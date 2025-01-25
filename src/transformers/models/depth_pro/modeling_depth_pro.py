@@ -320,7 +320,6 @@ def merge_patches(patches: torch.Tensor, batch_size: int, padding: int) -> torch
     n_patches, hidden_size, out_size, out_size = patches.shape
     n_patches_per_batch = n_patches // batch_size
     sqrt_n_patches_per_batch = torch_int(math.sqrt(n_patches_per_batch))
-    new_out_size = sqrt_n_patches_per_batch * out_size
 
     if n_patches == batch_size:
         # merge only if the patches were created from scaled image
@@ -354,30 +353,25 @@ def merge_patches(patches: torch.Tensor, batch_size: int, padding: int) -> torch
     # (batch_size, hidden_size, sqrt_n_patches_per_batch, sqrt_n_patches_per_batch, out_size, out_size)
     merged = merged.permute(0, 1, 2, 4, 3, 5)
     # (batch_size, hidden_size, sqrt_n_patches_per_batch, out_size, sqrt_n_patches_per_batch, out_size)
-    merged = merged.reshape(batch_size, hidden_size, new_out_size, new_out_size)
-    # (batch_size, hidden_size, sqrt_n_patches_per_batch * out_size, sqrt_n_patches_per_batch * out_size)
 
-    # merged.shape: (batch_size, hidden_size, new_out_size, new_out_size)
-
+    # apply padding
     if padding > 0:
         # let out_size = 8, new_out_size = 32, padding = 2
-        # each patch is separated by |
+        # each patch is separated by "|"
         # and padding is applied to the merging edges of each patch
         # 00 01 02 03 04 05 06 07 | 08 09 10 11 12 13 14 15 | 16 17 18 19 20 21 22 23 | 24 25 26 27 28 29 30 31
         # 00 01 02 03 04 05 -- -- | -- -- 10 11 12 13 -- -- | -- -- 18 19 20 21 -- -- | -- -- 26 27 28 29 30 31
-        # starting_indexes = [2, 10, 18, 26]
-        # valid_indexes = [ 0,  1,  2,  3,  4,  5, 10, 11, 12, 13, 18, 19, 20, 21, 26, 27, 28, 29, 30, 31])
+        mask = merged[0, 0]
+        mask[:, :,  :-1, out_size-padding:] = torch.nan
+        mask[:, :, 1:  , :padding] = torch.nan
+        mask[ :-1, out_size-padding:, :, :] = torch.nan
+        mask[1:  , :padding, :, :] = torch.nan
+        mask = ~mask.isnan()
+        merged = merged.masked_select(mask)
 
-        starting_indexes = torch.arange(start=padding, end=new_out_size, step=out_size)
-        valid_indexes = torch.concat(
-            [
-                torch.arange(padding),
-                *[torch.arange(index, index + out_size - padding * 2) for index in starting_indexes],
-                torch.arange(new_out_size - padding, new_out_size),
-            ]
-        ).to(merged.device)
-        merged = merged[:, :, valid_indexes]
-        merged = merged[:, :, :, valid_indexes]
+    new_out_size = (sqrt_n_patches_per_batch - 2) * (out_size - 2 * padding) + 2 * (out_size - padding)
+    merged = merged.reshape(batch_size, hidden_size, new_out_size, new_out_size)
+    # (batch_size, hidden_size, new_out_size, new_out_size)
 
     return merged
 
