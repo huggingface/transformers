@@ -383,7 +383,7 @@ class GenerationMixin:
         #              (we can't check exception 3 while compiling)
         if past_key_values is not None:
             model_inputs["past_key_values"] = past_key_values
-            if inputs_embeds is not None and input_ids.shape[1]==0:
+            if inputs_embeds is not None and input_ids.shape[1] == 0:
                 inputs_embeds = inputs_embeds[:, -cache_position.shape[0] :]
             elif (
                 inputs_embeds is not None  # Exception 1
