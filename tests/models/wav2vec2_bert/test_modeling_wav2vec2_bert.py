@@ -52,8 +52,8 @@ if is_torch_available():
     )
     from transformers.models.wav2vec2_bert.modeling_wav2vec2_bert import (
         _compute_mask_indices,
-        _sample_negative_indices,
     )
+    from transformers.models.wav2vec2.modeling_wav2vec2 import _sample_negative_indices
 
 
 # Copied from tests.models.wav2vec2_conformer.test_modeling_wav2vec2_conformer.Wav2Vec2ConformerModelTester with Conformer->Bert, input_values->input_features

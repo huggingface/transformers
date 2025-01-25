@@ -55,10 +55,18 @@ def get_module_source_from_name(module_name: str) -> str:
     return source_code
 
 
+# Exclude names exists to prevent edge cases where we want to keep a name that may
+# exist in the mapping, e.g. `Wav2Vec2BaseModelOutput` should not be replaced by `Wav2Vec2ModelOutput`
+EXCLUDE_NAMES = ["Wav2Vec2BaseModelOutput"]
+
+
 def preserve_case_replace(text, patterns: dict, default_name: str):
     # Create a regex pattern to match all variations
     regex_pattern = "|".join(re.escape(key) for key in patterns.keys())
-    compiled_regex = re.compile(f"(?<![a-z0-9])({regex_pattern})(.|$)", re.IGNORECASE | re.DOTALL)
+
+    # Create exclude pattern 
+    exclude_pattern = "|".join(re.escape(key) for key in EXCLUDE_NAMES)
+    compiled_regex = re.compile(f"(?<![a-z0-9])(?!{exclude_pattern})({regex_pattern})(.|$)", re.IGNORECASE | re.DOTALL)
 
     def replace(match):
         matched_pattern = match.group(1)
@@ -107,6 +115,7 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
     def __init__(self, old_name: str, new_name: str, original_new_model_name: str = "", only_doc: bool = False):
         super().__init__()
         self.old_name = old_name
+        new_name = new_name.replace("-", "_")
         self.new_name = new_name
         self.cased_new_name = get_cased_name(self.new_name)
         self.cased_old_name = get_cased_name(self.old_name)
@@ -535,7 +544,7 @@ def find_all_dependencies(
 
 
 # Top-level variables that match the following patterns will always use the value in the `modular_xxx.py` file
-ASSIGNMENTS_REGEX_TO_KEEP = [r"_CHECKPOINT", r"_EXPECTED", r"_FOR_DOC"]
+ASSIGNMENTS_REGEX_TO_KEEP = [r"_CHECKPOINT", r"_EXPECTED", r"_FOR_DOC", r"_HIDDEN_STATES_START_POSITION"]
 
 
 class ClassDependencyMapper(CSTVisitor):
@@ -860,6 +869,13 @@ class ModelFileMapper(ModuleMapper):
         for assignment, node in assignments.items():
             should_keep = any(re.search(pattern, assignment) for pattern in ASSIGNMENTS_REGEX_TO_KEEP)
 
+            # If it's a DOCSTRING var and is assigned to None, the parent's docstring is kept.
+            if "DOCSTRING" in assignment:
+                assigned_value = node.body[0].value
+                should_keep = (
+                    False if (isinstance(assigned_value, cst.Name) and assigned_value.value == "None") else True
+                )
+
             if should_keep or assignment not in self.assignments:
                 self.assignments[assignment] = node
                 if assignment in object_mapping:
@@ -1017,11 +1033,20 @@ def replace_class_node(
             new_decorators = (
                 updated_methods[name].decorators if len(updated_methods[name].decorators) > 0 else func.decorators
             )
+
+            # Keep return annotation in `modular_xxx.py` if any, else original return annotation
+            new_return_annotation = updated_methods[name].returns if updated_methods[name].returns else func.returns
+
             if not re.match(
                 r"\ndef .*\(.*\):\n    raise.*Error\(.*",
                 mapper.python_module.code_for_node(updated_methods[name]),
             ):
-                func = func.with_changes(body=updated_methods[name].body, params=new_params, decorators=new_decorators)
+                func = func.with_changes(
+                    body=updated_methods[name].body,
+                    params=new_params,
+                    decorators=new_decorators,
+                    returns=new_return_annotation,
+                )
             else:
                 continue
 
@@ -1130,7 +1155,7 @@ def append_new_import_node(
     import_node = node.body[0]
     names_to_keep = []
     for name in import_node.names:
-        name_value = name.evaluated_name
+        name_value = name.evaluated_alias or name.evaluated_name
         if name_value not in unused_imports and name_value not in added_names:
             names_to_keep.append(name.with_changes(comma=cst.MaybeSentinel.DEFAULT))
             added_names.add(name_value)
@@ -1167,14 +1192,24 @@ def get_needed_imports(body: dict[str, dict], all_imports: list[cst.CSTNode]) ->
     existing_protected_statements = set()  # str repr of the import nodes - does not work with the nodes directly
     for node in all_imports:
         if m.matches(node, m.If()):  # handle safe imports
-            new_statements = []
-            for stmt_node in node.body.body:
-                append_new_import_node(stmt_node, unused_imports, added_names, new_statements)
-            new_statements = [stmt for stmt in new_statements if str(stmt) not in existing_protected_statements]
-            if len(new_statements) > 0:
-                new_node = node.with_changes(body=node.body.with_changes(body=new_statements))
-                imports_to_keep.append(new_node)
-                existing_protected_statements.update({str(stmt) for stmt in new_statements})
+            import_statements = [
+                stmt
+                for stmt in node.body.body
+                if m.matches(stmt, m.SimpleStatementLine(body=[m.Import() | m.ImportFrom()]))
+            ]
+
+            if import_statements and len(import_statements) == len(node.body.body):
+                new_statements = []
+                for stmt_node in import_statements:
+                    append_new_import_node(stmt_node, unused_imports, added_names, new_statements)
+                new_statements = [stmt for stmt in new_statements if str(stmt) not in existing_protected_statements]
+                if len(new_statements) > 0:
+                    new_node = node.with_changes(body=node.body.with_changes(body=new_statements))
+                    imports_to_keep.append(new_node)
+                    existing_protected_statements.update({str(stmt) for stmt in new_statements})
+            else:
+                # There's a with statement or other code in the if block, so skip it
+                pass
         else:
             append_new_import_node(node, unused_imports, added_names, imports_to_keep)
 
