@@ -242,8 +242,8 @@ class DepthProFeatureUpsample(nn.Module):
             features[i + 1] = self.upsample_blocks[f'scaled_images_{i}'](features[i + 1])
 
         for i in range(self.n_intermediate_hooks):
-            features[i + 1 + self.n_scaled_images] = self.upsample_blocks[f'intermediate_{i}'](
-                features[i + 1 + self.n_scaled_images]
+            features[self.n_scaled_images + i + 1] = self.upsample_blocks[f'intermediate_{i}'](
+                features[self.n_scaled_images + i + 1]
             )
 
         return features
@@ -290,13 +290,9 @@ def split_to_patches(pixel_values: torch.Tensor, patch_size: int, overlap_ratio:
 
     stride = torch_int(patch_size * (1 - overlap_ratio))
 
-    # (batch_size, num_channels, height, width)
     patches = F.unfold(pixel_values, kernel_size=(patch_size, patch_size), stride=(stride, stride))
-    # patches.shape (batch_size, patch_size**2 * num_channels, n_patches_per_batch)
     patches = patches.permute(2, 0, 1)
-    # patches.shape (n_patches_per_batch, batch_size, patch_size**2 * C)
     patches = patches.reshape(-1, num_channels, patch_size, patch_size)
-    # patches.shape (n_patches, num_channels, patch_size, patch_size)
 
     return patches
 
@@ -306,13 +302,10 @@ def reshape_feature(hidden_states: torch.Tensor) -> torch.Tensor:
     n_samples, seq_len, hidden_size = hidden_states.shape
     size = torch_int(math.sqrt(seq_len))
 
-    # (n_samples, seq_len, hidden_size)
-    hidden_states = hidden_states[:, -(size**2) :, :]  # remove mask tokens if there are any
-    # (n_samples, seq_len, hidden_size)
+    hidden_states = hidden_states[:, -(size**2) :, :]  # remove special tokens if there are any
     hidden_states = hidden_states.reshape(n_samples, size, size, hidden_size)
-    # (n_samples, size, size, hidden_size)
     hidden_states = hidden_states.permute(0, 3, 1, 2)
-    # (n_samples, hidden_size, size, size)
+
     return hidden_states
 
 
@@ -459,8 +452,6 @@ class DepthProEncoder(nn.Module):
                 f"when patch_size={self.config.patch_size}."
             )
 
-        # pixel_values.shape (batch_size, num_channels, height, width)
-
         # STEP 1: create 3-level image
 
         scaled_images = []
@@ -473,7 +464,6 @@ class DepthProEncoder(nn.Module):
                     align_corners=False,
                 )
             )
-            # (batch_size, num_channels, height*ratio, width*ratio)
 
         # STEP 2: create patches
 
@@ -483,31 +473,22 @@ class DepthProEncoder(nn.Module):
                 patch_size=self.config.patch_size,
                 overlap_ratio=self.scaled_images_overlap_ratios[i],
             )
-            # (n_patches_per_scaled_image[i], num_channels, patch_size, patch_size)
         n_patches_per_scaled_image = [len(i) for i in scaled_images]
         patches = torch.cat(scaled_images[::-1], dim=0)  # -1 as patch encoder expects high res patches first
-        # (n_patches, num_channels, patch_size, patch_size)
 
         # STEP 3: apply patch and image encoder
 
         patch_encodings = self.patch_encoder(
+            # each patch is processed as a separate batch
             patches,
             head_mask=head_mask,
             # required for intermediate features
             output_hidden_states=self.n_intermediate_hooks > 0,
             return_dict=return_dict,
         )
-        # TODO: these shapes are wrong
-        # patch_encodings.last_hidden_state (batch_size, n_patches/batch_size, seq_len, hidden_size)
-        # patch_encodings.hidden_states[i]  (batch_size, n_patches/batch_size, seq_len, hidden_size)
-        # patch_encodings.attentions[i]     (batch_size, n_patches/batch_size, num_heads, seq_len, seq_len)
 
-        last_hidden_state = patch_encodings[0]
-        # (n_patches, seq_len, hidden_size)
-        scaled_images_last_hidden_state = torch.split_with_sizes(last_hidden_state, n_patches_per_scaled_image[::-1])
-        # (n_patches_per_scaled_image[i], seq_len, hidden_size)
+        scaled_images_last_hidden_state = torch.split_with_sizes(patch_encodings[0], n_patches_per_scaled_image[::-1])
         scaled_images_last_hidden_state = scaled_images_last_hidden_state[::-1]
-        # (n_patches_per_scaled_image[i], seq_len, hidden_size)
         # -1 (reverse list) as patch encoder returns high res patches first, we need low res first
 
         # scale the image to patch size for image_encoder
@@ -520,17 +501,13 @@ class DepthProEncoder(nn.Module):
         image_encodings = self.image_encoder(
             pixel_values=image_scaled_to_patch_size,
             head_mask=head_mask,
-            # TODO: return hidden_states from patch_encodings instead of image_encodings
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
         )
-        # image_encodings.last_hidden_state (batch_size, seq_len, hidden_size)
-        # image_encodings.hidden_states[i]  (batch_size, seq_len, hidden_size)
-        # image_encodings.attentions[i]     (batch_size, num_heads, seq_len, seq_len)
 
         # calculate base height and width
         # base height and width are the dimensions of the lowest resolution features
-        out_size = torch_int(math.sqrt(image_encodings.last_hidden_state.shape[1]))
+        out_size = torch_int(math.sqrt(image_encodings[0].shape[1]))
         exponent_value = torch_int(math.log2(width / out_size))
         base_height = height // 2**exponent_value
         base_width = width // 2**exponent_value
@@ -541,18 +518,16 @@ class DepthProEncoder(nn.Module):
         for i in range(self.n_scaled_images):
             # a. extract hidden_state
             hidden_state = scaled_images_last_hidden_state[i]
-            # (n_patches_per_scaled_image[i], seq_len, hidden_size)
 
             # b. reshape back to image like
             features = reshape_feature(hidden_state)
-            # (n_patches_per_scaled_image[i], hidden_size, out_size, out_size)
 
             # c. merge patches back together
             features = merge_patches(
                 features,
                 batch_size=batch_size,
                 padding=torch_int(self.merge_padding_value * (1 / self.scaled_images_ratios[i])),
-            )  # (batch_size, hidden_size, merge_out_size, merge_out_size)
+            )
 
             # d. interpolate patches to base size
             features = F.interpolate(
@@ -560,7 +535,7 @@ class DepthProEncoder(nn.Module):
                 size=(base_height * 2**i, base_width * 2**i),
                 mode="bilinear",
                 align_corners=False,
-            )  # (batch_size, hidden_size, base_height*2**i, base_width*2**i)
+            )
 
             scaled_images_features.append(features)
 
@@ -570,24 +545,20 @@ class DepthProEncoder(nn.Module):
         for i in range(self.n_intermediate_hooks):
             # a. extract intermediate hidden_state
             # +1 to correct index position as hidden_states contain embedding output as well
-            layer_id = (
-                self.intermediate_hook_ids[i] + 1
-            )
+            layer_id = self.intermediate_hook_ids[i] + 1
             hidden_state = patch_encodings[2][layer_id]
             # number of patches are to be of same length as highest resolution
             hidden_state = hidden_state[:n_patches_per_scaled_image[-1]]
-            # (n_patches_per_scaled_image[-1], seq_len, hidden_size)
 
             # b. reshape back to image like
             features = reshape_feature(hidden_state)
-            # (n_patches_per_scaled_image[-1], hidden_size, out_size, out_size)
 
             # c. merge patches back together
             features = merge_patches(
                 features,
                 batch_size=batch_size,
                 padding=torch_int(self.merge_padding_value * (1 / self.scaled_images_ratios[-1])),
-            )  # (batch_size, hidden_size, merge_out_size, merge_out_size)
+            )
 
             # d. interpolate patches to base size
             features = F.interpolate(
@@ -595,18 +566,17 @@ class DepthProEncoder(nn.Module):
                 size=(base_height * 2 ** (self.n_scaled_images - 1), base_width * 2 ** (self.n_scaled_images - 1)),
                 mode="bilinear",
                 align_corners=False,
-            )  # (batch_size, hidden_size, base_height*2**(n_scaled_images - 1), base_width*2**(n_scaled_images - 1))
+            )
 
             intermediate_features.append(features)
 
         # STEP 6: get image features - (6) in diagram
 
         # a. extract hidden_state
-        hidden_state = image_encodings.last_hidden_state  # (batch_size, seq_len, hidden_size)
+        hidden_state = image_encodings[0]
 
         # b. reshape back to image like
         image_features = reshape_feature(hidden_state)
-        # (batch_size, hidden_size, out_size, out_size)
 
         # c. merge patches back together
         # no merge required for image_features as they are already in batches instead of patches
@@ -618,16 +588,12 @@ class DepthProEncoder(nn.Module):
             mode="bilinear",
             align_corners=False,
         )
-        # (batch_size, hidden_size, base_height, base_width)
 
         # STEP 7: combine all features
         features = [
             image_features,
-            # (batch_size, scaled_images_feature_dims[0], base_height*2, base_width*2)
             *scaled_images_features,
-            # (batch_size, scaled_images_feature_dims[i], base_height*2**(i+1), base_width*2**(i+1))
             *intermediate_features,
-            # (batch_size,  intermediate_feature_dims[i], base_height*2**(n_scaled_images+i+1), base_width*2**(n_scaled_images+i+1))
         ]
 
         # STEP 8: upsample features
@@ -645,16 +611,12 @@ class DepthProEncoder(nn.Module):
 
         # STEP 11: return output
 
-        # TODO: return hidden_states from patch_encodings instead of image_encodings
-        # last_hidden_state = patch_encodings.last_hidden_state
-        # hidden_states = patch_encodings.hidden_states if output_hidden_states else None
-        # attentions = patch_encodings.attentions if output_attentions else None
         last_hidden_state = image_encodings.last_hidden_state
         hidden_states = image_encodings.hidden_states
         attentions = image_encodings.attentions
 
         if not return_dict:
-            return tuple(v for v in [last_hidden_state, features, hidden_states, attentions] if v is not None)
+            return (image_encodings[0], features) + image_encodings[2:] # ignore last_hidden_state and poooler output
 
         return DepthProOutput(
             last_hidden_state=last_hidden_state,
@@ -962,14 +924,12 @@ class DepthProFOVModel(nn.Module):
         )
 
         # a. extract hidden_state
-        hidden_state = encodings.last_hidden_state  # (batch_size, seq_len, hidden_size)
+        hidden_state = encodings.last_hidden_state
         # extra step
         hidden_state = self.encoder_neck(hidden_state)
-        # (batch_size, seq_len, fusion_hidden_size//2)
 
         # b. reshape back to image like
         fov_features = reshape_feature(hidden_state)
-        # (batch_size, fusion_hidden_size//2, out_size, out_size)
 
         # c. merge patches back together
         # no merge required for fov_features as they are already in batches instead of patches
