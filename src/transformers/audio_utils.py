@@ -146,7 +146,7 @@ def chroma_filter_bank(
     sampling_rate: int,
     tuning: float = 0.0,
     power: Optional[float] = 2.0,
-    weighting_parameters: Optional[Tuple[float, float]] = (5., 2.),
+    weighting_parameters: Optional[Tuple[float, float]] = (5.0, 2.0),
     start_at_c_chroma: Optional[bool] = True,
 ):
     """
