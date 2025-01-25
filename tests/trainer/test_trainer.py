@@ -5434,19 +5434,20 @@ class TrainerHyperParameterWandbIntegrationTest(unittest.TestCase):
             self.assertIsNotNone(best_run.run_id)
             self.assertIsNotNone(best_run.run_summary)
             hp_keys = set(best_run.hyperparameters.keys())
-            self.assertSetEqual(hp_keys, {"a", "b", "assignments", 'metric'})
+            self.assertSetEqual(hp_keys, {"a", "b", "assignments", "metric"})
 
             # pretend restarting the process purged the environ
             import os
-            del os.environ['WANDB_ENTITY']
-            del os.environ['WANDB_PROJECT']
-            sweep_kwargs['sweep_id'] = best_run.run_summary
+
+            del os.environ["WANDB_ENTITY"]
+            del os.environ["WANDB_PROJECT"]
+            sweep_kwargs["sweep_id"] = best_run.run_summary
             updated_best_run = trainer.hyperparameter_search(**sweep_kwargs)
 
             self.assertIsNotNone(updated_best_run.run_id)
             self.assertEqual(updated_best_run.run_summary, best_run.run_summary)
             updated_hp_keys = set(updated_best_run.hyperparameters.keys())
-            self.assertSetEqual(updated_hp_keys, {"a", "b", "assignments", 'metric'})
+            self.assertSetEqual(updated_hp_keys, {"a", "b", "assignments", "metric"})
 
 
 class HyperParameterSearchBackendsTest(unittest.TestCase):

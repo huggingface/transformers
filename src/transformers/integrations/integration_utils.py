@@ -585,6 +585,7 @@ def run_hp_search_wandb(trainer, n_trials: int, direction: str, **kwargs) -> Bes
         sweep_id = wandb.sweep(sweep_config, project=project, entity=entity)
     else:
         import wandb.env
+
         if entity:
             wandb.env.set_entity(entity)
         wandb.env.set_project(project)
