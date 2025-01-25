@@ -37,3 +37,8 @@ Checkout all Doge model checkpoints [here](https://huggingface.co/collections/Ji
 
 [[autodoc]] DogeForCausalLM
     - forward
+
+## DogeForSequenceClassification
+
+[[autodoc]] DogeForSequenceClassification
+    - forward

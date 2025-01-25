@@ -46,6 +46,7 @@ from ...utils import (
 )
 from .configuration_doge import DogeConfig
 
+
 try:
     from einx import add as einx_add
 except ImportError:
@@ -175,8 +176,8 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
             Deprecated and unused.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. 
-            For example, note that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. 
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k.
+            For example, note that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim].
             Then, if q and k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k.
             Similarly, if q and k have the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
     Returns:
@@ -191,7 +192,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). 
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep).
     The hidden states go from (batch, num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
     """
     batch, num_key_value_heads, slen, head_dim = hidden_states.shape
@@ -210,7 +211,7 @@ class DogeDynamicMaskAttention(nn.Module):
         self.layer_idx = layer_idx
         self.head_dim = config.hidden_size // config.num_attention_heads
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
-        self.scaling = self.head_dim ** -0.5
+        self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.dynamic_mask_ratio = config.dynamic_mask_ratio
 
@@ -222,33 +223,21 @@ class DogeDynamicMaskAttention(nn.Module):
 
         # Q K V O projections
         self.q_proj = nn.Linear(
-            config.hidden_size,
-            config.num_attention_heads * self.head_dim,
-            bias=config.hidden_bias
+            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.hidden_bias
         )
         self.k_proj = nn.Linear(
-            config.hidden_size,
-            config.num_key_value_heads * self.head_dim,
-            bias=config.hidden_bias
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.hidden_bias
         )
         self.v_proj = nn.Linear(
-            config.hidden_size,
-            config.num_key_value_heads * self.head_dim,
-            bias=config.hidden_bias
+            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.hidden_bias
         )
         # dynamic mask for the QK^T attention score matrix
-        self.A = nn.Parameter(
-            torch.zeros(config.num_attention_heads)
-        )
+        self.A = nn.Parameter(torch.zeros(config.num_attention_heads))
         self.dt_proj = nn.Linear(
-            config.num_key_value_heads * self.head_dim,
-            config.num_attention_heads,
-            bias=config.hidden_bias
+            config.num_key_value_heads * self.head_dim, config.num_attention_heads, bias=config.hidden_bias
         )
         self.o_proj = nn.Linear(
-            config.num_attention_heads * self.head_dim,
-            config.hidden_size,
-            bias=config.hidden_bias
+            config.num_attention_heads * self.head_dim, config.hidden_size, bias=config.hidden_bias
         )
 
     def forward(
@@ -276,7 +265,9 @@ class DogeDynamicMaskAttention(nn.Module):
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         # calculate dynamic mask from value_states
-        dt_states = self.dt_proj(value_states.transpose(1, 2).reshape(value_states.shape[0], value_states.shape[-2], -1))
+        dt_states = self.dt_proj(
+            value_states.transpose(1, 2).reshape(value_states.shape[0], value_states.shape[-2], -1)
+        )
         dynamic_mask = torch.exp(self.A * F.softplus(dt_states)).transpose(-1, -2)
         attn_mask = self.prepare_dynamic_mask(
             hidden_states=hidden_states,
@@ -288,7 +279,7 @@ class DogeDynamicMaskAttention(nn.Module):
         attention_interface: Callable = self.eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = self.ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-        
+
         attn_output = attention_interface(
             query_states,
             key_states,
@@ -334,7 +325,7 @@ class DogeDynamicMaskAttention(nn.Module):
             attn_mask = attention_mask
 
         return attn_mask
-    
+
     def eager_attention_forward(
         self,
         query: torch.Tensor,
@@ -353,7 +344,7 @@ class DogeDynamicMaskAttention(nn.Module):
         if attention_mask is not None:
             causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
             attn_weights = attn_weights + causal_mask
-        
+
         # upcast attention scores to fp32
         attn_weights = F.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
         attn_weights = F.dropout(attn_weights, p=dropout, training=self.training)
@@ -362,7 +353,7 @@ class DogeDynamicMaskAttention(nn.Module):
         attn_output = torch.matmul(attn_weights, value_states)
         attn_output = attn_output.transpose(1, 2).contiguous()
         return attn_output
-    
+
     def sdpa_attention_forward(
         self,
         query: torch.Tensor,
@@ -375,7 +366,7 @@ class DogeDynamicMaskAttention(nn.Module):
     ) -> torch.Tensor:
         key = repeat_kv(key, self.num_key_value_groups)
         value = repeat_kv(value, self.num_key_value_groups)
-        
+
         causal_mask = attention_mask
         if attention_mask is not None:
             causal_mask = causal_mask[:, :, :, : key.shape[-2]]
@@ -398,7 +389,7 @@ class DogeDynamicMaskAttention(nn.Module):
         )
         attn_output = attn_output.transpose(1, 2).contiguous()
         return attn_output
-    
+
     def flex_attention_forward(
         self,
         query: torch.Tensor,
@@ -421,13 +412,13 @@ class DogeDynamicMaskAttention(nn.Module):
         def causal_mod(score, batch, head, q_idx, kv_idx):
             score = score + causal_mask[batch][0][q_idx][kv_idx]
             return score
-        
+
         def dynamic_mod(score, batch, head, q_idx, kv_idx):
             score = score + causal_mask[batch][head][q_idx][kv_idx]
             return score
-        
+
         mask_mod = causal_mod if self.is_causal else dynamic_mod
-        
+
         attn_output = flex_attention(
             query,
             key,
@@ -440,7 +431,6 @@ class DogeDynamicMaskAttention(nn.Module):
 
 
 class DogeMLP(nn.Module):
-
     def __init__(self, config: DogeConfig):
         super().__init__()
         self.hidden_dim = config.hidden_size
@@ -479,7 +469,7 @@ class DogeCDMoE(DogeMLP):
         self.keys = nn.Parameter(torch.zeros(self.num_cdmoe_heads, self.num_keys, 2, self.expert_retrieval_dim // 2))
 
         # experts
-        self.down_embed  = nn.Embedding(self.num_cdmoe_experts, self.hidden_dim)
+        self.down_embed = nn.Embedding(self.num_cdmoe_experts, self.hidden_dim)
         self.up_embed = nn.Embedding(self.num_cdmoe_experts, self.hidden_dim)
 
     def forward(
@@ -528,7 +518,7 @@ class DogeDecoderLayer(nn.Module):
         self.pre_residual = Residual(config.hidden_size)
 
         self.post_layernorm = RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.feed_forward = DogeMLP(config) if config.is_moe == False else DogeCDMoE(config)
+        self.feed_forward = DogeMLP(config) if not config.is_moe else DogeCDMoE(config)
         self.post_residual = Residual(config.hidden_size)
 
     def forward(
@@ -543,7 +533,6 @@ class DogeDecoderLayer(nn.Module):
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs,
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
-
         # sequence transformation
         residual = hidden_states
         hidden_states = self.pre_layernorm(hidden_states)
@@ -589,6 +578,8 @@ DOGE_START_DOCSTRING = r"""
             load the weights associated with the model, only the configuration. Check out the
             [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
+
+
 @add_start_docstrings(
     "The bare Doge Model outputting raw hidden-states without any specific head on top.",
     DOGE_START_DOCSTRING,
@@ -868,7 +859,7 @@ class DogeModel(DogePreTrainedModel):
         )
 
         return causal_mask
-    
+
     @staticmethod
     def _prepare_4d_causal_attention_mask_with_cache_position(
         attention_mask: torch.Tensor = None,
@@ -909,7 +900,9 @@ class DogeModel(DogePreTrainedModel):
             min_dtype = torch.finfo(dtype).min
             causal_mask = torch.full(
                 (sequence_length, target_length),
-                fill_value=min_dtype, dtype=dtype, device=device,
+                fill_value=min_dtype,
+                dtype=dtype,
+                device=device,
             )
             if sequence_length != 1:
                 causal_mask = torch.triu(causal_mask, diagonal=1)
@@ -955,7 +948,7 @@ class DogeForCausalLM(DogePreTrainedModel, GenerationMixin):
 
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
-    
+
     def get_decoder(self):
         return self.model
 
@@ -999,8 +992,8 @@ class DogeForCausalLM(DogePreTrainedModel, GenerationMixin):
         ```python
          >>> from transformers import AutoTokenizer, AutoModelForCausalLM
 
-        >>> model = AutoModelForCausalLM.from_pretrained("JingzeShi/Doge-20M-Instruct")
-        >>> tokenizer = AutoTokenizer.from_pretrained("JingzeShi/Doge-20M-Instruct")
+        >>> model = AutoModelForCausalLM.from_pretrained("JingzeShi/Doge-20M")
+        >>> tokenizer = AutoTokenizer.from_pretrained("JingzeShi/Doge-20M")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -1057,13 +1050,16 @@ class DogeForCausalLM(DogePreTrainedModel, GenerationMixin):
     """
     The Doge Model transformer with a sequence classification head on top (linear layer).
 
-    [`DogeForSequenceClassification`] uses the last token in order to do the classification, as other causal models (e.g. GPT-2) do.
+    [`DogeForSequenceClassification`] uses the last token in order to do the classification, as other causal models
+    (e.g. GPT-2) do.
 
-    Since it does classification on the last token, it requires to know the position of the last token. 
-    If a `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. 
-    If no `pad_token_id` is defined, it simply takes the last value in each row of the batch. 
-    Since it cannot guess the padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in each row of the batch).
-    """
+    Since it does classification on the last token, it requires to know the position of the last token. If a
+    `pad_token_id` is defined in the configuration, it finds the last token that is not a padding token in each row. If
+    no `pad_token_id` is defined, it simply takes the last value in each row of the batch. Since it cannot guess the
+    padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
+    each row of the batch).
+    """,
+    DOGE_START_DOCSTRING,
 )
 class DogeForSequenceClassification(DogePreTrainedModel):
     def __init__(self, config: DogeConfig):
@@ -1099,9 +1095,9 @@ class DogeForSequenceClassification(DogePreTrainedModel):
     ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. 
-            Indices should be in `[0, ..., config.num_labels - 1]`. 
-            If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
+            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
+            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
+            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

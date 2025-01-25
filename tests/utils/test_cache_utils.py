@@ -41,9 +41,9 @@ if is_torch_available():
         GenerationConfig,
         GPT2LMHeadModel,
         LlamaConfig,
+        SharedCache,
         SinkCache,
         StaticCache,
-        SharedCache,
         convert_and_export_with_cache,
     )
     from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_3
@@ -590,12 +590,11 @@ class CacheIntegrationTest(unittest.TestCase):
         model.generate(generation_config=offloaded, **inputs)
         offloaded_peak_memory = torch.cuda.max_memory_allocated(device)
         assert offloaded_peak_memory < original_peak_memory
-    
+
     def test_shared_cache_hard(self):
         tokenizer = AutoTokenizer.from_pretrained("JingzeShi/Doge-20M-Instruct")
         model = AutoModelForCausalLM.from_pretrained(
-            "JingzeShi/Doge-20M-Instruct", device_map="auto",
-            torch_dtype=torch.float16, trust_remote_code=True
+            "JingzeShi/Doge-20M-Instruct", device_map="auto", torch_dtype=torch.float16, trust_remote_code=True
         )
         inputs = tokenizer(["You are a Doge"], return_tensors="pt").to(model.device)
 
@@ -603,7 +602,9 @@ class CacheIntegrationTest(unittest.TestCase):
         set_seed(0)
         gen_out_legacy = model.generate(**inputs, do_sample=True, max_new_tokens=256)
         set_seed(0)
-        gen_out = model.generate(**inputs, do_sample=True, max_new_tokens=256, past_key_values=SharedCache(shared_layer_groups=2))
+        gen_out = model.generate(
+            **inputs, do_sample=True, max_new_tokens=256, past_key_values=SharedCache(shared_layer_groups=2)
+        )
         self.assertListEqual(gen_out_legacy.tolist(), gen_out.tolist())
 
     @require_torch_gpu

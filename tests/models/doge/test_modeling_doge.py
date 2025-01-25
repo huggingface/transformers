@@ -16,12 +16,8 @@
 
 import unittest
 
-from packaging import version
-
-from transformers import AutoTokenizer, DogeConfig, StaticCache, is_torch_available, set_seed
-from transformers.generation.configuration_utils import GenerationConfig
+from transformers import AutoTokenizer, DogeConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
-    cleanup,
     require_read_token,
     require_torch,
     require_torch_accelerator,
@@ -126,9 +122,7 @@ class DogeModelTester:
             pad_token_id=self.pad_token_id,
         )
 
-    def create_and_check_model(
-        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels
-    ):
+    def create_and_check_model(self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels):
         model = DogeModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -297,11 +291,11 @@ class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     def test_config(self):
         self.config_tester.run_common_tests()
-    
+
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-    
+
     def test_doge_sequence_classification_model(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
@@ -313,7 +307,7 @@ class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-    
+
     def test_doge_sequence_classification_model_for_single_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
@@ -326,7 +320,7 @@ class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-    
+
     def test_doge_sequence_classification_model_for_multi_label(self):
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.num_labels = 3
@@ -341,7 +335,7 @@ class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         model.eval()
         result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
         self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
-    
+
     @unittest.skip(reason="Doge buffers include complex numbers, which breaks this test")
     def test_save_load_fast_init_from_base(self):
         pass
@@ -358,22 +352,17 @@ class DogeIntegrationTest(unittest.TestCase):
         if is_torch_available() and torch.cuda.is_available():
             # 8 is for A100 / A10 and 7 for T4
             cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
-    
+
     @slow
     @require_read_token
     def test_Doge_20M_hard(self):
         """
         An integration test for Doge-20M. It tests against a long output to ensure the subtle numerical differences
         """
-        EXPECTED_TEXT = (
-            "Here's everything I know about dogs. Dogs is the best animal in the world, and it's a great way to learn about the world around us. Dogs are a great"
-        )
+        EXPECTED_TEXT = "Here's everything I know about dogs. Dogs is the best animal in the world, and it's a great way to learn about the world around us. Dogs are a great"
 
         tokenizer = AutoTokenizer.from_pretrained("JingzeShi/Doge-20M")
-        model = DogeForCausalLM.from_pretrained(
-            "JingzeShi/Doge-20M",
-            device_map="auto", torch_dtype=torch.bfloat16
-        )
+        model = DogeForCausalLM.from_pretrained("JingzeShi/Doge-20M", device_map="auto", torch_dtype=torch.bfloat16)
         input_text = ["Here's everything I know about dogs. Dogs is the best animal in the"]
         set_seed(0)
         model_inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
