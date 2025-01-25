@@ -899,7 +899,6 @@ class GgufIntegrationTests(unittest.TestCase):
         EXPECTED_TEXT = "Hello, I'm looking for a way to make"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
-
     @require_read_token
     def test_gemma2_weights_conversion_fp32(self):
         original_model = AutoModelForCausalLM.from_pretrained(
