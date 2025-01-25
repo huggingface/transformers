@@ -246,6 +246,7 @@ For now, Transformers supports SDPA inference and training for the following arc
 * [Dinov2](https://huggingface.co/docs/transformers/en/model_doc/dinov2)
 * [Dinov2_with_registers](https://huggingface.co/docs/transformers/en/model_doc/dinov2)
 * [DistilBert](https://huggingface.co/docs/transformers/model_doc/distilbert#transformers.DistilBertModel)
+* [Doge](https://huggingface.co/docs/transformers/model_doc/doge#transformers.DogeModel)
 * [Dpr](https://huggingface.co/docs/transformers/model_doc/dpr#transformers.DprReader)
 * [EncoderDecoder](https://huggingface.co/docs/transformers/model_doc/encoder_decoder#transformers.EncoderDecoderModel)
 * [Emu3](https://huggingface.co/docs/transformers/model_doc/emu3)

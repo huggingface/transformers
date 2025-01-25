@@ -131,6 +131,7 @@ Flax), PyTorch, and/or TensorFlow.
 |         [DINOv2 with Registers](model_doc/dinov2_with_registers)         |       ✅        |         ❌         |      ❌      |
 |                    [DistilBERT](model_doc/distilbert)                    |       ✅        |         ✅         |      ✅      |
 |                           [DiT](model_doc/dit)                           |       ✅        |         ❌         |      ✅      |
+|                          [Doge](model_doc/doge)                          |       ✅        |         ❌         |      ❌      |
 |                       [DonutSwin](model_doc/donut)                       |       ✅        |         ❌         |      ❌      |
 |                           [DPR](model_doc/dpr)                           |       ✅        |         ✅         |      ❌      |
 |                           [DPT](model_doc/dpt)                           |       ✅        |         ❌         |      ❌      |
