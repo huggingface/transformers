@@ -1345,6 +1345,7 @@ else:
         "SinkCache",
         "SlidingWindowCache",
         "StaticCache",
+        "SharedCache"
     ]
     _import_structure["data.datasets"] = [
         "GlueDataset",
@@ -6445,6 +6446,7 @@ if TYPE_CHECKING:
             SinkCache,
             SlidingWindowCache,
             StaticCache,
+            SharedCache,
         )
         from .data.datasets import (
             GlueDataset,
