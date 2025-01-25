@@ -67,6 +67,8 @@ class GgufIntegrationTests(unittest.TestCase):
     nemotron_model_id = "bartowski/Nemotron-Mini-4B-Instruct-GGUF"
     original_gemma2_model_id = "google/gemma-2-2b-it"
     gemma2_model_id = "bartowski/gemma-2-2b-it-GGUF"
+    original_gemma_model_id = "google/gemma-2b-it"
+    gemma_model_id = "google/gemma-2b-it-GGUF"
 
     # standard quants
     q4_0_gguf_model_id = "tinyllama-1.1b-chat-v1.0.Q4_0.gguf"
@@ -117,6 +119,7 @@ class GgufIntegrationTests(unittest.TestCase):
     q3_k_gemma2_model_id = "gemma-2-2b-it-Q3_K_L.gguf"
     q8_0_gemma2_model_id = "gemma-2-2b-it-Q8_0.gguf"
     fp32_gemma2_model_id = "gemma-2-2b-it-f32.gguf"
+    fp32_gemma_model_id = "gemma-2b-it.gguf"
 
     example_text = "Hello"
 
@@ -881,6 +884,21 @@ class GgufIntegrationTests(unittest.TestCase):
 
         EXPECTED_TEXT = "Hello! 👋\n\nI'm a large language model"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+        
+    def test_gemma_fp32(self):
+        model = AutoModelForCausalLM.from_pretrained(
+            self.gemma_model_id,
+            gguf_file=self.fp32_gemma_model_id,
+            torch_dtype=torch.float16,
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained(self.gemma_model_id, gguf_file=self.fp32_gemma_model_id)
+        text = tokenizer(self.example_text, return_tensors="pt")["input_ids"]
+        out = model.generate(text, max_new_tokens=10)
+
+        EXPECTED_TEXT = "Hello, I'm looking for a way to make"
+        self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
+        
 
     @require_read_token
     def test_gemma2_weights_conversion_fp32(self):

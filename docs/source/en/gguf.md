@@ -89,6 +89,7 @@ For now the supported model architectures are the architectures that have been v
 - Mamba
 - Nemotron
 - Gemma2
+- Gemma
 
 ## Example usage
 
