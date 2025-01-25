@@ -4710,6 +4710,185 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             )
             self.assertTrue(trainer.args.metric_for_best_model == "loss")
 
+    def test_best_model_checkpoint_behavior(self):
+        # Case 1. Never evaluated, save_total_limit > 1 and save_steps == 1.
+        # Both best_metric and best_model_checkpoint should be None.
+        # Total of 6 checkpoints should be saved.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trainer = get_regression_trainer(
+                output_dir=tmpdir,
+                eval_strategy="steps",
+                save_strategy="steps",
+                save_steps=1,
+                metric_for_best_model="accuracy",
+                greater_is_better=True,
+            )
+            trainer.train()
+
+            assert trainer.state.best_metric is None
+            assert trainer.state.best_model_checkpoint is None
+            assert len(os.listdir(tmpdir)) == 6
+
+        # Case 2. Never evaluated and save_total_limit == 1.
+        # Both best_metric and best_model_checkpoint should be None.
+        # Only the last checkpoint should remain.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trainer = get_regression_trainer(
+                output_dir=tmpdir,
+                eval_strategy="steps",
+                save_strategy="steps",
+                save_steps=1,
+                metric_for_best_model="accuracy",
+                greater_is_better=True,
+                save_total_limit=1,
+            )
+            trainer.train()
+
+            assert trainer.state.best_metric is None
+            assert trainer.state.best_model_checkpoint is None
+            assert len(os.listdir(tmpdir)) == 1
+
+            ckpt = os.path.join(tmpdir, f"{PREFIX_CHECKPOINT_DIR}-6")
+            assert os.path.isdir(ckpt)
+            assert os.listdir(tmpdir)[0] == f"{PREFIX_CHECKPOINT_DIR}-6"
+
+        # Case 3. eval_strategy == save_strategy.
+        # best_model_checkpoint should be at epoch 1.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trainer = get_regression_trainer(
+                output_dir=tmpdir,
+                eval_strategy="epoch",
+                save_strategy="epoch",
+                metric_for_best_model="accuracy",
+                compute_metrics=AlmostAccuracy(),
+                greater_is_better=True,
+                load_best_model_at_end=False,
+            )
+
+            with patch.object(
+                trainer,
+                "_evaluate",
+                side_effect=[
+                    {"eval_accuracy": 0.59, "epoch": 1.0},
+                    {"eval_accuracy": 0.57, "epoch": 2.0},
+                    {"eval_accuracy": 0.55, "epoch": 3.0},
+                ],
+            ):
+                trainer.train()
+
+            assert trainer.state.best_metric == 0.59
+            assert trainer.state.best_global_step == 2
+
+            best_ckpt = os.path.join(tmpdir, f"{PREFIX_CHECKPOINT_DIR}-{trainer.state.best_global_step}")
+            assert trainer.state.best_model_checkpoint == best_ckpt
+
+            assert len(os.listdir(tmpdir)) == 3
+
+        # Case 4. eval_strategy != save_strategy
+        # Same as Case 3, but a total of 6 checkpoints should be saved.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trainer = get_regression_trainer(
+                output_dir=tmpdir,
+                eval_strategy="epoch",
+                save_strategy="steps",
+                save_steps=1,
+                metric_for_best_model="accuracy",
+                compute_metrics=AlmostAccuracy(),
+                greater_is_better=True,
+                load_best_model_at_end=False,
+            )
+
+            with patch.object(
+                trainer,
+                "_evaluate",
+                side_effect=[
+                    {"eval_accuracy": 0.59, "epoch": 1.0},
+                    {"eval_accuracy": 0.57, "epoch": 2.0},
+                    {"eval_accuracy": 0.55, "epoch": 3.0},
+                ],
+            ):
+                trainer.train()
+
+            assert trainer.state.best_metric == 0.59
+            assert trainer.state.best_global_step == 2
+
+            best_ckpt = os.path.join(tmpdir, f"{PREFIX_CHECKPOINT_DIR}-{trainer.state.best_global_step}")
+            assert trainer.state.best_model_checkpoint == best_ckpt
+
+            assert len(os.listdir(tmpdir)) == 6
+
+        # Case 5. Multiple checkpoints, save_total_limit == 1.
+        # Best metric is found at step 1 and that checkpoint should be saved.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trainer = get_regression_trainer(
+                output_dir=tmpdir,
+                eval_strategy="steps",
+                eval_steps=1,
+                save_strategy="steps",
+                save_steps=1,
+                metric_for_best_model="accuracy",
+                compute_metrics=AlmostAccuracy(),
+                greater_is_better=True,
+                save_total_limit=1,
+            )
+
+            with patch.object(
+                trainer,
+                "_evaluate",
+                side_effect=[
+                    {"eval_accuracy": 0.90, "epoch": 0.5},
+                    {"eval_accuracy": 0.80, "epoch": 1.0},
+                    {"eval_accuracy": 0.70, "epoch": 1.5},
+                    {"eval_accuracy": 0.70, "epoch": 2.0},
+                    {"eval_accuracy": 0.70},
+                    {"eval_accuracy": 0.70},
+                    {"eval_accuracy": 0.70},
+                    {"eval_accuracy": 0.70},
+                    {"eval_accuracy": 0.70},
+                ],
+            ):
+                trainer.train()
+
+            assert trainer.state.best_metric == 0.90
+            assert trainer.state.best_global_step == 1
+
+            best_ckpt = os.path.join(tmpdir, f"{PREFIX_CHECKPOINT_DIR}-{trainer.state.best_global_step}")
+            assert trainer.state.best_model_checkpoint == best_ckpt
+
+            assert len(os.listdir(tmpdir)) == 1
+
+        # Case 6. Saving happens more often and eval/save mismatch.
+        # `best_model_checkpoint` should be None due to a step mismatch.
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trainer = get_regression_trainer(
+                output_dir=tmpdir,
+                eval_strategy="steps",
+                eval_steps=3,
+                save_strategy="steps",
+                save_steps=2,
+                metric_for_best_model="accuracy",
+                compute_metrics=AlmostAccuracy(),
+                greater_is_better=True,
+            )
+
+            with patch.object(
+                trainer,
+                "_evaluate",
+                side_effect=[
+                    {"eval_accuracy": 0.90, "epoch": 1.5},
+                    {"eval_accuracy": 0.80, "epoch": 2.0},
+                    {"eval_accuracy": 0.70},
+                ],
+            ):
+                trainer.train()
+
+            assert trainer.state.best_metric == 0.90
+            assert trainer.state.best_global_step == 3
+
+            assert trainer.state.best_model_checkpoint is None
+
+            assert len(os.listdir(tmpdir)) == 3
+
 
 @require_torch
 @is_staging_test
