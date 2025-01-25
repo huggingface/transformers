@@ -48,6 +48,15 @@ class ZeroShotClassificationArgumentHandler(ArgumentHandler):
         self._validate_hypothesis_template(hypothesis_template)
         
         labels = self._parse_labels(labels)
+
+        # Verify the template actually uses the placeholder
+        if hypothesis_template.format(labels[0]) == hypothesis_template:
+            raise ValueError(
+                (
+                    'The provided hypothesis_template "{}" was not able to be formatted with the target labels. '
+                    "Make sure the passed template includes formatting syntax such as {{}} where the label should go."
+                ).format(hypothesis_template)
+            )
         
         if isinstance(sequences, str):
             sequences = [sequences]
