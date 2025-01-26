@@ -26,6 +26,7 @@ from ...utils import (
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2ForSequenceClassification,
     Wav2Vec2Model,
+    Wav2Vec2FeedForward
 )
 
 from ..wav2vec2_conformer.modeling_wav2vec2_conformer import (
@@ -117,9 +118,9 @@ class Wav2Vec2BertFeatureProjection(nn.Module):
         return hidden_states, norm_hidden_states
 
 
-class Wav2Vec2BertFeedForward(nn.Module):
+class Wav2Vec2BertFeedForward(Wav2Vec2FeedForward, nn.Module):
     def __init__(self, config, act_fn=None, hidden_size=None):
-        super().__init__()
+        nn.Module.__init__()
         act_fn = act_fn if act_fn is not None else config.hidden_act
         hidden_size = hidden_size if hidden_size is not None else config.hidden_size
         self.intermediate_dropout = nn.Dropout(config.activation_dropout)
@@ -130,15 +131,6 @@ class Wav2Vec2BertFeedForward(nn.Module):
         self.output_dense = nn.Linear(config.intermediate_size, hidden_size)
         self.output_dropout = nn.Dropout(config.hidden_dropout)
 
-    # Copied from transformers.models.wav2vec2.modeling_wav2vec2.Wav2Vec2FeedForward.forward
-    def forward(self, hidden_states):
-        hidden_states = self.intermediate_dense(hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
-        hidden_states = self.intermediate_dropout(hidden_states)
-
-        hidden_states = self.output_dense(hidden_states)
-        hidden_states = self.output_dropout(hidden_states)
-        return hidden_states
 
 
 class Wav2Vec2BertConvolutionModule(nn.Module):

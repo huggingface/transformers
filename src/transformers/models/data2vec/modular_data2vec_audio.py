@@ -382,24 +382,7 @@ class Data2VecAudioForCTC(Data2VecAudioPreTrainedModel, Wav2Vec2ForCTC):
     """,
     DATA2VEC_AUDIO_START_DOCSTRING,
 )
-class Data2VecAudioForSequenceClassification(Data2VecAudioPreTrainedModel, Wav2Vec2ForSequenceClassification):
-    def __init__(self, config):
-        Data2VecAudioPreTrainedModel.__init__(config)
-
-        if hasattr(config, "add_adapter") and config.add_adapter:
-            raise ValueError(
-                "Sequence classification does not support the use of Data2VecAudio adapters (config.add_adapter=True)"
-            )
-        self.data2vec_audio = Data2VecAudioModel(config)
-        num_layers = config.num_hidden_layers + 1  # transformer layers + input embeddings
-        if config.use_weighted_layer_sum:
-            self.layer_weights = nn.Parameter(torch.ones(num_layers) / num_layers)
-        self.projector = nn.Linear(config.hidden_size, config.classifier_proj_size)
-        self.classifier = nn.Linear(config.classifier_proj_size, config.num_labels)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
+class Data2VecAudioForSequenceClassification(Wav2Vec2ForSequenceClassification):
     @add_start_docstrings_to_model_forward(DATA2VEC_AUDIO_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
@@ -417,24 +400,7 @@ class Data2VecAudioForSequenceClassification(Data2VecAudioPreTrainedModel, Wav2V
     """,
     DATA2VEC_AUDIO_START_DOCSTRING,
 )
-class Data2VecAudioForAudioFrameClassification(Data2VecAudioPreTrainedModel, Wav2Vec2ForAudioFrameClassification):
-    def __init__(self, config):
-        Data2VecAudioPreTrainedModel.__init__(config)
-
-        if hasattr(config, "add_adapter") and config.add_adapter:
-            raise ValueError(
-                "Audio frame classification does not support the use of Data2VecAudio adapters"
-                " (config.add_adapter=True)"
-            )
-        self.data2vec_audio = Data2VecAudioModel(config)
-        num_layers = config.num_hidden_layers + 1  # transformer layers + input embeddings
-        if config.use_weighted_layer_sum:
-            self.layer_weights = nn.Parameter(torch.ones(num_layers) / num_layers)
-        self.classifier = nn.Linear(config.hidden_size, config.num_labels)
-        self.num_labels = config.num_labels
-
-        self.init_weights()
-
+class Data2VecAudioForAudioFrameClassification(Wav2Vec2ForAudioFrameClassification):
     @add_start_docstrings_to_model_forward(DATA2VEC_AUDIO_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
