@@ -300,7 +300,7 @@ def split_to_patches(pixel_values: torch.Tensor, patch_size: int, overlap_ratio:
 def reshape_features(hidden_states: torch.Tensor) -> torch.Tensor:
     """Discard class token and reshape 1D feature map to a 2D grid."""
     n_samples, seq_len, hidden_size = hidden_states.shape
-    size = torch_int(math.sqrt(seq_len))
+    size = torch_int(seq_len ** 0.5)
 
     hidden_states = hidden_states[:, -(size**2) :, :]  # remove special tokens if there are any
     hidden_states = hidden_states.reshape(n_samples, size, size, hidden_size)
@@ -313,7 +313,7 @@ def merge_patches(patches: torch.Tensor, batch_size: int, padding: int) -> torch
     """Merges smaller patches into image-like feature map."""
     n_patches, hidden_size, out_size, out_size = patches.shape
     n_patches_per_batch = n_patches // batch_size
-    sqrt_n_patches_per_batch = torch_int(math.sqrt(n_patches_per_batch))
+    sqrt_n_patches_per_batch = torch_int(n_patches_per_batch ** 0.5)
     new_out_size = sqrt_n_patches_per_batch * out_size
 
     if n_patches == batch_size:
@@ -537,7 +537,7 @@ class DepthProEncoder(nn.Module):
 
         # calculate base height and width
         # base height and width are the dimensions of the lowest resolution features
-        out_size = torch_int(math.sqrt(image_encodings[0].shape[1]))
+        out_size = torch_int(image_encodings[0].shape[1] ** 0.5)
         exponent_value = torch_int(math.log2(width / out_size))
         base_height = height // 2**exponent_value
         base_width = width // 2**exponent_value
