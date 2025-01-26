@@ -207,7 +207,7 @@ class PromptDepthAnythingDepthEstimationHead(nn.Module):
             raise ValueError(f"Unknown depth estimation type: {config.depth_estimation_type}")
         self.max_depth = config.max_depth
 
-    def forward(self, hidden_states: List[torch.Tensor], patch_height, patch_width) -> torch.Tensor:
+    def forward(self, hidden_states: List[torch.Tensor], patch_height: int, patch_width: int) -> torch.Tensor:
         hidden_states = hidden_states[-1]
 
         predicted_depth = self.conv1(hidden_states)
@@ -345,7 +345,11 @@ class PromptDepthAnythingNeck(nn.Module):
         self.fusion_stage = PromptDepthAnythingFeatureFusionStage(config)
 
     def forward(
-        self, hidden_states: List[torch.Tensor], patch_height=None, patch_width=None, prompt_depth=None
+        self,
+        hidden_states: List[torch.Tensor],
+        patch_height: Optional[int] = None,
+        patch_width: Optional[int] = None,
+        prompt_depth: Optional[torch.Tensor] = None,
     ) -> List[torch.Tensor]:
         """
         Args:
