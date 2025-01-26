@@ -95,17 +95,17 @@ class DepthProModelTester:
         self.scaled_images_feature_dims = scaled_images_feature_dims
         self.initializer_range = initializer_range
         self.use_fov_model = use_fov_model
-        self.image_model_config =image_model_config
-        self.patch_model_config =patch_model_config
-        self.fov_model_config =fov_model_config
+        self.image_model_config = image_model_config
+        self.patch_model_config = patch_model_config
+        self.fov_model_config = fov_model_config
         self.num_labels = num_labels
 
-        self.hidden_size = image_model_config['hidden_size']
-        self.num_hidden_layers = image_model_config['num_hidden_layers']
-        self.num_attention_heads = image_model_config['num_attention_heads']
+        self.hidden_size = image_model_config["hidden_size"]
+        self.num_hidden_layers = image_model_config["num_hidden_layers"]
+        self.num_attention_heads = image_model_config["num_attention_heads"]
 
         # may be different for a backbone other than dinov2
-        self.out_size = patch_size // image_model_config['patch_size']
+        self.out_size = patch_size // image_model_config["patch_size"]
         self.seq_length = self.out_size**2 + 1  # we add 1 for the [CLS] token
 
         n_fusion_blocks = len(intermediate_hook_ids) + len(scaled_images_ratios)
@@ -350,7 +350,7 @@ class DepthProModelIntegrationTest(unittest.TestCase):
 
         # verify the predicted depth
         n_fusion_blocks = len(config.intermediate_hook_ids) + len(config.scaled_images_ratios)
-        out_size = config.backbone_config.image_size // config.backbone_config.patch_size
+        out_size = config.image_model_config.image_size // config.image_model_config.patch_size
         expected_depth_size = 2 ** (n_fusion_blocks + 1) * out_size
         expected_shape = torch.Size((1, expected_depth_size, expected_depth_size))
         self.assertEqual(predicted_depth.shape, expected_shape)

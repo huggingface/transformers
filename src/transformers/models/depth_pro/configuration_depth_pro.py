@@ -18,7 +18,7 @@ from copy import deepcopy
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
-from ..auto.configuration_auto import AutoConfig, CONFIG_MAPPING
+from ..auto.configuration_auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
@@ -37,10 +37,10 @@ class DepthProConfig(PretrainedConfig):
     Args:
         fusion_hidden_size (`int`, *optional*, defaults to 256):
             The number of channels before fusion.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         patch_size (`int`, *optional*, defaults to 384):
             The size (resolution) of each patch. This is also the image_size for backbone model.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         intermediate_hook_ids (`List[int]`, *optional*, defaults to `[11, 5]`):
             Indices of the intermediate hidden states from the patch encoder to use for fusion.
         intermediate_feature_dims (`List[int]`, *optional*, defaults to `[256, 256]`):
@@ -87,11 +87,7 @@ class DepthProConfig(PretrainedConfig):
     ```"""
 
     model_type = "depth_pro"
-    sub_configs = {
-        "image_model_config": AutoConfig,
-        "patch_model_config": AutoConfig,
-        "fov_model_config": AutoConfig
-    }
+    sub_configs = {"image_model_config": AutoConfig, "patch_model_config": AutoConfig, "fov_model_config": AutoConfig}
 
     def __init__(
         self,

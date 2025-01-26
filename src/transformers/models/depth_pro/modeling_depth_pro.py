@@ -19,8 +19,8 @@ from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
 import torch
-from torch import nn
 import torch.nn.functional as F
+from torch import nn
 
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
@@ -204,7 +204,7 @@ class DepthProFeatureUpsample(nn.Module):
         self.upsample_blocks = nn.ModuleDict()
 
         # for image_features
-        self.upsample_blocks['image'] = DepthProFeatureUpsampleBlock(
+        self.upsample_blocks["image"] = DepthProFeatureUpsampleBlock(
             config=config,
             input_dims=config.image_model_config.hidden_size,
             intermediate_dims=config.image_model_config.hidden_size,
@@ -216,7 +216,7 @@ class DepthProFeatureUpsample(nn.Module):
 
         # for scaled_images_features
         for i, feature_dims in enumerate(config.scaled_images_feature_dims):
-            self.upsample_blocks[f'scaled_images_{i}'] = DepthProFeatureUpsampleBlock(
+            self.upsample_blocks[f"scaled_images_{i}"] = DepthProFeatureUpsampleBlock(
                 config=config,
                 input_dims=config.patch_model_config.hidden_size,
                 intermediate_dims=feature_dims,
@@ -227,7 +227,7 @@ class DepthProFeatureUpsample(nn.Module):
         # for intermediate_features
         for i, feature_dims in enumerate(config.intermediate_feature_dims):
             intermediate_dims = config.fusion_hidden_size if i == 0 else feature_dims
-            self.upsample_blocks[f'intermediate_{i}'] = DepthProFeatureUpsampleBlock(
+            self.upsample_blocks[f"intermediate_{i}"] = DepthProFeatureUpsampleBlock(
                 config=config,
                 input_dims=config.patch_model_config.hidden_size,
                 intermediate_dims=intermediate_dims,
@@ -236,13 +236,13 @@ class DepthProFeatureUpsample(nn.Module):
             )
 
     def forward(self, features: List[torch.Tensor]) -> List[torch.Tensor]:
-        features[0] = self.upsample_blocks['image'](features[0])
+        features[0] = self.upsample_blocks["image"](features[0])
 
         for i in range(self.n_scaled_images):
-            features[i + 1] = self.upsample_blocks[f'scaled_images_{i}'](features[i + 1])
+            features[i + 1] = self.upsample_blocks[f"scaled_images_{i}"](features[i + 1])
 
         for i in range(self.n_intermediate_hooks):
-            features[self.n_scaled_images + i + 1] = self.upsample_blocks[f'intermediate_{i}'](
+            features[self.n_scaled_images + i + 1] = self.upsample_blocks[f"intermediate_{i}"](
                 features[self.n_scaled_images + i + 1]
             )
 
@@ -300,7 +300,7 @@ def split_to_patches(pixel_values: torch.Tensor, patch_size: int, overlap_ratio:
 def reshape_features(hidden_states: torch.Tensor) -> torch.Tensor:
     """Discard class token and reshape 1D feature map to a 2D grid."""
     n_samples, seq_len, hidden_size = hidden_states.shape
-    size = torch_int(seq_len ** 0.5)
+    size = torch_int(seq_len**0.5)
 
     hidden_states = hidden_states[:, -(size**2) :, :]  # remove special tokens if there are any
     hidden_states = hidden_states.reshape(n_samples, size, size, hidden_size)
@@ -313,7 +313,7 @@ def merge_patches(patches: torch.Tensor, batch_size: int, padding: int) -> torch
     """Merges smaller patches into image-like feature map."""
     n_patches, hidden_size, out_size, out_size = patches.shape
     n_patches_per_batch = n_patches // batch_size
-    sqrt_n_patches_per_batch = torch_int(n_patches_per_batch ** 0.5)
+    sqrt_n_patches_per_batch = torch_int(n_patches_per_batch**0.5)
     new_out_size = sqrt_n_patches_per_batch * out_size
 
     if n_patches == batch_size:
@@ -379,10 +379,7 @@ def merge_patches(patches: torch.Tensor, batch_size: int, padding: int) -> torch
 
 
 def feature_extractor(
-    hidden_state: torch.Tensor,
-    batch_size: int,
-    padding: int,
-    output_size: Tuple[float, float]
+    hidden_state: torch.Tensor, batch_size: int, padding: int, output_size: Tuple[float, float]
 ) -> torch.Tensor:
     """Converts hidden_state to image like feature map."""
 
@@ -552,7 +549,10 @@ class DepthProEncoder(nn.Module):
                 patch_encodings[2][self.intermediate_hook_ids[i] + 1],
                 batch_size=batch_size,
                 padding=torch_int(self.merge_padding_value * (1 / self.scaled_images_ratios[-1])),
-                output_size=(base_height * 2 ** (self.n_scaled_images - 1), base_width * 2 ** (self.n_scaled_images - 1)),
+                output_size=(
+                    base_height * 2 ** (self.n_scaled_images - 1),
+                    base_width * 2 ** (self.n_scaled_images - 1),
+                ),
             )
             intermediate_features.append(features)
 
@@ -588,7 +588,7 @@ class DepthProEncoder(nn.Module):
         # STEP 11: return output
 
         if not return_dict:
-            return (image_encodings[0], features) + image_encodings[2:] # ignore last_hidden_state and poooler output
+            return (image_encodings[0], features) + image_encodings[2:]  # ignore last_hidden_state and poooler output
 
         return DepthProOutput(
             last_hidden_state=image_encodings.last_hidden_state,
