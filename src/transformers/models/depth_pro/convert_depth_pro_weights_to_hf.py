@@ -163,6 +163,10 @@ def write_model(
     # file_path = "/home/geetu/work/hf/depth_pro/depth_pro.pt" # when you already have the files locally
     loaded = torch.load(file_path, weights_only=True)
 
+    # ensure state_dict is in float32
+    for key in loaded.keys():
+        loaded[key] = loaded[key].to(torch.float32)
+
     print("Converting model...")
     all_keys = list(loaded.keys())
     new_keys = convert_old_keys_to_new_keys(all_keys)
