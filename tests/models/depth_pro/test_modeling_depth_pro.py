@@ -49,23 +49,34 @@ class DepthProModelTester:
         num_channels=3,
         is_training=True,
         use_labels=True,
-        hidden_size=32,
         fusion_hidden_size=16,
-        intermediate_hook_ids=[0],
-        intermediate_feature_dims=[8],
+        intermediate_hook_ids=[1, 0],
+        intermediate_feature_dims=[10, 8],
         scaled_images_ratios=[0.5, 1.0],
         scaled_images_overlap_ratios=[0.0, 0.2],
         scaled_images_feature_dims=[12, 12],
-        num_hidden_layers=1,
-        num_attention_heads=4,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.1,
-        attention_probs_dropout_prob=0.1,
         initializer_range=0.02,
         use_fov_model=False,
-        backbone_config={
+        image_model_config={
             "model_type": "dinov2",
+            "num_hidden_layers": 2,
+            "hidden_size": 16,
+            "num_attention_heads": 1,
             "patch_size": 4,
+        },
+        patch_model_config={
+            "model_type": "vit",
+            "num_hidden_layers": 2,
+            "hidden_size": 24,
+            "num_attention_heads": 2,
+            "patch_size": 6,
+        },
+        fov_model_config={
+            "model_type": "vit",
+            "num_hidden_layers": 2,
+            "hidden_size": 32,
+            "num_attention_heads": 4,
+            "patch_size": 8,
         },
         num_labels=3,
     ):
@@ -76,25 +87,25 @@ class DepthProModelTester:
         self.num_channels = num_channels
         self.is_training = is_training
         self.use_labels = use_labels
-        self.hidden_size = hidden_size
         self.fusion_hidden_size = fusion_hidden_size
         self.intermediate_hook_ids = intermediate_hook_ids
         self.intermediate_feature_dims = intermediate_feature_dims
         self.scaled_images_ratios = scaled_images_ratios
         self.scaled_images_overlap_ratios = scaled_images_overlap_ratios
         self.scaled_images_feature_dims = scaled_images_feature_dims
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.hidden_act = hidden_act
-        self.hidden_dropout_prob = hidden_dropout_prob
-        self.attention_probs_dropout_prob = attention_probs_dropout_prob
         self.initializer_range = initializer_range
         self.use_fov_model = use_fov_model
-        self.backbone_config = backbone_config
+        self.image_model_config =image_model_config
+        self.patch_model_config =patch_model_config
+        self.fov_model_config =fov_model_config
         self.num_labels = num_labels
 
+        self.hidden_size = image_model_config['hidden_size']
+        self.num_hidden_layers = image_model_config['num_hidden_layers']
+        self.num_attention_heads = image_model_config['num_attention_heads']
+
         # may be different for a backbone other than dinov2
-        self.out_size = patch_size // backbone_config["patch_size"]
+        self.out_size = patch_size // image_model_config['patch_size']
         self.seq_length = self.out_size**2 + 1  # we add 1 for the [CLS] token
 
         n_fusion_blocks = len(intermediate_hook_ids) + len(scaled_images_ratios)
@@ -114,22 +125,17 @@ class DepthProModelTester:
     def get_config(self):
         return DepthProConfig(
             patch_size=self.patch_size,
-            num_channels=self.num_channels,
-            hidden_size=self.hidden_size,
             fusion_hidden_size=self.fusion_hidden_size,
             intermediate_hook_ids=self.intermediate_hook_ids,
             intermediate_feature_dims=self.intermediate_feature_dims,
             scaled_images_ratios=self.scaled_images_ratios,
             scaled_images_overlap_ratios=self.scaled_images_overlap_ratios,
             scaled_images_feature_dims=self.scaled_images_feature_dims,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            hidden_act=self.hidden_act,
-            hidden_dropout_prob=self.hidden_dropout_prob,
-            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
             initializer_range=self.initializer_range,
+            image_model_config=self.image_model_config,
+            patch_model_config=self.patch_model_config,
+            fov_model_config=self.fov_model_config,
             use_fov_model=self.use_fov_model,
-            backbone_config=self.backbone_config,
         )
 
     def create_and_check_model(self, config, pixel_values, labels):
@@ -137,11 +143,6 @@ class DepthProModelTester:
         model.to(torch_device)
         model.eval()
         result = model(pixel_values)
-        # TODO: return hidden_states from patch_encodings instead of image_encodings
-        # num_patches = result.last_hidden_state.shape[1]  # num_patches are created dynamically
-        # self.parent.assertEqual(
-        #     result.last_hidden_state.shape, (self.batch_size, num_patches, self.seq_length, self.hidden_size)
-        # )
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
     def create_and_check_for_depth_estimation(self, config, pixel_values, labels):

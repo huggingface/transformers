@@ -206,8 +206,8 @@ class DepthProFeatureUpsample(nn.Module):
         # for image_features
         self.upsample_blocks['image'] = DepthProFeatureUpsampleBlock(
             config=config,
-            input_dims=config.hidden_size,
-            intermediate_dims=config.hidden_size,
+            input_dims=config.image_model_config.hidden_size,
+            intermediate_dims=config.image_model_config.hidden_size,
             output_dims=config.scaled_images_feature_dims[0],
             n_upsample_layers=1,
             use_proj=False,
@@ -218,7 +218,7 @@ class DepthProFeatureUpsample(nn.Module):
         for i, feature_dims in enumerate(config.scaled_images_feature_dims):
             self.upsample_blocks[f'scaled_images_{i}'] = DepthProFeatureUpsampleBlock(
                 config=config,
-                input_dims=config.hidden_size,
+                input_dims=config.patch_model_config.hidden_size,
                 intermediate_dims=feature_dims,
                 output_dims=feature_dims,
                 n_upsample_layers=1,
@@ -229,7 +229,7 @@ class DepthProFeatureUpsample(nn.Module):
             intermediate_dims = config.fusion_hidden_size if i == 0 else feature_dims
             self.upsample_blocks[f'intermediate_{i}'] = DepthProFeatureUpsampleBlock(
                 config=config,
-                input_dims=config.hidden_size,
+                input_dims=config.patch_model_config.hidden_size,
                 intermediate_dims=intermediate_dims,
                 output_dims=feature_dims,
                 n_upsample_layers=2 + i,
@@ -411,7 +411,6 @@ class DepthProEncoder(nn.Module):
     def __init__(self, config: DepthProConfig):
         super().__init__()
         self.config = config
-        self.hidden_size = config.hidden_size
         self.fusion_hidden_size = config.fusion_hidden_size
 
         self.intermediate_hook_ids = config.intermediate_hook_ids
@@ -421,19 +420,14 @@ class DepthProEncoder(nn.Module):
         self.scaled_images_feature_dims = config.scaled_images_feature_dims
         self.merge_padding_value = config.merge_padding_value
 
-        # placeholder to avoid
-        # ValueError: The following configuration classes contain unused attributes in the corresponding modeling files
-        self.num_hidden_layers = config.num_hidden_layers
-        self.num_attention_heads = config.num_attention_heads
-
         self.n_scaled_images = len(self.scaled_images_ratios)
         self.n_intermediate_hooks = len(self.intermediate_hook_ids)
 
         # patch encoder
-        self.patch_encoder = AutoModel.from_config(config.backbone_config, **self.config.backbone_kwargs)
+        self.patch_encoder = AutoModel.from_config(config.patch_model_config)
 
         # image encoder
-        self.image_encoder = AutoModel.from_config(config.backbone_config, **self.config.backbone_kwargs)
+        self.image_encoder = AutoModel.from_config(config.image_model_config)
 
         # upsample features
         self.feature_upsample = DepthProFeatureUpsample(config)
@@ -469,11 +463,6 @@ class DepthProEncoder(nn.Module):
             raise ValueError("Input tensor must have shape (batch_size, num_channels, height, width).")
 
         batch_size, num_channels, height, width = pixel_values.shape
-
-        if not (num_channels == self.config.num_channels):
-            raise ValueError(
-                f"Found {num_channels} channels in image, expected number of channels is {self.config.num_channels} from config."
-            )
 
         if min(self.scaled_images_ratios) * min(height, width) < self.config.patch_size:
             raise ValueError(
@@ -851,13 +840,12 @@ class DepthProFOVModel(nn.Module):
     def __init__(self, config: DepthProConfig):
         super().__init__()
         self.config = config
-        self.hidden_size = config.hidden_size
         self.fusion_hidden_size = config.fusion_hidden_size
 
-        self.out_size = config.backbone_config.image_size // config.backbone_config.patch_size
+        self.out_size = config.fov_model_config.image_size // config.fov_model_config.patch_size
 
-        self.encoder = AutoModel.from_config(config.backbone_config, **self.config.backbone_kwargs)
-        self.encoder_neck = nn.Linear(self.hidden_size, self.fusion_hidden_size // 2)
+        self.encoder = AutoModel.from_config(config.fov_model_config)
+        self.encoder_neck = nn.Linear(config.fov_model_config.hidden_size, self.fusion_hidden_size // 2)
         self.global_neck = nn.Sequential(
             nn.Conv2d(self.fusion_hidden_size, self.fusion_hidden_size // 2, kernel_size=3, stride=2, padding=1),
             nn.ReLU(True),
