@@ -133,8 +133,20 @@ def write_model(
     # ------------------------------------------------------------
 
     # create config
+    backbone_config = {
+        "model_type": "dinov2",
+        "num_hidden_layers": 24,
+        "patch_size": 16,
+        "hidden_size": 1024,
+        "num_attention_heads": 16,
+        "image_size": 384,
+        "use_mask_token": False,
+    }
     config = DepthProConfig(
-        # use default config except for enabling fov model
+        # original implementation uses same config for all 3 models
+        image_model_config=backbone_config,
+        patch_model_config=backbone_config,
+        fov_model_config=backbone_config,
         use_fov_model=True,
     )
 
