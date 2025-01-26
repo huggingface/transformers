@@ -55,8 +55,9 @@ def get_module_source_from_name(module_name: str) -> str:
     return source_code
 
 
-# Exclude names exists to prevent edge cases where we want to keep a name that may
-# exist in the mapping, e.g. `Wav2Vec2BaseModelOutput` should not be replaced by `Wav2Vec2ModelOutput`
+# Exclude names to prevent edge cases where we want to keep a name that may
+# exist in the mapping, e.g. `Wav2Vec2BaseModelOutput` where `Wav2Vec2` is
+# a "base" model identifier but we want the type to pass as is in the produced modeling file
 EXCLUDE_NAMES = ["Wav2Vec2BaseModelOutput"]
 
 
@@ -64,7 +65,7 @@ def preserve_case_replace(text, patterns: dict, default_name: str):
     # Create a regex pattern to match all variations
     regex_pattern = "|".join(re.escape(key) for key in patterns.keys())
 
-    # Create exclude pattern 
+    # Create exclude pattern
     exclude_pattern = "|".join(re.escape(key) for key in EXCLUDE_NAMES)
     compiled_regex = re.compile(f"(?<![a-z0-9])(?!{exclude_pattern})({regex_pattern})(.|$)", re.IGNORECASE | re.DOTALL)
 
@@ -87,8 +88,11 @@ def preserve_case_replace(text, patterns: dict, default_name: str):
 
 def get_cased_name(lowercase_name: str) -> str:
     """From a model name in lowercase in the format `my_model`, return the cased name in the format `MyModel`."""
+    alt_lowercase_name = lowercase_name.replace("_", "-")
     if lowercase_name in CONFIG_MAPPING_NAMES:
         return CONFIG_MAPPING_NAMES[lowercase_name].replace("Config", "")
+    elif alt_lowercase_name in CONFIG_MAPPING_NAMES:
+        return CONFIG_MAPPING_NAMES[alt_lowercase_name].replace("Config", "")
     else:
         return "".join(x.title() for x in lowercase_name.split("_"))
 
@@ -114,8 +118,9 @@ class ReplaceNameTransformer(m.MatcherDecoratableTransformer):
 
     def __init__(self, old_name: str, new_name: str, original_new_model_name: str = "", only_doc: bool = False):
         super().__init__()
-        self.old_name = old_name
+        old_name = old_name.replace("-", "_")
         new_name = new_name.replace("-", "_")
+        self.old_name = old_name
         self.new_name = new_name
         self.cased_new_name = get_cased_name(self.new_name)
         self.cased_old_name = get_cased_name(self.old_name)
@@ -864,7 +869,7 @@ class ModelFileMapper(ModuleMapper):
 
         Merging rule: if any assignment with the same name was redefined in the modular, we use it and its dependencies ONLY if it matches
         a pattern in `ASSIGNMENTS_REGEX_TO_KEEP`. Otherwise, we use the original value and dependencies. This rule was chosen to avoid having to rewrite the
-        big docstrings.
+        big docstrings. If the assignment is a DOCSTRING var and is assigned to None, the parent's docstring is kept.
         """
         for assignment, node in assignments.items():
             should_keep = any(re.search(pattern, assignment) for pattern in ASSIGNMENTS_REGEX_TO_KEEP)
@@ -872,9 +877,8 @@ class ModelFileMapper(ModuleMapper):
             # If it's a DOCSTRING var and is assigned to None, the parent's docstring is kept.
             if "DOCSTRING" in assignment:
                 assigned_value = node.body[0].value
-                should_keep = (
-                    False if (isinstance(assigned_value, cst.Name) and assigned_value.value == "None") else True
-                )
+                is_assigned_none = isinstance(assigned_value, cst.Name) and assigned_value.value == "None"
+                should_keep = not is_assigned_none
 
             if should_keep or assignment not in self.assignments:
                 self.assignments[assignment] = node

@@ -5,41 +5,35 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...modeling_outputs import (
-
     CausalLMOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
     Wav2Vec2BaseModelOutput,
     XVectorOutput,
 )
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
 )
-
+from ..bart.modeling_bart import BartAttention, BartFlashAttention2, BartSdpaAttention
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Adapter,
     Wav2Vec2AdapterLayer,
+    Wav2Vec2Encoder,
+    Wav2Vec2EncoderLayer,
     Wav2Vec2FeatureEncoder,
     Wav2Vec2FeatureProjection,
+    Wav2Vec2FeedForward,
     Wav2Vec2ForAudioFrameClassification,
     Wav2Vec2ForCTC,
     Wav2Vec2ForSequenceClassification,
-    Wav2Vec2FeedForward,
-    Wav2Vec2EncoderLayer,
     Wav2Vec2ForXVector,
-    Wav2Vec2SamePadLayer,
-    Wav2Vec2Encoder,
+    Wav2Vec2Model,
     Wav2Vec2PreTrainedModel,
-    Wav2Vec2Model
+    Wav2Vec2SamePadLayer,
 )
-from ..bart.modeling_bart import (
-    BartAttention,
-    BartFlashAttention2,
-    BartSdpaAttention
-)
-from ...modeling_utils import PreTrainedModel
 from .configuration_data2vec_audio import Data2VecAudioConfig
 
 
@@ -154,13 +148,6 @@ class Data2VecAudioFlashAttention2(BartFlashAttention2):
 
 class Data2VecAudioSdpaAttention(BartSdpaAttention):
     pass
-
-
-DATA2VEC2AUDIO_ATTENTION_CLASSES = {
-    "eager": Data2VecAudioAttention,
-    "sdpa": Data2VecAudioSdpaAttention,
-    "flash_attention_2": Data2VecAudioFlashAttention2,
-}
 
 
 class Data2VecAudioFeedForward(Wav2Vec2FeedForward):
@@ -317,7 +304,6 @@ class Data2VecAudioModel(Data2VecAudioPreTrainedModel, Wav2Vec2Model):
         not be updated during training.
         """
         self.feature_extractor._freeze_parameters()
-
 
     @add_start_docstrings_to_model_forward(DATA2VEC_AUDIO_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(

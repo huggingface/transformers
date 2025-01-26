@@ -731,7 +731,7 @@ class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
 
     config_class = Wav2Vec2BertConfig
     base_model_prefix = "wav2vec2_bert"
-    main_input_name = "input_values"
+    main_input_name = "input_features"
     supports_gradient_checkpointing = True
 
     # Ignore copy
@@ -1054,7 +1054,7 @@ class Wav2Vec2BertModel(Wav2Vec2BertPreTrainedModel):
     )
     def forward(
         self,
-        input_values: Optional[torch.Tensor],
+        input_features: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         mask_time_indices: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
@@ -1067,7 +1067,7 @@ class Wav2Vec2BertModel(Wav2Vec2BertPreTrainedModel):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        hidden_states, extract_features = self.feature_projection(input_values)
+        hidden_states, extract_features = self.feature_projection(input_features)
         hidden_states = self._mask_hidden_states(
             hidden_states, mask_time_indices=mask_time_indices, attention_mask=attention_mask
         )
@@ -1145,7 +1145,7 @@ class Wav2Vec2BertForCTC(Wav2Vec2BertPreTrainedModel):
     )
     def forward(
         self,
-        input_values: Optional[torch.Tensor],
+        input_features: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1165,7 +1165,7 @@ class Wav2Vec2BertForCTC(Wav2Vec2BertPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         outputs = self.wav2vec2_bert(
-            input_values,
+            input_features,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1183,7 +1183,7 @@ class Wav2Vec2BertForCTC(Wav2Vec2BertPreTrainedModel):
             attention_mask = (
                 attention_mask
                 if attention_mask is not None
-                else torch.ones(input_values.shape[:2], device=input_values.device, dtype=torch.long)
+                else torch.ones(input_features.shape[:2], device=input_features.device, dtype=torch.long)
             )
             input_lengths = self._get_feat_extract_output_lengths(attention_mask.sum([-1])).to(torch.long)
 
@@ -1262,7 +1262,7 @@ class Wav2Vec2BertForSequenceClassification(Wav2Vec2BertPreTrainedModel):
     )
     def forward(
         self,
-        input_values: Optional[torch.Tensor],
+        input_features: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1280,7 +1280,7 @@ class Wav2Vec2BertForSequenceClassification(Wav2Vec2BertPreTrainedModel):
         output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
 
         outputs = self.wav2vec2_bert(
-            input_values,
+            input_features,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1363,7 +1363,7 @@ class Wav2Vec2BertForAudioFrameClassification(Wav2Vec2BertPreTrainedModel):
     )
     def forward(
         self,
-        input_values: Optional[torch.Tensor],
+        input_features: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
@@ -1381,7 +1381,7 @@ class Wav2Vec2BertForAudioFrameClassification(Wav2Vec2BertPreTrainedModel):
         output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
 
         outputs = self.wav2vec2_bert(
-            input_values,
+            input_features,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1527,7 +1527,7 @@ class Wav2Vec2BertForXVector(Wav2Vec2BertPreTrainedModel):
     )
     def forward(
         self,
-        input_values: Optional[torch.Tensor],
+        input_features: Optional[torch.Tensor],
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1545,7 +1545,7 @@ class Wav2Vec2BertForXVector(Wav2Vec2BertPreTrainedModel):
         output_hidden_states = True if self.config.use_weighted_layer_sum else output_hidden_states
 
         outputs = self.wav2vec2_bert(
-            input_values,
+            input_features,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,

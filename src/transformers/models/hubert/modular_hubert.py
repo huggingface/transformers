@@ -5,37 +5,29 @@ import torch.nn as nn
 
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
-from ...modeling_outputs import (
-    BaseModelOutput,
-    CausalLMOutput,
-    SequenceClassifierOutput
-)
+from ...modeling_outputs import BaseModelOutput, CausalLMOutput, SequenceClassifierOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    replace_return_docstrings
+    replace_return_docstrings,
 )
+from ..bart.modeling_bart import BartAttention, BartFlashAttention2, BartSdpaAttention
 from ..wav2vec2.modeling_wav2vec2 import (
+    Wav2Vec2Encoder,
+    Wav2Vec2EncoderLayer,
+    Wav2Vec2EncoderLayerStableLayerNorm,
+    Wav2Vec2EncoderStableLayerNorm,
     Wav2Vec2FeatureEncoder,
     Wav2Vec2FeedForward,
     Wav2Vec2ForCTC,
     Wav2Vec2ForSequenceClassification,
     Wav2Vec2GroupNormConvLayer,
     Wav2Vec2LayerNormConvLayer,
-    Wav2Vec2Encoder,
+    Wav2Vec2Model,
     Wav2Vec2NoLayerNormConvLayer,
     Wav2Vec2SamePadLayer,
-    Wav2Vec2EncoderLayer,
-    Wav2Vec2EncoderLayerStableLayerNorm,
-    Wav2Vec2EncoderStableLayerNorm,
-    Wav2Vec2Model
-)
-from ..bart.modeling_bart import (
-    BartAttention,
-    BartFlashAttention2,
-    BartSdpaAttention
 )
 from .configuration_hubert import HubertConfig
 
@@ -53,11 +45,14 @@ _EXPECTED_OUTPUT_SHAPE = [1, 292, 768]
 class HubertNoLayerNormConvLayer(Wav2Vec2NoLayerNormConvLayer):
     pass
 
+
 class HubertLayerNormConvLayer(Wav2Vec2LayerNormConvLayer):
     pass
 
+
 class HubertGroupNormConvLayer(Wav2Vec2GroupNormConvLayer):
     pass
+
 
 class HubertPositionalConvEmbedding(nn.Module):
     def __init__(self, config):
@@ -135,37 +130,37 @@ class HubertFeatureProjection(nn.Module):
         return hidden_states
 
 
-
 class HubertAttention(BartAttention):
     pass
 
+
 class HubertFlashAttention2(BartFlashAttention2):
     pass
+
 
 class HubertSdpaAttention(BartSdpaAttention):
     pass
 
 
-HUBERT_ATTENTION_CLASSES = {
-    "eager": HubertAttention,
-    "sdpa": HubertSdpaAttention,
-    "flash_attention_2": HubertFlashAttention2,
-}
-
 class HubertFeedForward(Wav2Vec2FeedForward):
     pass
+
 
 class HubertEncoderLayer(Wav2Vec2EncoderLayer):
     pass
 
+
 class HubertEncoderLayerStableLayerNorm(Wav2Vec2EncoderLayerStableLayerNorm):
     pass
+
 
 class HubertEncoder(Wav2Vec2Encoder):
     pass
 
+
 class HubertEncoderStableLayerNorm(Wav2Vec2EncoderStableLayerNorm):
     pass
+
 
 class HubertPreTrainedModel(PreTrainedModel):
     """
@@ -288,6 +283,7 @@ HUBERT_INPUTS_DOCSTRING = r"""
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
 """
+
 
 @add_start_docstrings(
     "The bare Hubert Model transformer outputting raw hidden-states without any specific head on top.",

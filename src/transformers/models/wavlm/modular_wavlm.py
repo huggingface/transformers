@@ -13,7 +13,7 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
     Wav2Vec2BaseModelOutput,
-    XVectorOutput
+    XVectorOutput,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
@@ -32,8 +32,8 @@ from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Model,
     Wav2Vec2NoLayerNormConvLayer,
     Wav2Vec2PositionalConvEmbedding,
+    Wav2Vec2PreTrainedModel,
     Wav2Vec2SamePadLayer,
-    Wav2Vec2PreTrainedModel
 )
 from .configuration_wavlm import WavLMConfig
 
