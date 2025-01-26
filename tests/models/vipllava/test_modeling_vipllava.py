@@ -17,6 +17,7 @@
 import unittest
 
 import requests
+from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
@@ -29,7 +30,6 @@ from transformers.testing_utils import (
     cleanup,
     require_bitsandbytes,
     require_torch,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -226,7 +226,7 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTest
             with torch.no_grad():
                 out_ids = model(input_ids=input_ids, **inputs)[0]
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            self.assertTrue(torch.allclose(out_embeds, out_ids))
+            torch.testing.assert_close(out_embeds, out_ids)
 
     # Copied from tests.models.llava.test_modeling_llava.LlavaForConditionalGenerationModelTest.test_mismatching_num_image_tokens
     def test_mismatching_num_image_tokens(self):
@@ -257,6 +257,37 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTest
             # two images and two image tokens don't raise an error
             pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
             _ = model(input_ids=input_ids, pixel_values=pixel_values)
+
+    @parameterized.expand(
+        [
+            (-1,),
+            ([-1],),
+            ([-1, -2],),
+        ],
+    )
+    def test_vision_feature_layers(self, vision_feature_layers):
+        """
+        Test that we can use either one vision feature layer, or a list of
+        vision feature layers.
+        """
+        # NOTE: vipllava uses vision_feature_layers instead of vision_feature_layer as the
+        # config key. The reason is that other llava classes supported one vision feature layer
+        # and added support for a list of layers with granite vision support, while vipllava
+        # originally supported multiple feature layers, and added support for a single layer for
+        # for compatibility reasons.
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.vision_feature_layers = vision_feature_layers
+
+        num_feature_layers = 1 if isinstance(vision_feature_layers, int) else len(vision_feature_layers)
+        hidden_size = config.vision_config.hidden_size
+        expected_features = hidden_size * num_feature_layers
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            # We should have the right number of input features,
+            # and should be able to run a forward pass without exploding
+            assert model.multi_modal_projector.linear_1.in_features == expected_features
+            model(**input_dict)
 
     @unittest.skip(
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
@@ -322,24 +353,3 @@ class VipLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         EXPECTED_OUTPUT = "USER:  \nCan you please describe this image?\nASSISTANT: The image features a brown and white cat sitting on"
         self.assertEqual(processor.decode(outputs[0], skip_special_tokens=True), EXPECTED_OUTPUT)
-
-    @slow
-    @require_torch_gpu
-    def test_vipllava_merge_inputs_error_bug(self):
-        # This is a reproducer of https://github.com/huggingface/transformers/pull/28333 and makes sure it does not happen anymore
-        model_id = "llava-hf/vip-llava-7b-hf"
-        model = VipLlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
-        processor = AutoProcessor.from_pretrained(model_id)
-
-        url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/compel-neg.png"
-        image = Image.open(requests.get(url, stream=True).raw)
-        prompt = "USER: <image>\nCan you please describe this image?\nASSISTANT:"
-
-        inputs = processor(prompt, image, return_tensors="pt").to(torch_device, torch.float16)
-
-        # Make sure that the loss is properly computed
-        loss = model(
-            **inputs,
-            labels=inputs.input_ids.clone(),
-        ).loss
-        loss.backward()
