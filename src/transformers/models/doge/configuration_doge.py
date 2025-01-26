@@ -161,7 +161,7 @@ class DogeConfig(PretrainedConfig):
         bos_token_id=0,
         eos_token_id=1,
         pad_token_id=2,
-        tie_word_embeddings=False,
+        tie_word_embeddings=True,
         max_position_embeddings=2048,
         rope_theta=10000.0,
         rope_scaling={
