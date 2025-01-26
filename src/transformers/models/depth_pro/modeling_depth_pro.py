@@ -598,18 +598,14 @@ class DepthProEncoder(nn.Module):
 
         # STEP 11: return output
 
-        last_hidden_state = image_encodings.last_hidden_state
-        hidden_states = image_encodings.hidden_states
-        attentions = image_encodings.attentions
-
         if not return_dict:
             return (image_encodings[0], features) + image_encodings[2:] # ignore last_hidden_state and poooler output
 
         return DepthProOutput(
-            last_hidden_state=last_hidden_state,
+            last_hidden_state=image_encodings.last_hidden_state,
             features=features,
-            hidden_states=hidden_states,
-            attentions=attentions,
+            hidden_states=image_encodings.hidden_states,
+            attentions=image_encodings.attentions,
         )
 
 
@@ -624,6 +620,7 @@ class DepthProPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _supports_sdpa = True
+    _no_split_modules = []
 
     def _init_weights(self, module):
         """Initialize the weights"""

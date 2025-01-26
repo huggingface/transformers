@@ -134,35 +134,8 @@ def write_model(
 
     # create config
     config = DepthProConfig(
-        # this config is same as the default config and used for pre-trained weights
-        hidden_size=1024,
-        fusion_hidden_size=256,
-        num_hidden_layers=24,
-        num_attention_heads=16,
-        mlp_ratio=4,
-        hidden_act="gelu",
-        hidden_dropout_prob=0.0,
-        attention_probs_dropout_prob=0.0,
-        initializer_range=0.02,
-        layer_norm_eps=1e-6,
-        patch_size=384,
-        num_channels=3,
-        patch_embeddings_size=16,
-        qkv_bias=True,
-        layerscale_value=1.0,
-        drop_path_rate=0.0,
-        use_swiglu_ffn=False,
-        apply_layernorm=True,
-        reshape_hidden_states=True,
-        intermediate_hook_ids=[11, 5],
-        intermediate_feature_dims=[256, 256],
-        scaled_images_ratios=[0.25, 0.5, 1],
-        scaled_images_overlap_ratios=[0.0, 0.5, 0.25],
-        scaled_images_feature_dims=[1024, 1024, 512],
-        use_batch_norm_in_fusion_residual=False,
-        use_bias_in_fusion_residual=True,
+        # use default config except for enabling fov model
         use_fov_model=True,
-        num_fov_head_layers=2,
     )
 
     # save config
