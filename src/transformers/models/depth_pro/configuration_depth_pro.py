@@ -188,6 +188,7 @@ class DepthProConfig(PretrainedConfig):
             backbone_config = Dinov2Config(
                 patch_size=16,
                 image_size=self.patch_size,
+                use_mask_token=False,
                 **matching_config_dict,
             )
 
