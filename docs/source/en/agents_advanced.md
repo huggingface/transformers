@@ -162,7 +162,7 @@ agent.run(
 improved_prompt could be "A bright blue space suit wearing rabbit, on the surface of the moon, under a bright orange sunset, with the Earth visible in the background"
 
 Now that I have improved the prompt, I can use the image generator tool to generate an image based on this prompt.
->>> Agent is executing the code below:
+=== Agent is executing the code below:
 image = image_generator(prompt="A bright blue space suit wearing rabbit, on the surface of the moon, under a bright orange sunset, with the Earth visible in the background")
 final_answer(image)
 ```
