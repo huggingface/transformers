@@ -47,7 +47,7 @@ source ./env/bin/activate
 ```
 
 </hfoption>
-<hfoptions>
+</hfoptions>
 
 ## Python
 
