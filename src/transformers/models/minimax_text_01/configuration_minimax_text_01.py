@@ -51,6 +51,7 @@ class MiniMaxText01Config(PretrainedConfig):
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `8`.
+        head_dim (`<fill_type>`, *optional*): <fill_docstring>
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to `4096*32`):
@@ -89,6 +90,15 @@ class MiniMaxText01Config(PretrainedConfig):
             The aux loss factor for the total loss.
         router_jitter_noise (`float`, *optional*, defaults to 0.0):
             Amount of noise to add to the router.
+        attn_type_list (`<fill_type>`, *optional*): <fill_docstring>
+        block_size (`<fill_type>`, *optional*, defaults to 256): <fill_docstring>
+        residual_post_norm (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        layernorm_attention_alpha (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
+        layernorm_attention_beta (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
+        layernorm_lightning_attention_alpha (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
+        layernorm_lightning_attention_beta (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
+        layernorm_mlp_alpha (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
+        layernorm_mlp_beta (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
 
     ```python
     >>> from transformers import MiniMaxText01Model, MiniMaxText01Config

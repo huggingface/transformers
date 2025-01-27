@@ -91,6 +91,7 @@ class MiniMaxText01Config(PretrainedConfig):
             converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to `8`.
+        head_dim (`<fill_type>`, *optional*): <fill_docstring>
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to `4096*32`):
@@ -129,6 +130,15 @@ class MiniMaxText01Config(PretrainedConfig):
             The aux loss factor for the total loss.
         router_jitter_noise (`float`, *optional*, defaults to 0.0):
             Amount of noise to add to the router.
+        attn_type_list (`<fill_type>`, *optional*): <fill_docstring>
+        block_size (`<fill_type>`, *optional*, defaults to 256): <fill_docstring>
+        residual_post_norm (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
+        layernorm_attention_alpha (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
+        layernorm_attention_beta (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
+        layernorm_lightning_attention_alpha (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
+        layernorm_lightning_attention_beta (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
+        layernorm_mlp_alpha (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
+        layernorm_mlp_beta (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
 
     ```python
     >>> from transformers import MiniMaxText01Model, MiniMaxText01Config
@@ -172,8 +182,8 @@ class MiniMaxText01Config(PretrainedConfig):
         output_router_logits=False,
         router_aux_loss_coef=0.001,
         router_jitter_noise=0.0,
-        attn_type_list = None,
-        block_size = 256,
+        attn_type_list=None,
+        block_size=256,
         residual_post_norm=False,
         layernorm_attention_alpha=1,
         layernorm_attention_beta=1,
@@ -208,8 +218,9 @@ class MiniMaxText01Config(PretrainedConfig):
         # use softmax-attention after `interval` lightning-attentions
         interval = num_hidden_layers // 10
         self.attn_type_list = (
-            [1 if i%interval==interval-1 else 0 for i in range(num_hidden_layers)]
-            if attn_type_list is None else attn_type_list
+            [1 if i % interval == interval - 1 else 0 for i in range(num_hidden_layers)]
+            if attn_type_list is None
+            else attn_type_list
         )
 
         self.block_size = block_size
@@ -260,8 +271,8 @@ class MiniMaxText01LightningAttentionDecay(nn.Module):
         num_heads_range = torch.arange(self.num_heads).to(x) + 1
         block_size_range = torch.arange(self.block_size).to(x) + 1
 
-        slope_rate = ( 1 / (2 ** (8/self.num_heads)) ) ** num_heads_range
-        slope_rate *= 1 - self.layer_idx / (self.num_hidden_layers - 1) + 1e-5 # check small addition
+        slope_rate = (1 / (2 ** (8 / self.num_heads))) ** num_heads_range
+        slope_rate *= 1 - self.layer_idx / (self.num_hidden_layers - 1) + 1e-5  # check small addition
         slope_rate = slope_rate[:, None, None]
 
         query_decay = torch.exp(-slope_rate * block_size_range[:, None])
@@ -270,7 +281,7 @@ class MiniMaxText01LightningAttentionDecay(nn.Module):
         key_decay = torch.exp(-slope_rate * (self.block_size - block_size_range[:, None]))
         key_decay = key_decay[:, None, :, :]
         key_decay = key_decay.repeat(1, num_blocks, 1, 1)
-        key_decay[:, -1, :self.block_size-padding] = key_decay[:, -1, padding:]
+        key_decay[:, -1, : self.block_size - padding] = key_decay[:, -1, padding:]
 
         diagonal_decay = block_size_range[:, None] - block_size_range[None, :]
         diagonal_decay = slope_rate * diagonal_decay[None, :, :]
@@ -278,10 +289,9 @@ class MiniMaxText01LightningAttentionDecay(nn.Module):
         diagonal_decay = torch.exp(diagonal_decay)
         diagonal_decay = diagonal_decay[:, None, :, :]
 
-        block_lengths = torch.cat((
-            torch.full((num_blocks-1,), self.block_size),
-            torch.tensor([self.block_size-padding])
-        )).to(x)
+        block_lengths = torch.cat(
+            (torch.full((num_blocks - 1,), self.block_size), torch.tensor([self.block_size - padding]))
+        ).to(x)
         block_decay = torch.exp(-slope_rate[:, None, :, :] * block_lengths[:, None, None])
 
         return key_decay, query_decay, diagonal_decay, block_decay
@@ -352,14 +362,14 @@ class MiniMaxText01LightningAttention(nn.Module):
         attn_weights_inter = torch.matmul((key_states * key_decay).transpose(-1, -2), value_states)
         attn_weights_inter = torch.cat([next_cache, attn_weights_inter], dim=2)
         for i in range(num_blocks):
-            attn_weights_inter[:, :, i+1, :, :] += attn_weights_inter[:, :, i, :, :] * block_decay[:, i, :, :]
+            attn_weights_inter[:, :, i + 1, :, :] += attn_weights_inter[:, :, i, :, :] * block_decay[:, i, :, :]
         next_cache = attn_weights_inter[:, :, -1, :, :]
         attn_weights_inter = attn_weights_inter[:, :, :-1, :, :]
         attn_output_inter = torch.matmul(query_states * query_decay, attn_weights_inter)
 
         # inter + intra
         attn_output = attn_output_inter + attn_output_intra
-        attn_output = attn_output.reshape(batch_size, self.num_heads, seq_len+padding, self.head_dim)
+        attn_output = attn_output.reshape(batch_size, self.num_heads, seq_len + padding, self.head_dim)
         attn_output = attn_output[:, :, :seq_len, :]
 
         # final output projection
@@ -452,7 +462,7 @@ class MiniMaxText01DecoderLayer(MixtralDecoderLayer):
             residual = hidden_states
 
         # Self Attention
-        attention_mask = attention_mask if self.attn_type==0 else causal_mask
+        attention_mask = attention_mask if self.attn_type == 0 else causal_mask
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
             position_embeddings=position_embeddings,

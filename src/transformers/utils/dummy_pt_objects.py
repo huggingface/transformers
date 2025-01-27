@@ -6315,14 +6315,14 @@ class MixtralPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class MiniMaxText01ForCausalLM(metaclass=DummyObject):
+class MiniMaxText01Model(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class MiniMaxText01ForQuestionAnswering(metaclass=DummyObject):
+class MiniMaxText01ForCausalLM(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -6343,7 +6343,7 @@ class MiniMaxText01ForTokenClassification(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class MiniMaxText01Model(metaclass=DummyObject):
+class MiniMaxText01ForQuestionAnswering(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
