@@ -46,7 +46,7 @@ class TestMissingWeightsInit(unittest.TestCase):
 
         self.TestConfig = TestConfig
         self.TestModel = TestModel
-
+        
     def test_missing_weights_initialization(self):
         # 1. Create and save base model
         base_config = self.TestConfig(use_new=False)
@@ -72,7 +72,7 @@ class TestMissingWeightsInit(unittest.TestCase):
         # New layer should be properly initialized
         self.assertTrue(torch.all(loaded_model.new_layer.weight.data == 1.0),
                        f"New layer not properly initialized: {loaded_model.new_layer.weight.data}")
-        
+
     def test_backward_compatibility(self):
         """Test that existing behavior is preserved for matched weights"""
         # 1. Create and save base model
@@ -109,7 +109,7 @@ class TestMissingWeightsInit(unittest.TestCase):
         # 4. Verify both are properly initialized
         self.assertTrue(torch.all(model_with_fast_init.new_layer.weight.data == 1.0),
                        "New layer not properly initialized with _fast_init=True")
-        
+
     def test_original_issue_reproduction(self):
         """Test the specific case from issue #35437"""
         # 1. Create and save base model
@@ -126,7 +126,7 @@ class TestMissingWeightsInit(unittest.TestCase):
                          "New weights contain NaN values")
         self.assertTrue(torch.all(new_model.new_layer.weight.data == 1.0),
                        "New weights not properly initialized")
-        
+
     def tearDown(self):
         # Clean up
         for file in os.listdir(self.tmp_dir):
