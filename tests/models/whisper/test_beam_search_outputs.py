@@ -63,7 +63,7 @@ class TestWhisperBeamSearchOutputs(unittest.TestCase):
                         torch.all((valid_indices >= 0) & (valid_indices < num_beams)),
                         f"Beam indices for batch {i} outside valid range [0, {num_beams})"
                     )
-
+    
     def test_beam_search_short_form(self):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny").to(torch_device)
         
