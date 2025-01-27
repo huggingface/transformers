@@ -63,3 +63,45 @@ class TestWhisperBeamSearchOutputs(unittest.TestCase):
                         torch.all((valid_indices >= 0) & (valid_indices < num_beams)),
                         f"Beam indices for batch {i} outside valid range [0, {num_beams})"
                     )
+
+    def test_beam_search_short_form(self):
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny").to(torch_device)
+        
+        # Create input features with correct length (3000)
+        input_features = torch.randn(1, 80, 3000).to(torch_device)
+        attention_mask = torch.ones((1, 3000), dtype=torch.long, device=torch_device)
+        
+        num_beams = 5
+        gen_kwargs = {
+            "max_new_tokens": 20,
+            "num_beams": num_beams,
+            "num_return_sequences": 1,
+            "return_dict_in_generate": True,
+            "output_scores": True,
+            "language": "en",
+            "task": "transcribe",
+            "attention_mask": attention_mask
+        }
+        
+        outputs = model.generate(input_features, **gen_kwargs)
+        
+        # Verify output structure matches the reported issue
+        self.assertTrue(hasattr(outputs, 'sequences'))
+        self.assertTrue(hasattr(outputs, 'sequences_scores'))
+        self.assertTrue(hasattr(outputs, 'beam_indices'))
+        
+        # Verify outputs are not None
+        self.assertIsNotNone(outputs.sequences_scores)
+        self.assertIsNotNone(outputs.beam_indices)
+        
+        # Check beam indices
+        if outputs.beam_indices is not None:
+            valid_positions = outputs.beam_indices != -1
+            if valid_positions.any():
+                valid_indices = outputs.beam_indices[valid_positions]
+                print(f"Single batch indices range: {valid_indices.min().item()} to {valid_indices.max().item()}")
+                # For single batch, indices should be in [0, num_beams)
+                self.assertTrue(
+                    torch.all((valid_indices >= 0) & (valid_indices < num_beams)),
+                    f"Beam indices outside valid range [0, {num_beams})"
+                )
