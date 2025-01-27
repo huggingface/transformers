@@ -869,7 +869,7 @@ class TFCTRLForSequenceClassification(TFCTRLPreTrainedModel, TFSequenceClassific
             training=training,
         )
         hidden_states = transformer_outputs[0]
-        logits = self.score(hidden_states)
+        logits = self.classifier(hidden_states)
         logits_shape = shape_list(logits)
         batch_size = logits_shape[0]
 
