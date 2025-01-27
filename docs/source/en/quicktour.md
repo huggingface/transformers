@@ -564,13 +564,13 @@ This CLI is implemented on top of our `AutoClass` abstraction, leveraging our [t
 [chat](chat_templating.md) tooling, and thus will be compatible with any 🤗 Transformers model. If you have the library
 [installed](installation.md), you can launch the chat session on your terminal with
 
-```
+```bash
 transformers-cli chat --model_name_or_path Qwen/Qwen2.5-0.5B-Instruct
 ```
 
 For a full list of options to launch the chat, type
 
-```
+```bash
 transformers-cli chat -h
 ```
 
