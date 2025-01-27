@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Chat pipeline
+# Chat basics
 
 Chat models are conversational models you can send and receive messages from. There are many chat models available to choose from, but in general, larger models tend to be better though that's not always the case. The model size is often included in the name, like "8B" or "70B", and it describes the number of parameters. Mixture-of-expert (MoE) models have names like "8x7B" or "141B-A35B" which means it's a 56B and 141B parameter model. You can try quantizing larger models to reduce memory requirements, otherwise you'll need ~2 bytes of memory per parameter.
 
@@ -23,7 +23,27 @@ Check model leaderboards like [OpenLLM](https://hf.co/spaces/HuggingFaceH4/open_
 > [!TIP]
 > Chat with a number of open-source models for free on [HuggingChat](https://hf.co/chat/)!
 
-This guide shows you how to build and format a conversation, and how to quickly start chatting with a model with [`TextGenerationPipeline`].
+This guide shows you how to quickly start chatting with Transformers from the command line, how build and format a conversation, and how to chat using the [`TextGenerationPipeline`].
+
+## transformers-cli
+
+Chat with a model directly from the command line as shown below. It launches an interactive session with a model. Enter `clear` to reset the conversation, `exit` to terminate the session, and `help` to display all the command options.
+
+```bash
+transformers-cli chat --model_name_or_path Qwen/Qwen2.5-0.5B-Instruct
+```
+
+<div class="flex justify-center">
+    <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/transformers-chat-cli.png"/>
+</div>
+
+For a full list of options, run the command below.
+
+```bash
+transformers-cli chat -h
+```
+
+The chat is implemented on top of the [AutoClass](./model_doc/auto), using tooling from [text generation](./llm_tutorial) and [chat](./chat_templating).
 
 ## TextGenerationPipeline
 

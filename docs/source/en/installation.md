@@ -26,37 +26,49 @@ Transformers works with [PyTorch](https://pytorch.org/get-started/locally/), [Te
 
 A virtual environment helps manage different projects and avoids compatibility issues between dependencies. Take a look at the [Install packages in a virtual environment using pip and venv](https://packaging.python.org/en/latest/guides/installing-using-pip-and-virtual-environments/) guide if you're unfamiliar with Python virtual environments.
 
-Create a virtual environment in your project directory.
+<hfoptions id="virtual">
+<hfoption id="venv">
+
+Create and activate a virtual environment in your project directory with venv or uv.
 
 ```bash
 python -m venv .env
-```
-
-Activate the virtual environment.
-
-<hfoptions id="venv">
-<hfoption id="macOS/Linux">
-
-```bash
 source ./env/bin/activate
 ```
 
 </hfoption>
-<hfoption id="Windows">
+<hfoption id="uv">
+
+[uv](https://docs.astral.sh/uv/) is a fast Rust-based Python package and project manager.
 
 ```bash
-.env/Scripts/activate
+uv venv .env
+source ./env/bin/activate
 ```
 
 </hfoption>
-</hfoptions>
+<hfoptions>
 
-## pip
+## Python
+
+You can install Transformers with pip or uv.
+
+<hfoptions id="install">
+<hfoption id="pip">
 
 [pip](https://pip.pypa.io/en/stable/) is a package installer for Python. Install Transformers with pip in your newly created virtual environment.
 
 ```bash
 pip install transformers
+```
+
+</hfoption>
+<hfoption id="uv">
+
+[uv](https://docs.astral.sh/uv/) is a fast Rust-based Python package and project manager.
+
+```bash
+uv pip install transformers
 ```
 
 </hfoption>
@@ -77,6 +89,7 @@ To install a CPU-only version of Transformers and a machine learning framework, 
 
 ```bash
 pip install 'transformers[torch]'
+uv pip install 'transformers[torch]'
 ```
 
 </hfoption>
@@ -93,6 +106,7 @@ Install TensorFlow 2.0.
 
 ```bash
 pip install 'transformers[tf-cpu]'
+uv pip install 'transformers[tf-cpu]'
 ```
 
 </hfoption>
@@ -100,6 +114,7 @@ pip install 'transformers[tf-cpu]'
 
 ```bash
 pip install 'transformers[flax]'
+uv pip install 'transformers[flax]'
 ```
 
 </hfoption>

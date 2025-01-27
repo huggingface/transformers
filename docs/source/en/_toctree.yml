@@ -85,7 +85,7 @@
   - title: Chat
     sections:
     - local: conversations
-      title: Chat pipeline
+      title: Chat basics
     - local: chat_templating
       title: Templates
     - local: chat_templating_multimodal
