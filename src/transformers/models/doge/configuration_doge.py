@@ -17,8 +17,8 @@
 # limitations under the License.
 """PyTorch Doge model configuration"""
 
-from transformers.configuration_utils import PretrainedConfig
-from transformers.modeling_rope_utils import rope_config_validation
+from ...configuration_utils import PretrainedConfig
+from ...modeling_rope_utils import rope_config_validation
 
 
 class DogeConfig(PretrainedConfig):
@@ -111,7 +111,7 @@ class DogeConfig(PretrainedConfig):
         is_moe (`bool`, *optional*, defaults to `False`):
             Whether to use the Cross Domain Mixture of Experts, if `True`, the MoE will inherit the MLP to initialize. For more details checkout [this paper](https://arxiv.org/pdf/2412.11834).
         num_cdmoe_experts (`int`, *optional*, defaults to 16348):
-            Number of Experts for the Cross Domain Mixture of Experts. calculation formula: :math:`\text{num_cdmoe_experts} = (32 \times \text{num_cdmoe_heads})^2`
+            Number of Experts for the Cross Domain Mixture of Experts.
         num_cdmoe_heads (`int`, *optional*, defaults to 4):
             Number of retrieval heads, used to mix multi-head experts.
         num_cdmoe_experts_per_head (`int`, *optional*, defaults to 8):
