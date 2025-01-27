@@ -259,6 +259,13 @@ def eager_attention_forward(
         causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
         attn_weights = attn_weights + causal_mask
 
+    # print()
+    # ic(module.layer_idx)
+    # show_tensor(query, False, True)
+    # show_tensor(key_states, False, True)
+    # show_tensor(value_states, False, True)
+    # show_tensor(attn_weights, False, True)
+
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value_states)
@@ -303,10 +310,22 @@ class MiniMaxText01Attention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
+        # print(self.layer_idx)
+        # show_tensor(query_states, end=False, only_shapes=False)
+        # show_tensor(key_states, end=False, only_shapes=True)
+        # show_tensor(value_states, end=True, only_shapes=True)
+
+        # print()
+        # print()
+        # ic(self.layer_idx)
+        # show_tensor(key_states, False, True)
+
         if past_key_value is not None:
             # sin and cos are specific to RoPE models; cache_position needed for the static cache
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
+
+        # show_tensor(key_states, False, True)
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -332,6 +351,10 @@ class MiniMaxText01Attention(nn.Module):
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
         attn_output = self.o_proj(attn_output)
+
+        # ic(self.layer_idx)
+        # show_tensor(attn_output, False, True)
+
         return attn_output, attn_weights
 
 
@@ -569,7 +592,7 @@ class MiniMaxText01RotaryEmbedding(nn.Module):
         2 - the current sequence length is in the original scale (avoid losing precision with small sequences)
         """
         seq_len = torch.max(position_ids) + 1
-        if seq_len > self.max_seq_len_cached:  # growth
+        if seq_len > self.max_seq_len_cached:  # growth_dynamic_frequency_update
             inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
             self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
             self.max_seq_len_cached = seq_len
@@ -605,7 +628,7 @@ class MiniMaxText01RotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-MINIMAX_TEXT_01_START_DOCSTRING = r"""
+MINI_MAX_TEXT01_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
@@ -624,7 +647,7 @@ MINIMAX_TEXT_01_START_DOCSTRING = r"""
 
 @add_start_docstrings(
     "The bare MiniMaxText01 Model outputting raw hidden-states without any specific head on top.",
-    MINIMAX_TEXT_01_START_DOCSTRING,
+    MINI_MAX_TEXT01_START_DOCSTRING,
 )
 class MiniMaxText01PreTrainedModel(PreTrainedModel):
     config_class = MiniMaxText01Config
@@ -651,7 +674,7 @@ class MiniMaxText01PreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-MINIMAX_TEXT_01_INPUTS_DOCSTRING = r"""
+MINI_MAX_TEXT01_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
@@ -728,7 +751,7 @@ MINIMAX_TEXT_01_INPUTS_DOCSTRING = r"""
 
 @add_start_docstrings(
     "The bare MiniMaxText01 Model outputting raw hidden-states without any specific head on top.",
-    MINIMAX_TEXT_01_START_DOCSTRING,
+    MINI_MAX_TEXT01_START_DOCSTRING,
 )
 class MiniMaxText01Model(MiniMaxText01PreTrainedModel):
     """
@@ -760,7 +783,7 @@ class MiniMaxText01Model(MiniMaxText01PreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    @add_start_docstrings_to_model_forward(MINIMAX_TEXT_01_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(MINI_MAX_TEXT01_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -797,6 +820,7 @@ class MiniMaxText01Model(MiniMaxText01PreTrainedModel):
                 )
                 use_cache = False
 
+        # TODO: raise exception here?
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache()
 
@@ -1149,7 +1173,7 @@ class MiniMaxText01ForCausalLM(MiniMaxText01PreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
-    @add_start_docstrings_to_model_forward(MINIMAX_TEXT_01_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(MINI_MAX_TEXT01_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1198,6 +1222,7 @@ class MiniMaxText01ForCausalLM(MiniMaxText01PreTrainedModel, GenerationMixin):
         >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
         "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
         ```"""
+        # ic(input_ids.shape, input_ids)
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_router_logits = (
@@ -1274,7 +1299,7 @@ class MiniMaxText01ForCausalLM(MiniMaxText01PreTrainedModel, GenerationMixin):
     padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
     each row of the batch).
     """,
-    MINIMAX_TEXT_01_START_DOCSTRING,
+    MINI_MAX_TEXT01_START_DOCSTRING,
 )
 class MiniMaxText01ForSequenceClassification(MiniMaxText01PreTrainedModel):
     def __init__(self, config):
@@ -1292,7 +1317,7 @@ class MiniMaxText01ForSequenceClassification(MiniMaxText01PreTrainedModel):
     def set_input_embeddings(self, value):
         self.model.embed_tokens = value
 
-    @add_start_docstrings_to_model_forward(MINIMAX_TEXT_01_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(MINI_MAX_TEXT01_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1370,7 +1395,7 @@ class MiniMaxText01ForSequenceClassification(MiniMaxText01PreTrainedModel):
     The MiniMaxText01 Model transformer with a token classification head on top (a linear layer on top of the hidden-states
     output) e.g. for Named-Entity-Recognition (NER) tasks.
     """,
-    MINIMAX_TEXT_01_START_DOCSTRING,
+    MINI_MAX_TEXT01_START_DOCSTRING,
 )
 class MiniMaxText01ForTokenClassification(MiniMaxText01PreTrainedModel):
     def __init__(self, config):
@@ -1395,7 +1420,7 @@ class MiniMaxText01ForTokenClassification(MiniMaxText01PreTrainedModel):
     def set_input_embeddings(self, value):
         self.model.embed_tokens = value
 
-    @add_start_docstrings_to_model_forward(MINIMAX_TEXT_01_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(MINI_MAX_TEXT01_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
         output_type=TokenClassifierOutput,
@@ -1458,7 +1483,7 @@ class MiniMaxText01ForTokenClassification(MiniMaxText01PreTrainedModel):
 The MiniMaxText01 Model transformer with a span classification head on top for extractive question-answering tasks like
 SQuAD (a linear layer on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
-    MINIMAX_TEXT_01_START_DOCSTRING,
+    MINI_MAX_TEXT01_START_DOCSTRING,
 )
 class MiniMaxText01ForQuestionAnswering(MiniMaxText01PreTrainedModel):
     base_model_prefix = "model"
@@ -1477,7 +1502,7 @@ class MiniMaxText01ForQuestionAnswering(MiniMaxText01PreTrainedModel):
     def set_input_embeddings(self, value):
         self.model.embed_tokens = value
 
-    @add_start_docstrings_to_model_forward(MINIMAX_TEXT_01_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(MINI_MAX_TEXT01_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
