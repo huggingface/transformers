@@ -19,3 +19,11 @@ class TestMask2FormerInitialization(unittest.TestCase):
                 # Calculate empirical standard deviation
                 std = torch.std(module.weight.data).item()
                 self.assertAlmostEqual(std, 1.0, places=1)
+
+    def test_mlp_bias_initialization(self):
+        """Test that MLP biases are properly initialized"""
+        for name, module in self.model.named_modules():
+            if isinstance(module, Mask2FormerMaskedAttentionDecoderLayer):
+                for param in module.parameters():
+                    if param.dim() == 1:  # Bias terms
+                        self.assertFalse(torch.all(param.data == 0))
