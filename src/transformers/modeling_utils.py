@@ -4939,6 +4939,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 " to use it for predictions and inference."
             )
 
+        # After loading weights, initialize missing ones properly
+        missing_keys = set(model.state_dict().keys()) - set(loaded_keys)
+        if missing_keys:
+            for name, param in model.named_parameters():
+                if name in missing_keys:
+                    # Find the module containing this parameter
+                    module_name = '.'.join(name.split('.')[:-1])
+                    if module_name:
+                        module = getattr(model, module_name.split('.')[0])
+                        model._init_weights(module)
+
         return model, missing_keys, unexpected_keys, mismatched_keys, offload_index, error_msgs
 
     def retrieve_modules_from_names(self, names, add_prefix=False, remove_prefix=False):
