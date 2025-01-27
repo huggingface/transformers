@@ -23,7 +23,7 @@ import torch.utils.checkpoint
 from torch.nn import CrossEntropyLoss
 
 from transformers.models.blip.image_processing_blip import BlipImageProcessor
-from transformers.models.qwen2.modeling_qwen2 import Qwen2Model, Qwen2PreTrainedModel
+from transformers.models.qwen2.modeling_qwen2 import Qwen2ForCausalLM, Qwen2PreTrainedModel
 from transformers.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
 from transformers.models.sam.modeling_sam import (
     SamVisionAttention,
@@ -116,6 +116,9 @@ class GotOcr2VisionConfig(PretrainedConfig):
             The dimensionality of the MLP layer in the Transformer encoder. If `None`, defaults to `mlp_ratio *
             hidden_size`.
     """
+
+    model_type = "got_ocr2_vision_model"
+    base_config_key = "vision_config"
 
     def __init__(
         self,
@@ -649,7 +652,7 @@ class GotOcr2PreTrainedModel(Qwen2PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-class GotOcr2Model(Qwen2Model):
+class GotOcr2ForCausalLM(Qwen2ForCausalLM):
     pass
 
 
@@ -724,35 +727,34 @@ GOT_OCR2_INPUTS_DOCSTRING = r"""
 
 
 class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = ["language_model.lm_head.weight"]
 
     def __init__(self, config):
         super().__init__(config)
         self.visual = GotOcr2VisionEncoder(config.vision_config)
-        self.model = GotOcr2Model(config)
+        self.language_model = GotOcr2ForCausalLM(config)
         self.vocab_size = config.vocab_size
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
         self.visual_adapter = GotOcr2VisionAdapter(config.hidden_size, config.vision_config.output_channels)
 
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.model.embed_tokens
+        return self.language_model.get_input_embeddings()
 
     def set_input_embeddings(self, value):
-        self.model.embed_tokens = value
+        self.language_model.set_input_embeddings(value)
 
     def get_output_embeddings(self):
-        return self.lm_head
+        return self.language_model.get_output_embeddings()
 
     def set_output_embeddings(self, new_embeddings):
-        self.lm_head = new_embeddings
+        self.language_model.set_output_embeddings(new_embeddings)
 
     def set_decoder(self, decoder):
-        self.model = decoder
+        self.language_model.set_decoder(decoder)
 
     def get_decoder(self):
-        return self.model
+        return self.language_model.get_decoder()
 
     def _update_model_kwargs_for_generation(
         self,
@@ -832,7 +834,7 @@ class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, GenerationMixin):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if inputs_embeds is None:
-            inputs_embeds = self.model.embed_tokens(input_ids)
+            inputs_embeds = self.get_input_embeddings()(input_ids)
             if pixel_values is not None:
                 pixel_values = pixel_values.to(inputs_embeds.dtype)
                 image_embeds = self.visual(pixel_values)
@@ -855,7 +857,7 @@ class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, GenerationMixin):
             if attention_mask is not None:
                 attention_mask = attention_mask.to(inputs_embeds.device)
 
-        outputs = self.model(
+        outputs = self.language_model(
             input_ids=None,
             position_ids=position_ids,
             attention_mask=attention_mask,
@@ -868,8 +870,7 @@ class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, GenerationMixin):
             return_dict=return_dict,
         )
 
-        hidden_states = outputs[0]
-        logits = self.lm_head(hidden_states)
+        logits = outputs[0]
 
         loss = None
         if labels is not None:
@@ -938,11 +939,11 @@ class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, GenerationMixin):
                 batch_size, sequence_length = input_ids.shape
                 device = input_ids.device
 
-            attention_mask = self.model._prepare_4d_causal_attention_mask_with_cache_position(
+            attention_mask = self.language_model.model._prepare_4d_causal_attention_mask_with_cache_position(
                 attention_mask,
                 sequence_length=sequence_length,
                 target_length=past_key_values.get_max_cache_shape(),
-                dtype=self.lm_head.weight.dtype,
+                dtype=self.language_model.lm_head.weight.dtype,
                 device=device,
                 cache_position=cache_position,
                 batch_size=batch_size,

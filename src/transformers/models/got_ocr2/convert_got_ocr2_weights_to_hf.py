@@ -53,6 +53,8 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"model.vision_tower_high.neck.3":                              r"visual.neck.layer_norm2",
     r"model.vision_tower_high.net_(\d+)":                           lambda m: f"visual_adapter.conv_upsampler{int(m.group(1)) - 1}",
     r"model.mm_projector_vary" :                                    r"visual_adapter.multimodal_projector",
+    r"model.":                                                      r"language_model.model.",
+    r"lm_head":                                                     r"language_model.lm_head",
 }
 # fmt: on
 

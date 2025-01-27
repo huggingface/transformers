@@ -74,6 +74,9 @@ class GotOcr2VisionConfig(PretrainedConfig):
             hidden_size`.
     """
 
+    model_type = "got_ocr2_vision_model"
+    base_config_key = "vision_config"
+
     def __init__(
         self,
         hidden_size=768,
@@ -262,9 +265,9 @@ class GotOcr2Config(PretrainedConfig):
         **kwargs,
     ):
         if isinstance(vision_config, dict):
-            self.vision_config = GotOcr2VisionConfig(**vision_config)
+            self.vision_config = self.sub_configs["vision_config"](**vision_config)
         elif vision_config is None:
-            self.vision_config = GotOcr2VisionConfig()
+            self.vision_config = self.sub_configs["vision_config"]()
 
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
