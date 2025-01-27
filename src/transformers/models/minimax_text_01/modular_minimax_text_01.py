@@ -410,7 +410,8 @@ class MiniMaxText01DecoderLayer(MixtralDecoderLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        causal_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
@@ -423,8 +424,10 @@ class MiniMaxText01DecoderLayer(MixtralDecoderLayer):
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`Tuple[torch.Tensor, torch.Tensor]`, *optional*): attention mask of size
+            attention_mask (`torch.Tensor`, *optional*): attention mask of size
                 `(batch, sequence_length)` where padding elements are indicated by 0.
+            causal_mask (`torch.Tensor`, *optional*): causal attention mask of size
+                `(batch, 1, query_length, key_value_length)` where padding elements are indicated by 0.
             past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
@@ -449,10 +452,11 @@ class MiniMaxText01DecoderLayer(MixtralDecoderLayer):
             residual = hidden_states
 
         # Self Attention
+        attention_mask = attention_mask if self.attn_type==0 else causal_mask
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
             position_embeddings=position_embeddings,
-            attention_mask=attention_mask[self.attn_type],
+            attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_value=past_key_value,
             output_attentions=output_attentions,
@@ -545,8 +549,6 @@ class MiniMaxText01Model(MixtralModel):
         causal_mask = self._update_causal_mask(
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
         )
-        # TODO: commments
-        causal_mask = (attention_mask, causal_mask)
 
         hidden_states = inputs_embeds
 
@@ -566,6 +568,7 @@ class MiniMaxText01Model(MixtralModel):
                 layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,
                     hidden_states,
+                    attention_mask,
                     causal_mask,
                     position_ids,
                     past_key_values,
@@ -578,7 +581,8 @@ class MiniMaxText01Model(MixtralModel):
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,
-                    attention_mask=causal_mask,
+                    attention_mask=attention_mask,
+                    causal_mask=causal_mask,
                     position_ids=position_ids,
                     past_key_value=past_key_values,
                     output_attentions=output_attentions,
