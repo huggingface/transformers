@@ -316,7 +316,9 @@ class MiniMaxText01LightningAttention(nn.Module):
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
-        # TODO: apply attention_mask
+        # apply attention_mask
+        if attention_mask is not None:
+            value_states = value_states.masked_fill((1 - attention_mask).unsqueeze(1).unsqueeze(-1).to(torch.bool), 0)
 
         query_states = F.pad(query_states, (0, 0, 0, padding))
         key_states = F.pad(key_states, (0, 0, 0, padding))
@@ -384,8 +386,9 @@ class MiniMaxText01DecoderLayer(MixtralDecoderLayer):
         self.layernorm_lightning_attention_beta = config.layernorm_lightning_attention_beta
         self.layernorm_mlp_alpha = config.layernorm_mlp_alpha
         self.layernorm_mlp_beta = config.layernorm_mlp_beta
+        self.attn_type = config.attn_type_list[layer_idx]
 
-        if config.attn_type_list[layer_idx] == 0:
+        if self.attn_type == 0:
             self.self_attn = MiniMaxText01LightningAttention(config, layer_idx)
             self.layernorm_alpha = self.layernorm_lightning_attention_alpha
             self.layernorm_beta = self.layernorm_lightning_attention_beta
@@ -397,7 +400,7 @@ class MiniMaxText01DecoderLayer(MixtralDecoderLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
@@ -410,7 +413,7 @@ class MiniMaxText01DecoderLayer(MixtralDecoderLayer):
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
-            attention_mask (`torch.FloatTensor`, *optional*): attention mask of size
+            attention_mask (`Tuple[torch.Tensor, torch.Tensor]`, *optional*): attention mask of size
                 `(batch, sequence_length)` where padding elements are indicated by 0.
             past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
             output_attentions (`bool`, *optional*):
@@ -439,7 +442,7 @@ class MiniMaxText01DecoderLayer(MixtralDecoderLayer):
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
             position_embeddings=position_embeddings,
-            attention_mask=attention_mask,
+            attention_mask=attention_mask[self.attn_type],
             position_ids=position_ids,
             past_key_value=past_key_value,
             output_attentions=output_attentions,
@@ -474,6 +477,23 @@ class MiniMaxText01Model(MixtralModel):
         self.layers = nn.ModuleList(
             [MiniMaxText01DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
+
+    def _update_causal_mask(
+        self,
+        attention_mask: torch.Tensor,
+        input_tensor: torch.Tensor,
+        cache_position: torch.Tensor,
+        past_key_values: Cache,
+        output_attentions: bool,
+    ):
+        causal_mask = super()._update_causal_mask(
+            attention_mask=attention_mask,
+            input_tensor=input_tensor,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
+            output_attentions=output_attentions,
+        )
+        return (attention_mask, causal_mask)
 
 
 class MiniMaxText01ForCausalLM(MixtralForCausalLM):
