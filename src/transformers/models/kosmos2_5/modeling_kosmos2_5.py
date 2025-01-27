@@ -1017,7 +1017,8 @@ class Kosmos2_5TextAttention(nn.Module):
 
 
         # this weight maybe overflow with fp16
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * self.scaling
+        # attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) * self.scaling
+        attn_weights = torch.matmul(query_states * self.scaling, key_states.transpose(2, 3))
 
         if attention_mask is not None:
             causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
