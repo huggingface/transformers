@@ -868,42 +868,33 @@ class TFCTRLForSequenceClassification(TFCTRLPreTrainedModel, TFSequenceClassific
             return_dict=return_dict,
             training=training,
         )
-
         hidden_states = transformer_outputs[0]
-        logits = self.classifier(hidden_states)
-        in_logits = None
+        logits = self.score(hidden_states)
+        logits_shape = shape_list(logits)
+        batch_size = logits_shape[0]
+
         if self.config.pad_token_id is None:
-            sequence_lengths = -1
+            last_non_pad_token = tf.fill((batch_size,), value=logits_shape[1] - 1)
         else:
             if input_ids is not None:
-                sequence_lengths = (
-                    tf.argmax(tf.cast(tf.math.equal(input_ids, self.config.pad_token_id), input_ids.dtype), axis=-1)
-                    - 1
-                )
-                sequence_lengths = tf.where(sequence_lengths >= 0, sequence_lengths, input_ids.shape[-1] - 1)
-                in_logits = tf.gather(logits, sequence_lengths, batch_dims=1, axis=1)
+                token_indices = tf.range(shape_list(input_ids)[-1])
+                non_pad_mask = tf.cast(input_ids != self.config.pad_token_id, token_indices.dtype)
+                last_non_pad_token = tf.reduce_max(token_indices * non_pad_mask, axis=-1)
             else:
-                sequence_lengths = -1
+                last_non_pad_token = tf.fill((batch_size,), value=logits_shape[1] - 1)
                 logger.warning_once(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
                     "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
                 )
         loss = None
 
+        pooled_logits = tf.gather(logits, last_non_pad_token, batch_dims=1, axis=1)
+
         if labels is not None:
-            if input_ids is not None:
-                batch_size, sequence_length = shape_list(input_ids)[:2]
-            else:
-                batch_size, sequence_length = shape_list(inputs_embeds)[:2]
-            if self.config.pad_token_id is None and batch_size != 1:
+            if self.config.pad_token_id is None and logits_shape[0] != 1:
                 raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
 
-            if not tf.is_tensor(sequence_lengths):
-                in_logits = logits[0:batch_size, sequence_lengths]
-
-            loss = self.hf_compute_loss(tf.reshape(labels, [-1, 1]), tf.reshape(in_logits, [-1, self.num_labels]))
-
-        pooled_logits = in_logits if in_logits is not None else logits
+            loss = self.hf_compute_loss(tf.reshape(labels, [-1]), tf.reshape(pooled_logits, [-1, self.num_labels]))
 
         if not return_dict:
             output = (pooled_logits,) + transformer_outputs[1:]
