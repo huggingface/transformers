@@ -328,20 +328,6 @@ class ImageProcessingMixin(PushToHubMixin):
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
         is_local = os.path.isdir(pretrained_model_name_or_path)
 
-        # Try to load from new config file name, and emit warning if failed to find the file
-        # Deprecate old naming until v5.0
-        old_image_processor_name = "preprocessor_config.json"
-        if os.path.isdir(pretrained_model_name_or_path):
-            image_processor_file = os.path.join(pretrained_model_name_or_path, IMAGE_PROCESSOR_NAME)
-            old_image_processor_file = os.path.join(pretrained_model_name_or_path, old_image_processor_name)
-            if not os.path.exists(image_processor_file) and os.path.exists(old_image_processor_name):
-                logger.warning_once(
-                    "You have image processor config saved in `preprocessor.json` file which is deprecated. "
-                    "Image processor configs should be saved in their own `image_preprocessor.json` file. You can rename "
-                    "the file or load and save the processor back which renames it automatically. "
-                    "Loading from `preprocessor.json` will be removed in v5.0."
-                )
-                image_processor_file = old_image_processor_file
         if os.path.isfile(pretrained_model_name_or_path):
             resolved_image_processor_file = pretrained_model_name_or_path
             is_local = True
@@ -350,9 +336,10 @@ class ImageProcessingMixin(PushToHubMixin):
             resolved_image_processor_file = download_url(pretrained_model_name_or_path)
         else:
             try:
-                # try to load with an new config name first and if not successfull try with
-                # the old file name. In case we can't load with new name successfully, raise a deprecation warning
-                image_processor_file = IMAGE_PROCESSOR_NAME
+                # Try to load with an new config name first and if not successfull try with
+                # the old file name. In case we can load only with old name, raise warning.
+                # Deprecated until v5.0
+                image_processor_file = image_processor_filename
                 resolved_image_processor_file = cached_file(
                     pretrained_model_name_or_path,
                     image_processor_file,
@@ -367,7 +354,7 @@ class ImageProcessingMixin(PushToHubMixin):
                     subfolder=subfolder,
                 )
             except EnvironmentError:
-                image_processor_file = old_image_processor_name
+                image_processor_file = "preprocessor_config.json"
                 resolved_image_processor_file = cached_file(
                     pretrained_model_name_or_path,
                     image_processor_file,

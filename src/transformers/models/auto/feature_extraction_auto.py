@@ -25,7 +25,7 @@ from typing import Dict, Optional, Union
 from ...configuration_utils import PretrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...feature_extraction_utils import FeatureExtractionMixin
-from ...utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, get_file_from_repo, logging
+from ...utils import CONFIG_NAME, FEATURE_EXTRACTOR_NAME, IMAGE_PROCESSOR_NAME, get_file_from_repo, logging
 from .auto_factory import _LazyAutoMapping
 from .configuration_auto import (
     CONFIG_MAPPING_NAMES,
@@ -231,6 +231,19 @@ def get_feature_extractor_config(
         revision=revision,
         local_files_only=local_files_only,
     )
+
+    if resolved_config_file is None:
+        resolved_config_file = get_file_from_repo(
+            pretrained_model_name_or_path,
+            IMAGE_PROCESSOR_NAME,
+            cache_dir=cache_dir,
+            force_download=force_download,
+            resume_download=resume_download,
+            proxies=proxies,
+            token=token,
+            revision=revision,
+            local_files_only=local_files_only,
+        )
     if resolved_config_file is None:
         logger.info(
             "Could not locate the feature extractor configuration file, will try to use the model config instead."
