@@ -344,6 +344,7 @@ def isin_mps_friendly(elements: torch.Tensor, test_elements: torch.Tensor | int)
 
 
 # TODO need to add the __repr__ that shows that it is a colwise parallel
+# See https://github.com/pytorch/pytorch/issues/145726
 def translate_to_torch_parallel_style(style: str):
     """
     In model configurations, we use a neutral type (string) to specify parallel
