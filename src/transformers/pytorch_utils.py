@@ -342,6 +342,7 @@ def isin_mps_friendly(elements: torch.Tensor, test_elements: torch.Tensor | int)
         # Note: don't use named arguments in `torch.isin`, see https://github.com/pytorch/pytorch/issues/126045
         return torch.isin(elements, test_elements)
 
+
 # TODO need to add the __repr__ that shows that it is a colwise parallel
 def translate_to_torch_parallel_style(style: str):
     """
