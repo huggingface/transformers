@@ -654,6 +654,8 @@
         title: YOSO
       - local: model_doc/zamba
         title: Zamba
+      - local: model_doc/zamba2
+        title: Zamba2
     - title: Vision models
       sections:
       - local: model_doc/beit
