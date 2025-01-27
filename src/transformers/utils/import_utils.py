@@ -94,7 +94,7 @@ GGUF_MIN_VERSION = "0.10.0"
 XLA_FSDPV2_MIN_VERSION = "2.2.0"
 HQQ_MIN_VERSION = "0.2.1"
 VPTQ_MIN_VERSION = "0.0.4"
-
+PYDANTIC_MIN_VERSION = "2.0.0"
 
 _accelerate_available, _accelerate_version = _is_package_available("accelerate", return_version=True)
 _apex_available = _is_package_available("apex")
@@ -167,6 +167,7 @@ _pygments_available = _is_package_available("pygments")
 _pytesseract_available = _is_package_available("pytesseract")
 _pytest_available = _is_package_available("pytest")
 _pytorch_quantization_available = _is_package_available("pytorch_quantization")
+_pydantic_available, _pydantic_version = _is_package_available("pydantic", return_version=True)
 _rjieba_available = _is_package_available("rjieba")
 _sacremoses_available = _is_package_available("sacremoses")
 _safetensors_available = _is_package_available("safetensors")
@@ -1284,6 +1285,20 @@ def is_triton_available():
     return _triton_available
 
 
+def is_pydantic_available(min_version: str = PYDANTIC_MIN_VERSION):
+    return _pydantic_available and version.parse(_pydantic_version) >= version.parse(min_version)
+
+
+# docstyle-ignore
+PYDANTIC_IMPORT_ERROR = """
+{0} requires the pydantic library >= {PYDANTIC_MIN_VERSION} it was not found in your environment.
+You can install or update it with: 
+```
+pip install -U pydantic 
+```
+Please note that you may need to restart your runtime after installation.
+"""
+
 # docstyle-ignore
 AV_IMPORT_ERROR = """
 {0} requires the PyAv library but it was not found in your environment. You can install it with:
@@ -1665,6 +1680,7 @@ BACKENDS_MAPPING = OrderedDict(
         ("protobuf", (is_protobuf_available, PROTOBUF_IMPORT_ERROR)),
         ("pyctcdecode", (is_pyctcdecode_available, PYCTCDECODE_IMPORT_ERROR)),
         ("pytesseract", (is_pytesseract_available, PYTESSERACT_IMPORT_ERROR)),
+        ("pydantic", (is_pydantic_available, PYDANTIC_IMPORT_ERROR)),
         ("sacremoses", (is_sacremoses_available, SACREMOSES_IMPORT_ERROR)),
         ("pytorch_quantization", (is_pytorch_quantization_available, PYTORCH_QUANTIZATION_IMPORT_ERROR)),
         ("sentencepiece", (is_sentencepiece_available, SENTENCEPIECE_IMPORT_ERROR)),
