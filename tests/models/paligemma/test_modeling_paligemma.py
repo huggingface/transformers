@@ -354,7 +354,7 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     def test_attention_mask_with_token_types(self):
         """Test that attention masking works correctly both with and without token type IDs."""
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        
+
         for model_class in self.all_model_classes:
             model = model_class(config)
             model.to(torch_device)
@@ -365,9 +365,9 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
                 **inputs_dict,
                 output_attentions=True,
             )
-            
-            # Case 2: Without token_type_ids 
-            inputs_no_types = {k: v for k, v in inputs_dict.items() if k != 'token_type_ids'}
+
+            # Case 2: Without token_type_ids
+            inputs_no_types = {k: v for k, v in inputs_dict.items() if k != "token_type_ids"}
             outputs_no_types = model(
                 **inputs_no_types,
                 output_attentions=True,
@@ -389,7 +389,7 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
                                 # Verify attention weights for pad tokens are zero
                                 self.assertTrue(
                                     torch.all(layer_attn[batch_idx, :, :, seq_idx] == 0),
-                                    f"Found non-zero attention weights for padding token at batch {batch_idx}, sequence position {seq_idx}"
+                                    f"Found non-zero attention weights for padding token at batch {batch_idx}, sequence position {seq_idx}",
                                 )
 
 
