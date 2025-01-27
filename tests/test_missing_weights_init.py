@@ -109,3 +109,20 @@ class TestMissingWeightsInit(unittest.TestCase):
         # 4. Verify both are properly initialized
         self.assertTrue(torch.all(model_with_fast_init.new_layer.weight.data == 1.0),
                        "New layer not properly initialized with _fast_init=True")
+        
+    def test_original_issue_reproduction(self):
+        """Test the specific case from issue #35437"""
+        # 1. Create and save base model
+        base_config = self.TestConfig(use_new=False)
+        base_model = self.TestModel(base_config)
+        base_model.save_pretrained(self.tmp_dir)
+        
+        # 2. Load with new layer - this should now work correctly without _fast_init=False
+        new_config = self.TestConfig(use_new=True)
+        new_model = self.TestModel.from_pretrained(self.tmp_dir, use_new=True)
+        
+        # 3. Verify new weights are properly initialized
+        self.assertFalse(torch.isnan(new_model.new_layer.weight.data).any(),
+                         "New weights contain NaN values")
+        self.assertTrue(torch.all(new_model.new_layer.weight.data == 1.0),
+                       "New weights not properly initialized")
