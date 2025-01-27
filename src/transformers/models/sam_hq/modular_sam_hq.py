@@ -20,9 +20,11 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
+
+
 from ...configuration_utils import PretrainedConfig
 from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging
-from ..sam.configuration_sam import SamConfig, SamPromptEncoderConfig, SamVisionConfig
+from ..sam.configuration_sam import SamConfig, SamPromptEncoderConfig, SamVisionConfig,SamMaskDecoderConfig
 from ..sam.modeling_sam import (
     SamAttention,
     SamFeedForward,
@@ -79,38 +81,10 @@ class SamHQVisionConfig(SamVisionConfig):
     pass
 
 
-class SamHQMaskDecoderConfig(PretrainedConfig):
+class SamHQMaskDecoderConfig(SamMaskDecoderConfig):
     r"""
-    This is the configuration class to store the configuration of a [`SamHQMaskDecoder`]. It is used to instantiate a
-    SAM HQ mask decoder with the specified arguments, defining the model architecture. Instantiating a configuration
-    with defaults will yield a configuration similar to that of the SAM HQ variant.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 256):
-            Dimensionality of the hidden states.
-        hidden_act (`str`, *optional*, defaults to `"relu"`):
-            The non-linear activation function used inside the `SamHQMaskDecoder` module.
-        mlp_dim (`int`, *optional*, defaults to 2048):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        num_hidden_layers (`int`, *optional*, defaults to 2):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 8):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        attention_downsample_rate (`int`, *optional*, defaults to 2):
-            The downsampling rate of the attention layer.
-        num_multimask_outputs (`int`, *optional*, defaults to 3):
-            The number of outputs from the `SamHQMaskDecoder` module. In the Segment Anything paper, this is set to 3.
-        iou_head_depth (`int`, *optional*, defaults to 3):
-            The number of layers in the IoU head module.
-        iou_head_hidden_dim (`int`, *optional*, defaults to 256):
-            The dimensionality of the hidden states in the IoU head module.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        vit_dim (`int`, *optional*, defaults to 768):
-            Dimensionality of the Vision Transformer (ViT) used in the `SamHQMaskDecoder` module.
+    vit_dim (`int`, *optional*, defaults to 768):
+        Dimensionality of the Vision Transformer (ViT) used in the `SamHQMaskDecoder` module.
     """
 
     def __init__(
@@ -129,16 +103,6 @@ class SamHQMaskDecoderConfig(PretrainedConfig):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.hidden_size = hidden_size
-        self.hidden_act = hidden_act
-        self.mlp_dim = mlp_dim
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.attention_downsample_rate = attention_downsample_rate
-        self.num_multimask_outputs = num_multimask_outputs
-        self.iou_head_depth = iou_head_depth
-        self.iou_head_hidden_dim = iou_head_hidden_dim
-        self.layer_norm_eps = layer_norm_eps
         self.vit_dim = vit_dim
 
 
@@ -163,32 +127,7 @@ class SamHQConfig(SamConfig):
             Dictionary of keyword arguments.
     """
 
-    model_type = "sam-hq"
-
-    def __init__(
-        self,
-        vision_config=None,
-        prompt_encoder_config=None,
-        mask_decoder_config=None,
-        initializer_range=0.02,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-        vision_config = vision_config if vision_config is not None else {}
-        prompt_encoder_config = prompt_encoder_config if prompt_encoder_config is not None else {}
-        mask_decoder_config = mask_decoder_config if mask_decoder_config is not None else {}
-
-        if isinstance(vision_config, SamHQVisionConfig):
-            vision_config = vision_config.to_dict()
-        if isinstance(prompt_encoder_config, SamHQPromptEncoderConfig):
-            prompt_encoder_config = prompt_encoder_config.to_dict()
-        if isinstance(mask_decoder_config, SamHQMaskDecoderConfig):
-            mask_decoder_config = mask_decoder_config.to_dict()
-
-        self.vision_config = SamHQVisionConfig(**vision_config)
-        self.prompt_encoder_config = SamHQPromptEncoderConfig(**prompt_encoder_config)
-        self.mask_decoder_config = SamHQMaskDecoderConfig(**mask_decoder_config)
-        self.initializer_range = initializer_range
+    pass
 
 
 @dataclass
@@ -877,3 +816,7 @@ class SamHQModel(SamHQPreTrainedModel):
             vision_attentions=vision_attentions,
             mask_decoder_attentions=mask_decoder_attentions,
         )
+
+
+
+__all__ = ["SamHQVisionConfig","SamHQMaskDecoderConfig","SamHQPromptEncoderConfig","SamHQConfig"]

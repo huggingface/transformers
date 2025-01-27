@@ -175,9 +175,10 @@ class SamHQVisionConfig(PretrainedConfig):
 
 class SamHQMaskDecoderConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`SamHQMaskDecoder`]. It is used to instantiate a
-    SAM HQ mask decoder with the specified arguments, defining the model architecture. Instantiating a configuration
-    with defaults will yield a configuration similar to that of the SAM HQ variant.
+    This is the configuration class to store the configuration of a [`SamHQMaskDecoder`]. It is used to instantiate a SAM_HQ
+    mask decoder to the specified arguments, defining the model architecture. Instantiating a configuration defaults
+    will yield a similar configuration to that of the SAM_HQ-vit-h
+    [facebook/sam_hq-vit-huge](https://huggingface.co/facebook/sam_hq-vit-huge) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -203,9 +204,13 @@ class SamHQMaskDecoderConfig(PretrainedConfig):
             The dimensionality of the hidden states in the IoU head module.
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the layer normalization layers.
+
+
         vit_dim (`int`, *optional*, defaults to 768):
             Dimensionality of the Vision Transformer (ViT) used in the `SamHQMaskDecoder` module.
     """
+
+    base_config_key = "mask_decoder_config"
 
     def __init__(
         self,
@@ -257,7 +262,7 @@ class SamHQConfig(PretrainedConfig):
             Dictionary of keyword arguments.
     """
 
-    model_type = "sam-hq"
+    model_type = "sam_hq"
     sub_configs = {
         "prompt_encoder_config": SamHQPromptEncoderConfig,
         "mask_decoder_config": SamHQMaskDecoderConfig,
@@ -288,3 +293,6 @@ class SamHQConfig(PretrainedConfig):
         self.prompt_encoder_config = SamHQPromptEncoderConfig(**prompt_encoder_config)
         self.mask_decoder_config = SamHQMaskDecoderConfig(**mask_decoder_config)
         self.initializer_range = initializer_range
+
+
+__all__ = ["SamHQVisionConfig", "SamHQMaskDecoderConfig", "SamHQPromptEncoderConfig", "SamHQConfig"]
