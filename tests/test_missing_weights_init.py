@@ -126,3 +126,12 @@ class TestMissingWeightsInit(unittest.TestCase):
                          "New weights contain NaN values")
         self.assertTrue(torch.all(new_model.new_layer.weight.data == 1.0),
                        "New weights not properly initialized")
+        
+    def tearDown(self):
+        # Clean up
+        for file in os.listdir(self.tmp_dir):
+            os.remove(os.path.join(self.tmp_dir, file))
+        os.rmdir(self.tmp_dir)
+
+if __name__ == '__main__':
+    unittest.main() 
