@@ -119,7 +119,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("git", "GitModel"),
         ("glm", "GlmModel"),
         ("glpn", "GLPNModel"),
-        ("got_ocr2", "GotOcr2Model"),
+        ("got_ocr2", "GotOcr2ForConditionalGeneration"),
         ("gpt-sw3", "GPT2Model"),
         ("gpt2", "GPT2Model"),
         ("gpt_bigcode", "GPTBigCodeModel"),

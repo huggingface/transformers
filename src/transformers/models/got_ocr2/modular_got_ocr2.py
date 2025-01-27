@@ -23,7 +23,7 @@ import torch.utils.checkpoint
 from torch.nn import CrossEntropyLoss
 
 from transformers.models.blip.image_processing_blip import BlipImageProcessor
-from transformers.models.qwen2.modeling_qwen2 import Qwen2ForCausalLM, Qwen2PreTrainedModel
+from transformers.models.qwen2.modeling_qwen2 import Qwen2ForCausalLM, Qwen2Model, Qwen2PreTrainedModel
 from transformers.models.qwen2_vl.configuration_qwen2_vl import Qwen2VLConfig
 from transformers.models.sam.modeling_sam import (
     SamVisionAttention,
@@ -652,6 +652,10 @@ class GotOcr2PreTrainedModel(Qwen2PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
+class GotOcr2Model(Qwen2Model):
+    pass
+
+
 class GotOcr2ForCausalLM(Qwen2ForCausalLM):
     pass
 
@@ -970,6 +974,7 @@ __all__ = [
     "GotOcr2Processor",
     "GotOcr2PreTrainedModel",
     "GotOcr2Model",
+    "GotOcr2ForCausalLM",
     "GotOcr2ForConditionalGeneration",
     "GotOcr2ImageProcessor",
 ]

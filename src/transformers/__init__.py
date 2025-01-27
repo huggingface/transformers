@@ -2433,6 +2433,7 @@ else:
     )
     _import_structure["models.got_ocr2"].extend(
         [
+            "GotOcr2ForCausalLM",
             "GotOcr2ForConditionalGeneration",
             "GotOcr2Model",
             "GotOcr2PreTrainedModel",
@@ -7352,6 +7353,7 @@ if TYPE_CHECKING:
             GLPNPreTrainedModel,
         )
         from .models.got_ocr2 import (
+            GotOcr2ForCausalLM,
             GotOcr2ForConditionalGeneration,
             GotOcr2Model,
             GotOcr2PreTrainedModel,

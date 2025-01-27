@@ -267,6 +267,11 @@ alt="drawing" width="600"/>
 [[autodoc]] GotOcr2Model
     - forward
 
+## GotOcr2ForCausalLM
+
+[[autodoc]] GotOcr2ForCausalLM
+    - forward
+
 ## GotOcr2ForConditionalGeneration
 
 [[autodoc]] GotOcr2ForConditionalGeneration
