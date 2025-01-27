@@ -1,11 +1,11 @@
-FROM rocm/dev-ubuntu-22.04:5.6
+FROM rocm/dev-ubuntu-22.04:6.3
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
-ARG PYTORCH='2.1.1'
-ARG TORCH_VISION='0.16.1'
-ARG TORCH_AUDIO='2.1.1'
-ARG ROCM='5.6'
+ARG PYTORCH='2.5.1'
+ARG TORCH_VISION='0.20.0'
+ARG TORCH_AUDIO='2.5.0'
+ARG ROCM='6.3'
 
 RUN apt update && \
     apt install -y --no-install-recommends \
