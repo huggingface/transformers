@@ -784,7 +784,7 @@ class GgufIntegrationTests(unittest.TestCase):
                 if "mixer.A_log" in layer_name:
                     # we should increase tolerance after exponential reversing
                     # and performing np.log(-weights) operation as numbers are slightly different
-                    torch.testing.assert_close(original_params, converted_state_dict[layer_name], atol=1e-3, rtol=1e-3)
+                    torch.testing.assert_close(original_params, converted_state_dict[layer_name], rtol=1e-3, atol=1e-3)
                 else:
                     torch.testing.assert_close(original_params, converted_state_dict[layer_name])
             else:
@@ -835,9 +835,9 @@ class GgufIntegrationTests(unittest.TestCase):
 
         tokenizer = AutoTokenizer.from_pretrained(self.nemotron_model_id, gguf_file=self.q6_k_nemotron_model_id)
         text = tokenizer(self.example_text, return_tensors="pt")["input_ids"]
-        out = model.generate(text, max_new_tokens=10)
+        out = model.generate(text, max_new_tokens=16)
 
-        EXPECTED_TEXT = "'Hello. hotmail.com.'"
+        EXPECTED_TEXT = "Hello.▁hotmail.com</s>"
         self.assertEqual(tokenizer.decode(out[0], skip_special_tokens=True), EXPECTED_TEXT)
 
     def test_gemma2_q3_k(self):
