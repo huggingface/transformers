@@ -62,6 +62,7 @@ from transformers.testing_utils import (
     TemporaryHubRepo,
     TestCasePlus,
     backend_device_count,
+    evaluate_side_effect_factory,
     execute_subprocess_async,
     get_gpu_count,
     get_steps_per_epoch,
@@ -4770,11 +4771,13 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             with patch.object(
                 trainer,
                 "_evaluate",
-                side_effect=[
-                    {"eval_accuracy": 0.59, "epoch": 1.0},
-                    {"eval_accuracy": 0.57, "epoch": 2.0},
-                    {"eval_accuracy": 0.55, "epoch": 3.0},
-                ],
+                side_effect=evaluate_side_effect_factory(
+                    [
+                        {"eval_accuracy": 0.59, "epoch": 1.0},
+                        {"eval_accuracy": 0.57, "epoch": 2.0},
+                        {"eval_accuracy": 0.55, "epoch": 3.0},
+                    ]
+                ),
             ):
                 trainer.train()
 
@@ -4804,11 +4807,13 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             with patch.object(
                 trainer,
                 "_evaluate",
-                side_effect=[
-                    {"eval_accuracy": 0.59, "epoch": 1.0},
-                    {"eval_accuracy": 0.57, "epoch": 2.0},
-                    {"eval_accuracy": 0.55, "epoch": 3.0},
-                ],
+                side_effect=evaluate_side_effect_factory(
+                    [
+                        {"eval_accuracy": 0.59, "epoch": 1.0},
+                        {"eval_accuracy": 0.57, "epoch": 2.0},
+                        {"eval_accuracy": 0.55, "epoch": 3.0},
+                    ]
+                ),
             ):
                 trainer.train()
 
@@ -4840,17 +4845,13 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             with patch.object(
                 trainer,
                 "_evaluate",
-                side_effect=[
-                    {"eval_accuracy": 0.90, "epoch": 0.5},
-                    {"eval_accuracy": 0.80, "epoch": 1.0},
-                    {"eval_accuracy": 0.70, "epoch": 1.5},
-                    {"eval_accuracy": 0.70, "epoch": 2.0},
-                    {"eval_accuracy": 0.70},
-                    {"eval_accuracy": 0.70},
-                    {"eval_accuracy": 0.70},
-                    {"eval_accuracy": 0.70},
-                    {"eval_accuracy": 0.70},
-                ],
+                side_effect=evaluate_side_effect_factory(
+                    [
+                        {"eval_accuracy": 0.90, "epoch": 0.5},
+                        {"eval_accuracy": 0.80, "epoch": 1.0},
+                        {"eval_accuracy": 0.70, "epoch": 1.5},
+                    ]
+                ),
             ):
                 trainer.train()
 
@@ -4881,11 +4882,13 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             with patch.object(
                 trainer,
                 "_evaluate",
-                side_effect=[
-                    {"eval_accuracy": 0.90, "epoch": 1.5},
-                    {"eval_accuracy": 0.80, "epoch": 2.0},
-                    {"eval_accuracy": 0.70},
-                ],
+                side_effect=evaluate_side_effect_factory(
+                    [
+                        {"eval_accuracy": 0.90, "epoch": 1.5},
+                        {"eval_accuracy": 0.80, "epoch": 2.0},
+                        {"eval_accuracy": 0.70},
+                    ]
+                ),
             ):
                 trainer.train()
 
