@@ -565,6 +565,12 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
 @add_start_docstrings(
     """UniSpeech Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
     UNISPEECH_START_DOCSTRING,
+    """
+        target_lang (`str`, *optional*):
+            Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
+            adapter.<lang>.bin. Only relevant when using an instance of [`UniSpeechForCTC`] with adapters. Uses 'eng'
+            by default.
+    """,
 )
 class UniSpeechForCTC(Wav2Vec2ForCTC):
     @add_start_docstrings_to_model_forward(UNISPEECH_INPUTS_DOCSTRING)

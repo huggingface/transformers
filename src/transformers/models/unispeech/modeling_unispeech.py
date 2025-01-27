@@ -1580,6 +1580,12 @@ _CTC_EXPECTED_LOSS = 17.17
 @add_start_docstrings(
     """UniSpeech Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
     UNISPEECH_START_DOCSTRING,
+    """
+        target_lang (`str`, *optional*):
+            Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
+            adapter.<lang>.bin. Only relevant when using an instance of [`UniSpeechForCTC`] with adapters. Uses 'eng'
+            by default.
+    """,
 )
 class UniSpeechForCTC(UniSpeechPreTrainedModel):
     def __init__(self, config, target_lang: Optional[str] = None):
