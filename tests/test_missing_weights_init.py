@@ -46,3 +46,29 @@ class TestMissingWeightsInit(unittest.TestCase):
 
         self.TestConfig = TestConfig
         self.TestModel = TestModel
+
+    def test_missing_weights_initialization(self):
+        # 1. Create and save base model
+        base_config = self.TestConfig(use_new=False)
+        base_model = self.TestModel(base_config)
+        
+        # Verify initial state
+        self.assertTrue(torch.all(base_model.base_layer.weight.data == 1.0))
+        base_model.save_pretrained(self.tmp_dir)
+        
+        # 2. Load with new layer
+        new_config = self.TestConfig(use_new=True)
+        loaded_model = self.TestModel.from_pretrained(self.tmp_dir, config=new_config)
+        
+        # 3. Print debug information
+        print("\nBase layer weight:", loaded_model.base_layer.weight.data)
+        print("New layer weight:", loaded_model.new_layer.weight.data)
+        
+        # 4. Verify initialization
+        # Base layer should keep pretrained weights
+        self.assertTrue(torch.all(loaded_model.base_layer.weight.data == 1.0), 
+                       f"Base layer weights not preserved: {loaded_model.base_layer.weight.data}")
+        
+        # New layer should be properly initialized
+        self.assertTrue(torch.all(loaded_model.new_layer.weight.data == 1.0),
+                       f"New layer not properly initialized: {loaded_model.new_layer.weight.data}")
