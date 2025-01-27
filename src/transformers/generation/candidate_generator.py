@@ -635,10 +635,10 @@ class AssistantToTargetTranslator:
         self._target_tokenizer: "PreTrainedTokenizerBase" = target_tokenizer
         self._assistant_tokenizer: "PreTrainedTokenizerBase" = assistant_tokenizer
         self._assistant_model_device: str = assistant_model_device
-        if target_vocab_size:
-            self.target_vocab_size: int = target_vocab_size
-        else:
+        if target_vocab_size is None:
             self.target_vocab_size: int = len(self._target_tokenizer.get_vocab())
+        else:
+            self.target_vocab_size: int = target_vocab_size
         self.filter_value: float = filter_value
         self.suppress_tokens_id: int = suppress_tokens_id
         self._assistant_to_target_input_ids, self.target_to_assistant_input_ids = (
