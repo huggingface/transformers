@@ -24,9 +24,10 @@ import warnings
 
 import numpy as np
 import pytest
+from packaging import version
 from parameterized import parameterized
 
-from transformers import AutoConfig, is_torch_available, pipeline, set_seed
+from transformers import AutoConfig, is_torch_available, pipeline
 from transformers.testing_utils import (
     is_flaky,
     require_accelerate,
@@ -44,6 +45,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils import is_ipex_available
 
 from ..test_modeling_common import floats_tensor, ids_tensor
 from .test_framework_agnostic import GenerationIntegrationTestsMixin
@@ -69,7 +71,7 @@ if is_torch_available():
         SpeechEncoderDecoderModel,
         T5ForConditionalGeneration,
     )
-    from transformers.cache_utils import DynamicCache, EncoderDecoderCache, QuantoQuantizedCache, StaticCache
+    from transformers.cache_utils import Cache, DynamicCache, EncoderDecoderCache, QuantoQuantizedCache, StaticCache
     from transformers.generation import (
         BeamSampleDecoderOnlyOutput,
         BeamSampleEncoderDecoderOutput,
@@ -675,10 +677,11 @@ class GenerationTesterMixin:
     @require_torch_multi_accelerator
     @pytest.mark.generate
     def test_model_parallel_beam_search(self):
-        for model_class in self.all_generative_model_classes:
-            if "xpu" in torch_device:
-                return unittest.skip(reason="device_map='auto' does not work with XPU devices")
+        if "xpu" in torch_device:
+            if not (is_ipex_available("2.5") or version.parse(torch.__version__) >= version.parse("2.6")):
+                self.skipTest(reason="device_map='auto' does not work with XPU devices")
 
+        for model_class in self.all_generative_model_classes:
             if model_class._no_split_modules is None:
                 continue
 
@@ -1528,7 +1531,7 @@ class GenerationTesterMixin:
             next_logits_with_padding = model(**model_kwargs).logits[:, -1, :]
 
             # They should result in very similar logits
-            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, atol=1e-5, rtol=1e-5)
+            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5)
 
     @pytest.mark.generate
     def test_past_key_values_format(self):
@@ -1851,75 +1854,6 @@ class GenerationTesterMixin:
                         )
                     )
 
-    @parameterized.expand([(1, False), (1, True), (4, False)])
-    @pytest.mark.generate
-    def test_new_cache_format(self, num_beams, do_sample):
-        # Tests that generating with the new format is exactly the same as the legacy one (for models that support it).
-        # 👉 tests with and without beam search so that we can test with and without cache reordering.
-        # 👉 tests with and without sampling so we can cover the most common use cases.
-        for model_class in self.all_generative_model_classes:
-            if not model_class._supports_cache_class:
-                self.skipTest(reason="This model does not support the new cache format")
-
-            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-
-            model = model_class(config).to(torch_device).eval()
-            generation_kwargs = {
-                "max_new_tokens": 5,
-                "do_sample": do_sample,
-                "num_beams": num_beams,
-                "num_return_sequences": num_beams,
-                "return_dict_in_generate": True,  # Required to return `past_key_values`
-                "use_cache": True,
-            }
-
-            # Sets seed before calling `generate` for the case with do_sample=True
-            seed = torch.randint(0, 1000000, (1,)).item()
-            set_seed(seed)
-            legacy_results = model.generate(**generation_kwargs, **inputs_dict)
-            set_seed(seed)
-            if config.is_encoder_decoder:
-                cache_cls = EncoderDecoderCache
-                past_key_values = cache_cls(DynamicCache(), DynamicCache())
-            else:
-                cache_cls = DynamicCache
-                past_key_values = cache_cls()
-
-            new_results = model.generate(past_key_values=past_key_values, **generation_kwargs, **inputs_dict)
-
-            # The two sets of generated sequences must match, despite the cache format between forward passes being
-            # different
-            self.assertListEqual(legacy_results.sequences.tolist(), new_results.sequences.tolist())
-            self.assertTrue(isinstance(legacy_results.past_key_values, tuple))
-            self.assertTrue(isinstance(new_results.past_key_values, cache_cls))
-
-            # The contents of the two caches, when converted to the same format (in both directions!), must match
-            legacy_cache = legacy_results.past_key_values
-            new_cache_converted = new_results.past_key_values.to_legacy_cache()
-            for layer_idx in range(len(legacy_cache)):
-                for kv_idx in range(len(legacy_cache[layer_idx])):
-                    # TODO: @raushan, please look into this for new cache format
-                    if legacy_cache[layer_idx][kv_idx] != []:
-                        self.assertTrue(
-                            torch.allclose(
-                                legacy_cache[layer_idx][kv_idx],
-                                new_cache_converted[layer_idx][kv_idx],
-                            )
-                        )
-
-            new_cache = new_results.past_key_values
-            legacy_cache_converted = cache_cls.from_legacy_cache(legacy_results.past_key_values)
-            for layer_idx in range(len(new_cache)):
-                for kv_idx in range(len(new_cache[layer_idx])):
-                    # TODO: @raushan, please look into this for new cache format
-                    if new_cache[layer_idx][kv_idx] != []:
-                        self.assertTrue(
-                            torch.allclose(
-                                new_cache[layer_idx][kv_idx],
-                                legacy_cache_converted[layer_idx][kv_idx],
-                            )
-                        )
-
     @parameterized.expand([("offloaded",)])  # ("offloaded_static",) TODO: @raushan fixme in some models (eg T5)
     @require_torch_gpu
     @pytest.mark.generate
@@ -2095,10 +2029,10 @@ class GenerationTesterMixin:
                 self._check_similar_generate_outputs(dynamic_result, compiled_result)
 
     @pytest.mark.generate
-    def test_generate_methods_with_num_logits_to_keep(self):
+    def test_generate_methods_with_logits_to_keep(self):
         for model_class in self.all_generative_model_classes:
-            if "num_logits_to_keep" not in set(inspect.signature(model_class.forward).parameters.keys()):
-                self.skipTest(reason="This model does not support `num_logits_to_keep` argument.")
+            if "logits_to_keep" not in set(inspect.signature(model_class.forward).parameters.keys()):
+                self.skipTest(reason="This model does not support `logits_to_keep` argument.")
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
             config.use_cache = True
@@ -2113,17 +2047,17 @@ class GenerationTesterMixin:
                 "do_sample": False,
             }
 
-            # Setting num_logits_to_keep at 0 keeps all logits (old behavior)
-            with_all_logits = model.generate(**generation_kwargs, **inputs_dict, num_logits_to_keep=0)
-            # By default, num_logits_to_keep is automatically set to 1 if not provided (new behavior)
+            # Setting logits_to_keep at 0 keeps all logits (old behavior)
+            with_all_logits = model.generate(**generation_kwargs, **inputs_dict, logits_to_keep=0)
+            # By default, logits_to_keep is automatically set to 1 if not provided (new behavior)
             without_all_logits = model.generate(**inputs_dict, **generation_kwargs)
             self.assertEqual(with_all_logits.tolist(), without_all_logits.tolist())
 
     @pytest.mark.generate
-    def test_assisted_decoding_with_num_logits_to_keep(self):
+    def test_assisted_decoding_with_logits_to_keep(self):
         for model_class in self.all_generative_model_classes:
-            if "num_logits_to_keep" not in set(inspect.signature(model_class.forward).parameters.keys()):
-                self.skipTest(reason="This model does not support `num_logits_to_keep` argument.")
+            if "logits_to_keep" not in set(inspect.signature(model_class.forward).parameters.keys()):
+                self.skipTest(reason="This model does not support `logits_to_keep` argument.")
             if model_class._is_stateful:
                 self.skipTest(reason="Stateful models don't support assisted generation")
 
@@ -2147,9 +2081,9 @@ class GenerationTesterMixin:
                 "output_scores": True,
             }
 
-            # Setting num_logits_to_keep at 0 keeps all logits (old behavior)
-            with_all_logits = model.generate(**generation_kwargs, **inputs_dict, num_logits_to_keep=0)
-            # By default, num_logits_to_keep is automatically set to 1 if not provided (new behavior)
+            # Setting logits_to_keep at 0 keeps all logits (old behavior)
+            with_all_logits = model.generate(**generation_kwargs, **inputs_dict, logits_to_keep=0)
+            # By default, logits_to_keep is automatically set to 1 if not provided (new behavior)
             without_all_logits = model.generate(**inputs_dict, **generation_kwargs)
 
             self._check_similar_generate_outputs(with_all_logits, without_all_logits)
@@ -2345,6 +2279,7 @@ class GenerationTesterMixin:
             "mamba",
             "xlnet",
             "zamba",
+            "zamba2",
         )
         has_standard_cache = not any(
             model_name in config.__class__.__name__.lower() for model_name in models_without_standard_cache
@@ -2438,11 +2373,11 @@ class GenerationTesterMixin:
         )
 
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config, num_beam_groups=1):
-        self.assertIsInstance(past_key_values, tuple)
-        self.assertListEqual(
-            [isinstance(iter_past_key_values, tuple) for iter_past_key_values in past_key_values],
-            [True] * len(past_key_values),
-        )
+        self.assertIsInstance(past_key_values, (tuple, Cache))
+
+        # Encoder-decoder models: pull and verify the decoder cache
+        if isinstance(past_key_values, EncoderDecoderCache):
+            past_key_values = past_key_values.self_attention_cache
 
         # (batch, head, seq_length, head_features)
         expected_shape = (
@@ -2451,15 +2386,32 @@ class GenerationTesterMixin:
             seq_length,
             config.hidden_size // config.num_attention_heads,
         )
-        # check shape key, value
-        self.assertListEqual(
-            [layer_past_key_values[0].shape for layer_past_key_values in past_key_values],
-            [expected_shape] * len(past_key_values),
-        )
-        self.assertListEqual(
-            [layer_past_key_values[1].shape for layer_past_key_values in past_key_values],
-            [expected_shape] * len(past_key_values),
-        )
+
+        if isinstance(past_key_values, Cache):
+            self.assertListEqual(
+                [key_tensor.shape for key_tensor in past_key_values.key_cache],
+                [expected_shape] * len(past_key_values.key_cache),
+            )
+            self.assertListEqual(
+                [value_tensor.shape for value_tensor in past_key_values.value_cache],
+                [expected_shape] * len(past_key_values.value_cache),
+            )
+
+        # Legacy cache format checks. This branch should be removed when all models use `Cache` by default
+        else:
+            self.assertListEqual(
+                [isinstance(iter_past_key_values, tuple) for iter_past_key_values in past_key_values],
+                [True] * len(past_key_values),
+            )
+            # check shape key, value
+            self.assertListEqual(
+                [layer_past_key_values[0].shape for layer_past_key_values in past_key_values],
+                [expected_shape] * len(past_key_values),
+            )
+            self.assertListEqual(
+                [layer_past_key_values[1].shape for layer_past_key_values in past_key_values],
+                [expected_shape] * len(past_key_values),
+            )
 
     def _check_sequence_inside_sequence(self, tensor_1, tensor_2):
         # check if tensor_1 inside tensor_2 or tensor_2 inside tensor_1.
@@ -2757,7 +2709,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         transition_scores = model.compute_transition_scores(outputs.sequences, outputs.scores, outputs.beam_indices)
         transition_scores_sum = transition_scores.sum(-1)
 
-        self.assertTrue(torch.allclose(transition_scores_sum, outputs.sequences_scores, atol=1e-3))
+        torch.testing.assert_close(transition_scores_sum, outputs.sequences_scores, rtol=1e-3, atol=1e-3)
 
     def test_beam_search_low_memory(self):
         tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")

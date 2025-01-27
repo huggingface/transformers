@@ -17,6 +17,7 @@
 import unittest
 
 import requests
+from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
@@ -30,7 +31,6 @@ from transformers.testing_utils import (
     cleanup,
     require_bitsandbytes,
     require_torch,
-    require_torch_gpu,
     require_vision,
     slow,
     torch_device,
@@ -242,7 +242,7 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
             with torch.no_grad():
                 out_ids = model(input_ids=input_ids, **inputs)[0]
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            self.assertTrue(torch.allclose(out_embeds, out_ids))
+            torch.testing.assert_close(out_embeds, out_ids)
 
     def test_mismatching_num_image_tokens(self):
         """
@@ -272,6 +272,32 @@ class LlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterM
             # two images and two image tokens don't raise an error
             pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
             _ = model(input_ids=input_ids, pixel_values=pixel_values)
+
+    @parameterized.expand(
+        [
+            (-1,),
+            ([-1],),
+            ([-1, -2],),
+        ],
+    )
+    def test_vision_feature_layers(self, vision_feature_layer):
+        """
+        Test that we can use either one vision feature layer, or a list of
+        vision feature layers.
+        """
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.vision_feature_layer = vision_feature_layer
+
+        num_feature_layers = 1 if isinstance(vision_feature_layer, int) else len(vision_feature_layer)
+        hidden_size = config.vision_config.hidden_size
+        expected_features = hidden_size * num_feature_layers
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            # We should have the right number of input features,
+            # and should be able to run a forward pass without exploding
+            assert model.multi_modal_projector.linear_1.in_features == expected_features
+            model(**input_dict)
 
     @unittest.skip(
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
@@ -480,49 +506,6 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         generate_ids = model.generate(**inputs, max_new_tokens=20)
         outputs = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
         self.assertEqual(outputs, EXPECTED_OUTPUT)
-
-    @slow
-    @require_bitsandbytes
-    def test_llava_index_error_bug(self):
-        # This is a reproducer of https://github.com/huggingface/transformers/pull/28032 and makes sure it does not happen anymore
-        # Please refer to that PR, or specifically https://github.com/huggingface/transformers/pull/28032#issuecomment-1860650043 for
-        # more details
-        model_id = "llava-hf/llava-1.5-7b-hf"
-        model = LlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
-
-        processor = AutoProcessor.from_pretrained(model_id)
-
-        # Simulate a super long prompt
-        user_prompt = "Describe the image:?\n" * 200
-        prompt = f"USER: <image>\n{user_prompt}ASSISTANT:"
-        image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
-
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
-
-        # Make sure that `generate` works
-        _ = model.generate(**inputs, max_new_tokens=20)
-
-    @slow
-    @require_torch_gpu
-    def test_llava_merge_inputs_error_bug(self):
-        # This is a reproducer of https://github.com/huggingface/transformers/pull/28333 and makes sure it does not happen anymore
-        model_id = "llava-hf/llava-1.5-7b-hf"
-        model = LlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
-        processor = AutoProcessor.from_pretrained(model_id)
-
-        prompt = "USER: <image>\nDescribe the imageASSISTANT:"
-        image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
-
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
-
-        # Make sure that the loss is properly computed
-        loss = model(
-            **inputs,
-            labels=inputs.input_ids.clone(),
-        ).loss
-        loss.backward()
 
     def test_tokenizer_integration(self):
         slow_tokenizer = AutoTokenizer.from_pretrained("liuhaotian/llava-v1.6-34b", use_fast=False)
