@@ -889,6 +889,7 @@ _import_structure = {
     "models.yolos": ["YolosConfig"],
     "models.yoso": ["YosoConfig"],
     "models.zamba": ["ZambaConfig"],
+    "models.zamba2": ["Zamba2Config"],
     "models.zoedepth": ["ZoeDepthConfig"],
     "onnx": [],
     "pipelines": [
@@ -3990,6 +3991,14 @@ else:
             "ZambaPreTrainedModel",
         ]
     )
+    _import_structure["models.zamba2"].extend(
+        [
+            "Zamba2ForCausalLM",
+            "Zamba2ForSequenceClassification",
+            "Zamba2Model",
+            "Zamba2PreTrainedModel",
+        ]
+    )
     _import_structure["models.zoedepth"].extend(
         [
             "ZoeDepthForDepthEstimation",
@@ -6005,6 +6014,7 @@ if TYPE_CHECKING:
     from .models.yolos import YolosConfig
     from .models.yoso import YosoConfig
     from .models.zamba import ZambaConfig
+    from .models.zamba2 import Zamba2Config
     from .models.zoedepth import ZoeDepthConfig
 
     # Pipelines
@@ -8543,6 +8553,12 @@ if TYPE_CHECKING:
             ZambaForSequenceClassification,
             ZambaModel,
             ZambaPreTrainedModel,
+        )
+        from .models.zamba2 import (
+            Zamba2ForCausalLM,
+            Zamba2ForSequenceClassification,
+            Zamba2Model,
+            Zamba2PreTrainedModel,
         )
         from .models.zoedepth import (
             ZoeDepthForDepthEstimation,
