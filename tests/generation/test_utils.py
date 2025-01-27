@@ -2004,9 +2004,9 @@ class GenerationTesterMixin:
                 else:
                     input_1[key] = value
                     input_2[key] = value
-            main_input_sets = [input_1, input_2]
+            model_input_sets = [input_1, input_2]
             self.assertTrue(
-                main_input_sets[0][model.main_input_name].shape == main_input_sets[1][model.main_input_name].shape
+                model_input_sets[0][model.main_input_name].shape == model_input_sets[1][model.main_input_name].shape
             )
 
             generation_kwargs = {
@@ -2015,25 +2015,25 @@ class GenerationTesterMixin:
                 "return_dict_in_generate": True,
                 "output_scores": True,
             }
+            has_defined_cache_implementation = model.generation_config.cache_implementation is not None
 
             # get eager + dynamic cache results for future comparison
             dynamic_outputs = []
-            for model_inputs in main_input_sets:
+            for model_inputs in model_input_sets:
                 gen_out = model.generate(**model_inputs, **generation_kwargs)
                 dynamic_outputs.append(gen_out)
-                # sanity checks
-                self.assertTrue(isinstance(gen_out.past_key_values, DynamicCache))
-                self.assertFalse(gen_out.past_key_values.is_compileable)
-                self.assertFalse(hasattr(model, "_compiled_call"))  # our auto compile should NOT have been called
+                # sanity checks for the default cache implementation
+                if not has_defined_cache_implementation:
+                    self.assertTrue(isinstance(gen_out.past_key_values, DynamicCache))
+                    self.assertFalse(gen_out.past_key_values.is_compileable)
+                    self.assertFalse(hasattr(model, "_compiled_call"))  # our auto compile should NOT have been called
 
             # get compiled results -- relies on the automatic compilation triggered by specific "cache_implementation"
-            if "gemma2" in model_class.__name__.lower():
-                generation_kwargs["cache_implementation"] = "hybrid"
-            else:
+            if not has_defined_cache_implementation:
                 generation_kwargs["cache_implementation"] = "static"
 
             compiled_outputs = []
-            for model_inputs in main_input_sets:
+            for model_inputs in model_input_sets:
                 gen_out = model.generate(**model_inputs, **generation_kwargs)
                 compiled_outputs.append(gen_out)
                 # sanity checks
