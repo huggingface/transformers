@@ -298,6 +298,7 @@ class WhisperFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.
         )
         # fmt: on
 
+        torch.set_default_device("cuda")
         input_speech = self._load_datasamples(3)
         feature_extractor = WhisperFeatureExtractor()
         input_features = feature_extractor(input_speech, return_tensors="pt").input_features
