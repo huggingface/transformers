@@ -16,25 +16,35 @@ rendered properly in your Markdown viewer.
 
 # GPTQ
 
-[AutoGPTQ](https://github.com/PanQiWei/AutoGPTQ) implements the GPTQ algorithm, a post-training quantization technique where each row of the weight matrix is quantized independently to find a version of the weights that minimizes the error. These weights are quantized to int4, but they're restored to fp16 on the fly during inference. This can save your memory-usage by 4x because the int4 weights are dequantized in a fused kernel rather than a GPU's global memory. Inference is also faster because a lower bitwidth takes less time to communicate.
+The [GPTQModel](https://github.com/ModelCloud/GPTQModel) and [AutoGPTQ](https://github.com/PanQiWei/AutoGPTQ) implements the GPTQ algorithm, a post-training quantization technique where each row of the weight matrix is quantized independently to find a version of the weights that minimizes the error. These weights are quantized to int4, but they're restored to fp16 on the fly during inference. This can save memory usage by 4x because the int4 weights are dequantized in a fused kernel rather than a GPU's global memory. Inference is also faster because a lower bitwidth takes less time to communicate.
 
-Run the commands below to install AutoGPTQ.
+> [!WARNING]
+> AutoGPTQ is likely to be deprecated in the future due to lack of continued support for new models and features. See the [GPTQModel](#gptqmodel) section for more details.
+
+Install Accelerate, Transformers and Optimum first.
 
 ```bash
 pip install --upgrade accelerate optimum transformers
 ```
 
-Then install either GPTQModel or AutoGPTQ.
+Then run the command below to install a GPTQ library.
+
+<hfoptions id="install">
+<hfoption id="GPTQmodel">
 
 ```bash
 pip install gptqmodel --no-build-isolation
 ```
 
-or
+</hfoption>
+<hfoption id="AutoGPTQ">
 
 ```bash
 pip install auto-gptq --no-build-isolation
 ```
+
+</hfoption>
+</hfoptions>
 
 Create a [`GPTQConfig`] class and set the number of bits to quantize to, a dataset to calbrate the weights for quantization, and a tokenizer to prepare the dataset.
 
@@ -45,13 +55,12 @@ tokenizer = AutoTokenizer.from_pretrained("facebook/opt-125m")
 gptq_config = GPTQConfig(bits=4, dataset="c4", tokenizer=tokenizer)
 ```
 
-> [!TIP]
-> You can pass your own dataset as a list of strings, but it is highly recommended to use the same dataset from the GPTQ paper.
->
-> ```py
-> dataset = ["auto-gptq is an easy-to-use model quantization library with user-friendly apis, based on GPTQ algorithm."]
-> gptq_config = GPTQConfig(bits=4, dataset=dataset, tokenizer=tokenizer)
-> ```
+You can pass your own dataset as a list of strings, but it is highly recommended to use the same dataset from the GPTQ paper.
+
+```py
+dataset = ["auto-gptq is an easy-to-use model quantization library with user-friendly apis, based on GPTQ algorithm."]
+gptq_config = GPTQConfig(bits=4, dataset=dataset, tokenizer=tokenizer)
+```
 
 Load a model to quantize and pass [`GPTQConfig`] to [`~AutoModelForCausalLM.from_pretrained`]. Set `device_map="auto"` to automatically offload the model to a CPU to help fit the model in memory, and allow the model modules to be moved between the CPU and GPU for quantization.
 
@@ -146,6 +155,16 @@ model = AutoModelForCausalLM.from_pretrained(
     quantization_config=gptq_config
 )
 ```
+
+## GPTQModel
+
+It is recommended to use GPTQModel, originally a maintained fork of AutoGPTQ, because it has since diverged from AutoGTPQ with some significant features. GPTQModel has faster quantization, lower memory usage, and more accurate default quantization.
+
+GPTQModel provides asymmetric quantization which can potentially lower quantization errors compared to symmetric quantization. It is not backward compatible with AutoGPTQ, and not all kernels (Marlin) support asymmetric quantization.
+
+GPTQModel also has broader support for the latest LLM models, multimodal models (Qwen2-VL and Ovis1.6-VL), platforms (Linux, macOS, Windows 11), and hardware (AMD ROCm, Apple Silicon, Intel/AMD CPUs, and Intel Datacenter Max/Arc GPUs, etc.).
+
+The Marlin kernels are also updated for A100 GPUs and other kernels are updated to include auto-padding for legacy models and models with non-uniform in/out-features.
 
 ## Resources
 
