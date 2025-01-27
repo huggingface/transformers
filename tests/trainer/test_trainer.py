@@ -64,6 +64,7 @@ from transformers.testing_utils import (
     backend_device_count,
     execute_subprocess_async,
     get_gpu_count,
+    get_steps_per_epoch,
     get_tests_dir,
     is_staging_test,
     require_accelerate,
@@ -4777,8 +4778,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             ):
                 trainer.train()
 
+            steps_per_epoch = get_steps_per_epoch(trainer)
+
             assert trainer.state.best_metric == 0.59
-            assert trainer.state.best_global_step == 2
+            assert trainer.state.best_global_step == steps_per_epoch
 
             best_ckpt = os.path.join(tmpdir, f"{PREFIX_CHECKPOINT_DIR}-{trainer.state.best_global_step}")
             assert trainer.state.best_model_checkpoint == best_ckpt
@@ -4809,8 +4812,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             ):
                 trainer.train()
 
+            steps_per_epoch = get_steps_per_epoch(trainer)
+
             assert trainer.state.best_metric == 0.59
-            assert trainer.state.best_global_step == 2
+            assert trainer.state.best_global_step == steps_per_epoch
 
             best_ckpt = os.path.join(tmpdir, f"{PREFIX_CHECKPOINT_DIR}-{trainer.state.best_global_step}")
             assert trainer.state.best_model_checkpoint == best_ckpt
@@ -4849,8 +4854,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             ):
                 trainer.train()
 
+            steps_per_epoch = get_steps_per_epoch(trainer)
+
             assert trainer.state.best_metric == 0.90
-            assert trainer.state.best_global_step == 1
+            assert trainer.state.best_global_step == steps_per_epoch // 2
 
             best_ckpt = os.path.join(tmpdir, f"{PREFIX_CHECKPOINT_DIR}-{trainer.state.best_global_step}")
             assert trainer.state.best_model_checkpoint == best_ckpt
@@ -4882,8 +4889,10 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             ):
                 trainer.train()
 
+            steps_per_epoch = get_steps_per_epoch(trainer)
+
             assert trainer.state.best_metric == 0.90
-            assert trainer.state.best_global_step == 3
+            assert trainer.state.best_global_step == steps_per_epoch * 1.5
 
             assert trainer.state.best_model_checkpoint is None
 

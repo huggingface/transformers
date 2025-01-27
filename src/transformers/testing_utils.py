@@ -21,6 +21,7 @@ import gc
 import importlib
 import inspect
 import logging
+import math
 import multiprocessing
 import os
 import re
@@ -49,6 +50,7 @@ from huggingface_hub import delete_repo
 from packaging import version
 
 from transformers import logging as transformers_logging
+from transformers import Trainer
 
 from .integrations import (
     is_clearml_available,
@@ -1438,6 +1440,14 @@ def get_tests_dir(append_path=None):
         return os.path.join(tests_dir, append_path)
     else:
         return tests_dir
+
+
+def get_steps_per_epoch(trainer: Trainer) -> int:
+    train_dataloader = trainer.get_train_dataloader()
+    batches_per_epoch = len(train_dataloader)
+    steps_per_epoch = math.ceil(batches_per_epoch / trainer.args.gradient_accumulation_steps)
+
+    return steps_per_epoch
 
 
 #
