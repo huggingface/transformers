@@ -72,3 +72,17 @@ class TestMissingWeightsInit(unittest.TestCase):
         # New layer should be properly initialized
         self.assertTrue(torch.all(loaded_model.new_layer.weight.data == 1.0),
                        f"New layer not properly initialized: {loaded_model.new_layer.weight.data}")
+        
+    def test_backward_compatibility(self):
+        """Test that existing behavior is preserved for matched weights"""
+        # 1. Create and save base model
+        base_config = self.TestConfig(use_new=False)
+        base_model = self.TestModel(base_config)
+        original_weights = base_model.base_layer.weight.data.clone()
+        base_model.save_pretrained(self.tmp_dir)
+        
+        # 2. Load model without new layers
+        loaded_model = self.TestModel.from_pretrained(self.tmp_dir)
+        
+        # 3. Verify weights are exactly preserved
+        torch.testing.assert_close(loaded_model.base_layer.weight.data, original_weights)
