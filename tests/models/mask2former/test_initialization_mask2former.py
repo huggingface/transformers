@@ -11,7 +11,7 @@ class TestMask2FormerInitialization(unittest.TestCase):
     def setUpClass(cls):
         cls.config = Mask2FormerConfig()
         cls.model = Mask2FormerModel(cls.config)
-
+    
     def test_embedding_initialization(self):
         """Test that embeddings are initialized with std=1.0 (PyTorch default)"""
         for name, module in self.model.named_modules():
@@ -19,7 +19,7 @@ class TestMask2FormerInitialization(unittest.TestCase):
                 # Calculate empirical standard deviation
                 std = torch.std(module.weight.data).item()
                 self.assertAlmostEqual(std, 1.0, places=1)
-
+    
     def test_mlp_bias_initialization(self):
         """Test that MLP biases are properly initialized"""
         for name, module in self.model.named_modules():
@@ -27,7 +27,7 @@ class TestMask2FormerInitialization(unittest.TestCase):
                 for param in module.parameters():
                     if param.dim() == 1:  # Bias terms
                         self.assertFalse(torch.all(param.data == 0))
-
+    
     def test_multiscale_deformable_attention(self):
         """Test that multiscale deformable attention is properly initialized"""
         for name, module in self.model.named_modules():
