@@ -247,3 +247,6 @@ class SamHQProcessor(ProcessorMixin):
 
     def post_process_masks(self, *args, **kwargs):
         return self.image_processor.post_process_masks(*args, **kwargs)
+    
+
+__all__ = ["SamHQProcessor"]
