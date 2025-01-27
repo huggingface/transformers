@@ -19,6 +19,18 @@ Multi-GPU setups are effective for accelerating training and fitting large model
 
 This guide will discuss the various parallelism methods, combining them, and choosing an appropriate strategy for your setup. For more details about distributed training, refer to the [Accelerate](https://hf.co/docs/accelerate/index) documentation.
 
+## Scalability strategy
+
+Use the [Model Memory Calculator](https://huggingface.co/spaces/hf-accelerate/model-memory-usage) to calculate how much memory a model requires. Then refer to the table below to select a strategy based on your setup.
+
+| setup | scenario | strategy |
+|---|---|---|
+| single node/multi-GPU | fits on single GPU | DistributedDataParallel or ZeRO |
+|  | doesn't fit on single GPU | PipelineParallel, ZeRO or TensorParallel |
+|  | largest model layer doesn't fit | TensorParallel or ZeRO |
+| multi-node/multi-GPU | fast inter-node connectivity (NVLink or NVSwitch) | ZeRO or 3D parallelism (PipelineParallel, TensorParallel, DataParallel) |
+|  | slow inter-node connectivity | ZeRO or 3D parallelism (PipelineParallel, TensorParallel, DataParallel) |
+
 ## Data parallelism
 
 Data parallelism evenly distributes data across multiple GPUs. Each GPU holds a copy of the model and concurrently proccesses their portion of the data. At the end, the results from each GPU are synchronized and combined.
