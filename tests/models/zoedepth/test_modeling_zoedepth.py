@@ -323,7 +323,7 @@ class ZoeDepthModelIntegrationTest(unittest.TestCase):
         for img, out, expected_slice in zip(images, outputs, expected_slices):
             out = out["predicted_depth"]
             self.assertTrue(img.size == out.shape[::-1])
-            torch.testing.assert_close(expected_slice, out[:3, :3], rtol=1e-3)
+            torch.testing.assert_close(expected_slice, out[:3, :3], atol=1e-3, rtol=1e-3)
 
         self.check_target_size(image_processor, pad_input, images, outputs, raw_outputs, raw_outputs_flipped)
 
