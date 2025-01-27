@@ -947,17 +947,17 @@ class LlamaForSequenceClassification(LlamaPreTrainedModel):
         if self.config.pad_token_id is None and batch_size != 1:
             raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
         if self.config.pad_token_id is None:
-            sequence_lengths = -1
+            last_non_pad_token = -1
         else:
             if input_ids is not None:
-                # if no pad token found, use modulo instead of reverse indexing for ONNX compatibility
-                sequence_lengths = torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1
-                sequence_lengths = sequence_lengths % input_ids.shape[-1]
-                sequence_lengths = sequence_lengths.to(logits.device)
+                # To handle both left- and right- padding, we take the rightmost token that is not equal to pad_token_id
+                non_pad_mask = torch.ne(input_ids, self.config.pad_token_id).int().to(logits.device)
+                token_indices = torch.arange(input_ids.shape[-1], device=logits.device)
+                last_non_pad_token = (token_indices * non_pad_mask).max(-1).values
             else:
-                sequence_lengths = -1
+                last_non_pad_token = -1
 
-        pooled_logits = logits[torch.arange(batch_size, device=logits.device), sequence_lengths]
+        pooled_logits = logits[torch.arange(batch_size, device=logits.device), last_non_pad_token]
 
         loss = None
         if labels is not None:
