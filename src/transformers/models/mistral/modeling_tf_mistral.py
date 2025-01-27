@@ -999,14 +999,14 @@ class TFMistralForSequenceClassification(TFMistralPreTrainedModel, TFSequenceCla
         batch_size = logits_shape[0]
 
         if self.config.pad_token_id is None:
-            last_non_pad_token = tf.fill((batch_size,), value=-1)
+            last_non_pad_token = tf.fill((batch_size,), value=logits_shape[1] - 1)
         else:
             if input_ids is not None:
                 token_indices = tf.range(shape_list(input_ids)[-1])
                 non_pad_mask = tf.cast(input_ids != self.config.pad_token_id, token_indices.dtype)
                 last_non_pad_token = tf.reduce_max(token_indices * non_pad_mask, axis=-1)
             else:
-                last_non_pad_token = tf.fill((batch_size,), value=-1)
+                last_non_pad_token = tf.fill((batch_size,), value=logits_shape[1] - 1)
                 logger.warning_once(
                     f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
                     "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
