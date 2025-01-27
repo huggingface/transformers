@@ -14,6 +14,7 @@
 import warnings
 from typing import Dict, Optional, Union
 
+from .base import HfQuantizer
 from ..models.auto.configuration_auto import AutoConfig
 from ..utils.quantization_config import (
     AqlmConfig,
@@ -195,3 +196,30 @@ class AutoHfQuantizer:
             warnings.warn(warning_msg)
 
         return quantization_config
+
+def register_quantization_config(method: str):
+    """Register a custom quantization configuration."""
+
+    def register_config_fn(cls):
+        if method in AUTO_QUANTIZATION_CONFIG_MAPPING:
+            raise ValueError(f"Config '{method}' already registered")
+        
+        if not issubclass(cls, QuantizationConfigMixin):
+            raise ValueError(f"Config must extend QuantizationConfigMixin")
+        
+        AUTO_QUANTIZATION_CONFIG_MAPPING[method] = cls 
+        return cls
+    return register_config_fn
+
+def register_quantizer(name: str):
+    """Register a custom quantizer."""
+    def register_quantizer_fn(cls):
+        if name in AUTO_QUANTIZER_MAPPING:
+            raise ValueError(f"Quantizer '{name}' already registered")
+
+        if not issubclass(cls, HfQuantizer):
+            raise ValueError(f"Quantizer must extend HfQuantizer")
+        
+        AUTO_QUANTIZER_MAPPING[name] = cls
+        return cls
+    return register_quantizer_fn
