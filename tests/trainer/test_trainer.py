@@ -4713,7 +4713,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     def test_best_model_checkpoint_behavior(self):
         # Case 1. Never evaluated, save_total_limit > 1 and save_steps == 1.
         # Both best_metric and best_model_checkpoint should be None.
-        # Total of 6 checkpoints should be saved.
         with tempfile.TemporaryDirectory() as tmpdir:
             trainer = get_regression_trainer(
                 output_dir=tmpdir,
@@ -4727,7 +4726,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
             assert trainer.state.best_metric is None
             assert trainer.state.best_model_checkpoint is None
-            assert len(os.listdir(tmpdir)) == 6
+            assert len(os.listdir(tmpdir)) == trainer.state.global_step
 
         # Case 2. Never evaluated and save_total_limit == 1.
         # Both best_metric and best_model_checkpoint should be None.
@@ -4744,13 +4743,15 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             )
             trainer.train()
 
+            num_steps = trainer.state.global_step
+
             assert trainer.state.best_metric is None
             assert trainer.state.best_model_checkpoint is None
             assert len(os.listdir(tmpdir)) == 1
 
-            ckpt = os.path.join(tmpdir, f"{PREFIX_CHECKPOINT_DIR}-6")
+            ckpt = os.path.join(tmpdir, f"{PREFIX_CHECKPOINT_DIR}-{num_steps}")
             assert os.path.isdir(ckpt)
-            assert os.listdir(tmpdir)[0] == f"{PREFIX_CHECKPOINT_DIR}-6"
+            assert os.listdir(tmpdir)[0] == f"{PREFIX_CHECKPOINT_DIR}-{num_steps}"
 
         # Case 3. eval_strategy == save_strategy.
         # best_model_checkpoint should be at epoch 1.
@@ -4782,10 +4783,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             best_ckpt = os.path.join(tmpdir, f"{PREFIX_CHECKPOINT_DIR}-{trainer.state.best_global_step}")
             assert trainer.state.best_model_checkpoint == best_ckpt
 
-            assert len(os.listdir(tmpdir)) == 3
+            assert len(os.listdir(tmpdir)) == trainer.state.num_train_epochs
 
-        # Case 4. eval_strategy != save_strategy
-        # Same as Case 3, but a total of 6 checkpoints should be saved.
+        # Case 4. eval_strategy != save_strategy.
         with tempfile.TemporaryDirectory() as tmpdir:
             trainer = get_regression_trainer(
                 output_dir=tmpdir,
@@ -4815,7 +4815,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             best_ckpt = os.path.join(tmpdir, f"{PREFIX_CHECKPOINT_DIR}-{trainer.state.best_global_step}")
             assert trainer.state.best_model_checkpoint == best_ckpt
 
-            assert len(os.listdir(tmpdir)) == 6
+            assert len(os.listdir(tmpdir)) == trainer.state.global_step
 
         # Case 5. Multiple checkpoints, save_total_limit == 1.
         # Best metric is found at step 1 and that checkpoint should be saved.
@@ -4887,7 +4887,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
             assert trainer.state.best_model_checkpoint is None
 
-            assert len(os.listdir(tmpdir)) == 3
+            assert len(os.listdir(tmpdir)) == trainer.state.global_step // 2
 
 
 @require_torch
