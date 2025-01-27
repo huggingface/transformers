@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 from typing import Callable, Optional, Tuple, Union
 
 import torch
@@ -363,9 +364,14 @@ class MoonshineAttention(GlmAttention):
 
         # Pad head size dimension to next multiple of 8. Q K and V always have equal head sizes.
         pad_amount = 8 * ((query_states.shape[-1] + 7) // 8) - query_states.shape[-1]
-        query_states = torch.nn.functional.pad(query_states, (0, pad_amount))
-        key_states = torch.nn.functional.pad(key_states, (0, pad_amount))
-        value_states = torch.nn.functional.pad(value_states, (0, pad_amount))
+        if pad_amount > 0:
+            # Ensure scaling is correct even with padding.
+            if self.scaling is None:
+                self.scaling = 1.0 / math.sqrt(query_states.shape[-1])
+
+            query_states = torch.nn.functional.pad(query_states, (0, pad_amount))
+            key_states = torch.nn.functional.pad(key_states, (0, pad_amount))
+            value_states = torch.nn.functional.pad(value_states, (0, pad_amount))
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -380,7 +386,8 @@ class MoonshineAttention(GlmAttention):
         )
 
         # Remove head size padding.
-        attn_output = attn_output[:,:,:,:-pad_amount]
+        if pad_amount > 0:
+            attn_output = attn_output[:, :, :, :-pad_amount]
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
         attn_output = self.o_proj(attn_output)
@@ -626,13 +633,6 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
         if input_values is None:
             raise ValueError("You must specify input_values.")
 
-        # attention mask downsampling
-        if attention_mask is not None:
-            mask_len = self._get_feat_extract_output_lengths(attention_mask.shape[-1])
-            downsample_stride = 64 * 3 * 2 # conv strides
-            attention_mask = attention_mask[..., ::downsample_stride][..., :mask_len]
-            attention_mask = attention_mask.reshape((attention_mask.shape[0], 1, 1, -1)).to(torch.bool)
-
         # conv downsampling
         input_values = input_values.unsqueeze(1)
         hidden_states = nn.functional.tanh(self.conv1(input_values))
@@ -640,6 +640,13 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
         hidden_states = nn.functional.gelu(self.conv2(hidden_states))
         hidden_states = nn.functional.gelu(self.conv3(hidden_states))
         hidden_states = hidden_states.permute(0, 2, 1)
+
+        # attention mask downsampling
+        if attention_mask is not None:
+            mask_len = self._get_feat_extract_output_lengths(attention_mask.shape[-1])
+            downsample_stride = 64 * 3 * 2  # conv strides
+            attention_mask = attention_mask[..., ::downsample_stride][..., :mask_len]
+            attention_mask = attention_mask.reshape((attention_mask.shape[0], 1, 1, -1)).to(torch.bool)
 
         position_ids = torch.arange(0, hidden_states.shape[1], device=hidden_states.device).unsqueeze(0)
 
@@ -709,6 +716,7 @@ class MoonshineDecoder(LlamaModel):
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -773,6 +781,15 @@ class MoonshineDecoder(LlamaModel):
         all_self_attns = () if output_attentions else None
         all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
 
+        # attention mask downsampling
+        if encoder_attention_mask is not None:
+            mask_len = encoder_hidden_states.shape[-2]
+            downsample_stride = 64 * 3 * 2  # conv strides
+            encoder_attention_mask = encoder_attention_mask[..., ::downsample_stride][..., :mask_len]
+            encoder_attention_mask = encoder_attention_mask.reshape((encoder_attention_mask.shape[0], 1, 1, -1)).to(
+                torch.bool
+            )
+
         for decoder_layer in self.layers:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
@@ -794,6 +811,7 @@ class MoonshineDecoder(LlamaModel):
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=causal_mask,
+                    encoder_attention_mask=encoder_attention_mask,
                     encoder_hidden_states=encoder_hidden_states,
                     position_ids=position_ids,
                     past_key_value=past_key_values,
@@ -984,6 +1002,7 @@ class MoonshineModel(WhisperModel):
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
+            encoder_attention_mask=attention_mask,
             encoder_hidden_states=encoder_outputs[0],
             past_key_values=past_key_values,
             inputs_embeds=decoder_inputs_embeds,
