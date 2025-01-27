@@ -42,17 +42,17 @@ if is_vision_available():
 # fmt: off
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     # Vision encoder mapping
-    r"model.vision_tower_high.pos_embed":                           r"visual.pos_embed",
-    r"model.vision_tower_high.patch_embed.proj":                    r"visual.patch_embed.projection",
-    r"model.vision_tower_high.blocks.(\d+).norm":                   r"visual.layers.\1.layer_norm",
-    r"model.vision_tower_high.blocks.(\d+).attn":                   r"visual.layers.\1.attn",
-    r"model.vision_tower_high.blocks.(\d+).mlp.lin":                r"visual.layers.\1.mlp.fc",
-    r"model.vision_tower_high.neck.0":                              r"visual.neck.conv1",
-    r"model.vision_tower_high.neck.1":                              r"visual.neck.layer_norm1",
-    r"model.vision_tower_high.neck.2":                              r"visual.neck.conv2",
-    r"model.vision_tower_high.neck.3":                              r"visual.neck.layer_norm2",
-    r"model.vision_tower_high.net_(\d+)":                           lambda m: f"visual_adapter.conv_upsampler{int(m.group(1)) - 1}",
-    r"model.mm_projector_vary" :                                    r"visual_adapter.multimodal_projector",
+    r"model.vision_tower_high.pos_embed":                           r"vision_tower.pos_embed",
+    r"model.vision_tower_high.patch_embed.proj":                    r"vision_tower.patch_embed.projection",
+    r"model.vision_tower_high.blocks.(\d+).norm":                   r"vision_tower.layers.\1.layer_norm",
+    r"model.vision_tower_high.blocks.(\d+).attn":                   r"vision_tower.layers.\1.attn",
+    r"model.vision_tower_high.blocks.(\d+).mlp":                    r"vision_tower.layers.\1.mlp",
+    r"model.vision_tower_high.neck.0":                              r"vision_tower.neck.conv1",
+    r"model.vision_tower_high.neck.1":                              r"vision_tower.neck.layer_norm1",
+    r"model.vision_tower_high.neck.2":                              r"vision_tower.neck.conv2",
+    r"model.vision_tower_high.neck.3":                              r"vision_tower.neck.layer_norm2",
+    r"model.vision_tower_high.net_(\d+)":                           lambda m: f"multi_modal_projector.conv_upsampler{int(m.group(1)) - 1}",
+    r"model.mm_projector_vary" :                                    r"multi_modal_projector.multimodal_projector",
     r"model.":                                                      r"language_model.model.",
     r"lm_head":                                                     r"language_model.lm_head",
 }
@@ -90,27 +90,7 @@ def load_original_state_dict(model_id):
 
 
 def get_got_ocr2_config():
-    config = GotOcr2Config(
-        vocab_size=151860,
-        hidden_size=1024,
-        intermediate_size=2816,
-        num_hidden_layers=24,
-        num_attention_heads=16,
-        num_key_value_heads=16,
-        hidden_act="silu",
-        max_position_embeddings=32768,
-        initializer_range=0.02,
-        rms_norm_eps=1e-06,
-        use_cache=True,
-        tie_word_embeddings=True,
-        rope_theta=1000000.0,
-        use_sliding_window=False,
-        sliding_window=32768,
-        max_window_layers=21,
-        attention_dropout=0.0,
-        rope_scaling=None,
-        image_token_id=151859,
-    )
+    config = GotOcr2Config()
 
     return config
 

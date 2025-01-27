@@ -54,78 +54,65 @@ class GotOcr2VisionText2TextModelTester:
         bos_token_id=0,
         eos_token_id=0,
         pad_token_id=0,
-        image_token_id=1,
-        hidden_act="silu",
-        hidden_size=128,
-        vocab_size=99,
-        intermediate_size=37,
-        max_position_embeddings=512,
-        max_window_layers=3,
+        image_token_index=1,
         model_type="got_ocr2",
-        num_attention_heads=4,
-        num_hidden_layers=4,
-        num_key_value_heads=2,
-        rope_theta=10000,
-        tie_word_embeddings=True,
         is_training=True,
+        text_config={
+            "model_type": "qwen2",
+            "vocab_size": 99,
+            "hidden_size": 128,
+            "intermediate_size": 37,
+            "num_hidden_layers": 4,
+            "num_attention_heads": 4,
+            "num_key_value_heads": 2,
+            "output_channels": 64,
+            "hidden_act": "silu",
+            "max_position_embeddings": 512,
+            "rope_theta": 10000,
+            "mlp_ratio": 4,
+            "tie_word_embeddings": True,
+        },
         vision_config={
             "num_hidden_layers": 2,
             "output_channels": 64,
             "hidden_act": "quick_gelu",
             "hidden_size": 32,
-            "mlp_ratio": 4,
+            "mlp_dim": 128,
             "num_attention_heads": 4,
             "patch_size": 2,
             "image_size": 64,
         },
-        rope_scaling={"type": "mrope", "mrope_section": [2, 1, 1]},
     ):
         self.parent = parent
         self.ignore_index = ignore_index
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
-        self.image_token_id = image_token_id
-        self.hidden_act = hidden_act
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.max_position_embeddings = max_position_embeddings
-        self.max_window_layers = max_window_layers
+        self.image_token_index = image_token_index
         self.model_type = model_type
-        self.num_attention_heads = num_attention_heads
-        self.num_hidden_layers = num_hidden_layers
-        self.num_key_value_heads = num_key_value_heads
-        self.rope_theta = rope_theta
-        self.tie_word_embeddings = tie_word_embeddings
+        self.text_config = text_config
         self.vision_config = vision_config
-        self.rope_scaling = rope_scaling
         self.batch_size = batch_size
         self.num_channels = num_channels
         self.image_size = image_size
         self.is_training = is_training
-        self.vocab_size = vocab_size
         self.num_image_tokens = 64
         self.seq_length = seq_length + self.num_image_tokens
 
+        self.num_hidden_layers = text_config["num_hidden_layers"]
+        self.vocab_size = text_config["vocab_size"]
+        self.hidden_size = text_config["hidden_size"]
+        self.num_attention_heads = text_config["num_attention_heads"]
+
     def get_config(self):
         return GotOcr2Config(
-            hidden_size=self.hidden_size,
-            intermediate_size=self.intermediate_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            num_key_value_heads=self.num_key_value_heads,
-            hidden_act=self.hidden_act,
-            max_position_embeddings=self.max_position_embeddings,
+            text_config=self.text_config,
             vision_config=self.vision_config,
             model_type=self.model_type,
-            max_window_layers=self.max_window_layers,
-            rope_scaling=self.rope_scaling,
-            tie_word_embeddings=self.tie_word_embeddings,
             bos_token_id=self.bos_token_id,
             eos_token_id=self.eos_token_id,
             pad_token_id=self.pad_token_id,
-            image_token_id=self.image_token_id,
-            vocab_size=self.vocab_size,
+            image_token_index=self.image_token_index,
         )
 
     def prepare_config_and_inputs(self):
@@ -141,8 +128,8 @@ class GotOcr2VisionText2TextModelTester:
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
 
         # input_ids[:, -1] = self.pad_token_id
-        input_ids[input_ids == self.image_token_id] = self.pad_token_id
-        input_ids[:, : self.num_image_tokens] = self.image_token_id
+        input_ids[input_ids == self.image_token_index] = self.pad_token_id
+        input_ids[:, : self.num_image_tokens] = self.image_token_index
 
         inputs_dict = {
             "pixel_values": pixel_values,
@@ -215,6 +202,49 @@ class GotOcr2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                         msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                     )
 
+    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
+    def test_inputs_embeds(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+
+            input_ids = inputs["input_ids"]
+            del inputs["input_ids"]
+            del inputs["pixel_values"]
+
+            wte = model.get_input_embeddings()
+            inputs["inputs_embeds"] = wte(input_ids)
+
+            with torch.no_grad():
+                model(**inputs)
+
+    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
+    # while some other models require pixel_values to be present
+    def test_inputs_embeds_matches_input_ids(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+
+            inputs = self._prepare_for_class(inputs_dict, model_class)
+            input_ids = inputs["input_ids"]
+            del inputs["input_ids"]
+            del inputs["pixel_values"]
+
+            inputs_embeds = model.get_input_embeddings()(input_ids)
+
+            with torch.no_grad():
+                out_ids = model(input_ids=input_ids, **inputs)[0]
+                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
+            torch.testing.assert_close(out_embeds, out_ids)
+
     @unittest.skip(
         reason="VLMs can't generate from inputs embeds and pixels. This can be tested as part of bacbone LM, no need to run the test for VLMs"
     )
@@ -231,6 +261,10 @@ class GotOcr2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         reason="GotOcr2 needs a dynamic control flow to pass pixel values to the forward function only in the first generation step"
     )
     def test_generate_compile_1_end_to_end(self):
+        pass
+
+    @unittest.skip("FlashAttention only support fp16 and bf16 data type")
+    def test_flash_attn_2_fp32_ln(self):
         pass
 
 
