@@ -88,9 +88,15 @@ def to_channel_dimension_format(
         return image
 
     if target_channel_dim == ChannelDimension.FIRST:
-        image = image.transpose((2, 0, 1))
+        if image.ndim == 3:
+            image = image.transpose((2, 0, 1))
+        elif image.ndim == 4:
+            image = image.transpose((0, 3, 1, 2))
     elif target_channel_dim == ChannelDimension.LAST:
-        image = image.transpose((1, 2, 0))
+        if image.ndim == 3:
+            image = image.transpose((1, 2, 0))
+        elif image.ndim == 4:
+            image = image.transpose((0, 2, 3, 1))
     else:
         raise ValueError("Unsupported channel dimension format: {}".format(channel_dim))
 

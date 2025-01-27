@@ -25,7 +25,10 @@ from .dynamic_module_utils import custom_object_save
 from .image_processing_base import BatchFeature, ImageProcessingMixin
 from .image_processing_utils import get_size_dict
 from .image_transforms import center_crop, normalize, rescale
-from .image_utils import ChannelDimension, load_video
+from .image_utils import (
+    ChannelDimension,
+    load_video,
+)
 from .utils import (
     VIDEO_PROCESSOR_NAME,
     add_model_info_to_auto_map,
@@ -74,11 +77,11 @@ class BaseVideoProcessor(ImageProcessingMixin):
         **kwargs,
     ) -> np.ndarray:
         """
-        Rescale an video by a scale factor. video = video * scale.
+        Rescale a video by a scale factor. video = video * scale.
 
         Args:
             video (`np.ndarray`):
-                Video to rescale.
+                Video or video frame to rescale.
             scale (`float`):
                 The scaling factor to rescale pixel values by.
             data_format (`str` or `ChannelDimension`, *optional*):
@@ -107,11 +110,11 @@ class BaseVideoProcessor(ImageProcessingMixin):
         **kwargs,
     ) -> np.ndarray:
         """
-        Normalize an video. video = (video - mean) / std.
+        Normalize a video. video = (video - mean) / std.
 
         Args:
             video (`np.ndarray`):
-                Video to normalize.
+                Video or video frame to normalize.
             mean (`float` or `Iterable[float]`):
                 Mean to use for normalization.
             std (`float` or `Iterable[float]`):
@@ -143,12 +146,12 @@ class BaseVideoProcessor(ImageProcessingMixin):
         **kwargs,
     ) -> np.ndarray:
         """
-        Center crop an video to `(size["height"], size["width"])`. If the input size is smaller than `crop_size` along
+        Center crop a video to `(size["height"], size["width"])`. If the input size is smaller than `crop_size` along
         any edge, the video is padded with 0's and then center cropped.
 
         Args:
             video (`np.ndarray`):
-                Video to center crop.
+                Video or video frame to center crop.
             size (`Dict[str, int]`):
                 Size of the output video.
             data_format (`str` or `ChannelDimension`, *optional*):
@@ -400,18 +403,6 @@ class BaseVideoProcessor(ImageProcessingMixin):
 
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
         is_local = os.path.isdir(pretrained_model_name_or_path)
-        old_video_processor_name = "preprocessor_config.json"
-        if os.path.isdir(pretrained_model_name_or_path):
-            video_processor_file = os.path.join(pretrained_model_name_or_path, VIDEO_PROCESSOR_NAME)
-            old_video_processor_file = os.path.join(pretrained_model_name_or_path, old_video_processor_name)
-            if not os.path.exists(video_processor_file) and os.path.exists(old_video_processor_file):
-                logger.warning_once(
-                    "You have video processor config saved in `preprocessor.json` file which is deprecated. "
-                    "Video processor configs should be saved in their own `video_preprocessor.json` file. You can rename "
-                    "the file or load and save the processor back which renames it automatically. "
-                    "Loading from `preprocessor.json` will be removed in v5.0."
-                )
-                video_processor_file = old_video_processor_file
         if os.path.isfile(pretrained_model_name_or_path):
             resolved_video_processor_file = pretrained_model_name_or_path
             is_local = True
@@ -420,9 +411,10 @@ class BaseVideoProcessor(ImageProcessingMixin):
             resolved_video_processor_file = download_url(pretrained_model_name_or_path)
         else:
             try:
-                # try to load with an old config name first and if not successfull try with
-                # the new file name. In case we can load with old name successfully, raise a deprecation warning
-                video_processor_file = old_video_processor_name
+                # Try to load with a new config name first and if not successfull try with
+                # the old file name. In case we can load with old name only, raise a deprecation warning
+                # Deprecated until v5.0
+                video_processor_file = VIDEO_PROCESSOR_NAME
                 resolved_video_processor_file = cached_file(
                     pretrained_model_name_or_path,
                     video_processor_file,
@@ -437,8 +429,7 @@ class BaseVideoProcessor(ImageProcessingMixin):
                     subfolder=subfolder,
                 )
             except EnvironmentError:
-                video_processor_file = VIDEO_PROCESSOR_NAME
-                # Load from local folder or from cache or download from model Hub and cache
+                video_processor_file = "preprocessor_config.json"
                 resolved_video_processor_file = cached_file(
                     pretrained_model_name_or_path,
                     video_processor_file,
@@ -451,6 +442,12 @@ class BaseVideoProcessor(ImageProcessingMixin):
                     user_agent=user_agent,
                     revision=revision,
                     subfolder=subfolder,
+                )
+                logger.warning_once(
+                    "You have video processor config saved in `preprocessor.json` file which is deprecated. "
+                    "Video processor configs should be saved in their own `video_preprocessor.json` file. You can rename "
+                    "the file or load and save the processor back which renames it automatically. "
+                    "Loading from `preprocessor.json` will be removed in v5.0."
                 )
             except EnvironmentError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to
@@ -463,13 +460,6 @@ class BaseVideoProcessor(ImageProcessingMixin):
                     " it from 'https://huggingface.co/models', make sure you don't have a local directory with the"
                     f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
                     f" directory containing a {VIDEO_PROCESSOR_NAME} file"
-                )
-            else:
-                logger.warning_once(
-                    "You have video processor config saved in `preprocessor.json` file which is deprecated. "
-                    "Video processor configs should be saved in their own `video_preprocessor.json` file. You can rename "
-                    "the file or load and save the processor back which renames it automatically. "
-                    "Loading from `preprocessor.json` will be removed in v5.0."
                 )
 
         try:

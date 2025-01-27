@@ -628,6 +628,8 @@
         title: YOSO
       - local: model_doc/zamba
         title: Zamba
+      - local: model_doc/zamba2
+        title: Zamba2
       title: Text models
     - isExpanded: false
       sections:
