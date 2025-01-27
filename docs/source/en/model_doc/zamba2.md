@@ -34,6 +34,8 @@ Zamba2-1.2B, Zamba2-2.7B and Zamba2-7B are hybrid models combining state-space m
 Zamba2 requires you use `transformers` version 4.48.0 or higher:
 ```bash
 pip install transformers>=4.48.0
+```
+
 ## Inference
 
 ```python
