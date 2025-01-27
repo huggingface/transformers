@@ -4890,10 +4890,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             ):
                 trainer.train()
 
-            steps_per_epoch = get_steps_per_epoch(trainer)
-
             assert trainer.state.best_metric == 0.90
-            assert trainer.state.best_global_step == steps_per_epoch * 1.5
+            assert trainer.state.best_global_step == 3
 
             assert trainer.state.best_model_checkpoint is None
 
