@@ -4773,9 +4773,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 "_evaluate",
                 side_effect=evaluate_side_effect_factory(
                     [
-                        {"eval_accuracy": 0.59, "epoch": 1.0},
-                        {"eval_accuracy": 0.57, "epoch": 2.0},
-                        {"eval_accuracy": 0.55, "epoch": 3.0},
+                        {"eval_accuracy": 0.59},
+                        {"eval_accuracy": 0.57},
+                        {"eval_accuracy": 0.55},
                     ]
                 ),
             ):
@@ -4809,9 +4809,9 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 "_evaluate",
                 side_effect=evaluate_side_effect_factory(
                     [
-                        {"eval_accuracy": 0.59, "epoch": 1.0},
-                        {"eval_accuracy": 0.57, "epoch": 2.0},
-                        {"eval_accuracy": 0.55, "epoch": 3.0},
+                        {"eval_accuracy": 0.59},
+                        {"eval_accuracy": 0.57},
+                        {"eval_accuracy": 0.55},
                     ]
                 ),
             ):
@@ -4847,18 +4847,16 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 "_evaluate",
                 side_effect=evaluate_side_effect_factory(
                     [
-                        {"eval_accuracy": 0.90, "epoch": 0.5},
-                        {"eval_accuracy": 0.80, "epoch": 1.0},
-                        {"eval_accuracy": 0.70, "epoch": 1.5},
+                        {"eval_accuracy": 0.90},
+                        {"eval_accuracy": 0.80},
+                        {"eval_accuracy": 0.70},
                     ]
                 ),
             ):
                 trainer.train()
 
-            steps_per_epoch = get_steps_per_epoch(trainer)
-
             assert trainer.state.best_metric == 0.90
-            assert trainer.state.best_global_step == steps_per_epoch // 2
+            assert trainer.state.best_global_step == 1
 
             best_ckpt = os.path.join(tmpdir, f"{PREFIX_CHECKPOINT_DIR}-{trainer.state.best_global_step}")
             assert trainer.state.best_model_checkpoint == best_ckpt
@@ -4884,8 +4882,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 "_evaluate",
                 side_effect=evaluate_side_effect_factory(
                     [
-                        {"eval_accuracy": 0.90, "epoch": 1.5},
-                        {"eval_accuracy": 0.80, "epoch": 2.0},
+                        {"eval_accuracy": 0.90},
+                        {"eval_accuracy": 0.80},
                         {"eval_accuracy": 0.70},
                     ]
                 ),
