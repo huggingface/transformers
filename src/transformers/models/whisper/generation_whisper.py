@@ -1120,14 +1120,25 @@ class WhisperGenerationMixin(GenerationMixin):
         # Stack back seek_outputs tensors after splitting them with the split_by_batch_index method
         outputs = {}
         for key in seek_outputs[0].keys():
-            if key in ["sequences", "beam_indices", "token_timestamps"]:
-                outputs[key] = torch.stack([v[key] for v in seek_outputs], dim=0).to(device)
+            # Add sequences_scores to the list of tensor fields that should be stacked
+            if key in ["sequences", "beam_indices", "sequences_scores", "token_timestamps"]:
+                if all(key in v and v[key] is not None for v in seek_outputs):
+                    # For beam_indices, we need to ensure each batch has its own independent set of beam indices
+                    if key == "beam_indices":
+                        # First stack the beam indices
+                        stacked = torch.stack([v[key] for v in seek_outputs], dim=0).to(device)
+                        # For each batch, ensure its beam indices are in range [0, num_beams)
+                        valid_positions = stacked != -1
+                        stacked[valid_positions] = stacked[valid_positions] % kwargs.get("num_beams", 5)
+                        outputs[key] = stacked
+                    else:
+                        outputs[key] = torch.stack([v[key] for v in seek_outputs], dim=0).to(device)
+                else:
+                    outputs[key] = None
             elif key in ["scores", "encoder_attentions", "encoder_hidden_states", "logits"]:
                 outputs[key] = tuple(
                     torch.stack([v[key][i] for v in seek_outputs]).to(device) for i in range(len(seek_outputs[0][key]))
                 )
-            elif key == "sequences_scores":
-                outputs[key] = torch.stack([v[key] for v in seek_outputs], dim=0).to(device)
             elif key in ["decoder_attentions", "decoder_hidden_states", "cross_attentions"]:
                 outputs[key] = tuple(
                     tuple(
