@@ -12,7 +12,7 @@ RUN export PATH="${PATH:+${PATH}:}~/opt/rocm/bin"
 
 RUN python3 -m pip install --no-cache-dir --upgrade pip numpy
 
-RUN python3 -m pip install --pre torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/rocm6.3/
+RUN python3 -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/nightly/rocm6.3/
 
 RUN python3 -m pip install --no-cache-dir --upgrade importlib-metadata setuptools ninja git+https://github.com/facebookresearch/detectron2.git pytesseract "itsdangerous<2.1.0"
 
