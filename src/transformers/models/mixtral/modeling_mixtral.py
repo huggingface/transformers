@@ -1198,6 +1198,10 @@ class MixtralForSequenceClassification(MixtralPreTrainedModel):
                 last_non_pad_token = (token_indices * non_pad_mask).max(-1).values
             else:
                 last_non_pad_token = -1
+                logger.warning_once(
+                    f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
+                    "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
+                )
 
         pooled_logits = logits[torch.arange(batch_size, device=logits.device), last_non_pad_token]
 
