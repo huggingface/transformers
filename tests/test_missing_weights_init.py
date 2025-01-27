@@ -86,3 +86,26 @@ class TestMissingWeightsInit(unittest.TestCase):
         
         # 3. Verify weights are exactly preserved
         torch.testing.assert_close(loaded_model.base_layer.weight.data, original_weights)
+
+    def test_initialization_without_fast_init(self):
+        """Test that initialization works the same with and without _fast_init"""
+        # 1. Create and save base model
+        base_config = self.TestConfig(use_new=False)
+        base_model = self.TestModel(base_config)
+        base_model.save_pretrained(self.tmp_dir)
+        
+        # 2. Load with new layer using both methods
+        new_config = self.TestConfig(use_new=True)
+        model_with_fast_init = self.TestModel.from_pretrained(self.tmp_dir, config=new_config)
+        model_without_fast_init = self.TestModel.from_pretrained(self.tmp_dir, config=new_config, _fast_init=False)
+        
+        # 3. Verify both methods give same initialization
+        torch.testing.assert_close(
+            model_with_fast_init.new_layer.weight.data,
+            model_without_fast_init.new_layer.weight.data,
+            msg="Initialization differs between _fast_init=True and _fast_init=False"
+        )
+        
+        # 4. Verify both are properly initialized
+        self.assertTrue(torch.all(model_with_fast_init.new_layer.weight.data == 1.0),
+                       "New layer not properly initialized with _fast_init=True")
