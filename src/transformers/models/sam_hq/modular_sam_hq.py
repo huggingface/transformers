@@ -147,28 +147,6 @@ class SamHQImageSegmentationOutput(SamImageSegmentationOutput):
     pass
 
 
-class SamHQPatchEmbeddings(SamPatchEmbeddings):
-    pass
-
-
-class SamHQMLPBlock(SamMLPBlock):
-    pass
-
-
-class SamHQVisionAttention(SamVisionAttention):
-    pass
-
-
-class SamHQVisionLayer(SamVisionLayer):
-    pass
-
-
-class SamHQLayerNorm(SamLayerNorm):
-    pass
-
-
-class SamHQVisionNeck(SamVisionNeck):
-    pass
 
 
 class SamHQVisionEncoder(SamVisionEncoder):
@@ -239,19 +217,11 @@ class SamHQVisionEncoder(SamVisionEncoder):
         )
 
 
-class SamHQMaskEmbedding(SamMaskEmbedding):
+class SamHQLayerNorm(SamLayerNorm):
     pass
 
 
 class SamHQPromptEncoder(SamPromptEncoder):
-    pass
-
-
-class SamHQAttention(SamAttention):
-    pass
-
-
-class SamHQTwoWayAttentionBlock(SamTwoWayAttentionBlock):
     pass
 
 
@@ -819,4 +789,4 @@ class SamHQModel(SamHQPreTrainedModel):
 
 
 
-__all__ = ["SamHQVisionConfig","SamHQMaskDecoderConfig","SamHQPromptEncoderConfig","SamHQConfig"]
+__all__ = ["SamHQVisionConfig","SamHQMaskDecoderConfig","SamHQPromptEncoderConfig","SamHQConfig","SamHQModel", "SamHQPreTrainedModel"]
