@@ -1655,7 +1655,7 @@ class GenerationTesterMixin:
                 inputs_dict.pop("pixel_values_images", None)
             #   2.C - No easy fix, let's skip the check that compares the outputs from `input_ids` and `inputs_embeds`
             has_complex_embeds_computation = any(
-                model_name in model_class.__name__.lower() for model_name in ["moshi", "qwen2vl"]
+                model_name in model_class.__name__.lower() for model_name in ["moshi", "qwen2vl", "qwen2_5_vl"]
             )
             # 3 - `inputs_dict` doesn't contain `attention_mask`. When `attention_mask` is not passed to generate,
             # we infer it from `input_ids`. The last test case will fail if there is a pad token in the original input.
