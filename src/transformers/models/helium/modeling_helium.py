@@ -479,6 +479,13 @@ HELIUM_INPUTS_DOCSTRING = r"""
 """
 
 
+def get_position_ids_from_cu_seq_lens(cu_seq_lens: torch.Tensor) -> torch.Tensor:
+    pos_ids = torch.cat(
+        [torch.arange(s, dtype=torch.int32, device=cu_seq_lens.device) for s in cu_seq_lens.diff(dim=-1)], dim=-1
+    )[None]
+    return pos_ids
+
+
 @add_start_docstrings(
     "The bare Helium Model outputting raw hidden-states without any specific head on top.",
     HELIUM_START_DOCSTRING,
@@ -557,7 +564,10 @@ class HeliumModel(HeliumPreTrainedModel):
             )
 
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            if "cu_seq_lens_q" in flash_attn_kwargs:
+                position_ids = get_position_ids_from_cu_seq_lens(flash_attn_kwargs["cu_seq_lens_q"])
+            else:
+                position_ids = cache_position.unsqueeze(0)
 
         causal_mask = self._update_causal_mask(
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
