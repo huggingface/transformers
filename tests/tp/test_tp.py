@@ -13,9 +13,9 @@
 # limitations under the License.
 
 import os
-import textwrap
-import tempfile
 import subprocess
+import tempfile
+import textwrap
 
 from transformers import is_torch_available
 from transformers.models.llama.configuration_llama import LlamaConfig
@@ -64,7 +64,7 @@ class TestTensorParallel(TestCasePlus):
             model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16, tp_plan="auto")
             torch.distributed.barrier()
 
-            # The expected full model memory footprint 
+            # The expected full model memory footprint
             expected_model_memory = 16
             overhead_factor = 1.2
 
@@ -94,7 +94,6 @@ class TestTensorParallel(TestCasePlus):
             print(sub.stdout)
             print(sub.stderr)
             # successful return here == success - any errors would have caused an error in the sub-call
-
 
 
 if __name__ == "__main__":
