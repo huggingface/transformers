@@ -16,6 +16,8 @@ rendered properly in your Markdown viewer.
 
 # GLM
 
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+
 ## Overview
 
 The GLM Model was proposed
