@@ -1,7 +1,9 @@
 import math
 from typing import Callable, Optional, Tuple
 
+import numpy as np
 import torch
+import torch.distributed as dist
 import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
@@ -23,8 +25,6 @@ from ..llama.modeling_llama import (
     eager_attention_forward,
 )
 from .configuration_deepseekv3 import DeepseekV3Config
-import torch.distributed as dist
-import numpy as np
 
 
 logger = logging.get_logger(__name__)
