@@ -93,7 +93,7 @@ class TestTensorParallel(TestCasePlus):
                 raise ValueError("Each model shard is larger than what is expected.")
 
             torch.distributed.barrier()
-            torch.utils.distributed.destroy_process_group()
+            torch.distributed.destroy_process_group()
             """
         )
         self.torchrun(script_to_run)
