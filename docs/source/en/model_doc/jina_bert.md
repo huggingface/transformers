@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 ## Overview
 
 The JinaBERT model was proposed in [Jina Embeddings 2: 8192-Token General-Purpose Text Embeddings for Long Documents](https://arxiv.org/abs/2310.19923) by Michael Günther, Jackmin Ong, Isabelle Mohr, Alaeddine Abdessalem, Tanguy Abel, Mohammad Kalim Akram, Susana Guzman, Georgios Mastrapas, Saba Sturua, Bo Wang, Maximilian Werk, Nan Wang, Han Xiao.
-It is an multilingual embedding model speaks English and 30 widely used programming languages.
+It is an multilingual embedding model that supports English and 30 widely used programming languages.
 It is based on a Bert architecture that supports the symmetric bidirectional variant of [ALiBi](https://arxiv.org/abs/2108.12409) to allow longer sequence length.
 The abstract from the paper is the following:
 
