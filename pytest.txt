@@ -1,0 +1,7 @@
+tests/models
+-k "test_generate_compile_"
+-v
+-n 1
+--flake-finder
+--flake-runs=1
+--make-reports=tests_torch
