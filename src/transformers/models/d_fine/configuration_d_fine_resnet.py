@@ -131,4 +131,4 @@ class DFineResNetConfig(BackboneConfigMixin, PretrainedConfig):
         self.stage_config = stage_config
 
 
-__all__ = ["DFineResNetConfig"]
+__all__ = ["DFineResNetConfig", "DFineResNetStageConfig"]

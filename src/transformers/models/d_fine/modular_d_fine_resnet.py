@@ -16,7 +16,7 @@
 
 from ..rt_detr.configuration_rt_detr_resnet import RTDetrResNetConfig
 from ..rt_detr.modeling_rt_detr_resnet import RTDetrResNetBackbone, RTDetrResNetPreTrainedModel, RTDetrResNetEmbeddings, RTDetrResNetConvLayer
-from torch import nn
+from torch import nn, Tensor
 import torch
 from typing import List, Any, Iterator, NamedTuple
 
@@ -60,6 +60,7 @@ class DFineResNetConvLayer(RTDetrResNetConvLayer):
             groups: int = 1, 
             activation: str = "relu"):
         super().__init__(in_channels, out_channels, kernel_size, stride, activation)
+        self.lab = nn.Identity()
         self.convolution = nn.Conv2d(
             in_channels, 
             out_channels, 
@@ -69,6 +70,13 @@ class DFineResNetConvLayer(RTDetrResNetConvLayer):
             padding=kernel_size // 2, 
             bias=False
         )
+    
+    def forward(self, input: Tensor) -> Tensor:
+        hidden_state = self.convolution(input)
+        hidden_state = self.normalization(hidden_state)
+        hidden_state = self.activation(hidden_state)
+        hidden_state = self.lab(hidden_state)
+        return hidden_state
 
 
 class DFineResNetConvLayerLight(nn.Module):
@@ -260,7 +268,8 @@ class DFineResNetStage(nn.Module):
                 in_chs,
                 in_chs,
                 kernel_size=3,
-                stride=2
+                stride=2,
+                groups=in_chs
             )
         else:
             self.downsample = nn.Identity()
@@ -303,4 +312,4 @@ class DFineResNetBackbone(RTDetrResNetBackbone):
         self.encoder = DFineResNetEncoder(config=config)
 
 
-__all__ = ["DFineResNetConfig", "DFineResNetBackbone", "DFineResNetPreTrainedModel"]
+__all__ = ["DFineResNetConfig", "DFineResNetStageConfig", "DFineResNetBackbone", "DFineResNetPreTrainedModel"]

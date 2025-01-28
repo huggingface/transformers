@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from transformers.configuration_utils import PretrainedConfig
 from ..rt_detr.configuration_rt_detr import RTDetrConfig
 from ..rt_detr.modeling_rt_detr import (
     RTDetrDecoderLayer,
@@ -24,6 +25,8 @@ from ..rt_detr.modeling_rt_detr import (
     RTDetrRepVggBlock,
     RTDetrConvNormLayer,
     RTDetrPreTrainedModel,
+    RTDetrConvEncoder,
+    RTDetrForObjectDetection,
     inverse_sigmoid,
 )
 
@@ -40,13 +43,14 @@ from ...activations import ACT2CLS
 class DFineConfig(RTDetrConfig):
     model_type = "d-fine"
 
-    def __init__(self, decoder_offset_scale=0.5, eval_idx=-1, layer_scale=1, reg_max=32, **super_kwargs):
+    def __init__(self, decoder_offset_scale=0.5, eval_idx=-1, layer_scale=1, reg_max=32, reg_scale=4., **super_kwargs):
         super().__init__(**super_kwargs)
 
         self.decoder_offset_scale = decoder_offset_scale
         self.eval_idx = eval_idx
         self.layer_scale = layer_scale
         self.reg_max = reg_max
+        self.reg_scale = reg_scale
 
 
 def deformable_attention_core_func_v2(
@@ -252,6 +256,8 @@ class DFineDecoderLayer(RTDetrDecoderLayer):
         self.encoder_attn = DFineMultiscaleDeformableAttention(config=config)
         # gate
         self.gateway = Gate(config.d_model)
+
+        del self.encoder_attn_layer_norm
         self._reset_parameters()
 
     def forward(
@@ -314,10 +320,17 @@ class DFineDecoderLayer(RTDetrDecoderLayer):
         init.xavier_uniform_(self.fc2.weight)
 
 
+class DFineConvEncoder(RTDetrConvEncoder):
+    def __init__(self, config: DFineConfig ):
+        super().__init__(config)
+        self.intermediate_channel_sizes = config.encoder_in_channels
+
+
 class DFinePreTrainedModel(RTDetrPreTrainedModel):
     def _init_weights(self, module):
-        # this could be simplified like calling the base class function first then adding new stuff
-        """initialize linear layer biasreturn value according to a given probability value."""
+        """Initalize the weights"""
+
+        """initialize linear layer bias value according to a given probability value."""
         if isinstance(module, (DFineForObjectDetection, DFineDecoder)):
             if module.class_embed is not None:
                 for layer in module.class_embed:
@@ -349,7 +362,7 @@ class DFinePreTrainedModel(RTDetrPreTrainedModel):
                 module.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
             nn.init.constant_(module.attention_weights.weight.data, 0.0)
             nn.init.constant_(module.attention_weights.bias.data, 0.0)
-            
+
         if isinstance(module, DFineModel):
             prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
             bias = float(-math.log((1 - prior_prob) / prior_prob))
@@ -367,6 +380,30 @@ class DFinePreTrainedModel(RTDetrPreTrainedModel):
             nn.init.xavier_uniform_(module.denoising_class_embed.weight)
 
 
+class Integral(nn.Module):
+    """
+    A static layer that calculates integral results from a distribution.
+
+    This layer computes the target location using the formula: `sum{Pr(n) * W(n)}`,
+    where Pr(n) is the softmax probability vector representing the discrete
+    distribution, and W(n) is the non-uniform Weighting Function.
+
+    Args:
+        reg_max (int): Max number of the discrete bins. Default is 32.
+                       It can be adjusted based on the dataset or task requirements.
+    """
+
+    def __init__(self, reg_max=32):
+        super(Integral, self).__init__()
+        self.reg_max = reg_max
+
+    def forward(self, x, project):
+        shape = x.shape
+        x = F.softmax(x.reshape(-1, self.reg_max + 1), dim=1)
+        x = F.linear(x, project.to(x.device)).reshape(-1, 4)
+        return x.reshape(list(shape[:-1]) + [-1])
+    
+
 class DFineDecoder(RTDetrDecoder):
     """
     D-FINE Decoder implementing Fine-grained Distribution Refinement (FDR).
@@ -379,8 +416,11 @@ class DFineDecoder(RTDetrDecoder):
     def __init__(self, config: DFineConfig):
         self.eval_idx = config.eval_idx if config.eval_idx >= 0 else config.decoder_layers + config.eval_idx
         super().__init__(config=config)
+        self.reg_scale = nn.Parameter(torch.tensor([config.reg_scale]), requires_grad=False)
+        self.reg_max = config.reg_max
         self.d_model = config.d_model
         self.layer_scale = config.layer_scale
+        self.integral = Integral(self.reg_max)
         self.num_head = config.decoder_attention_heads
         self.up = nn.Parameter(torch.tensor([0.5]), requires_grad=False)
         self.layers = nn.ModuleList(
@@ -403,25 +443,22 @@ class DFineDecoder(RTDetrDecoder):
 
     def forward(
         self,
-        inputs_embeds,
-        ref_points_unact,
+        encoder_hidden_states,
+        reference_points,
         memory,
         spatial_shapes,
         bbox_head,
         score_head,
         pre_bbox_head,
-        integral,
-        up,
-        reg_scale,
-        encoder_attn_mask=None,
+        encoder_attention_mask=None,
         memory_mask=None,
         output_attentions=None,
         return_dict=None,
     ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if inputs_embeds is not None:
-            hidden_states = inputs_embeds
+        if encoder_hidden_states is not None:
+            hidden_states = encoder_hidden_states
 
         dec_out_bboxes = []
         dec_out_logits = []
@@ -431,8 +468,8 @@ class DFineDecoder(RTDetrDecoder):
         output_detach = pred_corners_undetach = 0
         value = self.value_op(memory, None, None, memory_mask, spatial_shapes)
 
-        project = weighting_function(self.reg_max, up, reg_scale)
-        ref_points_detach = F.sigmoid(ref_points_unact)
+        project = weighting_function(self.reg_max, self.up, self.reg_scale)
+        ref_points_detach = F.sigmoid(reference_points)
 
         for i, decoder_layer in enumerate(self.layers):
             ref_points_input = ref_points_detach.unsqueeze(2)
@@ -451,7 +488,7 @@ class DFineDecoder(RTDetrDecoder):
                 reference_points=ref_points_input,
                 spatial_shapes=spatial_shapes,
                 encoder_hidden_states=value,
-                encoder_attention_mask=encoder_attn_mask,
+                encoder_attention_mask=encoder_attention_mask,
                 output_attentions=output_attentions,
             )
 
@@ -465,7 +502,7 @@ class DFineDecoder(RTDetrDecoder):
 
             # Refine bounding box corners using FDR, integrating previous layer's corrections
             pred_corners = bbox_head[i](hidden_states + output_detach) + pred_corners_undetach
-            inter_ref_bbox = distance2bbox(ref_points_initial, integral(pred_corners, project), reg_scale)
+            inter_ref_bbox = distance2bbox(ref_points_initial, self.integral(pred_corners, project), self.reg_scale)
 
             if self.training or i == self.eval_idx:
                 scores = score_head[i](output)
@@ -507,18 +544,34 @@ class DFineDecoder(RTDetrDecoder):
 class DFineModel(RTDetrModel):
     def __init__(self, config: DFineConfig):
         super().__init__(config)
-
-        # decoder
+        del self.decoder_input_proj
         self.pre_bbox_head = MLP(config.hidden_size, config.hidden_size, 4, 3)
+        self.encoder = DFineHybridEncoder(config=config)
+        num_backbone_outs = len(config.decoder_in_channels)
+        decoder_input_proj = []
+        for _ in range(num_backbone_outs):
+            in_channels = config.decoder_in_channels[_]
+            decoder_input_proj.append(
+                nn.Sequential(
+                    nn.Conv2d(config.encoder_hidden_dim, in_channels, kernel_size=1, bias=False),
+                    nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
+                )
+            )
+        for _ in range(config.num_feature_levels - num_backbone_outs):
+            decoder_input_proj.append(
+                nn.Sequential(
+                    nn.Conv2d(config.encoder_hidden_dim, in_channels, kernel_size=3, stride=2, padding=1, bias=False),
+                    nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
+                )
+            )
+            in_channels = config.d_model
+        self.decoder_input_proj = nn.ModuleList(decoder_input_proj)
         self.decoder = DFineDecoder(config)
 
-        # create encoder
-        self.encoder = DFineHybridEncoder(config=config)
 
-
-class DFineForObjectDetection(DFinePreTrainedModel):
+class DFineForObjectDetection(RTDetrForObjectDetection, DFinePreTrainedModel):
     def __init__(self, config: DFineConfig):
-        super().__init__(config)
+        DFinePreTrainedModel.__init__(config)
 
         # D-FINE encoder-decoder model
         self.model = DFineModel(config)
@@ -650,7 +703,17 @@ class DFineVggBlock(RTDetrRepVggBlock):
 
 
 class DFineConvNormLayer(RTDetrConvNormLayer):
-    pass
+    def __init__(self, config, in_channels, out_channels, kernel_size, stride, groups=1, padding=None, activation=None):
+        super().__init__(config, in_channels, out_channels, kernel_size, stride, padding=None, activation=None)
+        self.conv = nn.Conv2d(
+            in_channels,
+            out_channels,
+            kernel_size,
+            stride,
+            groups=groups,
+            padding=(kernel_size - 1) // 2 if padding is None else padding,
+            bias=False,
+        )
 
 
 class DFineRepVggBlock(nn.Module):
