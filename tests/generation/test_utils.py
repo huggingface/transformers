@@ -2024,8 +2024,13 @@ class GenerationTesterMixin:
                 dynamic_outputs.append(gen_out)
                 # sanity checks for the default cache implementation
                 if not has_defined_cache_implementation:
-                    self.assertTrue(isinstance(gen_out.past_key_values, DynamicCache))
-                    self.assertFalse(gen_out.past_key_values.is_compileable)
+                    decoder_cache = (
+                        gen_out.past_key_values.self_attention_cache
+                        if config.is_encoder_decoder
+                        else gen_out.past_key_values
+                    )
+                    self.assertTrue(isinstance(decoder_cache, DynamicCache))
+                    self.assertFalse(decoder_cache.is_compileable)
                     self.assertFalse(hasattr(model, "_compiled_call"))  # our auto compile should NOT have been called
 
             # get compiled results -- relies on the automatic compilation triggered by specific "cache_implementation"
@@ -2037,8 +2042,13 @@ class GenerationTesterMixin:
                 gen_out = model.generate(**model_inputs, **generation_kwargs)
                 compiled_outputs.append(gen_out)
                 # sanity checks
-                self.assertFalse(isinstance(gen_out.past_key_values, DynamicCache))
-                self.assertTrue(gen_out.past_key_values.is_compileable)
+                decoder_cache = (
+                    gen_out.past_key_values.self_attention_cache
+                    if config.is_encoder_decoder
+                    else gen_out.past_key_values
+                )
+                self.assertFalse(isinstance(decoder_cache, DynamicCache))
+                self.assertTrue(decoder_cache.is_compileable)
                 self.assertTrue(hasattr(model, "_compiled_call"))  # our auto compile should have been called
 
             for dynamic_result, compiled_result in zip(dynamic_outputs, compiled_outputs):
