@@ -1,11 +1,11 @@
 import json
+from typing import Any, Dict
+
 import torch
-from typing import Dict, Any
-from transformers.quantizers import HfQuantizer
+
+from transformers import AutoModelForCausalLM, AutoTokenizer
+from transformers.quantizers import HfQuantizer, register_quantization_config, register_quantizer
 from transformers.utils.quantization_config import QuantizationConfigMixin
-from transformers.quantizers import register_quantization_config, register_quantizer
-from transformers import AutoModelForCausalLM
-from transformers import AutoTokenizer
 
 
 @register_quantization_config("custom")
@@ -72,7 +72,7 @@ input_text = "once there is"
 inputs = tokenizer(input_text, return_tensors="pt")
 output = model_8bit.generate(
     **inputs,
-    max_length=100, 
+    max_length=100,
     num_return_sequences=1,
     no_repeat_ngram_size=2,
 )

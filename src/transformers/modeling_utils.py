@@ -3643,7 +3643,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # In order to ensure popular quantization methods are supported. Can be disable with `disable_telemetry`
             try:
                 user_agent["quant"] = hf_quantizer.quantization_config.quant_method.value
-            except:
+            except Exception:
                 user_agent["quant"] = hf_quantizer.quantization_config.quant_method
             # Force-set to `True` for more mem efficiency
             if low_cpu_mem_usage is None:
