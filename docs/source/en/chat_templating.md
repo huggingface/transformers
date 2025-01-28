@@ -39,7 +39,7 @@ Let's make this concrete with a quick example using the `mistralai/Mistral-7B-In
 ... ]
 
 >>> tokenizer.apply_chat_template(chat, tokenize=False)
-"<s>[INST] Hello, how are you? [/INST]I'm doing great. How can I help you today?</s> [INST] I'd like to show off how chat templating works! [/INST]"
+"<s> [INST] Hello, how are you? [/INST] I'm doing great. How can I help you today?</s> [INST] I'd like to show off how chat templating works! [/INST]"
 ```
 
 Notice how the tokenizer has added the control tokens [INST] and [/INST] to indicate the start and end of
