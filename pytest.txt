@@ -1,5 +1,4 @@
-tests/models
--k "test_generate_compile_"
+tests/models/blip/test_modeling_blip.py::BlipVisionModelTest::test_batching_equivalence
 -v
 -n 1
 --flake-finder
