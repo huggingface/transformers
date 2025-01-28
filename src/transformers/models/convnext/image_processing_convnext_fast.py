@@ -85,6 +85,7 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
         image_mean: Union[float, List[float]] = None,
         image_std: Union[float, List[float]] = None,
         do_convert_rgb: bool = None,
+        # Additional arguments
         crop_pct=None,
         **kwargs,
     ):

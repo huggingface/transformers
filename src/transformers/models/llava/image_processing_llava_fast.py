@@ -26,10 +26,6 @@ from ...image_processing_utils_fast import (
     group_images_by_shape,
     reorder_images,
 )
-from ...image_transforms import (
-    group_images_by_shape,
-    reorder_images,
-)
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
@@ -98,6 +94,7 @@ class LlavaImageProcessorFast(BaseImageProcessorFast):
         image_mean: Union[float, List[float]] = None,
         image_std: Union[float, List[float]] = None,
         do_convert_rgb: bool = None,
+        # Additional arguments
         do_pad: bool = None,
         **kwargs,
     ) -> None:

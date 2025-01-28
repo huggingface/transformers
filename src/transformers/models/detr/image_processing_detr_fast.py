@@ -337,6 +337,7 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
         image_mean: Union[float, List[float]] = None,
         image_std: Union[float, List[float]] = None,
         do_convert_rgb: bool = None,
+        # Additional arguments
         format: Union[str, AnnotationFormat] = None,
         do_convert_annotations: Optional[bool] = None,
         do_pad: bool = None,

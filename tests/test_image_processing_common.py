@@ -205,7 +205,10 @@ class ImageProcessingTestMixin:
         encoding_slow = image_processor_slow(dummy_images, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_images, return_tensors="pt")
 
-        torch.testing.assert_close(encoding_slow.pixel_values, encoding_fast.pixel_values, rtol=1e-1, atol=1e-2)
+        self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-1))
+        self.assertLessEqual(
+            torch.mean(torch.abs(encoding_slow.pixel_values - encoding_fast.pixel_values)).item(), 1e-3
+        )
 
     @require_vision
     @require_torch
@@ -349,7 +352,6 @@ class ImageProcessingTestMixin:
         dict_slow_0 = {key: dict_slow_0[key] for key in set(dict_slow_0) & set(dict_slow_1)}
         dict_slow_1 = {key: dict_slow_1[key] for key in set(dict_slow_0) & set(dict_slow_1)}
         # check that all additional keys are None
-        print("difference", difference)
         self.assertTrue(all(value is None for value in difference.values()))
         # check that the remaining keys are the same
         self.assertEqual(dict_slow_0, dict_slow_1)

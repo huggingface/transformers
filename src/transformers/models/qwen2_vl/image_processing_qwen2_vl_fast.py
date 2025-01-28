@@ -23,6 +23,7 @@ from typing import Dict, List, Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BaseImageProcessorFast,
     group_images_by_shape,
     reorder_images,
@@ -41,6 +42,7 @@ from ...image_utils import (
 )
 from ...utils import (
     TensorType,
+    add_start_docstrings,
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
@@ -65,39 +67,23 @@ elif is_torchvision_available():
 logger = logging.get_logger(__name__)
 
 
-class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
-    r"""
-    Constructs a fast Qwen2-VL image processor that dynamically resizes images based on the original images.
-
-    Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's (height, width) dimensions.
-        size (`Dict`, *optional*):
-            Size of the output image after resizing. Can be overridden by the `size` parameter in the `preprocess`
-            method.
-        default_to_square (`bool`, *optional*): <fill_docstring>
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
-            Resampling filter to use when resizing the image.
-        do_center_crop (`bool`, *optional*):
-            Whether to center crop the image to the specified `crop_size`. Can be overridden by `do_center_crop` in the
-            `preprocess` method.
-        crop_size (`Dict`, *optional*):
-            Size of the output image after applying `center_crop`. Can be overridden by `crop_size` in the `preprocess`
-            method.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the image.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `[0.48145466, 0.4578275, 0.40821073]`):
-            Mean to use if normalizing the image. This is a float or list of floats for each channel in the image.
-        image_std (`float` or `List[float]`, *optional*, defaults to `[0.26862954, 0.26130258, 0.27577711]`):
-            Standard deviation to use if normalizing the image. This is a float or list of floats for each channel in the image.
-        do_convert_rgb (`bool`, *optional*, defaults to `True`):
-            Whether to convert the image to RGB.
+@add_start_docstrings(
+    "Constructs a fast Qwen2-VL image processor that dynamically resizes images based on the original images.",
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     """
-
+        min_pixels (`int`, *optional*, defaults to `56 * 56`):
+            The min pixels of the image to resize the image.
+        max_pixels (`int`, *optional*, defaults to `28 * 28 * 1280`):
+            The max pixels of the image to resize the image.
+        patch_size (`int`, *optional*, defaults to 14):
+            The spacial patch size of the vision encoder.
+        temporal_patch_size (`int`, *optional*, defaults to 2):
+            The temporal patch size of the vision encoder.
+        merge_size (`int`, *optional*, defaults to 2):
+            The merge size of the vision encoder to llm encoder.
+    """,
+)
+class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
     do_resize = True
     resample = PILImageResampling.BICUBIC
     size = {"shortest_edge": 56 * 56, "longest_edge": 28 * 28 * 1280}
@@ -111,14 +97,52 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
     merge_size = 2
     min_pixels = 56 * 56
     max_pixels = 28 * 28 * 1280
-    model_input_names = [
-        "pixel_values",
-        "image_grid_thw",
-        "pixel_values_videos",
-        "video_grid_thw",
-        "min_pixels",
-        "max_pixels",
-    ]
+    valid_extra_kwargs = ["min_pixels", "max_pixels", "patch_size", "temporal_patch_size", "merge_size"]
+
+    model_input_names = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw"]
+
+    def __init__(
+        self,
+        do_resize: bool = None,
+        size: Dict[str, int] = None,
+        default_to_square: bool = None,
+        resample: Union[PILImageResampling, "F.InterpolationMode"] = None,
+        do_center_crop: bool = None,
+        crop_size: Dict[str, int] = None,
+        do_rescale: bool = None,
+        rescale_factor: Union[int, float] = 1 / 255,
+        do_normalize: bool = None,
+        image_mean: Union[float, List[float]] = None,
+        image_std: Union[float, List[float]] = None,
+        do_convert_rgb: bool = None,
+        # Additional arguments
+        min_pixels: int = None,
+        max_pixels: int = None,
+        patch_size: int = None,
+        temporal_patch_size: int = None,
+        merge_size: int = None,
+        **kwargs,
+    ) -> None:
+        super().__init__(
+            do_resize=do_resize,
+            size=size,
+            default_to_square=default_to_square,
+            resample=resample,
+            do_center_crop=do_center_crop,
+            crop_size=crop_size,
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_convert_rgb=do_convert_rgb,
+            min_pixels=min_pixels,
+            max_pixels=max_pixels,
+            patch_size=patch_size,
+            temporal_patch_size=temporal_patch_size,
+            merge_size=merge_size,
+            **kwargs,
+        )
 
     def _preprocess(
         self,

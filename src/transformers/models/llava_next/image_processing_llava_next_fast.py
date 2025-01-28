@@ -59,11 +59,12 @@ if is_torchvision_available():
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     """
         image_grid_pinpoints (`List[List[int]]`, *optional*):
-            A list of possible resolutions to use for processing high resolution images. Each item in the list should be a tuple or list
-            of the form `(height, width)`.
+            A list of possible resolutions to use for processing high resolution images. The best resolution is selected
+            based on the original size of the image. Can be overridden by `image_grid_pinpoints` in the `preprocess`
+            method.
         do_pad (`bool`, *optional*):
-                Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
-                number of patches in the batch. Padding will be applied to the bottom and right with zeros.
+            Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
+            number of patches in the batch. Padding will be applied to the bottom and right with zeros.
     """,
 )
 class LlavaNextImageProcessorFast(BaseImageProcessorFast):
@@ -98,6 +99,7 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
         image_mean: Union[float, List[float]] = None,
         image_std: Union[float, List[float]] = None,
         do_convert_rgb: bool = None,
+        # Additional arguments
         image_grid_pinpoints: List[List[int]] = None,
         do_pad: bool = None,
         **kwargs,
@@ -325,11 +327,21 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
 
         processed_images = []
         image_sizes = []
-        for image in images:
-            size_tuple = (
-                (size.height, size.width) if size.height and size.width else (size.shortest_edge, size.shortest_edge)
-            )
+        # Determine the size tuple
+        if size and size.height and size.width:
+            size_tuple = (size.height, size.width)
+        else:
+            size_tuple = (size.shortest_edge, size.shortest_edge)
+
+        # Determine the patch size
+        if crop_size and crop_size.height:
             patch_size = crop_size.height
+        elif size and size.height:
+            patch_size = size.height
+        else:
+            patch_size = size.shortest_edge
+
+        for image in images:
             image_patches = self._get_image_patches(
                 image,
                 image_grid_pinpoints,

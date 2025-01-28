@@ -265,7 +265,6 @@ class BaseImageProcessorFast(BaseImageProcessor):
                 setattr(self, key, kwarg)
             else:
                 setattr(self, key, getattr(self, key, None))
-            print(f"key: {key}, kwarg: {kwarg}, getattr: {getattr(self, key, None)}")
         if kwargs:
             logger.warning_once(f"Found kwargs that are not in valid_extra_kwargs: {kwargs.keys()}")
 

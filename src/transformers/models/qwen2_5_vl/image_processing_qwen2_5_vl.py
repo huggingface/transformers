@@ -198,7 +198,7 @@ class Qwen2_5_VLImageProcessor(BaseImageProcessor):
         self.patch_size = patch_size
         self.temporal_patch_size = temporal_patch_size
         self.merge_size = merge_size
-        self.size = {"min_pixels": min_pixels, "max_pixels": max_pixels}
+        self.size = {"shortest_edge": min_pixels, "longest_edge": max_pixels}
         self.do_convert_rgb = do_convert_rgb
 
     def _preprocess(
