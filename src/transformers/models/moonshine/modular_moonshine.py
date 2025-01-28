@@ -815,7 +815,7 @@ class MoonshineDecoder(LlamaModel):
                 )
             else:
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
-                encoder_attention_mask = _prepare_4d_encoder_attention_mask(
+                encoder_attention_mask = _prepare_4d_attention_mask(
                     encoder_attention_mask, hidden_states.dtype, hidden_states.shape[-2]
                 )
 
