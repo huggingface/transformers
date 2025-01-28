@@ -37,7 +37,6 @@ autogenerate_code: deps_table_update
 repo-consistency:
 	python utils/check_copies.py
 	python utils/check_modular_conversion.py
-	python utils/check_table.py
 	python utils/check_dummies.py
 	python utils/check_repo.py
 	python utils/check_inits.py
@@ -82,7 +81,6 @@ fixup: modified_only_fixup extra_style_checks autogenerate_code repo-consistency
 fix-copies:
 	python utils/check_copies.py --fix_and_overwrite
 	python utils/check_modular_conversion.py  --fix_and_overwrite
-	python utils/check_table.py --fix_and_overwrite
 	python utils/check_dummies.py --fix_and_overwrite
 	python utils/check_doctest_list.py --fix_and_overwrite
 	python utils/check_docstrings.py --fix_and_overwrite
