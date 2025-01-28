@@ -209,7 +209,7 @@ def fa_peft_integration_check(
     if target_dtype is None:
         return query, key, value
 
-    input_dtype = value.dtype
+    input_dtype = query.dtype
     if input_dtype == torch.float32:
         logger.warning_once(
             f"The input hidden states seems to be silently casted in float32, this might be related to"
