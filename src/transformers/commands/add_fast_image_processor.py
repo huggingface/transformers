@@ -29,47 +29,6 @@ CURRENT_YEAR = date.today().year
 TRANSFORMERS_PATH = Path(__file__).parent.parent
 REPO_PATH = TRANSFORMERS_PATH.parent.parent
 
-DEFAULT_CLASS_DOCSTRING = """r\"\"\"
-    Constructs a fast {model_name} image processor.
-
-    Args:
-        do_resize (`bool`, *optional*):
-            Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by the
-            `do_resize` parameter in the `preprocess` method.
-        size (`dict`, *optional*):
-            Size of the output image after resizing. Can be overridden by the `size` parameter in the `preprocess`
-            method.
-        resample (`PILImageResampling`, *optional*):
-            Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`. Can be
-            overridden by the `resample` parameter in the `preprocess` method.
-        do_center_crop (`bool`, *optional*, defaults to `True`):
-            Whether to center crop the image to the specified `crop_size`. Can be overridden by `do_center_crop` in the
-            `preprocess` method.
-        crop_size (`Dict[str, int]` *optional*, defaults to 224):
-            Size of the output image after applying `center_crop`. Can be overridden by `crop_size` in the `preprocess`
-            method.
-        do_rescale (`bool`, *optional*):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the
-            `do_rescale` parameter in the `preprocess` method.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image. Only has an effect if `do_rescale` is set to `True`. Can be
-            overridden by the `rescale_factor` parameter in the `preprocess` method.
-        do_normalize (`bool`, *optional*):
-            Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
-            method. Can be overridden by the `do_normalize` parameter in the `preprocess` method.
-        image_mean (`float` or `List[float]`, *optional*):
-            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
-            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method. Can be
-            overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*):
-            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
-            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
-            Can be overridden by the `image_std` parameter in the `preprocess` method.
-        do_convert_rgb (`bool`, *optional*):
-            Whether to convert the image to RGB.
-    \"\"\"
-"""
-
 
 def add_import_structure_entry_init(content: str, fast_image_processor_name: str, model_name: str):
     """
@@ -550,18 +509,17 @@ def add_fast_image_processor_file(
     default_args_dict["default_to_square"] = False if "(size, default_to_square=False" in init else None
 
     content_header = get_fast_image_processing_content_header(content_base_file)
-    class_docstring = DEFAULT_CLASS_DOCSTRING.format(
-        model_name=fast_image_processor_name.replace("ImageProcessorFast", "")
-    )
     content_base_file = (
+        f"@add_start_docstrings(\n"
+        f'    "Constructs a fast {fast_image_processor_name.replace("ImageProcessorFast", "")} image processor.",\n'
+        f"    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,\n)\n"
         f"class {fast_image_processor_name}(BaseImageProcessorFast):\n"
-        f"    {class_docstring}\n\n"
         "    # This generated class can be used as a starting point for the fast image processor.\n"
         "    # if the image processor is only used for simple augmentations, such as resizing, center cropping, rescaling, or normalizing,\n"
         "    # only the default values should be set in the class.\n"
         "    # If the image processor requires more complex augmentations, methods from BaseImageProcessorFast can be overridden.\n"
         "    # In most cases, only the `_preprocess` method should be overridden.\n\n"
-        "    # For an example of a fast image processor requiring more complex augmentations, see `LlavaOnevisionImageProcessorFast`.\n\n"
+        "    # For an example of a fast image processor requiring more complex augmentations, see `LlavaNextImageProcessorFast`.\n\n"
         "    # Default values should be checked against the slow image processor\n"
         "    # None values left after checking can be removed\n"
         f'    resample = {default_args_dict.get("resample")}\n'
@@ -578,7 +536,9 @@ def add_fast_image_processor_file(
         f'__all__ = ["{fast_image_processor_name}"]\n'
     )
 
-    imports = "\n\nfrom ...image_processing_utils_fast import BaseImageProcessorFast\n"
+    imports = (
+        "\n\nfrom ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast\n"
+    )
     image_utils_imports = []
     if default_args_dict.get("resample") is not None and "PILImageResampling" in default_args_dict.get("resample"):
         image_utils_imports.append("PILImageResampling")
@@ -595,6 +555,8 @@ def add_fast_image_processor_file(
         # sort imports
         image_utils_imports.sort()
         imports += f"from ...image_utils import {', '.join(image_utils_imports)}\n"
+
+    imports += "from ...utils import add_start_docstrings\n"
 
     content = content_header + imports + "\n\n" + content_base_file
 
