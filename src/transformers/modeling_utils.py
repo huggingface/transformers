@@ -3443,6 +3443,29 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # TODO: we can relax this check when we support taking tp_plan from a json file, for example.
             raise ValueError(f"tp_plan supports 'auto' only for now but got {tp_plan}.")
 
+        if tp_plan is not None and device_map is not None:
+            raise ValueError(
+                "`tp_plan` and `device_map` are mutually exclusive. Choose either one for parallelization."
+            )
+
+        # We need to correctly dispatch the model on the current process device. The easiest way for this is to use a simple
+        # `device_map` pointing to the correct device. If we don't, torch will use the default device (index 0) for all
+        # childs processes at parallelization time, resulting in excessive memory usage on device 0 and OOMs.
+        # And temporarily setting the default device to current process rank result in the following error
+        # `torch.distributed.DistBackendError: Attempt to perform collective on tensor not on device passed to init_process_group`
+        tp_device = None
+        if tp_plan is not None:
+            if not torch.distributed.is_initialized():
+                raise ValueError("Tensor Parallel requires torch.distributed to be initialized first.")
+
+            # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
+            device_type = torch._C._get_accelerator().type
+            device_module = torch.get_device_module(device_type)
+            # Get device with index assuming equal number of devices per host
+            tp_device = torch.device(device_type, torch.distributed.get_rank() % device_module.device_count())
+            # This is the easiest way to dispatch to the current process device
+            device_map = tp_device
+
         if is_fsdp_enabled():
             low_cpu_mem_usage = True
 
@@ -4090,7 +4113,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # Instantiate model.
         init_contexts = [no_init_weights(_enable=_fast_init)]
-        tp_device = None
 
         if is_deepspeed_zero3_enabled() and not is_quantized and not _is_ds_init_called:
             import deepspeed
@@ -4106,16 +4128,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     f"Using `low_cpu_mem_usage=True` or a `device_map` requires Accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
                 )
             init_contexts.append(init_empty_weights())
-        elif tp_plan is not None:
-            if not torch.distributed.is_initialized():
-                raise ValueError("Tensor Parallel requires torch.distributed to be initialized first.")
-
-            # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
-            device_type = torch._C._get_accelerator().type
-            device_module = torch.get_device_module(device_type)
-            # Get device with index assuming equal number of devices per host
-            tp_device = torch.device(device_type, torch.distributed.get_rank() % device_module.device_count())
-            init_contexts.append(tp_device)
 
         if is_deepspeed_zero3_enabled() and is_quantized:
             init_contexts.append(set_quantized_state())
@@ -4249,38 +4261,32 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if dtype_orig is not None:
                 torch.set_default_dtype(dtype_orig)
 
-            load_contexts = []
-            # Make sure we load onto targeted device
-            if tp_device is not None:
-                load_contexts.append(tp_device)
-
-            with ContextManagers(load_contexts):
-                (
-                    model,
-                    missing_keys,
-                    unexpected_keys,
-                    mismatched_keys,
-                    offload_index,
-                    error_msgs,
-                ) = cls._load_pretrained_model(
-                    model,
-                    state_dict,
-                    loaded_state_dict_keys,  # XXX: rename?
-                    resolved_archive_file,
-                    pretrained_model_name_or_path,
-                    ignore_mismatched_sizes=ignore_mismatched_sizes,
-                    sharded_metadata=sharded_metadata,
-                    _fast_init=_fast_init,
-                    low_cpu_mem_usage=low_cpu_mem_usage,
-                    device_map=device_map,
-                    offload_folder=offload_folder,
-                    offload_state_dict=offload_state_dict,
-                    dtype=torch_dtype,
-                    hf_quantizer=hf_quantizer,
-                    keep_in_fp32_modules=keep_in_fp32_modules,
-                    gguf_path=gguf_path,
-                    weights_only=weights_only,
-                )
+            (
+                model,
+                missing_keys,
+                unexpected_keys,
+                mismatched_keys,
+                offload_index,
+                error_msgs,
+            ) = cls._load_pretrained_model(
+                model,
+                state_dict,
+                loaded_state_dict_keys,  # XXX: rename?
+                resolved_archive_file,
+                pretrained_model_name_or_path,
+                ignore_mismatched_sizes=ignore_mismatched_sizes,
+                sharded_metadata=sharded_metadata,
+                _fast_init=_fast_init,
+                low_cpu_mem_usage=low_cpu_mem_usage,
+                device_map=device_map,
+                offload_folder=offload_folder,
+                offload_state_dict=offload_state_dict,
+                dtype=torch_dtype,
+                hf_quantizer=hf_quantizer,
+                keep_in_fp32_modules=keep_in_fp32_modules,
+                gguf_path=gguf_path,
+                weights_only=weights_only,
+            )
 
         # make sure token embedding weights are still tied if needed
         model.tie_weights()
