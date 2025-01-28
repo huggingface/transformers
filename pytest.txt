@@ -53,5 +53,5 @@ tests/models/table_transformer/test_modeling_table_transformer.py::TableTransfor
 -v
 -n 8
 --flake-finder
---flake-runs=30
+--flake-runs=300
 --make-reports=tests_torch
