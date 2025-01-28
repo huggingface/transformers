@@ -171,7 +171,7 @@ else:
                 ),
             ),
             (
-                "deepseekv3",
+                "deepseek_v3",
                 (
                     "LlamaTokenizer" if is_sentencepiece_available() else None,
                     "LlamaTokenizerFast" if is_tokenizers_available() else None,
