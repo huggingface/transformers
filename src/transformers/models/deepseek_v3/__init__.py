@@ -18,8 +18,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_deepseekv3 import *
-    from .modeling_deepseekv3 import *
+    from .configuration_deepseek_v3 import *
+    from .modeling_deepseek_v3 import *
 else:
     import sys
 

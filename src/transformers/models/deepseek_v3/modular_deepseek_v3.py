@@ -24,7 +24,7 @@ from ..llama.modeling_llama import (
     LlamaRotaryEmbedding,
     eager_attention_forward,
 )
-from .configuration_deepseekv3 import DeepseekV3Config
+from .configuration_deepseek_v3 import DeepseekV3Config
 
 
 logger = logging.get_logger(__name__)
@@ -38,7 +38,6 @@ class DeepseekV3RotaryEmbedding(LlamaRotaryEmbedding):
     pass
 
 
-# Copied from transformers.models.llama.modeling_llama.rotate_half
 def rotate_half(x):
     """Rotates half the hidden dims of the input."""
     x1 = x[..., : x.shape[-1] // 2]
@@ -46,7 +45,6 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-# Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
