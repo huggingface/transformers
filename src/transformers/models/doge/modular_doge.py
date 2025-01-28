@@ -22,8 +22,13 @@ from typing import Callable, List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import nn
+
+from transformers.models.llama.modeling_llama import (
+    LlamaForSequenceClassification,
+    LlamaRMSNorm,
+    LlamaRotaryEmbedding,
+)
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
@@ -31,24 +36,25 @@ from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
-    SequenceClassifierOutputWithPast,
 )
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, rope_config_validation
+from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import PretrainedConfig, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     LossKwargs,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
+    is_einx_available,
     is_torch_flex_attn_available,
     logging,
     replace_return_docstrings,
 )
+from ...utils.deprecation import deprecate_kwarg
 
 
-try:
+if is_einx_available():
     from einx import add as einx_add
-except ImportError:
+else:
     einx_add = None
 
 if is_torch_flex_attn_available():
@@ -263,24 +269,12 @@ class DogeConfig(PretrainedConfig):
         )
 
 
-class RMSNorm(nn.Module):
+class RMSNorm(LlamaRMSNorm):
     def __init__(self, hidden_size, eps=1e-6):
         """
         RMSNorm is equivalent to T5LayerNorm
         """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
+        super().__init__(hidden_size, eps)
 
 
 class Residual(nn.Module):
@@ -295,66 +289,9 @@ class Residual(nn.Module):
         return f"{tuple(self.weight.shape)}"
 
 
-class RotaryEmbedding(nn.Module):
-    def __init__(self, config: Optional[DogeConfig] = None):
-        super().__init__()
-        self.rope_kwargs = {}
-
-        if config.rope_scaling is not None:
-            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
-        else:
-            self.rope_type = "default"
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
-        self.base = config.rope_theta
-
-        self.config = config
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-
-        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, **self.rope_kwargs)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = self.inv_freq
-
-    def _dynamic_frequency_update(self, position_ids, device):
-        """
-        dynamic RoPE layers should recompute `inv_freq` in the following situations:
-        1 - growing beyond the cached sequence length (allow scaling)
-        2 - the current sequence length is in the original scale (avoid losing precision with small sequences)
-        """
-        seq_len = torch.max(position_ids) + 1
-        if seq_len > self.max_seq_len_cached:  # growth
-            inv_freq, self.attention_scaling = self.rope_init_fn(
-                self.config, device, seq_len=seq_len, **self.rope_kwargs
-            )
-            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
-            self.max_seq_len_cached = seq_len
-
-        if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
-            self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
-            self.max_seq_len_cached = self.original_max_seq_len
-
-    @torch.no_grad()
-    def forward(self, x, position_ids):
-        if "dynamic" in self.rope_type:
-            self._dynamic_frequency_update(position_ids, device=x.device)
-
-        # core RoPE block
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
-        position_ids_expanded = position_ids[:, None, :].float()
-        # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
-        device_type = x.device.type
-        device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos()
-            sin = emb.sin()
-
-        # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
-        cos = cos * self.attention_scaling
-        sin = sin * self.attention_scaling
-
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+class RotaryEmbedding(LlamaRotaryEmbedding):
+    def __init__(self, config: Optional[DogeConfig] = None, device=None):
+        super().__init__(config, device)
 
 
 def rotate_half(x):
@@ -1157,6 +1094,7 @@ class DogeForCausalLM(DogePreTrainedModel, GenerationMixin):
     def set_decoder(self, decoder):
         self.model = decoder
 
+    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(DOGE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1172,7 +1110,7 @@ class DogeForCausalLM(DogePreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        num_logits_to_keep: int = 0,
+        logits_to_keep: int = 0,
         **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
@@ -1182,10 +1120,12 @@ class DogeForCausalLM(DogePreTrainedModel, GenerationMixin):
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
-            num_logits_to_keep (`int`, *optional*):
-                Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
+            logits_to_keep (`int`, *optional*):
+                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
                 `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
                 token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
+                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
+                This is useful when using packed tensor format (single dimension for batch and sequence length).
 
         Returns:
 
@@ -1227,9 +1167,9 @@ class DogeForCausalLM(DogePreTrainedModel, GenerationMixin):
         )
 
         hidden_states = outputs[0]
-
         # only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :])
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
@@ -1263,100 +1203,23 @@ class DogeForCausalLM(DogePreTrainedModel, GenerationMixin):
     """,
     DOGE_START_DOCSTRING,
 )
-class DogeForSequenceClassification(DogePreTrainedModel):
+class DogeForSequenceClassification(LlamaForSequenceClassification):
     def __init__(self, config: DogeConfig):
         super().__init__(config)
         self.config = config
         self.num_labels = config.num_labels
 
         self.model = DogeModel(config)
-        self.classifier = nn.Linear(config.hidden_size, self.num_labels, bias=False)
+        self.score = nn.Linear(config.hidden_size, self.num_labels, bias=False)
 
         # Initialize weights and apply final processing
-        self.init_weights()
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.model.word_embed
 
     def set_input_embeddings(self, value):
         self.model.word_embed = value
-
-    @add_start_docstrings_to_model_forward(DOGE_INPUTS_DOCSTRING)
-    def forward(
-        self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Tuple, SequenceClassifierOutputWithPast]:
-        r"""
-        labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
-            Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
-            config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
-            `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
-        """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.model(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            use_cache=use_cache,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-        hidden_states = outputs[0]
-        logits = self.classifier(hidden_states)
-
-        if input_ids is not None:
-            batch_size = input_ids.shape[0]
-        else:
-            batch_size = inputs_embeds.shape[0]
-
-        if self.config.pad_token_id is None and batch_size != 1:
-            raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
-        if self.config.pad_token_id is None:
-            sequence_lengths = -1
-        else:
-            if input_ids is not None:
-                # if no pad token found, use modulo instead of reverse indexing for ONNX compatibility
-                sequence_lengths = torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1
-                sequence_lengths = sequence_lengths % input_ids.shape[-1]
-                sequence_lengths = sequence_lengths.to(logits.device)
-            else:
-                sequence_lengths = -1
-
-        pooled_logits = logits[torch.arange(batch_size, device=logits.device), sequence_lengths]
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(
-                logits=logits,
-                labels=labels,
-                pooled_logits=pooled_logits,
-                config=self.config,
-            )
-
-        if not return_dict:
-            output = (pooled_logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
-
-        return SequenceClassifierOutputWithPast(
-            loss=loss,
-            logits=pooled_logits,
-            past_key_values=outputs.past_key_values,
-            hidden_states=outputs.hidden_states,
-            attentions=outputs.attentions,
-        )
 
 
 __all__ = [
