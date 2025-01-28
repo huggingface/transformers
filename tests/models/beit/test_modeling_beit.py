@@ -776,7 +776,8 @@ class BeitModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(pixel_values, interpolate_pos_encoding=True)
 
-        expected_shape = torch.Size((1, 1801, 768))
+        # 1 + (480 / 16) * (480 / 16) = 1 + 30 * 30 = 901
+        expected_shape = torch.Size((1, 901, 768))
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
 
