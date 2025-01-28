@@ -16,6 +16,7 @@
 
 import collections.abc
 import math
+import warnings
 from dataclasses import dataclass
 from typing import List, Optional, Tuple, Union
 
@@ -196,15 +197,15 @@ class BeitEmbeddings(nn.Module):
         self,
         pixel_values: torch.Tensor,
         bool_masked_pos: Optional[torch.BoolTensor] = None,
-        interpolate_pos_encoding: bool = False,
+        interpolate_pos_encoding: Optional[bool] = None,
     ) -> torch.Tensor:
-        _, _, height, width = pixel_values.shape
-        expected_height, expected_width = self.image_size
-        if not interpolate_pos_encoding and (height != expected_height or width != expected_width):
-            raise ValueError(
-                f"Input image size ({height}*{width}) doesn't match model" f" ({expected_height}*{expected_width})."
+        if self.position_embeddings is not None and interpolate_pos_encoding is not None:
+            warnings.warn(
+                "`interpolate_pos_encoding` argument has no effect for BEiTEmbeddings, embeddings are always "
+                "interpolated to the input image size. The argument will be removed in transformers v4.51.0."
             )
 
+        _, _, height, width = pixel_values.shape
         embeddings, (patch_height, patch_width) = self.patch_embeddings(pixel_values)
         batch_size, seq_len, _ = embeddings.size()
 
@@ -875,9 +876,7 @@ class BeitModel(BeitPreTrainedModel):
         # and head_mask is converted to shape [num_hidden_layers x batch x num_heads x seq_length x seq_length]
         head_mask = self.get_head_mask(head_mask, self.config.num_hidden_layers)
 
-        embedding_output, _ = self.embeddings(
-            pixel_values, bool_masked_pos=bool_masked_pos, interpolate_pos_encoding=interpolate_pos_encoding
-        )
+        embedding_output, _ = self.embeddings(pixel_values, bool_masked_pos=bool_masked_pos)
         resolution = pixel_values.shape[2:]
 
         encoder_outputs = self.encoder(
