@@ -33,6 +33,22 @@ if is_torch_available():
 
 
 class TestTensorParallel(TestCasePlus):
+    def torchrun(self, script: str):
+        """Run the `script` using `torchrun` command for multi-processing in a subprocess. Captures errors as necesary."""
+        with tempfile.NamedTemporaryFile(mode="w+", suffix=".py") as tmp:
+            tmp.write(script)
+            tmp.flush()
+            tmp.seek(0)
+            cmd = (
+                f"torchrun --nproc_per_node {torch.cuda.device_count()} --master_port {get_torch_dist_unique_port()} {tmp.name}"
+            ).split()
+
+            # Note that the subprocess will be waited for here, and raise an error if not successful
+            try:
+                _ = subprocess.run(cmd, capture_output=True, env=self.get_env(), text=True, check=True)
+            except subprocess.CalledProcessError as e:
+                raise Exception(f"The following error was capture: {e.stderr}")
+
     @require_torch_multi_gpu
     def test_tp(self):
         distributed_args = f"""--nproc_per_node={torch.cuda.device_count()}
@@ -80,20 +96,7 @@ class TestTensorParallel(TestCasePlus):
             torch.utils.distributed.destroy_process_group()
             """
         )
-
-        with tempfile.NamedTemporaryFile(mode="w+", suffix=".py") as tmp:
-            tmp.write(script_to_run)
-            tmp.flush()
-            tmp.seek(0)
-            cmd = (
-                f"torchrun --nproc_per_node {torch.cuda.device_count()} --master_port {get_torch_dist_unique_port()} {tmp.name}"
-            ).split()
-
-            # Note that the subprocess will be waited for here
-            sub = subprocess.run(cmd, capture_output=True, env=self.get_env(), text=True)
-            print(sub.stdout)
-            print(sub.stderr)
-            # successful return here == success - any errors would have caused an error in the sub-call
+        self.torchrun(script_to_run)
 
 
 if __name__ == "__main__":
