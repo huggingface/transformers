@@ -37,7 +37,7 @@ Checkout all Doge model checkpoints [here](https://huggingface.co/collections/Ji
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
 tokenizer = AutoTokenizer.from_pretrained("JingzeShi/Doge-20M")
->model = AutoModelForCausalLM.from_pretrained("JingzeShi/Doge-20M", trust_remote_code=True)
+model = AutoModelForCausalLM.from_pretrained("JingzeShi/Doge-20M")
 inputs = tokenizer("Hey how are you doing?", return_tensors="pt")
 
 outputs = model.generate(**inputs, max_new_tokens=100)
