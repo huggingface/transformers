@@ -22,6 +22,7 @@ from typing import Callable, List, Optional, Tuple, Union
 
 import torch
 import torch.nn.functional as F
+import torch.utils.checkpoint
 from torch import nn
 
 from transformers.models.llama.modeling_llama import (
@@ -32,13 +33,14 @@ from transformers.models.llama.modeling_llama import (
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import rope_config_validation
-from ...modeling_utils import PretrainedConfig, PreTrainedModel
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     LossKwargs,
