@@ -217,10 +217,7 @@ class Data2VecVisionEmbeddings(nn.Module):
         embeddings = torch.cat((cls_tokens, embeddings), dim=1)
 
         if self.position_embeddings is not None:
-            if interpolate_pos_encoding:
-                embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
-            else:
-                embeddings = embeddings + self.position_embeddings
+            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
 
         embeddings = self.dropout(embeddings)
 
@@ -252,11 +249,7 @@ class Data2VecVisionPatchEmbeddings(nn.Module):
 
         self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
 
-    def forward(
-        self,
-        pixel_values: torch.Tensor,
-        position_embedding: Optional[torch.Tensor] = None,
-    ) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
         if num_channels != self.num_channels:
             raise ValueError(
