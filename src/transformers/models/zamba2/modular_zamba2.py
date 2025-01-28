@@ -20,7 +20,6 @@ from typing import Callable, Optional, Tuple, Union
 
 import torch
 import torch.utils.checkpoint
-from einops import rearrange
 from torch import nn
 
 from ...activations import ACT2FN
@@ -83,10 +82,12 @@ class Zamba2RMSNormGated(torch.nn.Module):
         hidden_states = hidden_states.to(torch.float32)
         if gate is not None:
             hidden_states = hidden_states * nn.functional.silu(gate.to(torch.float32))
-        hidden_states_group = rearrange(hidden_states, "... (g d) -> ... g d", d=self.group_size)
+        *prefix_dims, last_dim = hidden_states.shape
+        group_count = last_dim // self.group_size
+        hidden_states_group = hidden_states.view(*prefix_dims, group_count, self.group_size)
         variance = hidden_states_group.pow(2).mean(-1, keepdim=True)
         hidden_states_group = hidden_states_group * torch.rsqrt(variance + self.variance_epsilon)
-        hidden_states = rearrange(hidden_states_group, "... g d -> ... (g d)")
+        hidden_states = hidden_states_group.view(*prefix_dims, group_count * self.group_size)
         return self.weight * hidden_states.to(input_dtype)
 
 
