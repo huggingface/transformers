@@ -38,56 +38,6 @@ from .configuration_depth_pro import DepthProConfig
 
 logger = logging.get_logger(__name__)
 
-# General docstring
-_CONFIG_FOR_DOC = "DepthProConfig"
-
-
-DEPTH_PRO_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`DepthProConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-DEPTH_PRO_INPUTS_DOCSTRING = r"""
-    Args:
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`DPTImageProcessor.__call__`]
-            for details.
-
-        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
-            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
-
-        output_attentions (`bool`, *optional*):
-            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
-            tensors for more detail.
-        output_hidden_states (`bool`, *optional*):
-            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
-            more detail.
-        return_dict (`bool`, *optional*):
-            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
-"""
-
-DEPTH_PRO_FOR_DEPTH_ESTIMATION_START_DOCSTRING = r"""
-    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
-    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
-    behavior.
-
-    Parameters:
-        config ([`DepthProConfig`]): Model configuration class with all the parameters of the model.
-            Initializing with a config file does not load the weights associated with the model, only the
-            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-        use_fov_model (`bool`, *optional*, defaults to `True`):
-            Whether to use `DepthProFOVModel` to generate the field of view.
-"""
-
 
 @dataclass
 class DepthProOutput(ModelOutput):
@@ -609,6 +559,57 @@ class DepthProEncoder(nn.Module):
             hidden_states=image_encodings.hidden_states,
             attentions=image_encodings.attentions,
         )
+
+
+# General docstring
+_CONFIG_FOR_DOC = "DepthProConfig"
+
+
+DEPTH_PRO_START_DOCSTRING = r"""
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
+    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
+
+    Parameters:
+        config ([`DepthProConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+DEPTH_PRO_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See [`DPTImageProcessor.__call__`]
+            for details.
+
+        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
+"""
+
+DEPTH_PRO_FOR_DEPTH_ESTIMATION_START_DOCSTRING = r"""
+    This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
+    as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
+    behavior.
+
+    Parameters:
+        config ([`DepthProConfig`]): Model configuration class with all the parameters of the model.
+            Initializing with a config file does not load the weights associated with the model, only the
+            configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+        use_fov_model (`bool`, *optional*, defaults to `True`):
+            Whether to use `DepthProFOVModel` to generate the field of view.
+"""
 
 
 class DepthProPreTrainedModel(PreTrainedModel):

@@ -166,17 +166,16 @@ class DepthProImageProcessor(BaseImageProcessor):
         # image.resize expects all values to be in range [0, 1] or [0, 255] and throws an exception otherwise,
         # however pytorch interpolation works with negative values.
         # relevant issue here: https://github.com/huggingface/transformers/issues/34920
-        return (
-            torch.nn.functional.interpolate(
-                # input should be (B, C, H, W)
-                input=torch.from_numpy(image).unsqueeze(0),
-                size=output_size,
-                mode=pil_torch_interpolation_mapping[resample].value,
-                antialias=antialias,
-            )
-            .squeeze(0)
-            .numpy()
+        # input should be (B, C, H, W)
+        image_tensor = torch.from_numpy(image).unsqueeze(0)
+        resized_image = torch.nn.functional.interpolate(
+            input=image_tensor,
+            size=output_size,
+            mode=pil_torch_interpolation_mapping[resample].value,
+            antialias=antialias,
         )
+        resized_image = resized_image.squeeze(0).numpy()
+        return resized_image
 
     def _validate_input_arguments(
         self,

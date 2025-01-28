@@ -17,10 +17,6 @@
 import functools
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
-
-if TYPE_CHECKING:
-    from ...modeling_outputs import DepthProDepthEstimatorOutput
-
 from ...image_processing_base import BatchFeature
 from ...image_processing_utils import get_size_dict
 from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict
@@ -40,6 +36,8 @@ from ...utils import TensorType, logging, requires_backends
 from ...utils.import_utils import is_torch_available, is_torchvision_available
 
 
+if TYPE_CHECKING:
+    from ...modeling_outputs import DepthProDepthEstimatorOutput
 logger = logging.get_logger(__name__)
 
 
