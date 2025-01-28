@@ -1987,6 +1987,8 @@ class GenerationTesterMixin:
             if not model_class._supports_static_cache:
                 self.skipTest("This model doesn't support static cache (= no expectations of compilation support)")
 
+            torch.compiler.reset()  # prevent cached compilation from being used in the test
+
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=4)
 
             model = model_class(config).to(torch_device)
