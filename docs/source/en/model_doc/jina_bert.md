@@ -38,7 +38,13 @@ The abstract from the paper is the following:
 This model was contributed by [joelkoch](https://huggingface.co/joelkoch).
 The original code can be found [here](https://huggingface.co/jinaai/jina-bert-v2-qk-post-norm/tree/main).
 
-## Supported (Programming) Languages
+<details>
+<summary>Supported programming languages</summary>
+
+- English
+...
+...
+</details>
 - English
 - Assembly
 - Batchfile
