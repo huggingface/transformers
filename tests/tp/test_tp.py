@@ -47,7 +47,7 @@ class TestTensorParallel(TestCasePlus):
             try:
                 _ = subprocess.run(cmd, capture_output=True, env=self.get_env(), text=True, check=True)
             except subprocess.CalledProcessError as e:
-                raise Exception(f"The following error was capture: {e.stderr}")
+                raise Exception(f"The following error was captured: {e.stderr}")
 
     @require_torch_multi_gpu
     def test_tp(self):
