@@ -197,6 +197,7 @@ class AutoHfQuantizer:
 
         return quantization_config
 
+
 def register_quantization_config(method: str):
     """Register a custom quantization configuration."""
 
@@ -209,10 +210,13 @@ def register_quantization_config(method: str):
 
         AUTO_QUANTIZATION_CONFIG_MAPPING[method] = cls
         return cls
+
     return register_config_fn
+
 
 def register_quantizer(name: str):
     """Register a custom quantizer."""
+
     def register_quantizer_fn(cls):
         if name in AUTO_QUANTIZER_MAPPING:
             raise ValueError(f"Quantizer '{name}' already registered")
@@ -222,4 +226,5 @@ def register_quantizer(name: str):
 
         AUTO_QUANTIZER_MAPPING[name] = cls
         return cls
+
     return register_quantizer_fn
