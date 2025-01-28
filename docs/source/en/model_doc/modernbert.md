@@ -46,6 +46,13 @@ The abstract from the paper is the following:
 
 The original code can be found [here](https://github.com/answerdotai/modernbert).
 
+### ModernBERT as a CausalLM
+ModernBERT can also be used as a decoder-only model, either with the same architecture but trained using causal language modeling, or through the use of iterative masking tokens. This was proposed in the paper [TODO](). 
+
+### Tokenizer
+
+The tokenizer for ModernBERT is the same as a PreTrainedTokenizerFast if you're using it as an encoder or modified slightly to not include the EOS token if used as a decoder. For the decoder case, be sure to include `is_causal=False` in your tokenizer config.
+
 ## Resources
 
 A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with ModernBert.
@@ -71,6 +78,10 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 <frameworkcontent>
 <pt>
 
+## ModernBertTokenizerFast
+
+[[autodoc]] ModernBertTokenizerFast
+
 ## ModernBertModel
 
 [[autodoc]] ModernBertModel
@@ -89,6 +100,11 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 ## ModernBertForTokenClassification
 
 [[autodoc]] ModernBertForTokenClassification
+    - forward
+
+## ModernBertForCausalLM
+
+[[autodoc]] ModernBertForCausalLM
     - forward
 
 </pt>

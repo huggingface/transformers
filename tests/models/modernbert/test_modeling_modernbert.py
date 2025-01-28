@@ -40,6 +40,7 @@ if is_torch_available():
 
     from transformers import (
         MODEL_FOR_PRETRAINING_MAPPING,
+        ModernBertForCausalLM,
         ModernBertForMaskedLM,
         ModernBertForSequenceClassification,
         ModernBertForTokenClassification,
@@ -74,6 +75,7 @@ class ModernBertModelTester:
         initializer_range=0.02,
         num_labels=3,
         num_choices=4,
+        is_causal=False,
         scope=None,
     ):
         self.parent = parent
@@ -99,6 +101,7 @@ class ModernBertModelTester:
         self.initializer_range = initializer_range
         self.num_labels = num_labels
         self.num_choices = num_choices
+        self.is_causal = is_causal
         self.scope = scope
 
     def prepare_config_and_inputs(self):
@@ -201,6 +204,15 @@ class ModernBertModelTester:
         result = model(input_ids, attention_mask=input_mask, labels=token_labels)
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.num_labels))
 
+    def create_and_check_for_causal_lm(
+        self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        model = ModernBertForCausalLM(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=input_mask, labels=token_labels)
+        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
+
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         (
@@ -222,6 +234,7 @@ class ModernBertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     all_model_classes = (
         (
             ModernBertModel,
+            ModernBertForCausalLM,
             ModernBertForMaskedLM,
             ModernBertForSequenceClassification,
             ModernBertForTokenClassification,
@@ -229,12 +242,13 @@ class ModernBertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         if is_torch_available()
         else ()
     )
-    all_generative_model_classes = ()
+    all_generative_model_classes = (ModernBertForCausalLM,)
     pipeline_model_mapping = (
         {
             "feature-extraction": ModernBertModel,
             "fill-mask": ModernBertForMaskedLM,
             "text-classification": ModernBertForSequenceClassification,
+            "text-generation": ModernBertForCausalLM,
             "token-classification": ModernBertForTokenClassification,
             "zero-shot": ModernBertForSequenceClassification,
         }
@@ -311,6 +325,10 @@ class ModernBertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_token_classification(*config_and_inputs)
 
+    def test_for_causal_lm(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_for_causal_lm(*config_and_inputs)
+
     def test_for_warning_if_padding_and_no_attention_mask(self):
         (
             config,
@@ -384,6 +402,29 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
             [[[3.8387, -0.2017, 12.2839], [3.6300, 0.6869, 14.7123], [-5.1137, -3.8122, 11.9874]]]
         )
         torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
+
+    @slow
+    def test_inference_causal_lm(self):
+        if version.parse(torch.__version__) < version.parse("2.4.0"):
+            self.skipTest(reason="This test requires torch >= 2.4 to run.")
+
+        model = ModernBertForCausalLM.from_pretrained(
+            "answerdotai/ModernBERT-base", reference_compile=False, attn_implementation="sdpa"
+        )
+        tokenizer = AutoTokenizer.from_pretrained("orionweller/dec-32m")
+
+        inputs = tokenizer("Paris is the capital of", return_tensors="pt")
+        with torch.no_grad():
+            output = model(**inputs)[0]
+        expected_shape = torch.Size((1, 6, 50368))
+        self.assertEqual(output.shape, expected_shape)
+
+        # compare the actual values for a slice.
+        # TODO: will update this
+        # expected_slice = torch.tensor(
+        #     [[[3.8387, -0.2017, 12.2839], [3.6300, 0.6869, 14.7123], [-5.1137, -3.8122, 11.9874]]]
+        # )
+        # torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_no_head(self):

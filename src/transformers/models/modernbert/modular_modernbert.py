@@ -25,13 +25,14 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from ...activations import ACT2FN
 from ...configuration_utils import PretrainedConfig
+from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import (
     BaseModelOutput,
+    CausalLMOutputWithPast,
     MaskedLMOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
-    CausalLMOutputWithCrossAttentions,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -43,7 +44,6 @@ from ...utils import (
 )
 from ...utils.import_utils import is_triton_available
 from ..gemma.modeling_gemma import GemmaRotaryEmbedding, apply_rotary_pos_emb
-from ...generation import GenerationMixin
 
 
 if is_flash_attn_2_available():
@@ -1515,7 +1515,6 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
         )
 
 
-
 @add_start_docstrings(
     "The ModernBert Model with a lm head on top, e.g. for Causal Language Modeling (CLM) tasks.",
     MODERNBERT_START_DOCSTRING,
@@ -1526,11 +1525,20 @@ class ModernBertForCausalLM(ModernBertPreTrainedModel, GenerationMixin):
     def __init__(self, config: ModernBertConfig):
         super().__init__(config)
         self.model = ModernBertModel(config)
-        self.lm_head = ModernBertPredictionHead(config)
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=config.decoder_bias)
-        
-        if not self.config.is_causal:
-            raise ValueError("ModernBertForCausalLM is only supported for causal models")
+
+        if self.config.is_causal:
+            self.lm_head = ModernBertPredictionHead(config)
+            self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=config.decoder_bias)
+        else:
+            # using the psuedo-casual method
+            self.head = ModernBertPredictionHead(config)
+            self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=config.decoder_bias)
+            # setup for psuedo-casual attributes
+            self.num_future_masks = getattr(config, "num_future_masks", 3)
+            self.config.add_cross_attention = False
+            self.mask_token_id = getattr(config, "mask_token_id", 50284)
+            self.eos_token_id = getattr(config, "eos_token_id", 20852)
+            # NOTE: be sure your tokenizer has `is_causal` set to True
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1543,12 +1551,40 @@ class ModernBertForCausalLM(ModernBertPreTrainedModel, GenerationMixin):
 
     @torch.compile(dynamic=True)
     def compiled_head(self, output: torch.Tensor) -> torch.Tensor:
-        return self.decoder(self.lm_head(output))
+        head = self.lm_head if self.config.is_causal else self.head
+        return self.decoder(head(output))
+
+    def _prepare_masked_input_for_position(
+        self,
+        input_ids: torch.LongTensor,
+        position: int,
+    ) -> torch.LongTensor:
+        """Masks current position and two future tokens as per paper."""
+        batch_size = input_ids.shape[0]
+        seq_len = input_ids.shape[1]
+
+        # Create new tensor with extra space for masks and EOS
+        new_seq_len = seq_len + self.num_future_masks + 1  # Add space for masks and EOS
+        masked_input = torch.zeros((batch_size, new_seq_len), dtype=input_ids.dtype, device=input_ids.device)
+
+        # Copy original sequence
+        masked_input[:, :seq_len] = input_ids
+
+        # Mask current position and future tokens
+        for i in range(self.num_future_masks + 1):
+            mask_pos = position + i
+            if mask_pos < new_seq_len:
+                masked_input[:, mask_pos] = self.mask_token_id
+
+        # Add EOS token at the end
+        masked_input[:, -1] = self.eos_token_id
+
+        return masked_input
 
     @add_start_docstrings_to_model_forward(MODERNBERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=CausalLMOutputWithCrossAttentions,
+        output_type=CausalLMOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
@@ -1569,6 +1605,61 @@ class ModernBertForCausalLM(ModernBertPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[Tuple[torch.Tensor], MaskedLMOutput]:
+        if self.config.is_causal:
+            return self._forward_causal(
+                input_ids,
+                attention_mask,
+                sliding_window_mask,
+                position_ids,
+                inputs_embeds,
+                labels,
+                indices,
+                cu_seqlens,
+                max_seqlen,
+                batch_size,
+                seq_len,
+                output_attentions,
+                output_hidden_states,
+                return_dict,
+                **kwargs,
+            )
+        else:
+            return self._forward_pseudo_casual(
+                input_ids,
+                attention_mask,
+                sliding_window_mask,
+                position_ids,
+                inputs_embeds,
+                labels,
+                indices,
+                cu_seqlens,
+                max_seqlen,
+                batch_size,
+                seq_len,
+                output_attentions,
+                output_hidden_states,
+                return_dict,
+                **kwargs,
+            )
+
+    def _forward_causal(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        sliding_window_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        indices: Optional[torch.Tensor] = None,
+        cu_seqlens: Optional[torch.Tensor] = None,
+        max_seqlen: Optional[int] = None,
+        batch_size: Optional[int] = None,
+        seq_len: Optional[int] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        **kwargs,
+    ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         self._maybe_set_compile()
 
@@ -1614,7 +1705,7 @@ class ModernBertForCausalLM(ModernBertPreTrainedModel, GenerationMixin):
         lm_logits = (
             self.compiled_head(last_hidden_state)
             if self.config.reference_compile
-            else self.decoder(self.head(last_hidden_state))
+            else self.decoder(self.lm_head(last_hidden_state))
         )
 
         if self.config._attn_implementation == "flash_attention_2":
@@ -1636,28 +1727,123 @@ class ModernBertForCausalLM(ModernBertPreTrainedModel, GenerationMixin):
             output = (lm_logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
 
-        return CausalLMOutputWithCrossAttentions(
+        return CausalLMOutputWithPast(
             loss=loss,
             logits=lm_logits,
-            past_key_values=None,
+            past_key_values=outputs.attentions,
             hidden_states=outputs.hidden_states,
-            attentions=None,
-            cross_attentions=None,
         )
-    
-    def prepare_inputs_for_generation(
+
+    def _forward_pseudo_casual(
         self,
-        input_ids: torch.Tensor,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        **kwargs
+        sliding_window_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        indices: Optional[torch.Tensor] = None,
+        cu_seqlens: Optional[torch.Tensor] = None,
+        max_seqlen: Optional[int] = None,
+        batch_size: Optional[int] = None,
+        seq_len: Optional[int] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        return_single_token_logits: Optional[bool] = False,
+        **kwargs,
+    ):
+        batch_size, seq_len = input_ids.shape
+        device = input_ids.device
+
+        # For generation or single token prediction
+        if return_single_token_logits:
+            # For batched generation, all sequences will have same length, otherwise raise an error
+            if self.mask_token_id in input_ids.any():
+                raise ValueError("Mask token found in input_ids during generation")
+
+            # Prepare masked input for the batch
+            masked_input = self._prepare_masked_input_for_position(input_ids, seq_len)
+            attention_mask = torch.ones_like(masked_input)
+
+            outputs = self.model(input_ids=masked_input, attention_mask=attention_mask, **kwargs)
+
+            output_logits = (
+                self.compiled_head(outputs.last_hidden_state)
+                if self.config.reference_compile
+                else self.decoder(self.head(outputs.last_hidden_state))
+            )
+
+            # Get just the next token logits but reshape to match expected format
+            new_logit = output_logits[:, seq_len, :].unsqueeze(1)  # Shape: (batch_size, 1, vocab_size)
+            seq_len = input_ids.shape[1]
+
+            # Create zero logits for all positions except the last
+            zero_logits = torch.zeros(
+                (batch_size, seq_len - 2, self.config.vocab_size), device=new_logit.device, dtype=new_logit.dtype
+            )
+
+            # Concat to get proper shape while ensuring only the last position has real logits, even with batches
+            logits = torch.cat([zero_logits, new_logit], dim=1)
+
+        else:
+            # NOTE: must turn every token into a instance, since it can only predict logits for one token at a time
+            # This means the batch size will explode. If you get OOM errors, try reducing the batch size to one
+            batched_inputs = torch.zeros(
+                (batch_size * (seq_len + self.num_future_masks + 1), (seq_len + self.num_future_masks + 1)),
+                dtype=input_ids.dtype,
+                device=device,
+            )
+
+            for pos in range(seq_len):
+                start_idx = pos * batch_size
+                end_idx = (pos + 1) * batch_size
+                batched_inputs[start_idx:end_idx] = self._prepare_masked_input_for_position(input_ids, pos)
+
+            batched_attention_mask = torch.triu(torch.ones_like(batched_inputs), diagonal=1)
+
+            outputs = self.model(input_ids=batched_inputs, attention_mask=batched_attention_mask, **kwargs)
+            output_logits = (
+                self.compiled_head(outputs.last_hidden_state)
+                if self.config.reference_compile
+                else self.decoder(self.head(outputs.last_hidden_state))
+            )
+            all_logits = torch.zeros_like(output_logits)
+
+            for pos in range(seq_len):
+                start_idx = pos * batch_size
+                end_idx = (pos + 1) * batch_size
+                all_logits[:, pos, :] = output_logits[start_idx:end_idx, pos, :]
+
+            logits = all_logits
+
+        loss = None
+        if labels is not None:
+            loss_fct = nn.CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.config.vocab_size), labels.view(-1))
+
+        return CausalLMOutputWithPast(
+            loss=loss,
+            logits=logits,
+            past_key_values=None,  # can't re-use key value cache cuz bidirectional
+        )
+
+    def prepare_inputs_for_generation(
+        self, input_ids: torch.Tensor, attention_mask: Optional[torch.Tensor] = None, **kwargs
     ) -> dict:
         if attention_mask is None:
             attention_mask = torch.ones_like(input_ids)
 
-        return {
+        generation_dict = {
             "input_ids": input_ids,
             "attention_mask": attention_mask,
         }
+
+        if not self.config.is_causal:
+            generation_dict["return_single_token_logits"] = True
+
+        return generation_dict
+
 
 __all__ = [
     "ModernBertConfig",

@@ -115,7 +115,6 @@ class ModernBertConfig(PretrainedConfig):
         is_causal (`bool`, *optional*, defaults to `False`):
             Whether to use causal attention (e.g. decoder-only models). For standard encoder-decoder models, this should
             be set to `False`.
-            
     Examples:
 
     ```python
@@ -213,7 +212,6 @@ class ModernBertConfig(PretrainedConfig):
         self.reference_compile = reference_compile
         self.repad_logits_with_grad = repad_logits_with_grad
         self.is_causal = is_causal
-        
         if self.classifier_pooling not in ["cls", "mean"]:
             raise ValueError(
                 f'Invalid value for `classifier_pooling`, should be either "cls" or "mean", but is {self.classifier_pooling}.'
