@@ -18,6 +18,7 @@ import gc
 import unittest
 
 import requests
+from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
@@ -337,9 +338,7 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
         pass
 
     @parameterized.expand([("greedy", 1), ("beam search", 2)])
-    @unittest.skip(
-        reason="Breaks the CIs right now! To check!"
-    )
+    @unittest.skip(reason="Breaks the CIs right now! To check!")
     def test_generate_from_inputs_embeds(self, _, num_beams):
         pass
 
