@@ -1126,7 +1126,6 @@ def get_parameter_names(model, forbidden_layer_types, forbidden_layer_names=None
     """
     if forbidden_layer_names is None:
         forbidden_layer_names = []
-        
     result = []
     for name, child in model.named_children():
         child_params = get_parameter_names(child, forbidden_layer_types, forbidden_layer_names)
@@ -1136,13 +1135,11 @@ def get_parameter_names(model, forbidden_layer_types, forbidden_layer_names=None
             if not isinstance(child, tuple(forbidden_layer_types))
             and not any(forbidden in n.lower() for forbidden in forbidden_layer_names)
         ]
-    
     # Add model specific parameters that are not in any child
     result += [
         k for k in model._parameters.keys()
         if not any(forbidden in k.lower() for forbidden in forbidden_layer_names)
     ]
-    
     return result
 
 
