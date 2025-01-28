@@ -113,7 +113,7 @@ class DepthProFeatureUpsampleBlock(nn.Module):
     ):
         super().__init__()
         self.config = config
-        self.layers = nn.Sequential()
+        self.layers = nn.ModuleList()
 
         # create first projection layer
         if use_proj:
@@ -141,7 +141,8 @@ class DepthProFeatureUpsampleBlock(nn.Module):
             self.layers.append(layer)
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
-        features = self.layers(features)
+        for layer in self.layers:
+            features = layer(features)
         return features
 
 
@@ -151,10 +152,9 @@ class DepthProFeatureUpsample(nn.Module):
         self.config = config
         self.n_scaled_images = len(self.config.scaled_images_ratios)
         self.n_intermediate_hooks = len(self.config.intermediate_hook_ids)
-        self.upsample_blocks = nn.ModuleDict()
 
         # for image_features
-        self.upsample_blocks["image"] = DepthProFeatureUpsampleBlock(
+        self.image_block = DepthProFeatureUpsampleBlock(
             config=config,
             input_dims=config.image_model_config.hidden_size,
             intermediate_dims=config.image_model_config.hidden_size,
@@ -165,36 +165,38 @@ class DepthProFeatureUpsample(nn.Module):
         )
 
         # for scaled_images_features
+        self.scaled_images = nn.ModuleList()
         for i, feature_dims in enumerate(config.scaled_images_feature_dims):
-            self.upsample_blocks[f"scaled_images_{i}"] = DepthProFeatureUpsampleBlock(
+            block = DepthProFeatureUpsampleBlock(
                 config=config,
                 input_dims=config.patch_model_config.hidden_size,
                 intermediate_dims=feature_dims,
                 output_dims=feature_dims,
                 n_upsample_layers=1,
             )
+            self.scaled_images.append(block)
 
         # for intermediate_features
+        self.intermediate = nn.ModuleList()
         for i, feature_dims in enumerate(config.intermediate_feature_dims):
             intermediate_dims = config.fusion_hidden_size if i == 0 else feature_dims
-            self.upsample_blocks[f"intermediate_{i}"] = DepthProFeatureUpsampleBlock(
+            block = DepthProFeatureUpsampleBlock(
                 config=config,
                 input_dims=config.patch_model_config.hidden_size,
                 intermediate_dims=intermediate_dims,
                 output_dims=feature_dims,
                 n_upsample_layers=2 + i,
             )
+            self.intermediate.append(block)
 
     def forward(self, features: List[torch.Tensor]) -> List[torch.Tensor]:
-        features[0] = self.upsample_blocks["image"](features[0])
+        features[0] = self.image_block(features[0])
 
         for i in range(self.n_scaled_images):
-            features[i + 1] = self.upsample_blocks[f"scaled_images_{i}"](features[i + 1])
+            features[i + 1] = self.scaled_images[i](features[i + 1])
 
         for i in range(self.n_intermediate_hooks):
-            features[self.n_scaled_images + i + 1] = self.upsample_blocks[f"intermediate_{i}"](
-                features[self.n_scaled_images + i + 1]
-            )
+            features[self.n_scaled_images + i + 1] = self.intermediate[i](features[self.n_scaled_images + i + 1])
 
         return features
 

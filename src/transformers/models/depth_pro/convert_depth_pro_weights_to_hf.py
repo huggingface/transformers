@@ -59,12 +59,12 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"fov.head.head.(\d+).(weight|bias)":                                       r"fov_model.head.\1.\2",
 
     # upsamples
-    r"encoder.upsample_lowres.(weight|bias)":                                   r"depth_pro.encoder.feature_upsample.upsample_blocks.image.layers.0.\1",
+    r"encoder.upsample_lowres.(weight|bias)":                                   r"depth_pro.encoder.feature_upsample.image_block.layers.0.\1",
     r"encoder.upsample_latent(\d+).(\d+).(weight|bias)": lambda match: (
-        f"depth_pro.encoder.feature_upsample.upsample_blocks.intermediate_{1-int(match.group(1))}.layers.{match.group(2)}.{match.group(3)}"
+        f"depth_pro.encoder.feature_upsample.intermediate.{1-int(match.group(1))}.layers.{match.group(2)}.{match.group(3)}"
     ),
     r"encoder.upsample(\d+).(\d+).(weight|bias)": lambda match: (
-        f"depth_pro.encoder.feature_upsample.upsample_blocks.scaled_images_{2-int(match.group(1))}.layers.{match.group(2)}.{match.group(3)}"
+        f"depth_pro.encoder.feature_upsample.scaled_images.{2-int(match.group(1))}.layers.{match.group(2)}.{match.group(3)}"
     ),
 
     # projections between encoder and fusion
