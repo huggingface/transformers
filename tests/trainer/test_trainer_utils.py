@@ -239,7 +239,7 @@ class TrainerUtilsTest(unittest.TestCase):
         model = nn.Sequential(TstLayer(128), nn.ModuleList([TstLayer(128), TstLayer(128)]))
         # fmt: off
         self.assertEqual(
-            get_parameter_names(model, [nn.LayerNorm]),
+            get_parameter_names(model, [nn.LayerNorm], ["layernorm", "rmsnorm"]),
             ['0.linear1.weight', '0.linear1.bias', '0.linear2.weight', '0.linear2.bias', '0.bias', '1.0.linear1.weight', '1.0.linear1.bias', '1.0.linear2.weight', '1.0.linear2.bias', '1.0.bias', '1.1.linear1.weight', '1.1.linear1.bias', '1.1.linear2.weight', '1.1.linear2.bias', '1.1.bias']
         )
         # fmt: on
