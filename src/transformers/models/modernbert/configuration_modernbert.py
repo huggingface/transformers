@@ -112,7 +112,10 @@ class ModernBertConfig(PretrainedConfig):
         repad_logits_with_grad (`bool`, *optional*, defaults to `False`):
             When True, ModernBertForMaskedLM keeps track of the logits' gradient when repadding for output. This only
             applies when using Flash Attention 2 with passed labels. Otherwise output logits always have a gradient.
-
+        is_causal (`bool`, *optional*, defaults to `False`):
+            Whether to use causal attention (e.g. decoder-only models). For standard encoder-decoder models, this should
+            be set to `False`.
+            
     Examples:
 
     ```python
@@ -168,6 +171,7 @@ class ModernBertConfig(PretrainedConfig):
         sparse_pred_ignore_index=-100,
         reference_compile=None,
         repad_logits_with_grad=False,
+        is_causal=False,
         **kwargs,
     ):
         super().__init__(
@@ -208,7 +212,8 @@ class ModernBertConfig(PretrainedConfig):
         self.sparse_pred_ignore_index = sparse_pred_ignore_index
         self.reference_compile = reference_compile
         self.repad_logits_with_grad = repad_logits_with_grad
-
+        self.is_causal = is_causal
+        
         if self.classifier_pooling not in ["cls", "mean"]:
             raise ValueError(
                 f'Invalid value for `classifier_pooling`, should be either "cls" or "mean", but is {self.classifier_pooling}.'

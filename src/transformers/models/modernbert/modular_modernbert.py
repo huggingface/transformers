@@ -31,6 +31,7 @@ from ...modeling_outputs import (
     MaskedLMOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
+    CausalLMOutputWithCrossAttentions,
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -42,6 +43,7 @@ from ...utils import (
 )
 from ...utils.import_utils import is_triton_available
 from ..gemma.modeling_gemma import GemmaRotaryEmbedding, apply_rotary_pos_emb
+from ...generation import GenerationMixin
 
 
 if is_flash_attn_2_available():
@@ -145,7 +147,9 @@ class ModernBertConfig(PretrainedConfig):
         repad_logits_with_grad (`bool`, *optional*, defaults to `False`):
             When True, ModernBertForMaskedLM keeps track of the logits' gradient when repadding for output. This only
             applies when using Flash Attention 2 with passed labels. Otherwise output logits always have a gradient.
-
+        is_causal (`bool`, *optional*, defaults to `False`):
+            Whether to use causal attention (e.g. decoder-only models). For standard encoder-decoder models, this should
+            be set to `False`.
     Examples:
 
     ```python
@@ -201,6 +205,7 @@ class ModernBertConfig(PretrainedConfig):
         sparse_pred_ignore_index=-100,
         reference_compile=None,
         repad_logits_with_grad=False,
+        is_causal=False,
         **kwargs,
     ):
         super().__init__(
@@ -241,7 +246,7 @@ class ModernBertConfig(PretrainedConfig):
         self.sparse_pred_ignore_index = sparse_pred_ignore_index
         self.reference_compile = reference_compile
         self.repad_logits_with_grad = repad_logits_with_grad
-
+        self.is_causal = is_causal
         if self.classifier_pooling not in ["cls", "mean"]:
             raise ValueError(
                 f'Invalid value for `classifier_pooling`, should be either "cls" or "mean", but is {self.classifier_pooling}.'
@@ -520,6 +525,7 @@ def eager_attention_forward(
     bs: int,
     dim: int,
     output_attentions: Optional[bool] = False,
+    is_causal: bool = False,
     **_kwargs,
 ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
     # qkv: [batch_size, seqlen, 3, nheads, headdim]
@@ -530,6 +536,13 @@ def eager_attention_forward(
 
     scale = module.head_dim**-0.5
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scale
+
+    if is_causal:
+        # Create causal mask: lower triangular matrix of -inf
+        # NOTE: quite memory intensive, if this is a problem please use FA or SDPA
+        seq_len = query.size(2)
+        causal_mask = torch.triu(torch.ones(seq_len, seq_len, dtype=torch.bool, device=query.device), diagonal=1)
+        attn_weights.masked_fill_(causal_mask, float("-inf"))
 
     if local_attention != (-1, -1):
         attention_mask = sliding_window_mask
@@ -557,6 +570,7 @@ def flash_attention_forward(
     bs: int,
     dim: int,
     target_dtype: torch.dtype = torch.bfloat16,
+    is_causal: bool = False,
     **_kwargs,
 ) -> Tuple[torch.Tensor]:
     # (total_seqlen, 3, nheads, headdim)
@@ -576,6 +590,7 @@ def flash_attention_forward(
             dropout_p=module.attention_dropout if module.training else 0.0,
             deterministic=module.deterministic_flash_attn,
             window_size=local_attention,
+            causal=is_causal,
         )
         attn = attn.to(orig_dtype)  # type: ignore
     else:
@@ -586,6 +601,7 @@ def flash_attention_forward(
             dropout_p=module.attention_dropout if module.training else 0.0,
             deterministic=module.deterministic_flash_attn,
             window_size=local_attention,
+            causal=is_causal,
         )
     return (attn.view(bs, dim),)
 
@@ -599,6 +615,7 @@ def sdpa_attention_forward(
     local_attention: Tuple[int, int],
     bs: int,
     dim: int,
+    is_causal: bool = False,
     **_kwargs,
 ) -> Tuple[torch.Tensor]:
     # qkv: [batch_size, seqlen, 3, nheads, headdim]
@@ -616,7 +633,8 @@ def sdpa_attention_forward(
             key,
             value,
             dropout_p=module.attention_dropout if module.training else 0.0,
-            attn_mask=attention_mask,
+            attn_mask=attention_mask if not is_causal else None,
+            is_causal=is_causal,
         )
         .transpose(1, 2)
         .contiguous()
@@ -704,6 +722,7 @@ class ModernBertAttention(nn.Module):
             bs=bs,
             dim=self.all_head_size,
             output_attentions=output_attentions,
+            is_causal=self.config.is_causal,
             **kwargs,
         )
         hidden_states = attn_outputs[0]
@@ -1356,16 +1375,25 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
         )
         last_hidden_state = outputs[0]
 
-        if self.config.classifier_pooling == "cls":
-            last_hidden_state = last_hidden_state[:, 0]
-        elif self.config.classifier_pooling == "mean":
-            last_hidden_state = (last_hidden_state * attention_mask.unsqueeze(-1)).sum(dim=1) / attention_mask.sum(
-                dim=1, keepdim=True
-            )
+        if self.config.is_causal:
+            # we need to use EOS / no intermediate pooling
+            nonpooled_output = self.head(last_hidden_state)
+            nonpooled_output = self.drop(nonpooled_output)
+            classifier_output = self.classifier(nonpooled_output)
+            batch_size = input_ids.shape[0]
+            sequence_lengths = attention_mask.sum(dim=1) - 1
+            logits = classifier_output[torch.arange(batch_size, device=classifier_output.device), sequence_lengths]
+        else:
+            if self.config.classifier_pooling == "cls":
+                last_hidden_state = last_hidden_state[:, 0]
+            elif self.config.classifier_pooling == "mean":
+                last_hidden_state = (last_hidden_state * attention_mask.unsqueeze(-1)).sum(dim=1) / attention_mask.sum(
+                    dim=1, keepdim=True
+                )
 
-        pooled_output = self.head(last_hidden_state)
-        pooled_output = self.drop(pooled_output)
-        logits = self.classifier(pooled_output)
+            pooled_output = self.head(last_hidden_state)
+            pooled_output = self.drop(pooled_output)
+            logits = self.classifier(pooled_output)
 
         loss = None
         if labels is not None:
@@ -1487,6 +1515,150 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
         )
 
 
+
+@add_start_docstrings(
+    "The ModernBert Model with a lm head on top, e.g. for Causal Language Modeling (CLM) tasks.",
+    MODERNBERT_START_DOCSTRING,
+)
+class ModernBertForCausalLM(ModernBertPreTrainedModel, GenerationMixin):
+    _tied_weights_keys = ["decoder.weight"]
+
+    def __init__(self, config: ModernBertConfig):
+        super().__init__(config)
+        self.model = ModernBertModel(config)
+        self.lm_head = ModernBertPredictionHead(config)
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=config.decoder_bias)
+        
+        if not self.config.is_causal:
+            raise ValueError("ModernBertForCausalLM is only supported for causal models")
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_output_embeddings(self):
+        return self.decoder
+
+    def set_output_embeddings(self, new_embeddings: nn.Linear):
+        self.decoder = new_embeddings
+
+    @torch.compile(dynamic=True)
+    def compiled_head(self, output: torch.Tensor) -> torch.Tensor:
+        return self.decoder(self.lm_head(output))
+
+    @add_start_docstrings_to_model_forward(MODERNBERT_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=CausalLMOutputWithCrossAttentions,
+        config_class=_CONFIG_FOR_DOC,
+    )
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        sliding_window_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.Tensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        labels: Optional[torch.Tensor] = None,
+        indices: Optional[torch.Tensor] = None,
+        cu_seqlens: Optional[torch.Tensor] = None,
+        max_seqlen: Optional[int] = None,
+        batch_size: Optional[int] = None,
+        seq_len: Optional[int] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        **kwargs,
+    ) -> Union[Tuple[torch.Tensor], MaskedLMOutput]:
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        self._maybe_set_compile()
+
+        if self.config._attn_implementation == "flash_attention_2":
+            if indices is None and cu_seqlens is None and max_seqlen is None:
+                if batch_size is None and seq_len is None:
+                    if inputs_embeds is not None:
+                        batch_size, seq_len = inputs_embeds.shape[:2]
+                    else:
+                        batch_size, seq_len = input_ids.shape[:2]
+                device = input_ids.device if input_ids is not None else inputs_embeds.device
+
+                if attention_mask is None:
+                    attention_mask = torch.ones((batch_size, seq_len), device=device, dtype=torch.bool)
+
+                if inputs_embeds is None:
+                    with torch.no_grad():
+                        input_ids, indices, cu_seqlens, max_seqlen, position_ids, labels = _unpad_modernbert_input(
+                            inputs=input_ids, attention_mask=attention_mask, position_ids=position_ids, labels=labels
+                        )
+                else:
+                    inputs_embeds, indices, cu_seqlens, max_seqlen, position_ids, labels = _unpad_modernbert_input(
+                        inputs=inputs_embeds, attention_mask=attention_mask, position_ids=position_ids, labels=labels
+                    )
+
+        outputs = self.model(
+            input_ids=input_ids,
+            attention_mask=attention_mask,
+            sliding_window_mask=sliding_window_mask,
+            position_ids=position_ids,
+            inputs_embeds=inputs_embeds,
+            indices=indices,
+            cu_seqlens=cu_seqlens,
+            max_seqlen=max_seqlen,
+            batch_size=batch_size,
+            seq_len=seq_len,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        last_hidden_state = outputs[0]
+
+        lm_logits = (
+            self.compiled_head(last_hidden_state)
+            if self.config.reference_compile
+            else self.decoder(self.head(last_hidden_state))
+        )
+
+        if self.config._attn_implementation == "flash_attention_2":
+            with nullcontext() if self.config.repad_logits_with_grad or labels is None else torch.no_grad():
+                lm_logits = _pad_modernbert_output(inputs=lm_logits, indices=indices, batch=batch_size, seqlen=seq_len)
+
+        loss = None
+        if labels is not None:
+            # move labels to correct device to enable model parallelism
+            labels = labels.to(lm_logits.device)
+            # Shift so that tokens < n predict n
+            shift_logits = lm_logits[..., :-1, :].contiguous()
+            shift_labels = labels[..., 1:].contiguous()
+            # Flatten the tokens
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(shift_logits.view(-1, shift_logits.size(-1)), shift_labels.view(-1))
+
+        if not return_dict:
+            output = (lm_logits,) + outputs[1:]
+            return ((loss,) + output) if loss is not None else output
+
+        return CausalLMOutputWithCrossAttentions(
+            loss=loss,
+            logits=lm_logits,
+            past_key_values=None,
+            hidden_states=outputs.hidden_states,
+            attentions=None,
+            cross_attentions=None,
+        )
+    
+    def prepare_inputs_for_generation(
+        self,
+        input_ids: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        **kwargs
+    ) -> dict:
+        if attention_mask is None:
+            attention_mask = torch.ones_like(input_ids)
+
+        return {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+        }
+
 __all__ = [
     "ModernBertConfig",
     "ModernBertModel",
@@ -1494,4 +1666,5 @@ __all__ = [
     "ModernBertForMaskedLM",
     "ModernBertForSequenceClassification",
     "ModernBertForTokenClassification",
+    "ModernBertForCausalLM",
 ]
