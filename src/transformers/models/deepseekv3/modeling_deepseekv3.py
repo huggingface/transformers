@@ -597,7 +597,7 @@ class DeepseekV3DecoderLayer(nn.Module):
         return outputs
 
 
-DEEPSEEK_V3_START_DOCSTRING = r"""
+DEEPSEEKV3_START_DOCSTRING = r"""
     This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
     library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
     etc.)
@@ -616,7 +616,7 @@ DEEPSEEK_V3_START_DOCSTRING = r"""
 
 @add_start_docstrings(
     "The bare DeepseekV3 Model outputting raw hidden-states without any specific head on top.",
-    DEEPSEEK_V3_START_DOCSTRING,
+    DEEPSEEKV3_START_DOCSTRING,
 )
 class DeepseekV3PreTrainedModel(PreTrainedModel):
     config_class = DeepseekV3Config
@@ -644,7 +644,7 @@ class DeepseekV3PreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-DEEPSEEK_V3_INPUTS_DOCSTRING = r"""
+DEEPSEEKV3_INPUTS_DOCSTRING = r"""
     Args:
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
@@ -721,7 +721,7 @@ DEEPSEEK_V3_INPUTS_DOCSTRING = r"""
 
 @add_start_docstrings(
     "The bare DeepseekV3 Model outputting raw hidden-states without any specific head on top.",
-    DEEPSEEK_V3_START_DOCSTRING,
+    DEEPSEEKV3_START_DOCSTRING,
 )
 class DeepseekV3Model(DeepseekV3PreTrainedModel):
     """
@@ -753,7 +753,7 @@ class DeepseekV3Model(DeepseekV3PreTrainedModel):
     def set_input_embeddings(self, value):
         self.embed_tokens = value
 
-    @add_start_docstrings_to_model_forward(DEEPSEEK_V3_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(DEEPSEEKV3_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1017,7 +1017,7 @@ class DeepseekV3ForCausalLM(DeepseekV3PreTrainedModel, GenerationMixin):
         return self.model
 
     @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
-    @add_start_docstrings_to_model_forward(DEEPSEEK_V3_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(DEEPSEEKV3_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
@@ -1056,8 +1056,8 @@ class DeepseekV3ForCausalLM(DeepseekV3PreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, DeepseekV3ForCausalLM
 
-        >>> model = DeepseekV3ForCausalLM.from_pretrained("meta-deepseek_v3/DeepseekV3-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-deepseek_v3/DeepseekV3-2-7b-hf")
+        >>> model = DeepseekV3ForCausalLM.from_pretrained("meta-deepseekv3/DeepseekV3-2-7b-hf")
+        >>> tokenizer = AutoTokenizer.from_pretrained("meta-deepseekv3/DeepseekV3-2-7b-hf")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
@@ -1123,7 +1123,7 @@ class DeepseekV3ForCausalLM(DeepseekV3PreTrainedModel, GenerationMixin):
     padding tokens when `inputs_embeds` are passed instead of `input_ids`, it does the same (take the last value in
     each row of the batch).
     """,
-    DEEPSEEK_V3_START_DOCSTRING,
+    DEEPSEEKV3_START_DOCSTRING,
 )
 class DeepseekV3ForSequenceClassification(DeepseekV3PreTrainedModel):
     def __init__(self, config):
@@ -1141,7 +1141,7 @@ class DeepseekV3ForSequenceClassification(DeepseekV3PreTrainedModel):
     def set_input_embeddings(self, value):
         self.model.embed_tokens = value
 
-    @add_start_docstrings_to_model_forward(DEEPSEEK_V3_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(DEEPSEEKV3_INPUTS_DOCSTRING)
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
