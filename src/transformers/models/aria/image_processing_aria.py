@@ -133,6 +133,8 @@ class AriaImageProcessor(BaseImageProcessor):
             The resampling filter to use if resizing the image.
     """
 
+    model_input_names = ["pixel_values", "pixel_mask", "num_crops"]
+
     def __init__(
         self,
         image_mean: List[float] = None,

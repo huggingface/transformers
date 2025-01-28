@@ -129,6 +129,7 @@ class Idefics3Processor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
+    valid_kwargs = ["image_seq_len", "chat_template"]
     image_processor_class = "Idefics3ImageProcessor"
     tokenizer_class = "AutoTokenizer"
 
@@ -354,7 +355,7 @@ class Idefics3Processor(ProcessorMixin):
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+        return list(dict.fromkeys(image_processor_input_names + tokenizer_input_names))
 
 
 __all__ = ["Idefics3Processor"]

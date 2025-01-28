@@ -762,7 +762,11 @@ class ProcessorMixin(PushToHubMixin):
         # (`cached_file` called using `_raise_exceptions_for_missing_entries=False` to avoid exception)
         # However, for models added in the future, we won't get the expected error if this file is missing.
         if resolved_processor_file is None:
-            return {}, kwargs
+            # In any case we need to pass `chat_template` if it is available
+            processor_dict = {}
+            if "chat_template" in kwargs:
+                processor_dict = {"chat_template": kwargs.pop("chat_template")}
+            return processor_dict, kwargs
 
         try:
             # Load processor dict
@@ -785,6 +789,9 @@ class ProcessorMixin(PushToHubMixin):
                 "Chat templates should be in a 'chat_template.jinja' file but found key='chat_template' "
                 "in the processor's config. Make sure to move your template to its own file."
             )
+
+        if "chat_template" in kwargs:
+            processor_dict["chat_template"] = kwargs.pop("chat_template")
 
         if not is_local:
             if "auto_map" in processor_dict:
@@ -817,7 +824,6 @@ class ProcessorMixin(PushToHubMixin):
         """
         processor_dict = processor_dict.copy()
         return_unused_kwargs = kwargs.pop("return_unused_kwargs", False)
-        chat_template = kwargs.pop("chat_template", None)
 
         # We have to pop up some unused (but specific) kwargs and then validate that it doesn't contain unused kwargs
         # If we don't pop, some specific kwargs will raise a warning
@@ -829,8 +835,6 @@ class ProcessorMixin(PushToHubMixin):
 
         unused_kwargs = cls.validate_init_kwargs(processor_config=processor_dict, valid_kwargs=cls.valid_kwargs)
         processor = cls(*args, **processor_dict)
-        if chat_template is not None:
-            setattr(processor, "chat_template", chat_template)
 
         # Update processor with kwargs if needed
         for key in set(kwargs.keys()):
@@ -1199,12 +1203,6 @@ class ProcessorMixin(PushToHubMixin):
                     "https://huggingface.co/docs/transformers/main/en/chat_templating for more information."
                 )
 
-        text_kwargs = {}
-        for key in TextKwargs.__annotations__.keys():
-            value = kwargs.pop(key, None)
-            if value is not None:
-                text_kwargs[key] = value
-
         chat_template_kwargs = {}
         for key in ChatTemplateKwargs.__annotations__.keys():
             value = kwargs.pop(key, getattr(ChatTemplateKwargs, key))
@@ -1221,31 +1219,52 @@ class ProcessorMixin(PushToHubMixin):
             chat_template=chat_template,
             tokenize=False,
             return_dict=False,
-            **text_kwargs,
             **chat_template_kwargs,
         )
 
-        # we will have to return all processed inputs in a dict
+        if isinstance(conversation, (list, tuple)) and (
+            isinstance(conversation[0], (list, tuple)) or hasattr(conversation[0], "content")
+        ):
+            conversations = conversation
+            is_batched = True
+        else:
+            conversations = [conversation]
+            is_batched = False
+
+        # We will have to return all processed inputs in a dict
+        # Currently all processors can accept flat list of visuals, but not all can accept nested list of batches
+        # So we'll make a simple list of images in the order they appear
         if tokenize:
-            images, videos = [], []
-            for message in conversation:
-                visuals = [content for content in message["content"] if content["type"] in ["image", "video"]]
-                for vision_info in visuals:
-                    if vision_info["type"] == "image":
-                        for key in ["image", "url", "path", "base64"]:
-                            if key in vision_info:
-                                images.append(load_image(vision_info[key]))
-                    elif vision_info["type"] == "video":
-                        for key in ["video", "url", "path"]:
-                            if key in vision_info:
-                                videos.append(
-                                    load_video(vision_info[key], num_frames=num_frames, backend=video_load_backend)
-                                )
+            batch_images, batch_videos = [], []
+            for conversation in conversations:
+                for message in conversation:
+                    visuals = [content for content in message["content"] if content["type"] in ["image", "video"]]
+                    for vision_info in visuals:
+                        if vision_info["type"] == "image":
+                            for key in ["image", "url", "path", "base64"]:
+                                if key in vision_info:
+                                    batch_images.append(load_image(vision_info[key]))
+                        elif vision_info["type"] == "video":
+                            for key in ["video", "url", "path"]:
+                                if key in vision_info:
+                                    batch_videos.append(
+                                        load_video(vision_info[key], num_frames=num_frames, backend=video_load_backend)
+                                    )
+
+            # Tokenizer's `apply_chat_template` never adds special tokens when tokenizing
+            # But processor's `apply_chat_template` didn't have an option to tokenize, so users had to format the prompt
+            # and pass it to the processor. Users thus never worried about special tokens relying on processor hadnling
+            # everything internally. The below line is to keep BC for that and be able to work with model that have
+            # special tokens in the template (consistent with tokenizers). We dont want to raise warning, it will flood command line
+            # without actionable solution for users
+            single_prompt = prompt[0] if is_batched else prompt
+            if self.tokenizer.bos_token is not None and single_prompt.startswith(self.tokenizer.bos_token):
+                kwargs["add_special_tokens"] = False
 
             out = self(
                 text=prompt,
-                images=images if images else None,
-                videos=videos if videos else None,
+                images=batch_images if batch_images else None,
+                videos=batch_videos if batch_videos else None,
                 **kwargs,
             )
             if return_dict:

@@ -61,7 +61,11 @@ class LlavaOnevisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).video_processor
 
     def prepare_processor_dict(self):
-        return {"chat_template": "dummy_template", "num_image_tokens": 6, "vision_feature_select_strategy": "default"}
+        return {
+            "chat_template": "{% for message in messages %}{{'<|im_start|>' + message['role'] + ' '}}{# Render all images first #}{% for content in message['content'] | selectattr('type', 'equalto', 'image') %}{{ '<image>' }}{% endfor %}{# Render all video then #}{% for content in message['content'] | selectattr('type', 'equalto', 'video') %}{{ '<video>' }}{% endfor %}{# Render all text next #}{% if message['role'] != 'assistant' %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{{ '\n' + content['text'] }}{% endfor %}{% else %}{% for content in message['content'] | selectattr('type', 'equalto', 'text') %}{% generation %}{{ '\n' + content['text'] }}{% endgeneration %}{% endfor %}{% endif %}{{'<|im_end|>'}}{% endfor %}{% if add_generation_prompt %}{{ '<|im_start|>assistant\n' }}{% endif %}",
+            "num_image_tokens": 6,
+            "vision_feature_select_strategy": "default"
+        }  # fmt: skip
 
     def test_processor_to_json_string(self):
         processor = self.get_processor()

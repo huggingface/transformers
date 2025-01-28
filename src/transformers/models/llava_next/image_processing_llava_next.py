@@ -186,7 +186,7 @@ class LlavaNextImageProcessor(BaseImageProcessor):
             Whether to convert the image to RGB.
     """
 
-    model_input_names = ["pixel_values"]
+    model_input_names = ["pixel_values", "image_sizes"]
 
     def __init__(
         self,

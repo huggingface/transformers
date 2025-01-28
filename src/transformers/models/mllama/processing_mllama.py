@@ -209,10 +209,11 @@ class MllamaProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
+    valid_kwargs = ["chat_template"]
     image_processor_class = "MllamaImageProcessor"
     tokenizer_class = "PreTrainedTokenizerFast"
 
-    def __init__(self, image_processor, tokenizer):
+    def __init__(self, image_processor, tokenizer, chat_template=None):
         if not hasattr(tokenizer, "image_token"):
             self.image_token = "<|image|>"
             self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
@@ -223,8 +224,7 @@ class MllamaProcessor(ProcessorMixin):
         self.python_token = "<|python_tag|>"
         self.python_token_id = tokenizer.convert_tokens_to_ids(self.python_token)
         self.bos_token = tokenizer.bos_token
-        self.chat_template = tokenizer.chat_template
-        super().__init__(image_processor, tokenizer)
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
         self,
@@ -367,6 +367,10 @@ class MllamaProcessor(ProcessorMixin):
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
+
+        # Remove `num_tiles`, it is popped and used only when processing. Make a copy of list when remocing
+        # otherwise `self.image_processor.model_input_names` is also modified
+        image_processor_input_names = [name for name in image_processor_input_names if name != "num_tiles"]
         return list(tokenizer_input_names + image_processor_input_names + ["cross_attention_mask"])
 
 

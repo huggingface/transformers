@@ -217,7 +217,7 @@ class Idefics2ImageProcessor(BaseImageProcessor):
             strategy was first introduced in https://arxiv.org/abs/2311.06607.
     """
 
-    model_input_names = ["pixel_values"]
+    model_input_names = ["pixel_values", "pixel_attention_mask"]
 
     def __init__(
         self,
