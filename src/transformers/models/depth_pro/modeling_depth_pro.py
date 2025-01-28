@@ -495,11 +495,16 @@ class DepthProEncoder(nn.Module):
 
         scaled_images_features = []
         for i in range(self.n_scaled_images):
+            hidden_state = scaled_images_last_hidden_state[i]
+            batch_size = batch_size
+            padding = torch_int(self.merge_padding_value * (1 / self.scaled_images_ratios[i]))
+            output_height = base_height * 2**i
+            output_width = base_width * 2**i
             features = reconstruct_feature_maps(
-                scaled_images_last_hidden_state[i],
+                hidden_state,
                 batch_size=batch_size,
-                padding=torch_int(self.merge_padding_value * (1 / self.scaled_images_ratios[i])),
-                output_size=(base_height * 2**i, base_width * 2**i),
+                padding=padding,
+                output_size=(output_height, output_width),
             )
             scaled_images_features.append(features)
 
@@ -507,15 +512,16 @@ class DepthProEncoder(nn.Module):
 
         intermediate_features = []
         for i in range(self.n_intermediate_hooks):
+            # +1 to correct index position as hidden_states contain embedding output as well
+            hidden_state = patch_encodings[2][self.intermediate_hook_ids[i] + 1]
+            padding = torch_int(self.merge_padding_value * (1 / self.scaled_images_ratios[-1]))
+            output_height = base_height * 2 ** (self.n_scaled_images - 1)
+            output_width = base_width * 2 ** (self.n_scaled_images - 1)
             features = reconstruct_feature_maps(
-                # +1 to correct index position as hidden_states contain embedding output as well
-                patch_encodings[2][self.intermediate_hook_ids[i] + 1],
+                hidden_state,
                 batch_size=batch_size,
-                padding=torch_int(self.merge_padding_value * (1 / self.scaled_images_ratios[-1])),
-                output_size=(
-                    base_height * 2 ** (self.n_scaled_images - 1),
-                    base_width * 2 ** (self.n_scaled_images - 1),
-                ),
+                padding=padding,
+                output_size=(output_height, output_width),
             )
             intermediate_features.append(features)
 
