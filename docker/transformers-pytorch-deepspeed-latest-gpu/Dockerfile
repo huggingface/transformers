@@ -15,6 +15,10 @@ RUN python3 -m pip install --no-cache-dir --upgrade pip
 ARG REF=main
 RUN git clone https://github.com/huggingface/transformers && cd transformers && git checkout $REF
 
+# Install Rust for Tokenizers
+RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
+ENV PATH="$HOME/.cargo/bin:${PATH}"
+
 RUN python3 -m pip install --no-cache-dir ./transformers[deepspeed-testing]
 
 # Install latest release PyTorch
