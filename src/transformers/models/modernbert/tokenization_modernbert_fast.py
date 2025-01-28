@@ -1,8 +1,12 @@
 from typing import List, Optional, Tuple
-from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
+
 from tokenizers import processors
 
+from transformers.tokenization_utils_fast import PreTrainedTokenizerFast
+
+
 VOCAB_FILES_NAMES = {"tokenizer_file": "tokenizer.json"}
+
 
 class ModernBertTokenizerFast(PreTrainedTokenizerFast):
     """
@@ -56,10 +60,10 @@ class ModernBertTokenizerFast(PreTrainedTokenizerFast):
         self.is_causal = is_causal
         if is_causal:
             # Force add_bos_token to True for causal mode
-            kwargs.pop('add_bos_token', None)
+            kwargs.pop("add_bos_token", None)
             add_bos_token = True
         else:
-            add_bos_token = kwargs.pop('add_bos_token', False)
+            add_bos_token = kwargs.pop("add_bos_token", False)
 
         super().__init__(
             vocab_file=vocab_file,
@@ -78,6 +82,7 @@ class ModernBertTokenizerFast(PreTrainedTokenizerFast):
         if is_causal:
             self._add_bos_token = True
             self._add_eos_token = add_eos_token
+
             # Define causal-mode specific properties and methods
             def add_bos_token_getter(self):
                 """
@@ -120,13 +125,16 @@ class ModernBertTokenizerFast(PreTrainedTokenizerFast):
                 special_tokens = [(bos, bos_token_id)]
                 if self._add_eos_token:
                     special_tokens.append((eos, eos_token_id))
-                
+
                 self._tokenizer.post_processor = processors.TemplateProcessing(
                     single=single, pair=pair, special_tokens=special_tokens
                 )
 
             def get_special_tokens_mask(
-                self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None, already_has_special_tokens: bool = False
+                self,
+                token_ids_0: List[int],
+                token_ids_1: Optional[List[int]] = None,
+                already_has_special_tokens: bool = False,
             ) -> List[int]:
                 """
                 Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -164,10 +172,12 @@ class ModernBertTokenizerFast(PreTrainedTokenizerFast):
                     + eos_token_id
                 )
 
-            def build_inputs_with_special_tokens(self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None) -> List[int]:
+            def build_inputs_with_special_tokens(
+                self, token_ids_0: List[int], token_ids_1: Optional[List[int]] = None
+            ) -> List[int]:
                 """
                 Build model inputs from a sequence or a pair of sequence by concatenating and adding special tokens.
-                
+
                 Args:
                     token_ids_0 (`List[int]`):
                         List of IDs to which the special tokens will be added.
@@ -216,5 +226,6 @@ class ModernBertTokenizerFast(PreTrainedTokenizerFast):
 
             # Initialize the post processor
             self.update_post_processor()
+
 
 __all__ = ["ModernBertTokenizerFast"]
