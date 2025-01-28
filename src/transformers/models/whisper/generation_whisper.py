@@ -665,24 +665,9 @@ class WhisperGenerationMixin(GenerationMixin):
         )
 
         # 5 Prepare running variables, list for generation
-        num_return_sequences = generation_config.num_return_sequences
-        (
-            batch_idx_map,
-            cur_bsz,
-            input_features,
-            seek,
-            max_frames,
-            init_tokens,
-            do_condition_on_prev_tokens,
-        ) = self._expand_variables_for_generation(
-            input_features=input_features,
-            seek=seek,
-            max_frames=max_frames,
-            init_tokens=init_tokens,
-            batch_size=batch_size,
-            condition_on_prev_tokens=condition_on_prev_tokens,
-            generation_config=generation_config,
-        )
+        cur_bsz = batch_size
+        batch_idx_map = list(range(batch_size))
+        do_condition_on_prev_tokens = [condition_on_prev_tokens for _ in range(cur_bsz)]
 
         current_segments = self._prepare_segments(
             prompt_ids=prompt_ids,
@@ -840,18 +825,7 @@ class WhisperGenerationMixin(GenerationMixin):
             and (force_unique_generate_call or not return_timestamps)
         ):
             # only one call to generate_with_fallback, we can return a ModelOutput
-            outputs = self._stack_split_outputs(seek_outputs, model_output_type, self.device, kwargs)
-            if num_return_sequences > 1:
-                if hasattr(outputs, "encoder_attentions") and outputs.encoder_attentions is not None:
-                    outputs.encoder_attentions = tuple(
-                        outputs.encoder_attentions[i][::num_return_sequences]
-                        for i in range(len(outputs.encoder_attentions))
-                    )
-                if hasattr(outputs, "encoder_hidden_states") and outputs.encoder_hidden_states is not None:
-                    outputs.encoder_hidden_states = tuple(
-                        outputs.encoder_hidden_states[i][::num_return_sequences]
-                        for i in range(len(outputs.encoder_hidden_states))
-                    )
+            outputs = self._stack_split_outputs(seek_outputs, model_output_type, self.device, kwargs) 
             return outputs
 
         padded_outputs = _pad_to_max_length(
