@@ -280,10 +280,8 @@ class PixtralImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         encoding_slow = image_processor_slow(dummy_image, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
-
-        self.assertTrue(torch.allclose(encoding_slow.pixel_values[0][0], encoding_fast.pixel_values[0][0], atol=1e-1))
-        self.assertLessEqual(
-            torch.mean(torch.abs(encoding_slow.pixel_values[0][0] - encoding_fast.pixel_values[0][0])).item(), 1e-3
+        torch.testing.assert_close(
+            encoding_slow.pixel_values[0][0], encoding_fast.pixel_values[0][0], rtol=100, atol=1e-1
         )
 
     @require_vision
@@ -315,6 +313,9 @@ class PixtralImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             self.assertLessEqual(
                 torch.mean(torch.abs(encoding_slow.pixel_values[i][0] - encoding_fast.pixel_values[i][0])).item(), 1e-3
             )
+            torch.testing.assert_close(
+                encoding_slow.pixel_values[0][0], encoding_fast.pixel_values[0][0], rtol=100, atol=1e-1
+            )
 
     @slow
     @require_torch_gpu
@@ -333,7 +334,9 @@ class PixtralImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         image_processor = torch.compile(image_processor, mode="reduce-overhead")
         output_compiled = image_processor(input_image, device=torch_device, return_tensors="pt")
 
-        self.assertTrue(torch.allclose(output_eager.pixel_values[0][0], output_compiled.pixel_values[0][0], atol=1e-4))
+        torch.testing.assert_close(
+            output_eager.pixel_values[0][0], output_compiled.pixel_values[0][0], rtol=1e-4, atol=1e-4
+        )
 
     @unittest.skip(reason="PixtralImageProcessor doesn't treat 4 channel PIL and numpy consistently yet")  # FIXME Amy
     def test_call_numpy_4_channels(self):

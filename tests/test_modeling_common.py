@@ -331,6 +331,12 @@ class ModelTesterMixin:
                 with torch.no_grad():
                     second = model(**self._prepare_for_class(inputs_dict, model_class))[0]
 
+                # Save and load second time because `from_pretrained` adds a bunch of new config fields
+                # so we need to make sure those fields can be loaded back after saving
+                # Simply init as `model(config)` doesn't add those fields
+                model.save_pretrained(tmpdirname)
+                model = model_class.from_pretrained(tmpdirname)
+
             if isinstance(first, tuple) and isinstance(second, tuple):
                 for tensor1, tensor2 in zip(first, second):
                     check_save_load(tensor1, tensor2)
@@ -1771,7 +1777,7 @@ class ModelTesterMixin:
             model.eval()
 
             hidden_states_with_chunk = model(**self._prepare_for_class(inputs_dict, model_class))[0]
-            self.assertTrue(torch.allclose(hidden_states_no_chunk, hidden_states_with_chunk, atol=1e-3))
+            torch.testing.assert_close(hidden_states_no_chunk, hidden_states_with_chunk, rtol=1e-3, atol=1e-3)
 
     def test_resize_position_vector_embeddings(self):
         if not self.test_resize_position_embeddings:
@@ -1898,7 +1904,7 @@ class ModelTesterMixin:
             else:
                 old_embeddings_mean = torch.mean(model_embed.weight.data[:-10, :], axis=0)
                 new_embeddings_mean = torch.mean(model_embed.weight.data[-10:, :], axis=0)
-            torch.testing.assert_close(old_embeddings_mean, new_embeddings_mean, atol=1e-3, rtol=1e-1)
+            torch.testing.assert_close(old_embeddings_mean, new_embeddings_mean, rtol=1e-3, atol=1e-3)
 
             # Check that the model can still do a forward pass successfully (every parameter should be resized)
             if not is_deepspeed_zero3_enabled():
@@ -2006,7 +2012,7 @@ class ModelTesterMixin:
             else:
                 old_embeddings_mean = torch.mean(model_embed.weight.data[:-10, :], axis=0)
                 new_embeddings_mean = torch.mean(model_embed.weight.data[-10:, :], axis=0)
-            torch.testing.assert_close(old_embeddings_mean, new_embeddings_mean, atol=1e-3, rtol=1e-1)
+            torch.testing.assert_close(old_embeddings_mean, new_embeddings_mean, rtol=1e-3, atol=1e-3)
 
     @require_deepspeed
     @require_torch_accelerator
@@ -2081,7 +2087,7 @@ class ModelTesterMixin:
             else:
                 old_embeddings_mean = torch.mean(output_embeds.weight.data[:-10, :], axis=0)
                 new_embeddings_mean = torch.mean(output_embeds.weight.data[-10:, :], axis=0)
-            torch.testing.assert_close(old_embeddings_mean, new_embeddings_mean, atol=1e-3, rtol=1e-1)
+            torch.testing.assert_close(old_embeddings_mean, new_embeddings_mean, rtol=1e-3, atol=1e-3)
             # check if the old bias mean close to added bias mean.
             if output_embeds.bias is not None:
                 if is_deepspeed_zero3_enabled():
@@ -2092,7 +2098,7 @@ class ModelTesterMixin:
                     old_bias_mean = torch.mean(output_embeds.bias.data[:-10], axis=0)
                     new_bias_mean = torch.mean(output_embeds.bias.data[-10:], axis=0)
 
-                torch.testing.assert_close(old_bias_mean, new_bias_mean, atol=1e-5, rtol=1e-2)
+                torch.testing.assert_close(old_bias_mean, new_bias_mean, rtol=1e-5, atol=1e-5)
 
             # Check that resizing the token embeddings with a smaller vocab size decreases the model's vocab size
             model.resize_token_embeddings(model_vocab_size - 15)
@@ -3049,7 +3055,7 @@ class ModelTesterMixin:
                     out_embeds = model(
                         inputs_embeds=inputs_embeds, decoder_inputs_embeds=decoder_inputs_embeds, **inputs
                     )[0]
-            self.assertTrue(torch.allclose(out_embeds, out_ids))
+            torch.testing.assert_close(out_embeds, out_ids)
 
     @require_non_xpu
     @require_torch_multi_gpu
@@ -3170,10 +3176,10 @@ class ModelTesterMixin:
 
             for value, parallel_value in zip(output, parallel_output):
                 if isinstance(value, torch.Tensor):
-                    self.assertTrue(torch.allclose(value, parallel_value.to("cpu"), atol=1e-7))
+                    torch.testing.assert_close(value, parallel_value.to("cpu"), rtol=1e-7, atol=1e-7)
                 elif isinstance(value, (Tuple, List)):
                     for value_, parallel_value_ in zip(value, parallel_value):
-                        self.assertTrue(torch.allclose(value_, parallel_value_.to("cpu"), atol=1e-7))
+                        torch.testing.assert_close(value_, parallel_value_.to("cpu"), rtol=1e-7, atol=1e-7)
 
     def check_device_map_is_respected(self, model, device_map):
         for param_name, param in model.named_parameters():
@@ -3229,9 +3235,12 @@ class ModelTesterMixin:
                 new_output = new_model(**inputs_dict_class)
 
                 if isinstance(base_output[0], tuple) and isinstance(new_output[0], tuple):
-                    self.assertTrue(torch.allclose(a, b, atol=1e-5) for a, b in zip(base_output[0], new_output[0]))
+                    [
+                        torch.testing.assert_close(a, b, rtol=1e-5, atol=1e-5)
+                        for a, b in zip(base_output[0], new_output[0])
+                    ]
                 else:
-                    self.assertTrue(torch.allclose(base_output[0], new_output[0], atol=1e-5))
+                    torch.testing.assert_close(base_output[0], new_output[0], rtol=1e-5, atol=1e-5)
 
     @require_accelerate
     @mark.accelerate_tests
@@ -3264,9 +3273,12 @@ class ModelTesterMixin:
                 new_output = new_model(**inputs_dict_class)
 
                 if isinstance(base_output[0], tuple) and isinstance(new_output[0], tuple):
-                    self.assertTrue(torch.allclose(a, b, atol=1e-5) for a, b in zip(base_output[0], new_output[0]))
+                    [
+                        torch.testing.assert_close(a, b, rtol=1e-5, atol=1e-5)
+                        for a, b in zip(base_output[0], new_output[0])
+                    ]
                 else:
-                    self.assertTrue(torch.allclose(base_output[0], new_output[0], atol=1e-5))
+                    torch.testing.assert_close(base_output[0], new_output[0], rtol=1e-5, atol=1e-5)
 
     @require_accelerate
     @mark.accelerate_tests
@@ -3303,9 +3315,12 @@ class ModelTesterMixin:
                     new_output = new_model(**inputs_dict_class)
 
                     if isinstance(base_output[0], tuple) and isinstance(new_output[0], tuple):
-                        self.assertTrue(torch.allclose(a, b, atol=1e-5) for a, b in zip(base_output[0], new_output[0]))
+                        [
+                            torch.testing.assert_close(a, b, rtol=1e-5, atol=1e-5)
+                            for a, b in zip(base_output[0], new_output[0])
+                        ]
                     else:
-                        self.assertTrue(torch.allclose(base_output[0], new_output[0], atol=1e-5))
+                        torch.testing.assert_close(base_output[0], new_output[0], rtol=1e-5, atol=1e-5)
 
     @require_accelerate
     @mark.accelerate_tests
@@ -3341,9 +3356,12 @@ class ModelTesterMixin:
                     new_output = new_model(**inputs_dict_class)
 
                     if isinstance(base_output[0], tuple) and isinstance(new_output[0], tuple):
-                        self.assertTrue(torch.allclose(a, b, atol=1e-5) for a, b in zip(base_output[0], new_output[0]))
+                        [
+                            torch.testing.assert_close(a, b, rtol=1e-5, atol=1e-5)
+                            for a, b in zip(base_output[0], new_output[0])
+                        ]
                     else:
-                        self.assertTrue(torch.allclose(base_output[0], new_output[0], atol=1e-5))
+                        torch.testing.assert_close(base_output[0], new_output[0], rtol=1e-5, atol=1e-5)
 
     def test_problem_types(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -4555,10 +4573,10 @@ class ModelTesterMixin:
                 logits_padded = res_padded.logits[inputs_dict["attention_mask"].bool()]
                 logits_padfree = res_padfree.logits[0]
 
-                torch.testing.assert_close(logits_padded.argmax(-1), logits_padfree.argmax(-1), atol=0, rtol=0)
+                torch.testing.assert_close(logits_padded.argmax(-1), logits_padfree.argmax(-1), rtol=0, atol=0)
                 # acceptable numerical instability
                 tol = torch.finfo(torch.float16).eps
-                torch.testing.assert_close(logits_padded, logits_padfree, atol=tol, rtol=tol)
+                torch.testing.assert_close(logits_padded, logits_padfree, rtol=tol, atol=tol)
 
     @is_pt_tf_cross_test
     def test_tf_from_pt_safetensors(self):
@@ -4628,32 +4646,11 @@ class ModelTesterMixin:
             dummy_input = torch.LongTensor([[0, 2, 3, 4], [0, 2, 3, 4]]).to(torch_device)
             dummy_attention_mask = torch.LongTensor([[1, 1, 1, 1], [0, 1, 1, 1]]).to(torch_device)
 
-            fa2_correctly_converted = False
-
-            for _, module in fa2_model.named_modules():
-                if "FlashAttention" in module.__class__.__name__:
-                    fa2_correctly_converted = True
-                    break
-
-            self.assertTrue(fa2_correctly_converted)
-
             _ = fa2_model(input_ids=dummy_input, attention_mask=dummy_attention_mask)
-
             with tempfile.TemporaryDirectory() as tmpdirname:
                 fa2_model.save_pretrained(tmpdirname)
-
                 model_from_pretrained = model_class.from_pretrained(tmpdirname)
-
                 self.assertTrue(model_from_pretrained.config._attn_implementation != "flash_attention_2")
-
-                fa2_correctly_converted = False
-
-                for _, module in model_from_pretrained.named_modules():
-                    if "FlashAttention" in module.__class__.__name__:
-                        fa2_correctly_converted = True
-                        break
-
-                self.assertFalse(fa2_correctly_converted)
 
     def _get_custom_4d_mask_test_data(self):
         # Sequence in which all but the last token is the same
@@ -4780,28 +4777,28 @@ class ModelTesterMixin:
         for name, param in model._orig_mod.named_parameters():
             torch.testing.assert_close(param.grad.detach().cpu(), params[name], rtol=1e-4, atol=1e-4)
 
-    def test_forward_with_num_logits_to_keep(self):
+    def test_forward_with_logits_to_keep(self):
         for model_class in self.all_generative_model_classes:
-            if "num_logits_to_keep" not in set(inspect.signature(model_class.forward).parameters.keys()):
-                self.skipTest(reason="This model does not support `num_logits_to_keep` argument.")
+            if "logits_to_keep" not in set(inspect.signature(model_class.forward).parameters.keys()):
+                self.skipTest(reason="This model does not support `logits_to_keep` argument.")
 
             config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
             batch_size, sequence_length = inputs["input_ids"].shape
             vocab_size = config.get_text_config().vocab_size
             model = model_class(config).to(device=torch_device).eval()
-            # some models have labels but `num_logits_to_keep` should not be used in train mode
+            # some models have labels but `logits_to_keep` should not be used in train mode
             _ = inputs.pop("labels", None)
 
-            # num_logits_to_keep=0 is a special case meaning "keep all logits"
-            all_logits = model(**inputs, num_logits_to_keep=0).logits
-            last_token_logits = model(**inputs, num_logits_to_keep=1).logits
+            # logits_to_keep=0 is a special case meaning "keep all logits"
+            all_logits = model(**inputs, logits_to_keep=0).logits
+            last_token_logits = model(**inputs, logits_to_keep=1).logits
 
             # Assert all shapes are correct
             self.assertEqual(tuple(all_logits.shape), (batch_size, sequence_length, vocab_size))
             self.assertEqual(tuple(last_token_logits.shape), (batch_size, 1, vocab_size))
 
             # Assert the last tokens are actually the same (except for the natural fluctuation due to order of FP ops)
-            self.assertTrue(torch.allclose(all_logits[:, -1:, :], last_token_logits, atol=1e-5))
+            torch.testing.assert_close(all_logits[:, -1:, :], last_token_logits, rtol=1e-5, atol=1e-5)
 
     @require_torch_gpu
     def test_flex_attention_with_grads(self):
