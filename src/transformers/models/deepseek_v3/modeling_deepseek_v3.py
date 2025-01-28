@@ -1054,8 +1054,8 @@ class DeepseekV3ForCausalLM(DeepseekV3PreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, DeepseekV3ForCausalLM
 
-        >>> model = DeepseekV3ForCausalLM.from_pretrained("meta-deepseek_v3/DeepseekV3-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-deepseek_v3/DeepseekV3-2-7b-hf")
+        >>> model = DeepseekV3ForCausalLM.from_pretrained("deepseek-ai/DeepSeek-V3")
+        >>> tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V3")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
