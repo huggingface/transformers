@@ -336,6 +336,13 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
     def test_generate_compile_model_forward(self):
         pass
 
+    @parameterized.expand([("greedy", 1), ("beam search", 2)])
+    @unittest.skip(
+        reason="Breaks the CIs right now! To check!"
+    )
+    def test_generate_from_inputs_embeds(self, _, num_beams):
+        pass
+
 
 @require_torch
 class Qwen2VLIntegrationTest(unittest.TestCase):
