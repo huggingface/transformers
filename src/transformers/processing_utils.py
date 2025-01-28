@@ -1237,19 +1237,24 @@ class ProcessorMixin(PushToHubMixin):
         if tokenize:
             batch_images, batch_videos = [], []
             for conversation in conversations:
+                images, videos = [], []
                 for message in conversation:
                     visuals = [content for content in message["content"] if content["type"] in ["image", "video"]]
                     for vision_info in visuals:
                         if vision_info["type"] == "image":
                             for key in ["image", "url", "path", "base64"]:
                                 if key in vision_info:
-                                    batch_images.append(load_image(vision_info[key]))
+                                    images.append(load_image(vision_info[key]))
                         elif vision_info["type"] == "video":
                             for key in ["video", "url", "path"]:
                                 if key in vision_info:
-                                    batch_videos.append(
+                                    videos.append(
                                         load_video(vision_info[key], num_frames=num_frames, backend=video_load_backend)
                                     )
+                if images:
+                    batch_images.append(images)
+                if videos:
+                    batch_videos.append(videos)
 
             # Tokenizer's `apply_chat_template` never adds special tokens when tokenizing
             # But processor's `apply_chat_template` didn't have an option to tokenize, so users had to format the prompt
