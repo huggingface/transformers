@@ -893,7 +893,7 @@ class UniversalSpeculativeDecodingGenerator(AssistedCandidateGeneratorDifferentT
             if tokens_to_remove > 0:
                 self._prev_assistant_ids = self._prev_assistant_ids[:, :-tokens_to_remove]
             assistant_input_ids = torch.cat([self._prev_assistant_ids, assistant_new_ids], dim=-1)
-        assistant_input_ids = assistant_input_ids.to(torch.long)
+        assistant_input_ids = assistant_input_ids.to(dtype=torch.long)
 
         return assistant_input_ids, len(assistant_new_ids[0])
 
