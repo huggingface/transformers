@@ -77,15 +77,9 @@ The original code can be found [here](https://huggingface.co/jinaai/jina-bert-v2
 - TeX
 - Visual Basic
 
-## Usage tips
+## Tips
 
-Please apply mean pooling when integrating the model.
-
-### Why mean pooling?
-
-`mean poooling` takes all token embeddings from model output and averaging them at sentence/paragraph level.
-It has been proved to be the most effective way to produce high-quality sentence embeddings.
-We offer an `encode` function to deal with this.
+Please apply mean pooling with the `encode` function when integrating the model. `mean_pooling` averages all the token embeddings from the model output at a sentence/paragraph level. This is shown to be the most effective way to produce high-quality sentence embeddings.
 
 ## Resources
 
