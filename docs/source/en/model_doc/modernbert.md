@@ -16,14 +16,7 @@ rendered properly in your Markdown viewer.
 
 # ModernBERT
 
-<div class="flex flex-wrap space-x-1">
-<a href="https://huggingface.co/models?filter=modernbert">
-<img alt="Models" src="https://img.shields.io/badge/All_model_pages-modernbert-blueviolet">
-</a>
-<a href="https://arxiv.org/abs/2412.13663">
-<img alt="Paper page" src="https://img.shields.io/badge/Paper%20page-2412.13663-green">
-</a>
-</div>
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 
 ## Overview
 

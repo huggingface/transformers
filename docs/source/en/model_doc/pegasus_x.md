@@ -16,6 +16,8 @@ rendered properly in your Markdown viewer.
 
 # PEGASUS-X
 
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+
 ## Overview
 
 The PEGASUS-X model was proposed in [Investigating Efficiently Extending Transformers for Long Input Summarization](https://arxiv.org/abs/2208.04347)  by Jason Phang, Yao Zhao and Peter J. Liu.

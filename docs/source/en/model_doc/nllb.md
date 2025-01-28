@@ -16,6 +16,8 @@ rendered properly in your Markdown viewer.
 
 # NLLB
 
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+
 ## Updated tokenizer behavior 
 
 **DISCLAIMER:** The default behaviour for the tokenizer was fixed and thus changed in April 2023.
