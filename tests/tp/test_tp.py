@@ -72,7 +72,7 @@ class TestTensorParallel(TestCasePlus):
             if not torch.cuda.max_memory_allocated(device) / 1024**3 < expected_model_memory * overhead_factor:
                 raise ValueError("Loading the model used more than the full model size")
 
-            # Assert we correctly handled the sharding (we use 20 GB)
+            # Assert we correctly handled the sharding between devices
             if not torch.cuda.memory_allocated(device) / 1024**3 < (expected_model_memory / world_size) * overhead_factor:
                 raise ValueError("Each model shard is larger than what is expected.")
 
