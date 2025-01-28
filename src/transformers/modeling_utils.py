@@ -1294,7 +1294,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     # This flag signal that the model can be used as an efficient backend in TGI and vLLM
     # In practice, it means that they support attention interface functions, fully pass the kwargs
-    # through all modules up to the Attention layer, and can slice logits with Tensor
+    # through all modules up to the Attention layer, can slice logits with Tensor, and have a default TP plan
     _supports_attention_backend = False
 
     @property
@@ -4037,7 +4037,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             sub_config = getattr(config, sub_config_key)
                             sub_config.torch_dtype = torch_dtype
                 elif isinstance(torch_dtype, torch.dtype):
-                    pass
+                    for sub_config_key in config.sub_configs.keys():
+                        sub_config = getattr(config, sub_config_key)
+                        sub_config.torch_dtype = torch_dtype
                 elif isinstance(torch_dtype, dict):
                     for key, curr_dtype in torch_dtype.items():
                         if hasattr(config, key):
