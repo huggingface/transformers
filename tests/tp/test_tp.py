@@ -13,6 +13,8 @@
 # limitations under the License.
 
 import os
+import textwrap
+import tempfile
 
 from transformers import is_torch_available
 from transformers.models.llama.configuration_llama import LlamaConfig
@@ -42,6 +44,50 @@ class TestTensorParallel(TestCasePlus):
         print(cmd)
         execute_subprocess_async(cmd, env=self.get_env())
         # successful return here == success - any errors would have caused an error in the sub-call
+
+    @require_torch_multi_gpu
+    def test_memory_consumptiom_loading(self):
+        script_to_run = textwrap.dedent(
+            """
+            import torch
+            import os
+            from transformers import AutoModelForCausalLM
+
+            model_id = "meta-llama/Meta-Llama-3-8B-Instruct"
+
+            rank = int(os.environ["RANK"])
+            world_size = int(os.environ["WORLD_SIZE"])
+            device = torch.device(f"cuda:{rank}")
+            torch.distributed.init_process_group("nccl", device_id=device)
+            device_mesh = torch.distributed.init_device_mesh("cuda", (world_size,))
+
+            model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16, tp_plan="auto")
+            torch.distributed.barrier()
+
+            # The expected full model memory footprint 
+            expected_model_memory = 16
+            overhead_factor = 1.2
+
+            # Assert we did not use more than the full model expected memory (with some overhead)
+            if not torch.cuda.max_memory_allocated(device) / 1024**3 < expected_model_memory * overhead_factor:
+                raise ValueError("Loading the model used more than the full model size")
+
+            # Assert we correctly handled the sharding (we use 20 GB)
+            if not torch.cuda.memory_allocated(device) / 1024**3 < (expected_model_memory / world_size) * overhead_factor:
+                raise ValueError("Each model shard is larger than what is expected.")
+            """
+        )
+
+        with tempfile.NamedTemporaryFile(suffix=".py") as tmp:
+            tmp.write(script_to_run)
+            distributed_args = f"--nproc_per_node={torch.cuda.device_count()} --master_port={get_torch_dist_unique_port()} {tmp.name}".split()
+            output_dir = self.get_auto_remove_tmp_dir()
+            args = f"--output_dir {output_dir} --report_to none".split()
+            cmd = ["torchrun"] + distributed_args + args
+            print(cmd)
+            execute_subprocess_async(cmd, env=self.get_env())
+            # successful return here == success - any errors would have caused an error in the sub-call
+
 
 
 if __name__ == "__main__":
