@@ -15,7 +15,7 @@
 """BARK model generation configuration"""
 
 import copy
-from typing import Dict
+from typing import ClassVar, Dict
 
 from ...generation.configuration_utils import GenerationConfig
 from ...utils import logging
@@ -25,7 +25,7 @@ logger = logging.get_logger(__name__)
 
 
 class BarkSemanticGenerationConfig(GenerationConfig):
-    model_type = "semantic"
+    model_type : ClassVar[str] = "semantic"
 
     def __init__(
         self,
@@ -116,7 +116,7 @@ class BarkSemanticGenerationConfig(GenerationConfig):
 
 
 class BarkCoarseGenerationConfig(GenerationConfig):
-    model_type = "coarse_acoustics"
+    model_type : ClassVar[str] = "coarse_acoustics"
 
     def __init__(
         self,
@@ -196,7 +196,7 @@ class BarkCoarseGenerationConfig(GenerationConfig):
 
 
 class BarkFineGenerationConfig(GenerationConfig):
-    model_type = "fine_acoustics"
+    model_type : ClassVar[str] = "fine_acoustics"
 
     def __init__(
         self,
@@ -239,8 +239,8 @@ class BarkFineGenerationConfig(GenerationConfig):
 
 
 class BarkGenerationConfig(GenerationConfig):
-    model_type = "bark"
-    is_composition = True
+    model_type : ClassVar[str] = "bark"
+    is_composition : ClassVar[bool] = True
 
     # TODO (joao): nested from_dict
 
