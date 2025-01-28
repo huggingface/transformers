@@ -15,6 +15,7 @@
 import os
 import textwrap
 import tempfile
+import subprocess
 
 from transformers import is_torch_available
 from transformers.models.llama.configuration_llama import LlamaConfig
@@ -46,7 +47,7 @@ class TestTensorParallel(TestCasePlus):
         # successful return here == success - any errors would have caused an error in the sub-call
 
     @require_torch_multi_gpu
-    def test_memory_consumptiom_loading(self):
+    def test_loading_memory_consumption(self):
         script_to_run = textwrap.dedent(
             """
             import torch
@@ -59,7 +60,6 @@ class TestTensorParallel(TestCasePlus):
             world_size = int(os.environ["WORLD_SIZE"])
             device = torch.device(f"cuda:{rank}")
             torch.distributed.init_process_group("nccl", device_id=device)
-            device_mesh = torch.distributed.init_device_mesh("cuda", (world_size,))
 
             model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16, tp_plan="auto")
             torch.distributed.barrier()
@@ -75,17 +75,24 @@ class TestTensorParallel(TestCasePlus):
             # Assert we correctly handled the sharding (we use 20 GB)
             if not torch.cuda.memory_allocated(device) / 1024**3 < (expected_model_memory / world_size) * overhead_factor:
                 raise ValueError("Each model shard is larger than what is expected.")
+
+            torch.distributed.barrier()
+            torch.utils.distributed.destroy_process_group()
             """
         )
 
-        with tempfile.NamedTemporaryFile(suffix=".py") as tmp:
+        with tempfile.NamedTemporaryFile(mode="w+", suffix=".py") as tmp:
             tmp.write(script_to_run)
-            distributed_args = f"--nproc_per_node={torch.cuda.device_count()} --master_port={get_torch_dist_unique_port()} {tmp.name}".split()
-            output_dir = self.get_auto_remove_tmp_dir()
-            args = f"--output_dir {output_dir} --report_to none".split()
-            cmd = ["torchrun"] + distributed_args + args
-            print(cmd)
-            execute_subprocess_async(cmd, env=self.get_env())
+            tmp.flush()
+            tmp.seek(0)
+            cmd = (
+                f"torchrun --nproc_per_node {torch.cuda.device_count()} --master_port {get_torch_dist_unique_port()} {tmp.name}"
+            ).split()
+
+            # Note that the subprocess will be waited for here
+            sub = subprocess.run(cmd, capture_output=True, env=self.get_env(), text=True)
+            print(sub.stdout)
+            print(sub.stderr)
             # successful return here == success - any errors would have caused an error in the sub-call
 
 
