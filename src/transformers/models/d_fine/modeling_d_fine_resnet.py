@@ -86,11 +86,13 @@ class DFineResNetConvLayer(nn.Module):
         )
         self.normalization = nn.BatchNorm2d(out_channels)
         self.activation = ACT2FN[activation] if activation is not None else nn.Identity()
+        self.lab = nn.Identity()
 
     def forward(self, input: Tensor) -> Tensor:
         hidden_state = self.convolution(input)
         hidden_state = self.normalization(hidden_state)
         hidden_state = self.activation(hidden_state)
+        hidden_state = self.lab(hidden_state)
         return hidden_state
 
 
@@ -260,7 +262,7 @@ class DFineResNetStage(nn.Module):
     ):
         super().__init__()
         if downsample:
-            self.downsample = DFineResNetConvLayer(in_chs, in_chs, kernel_size=3, stride=2)
+            self.downsample = DFineResNetConvLayer(in_chs, in_chs, kernel_size=3, stride=2, groups=in_chs)
         else:
             self.downsample = nn.Identity()
 
