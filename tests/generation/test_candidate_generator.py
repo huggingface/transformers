@@ -4,14 +4,12 @@ import unittest
 import weakref
 from unittest.mock import MagicMock
 
-import numpy as np
 import torch
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
 from transformers.generation.candidate_generator import (
     AssistantToTargetTranslator,
     AssistantVocabTranslatorCache,
-    AssistedCandidateGeneratorDifferentTokenizers,
     UniversalSpeculativeDecodingGenerator,
 )
 
