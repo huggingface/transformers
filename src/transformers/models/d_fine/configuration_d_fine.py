@@ -19,7 +19,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...configuration_utils import PretrainedConfig
+from transformers.configuration_utils import PretrainedConfig
+
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto import CONFIG_MAPPING
@@ -252,6 +253,7 @@ class DFineConfig(PretrainedConfig):
         eval_idx=-1,
         layer_scale=1,
         reg_max=32,
+        reg_scale=4.0,
         **kwargs,
     ):
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
@@ -348,6 +350,7 @@ class DFineConfig(PretrainedConfig):
         self.eval_idx = eval_idx
         self.layer_scale = layer_scale
         self.reg_max = reg_max
+        self.reg_scale = reg_scale
 
     @property
     def num_attention_heads(self) -> int:

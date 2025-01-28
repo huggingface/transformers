@@ -16,15 +16,14 @@
 import argparse
 import json
 from pathlib import Path
-import glob
 
 import requests
 import torch
-from huggingface_hub import hf_hub_download, snapshot_download
+from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision import transforms
 
-from transformers import DFineConfig, DFineForObjectDetection, RTDetrImageProcessor
+from transformers import DFineConfig, DFineForObjectDetection, RTDetrImageProcessor, DFineResNetStageConfig
 from transformers.utils import logging
 
 
@@ -43,28 +42,41 @@ def get_d_fine_config(model_name: str) -> DFineConfig:
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
 
-    config.backbone_config.hidden_sizes = [64, 128, 256, 512]
-    config.backbone_config.depths = [5, 5, 5, 5]
-    config.backbone_config.layer_type = "basic"
-    config.backbone_config.embedding_size = 32
-    config.encoder_in_channels = [512, 1024, 2048]
-    config.hidden_expansion = 1.0
-    config.decoder_layers = 6
+    if model_name == "dfine_x_coco":
+        config.backbone_config.hidden_sizes = [64, 128, 256, 512]
+        config.backbone_config.layer_type = "basic"
+        config.backbone_config.embedding_size = 32
+        config.backbone_config.stage_config = DFineResNetStageConfig(
+            stage1=[64, 64, 128, 1, False, False, 3, 6],
+            stage2=[128, 128, 512, 2, True, False, 3, 6],
+            stage3=[512, 256, 1024, 5, True, True, 5, 6],
+            stage4=[1024, 512, 2048, 2, True, True, 5, 6],
+        )
+        config.backbone_config.stem_channels = [3, 32, 64]
+        config.encoder_in_channels = [512, 1024, 2048]
+        config.encoder_hidden_dim = 384
+        config.hidden_expansion = 1.0
+        config.decoder_layers = 6
+        config.encoder_ffn_dim = 2048
+    else:
+        config.backbone_config.hidden_sizes = [64, 128, 256, 512]
+        config.backbone_config.layer_type = "basic"
+        config.backbone_config.embedding_size = 32
+        config.encoder_in_channels = [512, 1024, 2048]
+        config.hidden_expansion = 1.0
+        config.decoder_layers = 6
 
 
     return config
 
 
-def load_original_state_dict(repo_id):
-    directory_path = snapshot_download(repo_id=repo_id, allow_patterns=["*.pth"])
+def load_original_state_dict(repo_id, model_name):
+    directory_path = hf_hub_download(repo_id=repo_id, filename=f"{model_name}.pth")
 
     original_state_dict = {}
-    for path in glob.glob(f"{directory_path}/*"):
-        if path.endswith(".pth"):
-            model = torch.load(path, map_location="cpu")['model']
-            for key in model.keys():
-                original_state_dict[key] = model[key]
-            break
+    model = torch.load(directory_path, map_location="cpu")['model']
+    for key in model.keys():
+        original_state_dict[key] = model[key]
 
     return original_state_dict
 
@@ -73,14 +85,20 @@ def create_rename_keys(config):
     # here we list all keys to be renamed (original name on the left, our name on the right)
     rename_keys = []
 
+    rename_keys.append((f"decoder.valid_mask", f"model.decoder.valid_mask"))
+    rename_keys.append((f"decoder.anchors", f"model.decoder.anchors"))
+    rename_keys.append((f"decoder.up", f"model.decoder.up"))
+    rename_keys.append((f"decoder.reg_scale", f"model.decoder.reg_scale"))
+
     # stem
     # fmt: off
     last_key = ["weight", "bias", "running_mean", "running_var"]
 
-    for level in range(5):
+
+    for level in range(1,5):
         if level == 1:
             rename_keys.append((f"backbone.stem.stem{level + 1}a.conv.weight", f"model.backbone.model.embedder.embedder.{level}.convolution.weight"))
-            rename_keys.append((f"backbone.stem.stem{level}.conv.weight", f"model.backbone.model.embedder.embedder.{level}.convolution.weight"))
+            rename_keys.append((f"backbone.stem.stem{level}.conv.weight", f"model.backbone.model.embedder.embedder.{level-1}.convolution.weight"))
         elif level == 2:
             rename_keys.append((f"backbone.stem.stem{level}b.conv.weight", f"model.backbone.model.embedder.embedder.{level}.convolution.weight"))
         else:
@@ -88,7 +106,7 @@ def create_rename_keys(config):
         for last in last_key:
             if level == 1:
                 rename_keys.append((f"backbone.stem.stem{level + 1}a.bn.{last}", f"model.backbone.model.embedder.embedder.{level}.normalization.{last}"))
-                rename_keys.append((f"backbone.stem.stem{level}.bn.{last}", f"model.backbone.model.embedder.embedder.{level}.normalization.{last}"))
+                rename_keys.append((f"backbone.stem.stem{level}.bn.{last}", f"model.backbone.model.embedder.embedder.{level-1}.normalization.{last}"))
             elif level == 2:
                 rename_keys.append((f"backbone.stem.stem{level}b.bn.{last}", f"model.backbone.model.embedder.embedder.{level}.normalization.{last}"))
             else:
@@ -310,10 +328,10 @@ def create_rename_keys(config):
                     (f"encoder.fpn_blocks.{i}.cv{j}.1.conv.weight", f"model.encoder.fpn_blocks.{i}.cv{j}.1.conv.weight")
                 )
                 rename_keys.append(
-                    (f"encoder.fpn_blocks.{i}.cv{j}.0.conv1.conv.weight", f"model.encoder.fpn_blocks.{i}.cv{j}.conv1.conv.weight")
+                    (f"encoder.fpn_blocks.{i}.cv{j}.0.conv1.conv.weight", f"model.encoder.fpn_blocks.{i}.cv{j}.0.conv1.conv.weight")
                 )
                 rename_keys.append(
-                    (f"encoder.fpn_blocks.{i}.cv{j}.0.conv2.conv.weight", f"model.encoder.fpn_blocks.{i}.cv{j}.conv2.conv.weight")
+                    (f"encoder.fpn_blocks.{i}.cv{j}.0.conv2.conv.weight", f"model.encoder.fpn_blocks.{i}.cv{j}.0.conv2.conv.weight")
                 )
                 rename_keys.append(
                     (f"encoder.fpn_blocks.{i}.cv{j}.1.conv.weight", f"model.encoder.fpn_blocks.{i}.cv{j}.1.conv.weight")
@@ -631,6 +649,23 @@ def create_rename_keys(config):
                 f"model.decoder.bbox_embed.{i}.layers.2.bias",
             )
         )
+    
+
+    # decoder projection
+    for i in range(len(config.decoder_in_channels)):
+        rename_keys.append(
+            (
+                f"decoder.input_proj.{i}.conv.weight",
+                f"model.decoder_input_proj.{i}.0.weight",
+            )
+        )
+        for last in last_key:
+            rename_keys.append(
+                (
+                    f"decoder.input_proj.{i}.norm.{last}",
+                    f"model.decoder_input_proj.{i}.1.{last}",
+                )
+            )
 
     # convolutional projection + query embeddings + layernorm of decoder + class and bounding box heads
     rename_keys.extend(
@@ -642,7 +677,7 @@ def create_rename_keys(config):
             ("decoder.query_pos_head.layers.1.bias", "model.decoder.query_pos_head.layers.1.bias"),
             ("decoder.enc_output.proj.weight", "model.enc_output.0.weight"),
             ("decoder.enc_output.proj.bias", "model.enc_output.0.bias"),
-            ("decoder.enc_output.norm.weight", "model.enc_output.norm.weight"),
+            ("decoder.enc_output.norm.weight", "model.enc_output.1.weight"),
             ("decoder.enc_output.norm.bias", "model.enc_output.1.bias"),
             ("decoder.enc_score_head.weight", "model.enc_score_head.weight"),
             ("decoder.enc_score_head.bias", "model.enc_score_head.bias"),
@@ -726,7 +761,7 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
 
     # load default config
     config = get_d_fine_config(model_name)
-    state_dict = load_original_state_dict(repo_id)
+    state_dict = load_original_state_dict(repo_id, model_name)
     model = DFineForObjectDetection(config)
     logger.info(f"Converting model {model_name}...")
 
@@ -734,6 +769,17 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     renamed_keys = create_rename_keys(config)
     for src, dest in renamed_keys:
         rename_key(state_dict, src, dest)
+
+    if not config.anchor_image_size:
+        state_dict.pop("model.decoder.valid_mask")
+        state_dict.pop("model.decoder.anchors")
+
+    #those parameters are comming from config
+    #state_dict.pop("decoder.up")
+    #state_dict.pop("decoder.reg_scale")
+    state_dict.pop("decoder.decoder.up")
+    state_dict.pop("decoder.decoder.reg_scale")
+
     # query, key and value matrices need special treatment
     read_in_q_k_v(state_dict, config)
     # important: we need to prepend a prefix to each of the base model keys as the head models use different attributes for them
@@ -927,7 +973,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--model_name",
-        default="D-FINE",
+        default="dfine_x_coco",
         type=str,
         help="model_name of the checkpoint you'd like to convert.",
     )

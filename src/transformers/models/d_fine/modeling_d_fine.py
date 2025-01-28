@@ -375,7 +375,6 @@ class DFineDecoderLayer(nn.Module):
 
         # override the encoder attention module with d-fine version
         self.encoder_attn = DFineMultiscaleDeformableAttention(config=config)
-        self.encoder_attn_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
         # feedforward neural networks
         self.fc1 = nn.Linear(config.d_model, config.decoder_ffn_dim)
         self.fc2 = nn.Linear(config.decoder_ffn_dim, config.d_model)
@@ -463,6 +462,101 @@ class DFineDecoderLayer(nn.Module):
     def _reset_parameters(self):
         init.xavier_uniform_(self.fc1.weight)
         init.xavier_uniform_(self.fc2.weight)
+
+
+class DFineFrozenBatchNorm2d(nn.Module):
+    """
+    BatchNorm2d where the batch statistics and the affine parameters are fixed.
+
+    Copy-paste from torchvision.misc.ops with added eps before rqsrt, without which any other models than
+    torchvision.models.resnet[18,34,50,101] produce nans.
+    """
+
+    def __init__(self, n):
+        super().__init__()
+        self.register_buffer("weight", torch.ones(n))
+        self.register_buffer("bias", torch.zeros(n))
+        self.register_buffer("running_mean", torch.zeros(n))
+        self.register_buffer("running_var", torch.ones(n))
+
+    def _load_from_state_dict(
+        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+    ):
+        num_batches_tracked_key = prefix + "num_batches_tracked"
+        if num_batches_tracked_key in state_dict:
+            del state_dict[num_batches_tracked_key]
+
+        super()._load_from_state_dict(
+            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+        )
+
+    def forward(self, x):
+        # move reshapes to the beginning
+        # to make it user-friendly
+        weight = self.weight.reshape(1, -1, 1, 1)
+        bias = self.bias.reshape(1, -1, 1, 1)
+        running_var = self.running_var.reshape(1, -1, 1, 1)
+        running_mean = self.running_mean.reshape(1, -1, 1, 1)
+        epsilon = 1e-5
+        scale = weight * (running_var + epsilon).rsqrt()
+        bias = bias - running_mean * scale
+        return x * scale + bias
+
+
+def replace_batch_norm(model):
+    r"""
+    Recursively replace all `torch.nn.BatchNorm2d` with `DFineFrozenBatchNorm2d`.
+
+    Args:
+        model (torch.nn.Module):
+            input model
+    """
+    for name, module in model.named_children():
+        if isinstance(module, nn.BatchNorm2d):
+            new_module = DFineFrozenBatchNorm2d(module.num_features)
+
+            if not module.weight.device == torch.device("meta"):
+                new_module.weight.data.copy_(module.weight)
+                new_module.bias.data.copy_(module.bias)
+                new_module.running_mean.data.copy_(module.running_mean)
+                new_module.running_var.data.copy_(module.running_var)
+
+            model._modules[name] = new_module
+
+        if len(list(module.children())) > 0:
+            replace_batch_norm(module)
+
+
+class DFineConvEncoder(nn.Module):
+    """
+    Convolutional backbone using the modeling_d_fine_resnet.py.
+
+    nn.BatchNorm2d layers are replaced by DFineFrozenBatchNorm2d as defined above.
+    https://github.com/lyuwenyu/RT-DETR/blob/main/DFine_pytorch/src/nn/backbone/presnet.py#L142
+    """
+
+    def __init__(self, config: DFineConfig):
+        super().__init__()
+
+        backbone = load_backbone(config)
+
+        if config.freeze_backbone_batch_norms:
+            # replace batch norm by frozen batch norm
+            with torch.no_grad():
+                replace_batch_norm(backbone)
+        self.model = backbone
+        self.intermediate_channel_sizes = config.encoder_in_channels
+
+    def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
+        # send pixel_values through the model to get list of feature maps
+        features = self.model(pixel_values).feature_maps
+
+        out = []
+        for feature_map in features:
+            # downsample pixel_mask to match shape of corresponding feature_map
+            mask = nn.functional.interpolate(pixel_mask[None].float(), size=feature_map.shape[-2:]).to(torch.bool)[0]
+            out.append((feature_map, mask))
+        return out
 
 
 @dataclass
@@ -627,101 +721,6 @@ class DFineObjectDetectionOutput(ModelOutput):
     enc_outputs_class: Optional[torch.FloatTensor] = None
     enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
     denoising_meta_values: Optional[Dict] = None
-
-
-class DFineFrozenBatchNorm2d(nn.Module):
-    """
-    BatchNorm2d where the batch statistics and the affine parameters are fixed.
-
-    Copy-paste from torchvision.misc.ops with added eps before rqsrt, without which any other models than
-    torchvision.models.resnet[18,34,50,101] produce nans.
-    """
-
-    def __init__(self, n):
-        super().__init__()
-        self.register_buffer("weight", torch.ones(n))
-        self.register_buffer("bias", torch.zeros(n))
-        self.register_buffer("running_mean", torch.zeros(n))
-        self.register_buffer("running_var", torch.ones(n))
-
-    def _load_from_state_dict(
-        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
-    ):
-        num_batches_tracked_key = prefix + "num_batches_tracked"
-        if num_batches_tracked_key in state_dict:
-            del state_dict[num_batches_tracked_key]
-
-        super()._load_from_state_dict(
-            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
-        )
-
-    def forward(self, x):
-        # move reshapes to the beginning
-        # to make it user-friendly
-        weight = self.weight.reshape(1, -1, 1, 1)
-        bias = self.bias.reshape(1, -1, 1, 1)
-        running_var = self.running_var.reshape(1, -1, 1, 1)
-        running_mean = self.running_mean.reshape(1, -1, 1, 1)
-        epsilon = 1e-5
-        scale = weight * (running_var + epsilon).rsqrt()
-        bias = bias - running_mean * scale
-        return x * scale + bias
-
-
-def replace_batch_norm(model):
-    r"""
-    Recursively replace all `torch.nn.BatchNorm2d` with `DFineFrozenBatchNorm2d`.
-
-    Args:
-        model (torch.nn.Module):
-            input model
-    """
-    for name, module in model.named_children():
-        if isinstance(module, nn.BatchNorm2d):
-            new_module = DFineFrozenBatchNorm2d(module.num_features)
-
-            if not module.weight.device == torch.device("meta"):
-                new_module.weight.data.copy_(module.weight)
-                new_module.bias.data.copy_(module.bias)
-                new_module.running_mean.data.copy_(module.running_mean)
-                new_module.running_var.data.copy_(module.running_var)
-
-            model._modules[name] = new_module
-
-        if len(list(module.children())) > 0:
-            replace_batch_norm(module)
-
-
-class DFineConvEncoder(nn.Module):
-    """
-    Convolutional backbone using the modeling_d_fine_resnet.py.
-
-    nn.BatchNorm2d layers are replaced by DFineFrozenBatchNorm2d as defined above.
-    https://github.com/lyuwenyu/RT-DETR/blob/main/DFine_pytorch/src/nn/backbone/presnet.py#L142
-    """
-
-    def __init__(self, config):
-        super().__init__()
-
-        backbone = load_backbone(config)
-
-        if config.freeze_backbone_batch_norms:
-            # replace batch norm by frozen batch norm
-            with torch.no_grad():
-                replace_batch_norm(backbone)
-        self.model = backbone
-        self.intermediate_channel_sizes = self.model.channels
-
-    def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
-        # send pixel_values through the model to get list of feature maps
-        features = self.model(pixel_values).feature_maps
-
-        out = []
-        for feature_map in features:
-            # downsample pixel_mask to match shape of corresponding feature_map
-            mask = nn.functional.interpolate(pixel_mask[None].float(), size=feature_map.shape[-2:]).to(torch.bool)[0]
-            out.append((feature_map, mask))
-        return out
 
 
 class DFineEncoderLayer(nn.Module):
@@ -1023,9 +1022,10 @@ class DFinePreTrainedModel(PreTrainedModel):
     _no_split_modules = [r"DFineConvEncoder", r"DFineEncoderLayer", r"DFineDecoderLayer"]
 
     def _init_weights(self, module):
-        # this could be simplified like calling the base class function first then adding new stuff
+        """Initalize the weights"""
+
         """Initalize the weights
-        initialize linear layer biasreturn value according to a given probability value."""
+initialize linear layer bias value according to a given probability value."""
         if isinstance(module, (DFineForObjectDetection, DFineDecoder)):
             if module.class_embed is not None:
                 for layer in module.class_embed:
@@ -1073,6 +1073,30 @@ class DFinePreTrainedModel(PreTrainedModel):
             nn.init.xavier_uniform_(module.weight_embedding.weight)
         if hasattr(module, "denoising_class_embed") and self.config.num_denoising > 0:
             nn.init.xavier_uniform_(module.denoising_class_embed.weight)
+
+
+class Integral(nn.Module):
+    """
+    A static layer that calculates integral results from a distribution.
+
+    This layer computes the target location using the formula: `sum{Pr(n) * W(n)}`,
+    where Pr(n) is the softmax probability vector representing the discrete
+    distribution, and W(n) is the non-uniform Weighting Function.
+
+    Args:
+        reg_max (int): Max number of the discrete bins. Default is 32.
+                       It can be adjusted based on the dataset or task requirements.
+    """
+
+    def __init__(self, reg_max=32):
+        super(Integral, self).__init__()
+        self.reg_max = reg_max
+
+    def forward(self, x, project):
+        shape = x.shape
+        x = F.softmax(x.reshape(-1, self.reg_max + 1), dim=1)
+        x = F.linear(x, project.to(x.device)).reshape(-1, 4)
+        return x.reshape(list(shape[:-1]) + [-1])
 
 
 def weighting_function(reg_max, up, reg_scale):
@@ -1153,8 +1177,11 @@ class DFineDecoder(DFinePreTrainedModel):
         # hack implementation for iterative bounding box refinement and two-stage Deformable DETR
         self.bbox_embed = None
         self.class_embed = None
+        self.reg_scale = nn.Parameter(torch.tensor([config.reg_scale]), requires_grad=False)
+        self.reg_max = config.reg_max
         self.d_model = config.d_model
         self.layer_scale = config.layer_scale
+        self.integral = Integral(self.reg_max)
         self.num_head = config.decoder_attention_heads
         self.up = nn.Parameter(torch.tensor([0.5]), requires_grad=False)
         self.lqe_layers = nn.ModuleList([LQE(4, 64, 2, config.reg_max) for _ in range(config.decoder_layers)])
@@ -1164,17 +1191,14 @@ class DFineDecoder(DFinePreTrainedModel):
 
     def forward(
         self,
-        inputs_embeds,
-        ref_points_unact,
+        encoder_hidden_states,
+        reference_points,
         memory,
         spatial_shapes,
         bbox_head,
         score_head,
         pre_bbox_head,
-        integral,
-        up,
-        reg_scale,
-        encoder_attn_mask=None,
+        encoder_attention_mask=None,
         memory_mask=None,
         output_attentions=None,
         return_dict=None,
@@ -1213,8 +1237,8 @@ class DFineDecoder(DFinePreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if inputs_embeds is not None:
-            hidden_states = inputs_embeds
+        if encoder_hidden_states is not None:
+            hidden_states = encoder_hidden_states
 
         dec_out_bboxes = []
         dec_out_logits = []
@@ -1224,8 +1248,8 @@ class DFineDecoder(DFinePreTrainedModel):
         output_detach = pred_corners_undetach = 0
         value = self.value_op(memory, None, None, memory_mask, spatial_shapes)
 
-        project = weighting_function(self.reg_max, up, reg_scale)
-        ref_points_detach = F.sigmoid(ref_points_unact)
+        project = weighting_function(self.reg_max, self.up, self.reg_scale)
+        ref_points_detach = F.sigmoid(reference_points)
 
         for i, decoder_layer in enumerate(self.layers):
             ref_points_input = ref_points_detach.unsqueeze(2)
@@ -1244,7 +1268,7 @@ class DFineDecoder(DFinePreTrainedModel):
                 reference_points=ref_points_input,
                 spatial_shapes=spatial_shapes,
                 encoder_hidden_states=value,
-                encoder_attention_mask=encoder_attn_mask,
+                encoder_attention_mask=encoder_attention_mask,
                 output_attentions=output_attentions,
             )
 
@@ -1258,7 +1282,7 @@ class DFineDecoder(DFinePreTrainedModel):
 
             # Refine bounding box corners using FDR, integrating previous layer's corrections
             pred_corners = bbox_head[i](hidden_states + output_detach) + pred_corners_undetach
-            inter_ref_bbox = distance2bbox(ref_points_initial, integral(pred_corners, project), reg_scale)
+            inter_ref_bbox = distance2bbox(ref_points_initial, self.integral(pred_corners, project), self.reg_scale)
 
             if self.training or i == self.eval_idx:
                 scores = score_head[i](output)
@@ -1322,10 +1346,7 @@ class DFineModel(DFinePreTrainedModel):
         # Create backbone
         self.backbone = DFineConvEncoder(config)
         intermediate_channel_sizes = self.backbone.intermediate_channel_sizes
-
-        # Create encoder input projection layers
-        # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/DFine_pytorch/src/zoo/DFine/hybrid_encoder.py#L212
-        num_backbone_outs = len(intermediate_channel_sizes)
+        num_backbone_outs = len(config.decoder_in_channels)
         encoder_input_proj_list = []
         for _ in range(num_backbone_outs):
             in_channels = intermediate_channel_sizes[_]
@@ -1336,8 +1357,6 @@ class DFineModel(DFinePreTrainedModel):
                 )
             )
         self.encoder_input_proj = nn.ModuleList(encoder_input_proj_list)
-
-        # create encoder
         self.encoder = DFineHybridEncoder(config=config)
 
         # denoising part
@@ -1361,9 +1380,6 @@ class DFineModel(DFinePreTrainedModel):
         # init encoder output anchors and valid_mask
         if config.anchor_image_size:
             self.anchors, self.valid_mask = self.generate_anchors(dtype=self.dtype)
-
-        # Create decoder input projection layers
-        # https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/DFine_pytorch/src/zoo/DFine/DFine_decoder.py#L412
         num_backbone_outs = len(config.decoder_in_channels)
         decoder_input_proj_list = []
         for _ in range(num_backbone_outs):
@@ -1382,11 +1398,26 @@ class DFineModel(DFinePreTrainedModel):
                 )
             )
             in_channels = config.d_model
-        self.decoder_input_proj = nn.ModuleList(decoder_input_proj_list)
         self.decoder = DFineDecoder(config)
-
-        # decoder
         self.pre_bbox_head = MLP(config.hidden_size, config.hidden_size, 4, 3)
+        decoder_input_proj = []
+        for _ in range(num_backbone_outs):
+            in_channels = config.decoder_in_channels[_]
+            decoder_input_proj.append(
+                nn.Sequential(
+                    nn.Conv2d(config.encoder_hidden_dim, in_channels, kernel_size=1, bias=False),
+                    nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
+                )
+            )
+        for _ in range(config.num_feature_levels - num_backbone_outs):
+            decoder_input_proj.append(
+                nn.Sequential(
+                    nn.Conv2d(config.encoder_hidden_dim, in_channels, kernel_size=3, stride=2, padding=1, bias=False),
+                    nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
+                )
+            )
+            in_channels = config.d_model
+        self.decoder_input_proj = nn.ModuleList(decoder_input_proj)
 
         self.post_init()
 
@@ -1644,7 +1675,19 @@ class DFineModel(DFinePreTrainedModel):
         )
 
 
+@add_start_docstrings(
+    """
+    RT-DETR Model (consisting of a backbone and encoder-decoder) outputting bounding boxes and logits to be further
+    decoded into scores and classes.
+    """,
+    DFine_START_DOCSTRING,
+)
 class DFineForObjectDetection(DFinePreTrainedModel):
+    # When using clones, all layers > 0 will be clones, but layer 0 *is* required
+    _tied_weights_keys = ["bbox_embed", "class_embed"]
+    # We can't initialize the model on meta device as some weights are modified during the initialization
+    _no_split_modules = None
+
     def __init__(self, config: DFineConfig):
         super().__init__(config)
 
@@ -1671,6 +1714,162 @@ class DFineForObjectDetection(DFinePreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    @torch.jit.unused
+    def _set_aux_loss(self, outputs_class, outputs_coord):
+        # this is a workaround to make torchscript happy, as torchscript
+        # doesn't support dictionary with non-homogeneous values, such
+        # as a dict having both a Tensor and a list.
+        return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class, outputs_coord)]
+
+    @add_start_docstrings_to_model_forward(DFine_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=DFineObjectDetectionOutput, config_class=_CONFIG_FOR_DOC)
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        pixel_mask: Optional[torch.LongTensor] = None,
+        encoder_outputs: Optional[torch.FloatTensor] = None,
+        inputs_embeds: Optional[torch.FloatTensor] = None,
+        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        labels: Optional[List[dict]] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        **loss_kwargs,
+    ) -> Union[Tuple[torch.FloatTensor], DFineObjectDetectionOutput]:
+        r"""
+        labels (`List[Dict]` of len `(batch_size,)`, *optional*):
+            Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
+            following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
+            respectively). The class labels themselves should be a `torch.LongTensor` of len `(number of bounding boxes
+            in the image,)` and the boxes a `torch.FloatTensor` of shape `(number of bounding boxes in the image, 4)`.
+
+        Returns:
+
+        Examples:
+
+        ```python
+        >>> from transformers import DFineImageProcessor, DFineForObjectDetection
+        >>> from PIL import Image
+        >>> import requests
+        >>> import torch
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> image_processor = DFineImageProcessor.from_pretrained("PekingU/DFine_r50vd")
+        >>> model = DFineForObjectDetection.from_pretrained("PekingU/DFine_r50vd")
+
+        >>> # prepare image for the model
+        >>> inputs = image_processor(images=image, return_tensors="pt")
+
+        >>> # forward pass
+        >>> outputs = model(**inputs)
+
+        >>> logits = outputs.logits
+        >>> list(logits.shape)
+        [1, 300, 80]
+
+        >>> boxes = outputs.pred_boxes
+        >>> list(boxes.shape)
+        [1, 300, 4]
+
+        >>> # convert outputs (bounding boxes and class logits) to Pascal VOC format (xmin, ymin, xmax, ymax)
+        >>> target_sizes = torch.tensor([image.size[::-1]])
+        >>> results = image_processor.post_process_object_detection(outputs, threshold=0.9, target_sizes=target_sizes)[
+        ...     0
+        ... ]
+
+        >>> for score, label, box in zip(results["scores"], results["labels"], results["boxes"]):
+        ...     box = [round(i, 2) for i in box.tolist()]
+        ...     print(
+        ...         f"Detected {model.config.id2label[label.item()]} with confidence "
+        ...         f"{round(score.item(), 3)} at location {box}"
+        ...     )
+        Detected sofa with confidence 0.97 at location [0.14, 0.38, 640.13, 476.21]
+        Detected cat with confidence 0.96 at location [343.38, 24.28, 640.14, 371.5]
+        Detected cat with confidence 0.958 at location [13.23, 54.18, 318.98, 472.22]
+        Detected remote with confidence 0.951 at location [40.11, 73.44, 175.96, 118.48]
+        Detected remote with confidence 0.924 at location [333.73, 76.58, 369.97, 186.99]
+        ```"""
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        outputs = self.model(
+            pixel_values,
+            pixel_mask=pixel_mask,
+            encoder_outputs=encoder_outputs,
+            inputs_embeds=inputs_embeds,
+            decoder_inputs_embeds=decoder_inputs_embeds,
+            labels=labels,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+
+        denoising_meta_values = (
+            outputs.denoising_meta_values if return_dict else outputs[-1] if self.training else None
+        )
+
+        outputs_class = outputs.intermediate_logits if return_dict else outputs[2]
+        outputs_coord = outputs.intermediate_reference_points if return_dict else outputs[3]
+
+        logits = outputs_class[:, -1]
+        pred_boxes = outputs_coord[:, -1]
+
+        loss, loss_dict, auxiliary_outputs, enc_topk_logits, enc_topk_bboxes = None, None, None, None, None
+        if labels is not None:
+            if self.training and denoising_meta_values is not None:
+                enc_topk_logits = outputs.enc_topk_logits if return_dict else outputs[-5]
+                enc_topk_bboxes = outputs.enc_topk_bboxes if return_dict else outputs[-4]
+            loss, loss_dict, auxiliary_outputs = self.loss_function(
+                logits,
+                labels,
+                self.device,
+                pred_boxes,
+                self.config,
+                outputs_class,
+                outputs_coord,
+                enc_topk_logits=enc_topk_logits,
+                enc_topk_bboxes=enc_topk_bboxes,
+                denoising_meta_values=denoising_meta_values,
+                **loss_kwargs,
+            )
+
+        if not return_dict:
+            if auxiliary_outputs is not None:
+                output = (logits, pred_boxes) + (auxiliary_outputs,) + outputs
+            else:
+                output = (logits, pred_boxes) + outputs
+            return ((loss, loss_dict) + output) if loss is not None else output
+
+        return DFineObjectDetectionOutput(
+            loss=loss,
+            loss_dict=loss_dict,
+            logits=logits,
+            pred_boxes=pred_boxes,
+            auxiliary_outputs=auxiliary_outputs,
+            last_hidden_state=outputs.last_hidden_state,
+            intermediate_hidden_states=outputs.intermediate_hidden_states,
+            intermediate_logits=outputs.intermediate_logits,
+            intermediate_reference_points=outputs.intermediate_reference_points,
+            decoder_hidden_states=outputs.decoder_hidden_states,
+            decoder_attentions=outputs.decoder_attentions,
+            cross_attentions=outputs.cross_attentions,
+            encoder_last_hidden_state=outputs.encoder_last_hidden_state,
+            encoder_hidden_states=outputs.encoder_hidden_states,
+            encoder_attentions=outputs.encoder_attentions,
+            init_reference_points=outputs.init_reference_points,
+            enc_topk_logits=outputs.enc_topk_logits,
+            enc_topk_bboxes=outputs.enc_topk_bboxes,
+            enc_outputs_class=outputs.enc_outputs_class,
+            enc_outputs_coord_logits=outputs.enc_outputs_coord_logits,
+            denoising_meta_values=outputs.denoising_meta_values,
+        )
 
 
 # taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
@@ -1794,13 +1993,16 @@ class DFineVggBlock(nn.Module):
 
 
 class DFineConvNormLayer(nn.Module):
-    def __init__(self, config, in_channels, out_channels, kernel_size, stride, padding=None, activation=None):
+    def __init__(
+        self, config, in_channels, out_channels, kernel_size, stride, groups=1, padding=None, activation=None
+    ):
         super().__init__()
         self.conv = nn.Conv2d(
             in_channels,
             out_channels,
             kernel_size,
             stride,
+            groups=groups,
             padding=(kernel_size - 1) // 2 if padding is None else padding,
             bias=False,
         )
