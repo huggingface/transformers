@@ -274,9 +274,9 @@ class AutoProcessor:
                 processor_auto_map = config_dict["auto_map"]["AutoProcessor"]
 
         if processor_class is None:
-            # First let's check whether the processor class is saved in a image processor config
-            # If not found, let's check whether the processor class is saved in video processor config
-            # or in feature extractor config
+            # First let's check whether the processor class is saved in an image processor config
+            # If not found, let's check whether the processor class is saved in a video processor config
+            # or in a feature extractor config
             preprocessor_config_file = get_file_from_repo(
                 pretrained_model_name_or_path, IMAGE_PROCESSOR_NAME, **get_file_from_repo_kwargs
             )
