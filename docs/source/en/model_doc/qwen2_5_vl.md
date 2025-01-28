@@ -16,6 +16,8 @@ rendered properly in your Markdown viewer.
 
 # Qwen2.5-VL
 
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+
 ## Overview
 
 The [Qwen2.5-VL](https://qwenlm.github.io/blog/qwen2_5-vl/) model is an update to [Qwen2-VL](https://arxiv.org/abs/2409.12191) from Qwen team, Alibaba Group. 

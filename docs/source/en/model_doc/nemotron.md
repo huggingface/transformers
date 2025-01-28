@@ -14,7 +14,7 @@ specific language governing permissions and limitations under the License.
 
 # Nemotron
 
-## Nemotron
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
 
 ### License
 

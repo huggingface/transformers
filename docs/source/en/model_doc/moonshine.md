@@ -16,6 +16,8 @@ rendered properly in your Markdown viewer.
 
 # Moonshine
 
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+
 ## Overview
 
 The Moonshine model was proposed in [Moonshine: Speech Recognition for Live Transcription and Voice Commands

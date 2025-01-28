@@ -16,6 +16,8 @@ rendered properly in your Markdown viewer.
 
 # MaskFormer
 
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+
 <Tip>
 
 This is a recently introduced model so the API hasn't been tested extensively. There may be some bugs or slight

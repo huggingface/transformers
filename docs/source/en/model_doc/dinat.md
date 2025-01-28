@@ -16,6 +16,8 @@ rendered properly in your Markdown viewer.
 
 # Dilated Neighborhood Attention Transformer
 
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+
 ## Overview
 
 DiNAT was proposed in [Dilated Neighborhood Attention Transformer](https://arxiv.org/abs/2209.15001)

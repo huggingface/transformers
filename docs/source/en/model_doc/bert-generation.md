@@ -16,6 +16,8 @@ rendered properly in your Markdown viewer.
 
 # BertGeneration
 
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+
 ## Overview
 
 The BertGeneration model is a BERT model that can be leveraged for sequence-to-sequence tasks using

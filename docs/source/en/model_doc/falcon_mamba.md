@@ -16,6 +16,8 @@ rendered properly in your Markdown viewer.
 
 # FalconMamba
 
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+
 ## Overview
 
 The FalconMamba model was proposed by TII UAE (Technology Innovation Institute) in their release.

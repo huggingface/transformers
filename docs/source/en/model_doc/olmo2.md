@@ -16,6 +16,8 @@ rendered properly in your Markdown viewer.
 
 # OLMo2
 
+<img alt="PyTorch" src="https://img.shields.io/badge/PyTorch-DE3412?style=flat&logo=pytorch&logoColor=white">
+
 ## Overview
 
 The OLMo2 model is the successor of the OLMo model, which was proposed in
