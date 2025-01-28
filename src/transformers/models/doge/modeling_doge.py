@@ -40,7 +40,6 @@ from ...utils import (
     LossKwargs,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
-    is_einx_available,
     is_torch_flex_attn_available,
     logging,
     replace_return_docstrings,
@@ -48,11 +47,6 @@ from ...utils import (
 from ...utils.deprecation import deprecate_kwarg
 from .configuration_doge import DogeConfig
 
-
-if is_einx_available():
-    from einx import add as einx_add
-else:
-    einx_add = None
 
 if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import flex_attention
@@ -487,14 +481,10 @@ class DogeCDMoE(DogeMLP):
 
         # get experts with the highest similarity
         (scores_x, scores_y), (indices_x, indices_y) = sim.topk(self.num_cdmoe_experts_per_head, dim=-1)
-        if einx_add is not None:
-            all_scores = einx_add("... i, ... j -> ... (i j)", scores_x, scores_y)
-            all_indices = einx_add("... i, ... j -> ... (i j)", indices_x * self.num_keys, indices_y)
-        else:
-            all_scores = scores_x.unsqueeze(-1) + scores_y.unsqueeze(-2)
-            all_scores = all_scores.view(*scores_x.shape[:-1], -1)
-            all_indices = (indices_x.unsqueeze(-1) * self.num_keys) + indices_y.unsqueeze(-2)
-            all_indices = all_indices.view(*indices_x.shape[:-1], -1)
+        all_scores = scores_x.unsqueeze(-1) + scores_y.unsqueeze(-2)
+        all_scores = all_scores.view(*scores_x.shape[:-1], -1)
+        all_indices = (indices_x.unsqueeze(-1) * self.num_keys) + indices_y.unsqueeze(-2)
+        all_indices = all_indices.view(*indices_x.shape[:-1], -1)
         scores, pk_indices = all_scores.topk(self.num_cdmoe_experts_per_head, dim=-1)
         indices = all_indices.gather(-1, pk_indices)
         down_embed = self.down_embed(indices)

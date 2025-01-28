@@ -23,13 +23,6 @@
 # limitations under the License.
 from ...modeling_rope_utils import rope_config_validation
 from ...modeling_utils import PretrainedConfig
-from ...utils import is_einx_available
-
-
-if is_einx_available():
-    from einx import add as einx_add
-else:
-    einx_add = None
 
 
 class DogeConfig(PretrainedConfig):
