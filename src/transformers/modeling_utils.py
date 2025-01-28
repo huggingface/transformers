@@ -4020,10 +4020,31 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                             )
                     elif hasattr(torch, torch_dtype):
                         torch_dtype = getattr(torch, torch_dtype)
-                    else:
-                        raise ValueError(
-                            f'`torch_dtype` can be one of: `torch.dtype`, `"auto"` or a string of a valid `torch.dtype`, but received {torch_dtype}'
-                        )
+                        for sub_config_key in config.sub_configs.keys():
+                            sub_config = getattr(config, sub_config_key)
+                            sub_config.torch_dtype = torch_dtype
+                elif isinstance(torch_dtype, torch.dtype):
+                    for sub_config_key in config.sub_configs.keys():
+                        sub_config = getattr(config, sub_config_key)
+                        sub_config.torch_dtype = torch_dtype
+                elif isinstance(torch_dtype, dict):
+                    for key, curr_dtype in torch_dtype.items():
+                        if hasattr(config, key):
+                            value = getattr(config, key)
+                            value.torch_dtype = curr_dtype
+                    # main torch dtype for modules that aren't part of any sub-config
+                    torch_dtype = torch_dtype.get("")
+                    config.torch_dtype = torch_dtype
+                    if isinstance(torch_dtype, str) and hasattr(torch, torch_dtype):
+                        torch_dtype = getattr(torch, torch_dtype)
+                    elif torch_dtype is None:
+                        torch_dtype = torch.float32
+                else:
+                    raise ValueError(
+                        f"`torch_dtype` can be one of: `torch.dtype`, `'auto'`, a string of a valid `torch.dtype` or a `dict` with valid `torch_dtype` "
+                        f"for each sub-config in composite configs, but received {torch_dtype}"
+                    )
+
                 dtype_orig = cls._set_default_torch_dtype(torch_dtype)
 
             # Check if `_keep_in_fp32_modules` is not None
