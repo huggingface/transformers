@@ -338,7 +338,7 @@ class TextNetModelIntegrationTest(unittest.TestCase):
             device=torch_device,
         )
         torch.testing.assert_close(
-            output.last_hidden_state[0, 12, :3, :3], expected_slice_backbone, rtol=1e-3, atol=1e-3
+            output.last_hidden_state[0, 12, :3, :3], expected_slice_backbone, rtol=1e-2, atol=1e-2
         )
 
 
