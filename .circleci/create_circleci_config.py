@@ -203,7 +203,7 @@ torch_and_flax_job = CircleCIJob(
 torch_job = CircleCIJob(
     "torch",
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
-    marker="not generate",
+    # marker="not generate",
     parallelism=1,
 )
 
