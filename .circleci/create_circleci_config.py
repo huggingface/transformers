@@ -152,16 +152,16 @@ class CircleCIJob:
                     "command": f"TESTS=$(circleci tests split  --split-by=timings {self.job_name}_test_list.txt) && echo $TESTS > splitted_tests.txt && echo $TESTS | tr ' ' '\n'" if self.parallelism else f"awk '{{printf \"%s \", $0}}' {self.job_name}_test_list.txt > splitted_tests.txt"
                     }
             },
-            {"run": "pip install -U pytest==7.4.4"},
+            {"run": "pip install -U pytest"},
             {"run": "pip install pytest-flakefinder"},
-            # {"run": {
-            #     "name": "Run tests",
-            #     "command": f"({timeout_cmd} python3 -m pytest @pytest.txt | tee tests_output.txt)"}
-            # },
             {"run": {
                 "name": "Run tests",
-                "command": f'({timeout_cmd} python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {additional_flags} {" ".join(pytest_flags)} tests/models -k "test_generate_compile_" | tee tests_output.txt)'}
+                "command": f"({timeout_cmd} python3 -m pytest @pytest.txt | tee tests_output.txt)"}
             },
+            # {"run": {
+            #     "name": "Run tests",
+            #     "command": f'({timeout_cmd} python3 -m pytest {marker_cmd} -n {self.pytest_num_workers} {additional_flags} {" ".join(pytest_flags)} tests/models -k "test_generate_compile_" | tee tests_output.txt)'}
+            # },
             {"run": {"name": "Expand to show skipped tests", "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --skip"}},
             {"run": {"name": "Failed tests: show reasons",   "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --fail"}},
             {"run": {"name": "Errors",                       "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --errors"}},
@@ -203,7 +203,7 @@ torch_and_flax_job = CircleCIJob(
 torch_job = CircleCIJob(
     "torch",
     docker_image=[{"image": "huggingface/transformers-torch-light"}],
-    # marker="not generate",
+    marker="not generate",
     parallelism=1,
 )
 
