@@ -49,8 +49,8 @@ import urllib3
 from huggingface_hub import delete_repo
 from packaging import version
 
-from transformers import logging as transformers_logging
 from transformers import Trainer
+from transformers import logging as transformers_logging
 
 from .integrations import (
     is_clearml_available,
@@ -1450,7 +1450,9 @@ def get_steps_per_epoch(trainer: Trainer) -> int:
     return steps_per_epoch
 
 
-def evaluate_side_effect_factory(side_effect_values: List[Dict[str, float]]) -> Generator[Dict[str, float], None, None]:
+def evaluate_side_effect_factory(
+    side_effect_values: List[Dict[str, float]],
+) -> Generator[Dict[str, float], None, None]:
     """
     Function that returns side effects for the _evaluate method.
     Used when we're unsure of exactly how many times _evaluate will be called.
