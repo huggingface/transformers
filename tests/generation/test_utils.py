@@ -1987,8 +1987,6 @@ class GenerationTesterMixin:
             if not model_class._supports_static_cache:
                 self.skipTest("This model doesn't support static cache (= no expectations of compilation support)")
 
-            torch.compiler.reset()  # prevent cached compilation from being used in the test
-
             config, inputs_dict = self.prepare_config_and_inputs_for_generate(batch_size=4)
 
             model = model_class(config).to(torch_device)
@@ -2011,13 +2009,17 @@ class GenerationTesterMixin:
                 model_input_sets[0][model.main_input_name].shape == model_input_sets[1][model.main_input_name].shape
             )
 
+            # compilation-specific setup
+            torch.compiler.reset()  # prevent cached compilation from being used in the test
+            has_defined_cache_implementation = model.generation_config.cache_implementation is not None
+            model.generation_config.compile_config._compile_all_devices = True  # force compilation (e.g. fast CI, CPU)
+
             generation_kwargs = {
                 "do_sample": False,
                 "max_new_tokens": 5,
                 "return_dict_in_generate": True,
                 "output_scores": True,
             }
-            has_defined_cache_implementation = model.generation_config.cache_implementation is not None
 
             # get eager + dynamic cache results for future comparison
             dynamic_outputs = []
