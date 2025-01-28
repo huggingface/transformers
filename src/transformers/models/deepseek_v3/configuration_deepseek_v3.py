@@ -60,14 +60,20 @@ class DeepseekV3Config(PretrainedConfig):
             Number of shared experts, None means dense model.
         n_routed_experts (`int`, *optional*, defaults to 256):
             Number of routed experts, None means dense model.
-        ep_size (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>
+        ep_size (`int`, *optional*, defaults to 1):
+            Expert parallelism size for distributed training.
         routed_scaling_factor (`float`, *optional*, defaults to 2.5):
             Scaling factor or routed experts.
-        kv_lora_rank (`<fill_type>`, *optional*, defaults to 512): <fill_docstring>
-        q_lora_rank (`<fill_type>`, *optional*, defaults to 1536): <fill_docstring>
-        qk_rope_head_dim (`<fill_type>`, *optional*, defaults to 64): <fill_docstring>
-        v_head_dim (`<fill_type>`, *optional*, defaults to 128): <fill_docstring>
-        qk_nope_head_dim (`<fill_type>`, *optional*, defaults to 128): <fill_docstring>
+        kv_lora_rank (`int`, *optional*, defaults to 512):
+            Rank of the LoRA matrices for key and value projections.
+        q_lora_rank (`int`, *optional*, defaults to 1536):
+            Rank of the LoRA matrices for query projections.
+        qk_rope_head_dim (`int`, *optional*, defaults to 64):
+            Dimension of the query/key heads that use rotary position embeddings.
+        v_head_dim (`int`, *optional*, defaults to 128):
+            Dimension of the value heads.
+        qk_nope_head_dim (`int`, *optional*, defaults to 128):
+            Dimension of the query/key heads that don't use rotary position embeddings.
         topk_method (`str`, *optional*, defaults to `"noaux_tc"`):
             Topk method used in routed gate.
         n_group (`int`, *optional*, defaults to 8):
@@ -88,7 +94,8 @@ class DeepseekV3Config(PretrainedConfig):
         aux_loss_alpha (`float`, *optional*, defaults to 0.001):
             Auxiliary loss weight coefficient.
             Whether to compute the auxiliary loss for each individual sample.
-        seq_aux (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
+        seq_aux (`bool`, *optional*, defaults to `True`):
+            Whether to compute auxiliary loss at sequence level.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 4096):
