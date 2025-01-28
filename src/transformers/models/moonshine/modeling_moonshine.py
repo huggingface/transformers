@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 from typing import Callable, Optional, Tuple, Union
 
 import numpy as np
@@ -39,12 +40,7 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    add_start_docstrings,
-    add_start_docstrings_to_model_forward,
-    logging,
-    replace_return_docstrings,
-)
+from ...utils import add_start_docstrings, add_start_docstrings_to_model_forward, logging, replace_return_docstrings
 from .configuration_moonshine import MoonshineConfig
 
 
@@ -270,17 +266,33 @@ class MoonshineAttention(nn.Module):
                 attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         is_causal = True if self.is_causal and attention_mask is None and q_len > 1 else False
+
+        # Pad head size dimension to next multiple of 8. Q K and V always have equal head sizes.
+        pad_amount = 8 * ((query_states.shape[-1] + 7) // 8) - query_states.shape[-1]
+        if pad_amount > 0:
+            # Ensure scaling is correct even with padding.
+            if self.scaling is None:
+                self.scaling = 1.0 / math.sqrt(query_states.shape[-1])
+
+            query_states = torch.nn.functional.pad(query_states, (0, pad_amount))
+            key_states = torch.nn.functional.pad(key_states, (0, pad_amount))
+            value_states = torch.nn.functional.pad(value_states, (0, pad_amount))
+
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
             key_states,
             value_states,
-            attention_mask,
+            attention_mask=attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
             is_causal=is_causal,
             **kwargs,
         )
+
+        # Remove head size padding.
+        if pad_amount > 0:
+            attn_output = attn_output[:, :, :, :-pad_amount]
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
         attn_output = self.o_proj(attn_output)
@@ -603,9 +615,11 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
                 `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
                 `input_values`, the [`AutoFeatureExtractor`] should be used for padding
                 and conversion into a tensor of type `torch.FloatTensor`.
-            attention_mask (`torch.Tensor`)`, *optional*):
-                Moonshine does not support masking of the `input_values`, this argument is preserved for compatibility,
-                but it is not used.
+            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+                Mask to avoid performing attention on padding indices in `input_values`. Mask values selected in `[0, 1]`:
+                - 1 for tokens that are **not masked**,
+                - 0 for tokens that are **masked**.
+                [What are attention masks?](../glossary#attention-mask)
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
                 tensors for more detail.
@@ -632,6 +646,13 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
         hidden_states = nn.functional.gelu(self.conv3(hidden_states))
         hidden_states = hidden_states.permute(0, 2, 1)
 
+        # attention mask downsampling
+        if attention_mask is not None:
+            mask_len = self._get_feat_extract_output_lengths(attention_mask.shape[-1])
+            downsample_stride = 64 * 3 * 2  # conv strides
+            attention_mask = attention_mask[..., ::downsample_stride][..., :mask_len]
+            attention_mask = attention_mask.reshape((attention_mask.shape[0], 1, 1, -1)).to(torch.bool)
+
         position_ids = torch.arange(0, hidden_states.shape[1], device=hidden_states.device).unsqueeze(0)
 
         # create position embeddings to be shared across the decoder layers
@@ -649,7 +670,7 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
                 layer_outputs = self._gradient_checkpointing_func(
                     encoder_layer.__call__,
                     hidden_states,
-                    None,
+                    attention_mask,
                     position_ids,
                     None,
                     output_attentions,
@@ -660,6 +681,7 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
             else:
                 layer_outputs = encoder_layer(
                     hidden_states,
+                    attention_mask=attention_mask,
                     position_ids=position_ids,
                     output_attentions=output_attentions,
                     position_embeddings=position_embeddings,
@@ -801,6 +823,7 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
         self,
         input_ids: torch.LongTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
+        encoder_attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Cache] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
@@ -865,6 +888,15 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
         all_self_attns = () if output_attentions else None
         all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
 
+        # attention mask downsampling
+        if encoder_attention_mask is not None:
+            mask_len = encoder_hidden_states.shape[-2]
+            downsample_stride = 64 * 3 * 2  # conv strides
+            encoder_attention_mask = encoder_attention_mask[..., ::downsample_stride][..., :mask_len]
+            encoder_attention_mask = encoder_attention_mask.reshape((encoder_attention_mask.shape[0], 1, 1, -1)).to(
+                torch.bool
+            )
+
         for decoder_layer in self.layers:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
@@ -886,6 +918,7 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
                 layer_outputs = decoder_layer(
                     hidden_states,
                     attention_mask=causal_mask,
+                    encoder_attention_mask=encoder_attention_mask,
                     encoder_hidden_states=encoder_hidden_states,
                     position_ids=position_ids,
                     past_key_value=past_key_values,
@@ -1168,9 +1201,11 @@ MOONSHINE_MODEL_INPUTS_DOCSTRING = r"""
             `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
             `input_values`, the [`AutoFeatureExtractor`] should be used for padding
             and conversion into a tensor of type `torch.FloatTensor`.
-        attention_mask (`torch.Tensor`)`, *optional*):
-            Moonshine does not support masking of the `input_values`, this argument is preserved for compatibility,
-            but it is not used.
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding indices in `input_values`. Mask values selected in `[0, 1]`:
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+            [What are attention masks?](../glossary#attention-mask)
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
             it.
@@ -1371,6 +1406,7 @@ class MoonshineModel(MoonshinePreTrainedModel):
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_values,
+                attention_mask=attention_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
@@ -1387,6 +1423,7 @@ class MoonshineModel(MoonshinePreTrainedModel):
         decoder_outputs = self.decoder(
             input_ids=decoder_input_ids,
             attention_mask=decoder_attention_mask,
+            encoder_attention_mask=attention_mask,
             encoder_hidden_states=encoder_outputs[0],
             past_key_values=past_key_values,
             inputs_embeds=decoder_inputs_embeds,
@@ -1517,6 +1554,7 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
 
         outputs = self.model(
             input_values,
+            attention_mask=attention_mask,
             decoder_input_ids=decoder_input_ids,
             encoder_outputs=encoder_outputs,
             decoder_attention_mask=decoder_attention_mask,
