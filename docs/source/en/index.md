@@ -118,7 +118,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                       [DeBERTa](model_doc/deberta)                       |       ✅        |         ✅         |      ❌      |
 |                    [DeBERTa-v2](model_doc/deberta-v2)                    |       ✅        |         ✅         |      ❌      |
 |          [Decision Transformer](model_doc/decision_transformer)          |       ✅        |         ❌         |      ❌      |
-|                   [Deepseek-V3](model_doc/deepseek-v3)                   |       ✅        |         ❌         |      ❌      |
+|                   [Deepseek-V3](model_doc/deepseek_v3)                   |       ✅        |         ❌         |      ❌      |
 |               [Deformable DETR](model_doc/deformable_detr)               |       ✅        |         ❌         |      ❌      |
 |                          [DeiT](model_doc/deit)                          |       ✅        |         ✅         |      ❌      |
 |                        [DePlot](model_doc/deplot)                        |       ✅        |         ❌         |      ❌      |

@@ -14,19 +14,24 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-""" DeepSeekV3 model configuration """
+"""DeepSeekV3 model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 
 
 DEEPSEEK_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
+
+
 class DeepseekV3Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DeepseekV3Model`]. It is used to instantiate an DeepSeek
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the DeepSeek-V3.
+
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
+
+
     Args:
         vocab_size (`int`, *optional*, defaults to 129280):
             Vocabulary size of the Deep model. Defines the number of different tokens that can be represented by the
@@ -119,10 +124,13 @@ class DeepseekV3Config(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+
     ```python
     >>> from transformers import DeepseekV3Model, DeepseekV3Config
+
     >>> # Initializing a Deepseek-V3 style configuration
     >>> configuration = DeepseekV3Config()
+
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
@@ -135,30 +143,30 @@ class DeepseekV3Config(PretrainedConfig):
         vocab_size=129280,
         hidden_size=7168,
         intermediate_size=18432,
-        moe_intermediate_size = 2048,
+        moe_intermediate_size=2048,
         num_hidden_layers=61,
         num_nextn_predict_layers=1,
         num_attention_heads=128,
         num_key_value_heads=128,
-        n_shared_experts = 1,
-        n_routed_experts = 256,
-        ep_size = 1,
-        routed_scaling_factor = 2.5,
-        kv_lora_rank = 512,
-        q_lora_rank = 1536,
-        qk_rope_head_dim = 64,
-        v_head_dim = 128,
-        qk_nope_head_dim = 128,
-        topk_method = 'noaux_tc',
-        n_group = 8,
-        topk_group = 4,
-        num_experts_per_tok = 8,
-        moe_layer_freq = 1,
-        first_k_dense_replace = 3,
-        norm_topk_prob = True,
-        scoring_func = 'sigmoid',
-        aux_loss_alpha = 0.001,
-        seq_aux = True,
+        n_shared_experts=1,
+        n_routed_experts=256,
+        ep_size=1,
+        routed_scaling_factor=2.5,
+        kv_lora_rank=512,
+        q_lora_rank=1536,
+        qk_rope_head_dim=64,
+        v_head_dim=128,
+        qk_nope_head_dim=128,
+        topk_method="noaux_tc",
+        n_group=8,
+        topk_group=4,
+        num_experts_per_tok=8,
+        moe_layer_freq=1,
+        first_k_dense_replace=3,
+        norm_topk_prob=True,
+        scoring_func="sigmoid",
+        aux_loss_alpha=0.001,
+        seq_aux=True,
         hidden_act="silu",
         max_position_embeddings=4096,
         initializer_range=0.02,

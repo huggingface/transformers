@@ -1210,3 +1210,11 @@ class DeepseekV3ForSequenceClassification(DeepseekV3PreTrainedModel):
             hidden_states=transformer_outputs.hidden_states,
             attentions=transformer_outputs.attentions,
         )
+
+
+__all__ = [
+    "DeepseekV3PreTrainedModel",
+    "DeepseekV3Model",
+    "DeepseekV3ForCausalLM",
+    "DeepseekV3ForSequenceClassification",
+]
