@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2020 The HuggingFace Inc. team.
+# Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -17,10 +17,13 @@ Utility functions for calling processes. Especially useful for calling processes
 """
 
 import argparse
+import logging
 import shlex
 import subprocess
 import time
 
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_RETRIES: int = 5
 DEFAULT_TIMEOUT: int = 1
@@ -42,7 +45,7 @@ def retry_call_proc(cmd, retries=DEFAULT_RETRIES, timeout=DEFAULT_TIMEOUT, debug
         out, err = call_proc(cmd)
         if err:
             if debug:
-                print(f"Error: {err}")
+                logger.error("Failed to run command: %s. Error: %s", cmd, err.decode())
             if timeout > 0:
                 time.sleep(timeout)
         else:
@@ -50,18 +53,11 @@ def retry_call_proc(cmd, retries=DEFAULT_RETRIES, timeout=DEFAULT_TIMEOUT, debug
     return None
 
 
-def argparse_int(value: str) -> int:
-    try:
-        return int(value)
-    except ValueError:
-        return 0
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Run a command and retry if it fails.")
     parser.add_argument("cmd", help="Command to run.")
-    parser.add_argument("--retries", type=int, help="Max retries for command.")
-    parser.add_argument("--timeout", type=int, help="Timeout between retries.")
+    parser.add_argument("--retries", type=int, default=DEFAULT_RETRIES, help="Max retries for command.")
+    parser.add_argument("--timeout", type=int, default=DEFAULT_TIMEOUT, help="Timeout between retries.")
     parser.add_argument("--debug", action="store_true", help="Whether or not this is a patch release.")
     args = parser.parse_args()
 
@@ -69,10 +65,7 @@ if __name__ == "__main__":
         print("Please provide a command to run.")
         exit(1)
 
-    retries = args.retries if args.retries else DEFAULT_RETRIES
-    timeout = args.timeout if args.timeout else DEFAULT_TIMEOUT
-
-    out = retry_call_proc(cmd=args.cmd, retries=retries, timeout=timeout, debug=args.debug)
+    out = retry_call_proc(cmd=args.cmd, retries=args.retries, timeout=args.timeout, debug=args.debug)
     if out:
         print(out.decode())
     else:
