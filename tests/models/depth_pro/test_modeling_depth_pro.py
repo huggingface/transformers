@@ -359,7 +359,7 @@ class DepthProModelIntegrationTest(unittest.TestCase):
             [[1.0582, 1.1225, 1.1335], [1.1154, 1.1398, 1.1486], [1.1434, 1.1500, 1.1643]]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.predicted_depth[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.predicted_depth[0, :3, :3], expected_slice, atol=1e-4, rtol=0)
 
     def test_post_processing_depth_estimation(self):
         model_path = "geetu040/DepthPro"
