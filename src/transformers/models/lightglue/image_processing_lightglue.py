@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 import numpy as np
 
-from ... import is_torch_available, is_vision_available
+from ... import is_matplotlib_available, is_torch_available, is_vision_available
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import resize, to_channel_dimension_format
 from ...image_utils import (
@@ -410,6 +410,50 @@ class LightGlueImageProcessor(BaseImageProcessor):
             )
 
         return results
+
+    def plot_keypoint_matching(self, images: ImageInput, keypoint_matching_output: "LightGlueKeypointMatchingOutput"):
+        """
+        Plots the image pairs side by side with the detected keypoints as well as the matching between them. Requires
+        matplotlib to be installed.
+
+        Args:
+            images (`ImageInput`):
+                Image pairs to plot. Same as `LightGlueImageProcessor.preprocess`. Expects either a list of 2 images or
+                a list of list of 2 images list with pixel values ranging from 0 to 255.
+            outputs ([`LightGlueKeypointMatchingOutput`]):
+                Raw outputs of the model.
+        """
+        if is_matplotlib_available():
+            import matplotlib.pyplot as plt
+
+        images = validate_and_format_image_pairs(images)
+        images = [to_numpy_array(image) for image in images]
+        image_pairs = [images[i : i + 2] for i in range(0, len(images), 2)]
+
+        for image_pair, pair_output in zip(image_pairs, keypoint_matching_output):
+            height0, width0 = image_pair[0].shape[:2]
+            height1, width1 = image_pair[1].shape[:2]
+            plot_image = np.zeros((max(height0, height1), width0 + width1, 3))
+            plot_image[:height0, :width0] = image_pair[0] / 255.0
+            plot_image[:height1, width0:] = image_pair[1] / 255.0
+            plt.imshow(plot_image)
+            plt.axis("off")
+
+            keypoints0_x, keypoints0_y = pair_output["keypoints0"].unbind(1)
+            keypoints1_x, keypoints1_y = pair_output["keypoints1"].unbind(1)
+            for keypoint0_x, keypoint0_y, keypoint1_x, keypoint1_y, matching_score in zip(
+                keypoints0_x, keypoints0_y, keypoints1_x, keypoints1_y, pair_output["matching_scores"]
+            ):
+                plt.plot(
+                    [keypoint0_x, keypoint1_x + width0],
+                    [keypoint0_y, keypoint1_y],
+                    color=plt.get_cmap("RdYlGn")(matching_score.item()),
+                    alpha=0.9,
+                    linewidth=0.5,
+                )
+                plt.scatter(keypoint0_x, keypoint0_y, c="black", s=2)
+                plt.scatter(keypoint1_x + width0, keypoint1_y, c="black", s=2)
+            plt.show()
 
 
 __all__ = ["LightGlueImageProcessor"]
