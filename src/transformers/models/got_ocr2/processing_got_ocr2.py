@@ -113,47 +113,25 @@ class GotOcr2Processor(ProcessorMixin):
         self.img_pad_token = "<imgpad>"
         self.system_query = "system\nYou should follow the instructions carefully and explain your answers in detail."
 
-    def _check_call_arguments(self, images, box, color, multi_page, crop_to_patches):
-        if images is None:
-            raise ValueError("Images are required to be passed to the processor.")
-
-        if not isinstance(box, (list, tuple)):
-            raise ValueError("Box must be a list or tuple of lists in the form [x1, y1, x2, y2].")
-
-        if multi_page or crop_to_patches:
-            if multi_page and crop_to_patches:
-                raise ValueError("Cannot set both `multi_page` and `crop_to_patches` to `True`.")
-            if box[0] is not None or color is not None:
-                raise ValueError("Cannot pass `box` or `color` with multi-page inference.")
-
-        if box[0] is not None and color is not None:
-            raise ValueError("Both `box` and `color` cannot be set at the same time.")
-
     def _make_list_of_inputs(self, images, text, box, color, multi_page):
         if not isinstance(images, (list, tuple)):
+            images = [images]
             if multi_page:
                 logger.warning("Multi-page inference is enabled but only one image is passed.")
-            images = [images]
+                images = [images]
         elif isinstance(images[0], (list, tuple)) and not multi_page:
             raise ValueError("Nested images are only supported with `multi_page` set to `True`.")
         elif not isinstance(images[0], (list, tuple)) and multi_page:
             images = [images]
 
-        if text is not None:
-            if not isinstance(text, (list, tuple)):
-                text = [text]
-            if len(text) != len(images):
-                raise ValueError("The number of `text` must match the number of images.")
+        if isinstance(text, str):
+            text = [text]
 
         if not isinstance(box[0], (list, tuple)):
             # Use the same box for all images
             box = [box for _ in range(len(images))]
         if not isinstance(color, (list, tuple)):
             color = [color for _ in range(len(images))]
-        if len(box) != len(images):
-            raise ValueError("The number of `box` must match the number of images.")
-        if len(color) != len(images):
-            raise ValueError("The number of `color` must match the number of images.")
 
         return images, text, box, color
 
@@ -231,7 +209,6 @@ class GotOcr2Processor(ProcessorMixin):
         min_patches = output_kwargs["images_kwargs"].pop("min_patches")
         max_patches = output_kwargs["images_kwargs"].pop("max_patches")
 
-        self._check_call_arguments(images, box, color, multi_page, crop_to_patches)
         images, text, box, color = self._make_list_of_inputs(images, text, box, color, multi_page)
 
         # Load images as we need to know the image size

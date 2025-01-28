@@ -20,6 +20,7 @@
 # limitations under the License.
 
 
+from functools import lru_cache
 from typing import Dict, List, Optional, Tuple, Union
 
 import numpy as np
@@ -55,35 +56,66 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
-def find_best_patches_grid(
-    original_image_size: dict,
-    target_patch_size: dict,
-    min_patches: int,
-    max_patches: int,
+@lru_cache(maxsize=10)
+def get_all_supported_aspect_ratios(min_image_tiles: int, max_image_tiles: int) -> List[Tuple[int, int]]:
+    """
+    Computes all allowed aspect ratios for a given minimum and maximum number of input tiles.
+
+    This function calculates all possible arrangements of tiles that can be formed
+    within the constraint of the minimum and maximum number of tiles. Each arrangement is
+    represented by its aspect ratio (width/height) and the corresponding tile configuration.
+
+    Args:
+        min_image_tiles (`int`):
+            The minimum number of tiles allowed.
+        max_image_tiles (`int`):
+            The maximum number of tiles allowed.
+
+    Returns:
+        `List[Tuple[int, int]]`: A list of tuples, each tuple representing a valid (width, height)
+        configuration in terms of number of tiles.
+
+    Example:
+        >>> get_all_supported_aspect_ratios(1, 4)
+        [(1, 1), (1, 2), (2, 1), (1, 3), (3, 1), (1, 4), (2, 2), (4, 1)]
+
+    """
+    aspect_ratios = []
+    for width in range(1, max_image_tiles + 1):
+        for height in range(1, max_image_tiles + 1):
+            if width * height <= max_image_tiles and width * height >= min_image_tiles:
+                aspect_ratios.append((width, height))
+
+    aspect_ratios = sorted(aspect_ratios, key=lambda x: x[0] * x[1])
+
+    return aspect_ratios
+
+
+@lru_cache(maxsize=100)
+def get_optimal_tiled_canvas(
+    original_image_size: Tuple[int, int],
+    target_tile_size: Tuple[int, int],
+    min_image_tiles: int,
+    max_image_tiles: int,
 ) -> Tuple[int, int]:
     """
-    Given a minimum and maximum number of patches, find the patches grid with the closest aspect ratio to the
+    Given a minimum and maximum number of tiles, find the canvas with the closest aspect ratio to the
     original image aspect ratio.
-    In case of tie-breaking condition when two grids have the same aspect ratio difference, we favor the grids with
-    more patches, until the area covered by the patches is more than twice the target area, in order to avoid unnecessarily
-    excessive patching.
+    In case of tie-breaking condition when two canvases have the same aspect ratio difference, we favor the canvas with
+    more tiles, until the area covered by the tiles is more than twice the target area, in order to avoid unnecessarily
+    excessive tiling.
     """
-    # compute possible patches grids
-    target_patches_grids = {
-        (i, j)
-        for i in range(1, max_patches + 1)
-        for j in range(1, max_patches + 1)
-        if i * j <= max_patches and i * j >= min_patches
-    }
-    target_patches_grids = sorted(target_patches_grids, key=lambda x: x[0] * x[1])
+    possible_tile_arrangements = get_all_supported_aspect_ratios(min_image_tiles, max_image_tiles)
+
+    original_height, original_width = original_image_size
+    target_tile_height, target_tile_width = target_tile_size
+    aspect_ratio = original_width / original_height
+    area = original_width * original_height
 
     # find the grid with the best aspect ratio
     best_ratio_diff = float("inf")
     best_grid = (1, 1)
-    original_width, original_height = original_image_size["width"], original_image_size["height"]
-    aspect_ratio = original_width / original_height
-    area = original_width * original_height
-    for grid in target_patches_grids:
+    for grid in possible_tile_arrangements:
         grid_aspect_ratio = grid[0] / grid[1]
         ratio_diff = abs(aspect_ratio - grid_aspect_ratio)
         if ratio_diff < best_ratio_diff:
@@ -92,7 +124,7 @@ def find_best_patches_grid(
         elif ratio_diff == best_ratio_diff:
             # if the aspect ratio difference is the same, we favor the grid with more patches
             # until the area covered by the patches is more than twice the original image area
-            if area > 0.5 * target_patch_size["width"] * target_patch_size["height"] * grid[0] * grid[1]:
+            if area > 0.5 * target_tile_height * target_tile_width * grid[0] * grid[1]:
                 best_grid = grid
 
     return best_grid
@@ -390,11 +422,14 @@ class GotOcr2ImageProcessor(BaseImageProcessor):
             do_rescale = _rescale_for_pil_conversion(image)
             image = to_pil_image(image, do_rescale=do_rescale)
 
+        patch_size_height, patch_size_width = patch_size["height"], patch_size["width"]
+        original_height, original_width = original_size["height"], original_size["width"]
         # find the closest aspect ratio to the target
-        num_columns, num_rows = find_best_patches_grid(original_size, patch_size, min_patches, max_patches)
+        num_columns, num_rows = get_optimal_tiled_canvas(
+            (original_height, original_width), (patch_size_height, patch_size_width), min_patches, max_patches
+        )
 
         # calculate the target width and height
-        patch_size_width, patch_size_height = patch_size["width"], patch_size["height"]
         target_width = patch_size_width * num_columns
         target_height = patch_size_height * num_rows
         num_blocks = num_columns * num_rows
