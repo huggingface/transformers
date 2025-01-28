@@ -96,5 +96,67 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 [[autodoc]] ModernBertForQuestionAnswering
     - forward
 
+### Usage tips
+
+#### Finetunning
+
+The model was finetuned using the Hugging Face Transformers library with the [official script](https://github.com/huggingface/transformers/blob/main/examples/pytorch/question-answering/run_qa.py) for questioning-answering tasks.
+
+In the follwoing example, we used [answerdotai/ModernBERT-base](https://huggingface.co/answerdotai/ModernBERT-base) as a base model for finetunning a questioninign-answering.
+
+```python
+python run_qa.py \
+  --model_name_or_path "answerdotai/ModernBERT-base" \
+  --dataset_name squad \
+  --do_train \
+  --do_eval \
+  --overwrite_output_dir \
+  --per_device_train_batch_size 25 \
+  --per_device_eval_batch_size 20 \
+  --eval_strategy="steps" \
+  --save_strategy="epoch" \
+  --logging_steps 50 \
+  --eval_steps 500 \
+  --learning_rate 3e-5 \
+  --warmup_ratio 0.1 \
+  --weight_decay 0.01 \
+  --doc_stride 128 \
+  --max_seq_length 384 \
+  --max_answer_length 128 \
+  --num_train_epochs 2 \
+  --run_name="ModernBERT-QnA-base-squad" \
+  --output_dir="/path/to/output/directory"
+```
+
+#### Inference
+
+The following example demonstrates how to use the finetuned model for question answering using the Hugging Face pipeline.
+
+```python
+from transformers.models.modernbert.modular_modernbert import ModernBertForQuestionAnswering
+from transformers import AutoTokenizer, pipeline
+
+# Load the model and tokenizer
+model_id = "rankyx/ModernBERT-QnA-base-squad"
+model = ModernBertForQuestionAnswering.from_pretrained(model_id)
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+
+# Initialize the question-answering pipeline
+question_answerer = pipeline("question-answering", model=model, tokenizer=tokenizer)
+
+# Example input
+question = "How many parameters does BLOOM contain?"
+context = "BLOOM has 176 billion parameters and can generate text in 46 natural languages and 13 programming languages."
+
+# Get the answer
+result = question_answerer(question=question, context=context)
+print(result)
+
+#
+# {'score': 0.7719728946685791, 'start': 9, 'end': 21, 'answer': '176 billion'}
+#
+
+```
+
 </pt>
 </frameworkcontent>
