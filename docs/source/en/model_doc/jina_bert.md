@@ -101,8 +101,6 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 [[autodoc]] models.bert.modeling_flax_jina_bert.FlaxJinaBertForPreTrainingOutput
 
 
-<frameworkcontent>
-<pt>
 
 ## JinaBertModel
 
