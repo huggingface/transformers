@@ -21,6 +21,8 @@ from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
     SizeDict,
     get_image_size_for_max_height_width,
@@ -45,6 +47,7 @@ from ...image_utils import (
 )
 from ...utils import (
     TensorType,
+    add_start_docstrings,
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
@@ -277,44 +280,12 @@ def prepare_coco_panoptic_annotation(
     return new_target
 
 
-class DetrImageProcessorFast(BaseImageProcessorFast):
-    r"""
-    Constructs a fast Detr image processor.
-
-    Args:
+@add_start_docstrings(
+    "Constructs a fast Detr image processor.",
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
+    """
         format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
             Data format of the annotations. One of "coco_detection" or "coco_panoptic".
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Controls whether to resize the image's `(height, width)` dimensions to the specified `size`. Can be
-            overridden by the `do_resize` parameter in the `preprocess` method.
-        size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 800, "longest_edge": 1333}`):
-            Size of the image's `(height, width)` dimensions after resizing. Can be overridden by the `size` parameter
-            in the `preprocess` method. Available options are:
-                - `{"height": int, "width": int}`: The image will be resized to the exact size `(height, width)`.
-                    Do NOT keep the aspect ratio.
-                - `{"shortest_edge": int, "longest_edge": int}`: The image will be resized to a maximum size respecting
-                    the aspect ratio and keeping the shortest edge less or equal to `shortest_edge` and the longest edge
-                    less or equal to `longest_edge`.
-                - `{"max_height": int, "max_width": int}`: The image will be resized to the maximum size respecting the
-                    aspect ratio and keeping the height less or equal to `max_height` and the width less or equal to
-                    `max_width`.
-        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
-            Resampling filter to use if resizing the image.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Controls whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the
-            `do_rescale` parameter in the `preprocess` method.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
-            `preprocess` method.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Controls whether to normalize the image. Can be overridden by the `do_normalize` parameter in the
-            `preprocess` method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_MEAN`):
-            Mean values to use when normalizing the image. Can be a single value or a list of values, one for each
-            channel. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_DEFAULT_STD`):
-            Standard deviation values to use when normalizing the image. Can be a single value or a list of values, one
-            for each channel. Can be overridden by the `image_std` parameter in the `preprocess` method.
         do_convert_annotations (`bool`, *optional*, defaults to `True`):
             Controls whether to convert the annotations to the format expected by the DETR model. Converts the
             bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
@@ -328,8 +299,9 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
             The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
             provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
             height and width in the batch.
-    """
-
+    """,
+)
+class DetrImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
     image_std = IMAGENET_DEFAULT_STD
@@ -353,17 +325,21 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
 
     def __init__(
         self,
-        format: Union[str, AnnotationFormat] = AnnotationFormat.COCO_DETECTION,
-        do_resize: bool = True,
+        do_resize: bool = None,
         size: Dict[str, int] = None,
-        resample: Union[PILImageResampling, "F.InterpolationMode"] = PILImageResampling.BILINEAR,
-        do_rescale: bool = True,
+        default_to_square: bool = None,
+        resample: Union[PILImageResampling, "F.InterpolationMode"] = None,
+        do_center_crop: bool = None,
+        crop_size: Dict[str, int] = None,
+        do_rescale: bool = None,
         rescale_factor: Union[int, float] = 1 / 255,
-        do_normalize: bool = True,
+        do_normalize: bool = None,
         image_mean: Union[float, List[float]] = None,
         image_std: Union[float, List[float]] = None,
+        do_convert_rgb: bool = None,
+        format: Union[str, AnnotationFormat] = None,
         do_convert_annotations: Optional[bool] = None,
-        do_pad: bool = True,
+        do_pad: bool = None,
         pad_size: Optional[Dict[str, int]] = None,
         **kwargs,
     ) -> None:
@@ -383,19 +359,23 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
         size = get_size_dict(size, max_size=max_size, default_to_square=False)
 
         # Backwards compatibility
-        if do_convert_annotations is None:
-            do_convert_annotations = do_normalize
+        if do_convert_annotations is None and getattr(self, "do_convert_annotations", None) is None:
+            do_convert_annotations = do_normalize if do_normalize is not None else self.do_normalize
 
         super().__init__(
-            format=format,
             do_resize=do_resize,
             size=size,
+            default_to_square=default_to_square,
             resample=resample,
+            do_center_crop=do_center_crop,
+            crop_size=crop_size,
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
             do_normalize=do_normalize,
             image_mean=image_mean,
             image_std=image_std,
+            do_convert_rgb=do_convert_rgb,
+            format=format,
             do_convert_annotations=do_convert_annotations,
             do_pad=do_pad,
             pad_size=pad_size,
@@ -635,6 +615,41 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
 
         return image, pixel_mask, annotation
 
+    @add_start_docstrings(
+        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
+        """
+        annotations (`AnnotationType` or `List[AnnotationType]`, *optional*):
+            List of annotations associated with the image or batch of images. If annotation is for object
+            detection, the annotations should be a dictionary with the following keys:
+            - "image_id" (`int`): The image id.
+            - "annotations" (`List[Dict]`): List of annotations for an image. Each annotation should be a
+                dictionary. An image can have no annotations, in which case the list should be empty.
+            If annotation is for segmentation, the annotations should be a dictionary with the following keys:
+            - "image_id" (`int`): The image id.
+            - "segments_info" (`List[Dict]`): List of segments for an image. Each segment should be a dictionary.
+                An image can have no segments, in which case the list should be empty.
+            - "file_name" (`str`): The file name of the image.
+        format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
+            Data format of the annotations. One of "coco_detection" or "coco_panoptic".
+        do_convert_annotations (`bool`, *optional*, defaults to `True`):
+            Controls whether to convert the annotations to the format expected by the DETR model. Converts the
+            bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
+            Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
+        do_pad (`bool`, *optional*, defaults to `True`):
+            Controls whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess`
+            method. If `True`, padding will be applied to the bottom and right of the image with zeros.
+            If `pad_size` is provided, the image will be padded to the specified dimensions.
+            Otherwise, the image will be padded to the maximum height and width of the batch.
+        pad_size (`Dict[str, int]`, *optional*):
+            The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
+            provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
+            height and width in the batch.
+        return_segmentation_masks (`bool`, *optional*, defaults to `False`):
+            Whether to return segmentation masks.
+        masks_path (`str` or `pathlib.Path`, *optional*):
+            Path to the directory containing the segmentation masks.
+        """,
+    )
     def preprocess(
         self,
         images: ImageInput,
@@ -659,82 +674,6 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
         device: Optional["torch.device"] = None,
         **kwargs,
     ) -> BatchFeature:
-        """
-        Preprocess an image or a batch of images so that it can be used by the model.
-
-        Args:
-            images (`ImageInput`):
-                Image or batch of images to preprocess. Expects a single or batch of images with pixel values ranging
-                from 0 to 255. If passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            annotations (`AnnotationType` or `List[AnnotationType]`, *optional*):
-                List of annotations associated with the image or batch of images. If annotation is for object
-                detection, the annotations should be a dictionary with the following keys:
-                - "image_id" (`int`): The image id.
-                - "annotations" (`List[Dict]`): List of annotations for an image. Each annotation should be a
-                  dictionary. An image can have no annotations, in which case the list should be empty.
-                If annotation is for segmentation, the annotations should be a dictionary with the following keys:
-                - "image_id" (`int`): The image id.
-                - "segments_info" (`List[Dict]`): List of segments for an image. Each segment should be a dictionary.
-                  An image can have no segments, in which case the list should be empty.
-                - "file_name" (`str`): The file name of the image.
-            return_segmentation_masks (`bool`, *optional*, defaults to self.return_segmentation_masks):
-                Whether to return segmentation masks.
-            masks_path (`str` or `pathlib.Path`, *optional*):
-                Path to the directory containing the segmentation masks.
-            do_resize (`bool`, *optional*, defaults to self.do_resize):
-                Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to self.size):
-                Size of the image's `(height, width)` dimensions after resizing. Available options are:
-                    - `{"height": int, "width": int}`: The image will be resized to the exact size `(height, width)`.
-                        Do NOT keep the aspect ratio.
-                    - `{"shortest_edge": int, "longest_edge": int}`: The image will be resized to a maximum size respecting
-                        the aspect ratio and keeping the shortest edge less or equal to `shortest_edge` and the longest edge
-                        less or equal to `longest_edge`.
-                    - `{"max_height": int, "max_width": int}`: The image will be resized to the maximum size respecting the
-                        aspect ratio and keeping the height less or equal to `max_height` and the width less or equal to
-                        `max_width`.
-            resample (`PILImageResampling` or `InterpolationMode`, *optional*, defaults to self.resample):
-                Resampling filter to use when resizing the image.
-            do_rescale (`bool`, *optional*, defaults to self.do_rescale):
-                Whether to rescale the image.
-            rescale_factor (`float`, *optional*, defaults to self.rescale_factor):
-                Rescale factor to use when rescaling the image.
-            do_normalize (`bool`, *optional*, defaults to self.do_normalize):
-                Whether to normalize the image.
-            do_convert_annotations (`bool`, *optional*, defaults to self.do_convert_annotations):
-                Whether to convert the annotations to the format expected by the model. Converts the bounding
-                boxes from the format `(top_left_x, top_left_y, width, height)` to `(center_x, center_y, width, height)`
-                and in relative coordinates.
-            image_mean (`float` or `List[float]`, *optional*, defaults to self.image_mean):
-                Mean to use when normalizing the image.
-            image_std (`float` or `List[float]`, *optional*, defaults to self.image_std):
-                Standard deviation to use when normalizing the image.
-            do_pad (`bool`, *optional*, defaults to self.do_pad):
-                Whether to pad the image. If `True`, padding will be applied to the bottom and right of
-                the image with zeros. If `pad_size` is provided, the image will be padded to the specified
-                dimensions. Otherwise, the image will be padded to the maximum height and width of the batch.
-            format (`str` or `AnnotationFormat`, *optional*, defaults to self.format):
-                Format of the annotations.
-            return_tensors (`str` or `TensorType`, *optional*):
-                Returns stacked tensors if set to `pt, returns a list of tensors if unset.
-            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - Unset: Use the channel dimension format of the input image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-            pad_size (`Dict[str, int]`, *optional*):
-                The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
-                provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
-                height and width in the batch.
-            device (`torch.device`, *optional*):
-                The device to process the images on. If unset, the device is inferred from the input images.
-        """
         if "pad_and_return_pixel_mask" in kwargs:
             logger.warning_once(
                 "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in a future version, "

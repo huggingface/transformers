@@ -17,7 +17,13 @@
 from typing import Dict, List, Optional, Union
 
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
+from ...image_processing_utils_fast import (
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
+    BaseImageProcessorFast,
+    group_images_by_shape,
+    reorder_images,
+)
 from ...image_transforms import get_resize_output_image_size
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
@@ -27,6 +33,7 @@ from ...image_utils import (
 )
 from ...utils import (
     TensorType,
+    add_start_docstrings,
     is_torch_available,
     is_torchvision_available,
     is_torchvision_v2_available,
@@ -43,48 +50,16 @@ if is_torchvision_available():
         from torchvision.transforms import functional as F
 
 
-class ConvNextImageProcessorFast(BaseImageProcessorFast):
-    r"""
-    Constructs a fast ConvNeXT image processor.
-
-    Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Controls whether to resize the image's (height, width) dimensions to the specified `size`. Can be overriden
-            by `do_resize` in the `preprocess` method.
-        size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 384}`):
-            Resolution of the output image after `resize` is applied. If `size["shortest_edge"]` >= 384, the image is
-            resized to `(size["shortest_edge"], size["shortest_edge"])`. Otherwise, the smaller edge of the image will
-            be matched to `int(size["shortest_edge"]/crop_pct)`, after which the image is cropped to
-            `(size["shortest_edge"], size["shortest_edge"])`. Only has an effect if `do_resize` is set to `True`. Can
-            be overriden by `size` in the `preprocess` method.
-        default_to_square (`bool`, *optional*):
-            Whether to default to a square image when resizing, if size is an int.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
-            Resampling filter to use if resizing the image. Can be overriden by `resample` in the `preprocess` method.
-        do_center_crop (`bool`, *optional*):
-            Whether to center crop the image to the specified `crop_size`. Can be overridden by `do_center_crop` in the
-        crop_size (`Dict`, *optional*):
-            Size of the output image after applying `center_crop`. Can be overridden by `crop_size` in the `preprocess`
-            method.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overriden by `do_rescale` in
-            the `preprocess` method.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image. Can be overriden by `rescale_factor` in the `preprocess`
-            method.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
-            method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
-            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
-            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
-            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
-            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
-        do_convert_rgb (`bool`, *optional*):
-            Whether to convert the image to RGB.
+@add_start_docstrings(
+    r"Constructs a fast ConvNeXT image processor.",
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     """
-
+        crop_pct (`float`, *optional*):
+            Percentage of the image to crop. Only has an effect if size < 384. Can be
+            overridden by `crop_pct` in the`preprocess` method.
+    """,
+)
+class ConvNextImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
@@ -95,6 +70,51 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
     do_normalize = True
     crop_pct = 224 / 256
     valid_extra_kwargs = ["crop_pct"]
+
+    def __init__(
+        self,
+        do_resize: bool = None,
+        size: Dict[str, int] = None,
+        default_to_square: bool = None,
+        resample: Union[PILImageResampling, "F.InterpolationMode"] = None,
+        do_center_crop: bool = None,
+        crop_size: Dict[str, int] = None,
+        do_rescale: bool = None,
+        rescale_factor: Union[int, float] = 1 / 255,
+        do_normalize: bool = None,
+        image_mean: Union[float, List[float]] = None,
+        image_std: Union[float, List[float]] = None,
+        do_convert_rgb: bool = None,
+        crop_pct=None,
+        **kwargs,
+    ):
+        super().__init__(
+            do_resize=do_resize,
+            size=size,
+            default_to_square=default_to_square,
+            resample=resample,
+            do_center_crop=do_center_crop,
+            crop_size=crop_size,
+            do_rescale=do_rescale,
+            rescale_factor=rescale_factor,
+            do_normalize=do_normalize,
+            image_mean=image_mean,
+            image_std=image_std,
+            do_convert_rgb=do_convert_rgb,
+            crop_pct=crop_pct,
+            **kwargs,
+        )
+
+    @add_start_docstrings(
+        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
+        """
+        crop_pct (`float`, *optional*):
+            Percentage of the image to crop. Only has an effect if size < 384. Can be
+            overridden by `crop_pct` in the`preprocess` method.
+        """,
+    )
+    def preprocess(self, *args, **kwargs) -> BatchFeature:
+        return super().preprocess(*args, **kwargs)
 
     def resize(
         self,
@@ -170,51 +190,6 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
         image_std: Optional[Union[float, List[float]]],
         return_tensors: Optional[Union[str, TensorType]],
     ) -> BatchFeature:
-        """
-        Preprocess an image or batch of images.
-
-        Args:
-            images (`ImageInput`):
-                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
-                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            do_resize (`bool):
-                Controls whether to resize the image's (height, width) dimensions to the specified `size`. Can be overriden
-                by `do_resize` in the `preprocess` method.
-            size (`Dict[str, int]`):
-                Resolution of the output image after `resize` is applied. If `size["shortest_edge"]` >= 384, the image is
-                resized to `(size["shortest_edge"], size["shortest_edge"])`. Otherwise, the smaller edge of the image will
-                be matched to `int(size["shortest_edge"]/crop_pct)`, after which the image is cropped to
-                `(size["shortest_edge"], size["shortest_edge"])`. Only has an effect if `do_resize` is set to `True`. Can
-                be overriden by `size` in the `preprocess` method.
-            default_to_square (`bool`):
-                Whether to default to a square image when resizing, if size is an int.
-            interpolation (`InterpolationMode`):
-                Resampling filter to use if resizing the image.
-            do_center_crop (`bool`):
-                Whether to center crop the image to the specified `crop_size`. Can be overridden by `do_center_crop` in the
-                `preprocess` method.
-            crop_size (`Dict[str, int]`):
-                Size of the output image after applying `center_crop`. Can be overridden by `crop_size` in the `preprocess`
-                method.
-            do_rescale (`bool`):
-                Whether to rescale the image by the specified scale `rescale_factor`. Can be overriden by `do_rescale` in
-                the `preprocess` method.
-            rescale_factor (`int` or `float`):
-                Scale factor to use if rescaling the image. Can be overriden by `rescale_factor` in the `preprocess`
-                method.
-            do_normalize (`bool`):
-                Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
-                method.
-            image_mean (`float` or `List[float]`):
-                Mean to use if normalizing the image. This is a float or list of floats the length of the number of
-                channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-            image_std (`float` or `List[float]`):
-                Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
-                number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
-            return_tensors (`str` or `TensorType`):
-                Returns stacked tensors if set to `pt, returns a list of tensors if unset.
-        """
-
         # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images)
         resized_images_grouped = {}
