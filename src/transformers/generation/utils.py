@@ -3349,10 +3349,10 @@ class GenerationMixin:
             shape = list(tensor.shape)
             return torch.reshape(tensor, [shape[0] * shape[1]] + shape[2:])
 
-        def unflatten_beam_dim(tensor, num_beams):
+        def unflatten_beam_dim(tensor, batch_size, num_beams):
             """2D with batch*beam in batch dim -> 3D with beams in a separate dim"""
             shape = list(tensor.shape)
-            return torch.reshape(tensor, [shape[0], num_beams] + shape[1:])
+            return torch.reshape(tensor, [batch_size, num_beams] + shape[1:])
 
         def gather_beams(nested: Union[torch.Tensor, Iterable], beam_indices: torch.Tensor):
             """
@@ -3430,7 +3430,7 @@ class GenerationMixin:
 
         # 3. init running tensors
         # per batch, beam-item holding current token in loop and completed sequences
-        running_sequences = unflatten_beam_dim(input_ids, num_beams)
+        running_sequences = unflatten_beam_dim(input_ids, batch_size, num_beams)
         sequences = running_sequences.clone().detach()
         # per batch, beam-item score, logprobs
         # initialise score of first beam with 0 and the rest with -1e9. This makes sure that only tokens
@@ -3539,7 +3539,7 @@ class GenerationMixin:
             # Otherwise a reference to outputs is kept which keeps the logits alive in the next iteration
             del model_outputs
 
-            log_probs = unflatten_beam_dim(log_probs, num_beams)
+            log_probs = unflatten_beam_dim(log_probs, batch_size, num_beams)
             log_probs = log_probs + running_beam_scores[:, :, None]  # (batch_size, num_beams, vocab_size)
             vocab_size = log_probs.shape[2]
             log_probs = torch.reshape(log_probs, (batch_size, num_beams * vocab_size))
@@ -3578,7 +3578,9 @@ class GenerationMixin:
 
             # d. Check which sequences have ended
             next_token_hits_stopping_criteria = stopping_criteria(flatten_beam_dim(topk_running_sequences), all_scores)
-            next_token_hits_stopping_criteria = unflatten_beam_dim(next_token_hits_stopping_criteria, beams_to_keep)
+            next_token_hits_stopping_criteria = unflatten_beam_dim(
+                next_token_hits_stopping_criteria, batch_size, beams_to_keep
+            )
 
             # Only the top `num_beam` sequences can be considered for the final returned sequences
             top_num_beam_mask = torch.cat(
