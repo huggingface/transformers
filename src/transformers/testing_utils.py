@@ -1435,6 +1435,7 @@ def set_model_tester_for_less_flaky_test(test_case):
     # TODO (if possible): Avoid exceptional cases
     exceptional_classes = [
         "ZambaModelTester",
+        "Zamba2ModelTester",
         "RwkvModelTester",
         "AriaVisionText2TextModelTester",
         "GPTNeoModelTester",
@@ -1498,7 +1499,16 @@ def set_config_for_less_flaky_test(config):
 
 def set_model_for_less_flaky_test(model):
     # Another way to make sure norm layers have desired epsilon. (Some models don't set it from its config.)
-    target_names = ("LayerNorm", "GroupNorm", "BatchNorm", "RMSNorm", "BatchNorm2d", "BatchNorm1d")
+    target_names = (
+        "LayerNorm",
+        "GroupNorm",
+        "BatchNorm",
+        "RMSNorm",
+        "BatchNorm2d",
+        "BatchNorm1d",
+        "BitGroupNormActivation",
+        "WeightStandardizedConv2d",
+    )
     target_attrs = ["eps", "epsilon", "variance_epsilon"]
     if is_torch_available() and isinstance(model, torch.nn.Module):
         for module in model.modules():
