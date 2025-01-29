@@ -22,7 +22,7 @@ class IJepaConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`IJepaModel`]. It is used to instantiate an IJEPA
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the I-JEPA
-    [google/ijepa-base-patch16-224](https://huggingface.co/google/ijepa-base-patch16-224) architecture.
+    [facebook/ijepa_vith14_1k](https://huggingface.co/facebook/ijepa_vith14_1k) architecture.
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

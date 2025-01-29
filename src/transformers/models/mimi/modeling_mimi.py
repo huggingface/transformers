@@ -1254,7 +1254,7 @@ class MimiEuclideanCodebook(nn.Module):
 
         self.codebook_size = config.codebook_size
 
-        self.register_buffer("initialized", torch.Tensor([True]))
+        self.register_buffer("initialized", torch.tensor([True], dtype=torch.float32))
         self.register_buffer("cluster_usage", torch.ones(config.codebook_size))
         self.register_buffer("embed_sum", embed)
         self._embed = None

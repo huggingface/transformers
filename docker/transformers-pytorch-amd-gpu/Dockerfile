@@ -1,5 +1,4 @@
-FROM rocm/dev-ubuntu-22.04:6.1
-# rocm/pytorch has no version with 2.1.0
+FROM rocm/dev-ubuntu-22.04:6.2.4
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
@@ -11,7 +10,7 @@ RUN apt update && \
 
 RUN python3 -m pip install --no-cache-dir --upgrade pip numpy
 
-RUN python3 -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.1
+RUN python3 -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/rocm6.2
 
 RUN python3 -m pip install --no-cache-dir --upgrade importlib-metadata setuptools ninja git+https://github.com/facebookresearch/detectron2.git pytesseract "itsdangerous<2.1.0"
 
