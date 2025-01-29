@@ -15,25 +15,16 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ..bart.modeling_bart import BartAttention, BartFlashAttention2, BartSdpaAttention
 from ..wav2vec2.modeling_wav2vec2 import (
-    Wav2Vec2AttnAdapterLayer,
     Wav2Vec2Encoder,
-    Wav2Vec2EncoderLayer,
-    Wav2Vec2EncoderLayerStableLayerNorm,
     Wav2Vec2EncoderStableLayerNorm,
     Wav2Vec2FeatureEncoder,
     Wav2Vec2FeatureProjection,
-    Wav2Vec2FeedForward,
     Wav2Vec2ForCTC,
     Wav2Vec2ForSequenceClassification,
-    Wav2Vec2GroupNormConvLayer,
     Wav2Vec2GumbelVectorQuantizer,
-    Wav2Vec2LayerNormConvLayer,
     Wav2Vec2Model,
-    Wav2Vec2NoLayerNormConvLayer,
     Wav2Vec2PositionalConvEmbedding,
-    Wav2Vec2SamePadLayer,
 )
 from .configuration_unispeech import UniSpeechConfig
 
@@ -91,23 +82,7 @@ class UniSpeechForPreTrainingOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-class UniSpeechNoLayerNormConvLayer(Wav2Vec2NoLayerNormConvLayer):
-    pass
-
-
-class UniSpeechLayerNormConvLayer(Wav2Vec2LayerNormConvLayer):
-    pass
-
-
-class UniSpeechGroupNormConvLayer(Wav2Vec2GroupNormConvLayer):
-    pass
-
-
 class UniSpeechPositionalConvEmbedding(Wav2Vec2PositionalConvEmbedding):
-    pass
-
-
-class UniSpeechSamePadLayer(Wav2Vec2SamePadLayer):
     pass
 
 
@@ -116,34 +91,6 @@ class UniSpeechFeatureEncoder(Wav2Vec2FeatureEncoder):
 
 
 class UniSpeechFeatureProjection(Wav2Vec2FeatureProjection):
-    pass
-
-
-class UniSpeechAttention(BartAttention):
-    pass
-
-
-class UniSpeechFlashAttention2(BartFlashAttention2):
-    pass
-
-
-class UniSpeechSdpaAttention(BartSdpaAttention):
-    pass
-
-
-class UniSpeechFeedForward(Wav2Vec2FeedForward):
-    pass
-
-
-class UniSpeechEncoderLayer(Wav2Vec2EncoderLayer):
-    pass
-
-
-class UniSpeechAttnAdapterLayer(Wav2Vec2AttnAdapterLayer):
-    pass
-
-
-class UniSpeechEncoderLayerStableLayerNorm(Wav2Vec2EncoderLayerStableLayerNorm):
     pass
 
 

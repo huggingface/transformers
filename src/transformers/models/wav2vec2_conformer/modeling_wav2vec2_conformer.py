@@ -86,75 +86,14 @@ class Wav2Vec2ConformerForPreTrainingOutput(ModelOutput):
     diversity_loss: Optional[torch.FloatTensor] = None
 
 
-class Wav2Vec2ConformerNoLayerNormConvLayer(nn.Module):
-    def __init__(self, config, layer_id=0):
+class Wav2Vec2ConformerSamePadLayer(nn.Module):
+    def __init__(self, num_conv_pos_embeddings):
         super().__init__()
-        self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
-        self.out_conv_dim = config.conv_dim[layer_id]
-
-        self.conv = nn.Conv1d(
-            self.in_conv_dim,
-            self.out_conv_dim,
-            kernel_size=config.conv_kernel[layer_id],
-            stride=config.conv_stride[layer_id],
-            bias=config.conv_bias,
-        )
-        self.activation = ACT2FN[config.feat_extract_activation]
+        self.num_pad_remove = 1 if num_conv_pos_embeddings % 2 == 0 else 0
 
     def forward(self, hidden_states):
-        hidden_states = self.conv(hidden_states)
-        hidden_states = self.activation(hidden_states)
-        return hidden_states
-
-
-class Wav2Vec2ConformerLayerNormConvLayer(nn.Module):
-    def __init__(self, config, layer_id=0):
-        super().__init__()
-        self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
-        self.out_conv_dim = config.conv_dim[layer_id]
-
-        self.conv = nn.Conv1d(
-            self.in_conv_dim,
-            self.out_conv_dim,
-            kernel_size=config.conv_kernel[layer_id],
-            stride=config.conv_stride[layer_id],
-            bias=config.conv_bias,
-        )
-        self.layer_norm = nn.LayerNorm(self.out_conv_dim, elementwise_affine=True)
-        self.activation = ACT2FN[config.feat_extract_activation]
-
-    def forward(self, hidden_states):
-        hidden_states = self.conv(hidden_states)
-
-        hidden_states = hidden_states.transpose(-2, -1)
-        hidden_states = self.layer_norm(hidden_states)
-        hidden_states = hidden_states.transpose(-2, -1)
-
-        hidden_states = self.activation(hidden_states)
-        return hidden_states
-
-
-class Wav2Vec2ConformerGroupNormConvLayer(nn.Module):
-    def __init__(self, config, layer_id=0):
-        super().__init__()
-        self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
-        self.out_conv_dim = config.conv_dim[layer_id]
-
-        self.conv = nn.Conv1d(
-            self.in_conv_dim,
-            self.out_conv_dim,
-            kernel_size=config.conv_kernel[layer_id],
-            stride=config.conv_stride[layer_id],
-            bias=config.conv_bias,
-        )
-        self.activation = ACT2FN[config.feat_extract_activation]
-
-        self.layer_norm = nn.GroupNorm(num_groups=self.out_conv_dim, num_channels=self.out_conv_dim, affine=True)
-
-    def forward(self, hidden_states):
-        hidden_states = self.conv(hidden_states)
-        hidden_states = self.layer_norm(hidden_states)
-        hidden_states = self.activation(hidden_states)
+        if self.num_pad_remove > 0:
+            hidden_states = hidden_states[:, :, : -self.num_pad_remove]
         return hidden_states
 
 
@@ -287,14 +226,75 @@ class Wav2Vec2ConformerRelPositionalEmbedding(nn.Module):
         return relative_position_embeddings
 
 
-class Wav2Vec2ConformerSamePadLayer(nn.Module):
-    def __init__(self, num_conv_pos_embeddings):
+class Wav2Vec2ConformerNoLayerNormConvLayer(nn.Module):
+    def __init__(self, config, layer_id=0):
         super().__init__()
-        self.num_pad_remove = 1 if num_conv_pos_embeddings % 2 == 0 else 0
+        self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
+        self.out_conv_dim = config.conv_dim[layer_id]
+
+        self.conv = nn.Conv1d(
+            self.in_conv_dim,
+            self.out_conv_dim,
+            kernel_size=config.conv_kernel[layer_id],
+            stride=config.conv_stride[layer_id],
+            bias=config.conv_bias,
+        )
+        self.activation = ACT2FN[config.feat_extract_activation]
 
     def forward(self, hidden_states):
-        if self.num_pad_remove > 0:
-            hidden_states = hidden_states[:, :, : -self.num_pad_remove]
+        hidden_states = self.conv(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        return hidden_states
+
+
+class Wav2Vec2ConformerLayerNormConvLayer(nn.Module):
+    def __init__(self, config, layer_id=0):
+        super().__init__()
+        self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
+        self.out_conv_dim = config.conv_dim[layer_id]
+
+        self.conv = nn.Conv1d(
+            self.in_conv_dim,
+            self.out_conv_dim,
+            kernel_size=config.conv_kernel[layer_id],
+            stride=config.conv_stride[layer_id],
+            bias=config.conv_bias,
+        )
+        self.layer_norm = nn.LayerNorm(self.out_conv_dim, elementwise_affine=True)
+        self.activation = ACT2FN[config.feat_extract_activation]
+
+    def forward(self, hidden_states):
+        hidden_states = self.conv(hidden_states)
+
+        hidden_states = hidden_states.transpose(-2, -1)
+        hidden_states = self.layer_norm(hidden_states)
+        hidden_states = hidden_states.transpose(-2, -1)
+
+        hidden_states = self.activation(hidden_states)
+        return hidden_states
+
+
+class Wav2Vec2ConformerGroupNormConvLayer(nn.Module):
+    def __init__(self, config, layer_id=0):
+        super().__init__()
+        self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
+        self.out_conv_dim = config.conv_dim[layer_id]
+
+        self.conv = nn.Conv1d(
+            self.in_conv_dim,
+            self.out_conv_dim,
+            kernel_size=config.conv_kernel[layer_id],
+            stride=config.conv_stride[layer_id],
+            bias=config.conv_bias,
+        )
+        self.activation = ACT2FN[config.feat_extract_activation]
+
+        self.layer_norm = nn.GroupNorm(num_groups=self.out_conv_dim, num_channels=self.out_conv_dim, affine=True)
+
+    def forward(self, hidden_states):
+        hidden_states = self.conv(hidden_states)
+        hidden_states = self.layer_norm(hidden_states)
+        hidden_states = self.activation(hidden_states)
         return hidden_states
 
 

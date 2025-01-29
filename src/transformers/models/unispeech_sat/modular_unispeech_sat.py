@@ -22,27 +22,18 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ..bart.modeling_bart import BartAttention, BartFlashAttention2, BartSdpaAttention
 from ..wav2vec2.modeling_wav2vec2 import (
-    Wav2Vec2AttnAdapterLayer,
     Wav2Vec2Encoder,
-    Wav2Vec2EncoderLayer,
-    Wav2Vec2EncoderLayerStableLayerNorm,
     Wav2Vec2EncoderStableLayerNorm,
     Wav2Vec2FeatureEncoder,
     Wav2Vec2FeatureProjection,
-    Wav2Vec2FeedForward,
     Wav2Vec2ForAudioFrameClassification,
     Wav2Vec2ForCTC,
     Wav2Vec2ForSequenceClassification,
     Wav2Vec2ForXVector,
-    Wav2Vec2GroupNormConvLayer,
     Wav2Vec2GumbelVectorQuantizer,
-    Wav2Vec2LayerNormConvLayer,
     Wav2Vec2Model,
-    Wav2Vec2NoLayerNormConvLayer,
     Wav2Vec2PositionalConvEmbedding,
-    Wav2Vec2SamePadLayer,
 )
 from .configuration_unispeech_sat import UniSpeechSatConfig
 
@@ -109,23 +100,7 @@ class UniSpeechSatForPreTrainingOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
 
 
-class UniSpeechSatNoLayerNormConvLayer(Wav2Vec2NoLayerNormConvLayer):
-    pass
-
-
-class UniSpeechSatLayerNormConvLayer(Wav2Vec2LayerNormConvLayer):
-    pass
-
-
-class UniSpeechSatGroupNormConvLayer(Wav2Vec2GroupNormConvLayer):
-    pass
-
-
 class UniSpeechSatPositionalConvEmbedding(Wav2Vec2PositionalConvEmbedding):
-    pass
-
-
-class UniSpeechSatSamePadLayer(Wav2Vec2SamePadLayer):
     pass
 
 
@@ -134,34 +109,6 @@ class UniSpeechSatFeatureEncoder(Wav2Vec2FeatureEncoder):
 
 
 class UniSpeechSatFeatureProjection(Wav2Vec2FeatureProjection):
-    pass
-
-
-class UniSpeechSatAttention(BartAttention):
-    pass
-
-
-class UniSpeechSatFlashAttention2(BartFlashAttention2):
-    pass
-
-
-class UniSpeechSatSdpaAttention(BartSdpaAttention):
-    pass
-
-
-class UniSpeechSatFeedForward(Wav2Vec2FeedForward):
-    pass
-
-
-class UniSpeechSatEncoderLayer(Wav2Vec2EncoderLayer):
-    pass
-
-
-class UniSpeechSatAttnAdapterLayer(Wav2Vec2AttnAdapterLayer):
-    pass
-
-
-class UniSpeechSatEncoderLayerStableLayerNorm(Wav2Vec2EncoderLayerStableLayerNorm):
     pass
 
 

@@ -43,75 +43,14 @@ _CHECKPOINT_FOR_DOC = "patrickvonplaten/wavlm-libri-clean-100h-base-plus"
 _CONFIG_FOR_DOC = "WavLMConfig"
 
 
-class WavLMNoLayerNormConvLayer(nn.Module):
-    def __init__(self, config, layer_id=0):
+class WavLMSamePadLayer(nn.Module):
+    def __init__(self, num_conv_pos_embeddings):
         super().__init__()
-        self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
-        self.out_conv_dim = config.conv_dim[layer_id]
-
-        self.conv = nn.Conv1d(
-            self.in_conv_dim,
-            self.out_conv_dim,
-            kernel_size=config.conv_kernel[layer_id],
-            stride=config.conv_stride[layer_id],
-            bias=config.conv_bias,
-        )
-        self.activation = ACT2FN[config.feat_extract_activation]
+        self.num_pad_remove = 1 if num_conv_pos_embeddings % 2 == 0 else 0
 
     def forward(self, hidden_states):
-        hidden_states = self.conv(hidden_states)
-        hidden_states = self.activation(hidden_states)
-        return hidden_states
-
-
-class WavLMLayerNormConvLayer(nn.Module):
-    def __init__(self, config, layer_id=0):
-        super().__init__()
-        self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
-        self.out_conv_dim = config.conv_dim[layer_id]
-
-        self.conv = nn.Conv1d(
-            self.in_conv_dim,
-            self.out_conv_dim,
-            kernel_size=config.conv_kernel[layer_id],
-            stride=config.conv_stride[layer_id],
-            bias=config.conv_bias,
-        )
-        self.layer_norm = nn.LayerNorm(self.out_conv_dim, elementwise_affine=True)
-        self.activation = ACT2FN[config.feat_extract_activation]
-
-    def forward(self, hidden_states):
-        hidden_states = self.conv(hidden_states)
-
-        hidden_states = hidden_states.transpose(-2, -1)
-        hidden_states = self.layer_norm(hidden_states)
-        hidden_states = hidden_states.transpose(-2, -1)
-
-        hidden_states = self.activation(hidden_states)
-        return hidden_states
-
-
-class WavLMGroupNormConvLayer(nn.Module):
-    def __init__(self, config, layer_id=0):
-        super().__init__()
-        self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
-        self.out_conv_dim = config.conv_dim[layer_id]
-
-        self.conv = nn.Conv1d(
-            self.in_conv_dim,
-            self.out_conv_dim,
-            kernel_size=config.conv_kernel[layer_id],
-            stride=config.conv_stride[layer_id],
-            bias=config.conv_bias,
-        )
-        self.activation = ACT2FN[config.feat_extract_activation]
-
-        self.layer_norm = nn.GroupNorm(num_groups=self.out_conv_dim, num_channels=self.out_conv_dim, affine=True)
-
-    def forward(self, hidden_states):
-        hidden_states = self.conv(hidden_states)
-        hidden_states = self.layer_norm(hidden_states)
-        hidden_states = self.activation(hidden_states)
+        if self.num_pad_remove > 0:
+            hidden_states = hidden_states[:, :, : -self.num_pad_remove]
         return hidden_states
 
 
@@ -157,61 +96,6 @@ class WavLMPositionalConvEmbedding(nn.Module):
         hidden_states = self.activation(hidden_states)
 
         hidden_states = hidden_states.transpose(1, 2)
-        return hidden_states
-
-
-class WavLMSamePadLayer(nn.Module):
-    def __init__(self, num_conv_pos_embeddings):
-        super().__init__()
-        self.num_pad_remove = 1 if num_conv_pos_embeddings % 2 == 0 else 0
-
-    def forward(self, hidden_states):
-        if self.num_pad_remove > 0:
-            hidden_states = hidden_states[:, :, : -self.num_pad_remove]
-        return hidden_states
-
-
-class WavLMFeatureEncoder(nn.Module):
-    """Construct the features from raw audio waveform"""
-
-    def __init__(self, config):
-        super().__init__()
-
-        if config.feat_extract_norm == "group":
-            conv_layers = [WavLMGroupNormConvLayer(config, layer_id=0)] + [
-                WavLMNoLayerNormConvLayer(config, layer_id=i + 1) for i in range(config.num_feat_extract_layers - 1)
-            ]
-        elif config.feat_extract_norm == "layer":
-            conv_layers = [WavLMLayerNormConvLayer(config, layer_id=i) for i in range(config.num_feat_extract_layers)]
-        else:
-            raise ValueError(
-                f"`config.feat_extract_norm` is {config.feat_extract_norm}, but has to be one of ['group', 'layer']"
-            )
-        self.conv_layers = nn.ModuleList(conv_layers)
-        self.gradient_checkpointing = False
-        self._requires_grad = True
-
-    def _freeze_parameters(self):
-        for param in self.parameters():
-            param.requires_grad = False
-        self._requires_grad = False
-
-    def forward(self, input_values):
-        hidden_states = input_values[:, None]
-
-        # make sure hidden_states require grad for gradient_checkpointing
-        if self._requires_grad and self.training:
-            hidden_states.requires_grad = True
-
-        for conv_layer in self.conv_layers:
-            if self._requires_grad and self.gradient_checkpointing and self.training:
-                hidden_states = self._gradient_checkpointing_func(
-                    conv_layer.__call__,
-                    hidden_states,
-                )
-            else:
-                hidden_states = conv_layer(hidden_states)
-
         return hidden_states
 
 
@@ -735,55 +619,6 @@ class WavLMGumbelVectorQuantizer(nn.Module):
         return codevectors, perplexity
 
 
-class WavLMAdapter(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-
-        # feature dim might need to be down-projected
-        if config.output_hidden_size != config.hidden_size:
-            self.proj = nn.Linear(config.hidden_size, config.output_hidden_size)
-            self.proj_layer_norm = nn.LayerNorm(config.output_hidden_size)
-        else:
-            self.proj = self.proj_layer_norm = None
-
-        self.layers = nn.ModuleList(WavLMAdapterLayer(config) for _ in range(config.num_adapter_layers))
-        self.layerdrop = config.layerdrop
-
-    def forward(self, hidden_states):
-        # down project hidden_states if necessary
-        if self.proj is not None and self.proj_layer_norm is not None:
-            hidden_states = self.proj(hidden_states)
-            hidden_states = self.proj_layer_norm(hidden_states)
-
-        hidden_states = hidden_states.transpose(1, 2)
-
-        for layer in self.layers:
-            layerdrop_prob = np.random.random()
-            if not self.training or (layerdrop_prob > self.layerdrop):
-                hidden_states = layer(hidden_states)
-
-        hidden_states = hidden_states.transpose(1, 2)
-        return hidden_states
-
-
-class WavLMAdapterLayer(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.conv = nn.Conv1d(
-            config.output_hidden_size,
-            2 * config.output_hidden_size,
-            config.adapter_kernel_size,
-            stride=config.adapter_stride,
-            padding=1,
-        )
-
-    def forward(self, hidden_states):
-        hidden_states = self.conv(hidden_states)
-        hidden_states = nn.functional.glu(hidden_states, dim=1)
-
-        return hidden_states
-
-
 class WavLMPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
@@ -872,6 +707,171 @@ class WavLMPreTrainedModel(PreTrainedModel):
         attention_mask[(torch.arange(attention_mask.shape[0], device=attention_mask.device), output_lengths - 1)] = 1
         attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
         return attention_mask
+
+
+class WavLMNoLayerNormConvLayer(nn.Module):
+    def __init__(self, config, layer_id=0):
+        super().__init__()
+        self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
+        self.out_conv_dim = config.conv_dim[layer_id]
+
+        self.conv = nn.Conv1d(
+            self.in_conv_dim,
+            self.out_conv_dim,
+            kernel_size=config.conv_kernel[layer_id],
+            stride=config.conv_stride[layer_id],
+            bias=config.conv_bias,
+        )
+        self.activation = ACT2FN[config.feat_extract_activation]
+
+    def forward(self, hidden_states):
+        hidden_states = self.conv(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        return hidden_states
+
+
+class WavLMLayerNormConvLayer(nn.Module):
+    def __init__(self, config, layer_id=0):
+        super().__init__()
+        self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
+        self.out_conv_dim = config.conv_dim[layer_id]
+
+        self.conv = nn.Conv1d(
+            self.in_conv_dim,
+            self.out_conv_dim,
+            kernel_size=config.conv_kernel[layer_id],
+            stride=config.conv_stride[layer_id],
+            bias=config.conv_bias,
+        )
+        self.layer_norm = nn.LayerNorm(self.out_conv_dim, elementwise_affine=True)
+        self.activation = ACT2FN[config.feat_extract_activation]
+
+    def forward(self, hidden_states):
+        hidden_states = self.conv(hidden_states)
+
+        hidden_states = hidden_states.transpose(-2, -1)
+        hidden_states = self.layer_norm(hidden_states)
+        hidden_states = hidden_states.transpose(-2, -1)
+
+        hidden_states = self.activation(hidden_states)
+        return hidden_states
+
+
+class WavLMGroupNormConvLayer(nn.Module):
+    def __init__(self, config, layer_id=0):
+        super().__init__()
+        self.in_conv_dim = config.conv_dim[layer_id - 1] if layer_id > 0 else 1
+        self.out_conv_dim = config.conv_dim[layer_id]
+
+        self.conv = nn.Conv1d(
+            self.in_conv_dim,
+            self.out_conv_dim,
+            kernel_size=config.conv_kernel[layer_id],
+            stride=config.conv_stride[layer_id],
+            bias=config.conv_bias,
+        )
+        self.activation = ACT2FN[config.feat_extract_activation]
+
+        self.layer_norm = nn.GroupNorm(num_groups=self.out_conv_dim, num_channels=self.out_conv_dim, affine=True)
+
+    def forward(self, hidden_states):
+        hidden_states = self.conv(hidden_states)
+        hidden_states = self.layer_norm(hidden_states)
+        hidden_states = self.activation(hidden_states)
+        return hidden_states
+
+
+class WavLMFeatureEncoder(nn.Module):
+    """Construct the features from raw audio waveform"""
+
+    def __init__(self, config):
+        super().__init__()
+
+        if config.feat_extract_norm == "group":
+            conv_layers = [WavLMGroupNormConvLayer(config, layer_id=0)] + [
+                WavLMNoLayerNormConvLayer(config, layer_id=i + 1) for i in range(config.num_feat_extract_layers - 1)
+            ]
+        elif config.feat_extract_norm == "layer":
+            conv_layers = [WavLMLayerNormConvLayer(config, layer_id=i) for i in range(config.num_feat_extract_layers)]
+        else:
+            raise ValueError(
+                f"`config.feat_extract_norm` is {config.feat_extract_norm}, but has to be one of ['group', 'layer']"
+            )
+        self.conv_layers = nn.ModuleList(conv_layers)
+        self.gradient_checkpointing = False
+        self._requires_grad = True
+
+    def _freeze_parameters(self):
+        for param in self.parameters():
+            param.requires_grad = False
+        self._requires_grad = False
+
+    def forward(self, input_values):
+        hidden_states = input_values[:, None]
+
+        # make sure hidden_states require grad for gradient_checkpointing
+        if self._requires_grad and self.training:
+            hidden_states.requires_grad = True
+
+        for conv_layer in self.conv_layers:
+            if self._requires_grad and self.gradient_checkpointing and self.training:
+                hidden_states = self._gradient_checkpointing_func(
+                    conv_layer.__call__,
+                    hidden_states,
+                )
+            else:
+                hidden_states = conv_layer(hidden_states)
+
+        return hidden_states
+
+
+class WavLMAdapterLayer(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.conv = nn.Conv1d(
+            config.output_hidden_size,
+            2 * config.output_hidden_size,
+            config.adapter_kernel_size,
+            stride=config.adapter_stride,
+            padding=1,
+        )
+
+    def forward(self, hidden_states):
+        hidden_states = self.conv(hidden_states)
+        hidden_states = nn.functional.glu(hidden_states, dim=1)
+
+        return hidden_states
+
+
+class WavLMAdapter(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+
+        # feature dim might need to be down-projected
+        if config.output_hidden_size != config.hidden_size:
+            self.proj = nn.Linear(config.hidden_size, config.output_hidden_size)
+            self.proj_layer_norm = nn.LayerNorm(config.output_hidden_size)
+        else:
+            self.proj = self.proj_layer_norm = None
+
+        self.layers = nn.ModuleList(WavLMAdapterLayer(config) for _ in range(config.num_adapter_layers))
+        self.layerdrop = config.layerdrop
+
+    def forward(self, hidden_states):
+        # down project hidden_states if necessary
+        if self.proj is not None and self.proj_layer_norm is not None:
+            hidden_states = self.proj(hidden_states)
+            hidden_states = self.proj_layer_norm(hidden_states)
+
+        hidden_states = hidden_states.transpose(1, 2)
+
+        for layer in self.layers:
+            layerdrop_prob = np.random.random()
+            if not self.training or (layerdrop_prob > self.layerdrop):
+                hidden_states = layer(hidden_states)
+
+        hidden_states = hidden_states.transpose(1, 2)
+        return hidden_states
 
 
 def _compute_mask_indices(

@@ -17,15 +17,11 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
 )
-from ..bart.modeling_bart import BartAttention, BartFlashAttention2, BartSdpaAttention
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Adapter,
-    Wav2Vec2AdapterLayer,
     Wav2Vec2Encoder,
-    Wav2Vec2EncoderLayer,
     Wav2Vec2FeatureEncoder,
     Wav2Vec2FeatureProjection,
-    Wav2Vec2FeedForward,
     Wav2Vec2ForAudioFrameClassification,
     Wav2Vec2ForCTC,
     Wav2Vec2ForSequenceClassification,
@@ -138,35 +134,11 @@ class Data2VecAudioFeatureProjection(Wav2Vec2FeatureProjection):
     pass
 
 
-class Data2VecAudioAttention(BartAttention):
-    pass
-
-
-class Data2VecAudioFlashAttention2(BartFlashAttention2):
-    pass
-
-
-class Data2VecAudioSdpaAttention(BartSdpaAttention):
-    pass
-
-
-class Data2VecAudioFeedForward(Wav2Vec2FeedForward):
-    pass
-
-
-class Data2VecAudioEncoderLayer(Wav2Vec2EncoderLayer):
-    pass
-
-
 class Data2VecAudioEncoder(Wav2Vec2Encoder):
     pass
 
 
 class Data2VecAudioAdapter(Wav2Vec2Adapter):
-    pass
-
-
-class Data2VecAudioAdapterLayer(Wav2Vec2AdapterLayer):
     pass
 
 

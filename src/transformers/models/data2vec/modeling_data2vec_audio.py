@@ -40,7 +40,6 @@ from .configuration_data2vec_audio import Data2VecAudioConfig
 if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
-
 logger = logging.get_logger(__name__)
 
 # Base docstring
@@ -721,6 +720,24 @@ class Data2VecAudioEncoder(nn.Module):
         )
 
 
+class Data2VecAudioAdapterLayer(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.conv = nn.Conv1d(
+            config.output_hidden_size,
+            2 * config.output_hidden_size,
+            config.adapter_kernel_size,
+            stride=config.adapter_stride,
+            padding=1,
+        )
+
+    def forward(self, hidden_states):
+        hidden_states = self.conv(hidden_states)
+        hidden_states = nn.functional.glu(hidden_states, dim=1)
+
+        return hidden_states
+
+
 class Data2VecAudioAdapter(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -749,24 +766,6 @@ class Data2VecAudioAdapter(nn.Module):
                 hidden_states = layer(hidden_states)
 
         hidden_states = hidden_states.transpose(1, 2)
-        return hidden_states
-
-
-class Data2VecAudioAdapterLayer(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.conv = nn.Conv1d(
-            config.output_hidden_size,
-            2 * config.output_hidden_size,
-            config.adapter_kernel_size,
-            stride=config.adapter_stride,
-            padding=1,
-        )
-
-    def forward(self, hidden_states):
-        hidden_states = self.conv(hidden_states)
-        hidden_states = nn.functional.glu(hidden_states, dim=1)
-
         return hidden_states
 
 

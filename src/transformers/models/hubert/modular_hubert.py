@@ -13,20 +13,13 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     replace_return_docstrings,
 )
-from ..bart.modeling_bart import BartAttention, BartFlashAttention2, BartSdpaAttention
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Encoder,
-    Wav2Vec2EncoderLayer,
-    Wav2Vec2EncoderLayerStableLayerNorm,
     Wav2Vec2EncoderStableLayerNorm,
     Wav2Vec2FeatureEncoder,
-    Wav2Vec2FeedForward,
     Wav2Vec2ForCTC,
     Wav2Vec2ForSequenceClassification,
-    Wav2Vec2GroupNormConvLayer,
-    Wav2Vec2LayerNormConvLayer,
     Wav2Vec2Model,
-    Wav2Vec2NoLayerNormConvLayer,
     Wav2Vec2SamePadLayer,
 )
 from .configuration_hubert import HubertConfig
@@ -42,16 +35,13 @@ _CHECKPOINT_FOR_DOC = "facebook/hubert-large-ls960-ft"
 _EXPECTED_OUTPUT_SHAPE = [1, 292, 768]
 
 
-class HubertNoLayerNormConvLayer(Wav2Vec2NoLayerNormConvLayer):
-    pass
+_CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'"
+_CTC_EXPECTED_LOSS = 22.68
 
 
-class HubertLayerNormConvLayer(Wav2Vec2LayerNormConvLayer):
-    pass
-
-
-class HubertGroupNormConvLayer(Wav2Vec2GroupNormConvLayer):
-    pass
+_SEQ_CLASS_CHECKPOINT = "superb/hubert-base-superb-ks"
+_SEQ_CLASS_EXPECTED_OUTPUT = "'_unknown_'"
+_SEQ_CLASS_EXPECTED_LOSS = 8.53
 
 
 class HubertPositionalConvEmbedding(nn.Module):
@@ -128,30 +118,6 @@ class HubertFeatureProjection(nn.Module):
         hidden_states = self.projection(hidden_states)
         hidden_states = self.dropout(hidden_states)
         return hidden_states
-
-
-class HubertAttention(BartAttention):
-    pass
-
-
-class HubertFlashAttention2(BartFlashAttention2):
-    pass
-
-
-class HubertSdpaAttention(BartSdpaAttention):
-    pass
-
-
-class HubertFeedForward(Wav2Vec2FeedForward):
-    pass
-
-
-class HubertEncoderLayer(Wav2Vec2EncoderLayer):
-    pass
-
-
-class HubertEncoderLayerStableLayerNorm(Wav2Vec2EncoderLayerStableLayerNorm):
-    pass
 
 
 class HubertEncoder(Wav2Vec2Encoder):
@@ -389,10 +355,6 @@ class HubertModel(Wav2Vec2Model, HubertPreTrainedModel):
         )
 
 
-_CTC_EXPECTED_OUTPUT = "'MISTER QUILTER IS THE APOSTLE OF THE MIDDLE CLASSES AND WE ARE GLAD TO WELCOME HIS GOSPEL'"
-_CTC_EXPECTED_LOSS = 22.68
-
-
 @add_start_docstrings(
     """Hubert Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).""",
     HUBERT_START_DOCSTRING,
@@ -410,11 +372,6 @@ class HubertForCTC(Wav2Vec2ForCTC):
     )
     def forward(self, **super_kwargs):
         super().forward(**super_kwargs)
-
-
-_SEQ_CLASS_CHECKPOINT = "superb/hubert-base-superb-ks"
-_SEQ_CLASS_EXPECTED_OUTPUT = "'_unknown_'"
-_SEQ_CLASS_EXPECTED_LOSS = 8.53
 
 
 @add_start_docstrings(

@@ -18,22 +18,15 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...utils import add_code_sample_docstrings, add_start_docstrings, add_start_docstrings_to_model_forward, logging
 from ..wav2vec2.modeling_wav2vec2 import (
-    Wav2Vec2Adapter,
-    Wav2Vec2AdapterLayer,
-    Wav2Vec2FeatureEncoder,
     Wav2Vec2FeatureProjection,
     Wav2Vec2FeedForward,
     Wav2Vec2ForAudioFrameClassification,
     Wav2Vec2ForCTC,
     Wav2Vec2ForSequenceClassification,
     Wav2Vec2ForXVector,
-    Wav2Vec2GroupNormConvLayer,
-    Wav2Vec2LayerNormConvLayer,
     Wav2Vec2Model,
-    Wav2Vec2NoLayerNormConvLayer,
     Wav2Vec2PositionalConvEmbedding,
     Wav2Vec2PreTrainedModel,
-    Wav2Vec2SamePadLayer,
 )
 from .configuration_wavlm import WavLMConfig
 
@@ -55,27 +48,7 @@ _XVECTOR_CHECKPOINT = "microsoft/wavlm-base-plus-sv"
 _XVECTOR_EXPECTED_OUTPUT = 0.97
 
 
-class WavLMNoLayerNormConvLayer(Wav2Vec2NoLayerNormConvLayer):
-    pass
-
-
-class WavLMLayerNormConvLayer(Wav2Vec2LayerNormConvLayer):
-    pass
-
-
-class WavLMGroupNormConvLayer(Wav2Vec2GroupNormConvLayer):
-    pass
-
-
 class WavLMPositionalConvEmbedding(Wav2Vec2PositionalConvEmbedding):
-    pass
-
-
-class WavLMSamePadLayer(Wav2Vec2SamePadLayer):
-    pass
-
-
-class WavLMFeatureEncoder(Wav2Vec2FeatureEncoder):
     pass
 
 
@@ -566,14 +539,6 @@ class WavLMGumbelVectorQuantizer(nn.Module):
         codevectors = codevectors.sum(-2).view(batch_size, sequence_length, -1)
 
         return codevectors, perplexity
-
-
-class WavLMAdapter(Wav2Vec2Adapter):
-    pass
-
-
-class WavLMAdapterLayer(Wav2Vec2AdapterLayer):
-    pass
 
 
 class WavLMPreTrainedModel(PreTrainedModel, Wav2Vec2PreTrainedModel):

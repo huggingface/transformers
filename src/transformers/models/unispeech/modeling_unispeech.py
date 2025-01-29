@@ -40,7 +40,6 @@ from .configuration_unispeech import UniSpeechConfig
 if is_flash_attn_2_available():
     from ...modeling_flash_attention_utils import _flash_attention_forward
 
-
 logger = logging.get_logger(__name__)
 
 # Base docstring
@@ -84,6 +83,62 @@ class UniSpeechForPreTrainingOutput(ModelOutput):
     codevector_perplexity: torch.FloatTensor = None
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
+
+
+class UniSpeechSamePadLayer(nn.Module):
+    def __init__(self, num_conv_pos_embeddings):
+        super().__init__()
+        self.num_pad_remove = 1 if num_conv_pos_embeddings % 2 == 0 else 0
+
+    def forward(self, hidden_states):
+        if self.num_pad_remove > 0:
+            hidden_states = hidden_states[:, :, : -self.num_pad_remove]
+        return hidden_states
+
+
+class UniSpeechPositionalConvEmbedding(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.conv = nn.Conv1d(
+            config.hidden_size,
+            config.hidden_size,
+            kernel_size=config.num_conv_pos_embeddings,
+            padding=config.num_conv_pos_embeddings // 2,
+            groups=config.num_conv_pos_embedding_groups,
+        )
+
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
+        if is_deepspeed_zero3_enabled():
+            import deepspeed
+
+            with deepspeed.zero.GatheredParameters(self.conv.weight, modifier_rank=0):
+                self.conv = weight_norm(self.conv, name="weight", dim=2)
+            if hasattr(self.conv, "parametrizations"):
+                weight_g = self.conv.parametrizations.weight.original0
+                weight_v = self.conv.parametrizations.weight.original1
+            else:
+                weight_g = self.conv.weight_g
+                weight_v = self.conv.weight_v
+            deepspeed.zero.register_external_parameter(self, weight_v)
+            deepspeed.zero.register_external_parameter(self, weight_g)
+        else:
+            self.conv = weight_norm(self.conv, name="weight", dim=2)
+
+        self.padding = UniSpeechSamePadLayer(config.num_conv_pos_embeddings)
+        self.activation = ACT2FN[config.feat_extract_activation]
+
+    def forward(self, hidden_states):
+        hidden_states = hidden_states.transpose(1, 2)
+
+        hidden_states = self.conv(hidden_states)
+        hidden_states = self.padding(hidden_states)
+        hidden_states = self.activation(hidden_states)
+
+        hidden_states = hidden_states.transpose(1, 2)
+        return hidden_states
 
 
 class UniSpeechNoLayerNormConvLayer(nn.Module):
@@ -155,62 +210,6 @@ class UniSpeechGroupNormConvLayer(nn.Module):
         hidden_states = self.conv(hidden_states)
         hidden_states = self.layer_norm(hidden_states)
         hidden_states = self.activation(hidden_states)
-        return hidden_states
-
-
-class UniSpeechPositionalConvEmbedding(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.conv = nn.Conv1d(
-            config.hidden_size,
-            config.hidden_size,
-            kernel_size=config.num_conv_pos_embeddings,
-            padding=config.num_conv_pos_embeddings // 2,
-            groups=config.num_conv_pos_embedding_groups,
-        )
-
-        weight_norm = nn.utils.weight_norm
-        if hasattr(nn.utils.parametrizations, "weight_norm"):
-            weight_norm = nn.utils.parametrizations.weight_norm
-
-        if is_deepspeed_zero3_enabled():
-            import deepspeed
-
-            with deepspeed.zero.GatheredParameters(self.conv.weight, modifier_rank=0):
-                self.conv = weight_norm(self.conv, name="weight", dim=2)
-            if hasattr(self.conv, "parametrizations"):
-                weight_g = self.conv.parametrizations.weight.original0
-                weight_v = self.conv.parametrizations.weight.original1
-            else:
-                weight_g = self.conv.weight_g
-                weight_v = self.conv.weight_v
-            deepspeed.zero.register_external_parameter(self, weight_v)
-            deepspeed.zero.register_external_parameter(self, weight_g)
-        else:
-            self.conv = weight_norm(self.conv, name="weight", dim=2)
-
-        self.padding = UniSpeechSamePadLayer(config.num_conv_pos_embeddings)
-        self.activation = ACT2FN[config.feat_extract_activation]
-
-    def forward(self, hidden_states):
-        hidden_states = hidden_states.transpose(1, 2)
-
-        hidden_states = self.conv(hidden_states)
-        hidden_states = self.padding(hidden_states)
-        hidden_states = self.activation(hidden_states)
-
-        hidden_states = hidden_states.transpose(1, 2)
-        return hidden_states
-
-
-class UniSpeechSamePadLayer(nn.Module):
-    def __init__(self, num_conv_pos_embeddings):
-        super().__init__()
-        self.num_pad_remove = 1 if num_conv_pos_embeddings % 2 == 0 else 0
-
-    def forward(self, hidden_states):
-        if self.num_pad_remove > 0:
-            hidden_states = hidden_states[:, :, : -self.num_pad_remove]
         return hidden_states
 
 
@@ -732,76 +731,6 @@ class UniSpeechEncoderLayer(nn.Module):
         return outputs
 
 
-class UniSpeechAttnAdapterLayer(nn.Module):
-    def __init__(self, config):
-        """
-        Implements adapter modules directly with 3D tensor weight as parameters and without using ModuleList to speed
-        up training throughput.
-        """
-        super().__init__()
-        self.input_dim = config.adapter_attn_dim
-        self.hidden_dim = config.hidden_size
-
-        self.norm = nn.LayerNorm(self.hidden_dim)
-        self.linear_1 = nn.Linear(self.hidden_dim, self.input_dim)
-        self.act_fn = nn.ReLU()
-        self.linear_2 = nn.Linear(self.input_dim, self.hidden_dim)
-
-    def forward(self, hidden_states: torch.FloatTensor):
-        hidden_states = self.norm(hidden_states)
-
-        hidden_states = self.linear_1(hidden_states)
-        hidden_states = self.act_fn(hidden_states)
-        hidden_states = self.linear_2(hidden_states)
-
-        return hidden_states
-
-
-class UniSpeechEncoderLayerStableLayerNorm(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.attention = UNISPEECH_ATTENTION_CLASSES[config._attn_implementation](
-            embed_dim=config.hidden_size,
-            num_heads=config.num_attention_heads,
-            dropout=config.attention_dropout,
-            is_decoder=False,
-        )
-        self.dropout = nn.Dropout(config.hidden_dropout)
-        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.feed_forward = UniSpeechFeedForward(config)
-        self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-        if getattr(config, "adapter_attn_dim", None) is not None:
-            self.adapter_layer = UniSpeechAttnAdapterLayer(config)
-        else:
-            self.adapter_layer = None
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ):
-        attn_residual = hidden_states
-        hidden_states = self.layer_norm(hidden_states)
-        hidden_states, attn_weights, _ = self.attention(
-            hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
-        )
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = attn_residual + hidden_states
-        hidden_states = hidden_states + self.feed_forward(self.final_layer_norm(hidden_states))
-
-        if self.adapter_layer is not None:
-            hidden_states = hidden_states + self.adapter_layer(hidden_states)
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
-
-
 class UniSpeechEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -885,6 +814,76 @@ class UniSpeechEncoder(nn.Module):
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
+
+
+class UniSpeechAttnAdapterLayer(nn.Module):
+    def __init__(self, config):
+        """
+        Implements adapter modules directly with 3D tensor weight as parameters and without using ModuleList to speed
+        up training throughput.
+        """
+        super().__init__()
+        self.input_dim = config.adapter_attn_dim
+        self.hidden_dim = config.hidden_size
+
+        self.norm = nn.LayerNorm(self.hidden_dim)
+        self.linear_1 = nn.Linear(self.hidden_dim, self.input_dim)
+        self.act_fn = nn.ReLU()
+        self.linear_2 = nn.Linear(self.input_dim, self.hidden_dim)
+
+    def forward(self, hidden_states: torch.FloatTensor):
+        hidden_states = self.norm(hidden_states)
+
+        hidden_states = self.linear_1(hidden_states)
+        hidden_states = self.act_fn(hidden_states)
+        hidden_states = self.linear_2(hidden_states)
+
+        return hidden_states
+
+
+class UniSpeechEncoderLayerStableLayerNorm(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.attention = UNISPEECH_ATTENTION_CLASSES[config._attn_implementation](
+            embed_dim=config.hidden_size,
+            num_heads=config.num_attention_heads,
+            dropout=config.attention_dropout,
+            is_decoder=False,
+        )
+        self.dropout = nn.Dropout(config.hidden_dropout)
+        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.feed_forward = UniSpeechFeedForward(config)
+        self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+        if getattr(config, "adapter_attn_dim", None) is not None:
+            self.adapter_layer = UniSpeechAttnAdapterLayer(config)
+        else:
+            self.adapter_layer = None
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+    ):
+        attn_residual = hidden_states
+        hidden_states = self.layer_norm(hidden_states)
+        hidden_states, attn_weights, _ = self.attention(
+            hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+        )
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = attn_residual + hidden_states
+        hidden_states = hidden_states + self.feed_forward(self.final_layer_norm(hidden_states))
+
+        if self.adapter_layer is not None:
+            hidden_states = hidden_states + self.adapter_layer(hidden_states)
+
+        outputs = (hidden_states,)
+
+        if output_attentions:
+            outputs += (attn_weights,)
+
+        return outputs
 
 
 class UniSpeechEncoderStableLayerNorm(nn.Module):

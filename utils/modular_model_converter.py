@@ -875,6 +875,7 @@ class ModelFileMapper(ModuleMapper):
             should_keep = any(re.search(pattern, assignment) for pattern in ASSIGNMENTS_REGEX_TO_KEEP)
 
             # If it's a DOCSTRING var and is assigned to None, the parent's docstring is kept.
+            # Otherwise, the assignment from modular file is kept.
             if "DOCSTRING" in assignment:
                 assigned_value = node.body[0].value
                 is_assigned_none = isinstance(assigned_value, cst.Name) and assigned_value.value == "None"

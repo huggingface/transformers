@@ -36,13 +36,9 @@ from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2ForPreTraining,
     Wav2Vec2ForSequenceClassification,
     Wav2Vec2ForXVector,
-    Wav2Vec2GroupNormConvLayer,
     Wav2Vec2GumbelVectorQuantizer,
-    Wav2Vec2LayerNormConvLayer,
     Wav2Vec2Model,
-    Wav2Vec2NoLayerNormConvLayer,
     Wav2Vec2PositionalConvEmbedding,
-    Wav2Vec2SamePadLayer,
 )
 from .configuration_wav2vec2_conformer import Wav2Vec2ConformerConfig
 
@@ -103,18 +99,6 @@ class Wav2Vec2ConformerForPreTrainingOutput(ModelOutput):
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     contrastive_loss: Optional[torch.FloatTensor] = None
     diversity_loss: Optional[torch.FloatTensor] = None
-
-
-class Wav2Vec2ConformerNoLayerNormConvLayer(Wav2Vec2NoLayerNormConvLayer):
-    pass
-
-
-class Wav2Vec2ConformerLayerNormConvLayer(Wav2Vec2LayerNormConvLayer):
-    pass
-
-
-class Wav2Vec2ConformerGroupNormConvLayer(Wav2Vec2GroupNormConvLayer):
-    pass
 
 
 class Wav2Vec2ConformerPositionalConvEmbedding(Wav2Vec2PositionalConvEmbedding):
@@ -203,10 +187,6 @@ class Wav2Vec2ConformerRelPositionalEmbedding(nn.Module):
         relative_position_embeddings = self.pe[:, start_idx:end_idx]
 
         return relative_position_embeddings
-
-
-class Wav2Vec2ConformerSamePadLayer(Wav2Vec2SamePadLayer):
-    pass
 
 
 class Wav2Vec2ConformerFeatureEncoder(Wav2Vec2FeatureEncoder):
