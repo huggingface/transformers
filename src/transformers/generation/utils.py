@@ -3352,7 +3352,7 @@ class GenerationMixin:
         def unflatten_beam_dim(tensor, num_beams):
             """2D with batch*beam in batch dim -> 3D with beams in a separate dim"""
             shape = list(tensor.shape)
-            return torch.reshape(tensor, [-1, num_beams] + shape[1:])
+            return torch.reshape(tensor, [shape[0], num_beams] + shape[1:])
 
         def gather_beams(nested: Union[torch.Tensor, Iterable], beam_indices: torch.Tensor):
             """
