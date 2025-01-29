@@ -27,6 +27,7 @@ from parameterized import parameterized
 from transformers import CONFIG_MAPPING, Blip2Config, Blip2QFormerConfig, Blip2VisionConfig
 from transformers.testing_utils import (
     require_torch,
+    require_torch_accelerator,
     require_torch_fp16,
     require_torch_gpu,
     require_torch_multi_accelerator,
@@ -330,7 +331,7 @@ class Blip2TextModelDecoderOnlyTester:
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
-        max_position_embeddings=20,
+        max_position_embeddings=512,
         eos_token_id=2,
         pad_token_id=1,
         bos_token_id=0,
@@ -900,7 +901,7 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
             next_logits_with_padding = model(**model_kwargs, pixel_values=pixel_values).logits[:, -1, :]
 
             # They should result in very similar logits
-            self.assertTrue(torch.allclose(next_logits_wo_padding, next_logits_with_padding, atol=1e-5))
+            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5)
 
     @unittest.skip("BLIP2 cannot generate only from input ids, and requires pixel values in all cases to be present")
     @parameterized.expand([("greedy", 1), ("beam search", 2)])
@@ -1122,6 +1123,13 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
 
     def setUp(self):
         self.model_tester = Blip2ModelTester(self)
+        common_properties = ["image_token_index", "num_query_tokens", "image_text_hidden_size"]
+        self.config_tester = ConfigTester(
+            self, config_class=Blip2Config, has_text_modality=False, common_properties=common_properties
+        )
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     def test_for_conditional_generation(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -1565,7 +1573,7 @@ class Blip2TextModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
             self.assertListEqual(arg_names[: len(expected_arg_names)], expected_arg_names)
 
     @slow
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_model_from_pretrained(self):
         model_name = "Salesforce/blip2-itm-vit-g"
         model = Blip2TextModelWithProjection.from_pretrained(model_name)
@@ -1994,8 +2002,8 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
 
         # Test output
-        print(predictions[0].tolist(), generated_text)
-        self.assertEqual(predictions[0].tolist(), [2, 102, 693, 2828, 15, 5, 4105, 19, 10, 2335, 50118])
+        expected_ids = [50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 2, 102, 693, 2828, 15, 5, 4105, 19, 10, 2335, 50118]  # fmt: skip
+        self.assertEqual(predictions[0].tolist(), expected_ids)
         self.assertEqual("a woman sitting on the beach with a dog", generated_text)
 
         # image and context
@@ -2007,10 +2015,8 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
 
         # Test output
-        self.assertEqual(
-            predictions[0].tolist(),
-            [2, 45641, 35, 61, 343, 16, 42, 116, 31652, 35, 24, 18, 45, 10, 343, 6, 24, 18, 10, 4105, 50118],
-        )
+        expected_ids = [50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 2, 45641, 35, 61, 343, 16, 42, 116, 31652, 35, 24, 18, 45, 10, 343, 6, 24, 18, 10, 4105, 50118]  # fmt: skip
+        self.assertEqual(predictions[0].tolist(), expected_ids)
         self.assertEqual(generated_text, "Question: which city is this? Answer: it's not a city, it's a beach")
 
     def test_inference_interpolate_pos_encoding(self):
@@ -2026,7 +2032,8 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         predictions = model.generate(**inputs, interpolate_pos_encoding=True)
         generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
 
-        self.assertEqual(predictions[0].tolist(), [2, 102, 693, 8, 2335, 15, 5, 4105, 50118])
+        expected_ids = [50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 2, 102, 693, 8, 2335, 15, 5, 4105, 50118]  # fmt: skip
+        self.assertEqual(predictions[0].tolist(), expected_ids)
         self.assertEqual(generated_text, "a woman and dog on the beach")
 
     def test_inference_opt_batched_beam_search(self):
@@ -2042,8 +2049,9 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         predictions = model.generate(**inputs, num_beams=2)
 
         # Test output (in this case, slightly different from greedy search)
-        self.assertEqual(predictions[0].tolist(), [2, 102, 693, 2828, 15, 5, 4105, 19, 69, 2335, 50118])
-        self.assertEqual(predictions[1].tolist(), [2, 102, 693, 2828, 15, 5, 4105, 19, 69, 2335, 50118])
+        expected_ids = [50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 50265, 2, 102, 693, 2828, 15, 5, 4105, 19, 69, 2335, 50118]  # fmt: skip
+        self.assertEqual(predictions[0].tolist(), expected_ids)
+        self.assertEqual(predictions[1].tolist(), expected_ids)
 
     def test_inference_t5(self):
         processor = Blip2Processor.from_pretrained("Salesforce/blip2-flan-t5-xl")
@@ -2070,10 +2078,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         generated_text = processor.batch_decode(predictions, skip_special_tokens=True)[0].strip()
 
         # Test output
-        self.assertEqual(
-            predictions[0].tolist(),
-            [0, 3, 7, 152, 67, 839, 1],
-        )
+        self.assertEqual(predictions[0].tolist(), [0, 3, 7, 152, 67, 839, 1])
         self.assertEqual(generated_text, "san diego")
 
     def test_inference_t5_batched_beam_search(self):
@@ -2194,7 +2199,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(generated_text_expanded == generated_text)
 
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_inference_itm(self):
         model_name = "Salesforce/blip2-itm-vit-g"
         processor = Blip2Processor.from_pretrained(model_name)
@@ -2210,10 +2215,10 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
 
         # verify
         expected_scores = torch.Tensor([[0.0238, 0.9762]])
-        self.assertTrue(torch.allclose(torch.nn.Softmax()(out_itm[0].cpu()), expected_scores, rtol=1e-3, atol=1e-3))
-        self.assertTrue(torch.allclose(out[0].cpu(), torch.Tensor([[0.4406]]), rtol=1e-3, atol=1e-3))
+        torch.testing.assert_close(torch.nn.Softmax()(out_itm[0].cpu()), expected_scores, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(out[0].cpu(), torch.Tensor([[0.4406]]), rtol=1e-3, atol=1e-3)
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_torch_fp16
     def test_inference_itm_fp16(self):
         model_name = "Salesforce/blip2-itm-vit-g"
@@ -2230,12 +2235,10 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
 
         # verify
         expected_scores = torch.Tensor([[0.0239, 0.9761]])
-        self.assertTrue(
-            torch.allclose(torch.nn.Softmax()(out_itm[0].cpu().float()), expected_scores, rtol=1e-3, atol=1e-3)
-        )
-        self.assertTrue(torch.allclose(out[0].cpu().float(), torch.Tensor([[0.4406]]), rtol=1e-3, atol=1e-3))
+        torch.testing.assert_close(torch.nn.Softmax()(out_itm[0].cpu().float()), expected_scores, rtol=1e-3, atol=1e-3)
+        torch.testing.assert_close(out[0].cpu().float(), torch.Tensor([[0.4406]]), rtol=1e-3, atol=1e-3)
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_torch_fp16
     def test_inference_vision_with_projection_fp16(self):
         model_name = "Salesforce/blip2-itm-vit-g"
@@ -2259,7 +2262,7 @@ class Blip2ModelIntegrationTest(unittest.TestCase):
         ]
         self.assertTrue(np.allclose(out.image_embeds[0][0][:6].tolist(), expected_image_embeds, atol=1e-3))
 
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_torch_fp16
     def test_inference_text_with_projection_fp16(self):
         model_name = "Salesforce/blip2-itm-vit-g"

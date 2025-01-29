@@ -28,6 +28,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_gpu,
     slow,
+    tooslow,
     torch_device,
 )
 
@@ -117,11 +118,6 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
     def test_dola_decoding_sample(self):
         pass
 
-    @parameterized.expand([(1, False), (1, True), (4, False)])
-    @unittest.skip("Gemma2 has HybridCache and doesn't support old tuple format at all")
-    def test_new_cache_format(self, num_beams, do_sample):
-        pass
-
     @unittest.skip("Gemma2 has HybridCache and doesn't support continue from past kv")
     def test_generate_continue_from_past_key_values(self):
         pass
@@ -199,19 +195,6 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
     def test_sdpa_equivalence(self):
         pass
 
-    def test_eager_attention_loaded_by_default(self):
-        """Gemma 2 + SDPA = inferior results, because of the logit softcapping. Eager is the default."""
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        # Usually we enable SDPA by default, but not for Gemma2
-        model = Gemma2Model(config)
-        self.assertTrue(model.config._attn_implementation == "eager")
-
-        # We can still force SDPA
-        config._attn_implementation = "sdpa"
-        model = Gemma2Model(config)
-        self.assertTrue(model.config._attn_implementation == "sdpa")
-
 
 @slow
 @require_torch_gpu
@@ -227,6 +210,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
             # 8 is for A100 / A10 and 7 for T4
             cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
 
+    @tooslow
     @require_read_token
     def test_model_9b_bf16(self):
         model_id = "google/gemma-2-9b"
@@ -247,6 +231,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
+    @tooslow
     @require_read_token
     def test_model_9b_fp16(self):
         model_id = "google/gemma-2-9b"
@@ -268,6 +253,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
     @require_read_token
+    @tooslow
     def test_model_9b_pipeline_bf16(self):
         # See https://github.com/huggingface/transformers/pull/31747 -- pipeline was broken for Gemma2 before this PR
         model_id = "google/gemma-2-9b"
@@ -277,9 +263,30 @@ class Gemma2IntegrationTest(unittest.TestCase):
             "Hi today I'm going to be talking about the history of the United States. The United States of America",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16).to(
-            torch_device
-        )
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="flex_attention"
+        ).to(torch_device)
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
+
+        output = pipe(self.input_text, max_new_tokens=20, do_sample=False, padding=True)
+
+        self.assertEqual(output[0][0]["generated_text"], EXPECTED_TEXTS[0])
+        self.assertEqual(output[1][0]["generated_text"], EXPECTED_TEXTS[1])
+
+    @require_read_token
+    def test_model_2b_pipeline_bf16_flex_attention(self):
+        # See https://github.com/huggingface/transformers/pull/31747 -- pipeline was broken for Gemma2 before this PR
+        model_id = "google/gemma-2-2b"
+        # EXPECTED_TEXTS should match the same non-pipeline test, minus the special tokens
+        EXPECTED_TEXTS = [
+            "Hello I am doing a project on the 1960s and I am trying to find out what the average",
+            "Hi today I'm going to be talking about the 10 best anime of all time.\n\n1",
+        ]
+
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="flex_attention"
+        ).to(torch_device)
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         pipe = pipeline("text-generation", model=model, tokenizer=tokenizer)
 
@@ -293,6 +300,7 @@ class Gemma2IntegrationTest(unittest.TestCase):
     @require_torch_gpu
     @mark.flash_attn_test
     @slow
+    @tooslow
     def test_model_9b_flash_attn(self):
         # See https://github.com/huggingface/transformers/issues/31953 --- flash attn was generating garbage for gemma2, especially in long context
         model_id = "google/gemma-2-9b"
@@ -365,3 +373,57 @@ class Gemma2IntegrationTest(unittest.TestCase):
         )
         ep_generated_text = tokenizer.batch_decode(ep_generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)
+
+    @require_read_token
+    @tooslow
+    def test_model_9b_bf16_flex_attention(self):
+        model_id = "google/gemma-2-9b"
+        EXPECTED_TEXTS = [
+            "<bos>Hello I am doing a project on the 1918 flu pandemic and I am trying to find out how many",
+            "<pad><pad><bos>Hi today I'm going to be talking about the history of the United States. The United States of America",
+        ]
+
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, low_cpu_mem_usage=True, torch_dtype=torch.bfloat16, attn_implementation="flex_attention"
+        ).to(torch_device)
+        assert model.config._attn_implementation == "flex_attention"
+        tokenizer = AutoTokenizer.from_pretrained(model_id)
+        inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
+
+        output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
+        output_text = tokenizer.batch_decode(output, skip_special_tokens=False)
+
+        self.assertEqual(output_text, EXPECTED_TEXTS)
+
+    @parameterized.expand([("flash_attention_2",), ("sdpa",), ("flex_attention",), ("eager",)])
+    @require_read_token
+    def test_generation_beyond_sliding_window(self, attn_implementation: str):
+        """Test that we can correctly generate beyond the sliding window. This is non trivial as
+        we need to correctly slice the attention mask in all cases (because we use a HybridCache).
+        Outputs for every attention functions should be coherent and identical.
+        """
+        model_id = "google/gemma-2-2b"
+        EXPECTED_COMPLETIONS = [
+            " the people, the food, the culture, the history, the music, the art, the architecture",
+            ", green, yellow, orange, purple, pink, brown, black, white, gray, silver",
+        ]
+
+        input_text = [
+            "This is a nice place. " * 800 + "I really enjoy the scenery,",  # This is larger than 4096 tokens
+            "A list of colors: red, blue",  # This will almost all be padding tokens
+        ]
+        tokenizer = AutoTokenizer.from_pretrained(model_id, padding="left")
+        inputs = tokenizer(input_text, padding=True, return_tensors="pt").to(torch_device)
+
+        model = AutoModelForCausalLM.from_pretrained(
+            model_id, attn_implementation=attn_implementation, torch_dtype=torch.float16
+        ).to(torch_device)
+
+        # Make sure prefill is larger than sliding window
+        input_size = inputs.input_ids.shape[-1]
+        self.assertTrue(input_size > model.config.sliding_window)
+
+        out = model.generate(**inputs, max_new_tokens=20)[:, input_size:]
+        output_text = tokenizer.batch_decode(out)
+
+        self.assertEqual(output_text, EXPECTED_COMPLETIONS)

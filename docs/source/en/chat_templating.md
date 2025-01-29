@@ -23,8 +23,8 @@ of text (as is the case with a standard language model), the model instead conti
 of one or more **messages**, each of which includes a **role**, like "user" or "assistant", as well as message text.
 
 Much like tokenization, different models expect very different input formats for chat. This is the reason we added
-**chat templates** as a feature. Chat templates are part of the tokenizer. They specify how to convert conversations, 
-represented as lists of messages, into a single tokenizable string in the format that the model expects. 
+**chat templates** as a feature. Chat templates are part of the tokenizer for text-only LLMs or processor for multimodal LLMs. They specify how to convert conversations,
+represented as lists of messages, into a single tokenizable string in the format that the model expects.
 
 Let's make this concrete with a quick example using the `mistralai/Mistral-7B-Instruct-v0.1` model:
 
@@ -39,11 +39,11 @@ Let's make this concrete with a quick example using the `mistralai/Mistral-7B-In
 ... ]
 
 >>> tokenizer.apply_chat_template(chat, tokenize=False)
-"<s>[INST] Hello, how are you? [/INST]I'm doing great. How can I help you today?</s> [INST] I'd like to show off how chat templating works! [/INST]"
+"<s> [INST] Hello, how are you? [/INST] I'm doing great. How can I help you today?</s> [INST] I'd like to show off how chat templating works! [/INST]"
 ```
 
-Notice how the tokenizer has added the control tokens [INST] and [/INST] to indicate the start and end of 
-user messages (but not assistant messages!), and the entire chat is condensed into a single string. 
+Notice how the tokenizer has added the control tokens [INST] and [/INST] to indicate the start and end of
+user messages (but not assistant messages!), and the entire chat is condensed into a single string.
 If we use `tokenize=True`, which is the default setting, that string will also be tokenized for us.
 
 Now, try the same code, but swap in the `HuggingFaceH4/zephyr-7b-beta` model instead, and you should get:
@@ -59,17 +59,26 @@ I'd like to show off how chat templating works!</s>
 
 Both Zephyr and Mistral-Instruct were fine-tuned from the same base model, `Mistral-7B-v0.1`. However, they were trained
 with totally different chat formats. Without chat templates, you would have to write manual formatting code for each
-model, and it's very easy to make minor errors that hurt performance! Chat templates handle the details of formatting 
+model, and it's very easy to make minor errors that hurt performance! Chat templates handle the details of formatting
 for you, allowing you to write universal code that works for any model.
+
+<Tip>
+
+Chat templates are a critical component of our [chat CLI](quicktour#chat-with-text-generation-models).
+You can apply the learnings of this guide there as well.
+
+</Tip>
 
 
 ## How do I use chat templates?
 
 As you can see in the example above, chat templates are easy to use. Simply build a list of messages, with `role`
-and `content` keys, and then pass it to the [`~PreTrainedTokenizer.apply_chat_template`] method. Once you do that,
+and `content` keys, and then pass it to the [`~PreTrainedTokenizer.apply_chat_template`] or [`~ProcessorMixin.apply_chat_template`] method
+depending on what type of model you are using. Once you do that,
 you'll get output that's ready to go! When using chat templates as input for model generation, it's also a good idea
-to use `add_generation_prompt=True` to add a [generation prompt](#what-are-generation-prompts). 
+to use `add_generation_prompt=True` to add a [generation prompt](#what-are-generation-prompts).
 
+## Usage with text-only LLMs
 Here's an example of preparing input for `model.generate()`, using `Zephyr` again:
 
 ```python
@@ -89,19 +98,19 @@ messages = [
 tokenized_chat = tokenizer.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_tensors="pt")
 print(tokenizer.decode(tokenized_chat[0]))
 ```
-This will yield a string in the input format that Zephyr expects. 
+This will yield a string in the input format that Zephyr expects.
 ```text
 <|system|>
-You are a friendly chatbot who always responds in the style of a pirate</s> 
+You are a friendly chatbot who always responds in the style of a pirate</s>
 <|user|>
-How many helicopters can a human eat in one sitting?</s> 
+How many helicopters can a human eat in one sitting?</s>
 <|assistant|>
 ```
 
 Now that our input is formatted correctly for Zephyr, we can use the model to generate a response to the user's question:
 
 ```python
-outputs = model.generate(tokenized_chat, max_new_tokens=128) 
+outputs = model.generate(tokenized_chat, max_new_tokens=128)
 print(tokenizer.decode(outputs[0]))
 ```
 
@@ -109,11 +118,49 @@ This will yield:
 
 ```text
 <|system|>
-You are a friendly chatbot who always responds in the style of a pirate</s> 
+You are a friendly chatbot who always responds in the style of a pirate</s>
 <|user|>
-How many helicopters can a human eat in one sitting?</s> 
+How many helicopters can a human eat in one sitting?</s>
 <|assistant|>
 Matey, I'm afraid I must inform ye that humans cannot eat helicopters. Helicopters are not food, they are flying machines. Food is meant to be eaten, like a hearty plate o' grog, a savory bowl o' stew, or a delicious loaf o' bread. But helicopters, they be for transportin' and movin' around, not for eatin'. So, I'd say none, me hearties. None at all.
+```
+
+## Usage with multimodal LLMs
+
+For multimodal LLMs such as [LLaVA](https://huggingface.co/llava-hf) the prompts can be formatted in a similar way. The only difference is you need to pass input images/videos as well along with the text. Each `"content"`
+has to be a list containing either a text or an image/video.
+
+Here's an example of preparing input for using `LLaVA` model:
+
+```python
+from transformers import AutoProcessor, LlavaOnevisionForConditionalGeneration
+
+model_id = "llava-hf/llava-onevision-qwen2-0.5b-ov-hf"
+model = LlavaOnevisionForConditionalGeneration.from_pretrained(model_id)  # You may want to use bfloat16 and/or move to GPU here
+processor = AutoProcessor.from_pretrained(model_id)
+
+messages = [
+    {
+        "role": "system",
+        "content": [{"type": "text", "text": "You are a friendly chatbot who always responds in the style of a pirate"}],
+    },
+    {
+      "role": "user",
+      "content": [
+          {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
+          {"type": "text", "text": "What are these?"},
+        ],
+    },
+]
+
+processed_chat = processor.apply_chat_template(messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt")
+print(processor.batch_decode(processed_chat["input_ids"][:, :30]))
+```
+This yields a string in LLaVAs expected input format with many `<image>` tokens at the end.
+The `<image>` tokens are placeholders and each one will be replaced by image embeddings when the mode is run in the forward call. The `processed_chat` can be further passed into [`~GenerationMixin.generate`] to generate text.
+```text
+'<|im_start|>system
+You are a friendly chatbot who always responds in the style of a pirate<|im_end|><|im_start|>user <image><image><image><image><image><image><image><image>'
 ```
 
 Arr, 'twas easy after all!
@@ -122,7 +169,7 @@ Arr, 'twas easy after all!
 
 Yes, there is! Our text generation pipelines support chat inputs, which makes it easy to use chat models. In the past,
 we used to use a dedicated "ConversationalPipeline" class, but this has now been deprecated and its functionality
-has been merged into the [`TextGenerationPipeline`]. Let's try the `Zephyr` example again, but this time using 
+has been merged into the [`TextGenerationPipeline`]. Let's try the `Zephyr` example again, but this time using
 a pipeline:
 
 ```python
@@ -187,9 +234,9 @@ Can I ask a question?<|im_end|>
 ```
 
 Note that this time, we've added the tokens that indicate the start of a bot response. This ensures that when the model
-generates text it will write a bot response instead of doing something unexpected, like continuing the user's 
-message. Remember, chat models are still just language models - they're trained to continue text, and chat is just a 
-special kind of text to them! You need to guide them with appropriate control tokens, so they know what they're 
+generates text it will write a bot response instead of doing something unexpected, like continuing the user's
+message. Remember, chat models are still just language models - they're trained to continue text, and chat is just a
+special kind of text to them! You need to guide them with appropriate control tokens, so they know what they're
 supposed to be doing.
 
 Not all models require generation prompts. Some models, like LLaMA, don't have any
@@ -201,7 +248,7 @@ effect that `add_generation_prompt` has will depend on the template being used.
 When passing a list of messages to `apply_chat_template` or `TextGenerationPipeline`, you can choose
 to format the chat so the model will continue the final message in the chat instead of starting a new one. This is done
 by removing any end-of-sequence tokens that indicate the end of the final message, so that the model will simply
-extend the final message when it begins to generate text. This is useful for "prefilling" the model's response. 
+extend the final message when it begins to generate text. This is useful for "prefilling" the model's response.
 
 Here's an example:
 
@@ -226,9 +273,9 @@ get an error if you try!
 <Tip>
 
 The default behaviour of `TextGenerationPipeline` is to set `add_generation_prompt=True` so that it starts a new
-message. However, if the final message in the input chat has the "assistant" role, it will assume that this message is 
-a prefill and switch to `continue_final_message=True` instead, because most models do not support multiple 
-consecutive assistant messages. You can override this behaviour by explicitly passing the `continue_final_message` 
+message. However, if the final message in the input chat has the "assistant" role, it will assume that this message is
+a prefill and switch to `continue_final_message=True` instead, because most models do not support multiple
+consecutive assistant messages. You can override this behaviour by explicitly passing the `continue_final_message`
 argument when calling the pipeline.
 
 </Tip>
@@ -237,8 +284,8 @@ argument when calling the pipeline.
 
 Yes! This is a good way to ensure that the chat template matches the tokens the model sees during training.
 We recommend that you apply the chat template as a preprocessing step for your dataset. After this, you
-can simply continue like any other language model training task. When training, you should usually set 
-`add_generation_prompt=False`, because the added tokens to prompt an assistant response will not be helpful during 
+can simply continue like any other language model training task. When training, you should usually set
+`add_generation_prompt=False`, because the added tokens to prompt an assistant response will not be helpful during
 training. Let's see an example:
 
 ```python
@@ -272,8 +319,8 @@ From here, just continue training like you would with a standard language modell
 
 <Tip>
 
-By default, some tokenizers add special tokens like `<bos>` and `<eos>` to text they tokenize. Chat templates should 
-already include all the special tokens they need, and so additional special tokens will often be incorrect or 
+By default, some tokenizers add special tokens like `<bos>` and `<eos>` to text they tokenize. Chat templates should
+already include all the special tokens they need, and so additional special tokens will often be incorrect or
 duplicated, which will hurt model performance.
 
 Therefore, if you format text with `apply_chat_template(tokenize=False)`, you should set the argument
@@ -286,7 +333,7 @@ Therefore, if you format text with `apply_chat_template(tokenize=False)`, you sh
 The only argument that `apply_chat_template` requires is `messages`. However, you can pass any keyword
 argument to `apply_chat_template` and it will be accessible inside the template. This gives you a lot of freedom to use
 chat templates for many things. There are no restrictions on the names or the format of these arguments - you can pass
-strings, lists, dicts or whatever else you want. 
+strings, lists, dicts or whatever else you want.
 
 That said, there are some common use-cases for these extra arguments,
 such as passing tools for function calling, or documents for retrieval-augmented generation. In these common cases,
@@ -309,7 +356,7 @@ def current_time():
 def multiply(a: float, b: float):
     """
     A function that multiplies two numbers
-    
+
     Args:
         a: The first number to multiply
         b: The second number to multiply
@@ -329,8 +376,8 @@ correctly as tools. Specifically, you should follow these rules:
 
 - The function should have a descriptive name
 - Every argument must have a type hint
-- The function must have a docstring in the standard Google style (in other words, an initial function description  
-  followed by an `Args:` block that describes the arguments, unless the function does not have any arguments. 
+- The function must have a docstring in the standard Google style (in other words, an initial function description
+  followed by an `Args:` block that describes the arguments, unless the function does not have any arguments.
 - Do not include types in the `Args:` block. In other words, write `a: The first number to multiply`, not
   `a (int): The first number to multiply`. Type hints should go in the function header instead.
 - The function can have a return type and a `Returns:` block in the docstring. However, these are optional
@@ -372,7 +419,7 @@ Next, let's define a list of tools:
 def get_current_temperature(location: str, unit: str) -> float:
     """
     Get the current temperature at a location.
-    
+
     Args:
         location: The location to get the temperature for, in the format "City, Country"
         unit: The unit to return the temperature in. (choices: ["celsius", "fahrenheit"])
@@ -384,7 +431,7 @@ def get_current_temperature(location: str, unit: str) -> float:
 def get_current_wind_speed(location: str) -> float:
     """
     Get the current wind speed in km/h at a given location.
-    
+
     Args:
         location: The location to get the temperature for, in the format "City, Country"
     Returns:
@@ -429,8 +476,8 @@ the temperature in France should certainly be displayed in Celsius.
 
 The output format above is specific to the `Hermes-2-Pro` model we're using in this example. Other models may emit different
 tool call formats, and you may need to do some manual parsing at this step. For example, `Llama-3.1` models will emit
-slightly different JSON, with `parameters` instead of `arguments`. Regardless of the format the model outputs, you 
-should add the tool call to the conversation in the format below, with `tool_calls`, `function` and `arguments` keys. 
+slightly different JSON, with `parameters` instead of `arguments`. Regardless of the format the model outputs, you
+should add the tool call to the conversation in the format below, with `tool_calls`, `function` and `arguments` keys.
 
 </Tip>
 
@@ -449,7 +496,7 @@ a dict, but in the OpenAI API it's a JSON string. Passing a string may cause err
 </Tip>
 
 Now that we've added the tool call to the conversation, we can call the function and append the result to the
-conversation. Since we're just using a dummy function for this example that always returns 22.0, we can just append 
+conversation. Since we're just using a dummy function for this example that always returns 22.0, we can just append
 that result directly.
 
 ```python
@@ -460,7 +507,7 @@ messages.append({"role": "tool", "name": "get_current_temperature", "content": "
 
 Some model architectures, notably Mistral/Mixtral, also require a `tool_call_id` here, which should be
 9 randomly-generated alphanumeric characters, and assigned to the `id` key of the tool call
-dictionary. The same key should also be assigned to the `tool_call_id` key of the tool response dictionary below, so 
+dictionary. The same key should also be assigned to the `tool_call_id` key of the tool response dictionary below, so
 that tool calls can be matched to tool responses. So, for Mistral/Mixtral models, the code above would be:
 
 ```python
@@ -492,13 +539,13 @@ And we get:
 The current temperature in Paris, France is 22.0 ° Celsius.<|im_end|>
 ```
 
-Although this was a simple demo with dummy tools and a single call, the same technique works with 
+Although this was a simple demo with dummy tools and a single call, the same technique works with
 multiple real tools and longer conversations. This can be a powerful way to extend the capabilities of conversational
 agents with real-time information, computational tools like calculators, or access to large databases.
 
 ### Understanding tool schemas
 
-Each function you pass to the `tools` argument of `apply_chat_template` is converted into a 
+Each function you pass to the `tools` argument of `apply_chat_template` is converted into a
 [JSON schema](https://json-schema.org/learn/getting-started-step-by-step). These schemas
 are then passed to the model chat template. In other words, tool-use models do not see your functions directly, and they
 never see the actual code inside them. What they care about is the function **definitions** and the **arguments** they
@@ -507,7 +554,7 @@ to read their outputs, detect if they have requested to use a tool, pass their a
 return the response in the chat.
 
 Generating JSON schemas to pass to the template should be automatic and invisible as long as your functions
-follow the specification above, but if you encounter problems, or you simply want more control over the conversion, 
+follow the specification above, but if you encounter problems, or you simply want more control over the conversion,
 you can handle the conversion manually. Here is an example of a manual schema conversion.
 
 ```python
@@ -516,7 +563,7 @@ from transformers.utils import get_json_schema
 def multiply(a: float, b: float):
     """
     A function that multiplies two numbers
-    
+
     Args:
         a: The first number to multiply
         b: The second number to multiply
@@ -531,33 +578,33 @@ This will yield:
 
 ```json
 {
-  "type": "function", 
+  "type": "function",
   "function": {
-    "name": "multiply", 
-    "description": "A function that multiplies two numbers", 
+    "name": "multiply",
+    "description": "A function that multiplies two numbers",
     "parameters": {
-      "type": "object", 
+      "type": "object",
       "properties": {
         "a": {
-          "type": "number", 
+          "type": "number",
           "description": "The first number to multiply"
-        }, 
+        },
         "b": {
           "type": "number",
           "description": "The second number to multiply"
         }
-      }, 
+      },
       "required": ["a", "b"]
     }
   }
 }
 ```
 
-If you wish, you can edit these schemas, or even write them from scratch yourself without using `get_json_schema` at 
-all. JSON schemas can be passed directly to the `tools` argument of 
+If you wish, you can edit these schemas, or even write them from scratch yourself without using `get_json_schema` at
+all. JSON schemas can be passed directly to the `tools` argument of
 `apply_chat_template` - this gives you a lot of power to define precise schemas for more complex functions. Be careful,
-though - the more complex your schemas, the more likely the model is to get confused when dealing with them! We 
-recommend simple function signatures where possible, keeping arguments (and especially complex, nested arguments) 
+though - the more complex your schemas, the more likely the model is to get confused when dealing with them! We
+recommend simple function signatures where possible, keeping arguments (and especially complex, nested arguments)
 to a minimum.
 
 Here is an example of defining schemas by hand, and passing them directly to `apply_chat_template`:
@@ -565,7 +612,7 @@ Here is an example of defining schemas by hand, and passing them directly to `ap
 ```python
 # A simple function that takes no arguments
 current_time = {
-  "type": "function", 
+  "type": "function",
   "function": {
     "name": "current_time",
     "description": "Get the current local time as a string.",
@@ -581,18 +628,18 @@ multiply = {
   'type': 'function',
   'function': {
     'name': 'multiply',
-    'description': 'A function that multiplies two numbers', 
+    'description': 'A function that multiplies two numbers',
     'parameters': {
-      'type': 'object', 
+      'type': 'object',
       'properties': {
         'a': {
           'type': 'number',
           'description': 'The first number to multiply'
-        }, 
+        },
         'b': {
           'type': 'number', 'description': 'The second number to multiply'
         }
-      }, 
+      },
       'required': ['a', 'b']
     }
   }
@@ -607,7 +654,7 @@ model_input = tokenizer.apply_chat_template(
 ## Advanced: Retrieval-augmented generation
 
 "Retrieval-augmented generation" or "RAG" LLMs can search a corpus of documents for information before responding
-to a query. This allows models to vastly expand their knowledge base beyond their limited context size. Our 
+to a query. This allows models to vastly expand their knowledge base beyond their limited context size. Our
 recommendation for RAG models is that their template
 should accept a `documents` argument. This should be a list of documents, where each "document"
 is a single dict with `title` and `contents` keys, both of which are strings. Because this format is much simpler
@@ -632,7 +679,7 @@ conversation = [
 # Define documents for retrieval-based generation
 documents = [
     {
-        "title": "The Moon: Our Age-Old Foe", 
+        "title": "The Moon: Our Age-Old Foe",
         "text": "Man has always dreamed of destroying the moon. In this essay, I shall..."
     },
     {
@@ -650,7 +697,7 @@ input_ids = tokenizer.apply_chat_template(
     add_generation_prompt=True,
     return_tensors="pt").to(device)
 
-# Generate a response 
+# Generate a response
 gen_tokens = model.generate(
     input_ids,
     max_new_tokens=100,
@@ -683,7 +730,7 @@ one is a little simplified from the actual one!
 
 ```
 {%- for message in messages %}
-    {{- '<|' + message['role'] + |>\n' }}
+    {{- '<|' + message['role'] + '|>\n' }}
     {{- message['content'] + eos_token }}
 {%- endfor %}
 {%- if add_generation_prompt %}
@@ -710,8 +757,8 @@ Effectively, the template does three things:
    an assistant response.
 
 This is a pretty simple template but Jinja gives you a lot of flexibility to do more complex things! Let's see a Jinja
-template that can format inputs similarly to the way LLaMA formats them (note that the real LLaMA template includes 
-handling for default system messages and slightly different system message handling in general - don't use this one 
+template that can format inputs similarly to the way LLaMA formats them (note that the real LLaMA template includes
+handling for default system messages and slightly different system message handling in general - don't use this one
 in your actual code!)
 
 ```
@@ -734,7 +781,7 @@ distinguishable to the model because of the tokens they're wrapped in.
 
 ### How do I create a chat template?
 
-Simple, just write a jinja template and set `tokenizer.chat_template`. You may find it easier to start with an 
+Simple, just write a jinja template and set `tokenizer.chat_template`. You may find it easier to start with an
 existing template from another model and simply edit it for your needs! For example, we could take the LLaMA template
 above and add "[ASST]" and "[/ASST]" to assistant messages:
 
@@ -762,13 +809,13 @@ tokenizer.chat_template = template  # Set the new template
 tokenizer.push_to_hub("model_name")  # Upload your new template to the Hub!
 ```
 
-The method [`~PreTrainedTokenizer.apply_chat_template`] which uses your chat template is called by the [`TextGenerationPipeline`] class, so 
+The method [`~PreTrainedTokenizer.apply_chat_template`] which uses your chat template is called by the [`TextGenerationPipeline`] class, so
 once you set the correct chat template, your model will automatically become compatible with [`TextGenerationPipeline`].
 
 <Tip>
 If you're fine-tuning a model for chat, in addition to setting a chat template, you should probably add any new chat
-control tokens as special tokens in the tokenizer. Special tokens are never split, 
-ensuring that your control tokens are always handled as single tokens rather than being tokenized in pieces. You 
+control tokens as special tokens in the tokenizer. Special tokens are never split,
+ensuring that your control tokens are always handled as single tokens rather than being tokenized in pieces. You
 should also set the tokenizer's `eos_token` attribute to the token that marks the end of assistant generations in your
 template. This will ensure that text generation tools can correctly figure out when to stop generating text.
 </Tip>
@@ -796,13 +843,13 @@ trying to put it all in a single template where possible!
 
 When setting the template for a model that's already been trained for chat, you should ensure that the template
 exactly matches the message formatting that the model saw during training, or else you will probably experience
-performance degradation. This is true even if you're training the model further - you will probably get the best 
+performance degradation. This is true even if you're training the model further - you will probably get the best
 performance if you keep the chat tokens constant. This is very analogous to tokenization - you generally get the
 best performance for inference or fine-tuning when you precisely match the tokenization used during training.
 
 If you're training a model from scratch, or fine-tuning a base language model for chat, on the other hand,
 you have a lot of freedom to choose an appropriate template! LLMs are smart enough to learn to handle lots of different
-input formats. One popular choice is the `ChatML` format, and this is a good, flexible choice for many use-cases. 
+input formats. One popular choice is the `ChatML` format, and this is a good, flexible choice for many use-cases.
 It looks like this:
 
 ```
@@ -848,7 +895,7 @@ Once the attribute is set, that's it, you're done! `tokenizer.apply_chat_templat
 model, which means it is also automatically supported in places like `TextGenerationPipeline`!
 
 By ensuring that models have this attribute, we can make sure that the whole community gets to use the full power of
-open-source models. Formatting mismatches have been haunting the field and silently harming performance for too long - 
+open-source models. Formatting mismatches have been haunting the field and silently harming performance for too long -
 it's time to put an end to them!
 
 ## Advanced: Template writing tips
@@ -856,17 +903,17 @@ it's time to put an end to them!
 <Tip>
 
 The easiest way to get started with writing Jinja templates is to take a look at some existing ones. You can use
-`print(tokenizer.chat_template)` for any chat model to see what template it's using. In general, models that support tool use have 
+`print(tokenizer.chat_template)` for any chat model to see what template it's using. In general, models that support tool use have
 much more complex templates than other models - so when you're just getting started, they're probably a bad example
-to learn from! You can also take a look at the 
+to learn from! You can also take a look at the
 [Jinja documentation](https://jinja.palletsprojects.com/en/3.1.x/templates/#synopsis) for details
 of general Jinja formatting and syntax.
 
 </Tip>
 
-Jinja templates in `transformers` are identical to Jinja templates elsewhere. The main thing to know is that 
-the conversation history will be accessible inside your template as a variable called `messages`.  
-You will be able to access `messages` in your template just like you can in Python, which means you can loop over 
+Jinja templates in `transformers` are identical to Jinja templates elsewhere. The main thing to know is that
+the conversation history will be accessible inside your template as a variable called `messages`.
+You will be able to access `messages` in your template just like you can in Python, which means you can loop over
 it with `{% for message in messages %}` or access individual messages with `{{ messages[0] }}`, for example.
 
 You can also use the following tips to write clean, efficient Jinja templates:
@@ -896,7 +943,7 @@ and indentation may end up being included in the output, which is probably not w
 
 ### Special variables
 
-Inside your template, you will have access several special variables. The most important of these is `messages`, 
+Inside your template, you will have access several special variables. The most important of these is `messages`,
 which contains the chat history as a list of message dicts. However, there are several others. Not every
 variable will be used in every template. The most common other variables are:
 
@@ -930,7 +977,7 @@ There are multiple implementations of Jinja in various languages. They generally
 but a key difference is that when you're writing a template in Python you can use Python methods, such as
 `.lower()` on strings or `.items()` on dicts. This will break if someone tries to use your template on a non-Python
 implementation of Jinja. Non-Python implementations are particularly common in deployment environments, where JS
-and Rust are very popular. 
+and Rust are very popular.
 
 Don't panic, though! There are a few easy changes you can make to your templates to ensure they're compatible across
 all implementations of Jinja:
@@ -962,21 +1009,21 @@ Here is an example of a template that formats messages ChatML-style, with genera
 ```
 
 The exact content of the assistant header will depend on your specific model, but it should always be **the string
-that represents the start of an assistant message**, so that if the user applies your template with 
+that represents the start of an assistant message**, so that if the user applies your template with
 `add_generation_prompt=True` and then generates text, the model will write an assistant response. Also note that some
-models do not need a generation prompt, because assistant messages always begin immediately after user messages. 
+models do not need a generation prompt, because assistant messages always begin immediately after user messages.
 This is particularly common for LLaMA and Mistral models, where assistant messages begin immediately after the `[/INST]`
 token that ends user messages. In these cases, the template can ignore the `add_generation_prompt` flag.
 
 Generation prompts are important! If your model requires a generation prompt but it is not set in the template, then
-model generations will likely be severely degraded, or the model may display unusual behaviour like continuing 
-the final user message! 
+model generations will likely be severely degraded, or the model may display unusual behaviour like continuing
+the final user message!
 
 ### Writing and debugging larger templates
 
-When this feature was introduced, most templates were quite small, the Jinja equivalent of a "one-liner" script. 
+When this feature was introduced, most templates were quite small, the Jinja equivalent of a "one-liner" script.
 However, with new models and features like tool-use and RAG, some templates can be 100 lines long or more. When
-writing templates like these, it's a good idea to write them in a separate file, using a text editor. You can easily 
+writing templates like these, it's a good idea to write them in a separate file, using a text editor. You can easily
 extract a chat template to a file:
 
 ```python
@@ -995,7 +1042,7 @@ identify the source of issues.
 
 ### Writing templates for tools
 
-Although chat templates do not enforce a specific API for tools (or for anything, really), we recommend 
+Although chat templates do not enforce a specific API for tools (or for anything, really), we recommend
 template authors try to stick to a standard API where possible. The whole point of chat templates is to allow code
 to be transferable across models, so deviating from the standard tools API means users will have to write
 custom code to use tools with your model. Sometimes it's unavoidable, but often with clever templating you can
@@ -1005,30 +1052,30 @@ Below, we'll list the elements of the standard API, and give tips on writing tem
 
 #### Tool definitions
 
-Your template should expect that the variable `tools` will either be null (if no tools are passed), or is a list 
+Your template should expect that the variable `tools` will either be null (if no tools are passed), or is a list
 of JSON schema dicts. Our chat template methods allow users to pass tools as either JSON schema or Python functions, but when
-functions are passed, we automatically generate JSON schema and pass that to your template. As a result, the 
+functions are passed, we automatically generate JSON schema and pass that to your template. As a result, the
 `tools` variable that your template receives will always be a list of JSON schema. Here is
 a sample tool JSON schema:
 
 ```json
 {
-  "type": "function", 
+  "type": "function",
   "function": {
-    "name": "multiply", 
-    "description": "A function that multiplies two numbers", 
+    "name": "multiply",
+    "description": "A function that multiplies two numbers",
     "parameters": {
-      "type": "object", 
+      "type": "object",
       "properties": {
         "a": {
-          "type": "number", 
+          "type": "number",
           "description": "The first number to multiply"
-        }, 
+        },
         "b": {
           "type": "number",
           "description": "The second number to multiply"
         }
-      }, 
+      },
       "required": ["a", "b"]
     }
   }
@@ -1052,13 +1099,13 @@ specific format - your model will probably need different formatting!
 
 The specific tokens and tool descriptions your template renders should of course be chosen to match the ones your model
 was trained with. There is no requirement that your **model** understands JSON schema input, only that your template can translate
-JSON schema into your model's format. For example, [Command-R](https://huggingface.co/CohereForAI/c4ai-command-r-plus-08-2024) 
-was trained with tools defined using Python function headers, but the Command-R tool template accepts JSON schema, 
+JSON schema into your model's format. For example, [Command-R](https://huggingface.co/CohereForAI/c4ai-command-r-plus-08-2024)
+was trained with tools defined using Python function headers, but the Command-R tool template accepts JSON schema,
 converts types internally and renders the input tools as Python headers. You can do a lot with templates!
 
 #### Tool calls
 
-Tool calls, if present, will be a list attached to a message with the "assistant" role. Note that `tool_calls` is 
+Tool calls, if present, will be a list attached to a message with the "assistant" role. Note that `tool_calls` is
 always a list, even though most tool-calling models only support single tool calls at a time, which means
 the list will usually only have a single element. Here is a sample message dict containing a tool call:
 

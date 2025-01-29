@@ -41,6 +41,9 @@ from transformers.testing_utils import (
     require_torch_gpu,
     require_torch_sdpa,
     require_torchaudio,
+    set_config_for_less_flaky_test,
+    set_model_for_less_flaky_test,
+    set_model_tester_for_less_flaky_test,
     slow,
     torch_device,
 )
@@ -48,7 +51,7 @@ from transformers.utils import cached_property, is_torch_bf16_available_on_devic
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, sdpa_kernel
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -516,8 +519,11 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
         def get_mean_reldiff(failcase, x, ref, atol, rtol):
             return f"{failcase}: mean relative difference: {((x - ref).abs() / (ref.abs() + 1e-12)).mean():.3e}, torch atol = {atol}, torch rtol = {rtol}"
 
+        set_model_tester_for_less_flaky_test(self)
+
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            set_config_for_less_flaky_test(config)
             model = model_class(config)
 
             is_encoder_decoder = model.config.is_encoder_decoder
@@ -533,6 +539,9 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
                     attn_implementation="eager",
                 )
                 model_eager = model_eager.eval().to(torch_device)
+
+                set_model_for_less_flaky_test(model_eager)
+                set_model_for_less_flaky_test(model_sdpa)
 
                 # We use these for loops instead of parameterized.expand just for the interest of avoiding loading/saving 8 times the model,
                 # but it would be nicer to have an efficient way to use parameterized.expand
@@ -615,7 +624,7 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
 
                                 # TODO: test gradients as well (& for FA2 as well!)
                                 with torch.no_grad():
-                                    with torch.backends.cuda.sdp_kernel(
+                                    with sdpa_kernel(
                                         enable_flash=enable_kernels,
                                         enable_math=True,
                                         enable_mem_efficient=enable_kernels,
@@ -637,6 +646,12 @@ class MusicgenMelodyDecoderTest(ModelTesterMixin, GenerationTesterMixin, unittes
                                 if torch_device in ["cpu", "cuda"]:
                                     atol = atols[torch_device, enable_kernels, torch_dtype]
                                     rtol = rtols[torch_device, enable_kernels, torch_dtype]
+                                elif torch_device == "xpu":
+                                    # As of PyTorch 2.5 XPU backend supports only torch.nn.attention.SDPBackend.MATH
+                                    # which is implemented on PyTorch level using aten operators and is
+                                    # device agnostic with respect to implementation of each aten operator.
+                                    atol = atols["cuda", False, torch_dtype]
+                                    rtol = rtols["cuda", False, torch_dtype]
                                 else:
                                     atol = 1e-7
                                     rtol = 1e-4
@@ -1333,7 +1348,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                     if isinstance(inp, torch.Tensor) and inp.dtype in [torch.float32, torch.float16]:
                         inputs_dict[name] = inp.to(torch.float16)
 
-                with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
+                with sdpa_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
                     _ = model(**inputs_dict)
 
     @require_flash_attn
@@ -1522,8 +1537,11 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         def get_mean_reldiff(failcase, x, ref, atol, rtol):
             return f"{failcase}: mean relative difference: {((x - ref).abs() / (ref.abs() + 1e-12)).mean():.3e}, torch atol = {atol}, torch rtol = {rtol}"
 
+        set_model_tester_for_less_flaky_test(self)
+
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            set_config_for_less_flaky_test(config)
             model = model_class(config)
 
             is_encoder_decoder = model.config.is_encoder_decoder
@@ -1539,6 +1557,9 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                     attn_implementation="eager",
                 )
                 model_eager = model_eager.eval().to(torch_device)
+
+                set_model_for_less_flaky_test(model_eager)
+                set_model_for_less_flaky_test(model_sdpa)
 
                 # We use these for loops instead of parameterized.expand just for the interest of avoiding loading/saving 8 times the model,
                 # but it would be nicer to have an efficient way to use parameterized.expand
@@ -1632,7 +1653,7 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                                 # TODO: test gradients as well (& for FA2 as well!)
                                 # Ignore copy
                                 with torch.no_grad():
-                                    with torch.backends.cuda.sdp_kernel(
+                                    with sdpa_kernel(
                                         enable_flash=enable_kernels,
                                         enable_math=True,
                                         enable_mem_efficient=enable_kernels,
@@ -1654,6 +1675,12 @@ class MusicgenMelodyTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
                                 if torch_device in ["cpu", "cuda"]:
                                     atol = atols[torch_device, enable_kernels, torch_dtype]
                                     rtol = rtols[torch_device, enable_kernels, torch_dtype]
+                                elif torch_device == "xpu":
+                                    # As of PyTorch 2.5 XPU backend supports only torch.nn.attention.SDPBackend.MATH
+                                    # which is implemented on PyTorch level using aten operators and is
+                                    # device agnostic with respect to implementation of each aten operator.
+                                    atol = atols["cuda", False, torch_dtype]
+                                    rtol = rtols["cuda", False, torch_dtype]
                                 else:
                                     atol = 1e-7
                                     rtol = 1e-4
@@ -1772,7 +1799,7 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         )
 
         self.assertTrue(logits.shape == logits_shape)
-        self.assertTrue(torch.allclose(logits[0, -1, :16].cpu(), EXPECTED_LOGITS, atol=1e-4))
+        torch.testing.assert_close(logits[0, -1, :16].cpu(), EXPECTED_LOGITS, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_logits_text_audio_prompt(self):
@@ -1814,7 +1841,7 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         # fmt: on
 
         self.assertTrue(logits.shape == (8, 240, 2048))
-        self.assertTrue(torch.allclose(logits[1:3, -1, 32:40].cpu(), EXPECTED_LOGITS, atol=1e-4))
+        torch.testing.assert_close(logits[1:3, -1, 32:40].cpu(), EXPECTED_LOGITS, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_generate_unconditional_greedy(self):
@@ -1836,7 +1863,7 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         # fmt: on
 
         self.assertTrue(output_values.shape == (1, 1, 4480))
-        self.assertTrue(torch.allclose(output_values[0, 0, :16].cpu(), EXPECTED_VALUES, atol=1e-4))
+        torch.testing.assert_close(output_values[0, 0, :16].cpu(), EXPECTED_VALUES, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_generate_unconditional_sampling(self):
@@ -1861,7 +1888,7 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         # fmt: on
 
         self.assertTrue(output_values.shape == (2, 1, 4480))
-        self.assertTrue(torch.allclose(output_values[0, 0, :16].cpu(), EXPECTED_VALUES, atol=1e-4))
+        torch.testing.assert_close(output_values[0, 0, :16].cpu(), EXPECTED_VALUES, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_generate_text_prompt_greedy(self):
@@ -1888,7 +1915,7 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         # fmt: on
 
         self.assertTrue(output_values.shape == (2, 1, 4480))
-        self.assertTrue(torch.allclose(output_values[0, 0, :10].cpu(), EXPECTED_VALUES, atol=1e-4))
+        torch.testing.assert_close(output_values[0, 0, :10].cpu(), EXPECTED_VALUES, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_generate_text_prompt_greedy_with_classifier_free_guidance(self):
@@ -1916,7 +1943,7 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         # fmt: on
 
         self.assertTrue(output_values.shape == (2, 1, 4480))
-        self.assertTrue(torch.allclose(output_values[0, 0, :16].cpu(), EXPECTED_VALUES, atol=1e-4))
+        torch.testing.assert_close(output_values[0, 0, :16].cpu(), EXPECTED_VALUES, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_generate_text_prompt_sampling(self):
@@ -1950,7 +1977,7 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         # fmt: on
 
         self.assertTrue(output_values.shape == (2, 1, 4480))
-        self.assertTrue(torch.allclose(output_values[0, 0, :16].cpu(), EXPECTED_VALUES, atol=1e-4))
+        torch.testing.assert_close(output_values[0, 0, :16].cpu(), EXPECTED_VALUES, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_generate_text_audio_prompt(self):
@@ -1975,7 +2002,7 @@ class MusicgenMelodyIntegrationTests(unittest.TestCase):
         # fmt: on
 
         self.assertTrue(output_values.shape == (2, 1, 4480))
-        self.assertTrue(torch.allclose(output_values[0, 0, :16].cpu(), EXPECTED_VALUES, atol=1e-4))
+        torch.testing.assert_close(output_values[0, 0, :16].cpu(), EXPECTED_VALUES, rtol=1e-4, atol=1e-4)
 
 
 @require_torch
@@ -2012,8 +2039,8 @@ class MusicgenMelodyStereoIntegrationTests(unittest.TestCase):
 
         # (bsz, channels, seq_len)
         self.assertTrue(output_values.shape == (1, 2, 5760))
-        self.assertTrue(torch.allclose(output_values[0, 0, :16].cpu(), EXPECTED_VALUES_LEFT, atol=6e-4))
-        self.assertTrue(torch.allclose(output_values[0, 1, :16].cpu(), EXPECTED_VALUES_LEFT, atol=6e-4))
+        torch.testing.assert_close(output_values[0, 0, :16].cpu(), EXPECTED_VALUES_LEFT, rtol=6e-4, atol=6e-4)
+        torch.testing.assert_close(output_values[0, 1, :16].cpu(), EXPECTED_VALUES_LEFT, rtol=6e-4, atol=6e-4)
 
     @slow
     def test_generate_text_audio_prompt(self):
@@ -2044,5 +2071,9 @@ class MusicgenMelodyStereoIntegrationTests(unittest.TestCase):
 
         # (bsz, channels, seq_len)
         self.assertTrue(output_values.shape == (2, 2, 5760))
-        self.assertTrue(torch.allclose(output_values[0, 0, :16].cpu(), EXPECTED_VALUES_LEFT_FIRST_SAMPLE, atol=1e-4))
-        self.assertTrue(torch.allclose(output_values[1, 1, :16].cpu(), EXPECTED_VALUES_RIGHT_SECOND_SAMPLE, atol=1e-4))
+        torch.testing.assert_close(
+            output_values[0, 0, :16].cpu(), EXPECTED_VALUES_LEFT_FIRST_SAMPLE, rtol=1e-4, atol=1e-4
+        )
+        torch.testing.assert_close(
+            output_values[1, 1, :16].cpu(), EXPECTED_VALUES_RIGHT_SECOND_SAMPLE, rtol=1e-4, atol=1e-4
+        )

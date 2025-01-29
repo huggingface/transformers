@@ -33,7 +33,6 @@ from ...modeling_outputs import (
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
-from ...pytorch_utils import is_torch_greater_or_equal_than_1_13
 from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
@@ -41,6 +40,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.import_utils import is_torch_fx_available
 from .configuration_phimoe import PhimoeConfig
 
@@ -51,9 +51,6 @@ if is_flash_attn_2_available():
 # This makes `_prepare_4d_causal_attention_mask` a leaf function in the FX graph.
 # It means that the function will not be traced through and simply appear as a node in the graph.
 if is_torch_fx_available():
-    if not is_torch_greater_or_equal_than_1_13:
-        import torch.fx
-
     _prepare_4d_causal_attention_mask = torch.fx.wrap(_prepare_4d_causal_attention_mask)
 
 
@@ -186,7 +183,6 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
-# Copied from transformers.models.mixtral.modeling_mixtral.apply_rotary_pos_emb
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -735,7 +731,7 @@ class PhimoeSparseMoeBlock(nn.Module):
     This implementation is
     strictly equivalent to standard MoE with full capacity (no
     dropped tokens). It's faster since it formulates MoE operations
-    in terms of block-sparse operations to accomodate imbalanced
+    in terms of block-sparse operations to accommodate imbalanced
     assignments of tokens to experts, whereas standard MoE either
     (1) drop tokens at the cost of reduced performance or (2) set
     capacity factor to number of experts and thus waste computation
@@ -906,16 +902,17 @@ PHIMOE_START_DOCSTRING = r"""
     "The bare Phimoe Model outputting raw hidden-states without any specific head on top.",
     PHIMOE_START_DOCSTRING,
 )
-# Copied from transformers.models.mixtral.modeling_mixtral.MixtralPreTrainedModel with Mixtral->Phimoe
 class PhimoePreTrainedModel(PreTrainedModel):
     config_class = PhimoeConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
     _no_split_modules = ["PhimoeDecoderLayer"]
-    _skip_keys_device_placement = "past_key_values"
+    _skip_keys_device_placement = ["past_key_values"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
     _supports_cache_class = True
+    _supports_quantized_cache = True
+    _supports_static_cache = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -1176,7 +1173,7 @@ class PhimoeModel(PhimoePreTrainedModel):
             router_logits=all_router_logits,
         )
 
-    # Copied from transformers.models.phi3.modeling_phi3.Phi3Model._update_causal_mask
+    # Copied from transformers.models.phi3.modeling_phi3.Phi3Model._update_causal_mask with Phi3->Phimoe
     def _update_causal_mask(
         self,
         attention_mask: torch.Tensor,
@@ -1186,6 +1183,14 @@ class PhimoeModel(PhimoePreTrainedModel):
         output_attentions: bool,
     ):
         if self.config._attn_implementation == "flash_attention_2":
+            if attention_mask is not None and past_key_values is not None:
+                is_padding_right = attention_mask[:, -1].sum().item() != input_tensor.size()[0]
+                if is_padding_right:
+                    raise ValueError(
+                        "You are attempting to perform batched generation with padding_side='right'"
+                        " this may lead to unexpected behaviour for Flash Attention version of Phimoe. Make sure to "
+                        " call `tokenizer.padding_side  = 'left'` before tokenizing the input. "
+                    )
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None
@@ -1359,6 +1364,7 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
+    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(PHIMOE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=MoeCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     # Ignore copy
@@ -1376,7 +1382,7 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
         output_router_logits: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        num_logits_to_keep: int = 0,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **loss_kwargs,
     ) -> Union[Tuple, MoeCausalLMOutputWithPast]:
         r"""
@@ -1386,10 +1392,12 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
-            num_logits_to_keep (`int`, *optional*):
-                Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
+            logits_to_keep (`int` or `torch.Tensor`, *optional*):
+                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
                 `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
                 token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
+                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
+                This is useful when using packed tensor format (single dimension for batch and sequence length).
         Returns:
         Example:
         ```python
@@ -1439,7 +1447,8 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
 
         hidden_states = outputs[0]
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :])
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
@@ -1482,7 +1491,7 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
         cache_position=None,
         position_ids=None,
         use_cache=True,
-        num_logits_to_keep=None,
+        logits_to_keep=None,
         **kwargs,
     ):
         # Overwritten -- this model may need to switch between short and long rope, invalidating the cache in the
@@ -1507,7 +1516,7 @@ class PhimoeForCausalLM(PhimoePreTrainedModel, GenerationMixin):
             cache_position=cache_position,
             position_ids=position_ids,
             use_cache=use_cache,
-            num_logits_to_keep=num_logits_to_keep,
+            logits_to_keep=logits_to_keep,
             **kwargs,
         )
         return model_inputs

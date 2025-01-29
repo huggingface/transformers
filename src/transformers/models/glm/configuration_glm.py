@@ -45,6 +45,7 @@ class GlmConfig(PretrainedConfig):
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
             `num_attention_heads`.
+        partial_rotary_factor (`float`, *optional*, defaults to 0.5): The factor of the partial rotary position.
         head_dim (`int`, *optional*, defaults to 128):
             The attention head dimension.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
@@ -84,6 +85,14 @@ class GlmConfig(PretrainedConfig):
 
     model_type = "glm"
     keys_to_ignore_at_inference = ["past_key_values"]
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.gate_up_proj": "colwise_rep",  # we need to replicate here due to the `chunk` operation
+        "layers.*.mlp.down_proj": "rowwise_rep",  # we need to replicate here due to the `chunk` operation
+    }
 
     def __init__(
         self,
@@ -93,6 +102,7 @@ class GlmConfig(PretrainedConfig):
         num_hidden_layers=40,
         num_attention_heads=32,
         num_key_value_heads=2,
+        partial_rotary_factor=0.5,
         head_dim=128,
         hidden_act="silu",
         attention_dropout=0.0,
@@ -114,6 +124,7 @@ class GlmConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+        self.partial_rotary_factor = partial_rotary_factor
         self.head_dim = head_dim
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act

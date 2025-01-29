@@ -294,7 +294,6 @@ class BartFlashAttention2(BartAttention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -2158,3 +2157,15 @@ class BartForCausalLM(BartPreTrainedModel, GenerationMixin):
                 tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past),
             )
         return reordered_past
+
+
+__all__ = [
+    "BartForCausalLM",
+    "BartForConditionalGeneration",
+    "BartForQuestionAnswering",
+    "BartForSequenceClassification",
+    "BartModel",
+    "BartPreTrainedModel",
+    "BartPretrainedModel",
+    "PretrainedBartModel",
+]

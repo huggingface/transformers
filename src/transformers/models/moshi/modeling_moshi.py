@@ -36,6 +36,7 @@ from ...modeling_outputs import (
     ModelOutput,
     Seq2SeqLMOutput,
 )
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
@@ -47,6 +48,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ..auto.modeling_auto import AutoModel
 from .configuration_moshi import MoshiConfig, MoshiDepthConfig
 
@@ -307,24 +309,51 @@ class MoshiLinear(nn.Module):
 
 # Copied from transformers.models.mistral.modeling_mistral.MistralRotaryEmbedding with Mistral->Moshi
 class MoshiRotaryEmbedding(nn.Module):
-    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
+    def __init__(self, config: MoshiConfig, device=None):
         super().__init__()
+        # BC: "rope_type" was originally "type"
+        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+        else:
+            self.rope_type = "default"
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
 
-        self.dim = dim
-        self.max_position_embeddings = max_position_embeddings
-        self.base = base
-        inv_freq = 1.0 / (self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64).float().to(device) / self.dim))
+        self.config = config
+        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
         self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = self.inv_freq
+
+    def _dynamic_frequency_update(self, position_ids, device):
+        """
+        dynamic RoPE layers should recompute `inv_freq` in the following situations:
+        1 - growing beyond the cached sequence length (allow scaling)
+        2 - the current sequence length is in the original scale (avoid losing precision with small sequences)
+        """
+        seq_len = torch.max(position_ids) + 1
+        if seq_len > self.max_seq_len_cached:  # growth
+            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
+            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
+            self.max_seq_len_cached = seq_len
+
+        if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
+            # This .to() is needed if the model has been moved to a device after being initialized (because
+            # the buffer is automatically moved, but not the original copy)
+            self.original_inv_freq = self.original_inv_freq.to(device)
+            self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
+            self.max_seq_len_cached = self.original_max_seq_len
 
     @torch.no_grad()
-    # copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding.forward
-    # TODO(joao): add me back asap :)
     def forward(self, x, position_ids):
-        # x: [bs, num_attention_heads, seq_len, head_size]
+        if "dynamic" in self.rope_type:
+            self._dynamic_frequency_update(position_ids, device=x.device)
+
+        # Core RoPE block
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
-        # Force float32 since bfloat16 loses precision on long contexts
-        # See https://github.com/huggingface/transformers/pull/29285
+        # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
         device_type = x.device.type
         device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
@@ -332,6 +361,11 @@ class MoshiRotaryEmbedding(nn.Module):
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos()
             sin = emb.sin()
+
+        # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
+        cos = cos * self.attention_scaling
+        sin = sin * self.attention_scaling
+
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
@@ -456,13 +490,10 @@ class MoshiAttention(nn.Module):
         self.rotary_emb = None
         if use_rope:
             self.rope_theta = config.rope_theta
-            self.rotary_emb = MoshiRotaryEmbedding(
-                self.head_dim,
-                max_position_embeddings=self.max_position_embeddings,
-                base=self.rope_theta,
-            )
+            self.rotary_emb = MoshiRotaryEmbedding(config)
 
-    # Copied from transformers.models.gemma.modeling_gemma.GemmaAttention.forward
+    # copied from transformers.models.gemma.modeling_gemma.GemmaAttention.forward
+    # no longer copied after attention refactors
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -527,7 +558,8 @@ class MoshiAttention(nn.Module):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.gemma.modeling_gemma.GemmaFlashAttention2 with Gemma->Moshi
+# NO LONGER EXIST Copied from transformers.models.gemma.modeling_gemma.GemmaFlashAttention2 with Gemma->Moshi
+# TODO cyril: modular
 class MoshiFlashAttention2(MoshiAttention):
     """
     Moshi flash attention module. This module inherits from `MoshiAttention` as the weights of the module stays
@@ -643,7 +675,8 @@ class MoshiFlashAttention2(MoshiAttention):
         return attn_output, attn_weights, past_key_value
 
 
-# Copied from transformers.models.gemma.modeling_gemma.GemmaSdpaAttention with Gemma->Moshi
+# NO LONGER EXIST Copied from transformers.models.gemma.modeling_gemma.GemmaSdpaAttention with Gemma->Moshi
+# TODO cyril: modular
 class MoshiSdpaAttention(MoshiAttention):
     """
     Moshi attention module using torch.nn.functional.scaled_dot_product_attention. This module inherits from
@@ -1256,7 +1289,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
             attentions=all_self_attns,
         )
 
-    # Copied from transformers.models.phi3.modeling_phi3.Phi3Model._update_causal_mask
+    # Copied from transformers.models.phi3.modeling_phi3.Phi3Model._update_causal_mask with Phi3->Moshi
     def _update_causal_mask(
         self,
         attention_mask: torch.Tensor,
@@ -1266,6 +1299,14 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
         output_attentions: bool,
     ):
         if self.config._attn_implementation == "flash_attention_2":
+            if attention_mask is not None and past_key_values is not None:
+                is_padding_right = attention_mask[:, -1].sum().item() != input_tensor.size()[0]
+                if is_padding_right:
+                    raise ValueError(
+                        "You are attempting to perform batched generation with padding_side='right'"
+                        " this may lead to unexpected behaviour for Flash Attention version of Moshi. Make sure to "
+                        " call `tokenizer.padding_side  = 'left'` before tokenizing the input. "
+                    )
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None
@@ -1560,7 +1601,7 @@ class MoshiModel(MoshiPreTrainedModel):
             attentions=all_self_attns,
         )
 
-    # Copied from transformers.models.phi3.modeling_phi3.Phi3Model._update_causal_mask
+    # Copied from transformers.models.phi3.modeling_phi3.Phi3Model._update_causal_mask with Phi3->Moshi
     def _update_causal_mask(
         self,
         attention_mask: torch.Tensor,
@@ -1570,6 +1611,14 @@ class MoshiModel(MoshiPreTrainedModel):
         output_attentions: bool,
     ):
         if self.config._attn_implementation == "flash_attention_2":
+            if attention_mask is not None and past_key_values is not None:
+                is_padding_right = attention_mask[:, -1].sum().item() != input_tensor.size()[0]
+                if is_padding_right:
+                    raise ValueError(
+                        "You are attempting to perform batched generation with padding_side='right'"
+                        " this may lead to unexpected behaviour for Flash Attention version of Moshi. Make sure to "
+                        " call `tokenizer.padding_side  = 'left'` before tokenizing the input. "
+                    )
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None
@@ -1740,6 +1789,7 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
+    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(MOSHI_DECODER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=MoshiCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1755,7 +1805,7 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        num_logits_to_keep: int = 0,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
     ) -> Union[Tuple, MoshiCausalLMOutputWithPast]:
         r"""
         Args:
@@ -1764,10 +1814,12 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
-            num_logits_to_keep (`int`, *optional*):
-                Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
+            logits_to_keep (`int` or `torch.Tensor`, *optional*):
+                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
                 `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
                 token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
+                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
+                This is useful when using packed tensor format (single dimension for batch and sequence length).
 
         Returns:
 
@@ -1813,7 +1865,8 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
                 "Starting from v4.46, the `logits` model output will have the same type as the model (except at train time, where it will always be FP32)"
             )
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :])
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
@@ -1866,12 +1919,9 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         self.embed_tokens = nn.ModuleList(
             [nn.Embedding(config.audio_vocab_size + 1, config.hidden_size) for _ in range(2 * config.num_codebooks)]
         )
-        self.audio_encoder = AutoModel.from_config(
-            config.audio_encoder_config, attn_implementation=config._attn_implementation
-        )
+        self.audio_encoder = AutoModel.from_config(config.audio_encoder_config)
         self.decoder = MoshiForCausalLM(config)
 
-        config.depth_decoder_config._attn_implementation_internal = config._attn_implementation
         self.depth_decoder = MoshiDepthDecoder(config.depth_decoder_config)
 
         self.num_codebooks = config.num_codebooks
@@ -2401,7 +2451,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         cache_position=None,
         position_ids=None,
         use_cache=True,
-        num_logits_to_keep=None,
+        logits_to_keep=None,
         user_delay_pattern_mask=None,
         moshi_delay_pattern_mask=None,
         kwargs_depth_decoder=None,
@@ -2418,7 +2468,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
             cache_position=cache_position,
             position_ids=position_ids,
             use_cache=use_cache,
-            num_logits_to_keep=num_logits_to_keep,
+            logits_to_keep=logits_to_keep,
             **kwargs,
         )
 
@@ -2527,7 +2577,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         - [ B, -1, -1, -1, -1, -1]
         - [ B, -1, -1, -1, -1, -1]
         - [ B, -1, -1, -1, -1, -1]
-        where B is the begining-of-sentence token, P is the special padding token id and -1 indicates that the token is valid for prediction. If we include
+        where B is the beginning-of-sentence token, P is the special padding token id and -1 indicates that the token is valid for prediction. If we include
         a prompt (input ids), the -1 positions indicate where new tokens should be predicted. Otherwise, the
         mask is set to the value in the prompt:
         - [ a0, a1, -1, -1, -1,  P]
