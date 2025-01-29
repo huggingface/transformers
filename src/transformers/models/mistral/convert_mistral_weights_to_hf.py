@@ -21,7 +21,7 @@ from safetensors.torch import load_file
 from tokenizers import Regex, Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import BPE
 
-from transformers import AutoTokenizer, MistralConfig, MistralForCausalLM, LlamaTokenizerFast
+from transformers import AutoTokenizer, LlamaTokenizerFast, MistralConfig, MistralForCausalLM
 from transformers.convert_slow_tokenizer import bytes_to_unicode
 
 
