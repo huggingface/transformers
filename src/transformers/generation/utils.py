@@ -3552,7 +3552,7 @@ class GenerationMixin:
             beams_to_keep = max(2, 1 + n_eos_tokens) * num_beams
             if do_sample:
                 topk_indices = torch.multinomial(nn.functional.softmax(log_probs, dim=-1), num_samples=beams_to_keep)
-                topk_log_probs = torch.gather(log_probs, topk_indices, axis=1, batch_dims=1)
+                topk_log_probs = torch.gather(input=log_probs, dim=1, index=topk_indices)
             else:
                 topk_log_probs, topk_indices = torch.topk(log_probs, k=beams_to_keep)
 

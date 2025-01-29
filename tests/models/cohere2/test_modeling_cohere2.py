@@ -107,10 +107,6 @@ class Cohere2ModelTest(CohereModelTest, unittest.TestCase):
     def test_generate_continue_from_past_key_values(self):
         pass
 
-    @unittest.skip("Cohere2 has HybridCache and doesn't support low_memory generation")
-    def test_beam_search_low_memory(self):
-        pass
-
     @unittest.skip("Cohere2 has HybridCache and doesn't support contrastive generation")
     def test_contrastive_generate(self):
         pass

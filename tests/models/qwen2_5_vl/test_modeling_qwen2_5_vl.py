@@ -331,12 +331,6 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         pass
 
     @unittest.skip(
-        reason="Qwen2.5-VL can't do low-memory generation because position IDs have extra dimension and split function doesn't work for that"
-    )
-    def test_beam_search_low_memory(self):
-        pass
-
-    @unittest.skip(
         reason="VLMs can't generate from inputs embeds and pixels. This can be tested as part of bacbone LM, no need to run the tes for VLMs"
     )
     def test_generate_from_inputs_embeds_with_static_cache(self):
