@@ -127,7 +127,7 @@ class CircleCIJob:
         timeout_cmd = f"timeout {self.command_timeout} " if self.command_timeout else ""
         marker_cmd = f"-m '{self.marker}'" if self.marker is not None else ""
         additional_flags = f" -p no:warning -o junit_family=xunit1 --junitxml=test-results/junit.xml"
-        parallel = f' << pipeline.parameters.{self.job_name}_parallelism >> '
+        parallel = 1
         steps = [
             "checkout",
             {"attach_workspace": {"at": "test_preparation"}},
@@ -152,10 +152,24 @@ class CircleCIJob:
                     "command": f"TESTS=$(circleci tests split  --split-by=timings {self.job_name}_test_list.txt) && echo $TESTS > splitted_tests.txt && echo $TESTS | tr ' ' '\n'" if self.parallelism else f"awk '{{printf \"%s \", $0}}' {self.job_name}_test_list.txt > splitted_tests.txt"
                     }
             },
+            {"run": "pip install -U pytest"},
+            {"run": "pip install pytest-flakefinder"},
+
+            # {"run": {
+            #     "name": "Run tests",
+            #     "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n 1 {additional_flags} {' '.join(pytest_flags)} tests/models/flaubert/test_modeling_flaubert.py::FlaubertModelTest::test_batching_equivalence | tee tests_output.txt)"}
+            # },
+
+            # {"run": {
+            #     "name": "Run tests",
+            #     "command": f"({timeout_cmd} python3 -m pytest @pytest.txt | tee tests_output.txt)"}
+            # },
+
             {"run": {
                 "name": "Run tests",
-                "command": f"({timeout_cmd} python3 -m pytest {marker_cmd} -n 1 {additional_flags} {' '.join(pytest_flags)} tests/models/flaubert/test_modeling_flaubert.py::FlaubertModelTest::test_batching_equivalence | tee tests_output.txt)"}
+                "command": f"({timeout_cmd} python3 -m pytest -v -n 8 --flake-finder --flake-runs=200 tests/models/timm_backbone/test_modeling_timm_backbone.py::TimmBackboneModelTest::test_batching_equivalence | tee tests_output.txt)"}
             },
+
             {"run": {"name": "Expand to show skipped tests", "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --skip"}},
             {"run": {"name": "Failed tests: show reasons",   "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --fail"}},
             {"run": {"name": "Errors",                       "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --errors"}},
