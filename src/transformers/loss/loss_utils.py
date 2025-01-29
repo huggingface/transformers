@@ -49,7 +49,7 @@ def ForCausalLMLoss(
         dist.all_gather(all_logits, logits_1d)
         all_logits[sp_rank] = logits
         all_logits = torch.cat(all_logits, dim=0)
-        logits = all_logits.reshape_as(logits.size(0), -1, logits.size(-1))
+        logits = all_logits.reshape(logits.size(0), -1, logits.size(-1))
 
     # Upcast to float if we need to compute the loss to avoid potential precision issues
     logits = logits.float()
