@@ -57,7 +57,6 @@ else:
 
 
 if is_deepspeed_available():
-    import deepspeed.comm as dist
     from deepspeed.sequence.layer import _SeqAllToAll
     from deepspeed.utils import groups as deepspeed_groups
 
