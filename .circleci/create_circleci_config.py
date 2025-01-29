@@ -167,7 +167,7 @@ class CircleCIJob:
 
             {"run": {
                 "name": "Run tests",
-                "command": f"({timeout_cmd} python3 -m pytest -v -n 8 --make-reports=tests_torch --flake-finder --flake-runs=200 tests/models/timm_backbone/test_modeling_timm_backbone.py::TimmBackboneModelTest::test_batching_equivalence | tee tests_output.txt)"}
+                "command": f"({timeout_cmd} python3 -m pytest -v -n 8 --make-reports=tests_torch --flake-finder --flake-runs=2000 tests/models/timm_backbone/test_modeling_timm_backbone.py::TimmBackboneModelTest::test_batching_equivalence | tee tests_output.txt)"}
             },
 
             {"run": {"name": "Expand to show skipped tests", "when": "always", "command": f"python3 .circleci/parse_test_outputs.py --file tests_output.txt --skip"}},
