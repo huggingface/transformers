@@ -285,6 +285,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                        [PVTv2](model_doc/pvt_v2)                         |       ✅        |         ❌         |      ❌      |
 |                       [QDQBert](model_doc/qdqbert)                       |       ✅        |         ❌         |      ❌      |
 |                         [Qwen2](model_doc/qwen2)                         |       ✅        |         ❌         |      ❌      |
+|                    [Qwen2_5_VL](model_doc/qwen2_5_vl)                    |       ✅        |         ❌         |      ❌      |
 |                   [Qwen2Audio](model_doc/qwen2_audio)                    |       ✅        |         ❌         |      ❌      |
 |                     [Qwen2MoE](model_doc/qwen2_moe)                      |       ✅        |         ❌         |      ❌      |
 |                      [Qwen2VL](model_doc/qwen2_vl)                       |       ✅        |         ❌         |      ❌      |
@@ -384,6 +385,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                         [YOLOS](model_doc/yolos)                         |       ✅        |         ❌         |      ❌      |
 |                          [YOSO](model_doc/yoso)                          |       ✅        |         ❌         |      ❌      |
 |                         [Zamba](model_doc/zamba)                         |       ✅        |         ❌         |      ❌      |
+|                        [Zamba2](model_doc/zamba2)                        |       ✅        |         ❌         |      ❌      |
 |                      [ZoeDepth](model_doc/zoedepth)                      |       ✅        |         ❌         |      ❌      |
 
 <!-- End table-->
