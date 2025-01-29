@@ -3515,21 +3515,25 @@ class GenerationMixin:
             # Store scores, attentions and hidden_states when required
             if return_dict_in_generate:
                 if output_logits:
-                    raw_logits.append(logits.clone())
+                    raw_logits += (logits.clone(),)
                 if output_scores:
-                    all_scores.append(log_probs.clone())
+                    all_scores += (log_probs.clone(),)
 
-                if output_attentions and self.config.is_encoder_decoder:
-                    decoder_attentions.append(model_outputs.decoder_attentions)
-                elif output_attentions and not self.config.is_encoder_decoder:
-                    decoder_attentions.append(model_outputs.attentions)
+                if output_attentions:
+                    decoder_attentions += (
+                        (model_outputs.decoder_attentions,)
+                        if self.config.is_encoder_decoder
+                        else (model_outputs.attentions,)
+                    )
                     if self.config.is_encoder_decoder:
-                        cross_attentions.append(model_outputs.cross_attentions)
+                        cross_attentions += (model_outputs.cross_attentions,)
 
-                if output_hidden_states and self.config.is_encoder_decoder:
-                    decoder_hidden_states.append(model_outputs.decoder_hidden_states)
-                elif output_hidden_states and self.config.is_encoder_decoder:
-                    decoder_hidden_states.append(model_outputs.hidden_states)
+                if output_hidden_states:
+                    decoder_hidden_states += (
+                        (model_outputs.decoder_hidden_states,)
+                        if self.config.is_encoder_decoder
+                        else (model_outputs.hidden_states,)
+                    )
 
             # This is needed to properly delete logits which may be very large for first iteration
             # Otherwise a reference to outputs is kept which keeps the logits alive in the next iteration
