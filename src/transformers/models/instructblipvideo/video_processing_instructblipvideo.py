@@ -327,3 +327,6 @@ class InstructBlipVideoVideoProcessor(BaseVideoProcessor):
         image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
 
         return image
+
+
+__all__ = ["InstructBlipVideoVideoProcessor"]

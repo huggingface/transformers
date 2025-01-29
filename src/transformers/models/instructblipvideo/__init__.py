@@ -13,77 +13,16 @@
 # limitations under the License.
 from typing import TYPE_CHECKING
 
-from ...utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_available, is_vision_available
+from ...utils import _LazyModule
+from ...utils.import_utils import define_import_structure
 
-
-_import_structure = {
-    "configuration_instructblipvideo": [
-        "InstructBlipVideoConfig",
-        "InstructBlipVideoQFormerConfig",
-        "InstructBlipVideoVisionConfig",
-    ],
-    "processing_instructblipvideo": ["InstructBlipVideoProcessor"],
-}
-
-
-try:
-    if not is_vision_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["video_processing_instructblipvideo"] = [
-        "InstructBlipVideoImageProcessor",
-        "InstructBlipVideoVideoProcessor",
-    ]
-
-
-try:
-    if not is_torch_available():
-        raise OptionalDependencyNotAvailable()
-except OptionalDependencyNotAvailable:
-    pass
-else:
-    _import_structure["modeling_instructblipvideo"] = [
-        "InstructBlipVideoQFormerModel",
-        "InstructBlipVideoPreTrainedModel",
-        "InstructBlipVideoForConditionalGeneration",
-        "InstructBlipVideoVisionModel",
-    ]
 
 if TYPE_CHECKING:
-    from .configuration_instructblipvideo import (
-        InstructBlipVideoConfig,
-        InstructBlipVideoQFormerConfig,
-        InstructBlipVideoVisionConfig,
-    )
-    from .processing_instructblipvideo import InstructBlipVideoProcessor
-
-    try:
-        if not is_vision_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .video_processing_instructblipvideo import (
-            InstructBlipVideoImageProcessor,
-            InstructBlipVideoVideoProcessor,
-        )
-
-    try:
-        if not is_torch_available():
-            raise OptionalDependencyNotAvailable()
-    except OptionalDependencyNotAvailable:
-        pass
-    else:
-        from .modeling_instructblipvideo import (
-            InstructBlipVideoForConditionalGeneration,
-            InstructBlipVideoPreTrainedModel,
-            InstructBlipVideoQFormerModel,
-            InstructBlipVideoVisionModel,
-        )
-
+    from .configuration_instructblip import *
+    from .modeling_instructblip import *
+    from .processing_instructblip import *
 else:
     import sys
 
-    sys.modules[__name__] = _LazyModule(__name__, globals()["__file__"], _import_structure, module_spec=__spec__)
+    _file = globals()["__file__"]
+    sys.modules[__name__] = _LazyModule(__name__, _file, define_import_structure(_file), module_spec=__spec__)

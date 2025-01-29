@@ -27,6 +27,9 @@ from transformers.models.instructblip.configuration_instructblip import (
 from transformers.models.instructblip.modeling_instructblip import (
     InstructBlipForConditionalGeneration,
     InstructBlipForConditionalGenerationModelOutput,
+    InstructBlipPreTrainedModel,
+    InstructBlipQFormerModel,
+    InstructBlipVisionModel,
 )
 
 from ...configuration_utils import PretrainedConfig
@@ -170,6 +173,18 @@ class InstructBlipVideoConfig(PretrainedConfig):
 
 @dataclass
 class InstructBlipVideoForConditionalGenerationModelOutput(InstructBlipForConditionalGenerationModelOutput):
+    pass
+
+
+class InstructBlipVideoPreTrainedModel(InstructBlipPreTrainedModel):
+    pass
+
+
+class InstructBlipVideoQFormerModel(InstructBlipQFormerModel):
+    pass
+
+
+class InstructBlipVideoVisionModel(InstructBlipVisionModel):
     pass
 
 
@@ -478,3 +493,14 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         outputs = self.language_model.generate(**inputs, **generate_kwargs)
 
         return outputs
+
+
+__all__ = [
+    "InstructBlipVideoConfig",
+    "InstructBlipVideoQFormerConfig",
+    "InstructBlipVideoVisionConfig",
+    "InstructBlipVideoQFormerModel",
+    "InstructBlipVideoPreTrainedModel",
+    "InstructBlipVideoVisionModel",
+    "InstructBlipVideoForConditionalGeneration",
+]

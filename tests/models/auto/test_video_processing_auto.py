@@ -130,7 +130,7 @@ class AutoVideoProcessorTest(unittest.TestCase):
     def test_video_processor_not_found(self):
         with self.assertRaisesRegex(
             EnvironmentError,
-            "hf-internal-testing/config-no-model does not appear to have a file named video_preprocessor_config.json.",
+            "hf-internal-testing/config-no-model does not appear to have a file named preprocessor_config.json.",
         ):
             _ = AutoVideoProcessor.from_pretrained("hf-internal-testing/config-no-model")
 
