@@ -42,7 +42,7 @@ def random_tensor(size):
     return torch.rand(size)
 
 
-class SuperGlueImageProcessingTester(unittest.TestCase):
+class SuperGlueImageProcessing:
     def __init__(
         self,
         parent,
