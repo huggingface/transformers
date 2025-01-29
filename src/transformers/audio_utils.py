@@ -188,7 +188,7 @@ def chroma_filter_bank(
     sampling_rate: int,
     tuning: float = 0.0,
     power: Optional[float] = 2.0,
-    weighting_parameters: Optional[Tuple[float]] = (5.0, 2),
+    weighting_parameters: Optional[Tuple[float, float]] = (5.0, 2.0),
     start_at_c_chroma: Optional[bool] = True,
 ):
     """
@@ -207,7 +207,7 @@ def chroma_filter_bank(
             Tuning deviation from A440 in fractions of a chroma bin.
         power (`float`, *optional*, defaults to 2.0):
             If 12.0, normalizes each column with their L2 norm. If 1.0, normalizes each column with their L1 norm.
-        weighting_parameters (`Tuple[float]`, *optional*, defaults to `(5., 2.)`):
+        weighting_parameters (`Tuple[float, float]`, *optional*, defaults to `(5., 2.)`):
             If specified, apply a Gaussian weighting parameterized by the first element of the tuple being the center and
             the second element being the Gaussian half-width.
         start_at_c_chroma (`float`, *optional*, defaults to `True`):
