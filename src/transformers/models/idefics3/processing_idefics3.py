@@ -156,6 +156,7 @@ class Idefics3Processor(ProcessorMixin):
             ]
         }
         tokenizer.add_special_tokens(tokens_to_add)
+        self.bos_token = self.tokenizer.bos_token
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template, **kwargs)
 
@@ -248,6 +249,11 @@ class Idefics3Processor(ProcessorMixin):
             elif not isinstance(text, list) and not isinstance(text[0], str):
                 raise ValueError("Invalid input text. Please provide a string, or a list of strings")
             n_images_in_text = [sample.count(self.image_token.content) for sample in text]
+
+        add_special_tokens = True
+        if self.bos_token is not None and text[0].startswith(self.bos_token):
+            add_special_tokens = False
+        output_kwargs["text_kwargs"]["add_special_tokens"] = add_special_tokens
 
         if images is not None:
             if is_image_or_image_url(images):
