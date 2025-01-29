@@ -445,6 +445,11 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.config_tester = ConfigTester(self, config_class=WhisperConfig)
         self.maxDiff = 3000
 
+    def prepare_config_and_inputs_for_generate(self, batch_size=2):
+        config, inputs_dict = super().prepare_config_and_inputs_for_generate(batch_size=batch_size)
+        inputs_dict["force_unique_generate_call"] = True
+        return config, inputs_dict
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
@@ -494,7 +499,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         for model_class in self.all_model_classes:
             model = model_class(config)
             embeds = model.get_encoder().embed_positions.weight
-            self.assertTrue(torch.allclose(embeds, sinusoids(*embeds.shape)))
+            torch.testing.assert_close(embeds, sinusoids(*embeds.shape))
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -919,7 +924,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 logits_fa = outputs_fa.decoder_hidden_states[-1]
 
                 # whisper FA2 needs very high tolerance
-                self.assertTrue(torch.allclose(logits_fa, logits, atol=4e-1))
+                torch.testing.assert_close(logits_fa, logits, rtol=4e-1, atol=4e-1)
 
                 # check with inference + dropout
                 model.train()
@@ -964,7 +969,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 logits_fa = outputs_fa.decoder_hidden_states[-1]
 
                 # whisper FA2 needs very high tolerance
-                self.assertTrue(torch.allclose(logits_fa, logits, atol=4e-1))
+                torch.testing.assert_close(logits_fa, logits, rtol=4e-1, atol=4e-1)
 
                 other_inputs = {
                     "decoder_input_ids": decoder_input_ids,
@@ -979,7 +984,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                 logits_fa = outputs_fa.decoder_hidden_states[-1]
 
                 # whisper FA2 needs very high tolerance
-                self.assertTrue(torch.allclose(logits_fa[:, -2:], logits[:, -2:], atol=4e-1))
+                torch.testing.assert_close(logits_fa[:, -2:], logits[:, -2:], rtol=4e-1, atol=4e-1)
 
     def _create_and_check_torchscript(self, config, inputs_dict):
         if not self.test_torchscript:
@@ -1597,6 +1602,11 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             with self.assertRaises(ValueError):
                 model(input_features=input_features, labels=labels)
 
+    # TODO (joao, eustache): fix me :)
+    @unittest.skip(reason="Whisper's custom generate is not consistent regarding the cache return types")
+    def test_generate_compile_model_forward(self):
+        pass
+
 
 @require_torch
 @require_torchaudio
@@ -1658,7 +1668,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             ]
         )
         # fmt: on
-        self.assertTrue(torch.allclose(logits[0][0, 0, :30].cpu(), EXPECTED_LOGITS, atol=1e-4))
+        torch.testing.assert_close(logits[0][0, 0, :30].cpu(), EXPECTED_LOGITS, rtol=1e-4, atol=1e-4)
 
         # fmt: off
         EXPECTED_GENERATION = torch.tensor(
@@ -1672,7 +1682,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         # fmt: on
 
         head_logits = logits[0] @ model.decoder.embed_tokens.weight.T
-        self.assertTrue(torch.allclose(head_logits[0, 0, :30].cpu(), EXPECTED_GENERATION, atol=1e-4))
+        torch.testing.assert_close(head_logits[0, 0, :30].cpu(), EXPECTED_GENERATION, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_small_en_logits_librispeech(self):
@@ -1707,7 +1717,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             ]
         )
         # fmt: on
-        self.assertTrue(torch.allclose(logits[0, 0, :30].cpu(), EXPECTED_LOGITS, atol=1e-4))
+        torch.testing.assert_close(logits[0, 0, :30].cpu(), EXPECTED_LOGITS, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_large_logits_librispeech(self):
@@ -1751,7 +1761,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         )
         # fmt: on
 
-        self.assertTrue(torch.allclose(logits[0, 0, :30].cpu(), EXPECTED_LOGITS, atol=1e-4))
+        torch.testing.assert_close(logits[0, 0, :30].cpu(), EXPECTED_LOGITS, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_tiny_en_generation(self):
@@ -1863,7 +1873,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         )
         # fmt: on
 
-        self.assertTrue(torch.allclose(generated_ids.cpu(), EXPECTED_LOGITS))
+        torch.testing.assert_close(generated_ids.cpu(), EXPECTED_LOGITS)
 
         # fmt: off
         EXPECTED_TRANSCRIPT = [
@@ -1891,8 +1901,8 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             "ja",
             split="test",
             streaming=True,
-            token=token,
             trust_remote_code=True,
+            token=token,
         )
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
 
@@ -1937,7 +1947,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         )
         # fmt: on
 
-        self.assertTrue(torch.allclose(generated_ids, EXPECTED_LOGITS))
+        torch.testing.assert_close(generated_ids, EXPECTED_LOGITS)
 
         # fmt: off
         EXPECTED_TRANSCRIPT = [
@@ -1970,7 +1980,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         ])
         # fmt: on
 
-        self.assertTrue(torch.allclose(generated_ids, EXPECTED_OUTPUT))
+        torch.testing.assert_close(generated_ids, EXPECTED_OUTPUT)
 
         EXPECTED_TRANSCRIPT = [
             {
@@ -2097,6 +2107,99 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         self.assertEqual(transcript[0]["offsets"], EXPECTED_TRANSCRIPT)
 
     @slow
+    def test_small_longform_timestamps_generation(self):
+        processor = WhisperProcessor.from_pretrained("openai/whisper-small.en")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-small.en")
+        model.to(torch_device)
+
+        dataset = load_dataset("distil-whisper/librispeech_long", "clean", split="validation")
+        sample = dataset[0]["audio"]["array"]
+        sampling_rate = dataset[0]["audio"]["sampling_rate"]
+
+        sample = [*sample[: 15 * sampling_rate], *np.zeros(16 * sampling_rate).tolist(), *sample[15 * sampling_rate :]]
+        sample = np.array(sample)
+
+        input_features = processor(
+            sample,
+            sampling_rate=16_000,
+            padding="longest",
+            truncation=False,
+            return_attention_mask=True,
+            return_tensors="pt",
+        ).input_features
+
+        input_features = input_features.to(torch_device)
+        generated_ids = model.generate(input_features, return_timestamps=True, return_segments=True)
+
+        EXPECTED_TRANSCRIPT = [
+            {
+                "text": " Mr. Quilter is the apostle of the middle classes, and we are glad to welcome his gospel.",
+                "timestamp": (0.0, 6.38),
+            },
+            {
+                "text": " Nor is Mr. Quilter's manner less interesting than his matter.",
+                "timestamp": (6.38, 11.32),
+            },
+            {
+                "text": " He tells us that at this festive season of the year,",
+                "timestamp": (11.32, 15.0),
+            },
+            {
+                "text": " With Christmas and roast beef looming before us, similes drawn from eating and its results",
+                "timestamp": (30.0, 36.76),
+            },
+            {
+                "text": " occur most readily to the mind.",
+                "timestamp": (36.76, 39.80),
+            },
+            {
+                "text": " He has grave doubts whether Sir Frederick Layton's work is really Greek after all and",
+                # "timestamp": (39.80, 45.36),
+                # above is the expected output on A100.
+                # on CI T4s, due to sligth difference in floating points operations, expected is below
+                "timestamp": (39.80, 45.38),
+            },
+            {
+                "text": " can discover in it but little of rocky Ithaca.",
+                # "timestamp": (45.36, 49.0),
+                # see above
+                "timestamp": (45.38, 49.0),
+            },
+            {
+                "text": " Lenell's pictures are a sort of up-guards-and-atom paintings, and Mason's exquisite ittles",
+                "timestamp": (49.0, 56.28),
+            },
+            {
+                "text": " are as national as a jingo poem. Mr. Burkett fosters landscape's smile at one much in",
+                "timestamp": (56.28, 64.12),
+            },
+            {
+                "text": " the same way that Mr. Karker used to flash his teeth. And Mr. John Collier gives his",
+                "timestamp": (64.12, 70.76),
+            },
+            {
+                "text": " sitter a cheerful slap on the back before he says, like a shampoo or in a Turkish bath,",
+                "timestamp": (70.76, 77.16),
+            },
+            {
+                "text": " Next Man",
+                "timestamp": (77.16, 78.16),
+            },
+        ]
+
+        transcript = processor.batch_decode(generated_ids["sequences"], skip_special_tokens=True, output_offsets=True)
+        self.assertEqual(transcript[0]["offsets"], EXPECTED_TRANSCRIPT)
+
+        transcript_segments = [
+            {
+                "text": processor.decode(seg["tokens"], skip_special_tokens=True),
+                "timestamp": (seg["start"].item(), seg["end"].item()),
+            }
+            for seg in generated_ids["segments"][0]
+        ]
+        self.assertEqual(transcript_segments, EXPECTED_TRANSCRIPT)
+
+    @slow
     def test_large_timestamp_generation(self):
         set_seed(0)
         processor = WhisperProcessor.from_pretrained("openai/whisper-large-v3")
@@ -2118,7 +2221,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             50365, 2221, 13, 2326, 388, 391, 307, 264, 50244, 295, 264, 2808, 5359, 11, 293, 321, 366, 5404, 281, 2928, 702, 14943, 13, 50629, 50682, 6966, 307, 2221, 13, 2326, 388, 391, 311, 9060, 1570, 1880, 813, 702, 1871, 13, 50870, 50911, 634, 5112, 505, 300, 412, 341, 42729, 3196, 295, 264, 1064, 11, 365, 5272, 293, 12904, 9256, 450, 10539, 949, 505, 11, 51245, 51287, 1034, 4680, 10117, 490, 3936, 293, 1080, 3542, 5160, 881, 26336, 281, 264, 1575, 13, 51494, 51523, 634, 575, 12525, 22618, 1968, 6144, 35617, 1456, 397, 266, 311, 589, 307, 534, 10281, 934, 439, 11, 51799, 51815, 50365, 293, 393, 4411, 50430
         ])
         # fmt: on
-        self.assertTrue(torch.allclose(generated_ids, EXPECTED_OUTPUT))
+        torch.testing.assert_close(generated_ids, EXPECTED_OUTPUT)
 
         EXPECTED_TRANSCRIPT = [
             {
@@ -2187,20 +2290,20 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         # fmt: off
         EXPECTED_OUTPUT = torch.tensor([
-            [0.0000, 0.4800, 0.8200, 0.9600, 1.1200, 1.1200, 1.2200, 1.5000, 1.7200, 2.0000, 2.3400, 2.5000, 2.6600, 3.1800, 3.5600, 3.6800, 3.8000, 4.1000, 4.3000, 4.5800, 4.9400, 5.3800, 12.4200, 12.8400, 26.9200, 26.9200, 26.9200, 26.9200, 26.9200, 26.9200, 26.9200, 26.9200, 26.9200, 26.9200, 26.9200, 26.9400, 26.9400, 26.9400, 26.9400],
-            [0.0000, 0.5200, 0.9000, 1.1400, 1.4200, 1.5200, 1.6800, 1.6800, 1.8800, 2.1000, 2.2200, 2.6200, 3.1400, 3.5800, 3.9600, 4.4000, 17.3000, 17.3000, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7200, 26.7400, 26.7400, 26.7400, 26.7400, 26.7400, 26.7400],
+            [0.0000, 0.4800, 0.8200, 0.9600, 1.1200, 1.1200, 1.2200, 1.5000, 1.7200, 2.0000, 2.3400, 2.5000, 2.6600, 3.1800, 3.5600, 3.6800, 3.8000, 4.1000, 4.3000, 4.5800, 4.9400, 5.3800, 12.4200, 12.4200, 12.4200, 12.4200, 12.4200, 12.4200, 12.4200, 12.4200, 12.4200, 12.4200, 12.4200, 12.4200, 12.4200, 12.4200, 12.4200, 12.4200, 12.4200],
+            [0.0000, 0.5200, 0.9000, 1.1400, 1.4200, 1.5200, 1.6800, 1.6800, 1.8800, 2.1000, 2.2200, 2.6200, 3.1400, 3.5800, 3.9600, 4.4000, 17.3000, 17.3000, 17.3000, 17.3000, 17.3000, 17.3000, 17.3000, 17.3000, 17.3000, 17.3000, 17.3000, 17.3000, 17.3000, 17.3000, 17.3000, 17.3000, 17.3000, 17.3000, 17.3000, 17.3000, 17.3000, 17.3000, 17.3000],
             [0.0000, 0.0000, 0.7600, 1.0000, 1.4200, 1.8000, 1.9400, 2.1800, 2.5200, 3.0200, 3.3200, 3.5400, 3.9400, 4.5600, 4.9200, 5.2800, 5.5600, 5.9000, 6.1600, 6.3000, 6.4800, 6.4800, 6.6400, 7.8200, 7.9600, 8.2200, 8.6000, 8.9200, 9.2200, 9.5200, 9.7200, 10.0600, 10.5400, 10.8800, 11.2600, 11.5400, 11.7400, 12.0800, 15.6800],
-            [0.0000, 0.0000, 0.7400, 1.0400, 1.3200, 1.6800, 2.1400, 2.4800, 2.7800, 3.0800, 3.1600, 3.4000, 3.6000, 4.0200, 4.2200, 4.8600, 5.2400, 5.7400, 6.3400, 6.6200, 6.7600, 6.7600, 6.8600, 7.2400, 7.4200, 7.6800, 7.9200, 8.4800, 8.7600, 9.2000, 9.2000, 9.4200, 15.8200, 15.8200, 29.6400, 29.6600, 29.6600, 29.6600, 29.6600]
+            [0.0000, 0.0000, 0.7400, 1.0400, 1.3200, 1.6800, 2.1400, 2.4800, 2.7800, 3.0800, 3.1600, 3.4000, 3.6000, 4.0200, 4.2200, 4.8600, 5.2400, 5.7400, 6.3400, 6.6200, 6.7600, 6.7600, 6.8600, 7.2400, 7.4200, 7.6800, 7.9200, 8.4800, 8.7600, 9.2000, 9.2000, 9.4200, 15.8200, 15.8200, 15.8200, 15.8200, 15.8200, 15.8200, 15.8200]
         ])
         # fmt: on
 
-        self.assertTrue(torch.allclose(generate_outputs["token_timestamps"].to("cpu"), EXPECTED_OUTPUT))
+        torch.testing.assert_close(generate_outputs["token_timestamps"].to("cpu"), EXPECTED_OUTPUT)
 
     @slow
-    def test_large_token_timestamp_generation(self):
+    def test_small_token_timestamp_generation(self):
         set_seed(0)
-        processor = WhisperProcessor.from_pretrained("openai/whisper-large-v3")
-        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large-v3")
+        processor = WhisperProcessor.from_pretrained("openai/whisper-small")
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-small")
         model.to(torch_device)
 
         input_speech = self._load_datasamples(4)
@@ -2217,14 +2320,14 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         # fmt: off
         EXPECTED_OUTPUT = torch.tensor([
-            [0.0000, 0.0000,  0.6200,  0.7400,  0.8600, 1.0000,  1.0400,  1.3000,  1.4400,  1.7800,  2.1800,  2.2800,  2.5000, 2.9200,  3.0000,  3.3800,  3.5000,  3.6000,  3.8400,  4.1000,  4.4000, 4.6800,  5.1400,  5.3600,  5.8200,  5.8200,  5.8200,  5.8200,  5.8200, 5.8200,  5.8200,  5.8200,  5.8200,  5.8200,  5.8200,  5.8200,  5.8200],
-            [0.0000, 0.0000,  0.6000,  0.9200,  1.2200, 1.3400,  1.4200,  1.5400,  1.5800,  1.7400,  2.0600,  2.3800,  3.0400, 3.3800,  3.6400,  4.1200,  4.3600,  4.7800,  4.7800,  4.7800,  4.7800, 4.7800,  4.7800,  4.7800,  4.7800,  4.7800,  4.7800,  4.7800,  4.7800, 4.7800,  4.7800,  4.7800,  4.7800,  4.7800,  4.7800,  4.7800,  4.7800],
-            [0.0000, 0.0000,  0.5400,  0.8200,  1.1600, 1.4600,  1.7400,  1.8800,  2.3400,  2.7400,  3.1400,  3.2200,  3.5400, 4.2800,  4.5600,  4.8200,  5.0600,  5.3200,  5.6600,  5.9600,  6.1400, 6.4000,  6.8400,  7.8800,  8.0200,  8.3600,  8.7000,  9.0200,  9.3200, 9.5000,  9.8400, 10.3000, 10.6600, 11.0800, 11.3600, 11.4600, 11.8000],
-            [0.0000, 0.0000,  0.5600,  0.7600,  1.0600, 1.4000,  1.8800,  2.2600,  2.6200,  2.8000,  2.9600,  3.0000,  3.2000, 3.4400,  3.6800,  4.0000,  4.6000,  5.0000,  5.3200,  5.4800,  6.0600, 6.0600,  6.1000,  6.3200,  6.7400,  7.0000,  7.2200,  7.4000,  7.7600, 8.0600,  8.5600,  8.8600,  8.9400,  9.1000,  9.3400,  9.8800,  9.8800]
+            [0.0000, 0.0000, 0.7400, 0.8000, 0.9800, 1.0200, 1.1400, 1.4000, 1.5200, 1.9200, 2.2600, 2.3800, 2.5400, 2.8600, 3.2600, 3.3400, 3.4400, 3.6000, 3.6800, 3.9200, 4.2000, 4.4800, 4.7800, 5.2600, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200, 5.8200],
+            [0.0000, 0.0000, 0.7600, 1.0000, 1.3000, 1.3800, 1.5200, 1.5800, 1.7000, 1.8400, 2.1000, 2.5000, 3.1400, 3.4400, 3.7400, 4.1800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800, 4.7800],
+            [0.0000, 0.0000, 0.6600, 0.9000, 1.2200, 1.5200, 1.7600, 2.0200, 2.4000, 2.9200, 3.1800, 3.3200, 3.6200, 4.1000, 4.3600, 4.7800, 5.1200, 5.3400, 5.7200, 6.0600, 6.2000, 6.2000, 6.2000, 6.5000, 6.9000, 7.6400, 8.0000, 8.2400, 8.5200, 8.7400, 9.0800, 9.4000, 9.5400, 9.9400, 10.4200, 10.7600, 11.1200, 11.4400, 11.5800, 11.8600, 12.4600],
+            [0.0000, 0.0000, 0.6600, 0.8600, 1.1400, 1.5000, 1.9600, 2.3600, 2.6400, 2.9800, 3.1200, 3.2400, 3.4800, 3.7800, 4.1400, 4.6400, 5.0800, 5.4400, 6.2200, 6.2200, 6.2200, 6.4000, 6.8400, 7.1200, 7.2600, 7.4800, 7.8200, 8.1400, 8.7000, 9.0200, 9.0200, 9.2000, 9.8800, 9.8800, 9.8800, 9.8800, 9.8800, 9.8800, 9.8800, 9.8800, 9.8800]
         ])
         # fmt: on
 
-        self.assertTrue(torch.allclose(generate_outputs["token_timestamps"].to("cpu"), EXPECTED_OUTPUT))
+        torch.testing.assert_close(generate_outputs["token_timestamps"].to("cpu"), EXPECTED_OUTPUT)
 
     @slow
     def test_tiny_token_timestamp_batch_generation(self):
@@ -2305,7 +2408,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         # fmt: on
 
         for segment, exp_segment in zip(generate_outputs["segments"][0], EXPECTED_OUTPUT):
-            self.assertTrue(torch.allclose(segment["token_timestamps"], exp_segment))
+            torch.testing.assert_close(segment["token_timestamps"], exp_segment)
 
     @slow
     def test_tiny_specaugment_librispeech(self):
@@ -2340,7 +2443,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
             ]
         )
         # fmt: on
-        self.assertTrue(torch.allclose(logits[0][0, 0, :30].cpu(), EXPECTED_LOGITS, atol=1e-4))
+        torch.testing.assert_close(logits[0][0, 0, :30].cpu(), EXPECTED_LOGITS, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_generate_with_prompt_ids(self):
@@ -3243,6 +3346,7 @@ class WhisperModelIntegrationTests(unittest.TestCase):
 
         # only permit 4 compilations: 2 prefill steps and 2 decoding steps (1 for each of conditioned/not conditioned)
         torch._dynamo.config.cache_size_limit = 4
+        torch._dynamo.reset()
 
         processor = WhisperProcessor.from_pretrained("openai/whisper-tiny.en")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny.en")

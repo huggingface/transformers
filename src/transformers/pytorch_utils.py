@@ -34,12 +34,16 @@ is_torch_greater_or_equal_than_2_4 = parsed_torch_version_base >= version.parse(
 is_torch_greater_or_equal_than_2_3 = parsed_torch_version_base >= version.parse("2.3")
 is_torch_greater_or_equal_than_2_2 = parsed_torch_version_base >= version.parse("2.2")
 is_torch_greater_or_equal_than_2_1 = parsed_torch_version_base >= version.parse("2.1")
+
+# For backwards compatibility (e.g. some remote codes on Hub using those variables).
 is_torch_greater_or_equal_than_2_0 = parsed_torch_version_base >= version.parse("2.0")
 is_torch_greater_or_equal_than_1_13 = parsed_torch_version_base >= version.parse("1.13")
 is_torch_greater_or_equal_than_1_12 = parsed_torch_version_base >= version.parse("1.12")
 
+# Cache this result has it's a C FFI call which can be pretty time-consuming
+_torch_distributed_available = torch.distributed.is_available()
 
-if is_torch_greater_or_equal("2.5"):
+if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
     from torch.distributed.tensor import Replicate
     from torch.distributed.tensor.parallel import (
         ColwiseParallel,
@@ -354,5 +358,7 @@ def translate_to_torch_parallel_style(style: str):
         return RowwiseParallel()
     elif style == "colwise_rep":
         return ColwiseParallel(output_layouts=Replicate())
+    elif style == "rowwise_rep":
+        return RowwiseParallel(input_layouts=Replicate())
     else:
         raise ValueError(f"Unsupported parallel style value: {style}")

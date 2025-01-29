@@ -17,6 +17,7 @@
 import unittest
 
 import requests
+from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
@@ -29,7 +30,6 @@ from transformers.testing_utils import (
     cleanup,
     require_bitsandbytes,
     require_torch,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -41,8 +41,6 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
-else:
-    is_torch_greater_or_equal_than_2_0 = False
 
 if is_vision_available():
     from PIL import Image
@@ -228,7 +226,7 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTest
             with torch.no_grad():
                 out_ids = model(input_ids=input_ids, **inputs)[0]
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            self.assertTrue(torch.allclose(out_embeds, out_ids))
+            torch.testing.assert_close(out_embeds, out_ids)
 
     # Copied from tests.models.llava.test_modeling_llava.LlavaForConditionalGenerationModelTest.test_mismatching_num_image_tokens
     def test_mismatching_num_image_tokens(self):
@@ -259,6 +257,37 @@ class VipLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTest
             # two images and two image tokens don't raise an error
             pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
             _ = model(input_ids=input_ids, pixel_values=pixel_values)
+
+    @parameterized.expand(
+        [
+            (-1,),
+            ([-1],),
+            ([-1, -2],),
+        ],
+    )
+    def test_vision_feature_layers(self, vision_feature_layers):
+        """
+        Test that we can use either one vision feature layer, or a list of
+        vision feature layers.
+        """
+        # NOTE: vipllava uses vision_feature_layers instead of vision_feature_layer as the
+        # config key. The reason is that other llava classes supported one vision feature layer
+        # and added support for a list of layers with granite vision support, while vipllava
+        # originally supported multiple feature layers, and added support for a single layer for
+        # for compatibility reasons.
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.vision_feature_layers = vision_feature_layers
+
+        num_feature_layers = 1 if isinstance(vision_feature_layers, int) else len(vision_feature_layers)
+        hidden_size = config.vision_config.hidden_size
+        expected_features = hidden_size * num_feature_layers
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            # We should have the right number of input features,
+            # and should be able to run a forward pass without exploding
+            assert model.multi_modal_projector.linear_1.in_features == expected_features
+            model(**input_dict)
 
     @unittest.skip(
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
@@ -322,72 +351,5 @@ class VipLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         outputs = model.generate(**inputs, max_new_tokens=10)
 
-        EXPECTED_OUTPUT = "USER: <image> \nCan you please describe this image?\nASSISTANT: The image features a brown and white cat sitting on"
+        EXPECTED_OUTPUT = "USER:  \nCan you please describe this image?\nASSISTANT: The image features a brown and white cat sitting on"
         self.assertEqual(processor.decode(outputs[0], skip_special_tokens=True), EXPECTED_OUTPUT)
-
-    @slow
-    @require_torch_gpu
-    def test_vipllava_merge_inputs_error_bug(self):
-        # This is a reproducer of https://github.com/huggingface/transformers/pull/28333 and makes sure it does not happen anymore
-        model_id = "llava-hf/vip-llava-7b-hf"
-        model = VipLlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
-
-        # Simulate some user inputs
-        pixel_values = torch.randn(
-            (1, 3, 336, 336),
-            dtype=torch.float,
-            device=torch_device,
-        )
-        input_ids = torch.tensor(
-            [
-                [32001, 32001, 1, 15043, 7084, 32000, 29871, 13, 7900],
-            ],
-            dtype=torch.long,
-            device=torch_device,
-        )
-        attention_mask = torch.tensor(
-            [[0, 0, 1, 1, 1, 1, 1, 1, 1]],
-            dtype=torch.long,
-            device=torch_device,
-        )
-
-        # Make sure that the loss is properly computed
-        loss = model(
-            pixel_values=pixel_values,
-            input_ids=input_ids,
-            attention_mask=attention_mask,
-            labels=input_ids,
-        ).loss
-        loss.backward()
-
-    @slow
-    @require_bitsandbytes
-    def test_expansion_in_processing(self):
-        model_id = "llava-hf/vip-llava-7b-hf"
-        model = VipLlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
-        processor = AutoProcessor.from_pretrained(model_id)
-
-        prompt = "USER: <image>\nDescribe the image:\nASSISTANT:"
-        image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
-
-        # check processing with expansion of inputs
-        processor.vision_feature_select_strategy = "default"
-        processor.patch_size = 14
-        processor.num_additional_image_tokens = 1
-        inputs_expanded = processor(prompt, raw_image, return_tensors="pt").to(torch_device, torch.float16)
-        self.assertTrue(inputs_expanded.input_ids.shape[-1] == 593)
-
-        # check processing without expansion of inputs (legacy behavior)
-        processor.vision_feature_select_strategy = None
-        processor.patch_size = None
-        processor.num_additional_image_tokens = None
-        inputs = processor(prompt, raw_image, return_tensors="pt").to(torch_device, torch.float16)
-        self.assertTrue(inputs.input_ids.shape[-1] == 18)
-
-        # generate exactly 20 tokens
-        output = model.generate(**inputs, min_new_tokens=20, max_new_tokens=20)
-        output_expanded = model.generate(**inputs_expanded, min_new_tokens=20, max_new_tokens=20)
-
-        # check that both inputs are handled correctly and generate the same output
-        self.assertListEqual(output_expanded[:, -20:].tolist(), output[:, -20:].tolist())

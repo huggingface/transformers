@@ -227,6 +227,7 @@ def hp_params(trial):
 
 def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> BestRun:
     import optuna
+    from accelerate.utils.memory import release_memory
 
     if trainer.args.process_index == 0:
 
@@ -251,6 +252,11 @@ def run_hp_search_optuna(trainer, n_trials: int, direction: str, **kwargs) -> Be
             if getattr(trainer, "objective", None) is None:
                 metrics = trainer.evaluate()
                 trainer.objective = trainer.compute_objective(metrics)
+
+            # Free GPU memory
+            trainer.model_wrapped, trainer.model = release_memory(trainer.model_wrapped, trainer.model)
+            trainer.accelerator.clear()
+
             return trainer.objective
 
         timeout = kwargs.pop("timeout", None)
@@ -909,13 +915,13 @@ class WandbCallback(TrainerCallback):
         if not self._initialized:
             self.setup(args, state, model, **kwargs)
 
-    def on_train_end(self, args, state, control, model=None, tokenizer=None, **kwargs):
+    def on_train_end(self, args, state, control, model=None, processing_class=None, **kwargs):
         if self._wandb is None:
             return
         if self._log_model.is_enabled and self._initialized and state.is_world_process_zero:
             from ..trainer import Trainer
 
-            fake_trainer = Trainer(args=args, model=model, processing_class=tokenizer, eval_dataset=["fake"])
+            fake_trainer = Trainer(args=args, model=model, processing_class=processing_class, eval_dataset=["fake"])
             with tempfile.TemporaryDirectory() as temp_dir:
                 fake_trainer.save_model(temp_dir)
                 metadata = (
@@ -1235,7 +1241,7 @@ class MLflowCallback(TrainerCallback):
 
         logger.debug(
             f"MLflow experiment_name={self._experiment_name}, run_name={args.run_name}, nested={self._nested_run},"
-            f" tags={self._nested_run}, tracking_uri={self._tracking_uri}"
+            f" tracking_uri={self._tracking_uri}"
         )
         if state.is_world_process_zero:
             if not self._ml_flow.is_tracking_uri_set():
@@ -1759,7 +1765,7 @@ class ClearMLCallback(TrainerCallback):
         self._log_model = False
         self._checkpoints_saved = []
 
-    def setup(self, args, state, model, tokenizer, **kwargs):
+    def setup(self, args, state, model, processing_class, **kwargs):
         if self._clearml is None:
             return
         if self._initialized:
@@ -1858,25 +1864,25 @@ class ClearMLCallback(TrainerCallback):
                         description=configuration_object_description,
                     )
 
-    def on_train_begin(self, args, state, control, model=None, tokenizer=None, **kwargs):
+    def on_train_begin(self, args, state, control, model=None, processing_class=None, **kwargs):
         if self._clearml is None:
             return
         self._checkpoints_saved = []
         if state.is_hyper_param_search:
             self._initialized = False
         if not self._initialized:
-            self.setup(args, state, model, tokenizer, **kwargs)
+            self.setup(args, state, model, processing_class, **kwargs)
 
     def on_train_end(self, args, state, control, **kwargs):
         if ClearMLCallback._should_close_on_train_end:
             self._clearml_task.close()
             ClearMLCallback._train_run_counter = 0
 
-    def on_log(self, args, state, control, model=None, tokenizer=None, logs=None, **kwargs):
+    def on_log(self, args, state, control, model=None, processing_class=None, logs=None, **kwargs):
         if self._clearml is None:
             return
         if not self._initialized:
-            self.setup(args, state, model, tokenizer, **kwargs)
+            self.setup(args, state, model, processing_class, **kwargs)
         if state.is_world_process_zero:
             eval_prefix = "eval_"
             eval_prefix_len = len(eval_prefix)
@@ -2125,7 +2131,7 @@ class DVCLiveCallback(TrainerCallback):
                 fake_trainer = Trainer(
                     args=args,
                     model=kwargs.get("model"),
-                    processing_class=kwargs.get("tokenizer"),
+                    processing_class=kwargs.get("processing_class"),
                     eval_dataset=["fake"],
                 )
                 name = "best" if args.load_best_model_at_end else "last"
@@ -2151,6 +2157,17 @@ INTEGRATION_TO_CALLBACK = {
 
 
 def get_reporting_integration_callbacks(report_to):
+    if report_to is None:
+        return []
+
+    if isinstance(report_to, str):
+        if "none" == report_to:
+            return []
+        elif "all" == report_to:
+            report_to = get_available_reporting_integrations()
+        else:
+            report_to = [report_to]
+
     for integration in report_to:
         if integration not in INTEGRATION_TO_CALLBACK:
             raise ValueError(

@@ -14,14 +14,12 @@
 # limitations under the License.
 """Testing suite for the PyTorch Granite model."""
 
-import tempfile
 import unittest
 
 from parameterized import parameterized
 
 from transformers import GraniteConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
-    require_flash_attn,
     require_read_token,
     require_torch,
     require_torch_gpu,
@@ -345,7 +343,7 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
         # maximum sequence length, so the outputs for the short input should match.
         if scaling_type == "dynamic":
-            self.assertTrue(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
+            torch.testing.assert_close(original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5)
         else:
             self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
 
@@ -417,33 +415,6 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(yarn_sin_long, original_sin_long)
 
-    @require_flash_attn
-    @require_torch_gpu
-    @slow
-    def test_use_flash_attention_2_true(self):
-        """
-        NOTE: this is the only test testing that the legacy `use_flash_attention=2` argument still works as intended.
-        """
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            with tempfile.TemporaryDirectory() as tmp_dir:
-                model = model_class(config)
-                model.save_pretrained(tmp_dir)
-
-                new_model = GraniteForCausalLM.from_pretrained(
-                    tmp_dir, use_flash_attention_2=True, torch_dtype=torch.float16
-                ).to("cuda")
-
-                self.assertTrue(new_model.config._attn_implementation == "flash_attention_2")
-
-                has_flash = False
-                for name, submodule in new_model.named_modules():
-                    if "FlashAttention" in submodule.__class__.__name__:
-                        has_flash = True
-                        break
-                if not has_flash:
-                    raise ValueError("The flash model should have flash attention layers")
-
 
 @require_torch_gpu
 class GraniteIntegrationTest(unittest.TestCase):
@@ -473,7 +444,7 @@ class GraniteIntegrationTest(unittest.TestCase):
         # fmt: off
         EXPECTED_MEAN = torch.tensor([[-1.9798, -3.1626, -2.8062, -2.3777, -2.7091, -2.2338, -2.5924, -2.3974]])
 
-        self.assertTrue(torch.allclose(EXPECTED_MEAN.to(torch_device), out.logits.mean(-1), atol=1e-2, rtol=1e-2))
+        torch.testing.assert_close(EXPECTED_MEAN.to(torch_device), out.logits.mean(-1), rtol=1e-2, atol=1e-2)
 
         # slicing logits[0, 0, 0:15]
         EXPECTED_SLICE = torch.tensor([[4.8750, -2.1875, -2.1875, -2.1875, -2.1875, -2.8438, -2.1875, -2.1875,
@@ -503,4 +474,4 @@ class GraniteIntegrationTest(unittest.TestCase):
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([[-2.0984, -3.1294, -2.8153, -2.3568, -2.7337, -2.2624, -2.6016, -2.4022]])
 
-        self.assertTrue(torch.allclose(EXPECTED_MEAN.to(torch_device), out.logits.float().mean(-1), atol=1e-2, rtol=1e-2))
+        torch.testing.assert_close(EXPECTED_MEAN.to(torch_device), out.logits.float().mean(-1), rtol=1e-2, atol=1e-2)

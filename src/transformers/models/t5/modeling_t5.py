@@ -1205,7 +1205,7 @@ class T5Stack(T5PreTrainedModel):
         output_attentions: bool,
     ):
         if self.config._attn_implementation == "flash_attention_2":
-            if attention_mask is not None and 0.0 in attention_mask:
+            if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
 
@@ -2491,3 +2491,15 @@ class T5ForQuestionAnswering(T5PreTrainedModel):
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
         )
+
+
+__all__ = [
+    "T5EncoderModel",
+    "T5ForConditionalGeneration",
+    "T5Model",
+    "T5PreTrainedModel",
+    "load_tf_weights_in_t5",
+    "T5ForQuestionAnswering",
+    "T5ForSequenceClassification",
+    "T5ForTokenClassification",
+]
