@@ -62,6 +62,7 @@ class ModernBertTokenizerFast(PreTrainedTokenizerFast):
             # Force add_bos_token to True for causal mode
             kwargs.pop("add_bos_token", None)
             add_bos_token = True
+            kwargs["padding_side"] = "left"
         else:
             add_bos_token = kwargs.pop("add_bos_token", False)
 

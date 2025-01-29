@@ -69,6 +69,8 @@ class ModernBertConfig(PretrainedConfig):
             Classification token id.
         sep_token_id (`int`, *optional*, defaults to 50282):
             Separation token id.
+        mask_token_id (`int`, *optional*, defaults to 50284):
+            Mask token id.
         global_rope_theta (`float`, *optional*, defaults to 160000.0):
             The base period of the global RoPE embeddings.
         attention_bias (`bool`, *optional*, defaults to `False`):
@@ -115,6 +117,10 @@ class ModernBertConfig(PretrainedConfig):
         is_causal (`bool`, *optional*, defaults to `False`):
             Whether to use causal attention (e.g. decoder-only models). For standard encoder-decoder models, this should
             be set to `False`.
+        num_future_masks (`int`, *optional*, defaults to 3):
+            The number of masks tokens to append to each iterative encoder-only token generation (is_casual=False).
+        use_cache (`bool`, *optional*, defaults to `False`):
+            Whether to use cache when in decoder-only model.
     Examples:
 
     ```python
@@ -151,6 +157,7 @@ class ModernBertConfig(PretrainedConfig):
         bos_token_id=50281,
         cls_token_id=50281,
         sep_token_id=50282,
+        mask_token_id=50284,
         global_rope_theta=160000.0,
         attention_bias=False,
         attention_dropout=0.0,
@@ -171,6 +178,8 @@ class ModernBertConfig(PretrainedConfig):
         reference_compile=None,
         repad_logits_with_grad=False,
         is_causal=False,
+        num_future_masks=3,
+        use_cache=False,
         **kwargs,
     ):
         super().__init__(
@@ -179,6 +188,7 @@ class ModernBertConfig(PretrainedConfig):
             eos_token_id=eos_token_id,
             cls_token_id=cls_token_id,
             sep_token_id=sep_token_id,
+            mask_token_id=mask_token_id,
             **kwargs,
         )
         self.vocab_size = vocab_size
@@ -212,6 +222,8 @@ class ModernBertConfig(PretrainedConfig):
         self.reference_compile = reference_compile
         self.repad_logits_with_grad = repad_logits_with_grad
         self.is_causal = is_causal
+        self.num_future_masks = num_future_masks
+        self.use_cache = use_cache
         if self.classifier_pooling not in ["cls", "mean"]:
             raise ValueError(
                 f'Invalid value for `classifier_pooling`, should be either "cls" or "mean", but is {self.classifier_pooling}.'

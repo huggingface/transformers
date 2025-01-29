@@ -28,7 +28,7 @@ from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_outputs import (
-    BaseModelOutput,
+    BaseModelOutputWithPast,
     CausalLMOutputWithPast,
     MaskedLMOutput,
     SequenceClassifierOutput,
@@ -104,6 +104,8 @@ class ModernBertConfig(PretrainedConfig):
             Classification token id.
         sep_token_id (`int`, *optional*, defaults to 50282):
             Separation token id.
+        mask_token_id (`int`, *optional*, defaults to 50284):
+            Mask token id.
         global_rope_theta (`float`, *optional*, defaults to 160000.0):
             The base period of the global RoPE embeddings.
         attention_bias (`bool`, *optional*, defaults to `False`):
@@ -150,6 +152,10 @@ class ModernBertConfig(PretrainedConfig):
         is_causal (`bool`, *optional*, defaults to `False`):
             Whether to use causal attention (e.g. decoder-only models). For standard encoder-decoder models, this should
             be set to `False`.
+        num_future_masks (`int`, *optional*, defaults to 3):
+            The number of masks tokens to append to each iterative encoder-only token generation (is_casual=False).
+        use_cache (`bool`, *optional*, defaults to `False`):
+            Whether to use cache when in decoder-only model.
     Examples:
 
     ```python
@@ -186,6 +192,7 @@ class ModernBertConfig(PretrainedConfig):
         bos_token_id=50281,
         cls_token_id=50281,
         sep_token_id=50282,
+        mask_token_id=50284,
         global_rope_theta=160000.0,
         attention_bias=False,
         attention_dropout=0.0,
@@ -206,6 +213,8 @@ class ModernBertConfig(PretrainedConfig):
         reference_compile=None,
         repad_logits_with_grad=False,
         is_causal=False,
+        num_future_masks=3,
+        use_cache=False,
         **kwargs,
     ):
         super().__init__(
@@ -214,6 +223,7 @@ class ModernBertConfig(PretrainedConfig):
             eos_token_id=eos_token_id,
             cls_token_id=cls_token_id,
             sep_token_id=sep_token_id,
+            mask_token_id=mask_token_id,
             **kwargs,
         )
         self.vocab_size = vocab_size
@@ -247,6 +257,8 @@ class ModernBertConfig(PretrainedConfig):
         self.reference_compile = reference_compile
         self.repad_logits_with_grad = repad_logits_with_grad
         self.is_causal = is_causal
+        self.num_future_masks = num_future_masks
+        self.use_cache = use_cache
         if self.classifier_pooling not in ["cls", "mean"]:
             raise ValueError(
                 f'Invalid value for `classifier_pooling`, should be either "cls" or "mean", but is {self.classifier_pooling}.'
@@ -526,26 +538,49 @@ def eager_attention_forward(
     dim: int,
     output_attentions: Optional[bool] = False,
     is_causal: bool = False,
+    past_key_value: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+    use_cache: Optional[bool] = False,
     **_kwargs,
-) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
+) -> Union[Tuple[torch.Tensor, ...], Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]]:
     # qkv: [batch_size, seqlen, 3, nheads, headdim]
     cos, sin = module.rotary_emb(qkv, position_ids=position_ids)
     query, key, value = qkv.transpose(3, 1).unbind(dim=2)
     # query, key, value: [batch_size, heads, seq_len, head_dim]
     query, key = apply_rotary_pos_emb(query, key, cos, sin)
 
+    # Handle past key value states
+    if past_key_value is not None:
+        past_k, past_v = past_key_value
+        key = torch.cat([past_k, key], dim=-2)
+        value = torch.cat([past_v, value], dim=-2)
+
     scale = module.head_dim**-0.5
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scale
 
     if is_causal:
-        # Create causal mask: lower triangular matrix of -inf
-        # NOTE: quite memory intensive, if this is a problem please use FA or SDPA
+        # Create causal mask. NOTE: more memory intensive, if this is a problem please use FA
         seq_len = query.size(2)
-        causal_mask = torch.triu(torch.ones(seq_len, seq_len, dtype=torch.bool, device=query.device), diagonal=1)
+        key_len = key.size(2)
+        past_key_len = past_key_value[0].size(-2) if past_key_value is not None else 0
+        query_indices = torch.arange(seq_len, device=query.device).unsqueeze(-1)
+        key_indices = torch.arange(key_len, device=query.device).unsqueeze(0)
+        causal_mask = key_indices > past_key_len + query_indices
         attn_weights.masked_fill_(causal_mask, float("-inf"))
+        # Slice attention_mask to match attn_weights' last two dims
+        seq_len_q = query.size(2)
+        seq_len_k = key.size(2)
+        attention_mask = attention_mask[:, :, :seq_len_q, :seq_len_k]
 
     if local_attention != (-1, -1):
-        attention_mask = sliding_window_mask
+        if is_causal:
+            # expand sliding_window_mask to match the number of heads
+            attention_mask = sliding_window_mask.expand(-1, module.num_heads, -1, -1)
+            # Slice sliding_window_mask to match attn_weights' last two dims
+            seq_len_q = query.size(2)
+            seq_len_k = key.size(2)
+            attention_mask = attention_mask[:, :, :seq_len_q, :seq_len_k]
+        else:
+            attention_mask = sliding_window_mask
 
     attn_weights = attn_weights + attention_mask
 
@@ -555,9 +590,12 @@ def eager_attention_forward(
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
     attn_output = attn_output.view(bs, -1, dim)
+    outputs = (attn_output,)
     if output_attentions:
-        return (attn_output, attn_weights)
-    return (attn_output,)
+        outputs = outputs + (attn_weights,)
+    if use_cache:
+        outputs = outputs + ((key, value),)
+    return outputs
 
 
 def flash_attention_forward(
@@ -571,18 +609,30 @@ def flash_attention_forward(
     dim: int,
     target_dtype: torch.dtype = torch.bfloat16,
     is_causal: bool = False,
+    past_key_value: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+    use_cache: Optional[bool] = False,
     **_kwargs,
-) -> Tuple[torch.Tensor]:
-    # (total_seqlen, 3, nheads, headdim)
+) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]]:
     qkv = rotary_emb(qkv, cu_seqlens=cu_seqlens, max_seqlen=max_seqlen)
 
+    original_seq_len = qkv.size(0)
+    if past_key_value is not None:
+        past_k, past_v = past_key_value
+        # Reshape from [batch, num_heads, seq, head_dim] to [seq, num_heads, head_dim]
+        past_k = past_k.squeeze(0).transpose(0, 1)
+        past_v = past_v.squeeze(0).transpose(0, 1)
+
+        q = qkv[:, 0]
+        k = torch.cat([past_k, qkv[:, 1]], dim=0)
+        v = torch.cat([past_v, qkv[:, 2]], dim=0)
+        q = torch.cat([torch.zeros_like(past_k, device=q.device, dtype=q.dtype), q], dim=0)
+        qkv = torch.stack([q, k, v], dim=1)
+
+    # Flash attention logic stays exactly the same
     convert_dtype = qkv.dtype not in (torch.float16, torch.bfloat16)
     if convert_dtype:
-        # FA2 implementation only supports fp16 and bf16. If FA2 is supported,
-        # bfloat16 must be supported as of FA2 2.5.7. (Turing GPUs not supported)
         orig_dtype = qkv.dtype
         qkv = qkv.to(target_dtype)
-
         attn = flash_attn_varlen_qkvpacked_func(
             qkv,
             cu_seqlens=cu_seqlens,
@@ -592,7 +642,7 @@ def flash_attention_forward(
             window_size=local_attention,
             causal=is_causal,
         )
-        attn = attn.to(orig_dtype)  # type: ignore
+        attn = attn.to(orig_dtype)
     else:
         attn = flash_attn_varlen_qkvpacked_func(
             qkv,
@@ -603,7 +653,17 @@ def flash_attention_forward(
             window_size=local_attention,
             causal=is_causal,
         )
-    return (attn.view(bs, dim),)
+
+    if past_key_value is not None:
+        attn = attn[-original_seq_len:]
+
+    outputs = (attn.view(bs, dim),)
+    if use_cache:
+        k, v = qkv[:, 1], qkv[:, 2]
+        k = k.transpose(0, 1)
+        v = v.transpose(0, 1)
+        outputs = outputs + ((k, v),)
+    return outputs
 
 
 def sdpa_attention_forward(
@@ -616,13 +676,21 @@ def sdpa_attention_forward(
     bs: int,
     dim: int,
     is_causal: bool = False,
+    past_key_value: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+    use_cache: Optional[bool] = False,
     **_kwargs,
-) -> Tuple[torch.Tensor]:
+) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]]:
     # qkv: [batch_size, seqlen, 3, nheads, headdim]
     cos, sin = module.rotary_emb(qkv, position_ids=position_ids)
     query, key, value = qkv.transpose(3, 1).unbind(dim=2)
     # query, key, value: [batch_size, heads, seq_len, head_dim]
     query, key = apply_rotary_pos_emb(query, key, cos, sin)
+
+    # Handle past key value states
+    if past_key_value is not None:
+        past_k, past_v = past_key_value
+        key = torch.cat([past_k, key], dim=-2)
+        value = torch.cat([past_v, value], dim=-2)
 
     if local_attention != (-1, -1):
         attention_mask = sliding_window_mask
@@ -640,7 +708,10 @@ def sdpa_attention_forward(
         .contiguous()
     )
     attn_output = attn_output.view(bs, -1, dim)
-    return (attn_output,)
+    outputs = (attn_output,)
+    if use_cache:
+        outputs = outputs + ((key, value),)
+    return outputs
 
 
 MODERNBERT_ATTENTION_FUNCTION = {
@@ -704,6 +775,8 @@ class ModernBertAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         output_attentions: Optional[bool] = False,
+        past_key_value: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
+        use_cache: bool = False,
         **kwargs,
     ) -> torch.Tensor:
         qkv = self.Wqkv(hidden_states)
@@ -723,6 +796,8 @@ class ModernBertAttention(nn.Module):
             dim=self.all_head_size,
             output_attentions=output_attentions,
             is_causal=self.config.is_causal,
+            past_key_value=past_key_value,
+            use_cache=use_cache,
             **kwargs,
         )
         hidden_states = attn_outputs[0]
@@ -755,7 +830,9 @@ class ModernBertEncoderLayer(nn.Module):
         position_ids: Optional[torch.LongTensor] = None,
         cu_seqlens: Optional[torch.Tensor] = None,
         max_seqlen: Optional[int] = None,
+        past_key_value: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
+        use_cache: Optional[bool] = False,
     ) -> torch.Tensor:
         attn_outputs = self.attn(
             self.attn_norm(hidden_states),
@@ -764,7 +841,9 @@ class ModernBertEncoderLayer(nn.Module):
             position_ids=position_ids,
             cu_seqlens=cu_seqlens,
             max_seqlen=max_seqlen,
+            past_key_value=past_key_value,
             output_attentions=output_attentions,
+            use_cache=use_cache,
         )
         hidden_states = hidden_states + attn_outputs[0]
         mlp_output = (
@@ -846,6 +925,8 @@ class ModernBertPreTrainedModel(PreTrainedModel):
             init_weight(module.decoder, stds["out"])
         elif isinstance(module, (ModernBertForSequenceClassification, ModernBertForTokenClassification)):
             init_weight(module.classifier, stds["final_out"])
+        elif isinstance(module, ModernBertForCausalLM):
+            init_weight(module.decoder, stds["out"])
 
     @classmethod
     def _autoset_attn_implementation(
@@ -982,6 +1063,8 @@ MODERNBERT_INPUTS_DOCSTRING = r"""
             more detail.
         return_dict (`bool`, *optional*):
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        repad (`bool`, *optional*):
+            Whether or not to repad the output tensors (hidden states, attentions, etc.)
 """
 
 
@@ -1010,7 +1093,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
     @add_start_docstrings_to_model_forward(MODERNBERT_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=BaseModelOutput,
+        output_type=BaseModelOutputWithPast,
         config_class=_CONFIG_FOR_DOC,
     )
     def forward(
@@ -1019,27 +1102,41 @@ class ModernBertModel(ModernBertPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         sliding_window_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         indices: Optional[torch.Tensor] = None,
         cu_seqlens: Optional[torch.Tensor] = None,
         max_seqlen: Optional[int] = None,
         batch_size: Optional[int] = None,
         seq_len: Optional[int] = None,
+        use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor, ...], BaseModelOutput]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        repad: Optional[bool] = False,
+    ) -> Union[Tuple[torch.Tensor, ...], BaseModelOutputWithPast]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        if use_cache and self.config._attn_implementation == "flash_attention_2":
+            raise ValueError("use_cache is not supported with flash attention 2, please switch to eager")
+
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        if self.config._attn_implementation == "flash_attention_2":
+            output_attentions = False
+
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
+        if not (self.config.is_causal or past_key_values is not None):
+            use_cache = False
+
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
+        next_decoder_cache = () if use_cache else None
 
         self._maybe_set_compile()
 
@@ -1056,7 +1153,14 @@ class ModernBertModel(ModernBertPreTrainedModel):
         if attention_mask is None:
             attention_mask = torch.ones((batch_size, seq_len), device=device, dtype=torch.bool)
 
-        repad = False
+        if past_key_values is not None:
+            # Extend attention mask for past key values
+            past_length = past_key_values[0][0].size(-2)
+            attention_mask = torch.cat(
+                [torch.ones((batch_size, past_length), device=device, dtype=attention_mask.dtype), attention_mask],
+                dim=-1,
+            )
+
         if self.config._attn_implementation == "flash_attention_2":
             if indices is None and cu_seqlens is None and max_seqlen is None:
                 repad = True
@@ -1072,6 +1176,8 @@ class ModernBertModel(ModernBertPreTrainedModel):
         else:
             if position_ids is None:
                 position_ids = torch.arange(seq_len, device=device).unsqueeze(0)
+            if past_key_values is not None:
+                position_ids = position_ids[:, -input_ids.size(1) :]
 
             attention_mask, sliding_window_mask = self._update_attention_mask(
                 attention_mask, output_attentions=output_attentions
@@ -1079,9 +1185,11 @@ class ModernBertModel(ModernBertPreTrainedModel):
 
         hidden_states = self.embeddings(input_ids=input_ids, inputs_embeds=inputs_embeds)
 
-        for encoder_layer in self.layers:
+        for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
+
+            past_key_value = past_key_values[idx] if past_key_values is not None else None
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
@@ -1092,7 +1200,9 @@ class ModernBertModel(ModernBertPreTrainedModel):
                     position_ids,
                     cu_seqlens,
                     max_seqlen,
+                    past_key_value,
                     output_attentions,
+                    use_cache,
                 )
             else:
                 layer_outputs = encoder_layer(
@@ -1103,10 +1213,19 @@ class ModernBertModel(ModernBertPreTrainedModel):
                     cu_seqlens=cu_seqlens,
                     max_seqlen=max_seqlen,
                     output_attentions=output_attentions,
+                    past_key_value=past_key_value,
+                    use_cache=use_cache,
                 )
             hidden_states = layer_outputs[0]
+
+            if use_cache:
+                next_decoder_cache += (layer_outputs[-1],)
+
             if output_attentions and len(layer_outputs) > 1:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
+                if use_cache:
+                    all_self_attentions = all_self_attentions + (layer_outputs[-2],)
+                else:
+                    all_self_attentions = all_self_attentions + (layer_outputs[1],)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
@@ -1122,26 +1241,28 @@ class ModernBertModel(ModernBertPreTrainedModel):
                     _pad_modernbert_output(inputs=hs, indices=indices, batch=batch_size, seqlen=seq_len)
                     for hs in all_hidden_states
                 )
+            if all_self_attentions is not None:
+                all_self_attentions = tuple(
+                    _pad_modernbert_output(inputs=attn, indices=indices, batch=batch_size, seqlen=seq_len)
+                    for attn in all_self_attentions
+                )
 
         if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
-        return BaseModelOutput(
+            return tuple(
+                v for v in [hidden_states, next_decoder_cache, all_hidden_states, all_self_attentions] if v is not None
+            )
+        return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
+            past_key_values=next_decoder_cache,
             hidden_states=all_hidden_states,
             attentions=all_self_attentions,
         )
 
     def _update_attention_mask(self, attention_mask: torch.Tensor, output_attentions: bool) -> torch.Tensor:
         if output_attentions:
-            if self.config._attn_implementation == "sdpa":
+            if self.config._attn_implementation == "flash_attention_2":
                 logger.warning_once(
-                    "Outputting attentions is only supported with the 'eager' attention implementation, "
-                    'not with "sdpa". Falling back to `attn_implementation="eager"`.'
-                )
-                self.config._attn_implementation = "eager"
-            elif self.config._attn_implementation != "eager":
-                logger.warning_once(
-                    "Outputting attentions is only supported with the eager attention implementation, "
+                    "Outputting attentions is only supported with the eager or sdpa attention implementations, "
                     f'not with {self.config._attn_implementation}. Consider setting `attn_implementation="eager"`.'
                     " Setting `output_attentions=False`."
                 )
@@ -1357,6 +1478,10 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         self._maybe_set_compile()
+        if attention_mask is None:
+            batch_size, seq_len = input_ids.shape if input_ids is not None else inputs_embeds.shape
+            device = input_ids.device if input_ids is not None else inputs_embeds.device
+            attention_mask = torch.ones((batch_size, seq_len), device=device, dtype=torch.bool)
 
         outputs = self.model(
             input_ids=input_ids,
@@ -1380,7 +1505,7 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
             nonpooled_output = self.head(last_hidden_state)
             nonpooled_output = self.drop(nonpooled_output)
             classifier_output = self.classifier(nonpooled_output)
-            batch_size = input_ids.shape[0]
+            batch_size = input_ids.shape[0] if input_ids is not None else inputs_embeds.shape[0]
             sequence_lengths = attention_mask.sum(dim=1) - 1
             logits = classifier_output[torch.arange(batch_size, device=classifier_output.device), sequence_lengths]
         else:
@@ -1476,6 +1601,10 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         self._maybe_set_compile()
+        if attention_mask is None:
+            batch_size, seq_len = input_ids.shape
+            device = input_ids.device if input_ids is not None else inputs_embeds.device
+            attention_mask = torch.ones((batch_size, seq_len), device=device, dtype=torch.bool)
 
         outputs = self.model(
             input_ids=input_ids,
@@ -1516,7 +1645,10 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
 
 
 @add_start_docstrings(
-    "The ModernBert Model with a lm head on top, e.g. for Causal Language Modeling (CLM) tasks.",
+    """The ModernBert model usedfor Causal Language Modeling (CLM) tasks. Note that there are two methods
+    of using the model: (1) with a causal head on top, as a standard decoder-only model and (2) as an
+    encoder-only model using psudo-causal generation from iterative masking. The iterative method was
+    proposed in "BERTs are Generative In-Context Learners" by David Samuel.""",
     MODERNBERT_START_DOCSTRING,
 )
 class ModernBertForCausalLM(ModernBertPreTrainedModel, GenerationMixin):
@@ -1530,15 +1662,9 @@ class ModernBertForCausalLM(ModernBertPreTrainedModel, GenerationMixin):
             self.lm_head = ModernBertPredictionHead(config)
             self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=config.decoder_bias)
         else:
-            # using the psuedo-casual method
+            # using the psuedo-casual method. NOTE: be sure your tokenizer has `is_causal` set to True
             self.head = ModernBertPredictionHead(config)
             self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=config.decoder_bias)
-            # setup for psuedo-casual attributes
-            self.num_future_masks = getattr(config, "num_future_masks", 3)
-            self.config.add_cross_attention = False
-            self.mask_token_id = getattr(config, "mask_token_id", 50284)
-            self.eos_token_id = getattr(config, "eos_token_id", 20852)
-            # NOTE: be sure your tokenizer has `is_causal` set to True
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1564,20 +1690,20 @@ class ModernBertForCausalLM(ModernBertPreTrainedModel, GenerationMixin):
         seq_len = input_ids.shape[1]
 
         # Create new tensor with extra space for masks and EOS
-        new_seq_len = seq_len + self.num_future_masks + 1  # Add space for masks and EOS
+        new_seq_len = seq_len + self.config.num_future_masks + 1  # Add space for masks and EOS
         masked_input = torch.zeros((batch_size, new_seq_len), dtype=input_ids.dtype, device=input_ids.device)
 
         # Copy original sequence
         masked_input[:, :seq_len] = input_ids
 
         # Mask current position and future tokens
-        for i in range(self.num_future_masks + 1):
+        for i in range(self.config.num_future_masks + 1):
             mask_pos = position + i
             if mask_pos < new_seq_len:
-                masked_input[:, mask_pos] = self.mask_token_id
+                masked_input[:, mask_pos] = self.config.mask_token_id
 
         # Add EOS token at the end
-        masked_input[:, -1] = self.eos_token_id
+        masked_input[:, -1] = self.config.eos_token_id if self.config.eos_token_id else self.config.sep_token_id
 
         return masked_input
 
@@ -1593,6 +1719,7 @@ class ModernBertForCausalLM(ModernBertPreTrainedModel, GenerationMixin):
         attention_mask: Optional[torch.Tensor] = None,
         sliding_window_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         indices: Optional[torch.Tensor] = None,
@@ -1600,6 +1727,7 @@ class ModernBertForCausalLM(ModernBertPreTrainedModel, GenerationMixin):
         max_seqlen: Optional[int] = None,
         batch_size: Optional[int] = None,
         seq_len: Optional[int] = None,
+        use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1611,6 +1739,7 @@ class ModernBertForCausalLM(ModernBertPreTrainedModel, GenerationMixin):
                 attention_mask,
                 sliding_window_mask,
                 position_ids,
+                past_key_values,
                 inputs_embeds,
                 labels,
                 indices,
@@ -1618,6 +1747,7 @@ class ModernBertForCausalLM(ModernBertPreTrainedModel, GenerationMixin):
                 max_seqlen,
                 batch_size,
                 seq_len,
+                use_cache,
                 output_attentions,
                 output_hidden_states,
                 return_dict,
@@ -1629,6 +1759,7 @@ class ModernBertForCausalLM(ModernBertPreTrainedModel, GenerationMixin):
                 attention_mask,
                 sliding_window_mask,
                 position_ids,
+                past_key_values,
                 inputs_embeds,
                 labels,
                 indices,
@@ -1636,6 +1767,7 @@ class ModernBertForCausalLM(ModernBertPreTrainedModel, GenerationMixin):
                 max_seqlen,
                 batch_size,
                 seq_len,
+                use_cache,
                 output_attentions,
                 output_hidden_states,
                 return_dict,
@@ -1648,6 +1780,7 @@ class ModernBertForCausalLM(ModernBertPreTrainedModel, GenerationMixin):
         attention_mask: Optional[torch.Tensor] = None,
         sliding_window_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         indices: Optional[torch.Tensor] = None,
@@ -1655,50 +1788,39 @@ class ModernBertForCausalLM(ModernBertPreTrainedModel, GenerationMixin):
         max_seqlen: Optional[int] = None,
         batch_size: Optional[int] = None,
         seq_len: Optional[int] = None,
+        use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
     ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+        use_cache = use_cache if use_cache is not None else self.config.use_cache
         self._maybe_set_compile()
 
+        repad = False
         if self.config._attn_implementation == "flash_attention_2":
-            if indices is None and cu_seqlens is None and max_seqlen is None:
-                if batch_size is None and seq_len is None:
-                    if inputs_embeds is not None:
-                        batch_size, seq_len = inputs_embeds.shape[:2]
-                    else:
-                        batch_size, seq_len = input_ids.shape[:2]
-                device = input_ids.device if input_ids is not None else inputs_embeds.device
-
-                if attention_mask is None:
-                    attention_mask = torch.ones((batch_size, seq_len), device=device, dtype=torch.bool)
-
-                if inputs_embeds is None:
-                    with torch.no_grad():
-                        input_ids, indices, cu_seqlens, max_seqlen, position_ids, labels = _unpad_modernbert_input(
-                            inputs=input_ids, attention_mask=attention_mask, position_ids=position_ids, labels=labels
-                        )
-                else:
-                    inputs_embeds, indices, cu_seqlens, max_seqlen, position_ids, labels = _unpad_modernbert_input(
-                        inputs=inputs_embeds, attention_mask=attention_mask, position_ids=position_ids, labels=labels
-                    )
+            # NOTE: by moving thet unpadding into ModernBertModel, we lose a bit of speed from not unpadding through the head
+            # but the tradeoff is a much cleaner implementation since we can assume everything is padded here
+            repad = True
 
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             sliding_window_mask=sliding_window_mask,
             position_ids=position_ids,
+            past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             indices=indices,
             cu_seqlens=cu_seqlens,
             max_seqlen=max_seqlen,
             batch_size=batch_size,
             seq_len=seq_len,
+            use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            repad=repad,
         )
         last_hidden_state = outputs[0]
 
@@ -1707,10 +1829,6 @@ class ModernBertForCausalLM(ModernBertPreTrainedModel, GenerationMixin):
             if self.config.reference_compile
             else self.decoder(self.lm_head(last_hidden_state))
         )
-
-        if self.config._attn_implementation == "flash_attention_2":
-            with nullcontext() if self.config.repad_logits_with_grad or labels is None else torch.no_grad():
-                lm_logits = _pad_modernbert_output(inputs=lm_logits, indices=indices, batch=batch_size, seqlen=seq_len)
 
         loss = None
         if labels is not None:
@@ -1726,12 +1844,12 @@ class ModernBertForCausalLM(ModernBertPreTrainedModel, GenerationMixin):
         if not return_dict:
             output = (lm_logits,) + outputs[1:]
             return ((loss,) + output) if loss is not None else output
-
         return CausalLMOutputWithPast(
             loss=loss,
             logits=lm_logits,
-            past_key_values=outputs.attentions,
+            past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
+            attentions=outputs.attentions,
         )
 
     def _forward_pseudo_casual(
@@ -1740,6 +1858,7 @@ class ModernBertForCausalLM(ModernBertPreTrainedModel, GenerationMixin):
         attention_mask: Optional[torch.Tensor] = None,
         sliding_window_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
+        past_key_values: Optional[Tuple[Tuple[torch.Tensor]]] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         indices: Optional[torch.Tensor] = None,
@@ -1753,13 +1872,16 @@ class ModernBertForCausalLM(ModernBertPreTrainedModel, GenerationMixin):
         return_single_token_logits: Optional[bool] = False,
         **kwargs,
     ):
-        batch_size, seq_len = input_ids.shape
-        device = input_ids.device
+        batch_size, seq_len = input_ids.shape if input_ids is not None else inputs_embeds.shape
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
+
+        if labels is not None:
+            raise ValueError("Training is not supported for pseudo-causal generation")
 
         # For generation or single token prediction
         if return_single_token_logits:
             # For batched generation, all sequences will have same length, otherwise raise an error
-            if self.mask_token_id in input_ids.any():
+            if self.config.mask_token_id in input_ids.any():
                 raise ValueError("Mask token found in input_ids during generation")
 
             # Prepare masked input for the batch
@@ -1790,7 +1912,10 @@ class ModernBertForCausalLM(ModernBertPreTrainedModel, GenerationMixin):
             # NOTE: must turn every token into a instance, since it can only predict logits for one token at a time
             # This means the batch size will explode. If you get OOM errors, try reducing the batch size to one
             batched_inputs = torch.zeros(
-                (batch_size * (seq_len + self.num_future_masks + 1), (seq_len + self.num_future_masks + 1)),
+                (
+                    batch_size * (seq_len + self.config.num_future_masks + 1),
+                    (seq_len + self.config.num_future_masks + 1),
+                ),
                 dtype=input_ids.dtype,
                 device=device,
             )
@@ -1817,32 +1942,31 @@ class ModernBertForCausalLM(ModernBertPreTrainedModel, GenerationMixin):
 
             logits = all_logits
 
-        loss = None
-        if labels is not None:
-            loss_fct = nn.CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.config.vocab_size), labels.view(-1))
-
         return CausalLMOutputWithPast(
-            loss=loss,
+            loss=None,
             logits=logits,
             past_key_values=None,  # can't re-use key value cache cuz bidirectional
         )
 
-    def prepare_inputs_for_generation(
-        self, input_ids: torch.Tensor, attention_mask: Optional[torch.Tensor] = None, **kwargs
-    ) -> dict:
-        if attention_mask is None:
-            attention_mask = torch.ones_like(input_ids)
+    def _reorder_cache(self, past_key_values, beam_idx):
+        """Reorders the cache for beam search during generation."""
+        if self.config._attn_implementation != "eager":
+            raise ValueError("Cache usage is only supported for eager attention")
 
-        generation_dict = {
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-        }
+        # If we don't use cache, just return None
+        if past_key_values is None:
+            return None
 
-        if not self.config.is_causal:
-            generation_dict["return_single_token_logits"] = True
-
-        return generation_dict
+        # If we do use cache, reorder it
+        reordered_past = ()
+        for layer_past in past_key_values:
+            # Reorder each layer's cache according to beam_idx
+            reordered_layer_past = tuple(
+                past_state.index_select(0, beam_idx.to(past_state.device)) if past_state is not None else None
+                for past_state in layer_past
+            )
+            reordered_past = reordered_past + (reordered_layer_past,)
+        return reordered_past
 
 
 __all__ = [
