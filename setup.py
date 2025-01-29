@@ -67,8 +67,6 @@ To create the package for pypi.
 9. Copy the release notes from RELEASE.md to the tag in github once everything is looking hunky-dory.
 """
 
-a = 1
-
 import os
 import re
 import shutil
