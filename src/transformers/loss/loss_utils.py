@@ -45,8 +45,8 @@ def ForCausalLMLoss(
         sp_size = sp_group.size()
         sp_rank = sp_group.rank()
         logits_1d = atleast_1d(logits).contiguous()
-        all_logits = [logits_1d.clone() for _ in range(sp_size)]
-        dist.all_gather(all_logits, logits_1d)
+        all_logits = [torch.zeros_like(logits_1d) for _ in range(sp_size)]
+        dist.all_gather(all_logits, logits_1d, group=sp_group)
         all_logits[sp_rank] = logits
         all_logits = torch.cat(all_logits, dim=0)
         logits = all_logits.reshape(logits.size(0), -1, logits.size(-1))
