@@ -735,7 +735,7 @@ class MllamaImageProcessor(BaseImageProcessor):
                     image = self.rescale(
                         image=image,
                         scale=rescale_factor,
-                        input_data_format=input_data_format,
+                        input_data_format=data_format,
                         data_format=data_format,
                     )
 
@@ -744,7 +744,7 @@ class MllamaImageProcessor(BaseImageProcessor):
                         image=image,
                         mean=image_mean,
                         std=image_std,
-                        input_data_format=input_data_format,
+                        input_data_format=data_format,
                         data_format=data_format,
                     )
 

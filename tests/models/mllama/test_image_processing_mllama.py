@@ -224,6 +224,18 @@ class MllamaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
             tuple(encoded_images.shape), (self.image_processor_tester.batch_size, *expected_output_image_shape)
         )
 
+    def test_call_channels_last(self):
+        # Initialize image_processing
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+
+        # a white 1x1 pixel RGB image
+        image_inputs = [[np.ndarray(shape=(1, 1, 3), dtype=float, buffer=np.array([1.0, 1.0, 1.0]))]]
+        encoded_images = image_processing(
+            image_inputs, return_tensors="pt", input_data_format="channels_last"
+        ).pixel_values
+        expected_output_image_shape = self.image_processor_tester.expected_output_image_shape(image_inputs)
+        self.assertEqual(tuple(encoded_images.shape), (1, *expected_output_image_shape))
+
     def test_call_pytorch(self):
         # Initialize image_processing
         image_processing = self.image_processing_class(**self.image_processor_dict)
