@@ -217,4 +217,5 @@ class AutoHfQuantizer:
                 f" {list(AUTO_QUANTIZER_MAPPING.keys())}. Hence, we will skip the quantization. "
                 "To remove the warning, you can delete the quantization_config attribute in config.json"
             )
-        return False
+            return False
+        return True
