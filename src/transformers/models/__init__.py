@@ -131,6 +131,7 @@ from . import (
     informer,
     instructblip,
     instructblipvideo,
+    internvl,
     jamba,
     jetmoe,
     kosmos2,
