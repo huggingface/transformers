@@ -8,6 +8,7 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 from torch import nn
 
+from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
@@ -17,7 +18,6 @@ from ..llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaForSequenceClassification,
-    LlamaMLP,
     LlamaModel,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
@@ -72,8 +72,21 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     return q_embed, k_embed
 
 
-class DeepseekV3MLP(LlamaMLP):
-    pass
+class DeepseekV3MLP(nn.Module):
+    def __init__(self, config, hidden_size=None, intermediate_size=None):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size if hidden_size is None else hidden_size
+        self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
+
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
 
 
 class MoEGate(nn.Module):
