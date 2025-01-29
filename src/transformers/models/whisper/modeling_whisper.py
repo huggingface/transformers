@@ -1255,7 +1255,7 @@ class WhisperDecoder(WhisperPreTrainedModel):
             )
 
         if position_ids is None:
-            position_ids = cache_position.unsqueeze(0)
+            position_ids = cache_position.unsqueeze(0).repeat(input_shape[0], 1)
 
         # embed positions
         if input_ids is not None:
