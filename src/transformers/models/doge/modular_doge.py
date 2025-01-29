@@ -104,9 +104,10 @@ class DogeConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with.
         rope_theta (`float`, *optional*, defaults to 10000.0):
             The base period of the RoPE embeddings.
-        rope_scaling (`Dict`, *optional*, defaults to `{'rope_type': 'dynamic', 'factor': 4.0, 'original_max_position_embeddings': 2048}`):
+        rope_scaling (`Dict`, *optional*):
             Dictionary containing the scaling configuration for the RoPE embeddings.
             NOTE: if you apply new rope type and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value accordingly.
+            Doge family of small models use `{ 'rope_type': 'dynamic', 'factor': 4.0, 'original_max_position_embeddings': 2048 }` as the default value.
             Expected contents:
                 `rope_type` (`str`):
                     The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope', 'llama3'], with 'default' being the original RoPE implementation.
@@ -205,11 +206,7 @@ class DogeConfig(PretrainedConfig):
         tie_word_embeddings=False,
         max_position_embeddings=2048,
         rope_theta=10000.0,
-        rope_scaling={
-            "rope_type": "dynamic",
-            "factor": 4.0,
-            "original_max_position_embeddings": 2048,
-        },
+        rope_scaling=None,
         num_attention_heads=8,
         num_key_value_heads=None,
         attention_dropout=0.0,
