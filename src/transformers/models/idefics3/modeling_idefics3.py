@@ -1242,7 +1242,7 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
         pixel_values=None,
         pixel_attention_mask=None,
         image_hidden_states=None,
-        num_logits_to_keep=None,
+        logits_to_keep=None,
         **kwargs,
     ):
         # Overwritten -- there are mutually exclusive inputs (if the logic to make `image_hidden_states` take
@@ -1271,8 +1271,8 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
             # The clone here is for the same reason as for `position_ids`.
             model_inputs = {"input_ids": input_ids.clone(memory_format=torch.contiguous_format), "inputs_embeds": None}
 
-        if num_logits_to_keep is not None:
-            model_inputs["num_logits_to_keep"] = num_logits_to_keep
+        if logits_to_keep is not None:
+            model_inputs["logits_to_keep"] = logits_to_keep
 
         if image_hidden_states is not None:
             pixel_values = None

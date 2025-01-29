@@ -32,6 +32,7 @@ from ...utils import (
     add_start_docstrings,
     logging,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_llava_onevision import LlavaOnevisionConfig
 
@@ -201,8 +202,12 @@ class LlavaOnevisionCausalLMOutputWithPast(ModelOutput):
 class LlavaOnevisionMultiModalProjector(nn.Module):
     def __init__(self, config: LlavaOnevisionConfig):
         super().__init__()
+        # We have hidden_size * the number of vision feature layers
+        num_feature_layers = 1 if isinstance(config.vision_feature_layer, int) else len(config.vision_feature_layer)
         self.linear_1 = nn.Linear(
-            config.vision_config.hidden_size, config.text_config.hidden_size, bias=config.multimodal_projector_bias
+            config.vision_config.hidden_size * num_feature_layers,
+            config.text_config.hidden_size,
+            bias=config.multimodal_projector_bias,
         )
         self.act = ACT2FN[config.projector_hidden_act]
         self.linear_2 = nn.Linear(
@@ -333,8 +338,10 @@ LLAVA_ONEVISION_INPUTS_DOCSTRING = r"""
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
             is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
             model's internal embedding lookup matrix.
-        vision_feature_layer (`int`, *optional*, defaults to -2):
-            The index of the layer to select the vision feature.
+        vision_feature_layer (`Union[int, List[int]], *optional*, defaults to -2`):
+            The index of the layer to select the vision feature. If multiple indices are provided,
+            the vision feature of the corresponding indices will be concatenated to form the
+            vision features.
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             The feature selection strategy used to select the vision feature from the vision backbone.
             Can be one of `"default"` or `"full"`. If `"default"`, the CLS token is removed from the vision features.
@@ -487,7 +494,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
         self,
         pixel_values: torch.FloatTensor,
         image_sizes: torch.Tensor,
-        vision_feature_layer: int,
+        vision_feature_layer: Union[int, List[int]],
         vision_feature_select_strategy: str,
     ):
         """
@@ -498,8 +505,10 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
                The tensors corresponding to the input images.
             image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
                 Actual image size of each images (H, W).
-            vision_feature_layer (`int`):
-                The index of the layer to select the vision feature.
+            vision_feature_layer (`Union[int, List[int]], *optional*, defaults to -2`):
+                The index of the layer to select the vision feature. If multiple indices are provided,
+                the vision feature of the corresponding indices will be concatenated to form the
+                vision features.
             vision_feature_select_strategy (`str`):
                 The feature selection strategy used to select the vision feature from the vision backbone.
                 Can be one of `"default"` or `"full"`
@@ -525,7 +534,14 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
             raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
 
         image_features = self.vision_tower(pixel_values, output_hidden_states=True)
-        selected_image_feature = image_features.hidden_states[vision_feature_layer]
+        # If we have one vision feature layer, return the corresponding hidden states,
+        # otherwise, select the hidden states of each feature layer and concatenate them
+        if isinstance(vision_feature_layer, int):
+            selected_image_feature = image_features.hidden_states[vision_feature_layer]
+        else:
+            hs_pool = [image_features.hidden_states[layer_idx] for layer_idx in vision_feature_layer]
+            selected_image_feature = torch.cat(hs_pool, dim=-1)
+
         if vision_feature_select_strategy == "default":
             selected_image_feature = selected_image_feature[:, 1:]
         elif vision_feature_select_strategy == "full":
@@ -535,7 +551,10 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
         return image_features
 
     def get_video_features(
-        self, pixel_values: torch.FloatTensor, vision_feature_layer: int, vision_feature_select_strategy: str
+        self,
+        pixel_values: torch.FloatTensor,
+        vision_feature_layer: Union[int, List[int]],
+        vision_feature_select_strategy: str,
     ):
         """
         Obtains video last hidden states from the vision tower, apply multimodal projection and pooling.
@@ -543,8 +562,10 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
         Args:
             pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_frames, channels, height, width)`)
                The tensors corresponding to the input video.
-            vision_feature_layer (`int`):
-                The index of the layer to select the vision feature.
+            vision_feature_layer (`Union[int, List[int]], *optional*, defaults to -2`):
+                The index of the layer to select the vision feature. If multiple indices are provided,
+                the vision feature of the corresponding indices will be concatenated to form the
+                vision features.
             vision_feature_select_strategy (`str`):
                 The feature selection strategy used to select the vision feature from the vision backbone.
                 Can be one of `"default"` or `"full"`
@@ -555,7 +576,14 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
         batch_size, frames, channels, height, width = pixel_values.shape
         pixel_values = pixel_values.view(batch_size * frames, channels, height, width)
         video_features = self.vision_tower(pixel_values, output_hidden_states=True)
-        selected_video_feature = video_features.hidden_states[vision_feature_layer]
+
+        # If we have one vision feature layer, return the corresponding hidden states,
+        # otherwise, select the hidden states of each feature layer and concatenate them
+        if isinstance(vision_feature_layer, int):
+            selected_video_feature = video_features.hidden_states[vision_feature_layer]
+        else:
+            hs_pool = [video_features.hidden_states[layer_idx] for layer_idx in vision_feature_layer]
+            selected_video_feature = torch.cat(hs_pool, dim=-1)
 
         if vision_feature_select_strategy == "default":
             selected_video_feature = selected_video_feature[:, 1:]
@@ -568,6 +596,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
 
         return video_features
 
+    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings(LLAVA_ONEVISION_INPUTS_DOCSTRING)
     def forward(
         self,
@@ -580,7 +609,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[List[torch.FloatTensor]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        vision_feature_layer: Optional[int] = None,
+        vision_feature_layer: Optional[Union[int, List[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
         vision_aspect_ratio: Optional[str] = None,
         labels: Optional[torch.LongTensor] = None,
@@ -589,7 +618,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        num_logits_to_keep: int = 0,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
     ) -> Union[Tuple, LlavaOnevisionCausalLMOutputWithPast]:
         r"""
         Args:
@@ -598,10 +627,12 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
-            num_logits_to_keep (`int`, *optional*):
-                Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
+            logits_to_keep (`int` or `torch.Tensor`, *optional*):
+                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
                 `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
                 token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
+                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
+                This is useful when using packed tensor format (single dimension for batch and sequence length).
 
 
         Returns:
@@ -734,7 +765,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
             cache_position=cache_position,
-            num_logits_to_keep=num_logits_to_keep,
+            logits_to_keep=logits_to_keep,
         )
 
         logits = outputs[0]
@@ -782,7 +813,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
         image_sizes_videos=None,
         attention_mask=None,
         cache_position=None,
-        num_logits_to_keep=None,
+        logits_to_keep=None,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
@@ -793,7 +824,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
-            num_logits_to_keep=num_logits_to_keep,
+            logits_to_keep=logits_to_keep,
             **kwargs,
         )
 

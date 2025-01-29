@@ -77,6 +77,7 @@ def _get_json_schema_type(param_type: str) -> Dict[str, str]:
         float: {"type": "number"},
         str: {"type": "string"},
         bool: {"type": "boolean"},
+        type(None): {"type": "null"},
         Any: {},
     }
     if is_vision_available():
