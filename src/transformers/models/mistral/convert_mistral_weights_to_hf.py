@@ -22,7 +22,7 @@ from safetensors.torch import load_file
 from tokenizers import Regex, Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import BPE
 
-from transformers import LlamaTokenizer, MistralConfig, MistralForCausalLM, PreTrainedTokenizerFast, AutoTokenizer
+from transformers import AutoTokenizer, LlamaTokenizer, MistralConfig, MistralForCausalLM, PreTrainedTokenizerFast
 from transformers.convert_slow_tokenizer import bytes_to_unicode
 
 
@@ -302,7 +302,7 @@ class MistralConverter:
 
         return tokenizer
 
-    
+
 def convert_and_write_tokenizer(input_dir: str, output_dir: str):
     """Convert the tokenizer and save it."""
     # Tekken format -- need to use the Converter
@@ -329,7 +329,7 @@ def convert_and_write_tokenizer(input_dir: str, output_dir: str):
             unk_token="<unk>",
             eos_token="</s>",
         )
-        
+
         # Post-process
         tokenizer.add_special_tokens({"additional_special_tokens": all_special})
         tokenizer.model_input_names = ["input_ids", "attention_mask"]
