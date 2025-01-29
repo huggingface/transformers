@@ -96,6 +96,9 @@ class MoonshineConfig(PretrainedConfig):
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
             `decoder_num_attention_heads`.
+        pad_head_dim_to_multiple_of (`int` *optional*):
+            Pad head dimension in encoder and decoder to the next multiple of this value. Necessary for using certain
+            optimized attention implementations.
         encoder_hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder.
         decoder_hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
@@ -194,6 +197,7 @@ class MoonshineConfig(PretrainedConfig):
         decoder_num_hidden_layers=6,
         encoder_num_attention_heads=8,
         decoder_num_attention_heads=8,
+        pad_head_dim_to_multiple_of=None,
         encoder_num_key_value_heads=None,
         decoder_num_key_value_heads=None,
         encoder_hidden_act="gelu",
@@ -227,6 +231,8 @@ class MoonshineConfig(PretrainedConfig):
         if decoder_num_key_value_heads is None:
             decoder_num_key_value_heads = decoder_num_attention_heads
         self.decoder_num_key_value_heads = decoder_num_key_value_heads
+
+        self.pad_head_dim_to_multiple_of = pad_head_dim_to_multiple_of
 
         self.encoder_hidden_act = encoder_hidden_act
         self.decoder_hidden_act = decoder_hidden_act
@@ -366,16 +372,21 @@ class MoonshineAttention(GlmAttention):
 
         is_causal = True if self.is_causal and attention_mask is None and q_len > 1 else False
 
-        # Pad head size dimension to next multiple of 8. Q K and V always have equal head sizes.
-        pad_amount = 8 * ((query_states.shape[-1] + 7) // 8) - query_states.shape[-1]
-        if pad_amount > 0:
-            # Ensure scaling is correct even with padding.
-            if self.scaling is None:
-                self.scaling = 1.0 / math.sqrt(query_states.shape[-1])
+        # Pad head size dimension to next specified multiple. Q K and V always have equal head sizes.
+        head_dim_padding = 0
+        if self.config.pad_head_dim_to_multiple_of is not None:
+            head_dim = query_states.shape[-1]
+            target_multiple = self.config.pad_head_dim_to_multiple_of
+            target_head_dim = target_multiple * ((head_dim + target_multiple - 1) // target_multiple)
+            head_dim_padding = target_head_dim - head_dim
+            if head_dim_padding > 0:
+                # Ensure scaling is correct even with padding.
+                if self.scaling is None:
+                    self.scaling = 1.0 / math.sqrt(query_states.shape[-1])
 
-            query_states = torch.nn.functional.pad(query_states, (0, pad_amount))
-            key_states = torch.nn.functional.pad(key_states, (0, pad_amount))
-            value_states = torch.nn.functional.pad(value_states, (0, pad_amount))
+                query_states = torch.nn.functional.pad(query_states, (0, head_dim_padding))
+                key_states = torch.nn.functional.pad(key_states, (0, head_dim_padding))
+                value_states = torch.nn.functional.pad(value_states, (0, head_dim_padding))
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -390,8 +401,8 @@ class MoonshineAttention(GlmAttention):
         )
 
         # Remove head size padding.
-        if pad_amount > 0:
-            attn_output = attn_output[:, :, :, :-pad_amount]
+        if head_dim_padding > 0:
+            attn_output = attn_output[:, :, :, :-head_dim_padding]
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
         attn_output = self.o_proj(attn_output)

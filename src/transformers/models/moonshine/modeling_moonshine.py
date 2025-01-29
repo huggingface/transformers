@@ -276,16 +276,21 @@ class MoonshineAttention(nn.Module):
 
         is_causal = True if self.is_causal and attention_mask is None and q_len > 1 else False
 
-        # Pad head size dimension to next multiple of 8. Q K and V always have equal head sizes.
-        pad_amount = 8 * ((query_states.shape[-1] + 7) // 8) - query_states.shape[-1]
-        if pad_amount > 0:
-            # Ensure scaling is correct even with padding.
-            if self.scaling is None:
-                self.scaling = 1.0 / math.sqrt(query_states.shape[-1])
+        # Pad head size dimension to next specified multiple. Q K and V always have equal head sizes.
+        head_dim_padding = 0
+        if self.config.pad_head_dim_to_multiple_of is not None:
+            head_dim = query_states.shape[-1]
+            target_multiple = self.config.pad_head_dim_to_multiple_of
+            target_head_dim = target_multiple * ((head_dim + target_multiple - 1) // target_multiple)
+            head_dim_padding = target_head_dim - head_dim
+            if head_dim_padding > 0:
+                # Ensure scaling is correct even with padding.
+                if self.scaling is None:
+                    self.scaling = 1.0 / math.sqrt(query_states.shape[-1])
 
-            query_states = torch.nn.functional.pad(query_states, (0, pad_amount))
-            key_states = torch.nn.functional.pad(key_states, (0, pad_amount))
-            value_states = torch.nn.functional.pad(value_states, (0, pad_amount))
+                query_states = torch.nn.functional.pad(query_states, (0, head_dim_padding))
+                key_states = torch.nn.functional.pad(key_states, (0, head_dim_padding))
+                value_states = torch.nn.functional.pad(value_states, (0, head_dim_padding))
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -300,8 +305,8 @@ class MoonshineAttention(nn.Module):
         )
 
         # Remove head size padding.
-        if pad_amount > 0:
-            attn_output = attn_output[:, :, :, :-pad_amount]
+        if head_dim_padding > 0:
+            attn_output = attn_output[:, :, :, :-head_dim_padding]
 
         attn_output = attn_output.reshape(bsz, q_len, -1).contiguous()
         attn_output = self.o_proj(attn_output)
