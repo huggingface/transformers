@@ -120,8 +120,7 @@ class Zamba2Config(PretrainedConfig):
     >>> model = Zamba2Model(configuration)
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```
-    """
+    ```"""
 
     model_type = "zamba2"
     keys_to_ignore_at_inference = ["past_key_values"]
