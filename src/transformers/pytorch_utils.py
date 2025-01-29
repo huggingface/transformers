@@ -44,7 +44,7 @@ is_torch_greater_or_equal_than_1_12 = parsed_torch_version_base >= version.parse
 # Cache this result has it's a C FFI call which can be pretty time-consuming
 _torch_distributed_available = torch.distributed.is_available()
 
-if is_torch_greater_or_equal("2.5") and _torch_distributed_available:
+if is_torch_greater_or_equal_than_2_5 and _torch_distributed_available:
     from torch.distributed.tensor import Replicate
     from torch.distributed.tensor.parallel import (
         ColwiseParallel,
