@@ -45,8 +45,6 @@ class DeepseekV3Config(PretrainedConfig):
             Dimension of the MoE representations.
         num_hidden_layers (`int`, *optional*, defaults to 61):
             Number of hidden layers in the Transformer decoder.
-        num_nextn_predict_layers (`int`, *optional*, defaults to 1):
-            Number of nextn predict layers in the DeepSeekV3 Model.
         num_attention_heads (`int`, *optional*, defaults to 128):
             Number of attention heads for each attention layer in the Transformer decoder.
         num_key_value_heads (`int`, *optional*, defaults to 128):
@@ -58,11 +56,9 @@ class DeepseekV3Config(PretrainedConfig):
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
             `num_attention_heads`.
         n_shared_experts (`int`, *optional*, defaults to 1):
-            Number of shared experts, None means dense model.
+            Number of shared experts.
         n_routed_experts (`int`, *optional*, defaults to 256):
-            Number of routed experts, None means dense model.
-        ep_size (`int`, *optional*, defaults to 1):
-            Expert parallelism size for distributed training.
+            Number of routed experts.
         routed_scaling_factor (`float`, *optional*, defaults to 2.5):
             Scaling factor or routed experts.
         kv_lora_rank (`int`, *optional*, defaults to 512):
@@ -75,28 +71,20 @@ class DeepseekV3Config(PretrainedConfig):
             Dimension of the value heads.
         qk_nope_head_dim (`int`, *optional*, defaults to 128):
             Dimension of the query/key heads that don't use rotary position embeddings.
-        topk_method (`str`, *optional*, defaults to `"noaux_tc"`):
-            Topk method used in routed gate.
         n_group (`int`, *optional*, defaults to 8):
             Number of groups for routed experts.
         topk_group (`int`, *optional*, defaults to 4):
             Number of selected groups for each token(for each token, ensuring the selected experts is only within `topk_group` groups).
         num_experts_per_tok (`int`, *optional*, defaults to 8):
             Number of selected experts, None means dense model.
-        moe_layer_freq (`int`, *optional*, defaults to 1):
-            The frequency of the MoE layer: one expert layer for every `moe_layer_freq - 1` dense layers.
         first_k_dense_replace (`int`, *optional*, defaults to 3):
             Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
                                                             \--k dense layers--/
         norm_topk_prob (`bool`, *optional*, defaults to `True`):
             Whether to normalize the weights of the routed experts.
-        scoring_func (`str`, *optional*, defaults to `"sigmoid"`):
-            Method of computing expert weights.
         aux_loss_alpha (`float`, *optional*, defaults to 0.001):
             Auxiliary loss weight coefficient.
             Whether to compute the auxiliary loss for each individual sample.
-        seq_aux (`bool`, *optional*, defaults to `True`):
-            Whether to compute auxiliary loss at sequence level.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 4096):
@@ -145,6 +133,12 @@ class DeepseekV3Config(PretrainedConfig):
 
     model_type = "deepseek_v3"
     keys_to_ignore_at_inference = ["past_key_values"]
+    # Default tensor parallel plan for base model `DeepseekV3Model`
+    base_model_tp_plan = {
+        "layers.*.gate_proj": "colwise",
+        "layers.*.up_proj": "colwise",
+        "layers.*.down_proj": "rowwise",
+    }
 
     def __init__(
         self,
@@ -153,28 +147,22 @@ class DeepseekV3Config(PretrainedConfig):
         intermediate_size=18432,
         moe_intermediate_size=2048,
         num_hidden_layers=61,
-        num_nextn_predict_layers=1,
         num_attention_heads=128,
         num_key_value_heads=128,
         n_shared_experts=1,
         n_routed_experts=256,
-        ep_size=1,
         routed_scaling_factor=2.5,
         kv_lora_rank=512,
         q_lora_rank=1536,
         qk_rope_head_dim=64,
         v_head_dim=128,
         qk_nope_head_dim=128,
-        topk_method="noaux_tc",
         n_group=8,
         topk_group=4,
         num_experts_per_tok=8,
-        moe_layer_freq=1,
         first_k_dense_replace=3,
         norm_topk_prob=True,
-        scoring_func="sigmoid",
         aux_loss_alpha=0.001,
-        seq_aux=True,
         hidden_act="silu",
         max_position_embeddings=4096,
         initializer_range=0.02,
@@ -197,27 +185,23 @@ class DeepseekV3Config(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.moe_intermediate_size = moe_intermediate_size
         self.num_hidden_layers = num_hidden_layers
-        self.num_nextn_predict_layers = num_nextn_predict_layers
         self.num_attention_heads = num_attention_heads
         self.n_shared_experts = n_shared_experts
         self.n_routed_experts = n_routed_experts
-        self.ep_size = ep_size
         self.routed_scaling_factor = routed_scaling_factor
         self.kv_lora_rank = kv_lora_rank
         self.q_lora_rank = q_lora_rank
         self.qk_rope_head_dim = qk_rope_head_dim
         self.v_head_dim = v_head_dim
         self.qk_nope_head_dim = qk_nope_head_dim
-        self.topk_method = topk_method
+        self.q_head_dim = qk_nope_head_dim + qk_rope_head_dim
+        self.head_dim = qk_rope_head_dim
         self.n_group = n_group
         self.topk_group = topk_group
         self.num_experts_per_tok = num_experts_per_tok
-        self.moe_layer_freq = moe_layer_freq
         self.first_k_dense_replace = first_k_dense_replace
         self.norm_topk_prob = norm_topk_prob
-        self.scoring_func = scoring_func
         self.aux_loss_alpha = aux_loss_alpha
-        self.seq_aux = seq_aux
 
         # for backward compatibility
         if num_key_value_heads is None:
