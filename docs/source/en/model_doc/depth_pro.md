@@ -20,132 +20,111 @@ rendered properly in your Markdown viewer.
 
 The DepthPro model was proposed in [Depth Pro: Sharp Monocular Metric Depth in Less Than a Second](https://arxiv.org/abs/2410.02073) by Aleksei Bochkovskii, Amaël Delaunoy, Hugo Germain, Marcel Santos, Yichao Zhou, Stephan R. Richter, Vladlen Koltun.
 
-It leverages a multi-scale [Vision Transformer (ViT)](vit) optimized for dense predictions. It downsamples an image at several scales. At each scale, it is split into patches, which are processed by a ViT-based [Dinov2](dinov2) patch encoder, with weights shared across scales. Patches are merged into feature maps, upsampled, and fused via a [DPT](dpt)-like decoder.
+DepthPro is a foundation model for zero-shot metric monocular depth estimation, designed to generate high-resolution depth maps with remarkable sharpness and fine-grained details. It employs a multi-scale Vision Transformer (ViT)-based architecture, where images are downsampled, divided into patches, and processed using a shared Dinov2 encoder. The extracted patch-level features are merged, upsampled, and refined using a DPT-like fusion stage, enabling precise depth estimation.
 
 The abstract from the paper is the following:
 
 *We present a foundation model for zero-shot metric monocular depth estimation. Our model, Depth Pro, synthesizes high-resolution depth maps with unparalleled sharpness and high-frequency details. The predictions are metric, with absolute scale, without relying on the availability of metadata such as camera intrinsics. And the model is fast, producing a 2.25-megapixel depth map in 0.3 seconds on a standard GPU. These characteristics are enabled by a number of technical contributions, including an efficient multi-scale vision transformer for dense prediction, a training protocol that combines real and synthetic datasets to achieve high metric accuracy alongside fine boundary tracing, dedicated evaluation metrics for boundary accuracy in estimated depth maps, and state-of-the-art focal length estimation from a single image. Extensive experiments analyze specific design choices and demonstrate that Depth Pro outperforms prior work along multiple dimensions.*
 
-<img src="https://huggingface.co/geetu040/DepthPro/resolve/main/assets/architecture.jpg"
+<img src="https://raw.githubusercontent.com/apple/ml-depth-pro/main/data/depth-pro-teaser.jpg"
+alt="drawing" width="600"/>
+
+<small> DepthPro Outputs. Taken from the <a href="https://github.com/apple/ml-depth-pro" target="_blank">official code</a>. </small>
+
+This model was contributed by [geetu040](https://github.com/geetu040). The original code can be found [here](https://github.com/apple/ml-depth-pro).
+
+## Usage Tips
+
+The DepthPro model processes an input image by first downsampling it at multiple scales and splitting each scaled version into patches. These patches are then encoded using a shared Vision Transformer (ViT)-based Dinov2 patch encoder, while the full image is processed by a separate image encoder. The extracted patch features are merged into feature maps, upsampled, and fused using a DPT-like decoder to generate the final depth estimation. If enabled, an additional Field of View (FOV) encoder processes the image for estimating the camera's field of view, aiding in depth accuracy.
+
+```py
+>>> import requests
+>>> from PIL import Image
+>>> import torch
+>>> from transformers import DepthProImageProcessorFast, DepthProForDepthEstimation
+
+>>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+>>> image = Image.open(requests.get(url, stream=True).raw)
+
+>>> image_processor = DepthProImageProcessorFast.from_pretrained("geetu040/DepthPro")
+>>> model = DepthProForDepthEstimation.from_pretrained("geetu040/DepthPro")
+
+>>> inputs = image_processor(images=image, return_tensors="pt")
+
+>>> with torch.no_grad():
+...     outputs = model(**inputs)
+
+>>> post_processed_output = image_processor.post_process_depth_estimation(
+...     outputs, target_sizes=[(image.height, image.width)],
+... )
+
+>>> fov = post_processed_output[0]["fov"]
+>>> depth = post_processed_output[0]["predicted_depth"]
+>>> depth = (depth - depth.min()) / depth.max()
+>>> depth = depth * 255.
+>>> depth = depth.detach().cpu().numpy()
+>>> depth = Image.fromarray(depth.astype("uint8"))
+```
+
+### Architecture and Configuration
+
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/depth_pro_architecture.png"
 alt="drawing" width="600"/>
 
 <small> DepthPro architecture. Taken from the <a href="https://arxiv.org/abs/2410.02073" target="_blank">original paper</a>. </small>
 
-This model was contributed by [geetu040](https://github.com/geetu040). The original code can be found [here](https://github.com/apple/ml-depth-pro).
+The `DepthProForDepthEstimation` model uses a `DepthProEncoder`, for encoding the input image and a `FeatureFusionStage` for fusing the output features from encoder.
 
-<!-- TODO -->
-
-Here's an improved version of your documentation with enhanced clarity, formatting, and structure for easier understanding:
-
----
-
-## **Usage Tips**
-
-Initialize the Model with Default Configuration
-```python
-from transformers import DepthProConfig, DepthProModel
-
-config = DepthProConfig()
-model = DepthProModel(config=config)
-```
-
-Load a Pre-Trained Model for Depth Estimation
-```python
-from transformers import DepthProConfig, DepthProForDepthEstimation
-
-checkpoint = "geetu040/DepthPro"
-model = DepthProForDepthEstimation.from_pretrained(checkpoint)
-config = model.config
-```
-
-Key Features and Configuration Details
-
-1. Dual-Encoder Architecture:
-   - The `DepthProModel` uses **two encoders**:
-     - **`image_encoder`** and **`patch_encoder`**, which can be configured via `image_model_config` and `patch_model_config` in the configuration.
-   - By default, and in the pre-trained model, both encoders use the **`Dinov2Model`** architecture.
-
-2. Image Scaling and Patch Processing:
-   - Input images are scaled with multiple ratios, as specified in the `scaled_images_ratios` configuration.
+The `DepthProEncoder` further uses two encoders:
+- `patch_encoder`
+   - Input image is scaled with multiple ratios, as specified in the `scaled_images_ratios` configuration.
    - Each scaled image is split into smaller **patches** of size `patch_size` with overlapping areas determined by `scaled_images_overlap_ratios`.
-   - These patches are processed by the **`patch_encoder`**, while the image is also rescaled to `patch_size` and is processed by the **`image_encoder`**.
-   - Outputs from both encoders (`last_hidden_state`) and selected intermediate states (`hidden_states`) from **`patch_encoder`** are fused by a `DPT`-based `FeatureFusionStage` for depth estimation.
+   - These patches are processed by the **`patch_encoder`**
+- `image_encoder`
+   - Input image is also rescaled to `patch_size` and processed by the **`image_encoder`**
 
-3. Optional Field of View (FOV) Prediction:
-   - If `use_fov_model` is set to `True` in the configuration, the model predicts the **Field of View (FOV)** using a third encoder.
-   - This encoder also scales the image to `patch_size` and uses its `last_hidden_state` for FOV prediction. The encoder can be specified in the configuration using `fov_model_config`.
+Both these encoders can be configured via `patch_model_config` and `image_model_config` respectively, both of which are seperate `Dinov2Model` by default.
 
-4. Configuration and Validation:
-   - All encoders receive input images of size `patch_size`.
-   - The `image_size` for each encoder in the configuration should match the `patch_size`. This is validated when creating a `DepthProConfig`.
+Outputs from both encoders (`last_hidden_state`) and selected intermediate states (`hidden_states`) from **`patch_encoder`** are fused by a `DPT`-based `FeatureFusionStage` for depth estimation.
 
-5. Preprocessing and Postprocessing:
-   - Use the `DepthProImageProcessor` for preparing inputs and processing outputs:
-     - **Preprocessing**: Prepare images (rescale, normalize, resize) for model input.
-     - **Postprocessing**: Use `DepthProImageProcessor.post_process_depth_estimation` to interpolate the predicted depth to match the original input image size.
+### Field-of-View (FOV) Prediction
 
-6. Support for Variable Resolution and Aspect Ratios:
-   - The `DepthProModel` can process images with different resolutions and aspect ratios. However, for generating predicted depths that match the input image size, ensure the configuration satisfies:
-   ```py
-   input_image_size / 2**(n_fusion_blocks + 1) == image_model_config.image_size / image_model_config.patch_size
-   ```
+The network is supplemented with a focal length estimation head. A small convolutional head ingests frozen features from the depth estimation network and task-specific features from a separate ViT image encoder to predict the horizontal angular field-of-view.
 
-   - **Where**:
-     - `input_image_size`: The size of the input image.
-     - `image_model_config.image_size`: Image size for **`image_encoder`** which equals to `patch_size` in `DepthProConfig`.
-     - `n_fusion_blocks`: Total fusion blocks, calculated as:
-       ```py
-       len(intermediate_hook_ids) + len(scaled_images_ratios)
-       ```
+The `use_fov_model` parameter in `DepthProConfig` controls whether **FOV prediction** is enabled. By default, it is set to `False` to conserve memory and computation. When enabled, the **FOV encoder** is instantiated based on the `fov_model_config` parameter, which defaults to a `Dinov2Model`. The `use_fov_model` parameter can also be passed when initializing the `DepthProForDepthEstimation` model.
 
-### **Customizing Encoders in `DepthProModel`**
-
-The `DepthProModel` architecture uses **three encoders**, each responsible for a specific task:
-
-1. **Patch Encoder**: Processes image patches created by splitting the input image.
-2. **Image Encoder**: Processes the input image resized to `patch_size`.
-3. **FOV (Field of View) Encoder**: Generates the Field of View (FOV), if `use_fov_model` is enabled.
-
-You can configure each encoder to use any compatible model architecture. For example, to use:
-- **`ViT` (Vision Transformer)** as the **patch encoder**, and
-- **`BEiT`** as the **image encoder**, and
-- **`DinoV2`** as the **FOV encoder**.
-
-```python
-from transformers import DepthProConfig, DepthProForDepthEstimation
-
-config = DepthProConfig(
-    patch_model_config={
-        "model_type": "vit",
-        "num_hidden_layers": 6,
-        "patch_size": 16,
-        "hidden_size": 512,
-        "num_attention_heads": 16,
-        "image_size": 384,  # matches `patch_size`
-    },
-    image_model_config={
-        "model_type": "beit",
-        "num_hidden_layers": 4,
-        "patch_size": 8,
-        "hidden_size": 256,
-        "num_attention_heads": 8,
-        "image_size": 384,  # matches `patch_size`
-    },
-    fov_model_config={
-        "model_type": "dinov2",
-        "num_hidden_layers": 4,
-        "patch_size": 8,
-        "hidden_size": 256,
-        "num_attention_heads": 8,
-        "image_size": 384,  # matches `patch_size`
-    },
-    patch_size=384,
-    # uses layers from the patch encoder
-    intermediate_hook_ids=[5, 1],
-    use_fov_model=True,
-)
-model = DepthProForDepthEstimation(config)
+The pretrained model at checkpoint `geetu040/DepthPro` uses the FOV encoder. To use the pretrained-model without FOV encoder, set `use_fov_model=False` when loading the model, which saves computation.
+```py
+>>> from transformers import DepthProForDepthEstimation
+>>> model = DepthProForDepthEstimation.from_pretrained("geetu040/DepthPro", use_fov_model=False)
 ```
+
+To instantiate a new model with FOV encoder, set `use_fov_model=True` in the config.
+```py
+>>> from transformers import DepthProConfig, DepthProForDepthEstimation
+>>> config = DepthProConfig(use_fov_model=True)
+>>> model = DepthProForDepthEstimation(config)
+```
+
+Or set `use_fov_model=True` when initializing the model, which overrides the value in config.
+```py
+>>> from transformers import DepthProConfig, DepthProForDepthEstimation
+>>> config = DepthProConfig()
+>>> model = DepthProForDepthEstimation(config, use_fov_model=True)
+```
+
+### Image Resolution and Aspect Ratio
+
+The network can process images of different resolutions and aspect ratios and the predicted depth size can be calculated using the following formula:
+
+$\text{Predicted Depth Size} = \frac{2^{N+1} \cdot S}{P}$
+
+Where:
+- $N = \text{len}(\text{intermediate\_hook\_ids}) + \text{len}(\text{scaled\_images\_ratios})$
+- $S = \text{image\_model\_config.image\_size}$
+- $P = \text{image\_model\_config.patch\_size}$
+
+The aspect ratio of the raw predicted depth is maintained as the aspect ratio of the input image.
 
 ### Using Scaled Dot Product Attention (SDPA)
 
@@ -178,6 +157,7 @@ On a local benchmark (A100-40GB, PyTorch 2.3.0, OS Ubuntu 22.04) with `float32` 
 
 - Research Paper: [Depth Pro: Sharp Monocular Metric Depth in Less Than a Second](https://arxiv.org/pdf/2410.02073)
 - Official Implementation: [apple/ml-depth-pro](https://github.com/apple/ml-depth-pro)
+- DepthPro Inference Notebook: [DepthPro Inference](https://github.com/qubvel/transformers-notebooks/blob/main/notebooks/DepthPro_inference.ipynb)
 - DepthPro for Super Resolution and Image Segmentation
     - Read blog on Medium: [Depth Pro: Beyond Depth](https://medium.com/@raoarmaghanshakir040/depth-pro-beyond-depth-9d822fc557ba)
     - Code on Github: [geetu040/depthpro-beyond-depth](https://github.com/geetu040/depthpro-beyond-depth)
