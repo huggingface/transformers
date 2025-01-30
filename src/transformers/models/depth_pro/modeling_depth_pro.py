@@ -632,6 +632,7 @@ class DepthProPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _supports_sdpa = True
     _no_split_modules = []
+    _keys_to_ignore_on_load_unexpected = ['fov_model.*']
 
     def _init_weights(self, module):
         """Initialize the weights"""
