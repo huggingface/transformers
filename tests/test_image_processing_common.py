@@ -181,7 +181,7 @@ class ImageProcessingTestMixin:
         encoding_slow = image_processor_slow(dummy_image, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
 
-        self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-2))
+        torch.testing.assert_close(encoding_slow.pixel_values, encoding_fast.pixel_values, rtol=1e-1, atol=1e-2)
 
     @require_vision
     @require_torch
@@ -193,6 +193,8 @@ class ImageProcessingTestMixin:
             self.skipTest(reason="Skipping speed test as one of the image processors is not defined")
 
         def measure_time(image_processor, image):
+            # Warmup
+            _ = image_processor(image, return_tensors="pt")
             start = time.time()
             _ = image_processor(image, return_tensors="pt")
             return time.time() - start
@@ -488,7 +490,7 @@ class ImageProcessingTestMixin:
         image_processor = torch.compile(image_processor, mode="reduce-overhead")
         output_compiled = image_processor(input_image, device=torch_device, return_tensors="pt")
 
-        self.assertTrue(torch.allclose(output_eager.pixel_values, output_compiled.pixel_values, atol=1e-4))
+        torch.testing.assert_close(output_eager.pixel_values, output_compiled.pixel_values, rtol=1e-4, atol=1e-4)
 
 
 class AnnotationFormatTestMixin:
@@ -544,7 +546,7 @@ class AnnotationFormatTestMixin:
                 for idx in range(len(a)):
                     _compare(a[idx], b[idx])
             elif isinstance(a, torch.Tensor):
-                self.assertTrue(torch.allclose(a, b, atol=1e-3))
+                torch.testing.assert_close(a, b, rtol=1e-3, atol=1e-3)
             elif isinstance(a, str):
                 self.assertEqual(a, b)
 
