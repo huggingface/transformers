@@ -169,6 +169,7 @@ class SamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         """
         Test the run-length encoding function.
         """
+        # Test that a mask of all zeros returns a single run [height * width].
         input_mask = torch.zeros((1, 2, 2), dtype=torch.long)  # shape: 1 x 2 x 2
         rle = _mask_to_rle_pytorch(input_mask)
 
@@ -177,6 +178,7 @@ class SamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # For a 2x2 all-zero mask, we expect a single run of length 4:
         self.assertEqual(rle[0]["counts"], [4])
 
+        # Test that a mask of all ones returns [0, height * width].
         input_mask = torch.ones((1, 2, 2), dtype=torch.long)  # shape: 1 x 2 x 2
         rle = _mask_to_rle_pytorch(input_mask)
 
@@ -185,6 +187,7 @@ class SamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # For a 2x2 all-one mask, we expect two runs: [0, 4].
         self.assertEqual(rle[0]["counts"], [0, 4])
 
+        # Test a mask with mixed 0s and 1s to ensure the run-length encoding is correct.
         # Example mask:
         # Row 0: [0, 1]
         # Row 1: [1, 1]
@@ -285,6 +288,7 @@ class TFSamProcessorTest(unittest.TestCase):
         """
         Test the run-length encoding function.
         """
+        # Test that a mask of all zeros returns a single run [height * width].
         input_mask = tf.zeros((1, 2, 2), dtype=tf.int64)  # shape: 1 x 2 x 2
         rle = _mask_to_rle_tf(input_mask)
 
@@ -293,6 +297,7 @@ class TFSamProcessorTest(unittest.TestCase):
         # For a 2x2 all-zero mask, we expect a single run of length 4:
         self.assertEqual(rle[0]["counts"], [4])
 
+        # Test that a mask of all ones returns [0, height * width].
         input_mask = tf.ones((1, 2, 2), dtype=tf.int64)  # shape: 1 x 2 x 2
         rle = _mask_to_rle_tf(input_mask)
 
@@ -301,6 +306,7 @@ class TFSamProcessorTest(unittest.TestCase):
         # For a 2x2 all-one mask, we expect two runs: [0, 4].
         self.assertEqual(rle[0]["counts"], [0, 4])
 
+        # Test a mask with mixed 0s and 1s to ensure the run-length encoding is correct.
         # Example mask:
         # Row 0: [0, 1]
         # Row 1: [1, 1]
