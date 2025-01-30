@@ -24,7 +24,7 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
     get_image_size,
-    make_batched_images,
+    make_flat_list_of_images,
 )
 from ...utils import TensorType, add_start_docstrings, is_torch_available, is_torchvision_v2_available
 
@@ -132,7 +132,7 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
         Returns:
             `ImageInput`: The images with a valid nesting.
         """
-        return make_batched_images(images)
+        return make_flat_list_of_images(images)
 
     def _resize_for_patching(
         self,

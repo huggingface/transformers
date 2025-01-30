@@ -40,7 +40,7 @@ from .image_utils import (
     get_image_size_for_max_height_width,
     get_image_type,
     infer_channel_dimension_format,
-    make_list_of_images,
+    make_flat_list_of_images,
     validate_fast_preprocess_arguments,
     validate_kwargs,
 )
@@ -447,7 +447,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         Returns:
             `ImageInput`: The images with a valid nesting.
         """
-        return make_list_of_images(images)
+        return make_flat_list_of_images(images)
 
     def _process_image(
         self,

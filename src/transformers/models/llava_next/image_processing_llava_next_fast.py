@@ -33,7 +33,7 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
     get_image_size,
-    make_batched_images,
+    make_flat_list_of_images,
 )
 from ...utils import (
     TensorType,
@@ -150,7 +150,7 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
         Returns:
             `ImageInput`: The images with a valid nesting.
         """
-        return make_batched_images(images)
+        return make_flat_list_of_images(images)
 
     def _resize_for_patching(
         self,
