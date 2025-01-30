@@ -64,7 +64,7 @@ class MoonshineConfig(PretrainedConfig):
             by meanpooling all the original heads within that group. For more details checkout [this
             paper](https://arxiv.org/pdf/2305.13245.pdf). If it is not specified, will default to
             `decoder_num_attention_heads`.
-        pad_head_dim_to_multiple_of (`int` *optional*):
+        pad_head_dim_to_multiple_of (`int`, *optional*):
             Pad head dimension in encoder and decoder to the next multiple of this value. Necessary for using certain
             optimized attention implementations.
         encoder_hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
