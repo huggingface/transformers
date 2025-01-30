@@ -451,10 +451,13 @@ class VitDetLayer(nn.Module):
         super().__init__()
 
         dim = config.hidden_size
-        if isinstance(config.patch_size, tuple):
-            input_size = (config.image_size // config.patch_size[0], config.image_size // config.patch_size[1])
+
+        if isinstance(config.image_size, tuple) and isinstance(config.patch_size, tuple):
+            input_size = tuple(
+                i // p for i, p in zip(config.image_size, config.patch_size)
+            )
         else:
-            input_size = (config.image_size // config.patch_size, config.image_size // config.patch_size)
+            input_size = config.image_size // config.patch_size
 
         self.norm1 = nn.LayerNorm(dim, eps=config.layer_norm_eps)
         self.attention = VitDetAttention(
