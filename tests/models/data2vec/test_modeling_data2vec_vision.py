@@ -570,6 +570,7 @@ class Data2VecVisionModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(pixel_values, interpolate_pos_encoding=True)
 
+        # num_cls_tokens + (height / patch_size) * (width / patch_size)
         # 1 + (480 / 16) * (480 / 16) = 901
         expected_shape = torch.Size((1, 901, 768))
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
