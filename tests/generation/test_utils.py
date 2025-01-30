@@ -2060,7 +2060,14 @@ class GenerationTesterMixin:
                 )
                 self.assertFalse(isinstance(decoder_cache, DynamicCache))
                 self.assertTrue(decoder_cache.is_compileable)
-                self.assertTrue(hasattr(model, "_compiled_call"))  # our auto compile should have been called
+
+                # BLIP is the only exception with custom generate which call `self.lm.generate()`
+                # We should avoid such calls in all subsequent multimodal models and try to make `generate()`
+                # compatible with multimodality
+                if "blip" in model.__class__.__name__.lower():
+                    self.assertTrue(hasattr(model.language_model, "_compiled_call"))
+                else:
+                    self.assertTrue(hasattr(model, "_compiled_call"))  # our auto compile should have been called
 
             for dynamic_result, compiled_result in zip(dynamic_outputs, compiled_outputs):
                 self._check_similar_generate_outputs(dynamic_result, compiled_result)
