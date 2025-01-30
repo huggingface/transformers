@@ -176,6 +176,8 @@ class GotOcr2Config(PretrainedConfig):
             The image token index to encode the image prompt.
         image_seq_length (`int`, *optional*, defaults to 576):
             Sequence length of one image embedding.
+        pad_token_id (`int`, *optional*, defaults to -1):
+            Padding token id.
 
     ```python
     >>> from transformers import GotOcr2ForConditionalGeneration, GotOcr2Config
@@ -200,11 +202,13 @@ class GotOcr2Config(PretrainedConfig):
         ignore_index=-100,
         image_token_index=151859,
         image_seq_length=576,
+        pad_token_id=-1,
         **kwargs,
     ):
         self.ignore_index = ignore_index
         self.image_token_index = image_token_index
         self.image_seq_length = image_seq_length
+        self.pad_token_id = pad_token_id
 
         if vision_config is None:
             self.vision_config = GotOcr2VisionConfig()
@@ -294,6 +298,7 @@ def preprocess_box_annotation(box: Union[List, Tuple], image_size: Tuple[int, in
     return list(box)
 
 
+# Similar to image_processing_mllama.get_all_supported_aspect_ratios
 @lru_cache(maxsize=10)
 def get_all_supported_aspect_ratios(min_image_tiles: int, max_image_tiles: int) -> List[Tuple[int, int]]:
     """
@@ -809,7 +814,7 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
         if self.language_model._tied_weights_keys is not None:
             self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
 
-        self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
+        self.pad_token_id = config.pad_token_id
 
         self.post_init()
 
@@ -911,7 +916,7 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
 
         if pixel_values is not None:
             image_features = self.get_image_features(pixel_values=pixel_values)
-            n_image_tokens = (input_ids == self.config.image_token_index).sum().item()
+            n_image_tokens = (input_ids == self.config.image_token_index).sum()
             n_image_features = image_features.shape[0] * image_features.shape[1]
             if n_image_tokens != n_image_features:
                 raise ValueError(

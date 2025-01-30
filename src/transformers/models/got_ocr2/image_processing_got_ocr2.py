@@ -56,6 +56,7 @@ if is_vision_available():
 logger = logging.get_logger(__name__)
 
 
+# Similar to image_processing_mllama.get_all_supported_aspect_ratios
 @lru_cache(maxsize=10)
 def get_all_supported_aspect_ratios(min_image_tiles: int, max_image_tiles: int) -> List[Tuple[int, int]]:
     """
