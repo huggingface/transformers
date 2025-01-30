@@ -45,6 +45,11 @@ def sdpa_attention_forward(
     if is_causal is None:
         is_causal = causal_mask is None and query.shape[2] > 1
 
+    # Shapes (e.g. query.shape[2]) are tensors during jit tracing, resulting in `is_causal` being a tensor.
+    # We convert it to a bool for the SDPA kernel that only accepts bools.
+    if torch.jit.is_tracing() and isinstance(is_causal, torch.Tensor):
+        is_causal = is_causal.item()
+
     attn_output = torch.nn.functional.scaled_dot_product_attention(
         query,
         key,
