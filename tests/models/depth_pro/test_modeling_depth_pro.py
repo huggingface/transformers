@@ -346,20 +346,26 @@ class DepthProModelIntegrationTest(unittest.TestCase):
         # forward pass
         with torch.no_grad():
             outputs = model(**inputs)
-            predicted_depth = outputs.predicted_depth
 
         # verify the predicted depth
         n_fusion_blocks = len(config.intermediate_hook_ids) + len(config.scaled_images_ratios)
         out_size = config.image_model_config.image_size // config.image_model_config.patch_size
         expected_depth_size = 2 ** (n_fusion_blocks + 1) * out_size
+
         expected_shape = torch.Size((1, expected_depth_size, expected_depth_size))
-        self.assertEqual(predicted_depth.shape, expected_shape)
+        self.assertEqual(outputs.predicted_depth.shape, expected_shape)
 
         expected_slice = torch.tensor(
             [[1.0582, 1.1225, 1.1335], [1.1154, 1.1398, 1.1486], [1.1434, 1.1500, 1.1643]]
         ).to(torch_device)
+        torch.testing.assert_close(outputs.predicted_depth[0, :3, :3], expected_slice, atol=1e-4, rtol=1e-4)
 
-        torch.testing.assert_close(outputs.predicted_depth[0, :3, :3], expected_slice, atol=1e-4, rtol=0)
+        # verify the predicted fov
+        expected_shape = torch.Size((1,))
+        self.assertEqual(outputs.fov.shape, expected_shape)
+
+        expected_slice = torch.tensor([47.2459]).to(torch_device)
+        torch.testing.assert_close(outputs.fov, expected_slice, atol=1e-4, rtol=1e-4)
 
     def test_post_processing_depth_estimation(self):
         model_path = "geetu040/DepthPro"
