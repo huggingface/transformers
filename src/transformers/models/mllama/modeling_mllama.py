@@ -192,7 +192,7 @@ class MllamaVisionAttention(nn.Module):
         hidden_state: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = None,
-    ) -> torch.Tensor:
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
         query = self.q_proj(hidden_state)
         key = self.k_proj(hidden_state)
         value = self.v_proj(hidden_state)
