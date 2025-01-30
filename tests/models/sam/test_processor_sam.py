@@ -169,51 +169,34 @@ class SamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         """
         Test the run-length encoding function.
         """
+        input_mask = torch.zeros((1, 2, 2), dtype=torch.long)  # shape: 1 x 2 x 2
+        rle = _mask_to_rle_pytorch(input_mask)
 
-        def test_all_zeros():
-            """
-            Test that a mask of all zeros returns a single run [height * width].
-            """
-            input_mask = torch.zeros((1, 2, 2), dtype=torch.long)  # shape: 1 x 2 x 2
-            rle = _mask_to_rle_pytorch(input_mask)
+        self.assertEqual(len(rle), 1)
+        self.assertEqual(rle[0]["size"], [2, 2])
+        # For a 2x2 all-zero mask, we expect a single run of length 4:
+        self.assertEqual(rle[0]["counts"], [4])
 
-            self.assertEqual(len(rle), 1)
-            self.assertEqual(rle[0]["size"], [2, 2])
-            # For a 2x2 all-zero mask, we expect a single run of length 4:
-            self.assertEqual(rle[0]["counts"], [4])
+        input_mask = torch.ones((1, 2, 2), dtype=torch.long)  # shape: 1 x 2 x 2
+        rle = _mask_to_rle_pytorch(input_mask)
 
-        def test_all_ones():
-            """
-            Test that a mask of all ones returns [0, height * width].
-            """
-            input_mask = torch.ones((1, 2, 2), dtype=torch.long)  # shape: 1 x 2 x 2
-            rle = _mask_to_rle_pytorch(input_mask)
+        self.assertEqual(len(rle), 1)
+        self.assertEqual(rle[0]["size"], [2, 2])
+        # For a 2x2 all-one mask, we expect two runs: [0, 4].
+        self.assertEqual(rle[0]["counts"], [0, 4])
 
-            self.assertEqual(len(rle), 1)
-            self.assertEqual(rle[0]["size"], [2, 2])
-            # For a 2x2 all-one mask, we expect two runs: [0, 4].
-            self.assertEqual(rle[0]["counts"], [0, 4])
+        # Example mask:
+        # Row 0: [0, 1]
+        # Row 1: [1, 1]
+        # This is shape (1, 2, 2).
+        # Flattened in Fortran order -> [0, 1, 1, 1].
+        # The RLE for [0,1,1,1] is [1, 3].
+        input_mask = torch.tensor([[[0, 1], [1, 1]]], dtype=torch.long)
+        rle = _mask_to_rle_pytorch(input_mask)
 
-        def test_partial_mask():
-            """
-            Test a mask with mixed 0s and 1s to ensure the run-length encoding is correct.
-            """
-            # Example mask:
-            # Row 0: [0, 1]
-            # Row 1: [1, 1]
-            # This is shape (1, 2, 2).
-            # Flattened in Fortran order -> [0, 1, 1, 1].
-            # The RLE for [0,1,1,1] is [1, 3].
-            input_mask = torch.tensor([[[0, 1], [1, 1]]], dtype=torch.long)
-            rle = _mask_to_rle_pytorch(input_mask)
-
-            self.assertEqual(len(rle), 1)
-            self.assertEqual(rle[0]["size"], [2, 2])
-            self.assertEqual(rle[0]["counts"], [1, 3])  # 1 zero, followed by 3 ones
-
-        test_all_zeros()
-        test_all_ones()
-        test_partial_mask()
+        self.assertEqual(len(rle), 1)
+        self.assertEqual(rle[0]["size"], [2, 2])
+        self.assertEqual(rle[0]["counts"], [1, 3])  # 1 zero, followed by 3 ones
 
 
 @require_vision
@@ -302,51 +285,34 @@ class TFSamProcessorTest(unittest.TestCase):
         """
         Test the run-length encoding function.
         """
+        input_mask = tf.zeros((1, 2, 2), dtype=tf.int64)  # shape: 1 x 2 x 2
+        rle = _mask_to_rle_tf(input_mask)
 
-        def test_all_zeros():
-            """
-            Test that a mask of all zeros returns a single run [height * width].
-            """
-            input_mask = tf.zeros((1, 2, 2), dtype=tf.int64)  # shape: 1 x 2 x 2
-            rle = _mask_to_rle_tf(input_mask)
+        self.assertEqual(len(rle), 1)
+        self.assertEqual(rle[0]["size"], [2, 2])
+        # For a 2x2 all-zero mask, we expect a single run of length 4:
+        self.assertEqual(rle[0]["counts"], [4])
 
-            self.assertEqual(len(rle), 1)
-            self.assertEqual(rle[0]["size"], [2, 2])
-            # For a 2x2 all-zero mask, we expect a single run of length 4:
-            self.assertEqual(rle[0]["counts"], [4])
+        input_mask = tf.ones((1, 2, 2), dtype=tf.int64)  # shape: 1 x 2 x 2
+        rle = _mask_to_rle_tf(input_mask)
 
-        def test_all_ones():
-            """
-            Test that a mask of all ones returns [0, height * width].
-            """
-            input_mask = tf.ones((1, 2, 2), dtype=tf.int64)  # shape: 1 x 2 x 2
-            rle = _mask_to_rle_tf(input_mask)
+        self.assertEqual(len(rle), 1)
+        self.assertEqual(rle[0]["size"], [2, 2])
+        # For a 2x2 all-one mask, we expect two runs: [0, 4].
+        self.assertEqual(rle[0]["counts"], [0, 4])
 
-            self.assertEqual(len(rle), 1)
-            self.assertEqual(rle[0]["size"], [2, 2])
-            # For a 2x2 all-one mask, we expect two runs: [0, 4].
-            self.assertEqual(rle[0]["counts"], [0, 4])
+        # Example mask:
+        # Row 0: [0, 1]
+        # Row 1: [1, 1]
+        # This is shape (1, 2, 2).
+        # Flattened in Fortran order -> [0, 1, 1, 1].
+        # The RLE for [0,1,1,1] is [1, 3].
+        input_mask = tf.tensor([[[0, 1], [1, 1]]], dtype=tf.int64)
+        rle = _mask_to_rle_tf(input_mask)
 
-        def test_partial_mask():
-            """
-            Test a mask with mixed 0s and 1s to ensure the run-length encoding is correct.
-            """
-            # Example mask:
-            # Row 0: [0, 1]
-            # Row 1: [1, 1]
-            # This is shape (1, 2, 2).
-            # Flattened in Fortran order -> [0, 1, 1, 1].
-            # The RLE for [0,1,1,1] is [1, 3].
-            input_mask = tf.tensor([[[0, 1], [1, 1]]], dtype=tf.int64)
-            rle = _mask_to_rle_tf(input_mask)
-
-            self.assertEqual(len(rle), 1)
-            self.assertEqual(rle[0]["size"], [2, 2])
-            self.assertEqual(rle[0]["counts"], [1, 3])  # 1 zero, followed by 3 ones
-
-        test_all_zeros()
-        test_all_ones()
-        test_partial_mask()
+        self.assertEqual(len(rle), 1)
+        self.assertEqual(rle[0]["size"], [2, 2])
+        self.assertEqual(rle[0]["counts"], [1, 3])  # 1 zero, followed by 3 ones
 
 
 @require_vision
