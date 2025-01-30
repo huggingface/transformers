@@ -19,7 +19,7 @@ Processor class for PaliGemma.
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, is_valid_image, make_batched_images
+from ...image_utils import ImageInput, is_valid_image, make_flat_list_of_images
 from ...processing_utils import (
     ImagesKwargs,
     ProcessingKwargs,
@@ -273,7 +273,7 @@ class PaliGemmaProcessor(ProcessorMixin):
                     )
                     for prompt, image_list in zip(text, images)
                 ]
-                images = make_batched_images(images)
+                images = make_flat_list_of_images(images)
             else:
                 expanded_samples = []
                 for sample in text:

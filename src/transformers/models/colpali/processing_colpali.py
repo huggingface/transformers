@@ -23,7 +23,7 @@
 from typing import ClassVar, List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, is_valid_image, make_batched_images
+from ...image_utils import ImageInput, is_valid_image, make_flat_list_of_images
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, PreTokenizedInput, TextInput
 from ...utils import is_torch_available
@@ -207,7 +207,7 @@ class ColPaliProcessor(ProcessorMixin):
                 )
                 for prompt, image_list in zip(texts_doc, images)
             ]
-            images = make_batched_images(images)
+            images = make_flat_list_of_images(images)
             pixel_values = self.image_processor(images, **output_kwargs["images_kwargs"])["pixel_values"]
 
             # max_length has to account for the image tokens
