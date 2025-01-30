@@ -3584,7 +3584,11 @@ class GenerationMixin:
 
             # Only the top `num_beam` sequences can be considered for the final returned sequences
             top_num_beam_mask = torch.cat(
-                (torch.ones((num_beams), dtype=torch.bool), torch.zeros((num_beams), dtype=torch.bool)), dim=0
+                (
+                    torch.ones((num_beams), dtype=torch.bool),
+                    torch.zeros((beams_to_keep - num_beams), dtype=torch.bool),
+                ),
+                dim=0,
             ).to(next_token_hits_stopping_criteria.device)
             did_top_num_beams_just_finished = next_token_hits_stopping_criteria & top_num_beam_mask[None, :]
             # To prevent these just finished sequences from being used in subsequent iterations, set their log probs

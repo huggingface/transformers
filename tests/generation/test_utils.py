@@ -4172,6 +4172,43 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         decoded_assisted = tokenizer.batch_decode(outputs_assisted, skip_special_tokens=True)
         self.assertEqual(decoded_assisted, [expected_output])
 
+    @slow
+    def test_beam_search_advanced_stopping_criteria(self):
+        """
+        Tests that beam search works with a stopping criteria that is not max length or EOS token. Prior to the beam
+        search vectorization PR (#35802), beam search was not accepting other stopping criteria. Test inspired on
+        the original issue (#34843).
+        """
+        tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct")
+        model = AutoModelForCausalLM.from_pretrained("Qwen/Qwen2.5-0.5B-Instruct").to(torch_device)
+
+        prompt = (
+            "Natalia sold clips to 48 of her friends in April, and then she sold half as many clips in May. "
+            "How many clips did Natalia sell altogether in April and May?"
+        )
+        tokens = tokenizer(prompt, return_tensors="pt").to(torch_device)
+        generation_config = GenerationConfig(num_beams=3, do_sample=False, length_penalty=1.0, max_new_tokens=100)
+
+        # This particular prompt should result in a ":" being present in the answer
+        out = model.generate(**tokens, generation_config=generation_config, tokenizer=tokenizer)
+        output_text = tokenizer.decode(out[0], skip_special_tokens=True)
+        last_non_special_token_decoded = tokenizer.decode(out[out != tokenizer.pad_token_id][-1])
+        self.assertTrue(":" in output_text)
+        self.assertFalse(":" in output_text[-5:])
+        self.assertFalse(":" in last_non_special_token_decoded)
+
+        # Adding an advanced stopping criteria: text generation should stop when a ":" is generated.
+        # Note that:
+        # 1 - the text up to ":" doesn't have to be the same, it can belong to a different beam
+        # 2 - ":" may not be the last char, but it must be in the last non-special token
+        generation_config.stop_strings = ":"
+        out = model.generate(**tokens, generation_config=generation_config, tokenizer=tokenizer)
+        output_text = tokenizer.decode(out[0], skip_special_tokens=True)
+        last_non_special_token_decoded = tokenizer.decode(out[out != tokenizer.pad_token_id][-1])
+        self.assertTrue(":" in output_text)
+        self.assertTrue(":" in output_text[-5:])
+        self.assertTrue(":" in last_non_special_token_decoded)
+
 
 @require_torch
 class TokenHealingTestCase(unittest.TestCase):
