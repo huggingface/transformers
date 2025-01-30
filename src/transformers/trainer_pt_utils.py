@@ -89,10 +89,7 @@ def torch_pad_and_concatenate(tensor1, tensor2, padding_index=-100):
         return torch.cat((tensor1, tensor2), dim=0)
 
     # Let's figure out the new shape
-    new_shape = (
-        tensor1.shape[0] + tensor2.shape[0],
-        max(tensor1.shape[1], tensor2.shape[1]),
-    ) + tensor1.shape[2:]
+    new_shape = (tensor1.shape[0] + tensor2.shape[0], max(tensor1.shape[1], tensor2.shape[1])) + tensor1.shape[2:]
 
     # Now let's fill the result tensor
     result = tensor1.new_full(new_shape, padding_index)
@@ -110,10 +107,7 @@ def numpy_pad_and_concatenate(array1, array2, padding_index=-100):
         return np.concatenate((array1, array2), axis=0)
 
     # Let's figure out the new shape
-    new_shape = (
-        array1.shape[0] + array2.shape[0],
-        max(array1.shape[1], array2.shape[1]),
-    ) + array1.shape[2:]
+    new_shape = (array1.shape[0] + array2.shape[0], max(array1.shape[1], array2.shape[1])) + array1.shape[2:]
 
     # Now let's fill the result tensor
     result = np.full_like(array1, padding_index, shape=new_shape)
@@ -128,9 +122,9 @@ def nested_concat(tensors, new_tensors, padding_index=-100):
     nested list/tuples/dict of tensors.
     """
     if not (isinstance(tensors, torch.Tensor) and isinstance(new_tensors, torch.Tensor)):
-        assert type(tensors) is type(new_tensors), (
-            f"Expected `tensors` and `new_tensors` to have the same type but found {type(tensors)} and {type(new_tensors)}."
-        )
+        assert (
+            type(tensors) is type(new_tensors)
+        ), f"Expected `tensors` and `new_tensors` to have the same type but found {type(tensors)} and {type(new_tensors)}."
     if isinstance(tensors, (list, tuple)):
         return type(tensors)(nested_concat(t, n, padding_index=padding_index) for t, n in zip(tensors, new_tensors))
     elif isinstance(tensors, torch.Tensor):
@@ -388,15 +382,15 @@ class SequentialDistributedSampler(Sampler):
 
         # add extra samples to make it evenly divisible
         indices += indices[: (self.total_size - len(indices))]
-        assert len(indices) == self.total_size, (
-            f"Indices length {len(indices)} and total size {self.total_size} mismatched"
-        )
+        assert (
+            len(indices) == self.total_size
+        ), f"Indices length {len(indices)} and total size {self.total_size} mismatched"
 
         # subsample
         indices = indices[self.rank * self.num_samples : (self.rank + 1) * self.num_samples]
-        assert len(indices) == self.num_samples, (
-            f"Indices length {len(indices)} and sample number {self.num_samples} mismatched"
-        )
+        assert (
+            len(indices) == self.num_samples
+        ), f"Indices length {len(indices)} and sample number {self.num_samples} mismatched"
 
         return iter(indices)
 
@@ -419,11 +413,7 @@ def nested_new_like(arrays, num_samples, padding_index=-100):
 
 def expand_like(arrays, new_seq_length, padding_index=-100):
     """Expand the `arrays` so that the second dimension grows to `new_seq_length`. Uses `padding_index` for padding."""
-    result = np.full_like(
-        arrays,
-        padding_index,
-        shape=(arrays.shape[0], new_seq_length) + arrays.shape[2:],
-    )
+    result = np.full_like(arrays, padding_index, shape=(arrays.shape[0], new_seq_length) + arrays.shape[2:])
     result[:, : arrays.shape[1]] = arrays
     return result
 
@@ -517,9 +507,9 @@ class DistributedTensorGatherer:
         if isinstance(arrays, (list, tuple)):
             result = [self._nested_set_tensors(x, y) for x, y in zip(storage, arrays)]
             return result[0][0], type(arrays)(r[1] for r in result)
-        assert arrays.shape[0] % self.world_size == 0, (
-            f"Arrays passed should all have a first dimension multiple of {self.world_size}, found {arrays.shape[0]}."
-        )
+        assert (
+            arrays.shape[0] % self.world_size == 0
+        ), f"Arrays passed should all have a first dimension multiple of {self.world_size}, found {arrays.shape[0]}."
 
         slice_len = arrays.shape[0] // self.world_size
         for i in range(self.world_size):
@@ -619,10 +609,7 @@ def get_length_grouped_indices(lengths, batch_size, mega_batch_mult=None, genera
     megabatch_maximums = [lengths[megabatch[0]] for megabatch in megabatches]
     max_idx = torch.argmax(torch.tensor(megabatch_maximums)).item()
     # Switch to put the longest element in first position
-    megabatches[0][0], megabatches[max_idx][0] = (
-        megabatches[max_idx][0],
-        megabatches[0][0],
-    )
+    megabatches[0][0], megabatches[max_idx][0] = megabatches[max_idx][0], megabatches[0][0]
 
     return [i for megabatch in megabatches for i in megabatch]
 
@@ -798,11 +785,7 @@ class ShardSampler(Sampler):
             indices += indices[: (self.total_num_samples - len(indices))]
 
         result = []
-        for batch_start in range(
-            self.batch_size * self.process_index,
-            self.total_num_samples,
-            self.total_batch_size,
-        ):
+        for batch_start in range(self.batch_size * self.process_index, self.total_num_samples, self.total_batch_size):
             result += indices[batch_start : batch_start + self.batch_size]
 
         return iter(result)
@@ -885,10 +868,7 @@ class IterableDatasetShard(IterableDataset):
         ):
             self.dataset.generator.manual_seed(self.seed + self.epoch)
         real_batch_size = self.batch_size * self.num_processes
-        process_slice = range(
-            self.process_index * self.batch_size,
-            (self.process_index + 1) * self.batch_size,
-        )
+        process_slice = range(self.process_index * self.batch_size, (self.process_index + 1) * self.batch_size)
 
         first_batch = None
         current_batch = []
@@ -971,11 +951,11 @@ def metrics_format(self, metrics: Dict[str, float]) -> Dict[str, float]:
     metrics_copy = metrics.copy()
     for k, v in metrics_copy.items():
         if "_mem_" in k:
-            metrics_copy[k] = f"{v >> 20}MB"
+            metrics_copy[k] = f"{ v >> 20 }MB"
         elif "_runtime" in k:
             metrics_copy[k] = _secs2timedelta(v)
         elif k == "total_flos":
-            metrics_copy[k] = f"{int(v) >> 30}GF"
+            metrics_copy[k] = f"{ int(v) >> 30 }GF"
         elif isinstance(metrics_copy[k], float):
             metrics_copy[k] = round(v, 4)
 
