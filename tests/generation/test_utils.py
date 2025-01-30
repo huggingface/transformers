@@ -16,6 +16,7 @@
 
 import collections
 import copy
+import datetime
 import gc
 import inspect
 import tempfile
@@ -4248,6 +4249,46 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         outputs_assisted = model.generate(**inputs, assistant_early_exit=4, do_sample=False, max_new_tokens=20)
         decoded_assisted = tokenizer.batch_decode(outputs_assisted, skip_special_tokens=True)
         self.assertEqual(decoded_assisted, [expected_output])
+
+    @slow
+    def test_max_time(self):
+        tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
+        model = GPT2LMHeadModel.from_pretrained("openai-community/gpt2")
+        model.to(torch_device)
+
+        torch.manual_seed(0)
+        tokenized = tokenizer("Today is a nice day and", return_tensors="pt", return_token_type_ids=True)
+        input_ids = tokenized.input_ids.to(torch_device)
+
+        MAX_TIME = 0.1
+        MAX_LENGTH = 64
+
+        # sampling on
+        start = datetime.datetime.now()
+        model.generate(input_ids, do_sample=True, max_time=MAX_TIME, max_length=MAX_LENGTH)
+        duration = datetime.datetime.now() - start
+        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
+        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
+
+        # sampling off
+        start = datetime.datetime.now()
+        model.generate(input_ids, do_sample=False, max_time=MAX_TIME, max_length=MAX_LENGTH)
+        duration = datetime.datetime.now() - start
+        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
+        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
+
+        # beam search
+        start = datetime.datetime.now()
+        model.generate(input_ids, do_sample=False, num_beams=2, max_time=MAX_TIME, max_length=MAX_LENGTH)
+        duration = datetime.datetime.now() - start
+        self.assertGreater(duration, datetime.timedelta(seconds=MAX_TIME))
+        self.assertLess(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
+
+        # sanity check: no time limit
+        start = datetime.datetime.now()
+        model.generate(input_ids, do_sample=False, max_time=None, max_length=MAX_LENGTH)
+        duration = datetime.datetime.now() - start
+        self.assertGreater(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
 
 
 @require_torch
