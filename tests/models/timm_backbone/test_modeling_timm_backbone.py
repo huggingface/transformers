@@ -18,7 +18,7 @@ import inspect
 import unittest
 
 from transformers import AutoBackbone
-from transformers.testing_utils import is_flaky, require_timm, require_torch, torch_device
+from transformers.testing_utils import require_timm, require_torch, torch_device
 from transformers.utils.import_utils import is_torch_available
 
 from ...test_backbone_common import BackboneTesterMixin
