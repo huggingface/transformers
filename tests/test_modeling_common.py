@@ -4536,6 +4536,8 @@ class ModelTesterMixin:
                 config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
 
             model = model_class(config)
+            if "position_ids" not in inspect.signature(model.forward).parameters:
+                self.skipTest("Model does not support position_ids")
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
