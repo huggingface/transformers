@@ -300,22 +300,27 @@ class DepthProModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         configs_no_init = _config_zero_init(config)
         for model_class in self.all_model_classes:
             model = model_class(config=configs_no_init)
-            # Skip the check for the backbone
-            backbone_params = []
-            for name, module in model.named_modules():
-                if module.__class__.__name__ == "DepthProViTHybridEmbeddings":
-                    backbone_params = [f"{name}.{key}" for key in module.state_dict().keys()]
-                    break
-
             for name, param in model.named_parameters():
+                non_uniform_init_parms = [
+                    # these encoders are vision transformers
+                    # any layer outside these encoders is either Conv2d or ConvTranspose2d
+                    # which use kaiming initialization
+                    "patch_encoder",
+                    "image_encoder",
+                    "fov_model.encoder",
+                ]
                 if param.requires_grad:
-                    if name in backbone_params:
-                        continue
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
+                    if any(x in name for x in non_uniform_init_parms):
+                        self.assertIn(
+                            ((param.data.mean() * 1e9).round() / 1e9).item(),
+                            [0.0, 1.0],
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
+                    else:
+                        self.assertTrue(
+                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
+                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
+                        )
 
     @slow
     def test_model_from_pretrained(self):
