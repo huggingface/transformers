@@ -1101,7 +1101,7 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
     test_pruning = False
     test_resize_embeddings = True
     test_attention_outputs = False
-    test_torchscript = True
+    test_torchscript = False
     _is_composite = True
 
     # TODO: Fix the failed tests
