@@ -14,6 +14,7 @@
 # limitations under the License.
 
 from concurrent.futures import ThreadPoolExecutor
+from functools import partial
 from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
 
 import numpy as np
@@ -448,6 +449,40 @@ class BaseImageProcessorFast(BaseImageProcessor):
         """
         return make_list_of_images(images)
 
+    def _process_image(
+        self,
+        image: ImageInput,
+        do_convert_rgb: Optional[bool] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        device: Optional["torch.device"] = None,
+    ) -> "torch.Tensor":
+        image_type = get_image_type(image)
+        if image_type not in [ImageType.PIL, ImageType.TORCH, ImageType.NUMPY]:
+            raise ValueError(f"Unsupported input image type {image_type}")
+
+        if do_convert_rgb:
+            image = self.convert_to_rgb(image)
+
+        if image_type == ImageType.PIL:
+            image = F.pil_to_tensor(image)
+        elif image_type == ImageType.NUMPY:
+            # not using F.to_tensor as it doesn't handle (C, H, W) numpy arrays
+            image = torch.from_numpy(image).contiguous()
+
+        # Infer the channel dimension format if not provided
+        if input_data_format is None:
+            input_data_format = infer_channel_dimension_format(image)
+
+        if input_data_format == ChannelDimension.LAST:
+            # We force the channel dimension to be first for torch tensors as this is what torchvision expects.
+            image = image.permute(2, 0, 1).contiguous()
+
+        # Now that we have torch tensors, we can move them to the right device
+        if device is not None:
+            image = image.to(device)
+
+        return image
+
     def _prepare_input_images(
         self,
         images: ImageInput,
@@ -459,37 +494,14 @@ class BaseImageProcessorFast(BaseImageProcessor):
         Prepare the input images for processing.
         """
         images = self._prepare_images_structure(images)
-        image_type = get_image_type(images[0])
-        if image_type not in [ImageType.PIL, ImageType.TORCH, ImageType.NUMPY]:
-            raise ValueError(f"Unsupported input image type {image_type}")
-
-        def process_image(image):
-            if do_convert_rgb:
-                image = self.convert_to_rgb(image)
-
-            if image_type == ImageType.PIL:
-                image = F.pil_to_tensor(image)
-            elif image_type == ImageType.NUMPY:
-                # not using F.to_tensor as it doesn't handle (C, H, W) numpy arrays
-                image = torch.from_numpy(image).contiguous()
-
-            # Infer the channel dimension format if not provided
-            nonlocal input_data_format
-            if input_data_format is None:
-                input_data_format = infer_channel_dimension_format(image)
-
-            if input_data_format == ChannelDimension.LAST:
-                # We force the channel dimension to be first for torch tensors as this is what torchvision expects.
-                image = image.permute(2, 0, 1).contiguous()
-
-            # Now that we have torch tensors, we can move them to the right device
-            if device is not None:
-                image = image.to(device)
-
-            return image
-
+        process_image_fn = partial(
+            self._process_image,
+            do_convert_rgb=do_convert_rgb,
+            input_data_format=input_data_format,
+            device=device,
+        )
         with ThreadPoolExecutor() as executor:
-            processed_images = list(executor.map(process_image, images))
+            processed_images = list(executor.map(process_image_fn, images))
 
         return processed_images
 
