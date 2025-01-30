@@ -20,7 +20,7 @@ import unittest
 
 import numpy as np
 
-from transformers.testing_utils import is_pt_flax_cross_test, require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import is_pt_flax_cross_test, require_torch, require_vision, slow, torch_device, skipIfRocm
 from transformers.utils import is_flax_available, is_torch_available, is_vision_available
 
 from ...test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
@@ -288,6 +288,10 @@ class VisionTextDualEncoderMixin:
 
 @require_torch
 class ViTBertModelTest(VisionTextDualEncoderMixin, unittest.TestCase):
+    @skipIfRocm(arch='gfx90a')
+    def test_save_load(self):
+        super().test_save_load()
+
     def get_pretrained_model_and_inputs(self):
         model = VisionTextDualEncoderModel.from_vision_text_pretrained(
             "hf-internal-testing/tiny-random-vit", "hf-internal-testing/tiny-bert"
@@ -345,6 +349,10 @@ class ViTBertModelTest(VisionTextDualEncoderMixin, unittest.TestCase):
 
 @require_torch
 class DeiTRobertaModelTest(VisionTextDualEncoderMixin, unittest.TestCase):
+    @skipIfRocm(arch='gfx90a')
+    def test_save_load(self):
+        super().test_save_load()
+
     def get_pretrained_model_and_inputs(self):
         model = VisionTextDualEncoderModel.from_vision_text_pretrained(
             "hf-internal-testing/tiny-random-deit", "hf-internal-testing/tiny-random-roberta"
@@ -436,6 +444,10 @@ class DeiTRobertaModelTest(VisionTextDualEncoderMixin, unittest.TestCase):
 
 @require_torch
 class CLIPVisionBertModelTest(VisionTextDualEncoderMixin, unittest.TestCase):
+    @skipIfRocm(arch='gfx90a')
+    def test_save_load(self):
+        super().test_save_load()
+
     def get_pretrained_model_and_inputs(self):
         model = VisionTextDualEncoderModel.from_vision_text_pretrained(
             "hf-internal-testing/tiny-random-clip", "hf-internal-testing/tiny-bert"

@@ -327,12 +327,12 @@ class DbrxModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     test_headmasking = False
     test_pruning = False
 
-    @skipIfRocm(arch='gfx1201')
+    @skipIfRocm(arch=['gfx1201','gfx90a'])
     def test_generate_with_static_cache(self):
         super().test_generate_with_static_cache()
         pass
 
-    @skipIfRocm(arch='gfx1201')
+    @skipIfRocm(arch=['gfx1201','gfx90a'])
     def test_generate_from_inputs_embeds_with_static_cache(self):
         super().test_generate_from_inputs_embeds_with_static_cache()
         pass

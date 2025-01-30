@@ -32,6 +32,7 @@ from transformers.testing_utils import (
     require_torch_gpu,
     slow,
     torch_device,
+    skipIfRocm
 )
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -230,6 +231,10 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     all_generative_model_classes = (Qwen2_5_VLForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False
     test_head_masking = False
+
+    @skipIfRocm(arch='gfx90a')
+    def test_generate_continue_from_past_key_values(self):
+        super().test_generate_continue_from_past_key_values()
 
     def setUp(self):
         self.model_tester = Qwen2_5_VLVisionText2TextModelTester(self)

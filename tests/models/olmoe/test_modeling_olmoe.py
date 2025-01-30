@@ -306,13 +306,13 @@ class OlmoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     model_split_percents = [0.5, 0.7, 0.8]
 
     def test_generate_with_static_cache(self):
-        if rocmUtils.is_rocm_skippable(arch='gfx1201'):
+        if rocmUtils.is_rocm_skippable(arch=['gfx1201','gfx90a']):
             torch._dynamo.config.capture_dynamic_output_shape_ops = True
         super().test_generate_with_static_cache()
         pass
 
     def test_generate_from_inputs_embeds_with_static_cache(self):
-        if rocmUtils.is_rocm_skippable(arch='gfx1201'):
+        if rocmUtils.is_rocm_skippable(arch=['gfx1201','gfx90a']):
             torch._dynamo.config.capture_dynamic_output_shape_ops = True
         super().test_generate_from_inputs_embeds_with_static_cache()
         pass

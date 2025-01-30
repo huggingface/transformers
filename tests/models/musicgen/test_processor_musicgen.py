@@ -21,13 +21,12 @@ import unittest
 import numpy as np
 
 from transformers import T5Tokenizer, T5TokenizerFast
-from transformers.testing_utils import require_sentencepiece, require_torch
+from transformers.testing_utils import require_sentencepiece, require_torch, require_torchaudio
 from transformers.utils.import_utils import is_speech_available
 
 
 if is_speech_available():
     from transformers import EncodecFeatureExtractor, MusicgenProcessor
-
 
 global_rng = random.Random()
 
@@ -48,6 +47,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 
 
 @require_torch
+@require_torchaudio
 @require_sentencepiece
 class MusicgenProcessorTest(unittest.TestCase):
     def setUp(self):
