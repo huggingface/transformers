@@ -86,7 +86,7 @@ If you want to do the pre- and postprocessing yourself, here's how to do that:
 >>> candidate_labels = ["2 cats", "2 dogs"]
 # follows the pipeline prompt template to get same results
 >>> texts = [f'This is a photo of {label}.' for label in candidate_labels]
->>> # important: we pass `padding=max_length` since the model was trained with this
+# important: we pass `padding=max_length` since the model was trained with this
 >>> inputs = processor(text=texts, images=image, padding="max_length", return_tensors="pt")
 
 >>> with torch.no_grad():
@@ -95,7 +95,7 @@ If you want to do the pre- and postprocessing yourself, here's how to do that:
 >>> logits_per_image = outputs.logits_per_image
 >>> probs = torch.sigmoid(logits_per_image) # these are the probabilities
 >>> print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
-31.9% that image 0 is 'a photo of 2 cats'
+19.8% that image 0 is '2 cats'
 ```
 
 ## Resources
@@ -142,8 +142,7 @@ To load and run a model using Flash Attention 2, refer to the snippet below:
 # follows the pipeline prompt template to get same results
 >>> texts = [f'This is a photo of {label}.' for label in candidate_labels]
 # important: we pass `padding=max_length` since the model was trained with this
->>> inputs = processor(text=texts, images=image, padding="max_length", return_tensors="pt")
->>> inputs.to(device)
+>>> inputs = processor(text=texts, images=image, padding="max_length", return_tensors="pt").to(device)
 
 >>> with torch.no_grad():
 ...     with torch.autocast(device):
@@ -152,7 +151,7 @@ To load and run a model using Flash Attention 2, refer to the snippet below:
 >>> logits_per_image = outputs.logits_per_image
 >>> probs = torch.sigmoid(logits_per_image) # these are the probabilities
 >>> print(f"{probs[0][0]:.1%} that image 0 is '{candidate_labels[0]}'")
-51.3% that image 0 is 'This is a photo of 2 cats.'
+19.8% that image 0 is '2 cats'
 ```
 
 
