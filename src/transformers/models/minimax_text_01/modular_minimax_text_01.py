@@ -17,7 +17,7 @@
 
 # TODO: remove these
 from icecream import ic
-from pack_minimax import show_tensor
+# from pack_minimax import show_tensor
 
 from typing import Callable, List, Optional, Tuple, Union
 
@@ -348,24 +348,46 @@ class MiniMaxText01LightningAttention(nn.Module):
         key_states = key_states.reshape(batch_size, self.num_heads, num_blocks, self.block_size, self.head_dim)
         value_states = value_states.reshape(batch_size, self.num_heads, num_blocks, self.block_size, self.head_dim)
 
-        # TODO: get from past_key_value[layer_idx]
-        next_cache = torch.zeros(batch_size, self.num_heads, 1, self.head_dim, self.head_dim).to(value_states)
+        # Dynamic Cache
+        if past_key_value is None:
+            kv_cache = DynamicCache()
+        else:
+            kv_cache = past_key_value
+
+        # update the kv_cache with the new key and value states
+        kv_cache.update(
+            key_states, value_states, layer_idx=self.layer_idx
+            )
+
+        # Retrieve the cached key and value states
+        cached_keys, cached_values = kv_cache[self.layer_idx] # Shape: [batch_size, num_heads, seq_len, head_dim]
+        
+        # # TODO: get from past_key_value[layer_idx]
+        # next_cache = torch.zeros(batch_size, self.num_heads, 1, self.head_dim, self.head_dim).to(value_states)
 
         # get decay factors
         key_decay, query_decay, diagonal_decay, block_decay = self.decay_factors(query_states, seq_len)
 
         # intra: ( Q @ K.T ) @ V -> QK * V
-        attn_weights_intra = torch.matmul(query_states, key_states.transpose(-1, -2))
-        attn_output_intra = torch.matmul(attn_weights_intra * diagonal_decay, value_states)
+        # attn_weights_intra = torch.matmul(query_states, key_states.transpose(-1, -2))
+        # Calculate the attention weights using the cached key and value states
+        attn_weights_intra = torch.matmul(query_states, cached_keys.transpose(-1, -2))
+        attn_output_intra = torch.matmul(attn_weights_intra * diagonal_decay, cached_values)
 
         # inter: Q @ ( K.T @ V ) -> Q * KV
-        attn_weights_inter = torch.matmul((key_states * key_decay).transpose(-1, -2), value_states)
-        attn_weights_inter = torch.cat([next_cache, attn_weights_inter], dim=2)
+        attn_weights_inter = torch.matmul((cached_keys * key_decay).transpose(-1, -2), cached_values)
+        attn_weights_inter = torch.cat([torch.zeros_like(attn_weights_inter[:, :, :1]), attn_weights_inter], dim=2)
+
+        # attn_weights_inter = torch.cat([next_cache, attn_weights_inter], dim=2)
+
         for i in range(num_blocks):
             attn_weights_inter[:, :, i + 1, :, :] += attn_weights_inter[:, :, i, :, :] * block_decay[:, i, :, :]
-        next_cache = attn_weights_inter[:, :, -1, :, :]
-        attn_weights_inter = attn_weights_inter[:, :, :-1, :, :]
-        attn_output_inter = torch.matmul(query_states * query_decay, attn_weights_inter)
+        
+        # next_cache = attn_weights_inter[:, :, -1, :, :]
+        # attn_weights_inter = attn_weights_inter[:, :, :-1, :, :]
+        # attn_output_inter = torch.matmul(query_states * query_decay, attn_weights_inter)
+
+        attn_output_inter = torch.matmul(query_states * query_decay, attn_weights_inter[:, :, :-1, :, :])
 
         # inter + intra
         attn_output = attn_output_inter + attn_output_intra
@@ -379,16 +401,16 @@ class MiniMaxText01LightningAttention(nn.Module):
         attn_output = F.sigmoid(self.output_gate(hidden_states)) * attn_output
         attn_output = self.out_proj(attn_output)
 
-        # TODO: put to past_key_value[layer_idx]
-        next_cache
+        print("KV Cache:", kv_cache)
+        # # TODO: put to past_key_value[layer_idx]
+        # next_cache
 
         # TODO: remove these
-        print()
-        print(self.layer_idx)
-        print(next_cache)
+        # print()
+        # print(self.layer_idx)
+        # print("Next Cache:",next_cache)
 
         return attn_output, None
-
 
 class MiniMaxText01Attention(MixtralAttention):
     pass
