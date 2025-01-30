@@ -16,7 +16,7 @@
 
 from typing import Dict, List, Optional, Union
 
-from ...image_processing_utils import get_size_dict
+from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import (
     ChannelDimension,
@@ -26,7 +26,7 @@ from ...image_utils import (
     get_image_size,
     get_image_type,
     infer_channel_dimension_format,
-    make_nested_list_of_images,
+    make_list_of_images,
     validate_fast_preprocess_arguments,
     validate_kwargs,
 )
@@ -39,7 +39,6 @@ from ...utils import (
     logging,
 )
 from .image_processing_pixtral import (
-    BatchMixFeature,
     convert_to_rgb,
     get_resize_output_image_size,
 )
@@ -189,6 +188,36 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
             **kwargs,
         )
 
+    # Adapted from transformers.models.pixtral.image_processing_pixtral.PixtralImageProcessor._pad_for_batching
+    def _pad_for_batching(
+        self,
+        pixel_values: List[torch.Tensor],
+        image_sizes: List[List[int]],
+    ):
+        """
+        Pads images on the `num_of_patches` dimension with zeros to form a batch of same number of patches.
+        Args:
+            pixel_values (`List[torch.Tensor]`):
+                An array of pixel values of each images of shape (`batch_size`, `channels`, `height`, `width`)
+            image_sizes (`List[List[int]]`):
+                A list of sizes for each image in `pixel_values` in (height, width) format.
+        Returns:
+            List[`torch.Tensor`]: The padded images.
+        """
+
+        max_shape = (
+            max([size[0] for size in image_sizes]),
+            max([size[1] for size in image_sizes]),
+        )
+        pixel_values = [
+            torch.nn.functional.pad(
+                image,
+                pad=(0, max_shape[1] - size[1], 0, max_shape[0] - size[0]),
+            )
+            for image, size in zip(pixel_values, image_sizes)
+        ]
+        return torch.stack(pixel_values)
+
     def preprocess(
         self,
         images: ImageInput,
@@ -206,7 +235,7 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
-    ) -> BatchMixFeature:
+    ) -> BatchFeature:
         """
         Preprocess an image or batch of images.
 
@@ -271,8 +300,8 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
 
         validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self._valid_processor_keys)
 
-        images_list = make_nested_list_of_images(images)
-        image_type = get_image_type(images_list[0][0])
+        images = make_list_of_images(images)
+        image_type = get_image_type(images[0])
 
         if image_type not in [ImageType.PIL, ImageType.TORCH, ImageType.NUMPY]:
             raise ValueError(f"Unsupported input image type {image_type}")
@@ -290,65 +319,63 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
             data_format=data_format,
         )
 
-        if do_convert_rgb:
-            images_list = [[convert_to_rgb(image) for image in images] for images in images_list]
-
-        if image_type == ImageType.PIL:
-            images_list = [[F.pil_to_tensor(image) for image in images] for images in images_list]
-        elif image_type == ImageType.NUMPY:
-            # not using F.to_tensor as it doesn't handle (C, H, W) numpy arrays
-            images_list = [[torch.from_numpy(image).contiguous() for image in images] for images in images_list]
-
-        if device is not None:
-            images_list = [[image.to(device) for image in images] for images in images_list]
-
-        # We assume that all images have the same channel dimension format.
-        if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(images_list[0][0])
-        if input_data_format == ChannelDimension.LAST:
-            images_list = [[image.permute(2, 0, 1).contiguous() for image in images] for images in images_list]
-            input_data_format = ChannelDimension.FIRST
-
         if do_rescale and do_normalize:
             # fused rescale and normalize
-            new_mean = torch.tensor(image_mean, device=images_list[0][0].device) * (1.0 / rescale_factor)
-            new_std = torch.tensor(image_std, device=images_list[0][0].device) * (1.0 / rescale_factor)
+            new_mean = torch.tensor(image_mean, device=device) * (1.0 / rescale_factor)
+            new_std = torch.tensor(image_std, device=device) * (1.0 / rescale_factor)
 
         batch_images = []
         batch_image_sizes = []
-        for sample_images in images_list:
-            images = []
-            image_sizes = []
-            for image in sample_images:
-                if do_resize:
-                    interpolation = (
-                        pil_torch_interpolation_mapping[resample]
-                        if isinstance(resample, (PILImageResampling, int))
-                        else resample
-                    )
-                    image = self.resize(
-                        image=image,
-                        size=size,
-                        patch_size=patch_size,
-                        interpolation=interpolation,
-                    )
+        for image in images:
+            if do_convert_rgb:
+                image = convert_to_rgb(image)
 
-                if do_rescale and do_normalize:
-                    # fused rescale and normalize
-                    image = F.normalize(image.to(dtype=torch.float32), new_mean, new_std)
-                elif do_rescale:
-                    image = image * rescale_factor
-                elif do_normalize:
-                    image = F.normalize(image, image_mean, image_std)
+            if image_type == ImageType.PIL:
+                image = F.pil_to_tensor(image)
+            elif image_type == ImageType.NUMPY:
+                # not using F.to_tensor as it doesn't handle (C, H, W) numpy arrays
+                image = torch.from_numpy(image).contiguous()
 
-                images.append(image)
-                image_sizes.append(get_image_size(image, input_data_format))
-            batch_images.append(images)
-            batch_image_sizes.append(image_sizes)
+            # We assume that all images have the same channel dimension format.
+            if input_data_format is None:
+                input_data_format = infer_channel_dimension_format(image)
 
-        return BatchMixFeature(
-            data={"pixel_values": batch_images, "image_sizes": batch_image_sizes},
-            tensor_type=None,
+            if input_data_format == ChannelDimension.LAST:
+                image = image.permute(2, 0, 1).contiguous()
+
+            image = image.to(device)
+
+            if do_resize:
+                interpolation = (
+                    pil_torch_interpolation_mapping[resample]
+                    if isinstance(resample, (PILImageResampling, int))
+                    else resample
+                )
+                image = self.resize(
+                    image=image,
+                    size=size,
+                    patch_size=patch_size,
+                    interpolation=interpolation,
+                )
+
+            if do_rescale and do_normalize:
+                # fused rescale and normalize
+                image = F.normalize(image.to(dtype=torch.float32), new_mean, new_std)
+            elif do_rescale:
+                image = image * rescale_factor
+            elif do_normalize:
+                image = F.normalize(image, image_mean, image_std)
+
+            batch_images.append(image)
+            batch_image_sizes.append(get_image_size(image, ChannelDimension.FIRST))
+
+        pixel_values = self._pad_for_batching(
+            pixel_values=batch_images,
+            image_sizes=batch_image_sizes,
+        )
+
+        return BatchFeature(
+            data={"pixel_values": pixel_values, "image_sizes": batch_image_sizes}, tensor_type=return_tensors
         )
 
 
