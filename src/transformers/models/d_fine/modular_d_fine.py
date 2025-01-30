@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from transformers.configuration_utils import PretrainedConfig
 from ..rt_detr.configuration_rt_detr import RTDetrConfig
 from ..rt_detr.modeling_rt_detr import (
     RTDetrDecoderLayer,
@@ -181,7 +180,7 @@ class DFineMultiscaleDeformableAttention(nn.Module):
         init.constant_(self.attention_weights.bias, 0)
 
     def forward(
-        self, query: torch.Tensor, reference_points: torch.Tensor, value: torch.Tensor, value_spatial_shapes: List[int]
+        self, query: torch.Tensor, reference_points: torch.Tensor, value: torch.Tensor, spatial_shapes: List[int]
     ):
         """
         Args:
@@ -203,7 +202,7 @@ class DFineMultiscaleDeformableAttention(nn.Module):
         attention_weights = F.softmax(attention_weights, dim=-1)
 
         if reference_points.shape[-1] == 2:
-            offset_normalizer = torch.tensor(value_spatial_shapes)
+            offset_normalizer = torch.tensor(spatial_shapes)
             offset_normalizer = offset_normalizer.flip([1]).reshape(1, 1, 1, self.n_levels, 1, 2)
             sampling_locations = (
                 reference_points.reshape(bs, Len_q, 1, self.n_levels, 1, 2) + sampling_offsets / offset_normalizer
@@ -220,7 +219,7 @@ class DFineMultiscaleDeformableAttention(nn.Module):
             )
 
         output = self.ms_deformable_attn_core(
-            value, value_spatial_shapes, sampling_locations, attention_weights, self.num_points_list
+            value, spatial_shapes, sampling_locations, attention_weights, self.num_points_list
         )
 
         return output
@@ -420,6 +419,7 @@ class DFineDecoder(RTDetrDecoder):
         self.reg_max = config.reg_max
         self.d_model = config.d_model
         self.layer_scale = config.layer_scale
+        self.pre_bbox_head = MLP(config.hidden_size, config.hidden_size, 4, 3)
         self.integral = Integral(self.reg_max)
         self.num_head = config.decoder_attention_heads
         self.up = nn.Parameter(torch.tensor([0.5]), requires_grad=False)
@@ -445,28 +445,36 @@ class DFineDecoder(RTDetrDecoder):
         self,
         encoder_hidden_states,
         reference_points,
-        memory,
+        inputs_embeds,
         spatial_shapes,
-        bbox_head,
-        score_head,
-        pre_bbox_head,
+        level_start_index=None,
+        spatial_shapes_list=None,
+        output_hidden_states=None,
         encoder_attention_mask=None,
         memory_mask=None,
         output_attentions=None,
         return_dict=None,
     ):
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        if encoder_hidden_states is not None:
-            hidden_states = encoder_hidden_states
+        if inputs_embeds is not None:
+            hidden_states = inputs_embeds
+        
 
-        dec_out_bboxes = []
-        dec_out_logits = []
-        dec_out_pred_corners = []
-        dec_out_refs = []
+        # decoder layers
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attns = () if output_attentions else None
+        all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
+        intermediate = ()
+        intermediate_reference_points = ()
+        intermediate_logits = ()
 
         output_detach = pred_corners_undetach = 0
-        value = self.value_op(memory, None, None, memory_mask, spatial_shapes)
+        #value = self.value_op(inputs_embeds, None, None, memory_mask, spatial_shapes)
 
         project = weighting_function(self.reg_max, self.up, self.reg_scale)
         ref_points_detach = F.sigmoid(reference_points)
@@ -474,20 +482,16 @@ class DFineDecoder(RTDetrDecoder):
         for i, decoder_layer in enumerate(self.layers):
             ref_points_input = ref_points_detach.unsqueeze(2)
             query_pos_embed = self.query_pos_head(ref_points_detach).clamp(min=-10, max=10)
-
-            # TODO Adjust scale if needed for detachable wider layers
-            if i >= self.eval_idx + 1 and self.layer_scale > 1:
-                query_pos_embed = F.interpolate(query_pos_embed, scale_factor=self.layer_scale)
-                value = self.value_op(memory, None, query_pos_embed.shape[-1], memory_mask, spatial_shapes)
-                hidden_states = F.interpolate(hidden_states, size=query_pos_embed.shape[-1])
-                output_detach = hidden_states.detach()
+            
+            if output_hidden_states:
+                all_hidden_states += (hidden_states,)
 
             output = decoder_layer(
                 hidden_states=hidden_states,
                 position_embeddings=query_pos_embed,
                 reference_points=ref_points_input,
                 spatial_shapes=spatial_shapes,
-                encoder_hidden_states=value,
+                encoder_hidden_states=encoder_hidden_states,
                 encoder_attention_mask=encoder_attention_mask,
                 output_attentions=output_attentions,
             )
@@ -496,48 +500,58 @@ class DFineDecoder(RTDetrDecoder):
 
             if i == 0:
                 # Initial bounding box predictions with inverse sigmoid refinement
-                pre_bboxes = F.sigmoid(pre_bbox_head(output) + inverse_sigmoid(ref_points_detach))
-                pre_scores = score_head[0](hidden_states)
-                ref_points_initial = pre_bboxes.detach()
+                new_reference_points = F.sigmoid(self.pre_bbox_head(output) + inverse_sigmoid(ref_points_detach))
+                ref_points_initial = new_reference_points.detach()
 
             # Refine bounding box corners using FDR, integrating previous layer's corrections
-            pred_corners = bbox_head[i](hidden_states + output_detach) + pred_corners_undetach
+            pred_corners = self.bbox_embed[i](hidden_states + output_detach) + pred_corners_undetach
             inter_ref_bbox = distance2bbox(ref_points_initial, self.integral(pred_corners, project), self.reg_scale)
-
-            if self.training or i == self.eval_idx:
-                scores = score_head[i](output)
-                # Lqe does not affect the performance here.
-                scores = self.lqe_layers[i](scores, pred_corners)
-                dec_out_logits.append(scores)
-                dec_out_bboxes.append(inter_ref_bbox)
-                dec_out_pred_corners.append(pred_corners)
-                dec_out_refs.append(ref_points_initial)
-
-                if not self.training:
-                    break
 
             pred_corners_undetach = pred_corners
             ref_points_detach = inter_ref_bbox.detach()
-            output_detach = hidden_states.detach()
+
+            intermediate += (hidden_states,)
+            intermediate_reference_points += (
+                (new_reference_points,) if self.bbox_embed is not None else (reference_points,)
+            )
+
+            if self.class_embed is not None:
+                logits = self.class_embed[i](hidden_states)
+                intermediate_logits += (logits,)
+        
+        # Keep batch_size as first dimension
+        intermediate = torch.stack(intermediate, dim=1)
+        intermediate_reference_points = torch.stack(intermediate_reference_points, dim=1)
+        if self.class_embed is not None:
+            intermediate_logits = torch.stack(intermediate_logits, dim=1)
+
+        # add hidden states from the last decoder layer
+        if output_hidden_states:
+            all_hidden_states += (hidden_states,)
 
         if not return_dict:
-            return (
-                torch.stack(dec_out_bboxes),
-                torch.stack(dec_out_logits),
-                torch.stack(dec_out_pred_corners),
-                torch.stack(dec_out_refs),
-                pre_bboxes,
-                pre_scores,
+            return tuple(
+                v
+                for v in [
+                    hidden_states,
+                    intermediate,
+                    intermediate_logits,
+                    intermediate_reference_points,
+                    all_hidden_states,
+                    all_self_attns,
+                    all_cross_attentions,
+                ]
+                if v is not None
             )
 
         return DFineDecoderOutput(
             last_hidden_state=hidden_states,
-            dec_out_bboxes=torch.stack(dec_out_bboxes),
-            dec_out_logits=torch.stack(dec_out_logits),
-            dec_out_pred_corners=torch.stack(dec_out_pred_corners),
-            dec_out_refs=torch.stack(dec_out_refs),
-            pre_bboxes=pre_bboxes,
-            pre_scores=pre_scores,
+            intermediate_logits=intermediate_logits,
+            intermediate_reference_points=ref_points_detach,
+            intermediate_hidden_states=intermediate,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attns,
+            cross_attentions=all_cross_attentions,
         )
 
 
@@ -545,7 +559,6 @@ class DFineModel(RTDetrModel):
     def __init__(self, config: DFineConfig):
         super().__init__(config)
         del self.decoder_input_proj
-        self.pre_bbox_head = MLP(config.hidden_size, config.hidden_size, 4, 3)
         self.encoder = DFineHybridEncoder(config=config)
         num_backbone_outs = len(config.decoder_in_channels)
         decoder_input_proj = []
@@ -690,12 +703,7 @@ class LQE(nn.Module):
 
 
 class DFineDecoderOutput(RTDetrDecoderOutput):
-    dec_out_bboxes:torch.FloatTensor = None,
-    dec_out_logits:torch.FloatTensor = None,
-    dec_out_pred_corners:torch.FloatTensor = None,
-    dec_out_refs:torch.FloatTensor = None,
-    pre_bboxes:torch.FloatTensor = None,
-    pre_scores:torch.FloatTensor = None,
+    pass
 
 
 class DFineVggBlock(RTDetrRepVggBlock):
