@@ -1981,7 +1981,7 @@ class ModelOnTheFlyConversionTester(unittest.TestCase):
             self.assertEqual(discussion.title, "Adding `safetensors` variant of this model")
 
         # We now switch the repo visibility to public
-        self.api.update_repo_visibility(self.repo_name, private=False)
+        self.api.update_repo_settings(self.repo_name, private=False)
 
         # We once again call from_pretrained, which should call the bot to open a PR
         BertModel.from_pretrained(self.repo_name, use_safetensors=True, token=self.token)
