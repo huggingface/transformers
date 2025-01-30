@@ -351,53 +351,73 @@ def eager_attention_forward(
     local_attention: Tuple[int, int],
     bs: int,
     dim: int,
-    output_attentions: Optional[bool] = False,
     is_causal: bool = False,
     past_key_value: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,
     use_cache: Optional[bool] = False,
+    output_attentions: Optional[bool] = False,
     **_kwargs,
-) -> Union[Tuple[torch.Tensor, ...], Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]]:
+) -> Union[
+    Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor], Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]
+]:
     # qkv: [batch_size, seqlen, 3, nheads, headdim]
-    cos, sin = module.rotary_emb(qkv, position_ids=position_ids)
     query, key, value = qkv.transpose(3, 1).unbind(dim=2)
     # query, key, value: [batch_size, heads, seq_len, head_dim]
-    query, key = apply_rotary_pos_emb(query, key, cos, sin)
 
-    # Handle past key value states
+    # Get RoPE embeddings
     if past_key_value is not None:
-        past_k, past_v = past_key_value
-        key = torch.cat([past_k, key], dim=-2)
-        value = torch.cat([past_v, value], dim=-2)
+        # Generate RoPE embeddings ONLY for the new token's position
+        qkv_new = torch.stack([query, key, value], dim=2).transpose(1, 2)
+        cos, sin = module.rotary_emb(qkv_new, position_ids=position_ids)
 
+        query_new, key_new = apply_rotary_pos_emb(query, key, cos, sin)
+
+        # Concatenate with past keys (which already have correct RoPE applied)
+        past_k, past_v = past_key_value
+        key = torch.cat([past_k, key_new], dim=-2)
+        value = torch.cat([past_v, value], dim=-2)
+        query = query_new
+    else:
+        # For initial forward pass
+        position_ids = torch.arange(query.size(-2), device=query.device)
+        position_ids = position_ids.unsqueeze(0).expand(bs, -1)
+        cos, sin = module.rotary_emb(qkv, position_ids=position_ids)
+        query, key = apply_rotary_pos_emb(query, key, cos, sin)
+
+    # Calculate attention scores
     scale = module.head_dim**-0.5
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scale
 
-    if is_causal:
-        # Create causal mask. NOTE: more memory intensive, if this is a problem please use FA
-        seq_len = query.size(2)
-        key_len = key.size(2)
-        past_key_len = past_key_value[0].size(-2) if past_key_value is not None else 0
-        query_indices = torch.arange(seq_len, device=query.device).unsqueeze(-1)
-        key_indices = torch.arange(key_len, device=query.device).unsqueeze(0)
-        causal_mask = key_indices > past_key_len + query_indices
-        attn_weights.masked_fill_(causal_mask, float("-inf"))
-        # Slice attention_mask to match attn_weights' last two dims
-        seq_len_q = query.size(2)
-        seq_len_k = key.size(2)
-        attention_mask = attention_mask[:, :, :seq_len_q, :seq_len_k]
-
+    final_attention_mask = None
     if local_attention != (-1, -1):
-        if is_causal:
-            # expand sliding_window_mask to match the number of heads
-            attention_mask = sliding_window_mask.expand(-1, module.num_heads, -1, -1)
-            # Slice sliding_window_mask to match attn_weights' last two dims
-            seq_len_q = query.size(2)
-            seq_len_k = key.size(2)
-            attention_mask = attention_mask[:, :, :seq_len_q, :seq_len_k]
-        else:
-            attention_mask = sliding_window_mask
+        final_attention_mask = sliding_window_mask
 
-    attn_weights = attn_weights + attention_mask
+    # Handle masking similar to SDPA version
+    if is_causal:
+        if past_key_value is not None:
+            # For cached case, we only need the last row of the sliding window mask
+            if final_attention_mask is not None:
+                final_attention_mask = final_attention_mask[:, :, -1:, :]
+            causal_mask = torch.zeros((1, 1, 1, key.size(-2)), device=query.device)
+        else:
+            # Create causal mask for the full sequence
+            seq_len = key.size(-2)
+            causal_mask = torch.triu(
+                torch.full((seq_len, seq_len), float("-inf"), device=query.device), diagonal=1
+            ).expand(1, 1, seq_len, seq_len)
+
+        # Combine masks if local attention is active
+        if final_attention_mask is not None:
+            final_attention_mask = final_attention_mask + causal_mask
+        else:
+            final_attention_mask = causal_mask
+
+    # Apply attention mask from input if provided and no other masks are active
+    elif final_attention_mask is None and attention_mask is not None:
+        final_attention_mask = attention_mask
+
+    # Apply attention mask if any
+    if final_attention_mask is not None:
+        attn_weights = attn_weights + final_attention_mask
 
     # upcast attention to fp32
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
@@ -405,6 +425,7 @@ def eager_attention_forward(
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
     attn_output = attn_output.view(bs, -1, dim)
+
     outputs = (attn_output,)
     if output_attentions:
         outputs = outputs + (attn_weights,)
@@ -429,7 +450,6 @@ def flash_attention_forward(
     **_kwargs,
 ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]]:
     qkv = rotary_emb(qkv, cu_seqlens=cu_seqlens, max_seqlen=max_seqlen)
-
     original_seq_len = qkv.size(0)
     if past_key_value is not None:
         past_k, past_v = past_key_value
@@ -496,19 +516,61 @@ def sdpa_attention_forward(
     **_kwargs,
 ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]]:
     # qkv: [batch_size, seqlen, 3, nheads, headdim]
-    cos, sin = module.rotary_emb(qkv, position_ids=position_ids)
     query, key, value = qkv.transpose(3, 1).unbind(dim=2)
     # query, key, value: [batch_size, heads, seq_len, head_dim]
-    query, key = apply_rotary_pos_emb(query, key, cos, sin)
 
-    # Handle past key value states
+    # Get RoPE embeddings
     if past_key_value is not None:
-        past_k, past_v = past_key_value
-        key = torch.cat([past_k, key], dim=-2)
-        value = torch.cat([past_v, value], dim=-2)
+        # Generate RoPE embeddings ONLY for the new token's position
+        qkv_new = torch.stack([query, key, value], dim=2).transpose(1, 2)
+        cos, sin = module.rotary_emb(qkv_new, position_ids=position_ids)
 
+        query_new, key_new = apply_rotary_pos_emb(query, key, cos, sin)
+
+        # Concatenate with past keys (which already have correct RoPE applied)
+        past_k, past_v = past_key_value
+        key = torch.cat([past_k, key_new], dim=-2)
+        value = torch.cat([past_v, value], dim=-2)
+        query = query_new
+    else:
+        # For initial forward pass
+        position_ids = torch.arange(query.size(-2), device=query.device)
+        position_ids = position_ids.unsqueeze(0).expand(bs, -1)
+        cos, sin = module.rotary_emb(qkv, position_ids=position_ids)
+        query, key = apply_rotary_pos_emb(query, key, cos, sin)
+
+    final_attention_mask = None
     if local_attention != (-1, -1):
-        attention_mask = sliding_window_mask
+        final_attention_mask = sliding_window_mask
+
+    # Figure out the attention mask
+    #   if is_causal, we need to create a causal mask
+    #   unless it is_causal and past_key_value is not None, then all can be attended
+    #   unless sliding_window_mask is provided for local attention, we need to combine masks
+    #   and if not is_causal we can simply use the provided mask
+    if is_causal:
+        if past_key_value is not None:
+            # For cached case, we only need the last row of the sliding window mask
+            if final_attention_mask is not None:
+                final_attention_mask = final_attention_mask[:, :, -1:, :]
+            causal_mask = torch.zeros((1, 1, 1, key.size(-2)), device=query.device)
+        else:
+            # Create causal mask for the full sequence
+            seq_len = key.size(-2)
+            # Create upper triangular matrix of ones (for positions to mask)
+            causal_mask = torch.triu(
+                torch.full((seq_len, seq_len), torch.finfo(attention_mask.dtype).min, device=query.device), diagonal=1
+            ).expand(1, 1, seq_len, seq_len)
+
+        # Combine masks if local attention is active
+        if final_attention_mask is not None:
+            final_attention_mask = final_attention_mask + causal_mask
+        else:
+            final_attention_mask = causal_mask
+
+    # Apply attention mask from input if provided and no other masks are active
+    elif final_attention_mask is None and attention_mask is not None:
+        final_attention_mask = attention_mask
 
     attn_output = (
         F.scaled_dot_product_attention(
@@ -516,8 +578,8 @@ def sdpa_attention_forward(
             key,
             value,
             dropout_p=module.attention_dropout if module.training else 0.0,
-            attn_mask=attention_mask if not is_causal else None,
-            is_causal=is_causal,
+            attn_mask=(final_attention_mask == 0) if final_attention_mask is not None else None,
+            is_causal=False,  # attn masks handled above
         )
         .transpose(1, 2)
         .contiguous()
@@ -756,7 +818,7 @@ class ModernBertPreTrainedModel(PreTrainedModel):
         # Otherwise we fall back to the default SDPA -> Eager from the super() method.
         # ModernBert's FA2 implementation correctly handles non-fp16/bf16 dtypes, we don't
         # need the FA2 warning for non-fp16/bf16 dtypes so we set fp16 for the FA2 check.
-        if config._attn_implementation_internal is None:
+        if config._attn_implementation_internal is None and not getattr(config, "is_causal", False):
             config._attn_implementation_internal = "flash_attention_2"
             try:
                 return cls._check_and_enable_flash_attn_2(
@@ -1005,7 +1067,6 @@ class ModernBertModel(ModernBertPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
         if use_cache and self.config._attn_implementation == "flash_attention_2":
             raise ValueError("use_cache is not supported with flash attention 2, please switch to eager")
 
@@ -1043,10 +1104,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
         if past_key_values is not None:
             # Extend attention mask for past key values
             past_length = past_key_values[0][0].size(-2)
-            attention_mask = torch.cat(
-                [torch.ones((batch_size, past_length), device=device, dtype=attention_mask.dtype), attention_mask],
-                dim=-1,
-            )
+            attention_mask = torch.ones((batch_size, past_length + 1), device=device, dtype=attention_mask.dtype)
 
         if self.config._attn_implementation == "flash_attention_2":
             if indices is None and cu_seqlens is None and max_seqlen is None:
@@ -1682,7 +1740,6 @@ class ModernBertForCausalLM(ModernBertPreTrainedModel, GenerationMixin):
         **kwargs,
     ):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
         self._maybe_set_compile()
 
         repad = False
@@ -1753,6 +1810,7 @@ class ModernBertForCausalLM(ModernBertPreTrainedModel, GenerationMixin):
         max_seqlen: Optional[int] = None,
         batch_size: Optional[int] = None,
         seq_len: Optional[int] = None,
+        use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1766,7 +1824,7 @@ class ModernBertForCausalLM(ModernBertPreTrainedModel, GenerationMixin):
             raise ValueError("Training is not supported for pseudo-causal generation")
 
         # For generation or single token prediction
-        if return_single_token_logits:
+        if return_single_token_logits or use_cache: # NOTE: cache cannot be used but is a sign we are doing generation
             # For batched generation, all sequences will have same length, otherwise raise an error
             if self.config.mask_token_id in input_ids.any():
                 raise ValueError("Mask token found in input_ids during generation")
@@ -1783,19 +1841,22 @@ class ModernBertForCausalLM(ModernBertPreTrainedModel, GenerationMixin):
                 else self.decoder(self.head(outputs.last_hidden_state))
             )
 
+            breakpoint()
+
             # Get just the next token logits but reshape to match expected format
             new_logit = output_logits[:, seq_len, :].unsqueeze(1)  # Shape: (batch_size, 1, vocab_size)
             seq_len = input_ids.shape[1]
 
             # Create zero logits for all positions except the last
             zero_logits = torch.zeros(
-                (batch_size, seq_len - 2, self.config.vocab_size), device=new_logit.device, dtype=new_logit.dtype
+                (batch_size, seq_len - self.config.num_future_masks, self.config.vocab_size), device=new_logit.device, dtype=new_logit.dtype
             )
 
             # Concat to get proper shape while ensuring only the last position has real logits, even with batches
             logits = torch.cat([zero_logits, new_logit], dim=1)
 
-        else:
+        else: # e.g. we are doing likelihood
+
             # NOTE: must turn every token into a instance, since it can only predict logits for one token at a time
             # This means the batch size will explode. If you get OOM errors, try reducing the batch size to one
             batched_inputs = torch.zeros(
@@ -1812,7 +1873,7 @@ class ModernBertForCausalLM(ModernBertPreTrainedModel, GenerationMixin):
                 end_idx = (pos + 1) * batch_size
                 batched_inputs[start_idx:end_idx] = self._prepare_masked_input_for_position(input_ids, pos)
 
-            batched_attention_mask = torch.triu(torch.ones_like(batched_inputs), diagonal=1)
+            batched_attention_mask = torch.ones_like(batched_inputs)
 
             outputs = self.model(input_ids=batched_inputs, attention_mask=batched_attention_mask, **kwargs)
             output_logits = (
@@ -1837,12 +1898,12 @@ class ModernBertForCausalLM(ModernBertPreTrainedModel, GenerationMixin):
 
     def _reorder_cache(self, past_key_values, beam_idx):
         """Reorders the cache for beam search during generation."""
-        if self.config._attn_implementation != "eager":
-            raise ValueError("Cache usage is only supported for eager attention")
-
         # If we don't use cache, just return None
         if past_key_values is None:
             return None
+
+        if self.config._attn_implementation != "eager":
+            raise ValueError("Cache usage is only supported for eager attention")
 
         # If we do use cache, reorder it
         reordered_past = ()

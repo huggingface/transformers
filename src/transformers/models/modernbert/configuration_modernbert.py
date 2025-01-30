@@ -119,8 +119,6 @@ class ModernBertConfig(PretrainedConfig):
             be set to `False`.
         num_future_masks (`int`, *optional*, defaults to 3):
             The number of masks tokens to append to each iterative encoder-only token generation (is_casual=False).
-        use_cache (`bool`, *optional*, defaults to `False`):
-            Whether to use cache when in decoder-only model.
     Examples:
 
     ```python
@@ -179,7 +177,6 @@ class ModernBertConfig(PretrainedConfig):
         repad_logits_with_grad=False,
         is_causal=False,
         num_future_masks=3,
-        use_cache=False,
         **kwargs,
     ):
         super().__init__(
@@ -223,7 +220,6 @@ class ModernBertConfig(PretrainedConfig):
         self.repad_logits_with_grad = repad_logits_with_grad
         self.is_causal = is_causal
         self.num_future_masks = num_future_masks
-        self.use_cache = use_cache
         if self.classifier_pooling not in ["cls", "mean"]:
             raise ValueError(
                 f'Invalid value for `classifier_pooling`, should be either "cls" or "mean", but is {self.classifier_pooling}.'

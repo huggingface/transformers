@@ -251,6 +251,7 @@ class ModernBertModelTester:
                 "test_inputs_embeds_matches_input_ids",
                 "test_training_gradient_checkpointing_use_reentrant",
                 "test_training_gradient_checkpointing_use_reentrant_false",
+                "test_left_padding_compatibility",
             ]
             if test_name in turn_off_compile_tests:
                 config.reference_compile = False
