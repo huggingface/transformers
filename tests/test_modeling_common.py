@@ -931,6 +931,7 @@ class ModelTesterMixin:
             "MusicgenForCausalLM",
             "MusicgenMelodyForCausalLM",
             "MllamaForCausalLM",
+            "CpmAntForCausalLM",
         )
         for model_class in self.all_model_classes:
             if (
@@ -942,10 +943,7 @@ class ModelTesterMixin:
             self.skipTest(reason="No causal lm model classes found")
         for model_class in self.all_model_classes:
             model_name = model_class.__name__
-            if (
-                model_name in get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES)
-                and model_name not in incompatible_models
-            ):
+            if model_name in get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES) and model_name not in incompatible_models:
                 config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
                 with tempfile.TemporaryDirectory() as tmpdir:
