@@ -32,11 +32,31 @@ Install 🤗 Transformers for whichever deep learning library you're working wit
 
 You should install 🤗 Transformers in a [virtual environment](https://docs.python.org/3/library/venv.html). If you're unfamiliar with Python virtual environments, take a look at this [guide](https://packaging.python.org/guides/installing-using-pip-and-virtual-environments/). A virtual environment makes it easier to manage different projects, and avoid compatibility issues between dependencies.
 
-Now you're ready to install 🤗 Transformers with the following command:
+Create a virtual environment with [uv](https://docs.astral.sh/uv/) (refer to [Installation](https://docs.astral.sh/uv/getting-started/installation/) for installation instructions), a fast Rust-based Python package and project manager.
+
+```bash
+uv venv my-env
+source my-env/bin/activate
+```
+
+Now you're ready to install 🤗 Transformers with pip or uv.
+
+<hfoptions id="install">
+<hfoption id="uv">
+
+```bash
+uv pip install transformers
+```
+
+</hfoption>
+<hfoption id="pip">
 
 ```bash
 pip install transformers
 ```
+
+</hfoption>
+</hfoptions>
 
 For GPU acceleration, install the appropriate CUDA drivers for [PyTorch](https://pytorch.org/get-started/locally) and TensorFlow(https://www.tensorflow.org/install/pip).
 
