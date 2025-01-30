@@ -29,7 +29,7 @@ if is_vision_available():
         from transformers import DeiTImageProcessorFast
 
 
-class DeiTImageProcessingTester(unittest.TestCase):
+class DeiTImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -46,7 +46,6 @@ class DeiTImageProcessingTester(unittest.TestCase):
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
     ):
-        super().__init__()
         size = size if size is not None else {"height": 20, "width": 20}
         crop_size = crop_size if crop_size is not None else {"height": 18, "width": 18}
 

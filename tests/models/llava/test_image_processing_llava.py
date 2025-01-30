@@ -36,7 +36,7 @@ if is_vision_available():
         from transformers import LlavaImageProcessorFast
 
 
-class LlavaImageProcessingTester(unittest.TestCase):
+class LlavaImageProcessingTester:
     def __init__(
         self,
         parent,
