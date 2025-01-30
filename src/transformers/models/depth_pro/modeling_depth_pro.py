@@ -632,7 +632,7 @@ class DepthProPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _supports_sdpa = True
     _no_split_modules = []
-    _keys_to_ignore_on_load_unexpected = ['fov_model.*']
+    _keys_to_ignore_on_load_unexpected = ["fov_model.*"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
@@ -646,7 +646,7 @@ class DepthProPreTrainedModel(PreTrainedModel):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
         elif isinstance(module, (nn.Conv2d, nn.ConvTranspose2d)):
-            nn.init.kaiming_normal_(module.weight, mode='fan_out', nonlinearity='relu')
+            nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
             if module.bias is not None:
                 module.bias.data.zero_()
 
