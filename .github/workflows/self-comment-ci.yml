@@ -30,7 +30,7 @@ jobs:
     runs-on: ubuntu-22.04
     name: Get PR number
     # For security: only allow team members to run
-    if: ${{ github.event.issue.state == 'open' && contains(fromJSON('["ydshieh", "ArthurZucker", "zucchini-nlp", "qubvel", "molbap", "gante", "LysandreJik", "Cyrilvallez"]'), github.actor) && (startsWith(github.event.comment.body, 'run-slow') || startsWith(github.event.comment.body, 'run slow') || startsWith(github.event.comment.body, 'run_slow')) }}
+    if: ${{ github.event.issue.state == 'open' && contains(fromJSON('["ydshieh", "ArthurZucker", "zucchini-nlp", "qubvel", "molbap", "gante", "LysandreJik", "Cyrilvallez", "Rocketknight1"]'), github.actor) && (startsWith(github.event.comment.body, 'run-slow') || startsWith(github.event.comment.body, 'run slow') || startsWith(github.event.comment.body, 'run_slow')) }}
     outputs:
       PR_NUMBER: ${{ steps.set_pr_number.outputs.PR_NUMBER }}
     steps:
@@ -58,6 +58,7 @@ jobs:
     if: ${{ needs.get-pr-number.outputs.PR_NUMBER != ''}}
     outputs:
       PR_HEAD_SHA: ${{ steps.get_sha.outputs.PR_HEAD_SHA }}
+      PR_MERGE_SHA: ${{ steps.get_sha.outputs.PR_MERGE_SHA }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -76,10 +77,12 @@ jobs:
             echo "PR_HEAD_SHA=$(git log -1 --format=%H)" >> "$GITHUB_OUTPUT"
             git fetch origin refs/pull/$PR_NUMBER/merge:refs/remotes/pull/$PR_NUMBER/merge
             git checkout refs/remotes/pull/$PR_NUMBER/merge
+            echo "PR_MERGE_SHA: $(git log -1 --format=%H)"
+            echo "PR_MERGE_SHA=$(git log -1 --format=%H)" >> "$GITHUB_OUTPUT"
             PR_MERGE_COMMIT_TIMESTAMP=$(git log -1 --date=unix --format=%cd)
             echo "PR_MERGE_COMMIT_TIMESTAMP: $PR_MERGE_COMMIT_TIMESTAMP"
             COMMENT_TIMESTAMP=$(date -d "${COMMENT_DATE}" +"%s")
-            echo "PR_HEAD_SHA: $COMMENT_DATE"
+            echo "COMMENT_DATE: $COMMENT_DATE"
             echo "COMMENT_TIMESTAMP: $COMMENT_TIMESTAMP"
             if [ $COMMENT_TIMESTAMP -le $PR_MERGE_COMMIT_TIMESTAMP ]; then
               echo "Last commit on the pull request is newer than the issue comment triggering this run! Abort!";
@@ -91,7 +94,7 @@ jobs:
   # case 2: `run-slow model_1, model_2`
   get-tests:
     runs-on: ubuntu-22.04
-    needs: get-pr-number
+    needs: [get-pr-number, get-sha]
     if: ${{ needs.get-pr-number.outputs.PR_NUMBER != ''}}
     outputs:
       models: ${{ steps.models_to_run.outputs.models }}
@@ -100,6 +103,16 @@ jobs:
         with:
           fetch-depth: "0"
           ref: "refs/pull/${{needs.get-pr-number.outputs.PR_NUMBER}}/merge"
+
+      - name: Verify merge commit SHA
+        env:
+          VERIFIED_PR_MERGE_SHA: ${{ needs.get-sha.outputs.PR_MERGE_SHA }}
+        run: |
+            PR_MERGE_SHA=$(git log -1 --format=%H)
+            if [ $PR_MERGE_SHA != $VERIFIED_PR_MERGE_SHA ]; then
+              echo "The merged commit SHA is not the same as the verified one! Security issue detected, abort the workflow!";
+              exit -1;
+            fi
 
       - name: Get models to test
         env:
@@ -162,7 +175,7 @@ jobs:
   run_models_gpu:
       name: Run all tests for the model
       if: ${{ needs.get-tests.outputs.models != '[]' }}
-      needs: [get-pr-number, get-tests, create_run]
+      needs: [get-pr-number, get-sha, get-tests, create_run]
       strategy:
         fail-fast: false
         matrix:
@@ -196,6 +209,17 @@ jobs:
             git fetch origin refs/pull/${{ needs.get-pr-number.outputs.PR_NUMBER }}/merge:refs/remotes/pull/${{ needs.get-pr-number.outputs.PR_NUMBER }}/merge
             git checkout refs/remotes/pull/${{ needs.get-pr-number.outputs.PR_NUMBER }}/merge
             git log -1 --format=%H
+
+      - name: Verify merge commit SHA
+        env:
+          VERIFIED_PR_MERGE_SHA: ${{ needs.get-sha.outputs.PR_MERGE_SHA }}
+        working-directory: /transformers
+        run: |
+            PR_MERGE_SHA=$(git log -1 --format=%H)
+            if [ $PR_MERGE_SHA != $VERIFIED_PR_MERGE_SHA ]; then
+              echo "The merged commit SHA is not the same as the verified one! Security issue detected, abort the workflow!";
+              exit -1;
+            fi
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers

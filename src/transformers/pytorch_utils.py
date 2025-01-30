@@ -358,5 +358,7 @@ def translate_to_torch_parallel_style(style: str):
         return RowwiseParallel()
     elif style == "colwise_rep":
         return ColwiseParallel(output_layouts=Replicate())
+    elif style == "rowwise_rep":
+        return RowwiseParallel(input_layouts=Replicate())
     else:
         raise ValueError(f"Unsupported parallel style value: {style}")

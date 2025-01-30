@@ -257,6 +257,12 @@ def parse_args():
         help="Image longest size will be resized to this value, then image will be padded to square.",
     )
     parser.add_argument(
+        "--use_fast",
+        type=bool,
+        default=True,
+        help="Use a fast torchvision-base image processor if it is supported for a given model.",
+    )
+    parser.add_argument(
         "--cache_dir",
         type=str,
         help="Path to a folder in which the model and dataset will be cached.",
@@ -482,6 +488,7 @@ def main():
         size={"max_height": args.image_square_size, "max_width": args.image_square_size},
         do_pad=True,
         pad_size={"height": args.image_square_size, "width": args.image_square_size},
+        use_fast=args.use_fast,
         **common_pretrained_args,
     )
 
