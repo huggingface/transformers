@@ -451,7 +451,6 @@ class VitDetLayer(nn.Module):
         super().__init__()
 
         dim = config.hidden_size
-        input_size = (config.image_size // config.patch_size, config.image_size // config.patch_size)
         if isinstance(config.patch_size, tuple):
             input_size = (config.image_size // config.patch_size[0], config.image_size // config.patch_size[1])
         else:
