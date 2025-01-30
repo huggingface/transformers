@@ -128,3 +128,8 @@ build-release:
 	python setup.py bdist_wheel
 	python setup.py sdist
 	python utils/check_build.py
+
+
+# Run modeling test for model
+test_kwargs_%:
+	python -m pytest -sv tests/models/$*/test_modeling_$*.py -k test_causal_lm_can_accept_kwargs

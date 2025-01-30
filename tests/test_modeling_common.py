@@ -927,10 +927,15 @@ class ModelTesterMixin:
             self.skipTest(reason="ModelTester is not configured to run training tests")
 
         valid_model_class = False
+        incompatible_models = (
+            "MusicgenForCausalLM",
+            "MusicgenMelodyForCausalLM",
+            "MllamaForCausalLM",
+        )
         for model_class in self.all_model_classes:
             if (
                 model_class.__name__ in get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES)
-                and model_class.__name__ not in ("MusicgenForCausalLM", "MusicgenMelodyForCausalLM")
+                and model_class.__name__ not in incompatible_models
             ):
                 valid_model_class = True
         if not valid_model_class:
@@ -939,7 +944,7 @@ class ModelTesterMixin:
             model_name = model_class.__name__
             if (
                 model_name in get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES)
-                and model_name not in ("MusicgenForCausalLM", "MusicgenMelodyForCausalLM")
+                and model_name not in incompatible_models
             ):
                 config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
