@@ -94,23 +94,17 @@ def create_rename_keys(config):
     # fmt: off
     last_key = ["weight", "bias", "running_mean", "running_var"]
 
-
-    for level in range(1,5):
-        if level == 1:
-            rename_keys.append((f"backbone.stem.stem{level + 1}a.conv.weight", f"model.backbone.model.embedder.embedder.{level}.convolution.weight"))
-            rename_keys.append((f"backbone.stem.stem{level}.conv.weight", f"model.backbone.model.embedder.embedder.{level-1}.convolution.weight"))
-        elif level == 2:
-            rename_keys.append((f"backbone.stem.stem{level}b.conv.weight", f"model.backbone.model.embedder.embedder.{level}.convolution.weight"))
-        else:
-            rename_keys.append((f"backbone.stem.stem{level}.conv.weight", f"model.backbone.model.embedder.embedder.{level}.convolution.weight"))
-        for last in last_key:
-            if level == 1:
-                rename_keys.append((f"backbone.stem.stem{level + 1}a.bn.{last}", f"model.backbone.model.embedder.embedder.{level}.normalization.{last}"))
-                rename_keys.append((f"backbone.stem.stem{level}.bn.{last}", f"model.backbone.model.embedder.embedder.{level-1}.normalization.{last}"))
-            elif level == 2:
-                rename_keys.append((f"backbone.stem.stem{level}b.bn.{last}", f"model.backbone.model.embedder.embedder.{level}.normalization.{last}"))
-            else:
-                rename_keys.append((f"backbone.stem.stem{level}.bn.{last}", f"model.backbone.model.embedder.embedder.{level}.normalization.{last}"))
+    rename_keys.append((f"backbone.stem.stem1.conv.weight", f"model.backbone.model.embedder.stem1.convolution.weight"))
+    rename_keys.append((f"backbone.stem.stem2a.conv.weight", f"model.backbone.model.embedder.stem2a.convolution.weight"))
+    rename_keys.append((f"backbone.stem.stem2b.conv.weight", f"model.backbone.model.embedder.stem2b.convolution.weight"))
+    rename_keys.append((f"backbone.stem.stem3.conv.weight", f"model.backbone.model.embedder.stem3.convolution.weight"))
+    rename_keys.append((f"backbone.stem.stem4.conv.weight", f"model.backbone.model.embedder.stem4.convolution.weight"))
+    for last in last_key:
+        rename_keys.append((f"backbone.stem.stem1.bn.{last}", f"model.backbone.model.embedder.stem1.normalization.{last}"))
+        rename_keys.append((f"backbone.stem.stem2a.bn.{last}", f"model.backbone.model.embedder.stem2a.normalization.{last}"))
+        rename_keys.append((f"backbone.stem.stem2b.bn.{last}", f"model.backbone.model.embedder.stem2b.normalization.{last}"))
+        rename_keys.append((f"backbone.stem.stem3.bn.{last}", f"model.backbone.model.embedder.stem3.normalization.{last}"))
+        rename_keys.append((f"backbone.stem.stem4.bn.{last}", f"model.backbone.model.embedder.stem4.normalization.{last}"))
 
     for stage_idx, stage in enumerate(config.backbone_config.stage_config):
         _, _, _, block_num, downsample, _, _, layer_num = stage
@@ -687,12 +681,12 @@ def create_rename_keys(config):
             ("decoder.enc_bbox_head.layers.1.bias", "model.enc_bbox_head.layers.1.bias"),
             ("decoder.enc_bbox_head.layers.2.weight", "model.enc_bbox_head.layers.2.weight"),
             ("decoder.enc_bbox_head.layers.2.bias", "model.enc_bbox_head.layers.2.bias"),
-            ("decoder.pre_bbox_head.layers.0.weight", "model.pre_bbox_head.layers.0.weight"),
-            ("decoder.pre_bbox_head.layers.0.bias", "model.pre_bbox_head.layers.0.bias"),
-            ("decoder.pre_bbox_head.layers.1.weight", "model.pre_bbox_head.layers.1.weight"),
-            ("decoder.pre_bbox_head.layers.1.bias", "model.pre_bbox_head.layers.1.bias"),
-            ("decoder.pre_bbox_head.layers.2.weight", "model.pre_bbox_head.layers.2.weight"),
-            ("decoder.pre_bbox_head.layers.2.bias", "model.pre_bbox_head.layers.2.bias"),
+            ("decoder.pre_bbox_head.layers.0.weight", "model.decoder.pre_bbox_head.layers.0.weight"),
+            ("decoder.pre_bbox_head.layers.0.bias", "model.decoder.pre_bbox_head.layers.0.bias"),
+            ("decoder.pre_bbox_head.layers.1.weight", "model.decoder.pre_bbox_head.layers.1.weight"),
+            ("decoder.pre_bbox_head.layers.1.bias", "model.decoder.pre_bbox_head.layers.1.bias"),
+            ("decoder.pre_bbox_head.layers.2.weight", "model.decoder.pre_bbox_head.layers.2.weight"),
+            ("decoder.pre_bbox_head.layers.2.bias", "model.decoder.pre_bbox_head.layers.2.bias"),
         ]
     )
 

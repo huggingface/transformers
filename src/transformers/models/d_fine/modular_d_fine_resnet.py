@@ -15,10 +15,14 @@
 
 
 from ..rt_detr.configuration_rt_detr_resnet import RTDetrResNetConfig
-from ..rt_detr.modeling_rt_detr_resnet import RTDetrResNetBackbone, RTDetrResNetPreTrainedModel, RTDetrResNetEmbeddings, RTDetrResNetConvLayer
+from ..rt_detr.modeling_rt_detr_resnet import RTDetrResNetBackbone, RTDetrResNetPreTrainedModel, RTDetrResNetConvLayer
 from torch import nn, Tensor
 import torch
+import torch.nn.functional as F
 from typing import List, Any, Iterator, NamedTuple
+from ...modeling_outputs import (
+    BaseModelOutputWithNoAttention,
+)
 
 
 class DFineResNetStageConfig(NamedTuple):
@@ -55,22 +59,22 @@ class DFineResNetConvLayer(RTDetrResNetConvLayer):
             self, 
             in_channels: int, 
             out_channels: int, 
-            kernel_size: int = 3, 
+            kernel_size: int, 
             stride: int = 1,
             groups: int = 1, 
             activation: str = "relu"):
         super().__init__(in_channels, out_channels, kernel_size, stride, activation)
-        self.lab = nn.Identity()
         self.convolution = nn.Conv2d(
             in_channels, 
             out_channels, 
             kernel_size=kernel_size, 
             stride=stride, 
             groups=groups, 
-            padding=kernel_size // 2, 
+            padding=(kernel_size - 1) // 2, 
             bias=False
         )
-    
+        self.lab = nn.Identity()
+
     def forward(self, input: Tensor) -> Tensor:
         hidden_state = self.convolution(input)
         hidden_state = self.normalization(hidden_state)
@@ -126,49 +130,65 @@ class EseModule(nn.Module):
         return torch.mul(identity, x)
 
 
-class DFineResNetEmbeddings(RTDetrResNetEmbeddings):
+class DFineResNetEmbeddings(nn.Module):
     def __init__(self, config: DFineResNetConfig):
-        super().__init__(config=config)
+        super().__init__()
 
-        self.embedder = nn.Sequential(
-            *[
-                DFineResNetConvLayer(
+        self.stem1 = DFineResNetConvLayer(
                     config.stem_channels[0],
                     config.stem_channels[1],
                     kernel_size=3,
                     stride=2,
                     activation=config.hidden_act,
-                ),
-                DFineResNetConvLayer(
+                )
+        self.stem2a = DFineResNetConvLayer(
                     config.stem_channels[1],
                     config.stem_channels[1] // 2,
                     kernel_size=2,
                     stride=1,
                     activation=config.hidden_act,
-                ),
-                DFineResNetConvLayer(
+                )
+        self.stem2b = DFineResNetConvLayer(
                     config.stem_channels[1] // 2,
                     config.stem_channels[1],
                     kernel_size=2,
                     stride=1,
                     activation=config.hidden_act,
-                ),
-                DFineResNetConvLayer(
+                )
+        self.stem3 = DFineResNetConvLayer(
                     config.stem_channels[1] * 2,
                     config.stem_channels[1],
                     kernel_size=3,
                     stride=2,
                     activation=config.hidden_act,
-                ),
-                DFineResNetConvLayer(
+                )
+        self.stem4 = DFineResNetConvLayer(
                     config.stem_channels[1],
                     config.stem_channels[2],
                     kernel_size=1,
                     stride=1,
                     activation=config.hidden_act,
                 )
-            ]
-        )
+
+        self.pool = nn.MaxPool2d(kernel_size=2, stride=1, ceil_mode=True)
+        self.num_channels = config.num_channels
+    
+    def forward(self, pixel_values: Tensor) -> Tensor:
+        num_channels = pixel_values.shape[1]
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+            )
+        x = self.stem1(pixel_values)
+        x = F.pad(x, (0, 1, 0, 1))
+        x2 = self.stem2a(x)
+        x2 = F.pad(x2, (0, 1, 0, 1))
+        x2 = self.stem2b(x2)
+        x1 = self.pool(x)
+        x = torch.cat([x1, x2], dim=1)
+        x = self.stem3(x)
+        x = self.stem4(x)
+        return x
 
 
 class DFineResNetBasicLayer(nn.Module):
@@ -181,7 +201,8 @@ class DFineResNetBasicLayer(nn.Module):
             kernel_size=3,
             residual=False,
             light_block=False,
-            agg='ese'):
+            agg='ese',
+            drop_path=0.):
         super().__init__()
         self.residual = residual
 
@@ -236,6 +257,7 @@ class DFineResNetBasicLayer(nn.Module):
                 aggregation_conv,
                 att,
             )
+        self.drop_path = nn.Dropout(drop_path) if drop_path else nn.Identity()
     
     def forward(self, x):
         identity = x
@@ -261,7 +283,8 @@ class DFineResNetStage(nn.Module):
             downsample=True,
             light_block=False,
             kernel_size=3,
-            agg='se'):
+            agg='se',
+            drop_path=0.):
         super().__init__()
         if downsample:
             self.downsample = DFineResNetConvLayer(
@@ -285,7 +308,8 @@ class DFineResNetStage(nn.Module):
                     residual=False if i == 0 else True,
                     kernel_size=kernel_size,
                     light_block=light_block,
-                    agg=agg
+                    agg=agg,
+                    drop_path=drop_path[i] if isinstance(drop_path, (list, tuple)) else drop_path
                 )
             )
         self.blocks = nn.Sequential(*blocks_list)
@@ -303,6 +327,29 @@ class DFineResNetEncoder(nn.Module):
         for _, stage in enumerate(config.stage_config):
             in_channels, mid_channels, out_channels, block_num, downsample, light_block, kernel_size, layer_num = stage
             self.stages.append(DFineResNetStage(in_channels, mid_channels, out_channels, block_num, layer_num, downsample, light_block, kernel_size ))
+    
+    def forward(
+        self, hidden_state: Tensor, output_hidden_states: bool = False, return_dict: bool = True
+    ) -> BaseModelOutputWithNoAttention:
+        
+        hidden_states = () if output_hidden_states else None
+
+        for stage_module in self.stages:
+            if output_hidden_states:
+                hidden_states = hidden_states + (hidden_state,)
+
+            hidden_state = stage_module(hidden_state)
+
+        if output_hidden_states:
+            hidden_states = hidden_states + (hidden_state,)
+
+        if not return_dict:
+            return tuple(v for v in [hidden_state, hidden_states] if v is not None)
+
+        return BaseModelOutputWithNoAttention(
+            last_hidden_state=hidden_state,
+            hidden_states=hidden_states,
+        )
 
 
 class DFineResNetBackbone(RTDetrResNetBackbone):
