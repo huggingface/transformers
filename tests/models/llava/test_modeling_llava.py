@@ -564,9 +564,8 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertTrue(processor.batch_decode(output, skip_special_tokens=True)[0] == EXPECTED_DECODED_TEXT)
 
     @slow
-    @require_bitsandbytes
     def test_pixtral(self):
-        model_id = "hf-internal-testing/pixtral-12b"
+        model_id = "mistral-community/pixtral-12b"
         model = LlavaForConditionalGeneration.from_pretrained(model_id)
         processor = AutoProcessor.from_pretrained(model_id)
 
@@ -579,33 +578,75 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         PROMPT = "<s>[INST]Describe the images.\n[IMG][IMG][IMG][IMG][/INST]"
 
         # image = Image.open(requests.get(url, stream=True).raw)
-        inputs = processor(text=PROMPT, images=IMG_URLS, return_tensors="pt").to("cuda")
+        inputs = processor(text=PROMPT, images=IMG_URLS, return_tensors="pt").to(model.device)
         generate_ids = model.generate(**inputs, max_new_tokens=500)
         ouptut = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+        print(ouptut)
 
         # fmt: off
         EXPECTED_GENERATION = """
 Describe the images.
-Sure, let's break down each image description:
+Certainly! Here are the descriptions of the images:
 
-1. **Image 1:**
-   - **Description:** A black dog with a glossy coat is sitting on a wooden floor. The dog has a focused expression and is looking directly at the camera.
-   - **Details:** The wooden floor has a rustic appearance with visible wood grain patterns. The dog's eyes are a striking color, possibly brown or amber, which contrasts with its black fur.
+1. **Image 1**: This image features a black dog with a glossy coat sitting on a wooden surface. The dog has a calm and attentive expression, looking directly at the camera. The wooden background has a rustic appearance with visible grain and texture.
 
-2. **Image 2:**
-   - **Description:** A scenic view of a mountainous landscape with a winding road cutting through it. The road is surrounded by lush green vegetation and leads to a distant valley.
-   - **Details:** The mountains are rugged with steep slopes, and the sky is clear, indicating good weather. The winding road adds a sense of depth and perspective to the image.
+2. **Image 2**: This image captures a breathtaking view of a mountainous landscape. The mountains are rugged and covered with patches of green vegetation. The sky above is clear, and the scene conveys a sense of tranquility and natural beauty.
 
-3. **Image 3:**
-   - **Description:** A beach scene with waves crashing against the shore. There are several people in the water and on the beach, enjoying the waves and the sunset.
-   - **Details:** The waves are powerful, creating a dynamic and lively atmosphere. The sky is painted with hues of orange and pink from the setting sun, adding a warm glow to the scene.
+3. **Image 3**: This image shows a beach scene during sunset. The waves are gently rolling onto the shore, and several people can be seen in the water, possibly surfing or swimming. The sky is painted with warm hues of orange and yellow, creating a serene and picturesque atmosphere.
 
-4. **Image 4:**
-   - **Description:** A garden path leading to a large tree with a bench underneath it. The path is bordered by well-maintained grass and flowers.
-   - **Details:** The path is made of small stones or gravel, and the tree provides a shaded area with the bench invitingly placed beneath it. The surrounding area is lush and green, suggesting a well-kept garden.
+4. **Image 4**: This image depicts a narrow, winding path that cuts through a lush, green landscape. On either side of the path, there is dense grass and various trees, including a prominent tree with white blossoms. The sky is clear and blue, adding to the peaceful and inviting ambiance of the scene.
 
-Each image captures a different scene, from a close-up of a dog to expansive natural landscapes, showcasing various elements of nature and human interaction with it.
+These descriptions provide a detailed overview of the content and atmosphere of each image.
 """
         # fmt: on
         # check that both inputs are handled correctly and generate the same output
-        self.assertListEqual(ouptut, EXPECTED_GENERATION)
+        self.assertEqual(ouptut, EXPECTED_GENERATION)
+
+    @slow
+    @require_bitsandbytes
+    def test_pixtral_4bit(self):
+        model_id = "mistral-community/pixtral-12b"
+        model = LlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        processor = AutoProcessor.from_pretrained(model_id)
+
+        IMG_URLS = [
+            Image.open(requests.get("https://picsum.photos/id/237/400/300", stream=True).raw),
+            Image.open(requests.get("https://picsum.photos/id/231/200/300", stream=True).raw),
+        ]
+        PROMPT = "<s>[INST][IMG][IMG]Describe the images.[/INST]"
+
+        inputs = processor(text=PROMPT, images=IMG_URLS, return_tensors="pt").to(torch_device, torch.float16)
+        generate_ids = model.generate(**inputs, max_new_tokens=50)
+        output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
+
+        EXPECTED_GENERATION = "Describe the images.The image showcases a dog, which is prominently positioned in the center, taking up a significant portion of the frame. The dog is situated against a backdrop of a wooden surface, which spans the entire image. The dog appears to be a black Labrador"  # fmt: skip
+        self.assertEqual(output, EXPECTED_GENERATION)
+
+    @slow
+    @require_bitsandbytes
+    def test_pixtral_batched(self):
+        model_id = "mistral-community/pixtral-12b"
+        model = LlavaForConditionalGeneration.from_pretrained(model_id, load_in_4bit=True)
+        processor = AutoProcessor.from_pretrained(model_id)
+        processor.tokenizer.pad_token_id = processor.tokenizer.eos_token_id
+
+        IMG_URLS = [
+            Image.open(requests.get("https://picsum.photos/id/237/400/300", stream=True).raw),
+            Image.open(requests.get("https://picsum.photos/id/17/150/500", stream=True).raw),
+        ]
+        PROMPT = [
+            "<s>[INST][IMG]What breed is the dog?[/INST]",
+            "<s>[INST][IMG]What is shown in this image?[/INST]",
+        ]
+
+        inputs = processor(text=PROMPT, images=IMG_URLS, padding=True, return_tensors="pt").to(
+            torch_device, torch.float16
+        )
+        generate_ids = model.generate(**inputs, max_new_tokens=50)
+        output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+
+        EXPECTED_GENERATION = [
+            'What breed is the dog?The dog in the image is a black Labrador Retriever.',
+            'What is shown in this image?The image depicts a narrow, winding dirt path surrounded by lush greenery. The path is flanked by grass and shrubs on both sides. On the left side, there are tall trees and dense foliage, while on the right side, there'
+        ]  # fmt: skip
+        self.assertEqual(output, EXPECTED_GENERATION)
