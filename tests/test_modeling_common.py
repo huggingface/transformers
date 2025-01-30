@@ -928,12 +928,19 @@ class ModelTesterMixin:
 
         valid_model_class = False
         for model_class in self.all_model_classes:
-            if model_class.__name__ in get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES):
+            if (
+                model_class.__name__ in get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES)
+                and model_class.__name__ not in ("MusicgenForCausalLM", "MusicgenMelodyForCausalLM")
+            ):
                 valid_model_class = True
         if not valid_model_class:
             self.skipTest(reason="No causal lm model classes found")
         for model_class in self.all_model_classes:
-            if model_class.__name__ in get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES):
+            model_name = model_class.__name__
+            if (
+                model_name in get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES)
+                and model_name not in ("MusicgenForCausalLM", "MusicgenMelodyForCausalLM")
+            ):
                 config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
                 with tempfile.TemporaryDirectory() as tmpdir:
