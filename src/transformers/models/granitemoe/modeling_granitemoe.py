@@ -330,6 +330,8 @@ class GraniteMoeTopKGating(nn.Module):
         )  # [num_tokens, num_experts]
         gates = zeros.scatter(1, top_k_indices, 1)  # [num_tokens, num_experts]
         expert_size = gates.long().sum(0)  # [num_experts,]
+        # (This cause torch.compile to fail with `torch._dynamo.exc.Unsupported: Backend compiler failed with a fake tensor exception at`)
+        # (and `DataDependentOutputException`)
         expert_size = expert_size.tolist()
 
         # sort and group input tokens according to expert assignment
@@ -841,6 +843,7 @@ class GraniteMoePreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_cache_class = True
     _supports_quantized_cache = True
+    _supports_static_cache = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
 
     def _init_weights(self, module):
         std = self.config.initializer_range
