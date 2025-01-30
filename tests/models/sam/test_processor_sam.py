@@ -170,7 +170,7 @@ class SamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         Test the run-length encoding function.
         """
 
-        def test_all_zeros(self):
+        def test_all_zeros():
             """
             Test that a mask of all zeros returns a single run [height * width].
             """
@@ -182,7 +182,7 @@ class SamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             # For a 2x2 all-zero mask, we expect a single run of length 4:
             self.assertEqual(rle[0]["counts"], [4])
 
-        def test_all_ones(self):
+        def test_all_ones():
             """
             Test that a mask of all ones returns [0, height * width].
             """
@@ -194,7 +194,7 @@ class SamProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             # For a 2x2 all-one mask, we expect two runs: [0, 4].
             self.assertEqual(rle[0]["counts"], [0, 4])
 
-        def test_partial_mask(self):
+        def test_partial_mask():
             """
             Test a mask with mixed 0s and 1s to ensure the run-length encoding is correct.
             """
@@ -303,7 +303,7 @@ class TFSamProcessorTest(unittest.TestCase):
         Test the run-length encoding function.
         """
 
-        def test_all_zeros(self):
+        def test_all_zeros():
             """
             Test that a mask of all zeros returns a single run [height * width].
             """
@@ -315,7 +315,7 @@ class TFSamProcessorTest(unittest.TestCase):
             # For a 2x2 all-zero mask, we expect a single run of length 4:
             self.assertEqual(rle[0]["counts"], [4])
 
-        def test_all_ones(self):
+        def test_all_ones():
             """
             Test that a mask of all ones returns [0, height * width].
             """
@@ -327,7 +327,7 @@ class TFSamProcessorTest(unittest.TestCase):
             # For a 2x2 all-one mask, we expect two runs: [0, 4].
             self.assertEqual(rle[0]["counts"], [0, 4])
 
-        def test_partial_mask(self):
+        def test_partial_mask():
             """
             Test a mask with mixed 0s and 1s to ensure the run-length encoding is correct.
             """
