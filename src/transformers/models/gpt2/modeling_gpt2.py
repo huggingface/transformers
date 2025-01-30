@@ -1401,7 +1401,7 @@ class GPT2ForSequenceClassification(GPT2PreTrainedModel):
             # To handle both left- and right- padding, we take the rightmost token that is not equal to pad_token_id
             non_pad_mask = (input_ids != self.config.pad_token_id).to(logits.device, torch.int32)
             token_indices = torch.arange(input_ids.shape[-1], device=logits.device)
-            last_non_pad_token = (token_indices * non_pad_mask).max(-1).values
+            last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
         else:
             last_non_pad_token = -1
             logger.warning_once(
