@@ -772,10 +772,9 @@ class DabDetrEncoderLayer(nn.Module):
 class DabDetrDecoderLayer(nn.Module):
     def __init__(self, config: DabDetrConfig, is_first: bool = False):
         super().__init__()
-        self.layer = nn.ModuleList()
-        self.layer.append(DabDetrDecoderLayerSelfAttention(config))
-        self.layer.append(DabDetrDecoderLayerCrossAttention(config, is_first))
-        self.layer.append(DabDetrDecoderLayerFFN(config))
+        self.self_attn = DabDetrDecoderLayerSelfAttention(config)
+        self.cross_attn = DabDetrDecoderLayerCrossAttention(config, is_first)
+        self.mlp = DabDetrDecoderLayerFFN(config)
 
     def forward(
         self,
@@ -810,14 +809,14 @@ class DabDetrDecoderLayer(nn.Module):
                 returned tensors for more detail.
 
         """
-        hidden_states, self_attn_weights = self.layer[0](
+        hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
             query_position_embeddings=query_position_embeddings,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
         )
 
-        hidden_states, cross_attn_weights = self.layer[1](
+        hidden_states, cross_attn_weights = self.cross_attn(
             hidden_states=hidden_states,
             encoder_hidden_states=encoder_hidden_states,
             query_position_embeddings=query_position_embeddings,
@@ -827,7 +826,7 @@ class DabDetrDecoderLayer(nn.Module):
             output_attentions=output_attentions,
         )
 
-        hidden_states = self.layer[2](hidden_states=hidden_states)
+        hidden_states = self.mlp(hidden_states=hidden_states)
 
         outputs = (hidden_states,)
 
@@ -973,6 +972,7 @@ class DabDetrEncoder(DabDetrPreTrainedModel):
         self.query_scale = DabDetrMLP(config.hidden_size, config.hidden_size, config.hidden_size, 2)
         self.layers = nn.ModuleList([DabDetrEncoderLayer(config) for _ in range(config.encoder_layers)])
         self.norm = nn.LayerNorm(config.hidden_size) if config.normalize_before else None
+        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1032,14 +1032,24 @@ class DabDetrEncoder(DabDetrPreTrainedModel):
                 encoder_states = encoder_states + (hidden_states,)
             # pos scaler
             pos_scales = self.query_scale(hidden_states)
-            scaled_object_queries = object_queries * pos_scales
             # we add object_queries * pos_scaler as extra input to the encoder_layer
-            layer_outputs = encoder_layer(
-                hidden_states,
-                attention_mask=attention_mask,
-                object_queries=scaled_object_queries,
-                output_attentions=output_attentions,
-            )
+            scaled_object_queries = object_queries * pos_scales
+
+            if self.gradient_checkpointing and self.training:
+                layer_outputs = self._gradient_checkpointing_func(
+                    encoder_layer.__call__,
+                    hidden_states,
+                    attention_mask,
+                    scaled_object_queries,
+                    output_attentions,
+                )
+            else:
+                layer_outputs = encoder_layer(
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    object_queries=scaled_object_queries,
+                    output_attentions=output_attentions,
+                )
 
             hidden_states = layer_outputs[0]
 
@@ -1178,10 +1188,10 @@ class DabDetrDecoder(DabDetrPreTrainedModel):
             # apply transformation
             query_sine_embed = query_sine_embed[..., : self.hidden_size] * pos_transformation
 
-            # modulated HW attentions
-            refHW_cond = self.ref_anchor_head(hidden_states).sigmoid()  # nq, bs, 2
-            query_sine_embed[..., self.hidden_size // 2 :] *= (refHW_cond[..., 0] / obj_center[..., 2]).unsqueeze(-1)
-            query_sine_embed[..., : self.hidden_size // 2] *= (refHW_cond[..., 1] / obj_center[..., 3]).unsqueeze(-1)
+            # modulated Height Width attentions
+            reference_anchor_size = self.ref_anchor_head(hidden_states).sigmoid()  # nq, bs, 2
+            query_sine_embed[..., self.hidden_size // 2 :] *= (reference_anchor_size[..., 0] / obj_center[..., 2]).unsqueeze(-1)
+            query_sine_embed[..., : self.hidden_size // 2] *= (reference_anchor_size[..., 1] / obj_center[..., 3]).unsqueeze(-1)
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
@@ -1210,14 +1220,13 @@ class DabDetrDecoder(DabDetrPreTrainedModel):
             # iter update
             hidden_states = layer_outputs[0]
 
-            if self.bbox_embed is not None:
-                new_reference_points = self.bbox_embed(hidden_states)
+            new_reference_points = self.bbox_embed(hidden_states)
 
-                new_reference_points[..., : self.config.query_dim] += inverse_sigmoid(reference_points)
-                new_reference_points = new_reference_points[..., : self.config.query_dim].sigmoid()
-                if layer_id != self.num_layers - 1:
-                    ref_points.append(new_reference_points)
-                reference_points = new_reference_points.detach()
+            new_reference_points[..., : self.config.query_dim] += inverse_sigmoid(reference_points)
+            new_reference_points = new_reference_points[..., : self.config.query_dim].sigmoid()
+            if layer_id != self.num_layers - 1:
+                ref_points.append(new_reference_points)
+            reference_points = new_reference_points.detach()
 
             intermediate.append(self.layernorm(hidden_states))
 
@@ -1227,10 +1236,10 @@ class DabDetrDecoder(DabDetrPreTrainedModel):
                 if encoder_hidden_states is not None:
                     all_cross_attentions += (layer_outputs[2],)
 
-        if self.layernorm is not None:
-            hidden_states = self.layernorm(hidden_states)
-            intermediate.pop()
-            intermediate.append(hidden_states)
+        # Layer normalization on hidden states and add it to the intermediate list
+        hidden_states = self.layernorm(hidden_states)
+        intermediate.pop()
+        intermediate.append(hidden_states)
 
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
@@ -1302,7 +1311,7 @@ class DabDetrModel(DabDetrPreTrainedModel):
 
         self.num_patterns = config.num_patterns
         if not isinstance(self.num_patterns, int):
-            Warning("num_patterns should be int but {}".format(type(self.num_patterns)))
+            logger.warning("num_patterns should be int but {}".format(type(self.num_patterns)))
             self.num_patterns = 0
         if self.num_patterns > 0:
             self.patterns = nn.Embedding(self.num_patterns, self.hidden_size)
@@ -1609,8 +1618,8 @@ class DabDetrForObjectDetection(DabDetrPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("IDEA-Research/dab_detr-base")
-        >>> model = AutoModelForObjectDetection.from_pretrained("IDEA-Research/dab_detr-base")
+        >>> image_processor = AutoImageProcessor.from_pretrained("IDEA-Research/dab-detr-resnet-50")
+        >>> model = AutoModelForObjectDetection.from_pretrained("IDEA-Research/dab-detr-resnet-50")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
 
@@ -1658,9 +1667,9 @@ class DabDetrForObjectDetection(DabDetrPreTrainedModel):
         logits = self.class_embed(intermediate_hidden_states[-1])
 
         reference_before_sigmoid = inverse_sigmoid(reference_points)
-        tmp = self.bbox_predictor(intermediate_hidden_states)
-        tmp[..., : self.query_dim] += reference_before_sigmoid
-        outputs_coord = tmp.sigmoid()
+        bbox_with_refinement = self.bbox_predictor(intermediate_hidden_states)
+        bbox_with_refinement[..., : self.query_dim] += reference_before_sigmoid
+        outputs_coord = bbox_with_refinement.sigmoid()
 
         pred_boxes = outputs_coord[-1]
 
