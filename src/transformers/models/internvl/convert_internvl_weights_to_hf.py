@@ -12,307 +12,277 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import argparse
-import json
+import gc
 import os
+import re
 
-import regex as re
 import torch
-from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
-from safetensors.torch import load_file as safe_load_file
-from tokenizers import Regex, Tokenizer, decoders, pre_tokenizers, processors
-from tokenizers.models import BPE
 
 from transformers import (
+    AutoModel,
+    AutoTokenizer,
     InternVLConfig,
-    InternVLImageProcessor,
-    InternVLProcessor,
-    LlavaConfig,
-    LlavaForConditionalGeneration,
-    MistralConfig,
+    InternVLForConditionalGeneration,
+    is_vision_available,
 )
-from transformers.convert_slow_tokenizer import bytes_to_unicode
+from transformers.tokenization_utils import AddedToken
 
 
-"""
-# Here is how to get the original tokens!
-model_name = "mistralai/InternVL-12B-2409"
-tok = MistralTokenizer.from_model(model_name)
+if is_vision_available():
+    pass
+# fmt: off
+ORIGINAL_TO_CONVERTED_KEY_MAPPING_VISION = {
+    # Vision encoder mapping
+    r"vision_model":                                 r"vision_tower",
+    r"layers":                                      r"layer",
+    r"class_embedding":                             r"cls_token",
+    r"position_embedding":                          r"position_embeddings",
+    r"patch_embedding":                             r"patch_embeddings.projection",
+    r"ls(\d+)":                                     r"lambda_\1",
+    r"attn.proj":                                   r"attention.output.dense",
+    r"mlp.fc1":                                     r"intermediate.dense",
+    r"mlp.fc2":                                     r"output.dense",
+    r"norm1":                                       r"layernorm_before",
+    r"norm2":                                       r"layernorm_after",
 
-from mistral_common.protocol.instruct.request import ChatCompletionRequest, UserMessage, ImageChunk, TextChunk
-
-EXPECTED_TOKENS = tok.encode_chat_completion(
-    ChatCompletionRequest(
-        messages=[
-            UserMessage(
-                content=[
-                    TextChunk(text="Describe the images"),
-                ] + [ImageChunk(image=img) for img in IMG_URLS]
-            )
-        ],
-        model="internvl",
-    )
-)
-assert tokenizer.decode(inputs["input_ids"][0]) == EXPECTED_TOKENS
-"""
-
-OLD_KEY_TO_NEW_KEY_MAPPING = {
-    # Layer Normalization Weights
-    r"vision_encoder.transformer.layers.(\d+).input_layernorm.weight": r"vision_tower.transformer.layers.\1.attention_norm.weight",
-    r"vision_encoder.transformer.layers.(\d+).ffn_norm.weight": r"vision_tower.transformer.layers.\1.ffn_norm.weight",
-    # Self Attention Projections
-    r"vision_encoder.transformer.layers.(\d+).attention.wq.weight": r"vision_tower.transformer.layers.\1.attention.q_proj.weight",
-    r"vision_encoder.transformer.layers.(\d+).attention.wk.weight": r"vision_tower.transformer.layers.\1.attention.k_proj.weight",
-    r"vision_encoder.transformer.layers.(\d+).attention.wv.weight": r"vision_tower.transformer.layers.\1.attention.v_proj.weight",
-    r"vision_encoder.transformer.layers.(\d+).attention.wo.weight": r"vision_tower.transformer.layers.\1.attention.o_proj.weight",
-    # MLP Projections
-    r"vision_encoder.transformer.layers.(\d+).feed_forward.w1.weight": r"vision_tower.transformer.layers.\1.feed_forward.gate_proj.weight",
-    r"vision_encoder.transformer.layers.(\d+).feed_forward.w2.weight": r"vision_tower.transformer.layers.\1.feed_forward.down_proj.weight",
-    r"vision_encoder.transformer.layers.(\d+).feed_forward.w3.weight": r"vision_tower.transformer.layers.\1.feed_forward.up_proj.weight",
-    # Additional mappings
-    r"vision_encoder": r"vision_tower",
-    r"vision_language_adapter.w_in": r"multi_modal_projector.linear_1",
-    r"vision_language_adapter.w_out": r"multi_modal_projector.linear_2",
-    r"layers.(\d+).attention.wq.weight": r"language_model.model.layers.\1.self_attn.q_proj.weight",
-    r"layers.(\d+).attention.wk.weight": r"language_model.model.layers.\1.self_attn.k_proj.weight",
-    r"layers.(\d+).attention.wv.weight": r"language_model.model.layers.\1.self_attn.v_proj.weight",
-    r"layers.(\d+).attention.wo.weight": r"language_model.model.layers.\1.self_attn.o_proj.weight",
-    r"layers.(\d+).feed_forward.w1.weight": r"language_model.model.layers.\1.mlp.gate_proj.weight",
-    r"layers.(\d+).feed_forward.w2.weight": r"language_model.model.layers.\1.mlp.down_proj.weight",
-    r"layers.(\d+).feed_forward.w3.weight": r"language_model.model.layers.\1.mlp.up_proj.weight",
-    r"layers.(\d+).ffn_norm.weight": r"language_model.model.layers.\1.post_attention_layernorm.weight",
-    r"layers.(\d+).attention_norm.weight": r"language_model.model.layers.\1.input_layernorm.weight",
-    r"tok_embeddings.weight": r"language_model.model.embed_tokens.weight",
-    r"output.weight": r"language_model.lm_head.weight",
-    r"norm.weight": r"language_model.model.norm.weight",
 }
+# fmt: on
+
+CONTEXT_LENGTH = 8192
 
 
-class MistralConverter:
+def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
     """
-    A general tiktoken converter.
+    This function should be applied only once, on the concatenated keys to efficiently rename using
+    the key mappings.
     """
+    output_dict = {}
+    if state_dict_keys is not None:
+        old_text = "\n".join([key for key in state_dict_keys if key.startswith("vision_model")])
+        new_text = old_text
+        for pattern, replacement in ORIGINAL_TO_CONVERTED_KEY_MAPPING_VISION.items():
+            new_text = re.sub(pattern, replacement, new_text)
+        output_dict = dict(zip(old_text.split("\n"), new_text.split("\n")))
+    return output_dict
 
-    def __init__(
-        self,
-        vocab=None,
-        pattern=r"""(?i:'s|'t|'re|'ve|'m|'ll|'d)|[^\r\n\p{L}\p{N}]?\p{L}+|\p{N}{1,3}| ?[^\s\p{L}\p{N}]+[\r\n]*|\s*[\r\n]+|\s+(?!\S)|\s+""",
-        add_prefix_space=False,
-        additional_special_tokens=None,
-        *args,
-        **kwargs,
-    ):
-        super().__init__(*args)
-        self.vocab = vocab
-        self.pattern = pattern
-        self.add_prefix_space = add_prefix_space
-        self.additional_special_tokens = additional_special_tokens
 
-    def extract_vocab_merges_from_model(self, vocab: str):
-        bpe_ranks = vocab
-        byte_encoder = bytes_to_unicode()
+def load_original_state_dict(input_base_path):
+    model = (
+        AutoModel.from_pretrained(
+            input_base_path,
+            torch_dtype=torch.bfloat16,
+            low_cpu_mem_usage=True,
+            use_flash_attn=False,
+            trust_remote_code=True,
+        )
+        .eval()
+        .cuda()
+    )
 
-        def token_bytes_to_string(b):
-            return "".join([byte_encoder[ord(char)] for char in b.decode("latin-1")])
+    return model.state_dict()
 
-        merges = []
-        vocab = {}
-        for idx, (token, rank) in enumerate(bpe_ranks.items()):
-            if token not in self.additional_special_tokens:
-                vocab[token_bytes_to_string(token)] = idx
-                if len(token) == 1:
-                    continue
-                local = []
-                for index in range(1, len(token)):
-                    piece_l, piece_r = token[:index], token[index:]
-                    if piece_l in bpe_ranks and piece_r in bpe_ranks and (piece_l + piece_r) in bpe_ranks:
-                        local.append((piece_l, piece_r, rank))
-                local = sorted(local, key=lambda x: (bpe_ranks[x[0]], bpe_ranks[x[1]]), reverse=False)
-                merges.extend(local)
-            else:
-                vocab[token] = idx
-        merges = sorted(merges, key=lambda val: val[2], reverse=False)
-        merges = [(token_bytes_to_string(val[0]), token_bytes_to_string(val[1])) for val in merges]
-        return vocab, merges
 
-    def tokenizer(self):
-        vocab_scores, merges = self.extract_vocab_merges_from_model(self.vocab)
-        tokenizer = Tokenizer(BPE(vocab_scores, merges, fuse_unk=False))
-        if hasattr(tokenizer.model, "ignore_merges"):
-            tokenizer.model.ignore_merges = True
-        return tokenizer
+def get_internvl_config():
+    return InternVLConfig()
 
-    def converted(self) -> Tokenizer:
-        tokenizer = self.tokenizer()
-        tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
-            [
-                pre_tokenizers.Split(Regex(self.pattern), behavior="isolated", invert=False),
-                pre_tokenizers.ByteLevel(add_prefix_space=self.add_prefix_space, use_regex=False),
+
+def write_model(
+    model_path,
+    input_base_path,
+    push_to_hub=False,
+):
+    os.makedirs(model_path, exist_ok=True)
+
+    config = get_internvl_config()
+    config.architectures = ["InternVLForConditionalGeneration"]
+    config.save_pretrained(model_path)
+    print("Model config saved successfully...")
+
+    # ------------------------------------------------------------
+    # Convert weights
+    # ------------------------------------------------------------
+
+    print(f"Fetching all parameters from the checkpoint at {input_base_path}...")
+    state_dict_old = load_original_state_dict(input_base_path)
+    print("Converting model...")
+    all_keys = list(state_dict_old.keys())
+    new_keys = convert_old_keys_to_new_keys(all_keys)
+    state_dict = {}
+    for key in all_keys:
+        new_key = new_keys[key]
+        state_dict[new_key] = state_dict_old[key]
+
+    del state_dict_old
+    gc.collect()
+
+    print("Loading the checkpoint in a GotOcr2ForConditionalGeneration model.")
+    model = InternVLForConditionalGeneration(config)
+    missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
+    model = model.to(torch.bfloat16)
+    print("model dtype:", model.dtype)
+    print("Missing keys:", missing_keys)
+    print("Unexpected keys:", unexpected_keys)
+
+    print("Saving the model.")
+    model.save_pretrained(model_path)
+    # if push_to_hub:
+    #     model.push_to_hub("stepfun-ai/GOT-OCR-2.0-hf", use_temp_dir=True)
+    # del state_dict, model
+
+    # # Safety check: reload the converted model
+    # gc.collect()
+    # print("Reloading the model to check if it's saved correctly.")
+    # model = InternVLForConditionalGeneration.from_pretrained(model_path, device_map="auto")
+    # processor = InternVLProcessor.from_pretrained(model_path)
+    # image = load_image(
+    #     "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
+    # )
+
+    # inputs = processor(image, return_tensors="pt", format=True).to(model.device, dtype=model.dtype)
+    # generate_ids = model.generate(**inputs, do_sample=False, num_beams=1, max_new_tokens=4)
+    # decoded_output = processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+    # expected_output = "\\title{\nR"
+    # print("Decoded output:", decoded_output)
+    # assert decoded_output == expected_output
+    # print("Model reloaded successfully.")
+    # del model
+
+
+def write_tokenizer(save_dir: str, push_to_hub: bool = False):
+    tokenizer_fast = AutoTokenizer.from_pretrained("Qwen/Qwen2.5-VL-7B-Instruct")
+    tokenizer_fast.model_max_length = CONTEXT_LENGTH
+    tokenizer_fast.add_special_tokens(
+        {
+            "additional_special_tokens": [
+                AddedToken(
+                    "<img>",
+                    rstrip=False,
+                    lstrip=False,
+                    single_word=False,
+                    normalized=False,
+                    special=True,
+                ),
+                AddedToken(
+                    "</img>",
+                    rstrip=False,
+                    lstrip=False,
+                    single_word=False,
+                    normalized=False,
+                    special=True,
+                ),
+                AddedToken(
+                    "<IMG_CONTEXT>",
+                    rstrip=False,
+                    lstrip=False,
+                    single_word=False,
+                    normalized=False,
+                    special=True,
+                ),
+                AddedToken(
+                    "<quad>",
+                    rstrip=False,
+                    lstrip=False,
+                    single_word=False,
+                    normalized=False,
+                    special=True,
+                ),
+                AddedToken(
+                    "</quad>",
+                    rstrip=False,
+                    lstrip=False,
+                    single_word=False,
+                    normalized=False,
+                    special=True,
+                ),
+                AddedToken(
+                    "<ref>",
+                    rstrip=False,
+                    lstrip=False,
+                    single_word=False,
+                    normalized=False,
+                    special=True,
+                ),
+                AddedToken(
+                    "</ref>",
+                    rstrip=False,
+                    lstrip=False,
+                    single_word=False,
+                    normalized=False,
+                    special=True,
+                ),
+                AddedToken(
+                    "<box>",
+                    rstrip=False,
+                    lstrip=False,
+                    single_word=False,
+                    normalized=False,
+                    special=True,
+                ),
+                AddedToken(
+                    "</box>",
+                    rstrip=False,
+                    lstrip=False,
+                    single_word=False,
+                    normalized=False,
+                    special=True,
+                ),
             ]
-        )
-        tokenizer.decoder = decoders.ByteLevel()
-        tokenizer.add_special_tokens(self.additional_special_tokens)
-
-        tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
-
-        return tokenizer
-
-
-def convert_mistral_tokenizer(model_file):
-    from transformers import LlamaTokenizer
-
-    mistral_tokenizer = MistralTokenizer.from_file(model_file)
-    vocab = mistral_tokenizer.instruct_tokenizer.tokenizer.vocab()
-    control_token_ids = mistral_tokenizer.instruct_tokenizer.tokenizer._control_tokens
-    all_special = [vocab[id] for id in control_token_ids]
-    hf_tokenizer = LlamaTokenizer(model_file)
-    # Do I need to exclude tokens that are already special?
-    hf_tokenizer.add_special_tokens({"additional_special_tokens": all_special})
-    hf_tokenizer.model_input_names = ["input_ids", "attention_mask"]
-    return hf_tokenizer
-
-
-def permute_for_rope(value, n_heads, config):
-    dim1 = value.shape[0]
-    dim2 = config.hidden_size
-    return value.view(n_heads, dim1 // n_heads // 2, 2, dim2).transpose(1, 2).reshape(dim1, dim2)
-
-
-def convert_dictionary(original_state_dict, vision_config, text_config):
-    new_dict = {}
-
-    all_keys = "\n" + "\n".join(original_state_dict.keys())
-    old_keys = all_keys
-    for old, new in OLD_KEY_TO_NEW_KEY_MAPPING.items():
-        all_keys = re.sub(r"\n" + old, r"\n" + new, all_keys)
-
-    OLD_TO_NEW = dict(zip(old_keys.split("\n"), all_keys.split("\n")))
-
-    for key, value in original_state_dict.items():
-        new_key = OLD_TO_NEW[key]
-        if "vision_encoder" in key:
-            _config = vision_config
-            num_attention_heads = _config.num_attention_heads
-        else:
-            _config = text_config
-            if "q_proj" in new_key:
-                num_attention_heads = _config.num_attention_heads
-            if "k_proj" in new_key:
-                num_attention_heads = _config.num_key_value_heads
-
-        if "q_proj" in new_key or "k_proj" in new_key:
-            value = permute_for_rope(value, num_attention_heads, _config)
-
-        new_dict[new_key] = value
-    return new_dict
-
-
-MISTRAL_CONFIG_MAPPING = {
-    "dim": "hidden_size",
-    "hidden_dim": "intermediate_size",
-    "n_kv_heads": "num_key_value_heads",
-    "n_heads": "num_attention_heads",
-    "n_layers": "num_hidden_layers",
-}
-
-
-def convert_mistral_model(input_dir, output_dir):
-    vision_config = {}
-    if os.path.isfile(f"{input_dir}/params.json"):
-        with open(f"{input_dir}/params.json") as f:
-            param_json = json.load(f)
-        vision_config = param_json.pop("vision_encoder")
-        for k, v in MISTRAL_CONFIG_MAPPING.items():
-            value = param_json.pop(k)
-            param_json[v] = value
-        if "hidden_act" not in vision_config:
-            vision_config["hidden_act"] = "silu"
-        text_config = MistralConfig(
-            **param_json,
-            hidden_act="silu",
-            sliding_window=None,
-            tie_word_embeddings=False,
-            is_composition=True,
-            rms_norm_eps=1e-5,
-        )
-    else:
-        text_config = MistralConfig(
-            attention_dropout=0.0,
-            bos_token_id=1,
-            eos_token_id=2,
-            head_dim=128,
-            hidden_act="silu",
-            hidden_size=5120,
-            initializer_range=0.02,
-            intermediate_size=14336,
-            max_position_embeddings=1024000,
-            model_type="mistral",
-            num_attention_heads=32,
-            num_hidden_layers=40,
-            num_key_value_heads=8,
-            rms_norm_eps=1e-05,
-            rope_theta=1000000000.0,
-            sliding_window=None,
-            tie_word_embeddings=False,
-            vocab_size=131072,
-        )
-    adapter_bias = vision_config.pop("adapter_bias", True)
-    vision_config = InternVLConfig(**vision_config)
-    config = LlavaConfig(
-        vision_config,
-        text_config,
-        vision_feature_layer=-1,
-        image_token_index=10,
-        vision_feature_select_strategy="full",
-        image_seq_length=1,
-        multimodal_projector_bias=adapter_bias,
+        },
+        replace_additional_special_tokens=False,
     )
-    config.architectures = ["LlavaForConditionalGeneration"]
-    config.save_pretrained(output_dir)
-    full_original_state_dict = {}
-    safetensors_files = sorted([file for file in os.listdir(input_dir) if file.endswith(".safetensors")])
-    if len(safetensors_files) == 1:
-        full_original_state_dict = safe_load_file(f"{input_dir}/consolidated.safetensors")
-    else:
-        for file in safetensors_files:
-            loaded_dict = safe_load_file(f"{input_dir}/{file}")
-            full_original_state_dict.update(loaded_dict)
+    tokenizer_fast.save_pretrained(save_dir)
 
-    new_dict = convert_dictionary(full_original_state_dict, vision_config, text_config)
-    with torch.device("meta"):
-        model = LlavaForConditionalGeneration(config)
-    model.load_state_dict(new_dict, strict=True, assign=True)
-    model.save_pretrained(output_dir)
+    # if push_to_hub:
+    #     tokenizer.push_to_hub("stepfun-ai/GOT-OCR-2.0-hf", use_temp_dir=True)
+
+
+# def write_image_processor(save_dir: str, push_to_hub: bool = False):
+#     image_processor = GotOcr2ImageProcessor(
+#         do_resize=True,
+#         size={"height": 1024, "width": 1024},
+#         do_rescale=True,
+#         rescale_factor=1 / 255,
+#         do_normalize=True,
+#         image_mean=[0.48145466, 0.4578275, 0.40821073],
+#         image_std=[0.26862954, 0.26130258, 0.27577711],
+#     )
+
+#     image_processor.save_pretrained(save_dir)
+#     if push_to_hub:
+#         image_processor.push_to_hub("stepfun-ai/GOT-OCR-2.0-hf", use_temp_dir=True)
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--input_dir",
-        help="Location of LLaMA weights, which contains tokenizer.model and model folders",
-        required=True,
+        default="OpenGVLab/InternVL2_5-1B-MPO",
+        help="Location of original InternVL model",
     )
     parser.add_argument(
         "--output_dir",
-        help="Location to write HF model and tokenizer",
-        required=True,
-    )
-    parser.add_argument(
-        "--tokenizer_file", help="Location of the specific tokenizer model file to use.", required=True
-    )
-    parser.add_argument(
-        "--chat_template_file",
-        help="Optional file containing a raw chat template. Will be set as the processor's chat template.",
-        required=False,
+        default="InternVLTest",
+        help="Location to write HF model and processors",
     )
 
+    parser.add_argument(
+        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+    )
     args = parser.parse_args()
-    convert_mistral_model(args.input_dir, args.output_dir)
-    tokenizer = convert_mistral_tokenizer(args.tokenizer_file)
-    image_processor = InternVLImageProcessor()
-    processor = InternVLProcessor(tokenizer=tokenizer, image_processor=image_processor, image_token="[IMG]")
-    if args.chat_template_file:
-        processor.chat_template = open(args.chat_template_file).read()
-    processor.save_pretrained(args.output_dir)
+    write_tokenizer(
+        save_dir=args.output_dir,
+        push_to_hub=args.push_to_hub,
+    )
+
+    # write_image_processor(
+    #     save_dir=args.output_dir,
+    #     push_to_hub=args.push_to_hub,
+    # )
+    write_model(
+        model_path=args.output_dir,
+        input_base_path=args.input_dir,
+        push_to_hub=args.push_to_hub,
+    )
 
 
 if __name__ == "__main__":

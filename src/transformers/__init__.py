@@ -3240,7 +3240,7 @@ else:
         ]
     )
     _import_structure["models.pixtral"].extend(["PixtralPreTrainedModel", "PixtralVisionModel"])
-    _import_structure["models.internvl"].extend(["InternVLPreTrainedModel", "InternVLModel"])
+    _import_structure["models.internvl"].extend(["InternVLPreTrainedModel", "InternVLForConditionalGeneration"])
     _import_structure["models.plbart"].extend(
         [
             "PLBartForCausalLM",
@@ -7519,10 +7519,7 @@ if TYPE_CHECKING:
             InstructBlipVideoQFormerModel,
             InstructBlipVideoVisionModel,
         )
-        from .models.internvl import (
-            InternVLModel,
-            InternVLPreTrainedModel,
-        )
+        from .models.internvl import InternVLForConditionalGeneration, InternVLModel, InternVLPreTrainedModel
         from .models.jamba import (
             JambaForCausalLM,
             JambaForSequenceClassification,
