@@ -861,6 +861,12 @@ class MistralModel(MistralPreTrainedModel):
                         " this may lead to unexpected behaviour for Flash Attention version of Mistral. Make sure to "
                         " call `tokenizer.padding_side  = 'left'` before tokenizing the input. "
                     )
+
+            # Fix different sequence shards going to different attn implementations (fixed vs. varlen) by just forcing
+            # the use of the fixed length implementation.
+            if getattr(self, "sp_size", 1) > 1:
+                return None
+
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None
