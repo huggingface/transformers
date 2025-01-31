@@ -794,7 +794,7 @@ def _load_state_dict_into_meta_model(
 
     # we need this later to initialize tensor parallelism
     if device_mesh is not None:
-        full_tp_plan = model.config.base_tp_plan
+        full_tp_plan = model.config.base_model_tp_plan
         for submodule in model.modules():
             full_tp_plan.update(getattr(submodule, "_tp_plan", {}))
 
