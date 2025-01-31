@@ -45,7 +45,7 @@ class DepthProModelTester:
         parent,
         batch_size=8,
         image_size=64,
-        patch_size=8,
+        patch_size=16,
         num_channels=3,
         is_training=True,
         use_labels=True,
@@ -321,6 +321,11 @@ class DepthProModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
                             -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
+
+    # this started when switched from normal initialization to kaiming_normal intialization
+    # maybe because the magnitude of offset values from ViT-encoders increases when followed by many convolution layers
+    def test_batching_equivalence(self, atol=1e-4, rtol=1e-4):
+        super().test_batching_equivalence(atol=atol, rtol=rtol)
 
     @slow
     def test_model_from_pretrained(self):
