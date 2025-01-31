@@ -22,7 +22,7 @@ from huggingface_hub import hf_hub_download
 
 from transformers import VideoMAEConfig
 from transformers.models.auto import get_values
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import require_torch, require_torch_sdpa, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -213,6 +213,11 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
         return inputs_dict
 
+    @unittest.skip("`mse_cpu` not implemented for 'BFloat16'")
+    @require_torch_sdpa
+    def test_eager_matches_sdpa_inference_1_bfloat16(self):
+        pass
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
@@ -380,7 +385,7 @@ class VideoMAEModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([0.3669, -0.0688, -0.2421]).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_for_pretraining(self):
@@ -404,11 +409,11 @@ class VideoMAEModelIntegrationTest(unittest.TestCase):
             [[0.7994, 0.9612, 0.8508], [0.7401, 0.8958, 0.8302], [0.5862, 0.7468, 0.7325]], device=torch_device
         )
         self.assertEqual(outputs.logits.shape, expected_shape)
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
         # verify the loss (`config.norm_pix_loss` = `True`)
         expected_loss = torch.tensor([0.5142], device=torch_device)
-        self.assertTrue(torch.allclose(outputs.loss, expected_loss, atol=1e-4))
+        torch.testing.assert_close(outputs.loss, expected_loss, rtol=1e-4, atol=1e-4)
 
         # verify the loss (`config.norm_pix_loss` = `False`)
         model = VideoMAEForPreTraining.from_pretrained("MCG-NJU/videomae-base-short", norm_pix_loss=False).to(
@@ -419,4 +424,4 @@ class VideoMAEModelIntegrationTest(unittest.TestCase):
             outputs = model(**inputs)
 
         expected_loss = torch.tensor(torch.tensor([0.6469]), device=torch_device)
-        self.assertTrue(torch.allclose(outputs.loss, expected_loss, atol=1e-4))
+        torch.testing.assert_close(outputs.loss, expected_loss, rtol=1e-4, atol=1e-4)

@@ -157,14 +157,6 @@ class GLPNModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.model_tester = GLPNModelTester(self)
         self.config_tester = GLPNConfigTester(self, config_class=GLPNConfig)
 
-    @unittest.skip(reason="Failing after #32550")
-    def test_pipeline_depth_estimation(self):
-        pass
-
-    @unittest.skip(reason="Failing after #32550")
-    def test_pipeline_depth_estimation_fp16(self):
-        pass
-
     def test_config(self):
         self.config_tester.run_common_tests()
 
@@ -350,4 +342,4 @@ class GLPNModelIntegrationTest(unittest.TestCase):
             [[3.4291, 2.7865, 2.5151], [3.2841, 2.7021, 2.3502], [3.1147, 2.4625, 2.2481]]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.predicted_depth[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.predicted_depth[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

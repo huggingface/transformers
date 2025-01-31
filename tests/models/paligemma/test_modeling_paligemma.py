@@ -14,11 +14,9 @@
 # limitations under the License.
 """Testing suite for the PyTorch PaliGemma model."""
 
-import gc
 import unittest
 
 import requests
-from parameterized import parameterized
 
 from transformers import (
     PaliGemmaConfig,
@@ -28,9 +26,9 @@ from transformers import (
     is_vision_available,
 )
 from transformers.testing_utils import (
+    cleanup,
     require_read_token,
     require_torch,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -42,8 +40,7 @@ from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 
 if is_torch_available():
     import torch
-else:
-    is_torch_greater_or_equal_than_2_0 = False
+
 
 if is_vision_available():
     from PIL import Image
@@ -182,6 +179,7 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     """
 
     all_model_classes = (PaliGemmaForConditionalGeneration,) if is_torch_available() else ()
+    pipeline_model_mapping = {"image-text-to-text": PaliGemmaForConditionalGeneration}
     fx_compatible = False
     test_pruning = False
     test_torchscript = False
@@ -233,7 +231,37 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
             with torch.no_grad():
                 out_ids = model(input_ids=input_ids, **inputs)[0]
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            self.assertTrue(torch.allclose(out_embeds, out_ids))
+            torch.testing.assert_close(out_embeds, out_ids)
+
+    # Copied from tests.models.llava.test_modeling_llava.LlavaForConditionalGenerationModelTest.test_mismatching_num_image_tokens
+    def test_mismatching_num_image_tokens(self):
+        """
+        Tests that VLMs through an error with explicit message saying what is wrong
+        when number of images don't match number of image tokens in the text.
+        Also we need to test multi-image cases when one prompr has multiple image tokens.
+        """
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            _ = model(**input_dict)  # successfull forward with no modifications
+
+            # remove one image but leave the image token in text
+            input_dict["pixel_values"] = input_dict["pixel_values"][-1:, ...]
+            with self.assertRaises(ValueError):
+                _ = model(**input_dict)
+
+            # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
+            input_ids = input_dict["input_ids"][:1]
+            pixel_values = input_dict["pixel_values"][:1]
+            input_ids = torch.cat([input_ids, input_ids], dim=0)
+
+            # one image and two image tokens raise an error
+            with self.assertRaises(ValueError):
+                _ = model(input_ids=input_ids, pixel_values=pixel_values)
+
+            # two images and two image tokens don't raise an error
+            pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
+            _ = model(input_ids=input_ids, pixel_values=pixel_values)
 
     @unittest.skip(
         reason="This architecure seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
@@ -268,14 +296,6 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     @unittest.skip(reason="Some undefined behavior encountered with test versions of this model. Skip for now.")
     def test_model_parallelism(self):
         pass
-
-    @require_torch_sdpa
-    @slow
-    @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
-    def test_eager_matches_sdpa_inference(self, torch_dtype: str):
-        self.skipTest(
-            "Due to custom causal mask, there is a slightly too big difference between eager and sdpa in bfloat16."
-        )
 
     @unittest.skip(
         reason="PaliGemmma's SigLip encoder uses the same initialization scheme as the Flax original implementation"
@@ -315,10 +335,6 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
-    @unittest.skip(reason="TODO (@joao): fix me -- failing to produce similar results")
-    def test_static_cache_matches_dynamic(self):
-        pass
-
     @unittest.skip("FlashAttention only support fp16 and bf16 data type")
     def test_flash_attn_2_fp32_ln(self):
         pass
@@ -327,6 +343,11 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
         "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
     )
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    # TODO (joao, raushan): fix me -- the problem is in `cache_position[0] == 0`, i.e. dynamic control flow
+    @unittest.skip("PaliGemma is not compatible with end-to-end generation compilation")
+    def test_generate_compile_model_forward(self):
         pass
 
 
@@ -338,8 +359,7 @@ class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.processor = PaliGemmaProcessor.from_pretrained("google/paligemma-3b-pt-224")
 
     def tearDown(self):
-        gc.collect()
-        torch.cuda.empty_cache()
+        cleanup(torch_device, gc_collect=True)
 
     def test_small_model_integration_test(self):
         # Let' s make sure we test the preprocessing to replace what is used

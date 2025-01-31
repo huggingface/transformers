@@ -56,12 +56,7 @@ if is_torch_xla_available():
     import torch_xla.core.xla_model as xm
 
 if is_torch_available():
-    from .pytorch_utils import is_torch_greater_or_equal_than_2_0
-
-    if is_torch_greater_or_equal_than_2_0:
-        from torch.optim.lr_scheduler import LRScheduler
-    else:
-        from torch.optim.lr_scheduler import _LRScheduler as LRScheduler
+    from torch.optim.lr_scheduler import LRScheduler
 
 
 logger = logging.get_logger(__name__)
@@ -1395,3 +1390,17 @@ class LayerWiseDummyScheduler(LRScheduler):
 
     def _get_closed_form_lr(self):
         return self.base_lrs
+
+
+def set_rng_state_for_device(device_name, device_module, checkpoint_rng_state, is_distributed):
+    """Helper to set RNG state for a specific device type (CUDA, NPU, MLU, MUSA)"""
+    device_state_key = device_name.lower()
+    err_template = "Didn't manage to set back the RNG states of the {backend} because of the following error:\n {exception}\nThis won't yield the same results as if the training had not been interrupted."
+    try:
+        if is_distributed:
+            device_module.random.set_rng_state_all(checkpoint_rng_state[device_state_key])
+        else:
+            device_module.random.set_rng_state(checkpoint_rng_state[device_state_key])
+    except Exception as e:
+        # Log error if setting RNG state fails
+        logger.error(err_template.format(backend=device_name, exception=e))

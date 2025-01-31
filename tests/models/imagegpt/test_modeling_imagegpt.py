@@ -18,7 +18,7 @@ import inspect
 import unittest
 
 from transformers import ImageGPTConfig
-from transformers.testing_utils import require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import require_torch, require_vision, run_test_using_subprocess, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...generation.test_utils import GenerationTesterMixin
@@ -256,11 +256,9 @@ class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         self.assertEqual(len(scores), length)
         self.assertListEqual([iter_scores.shape for iter_scores in scores], [expected_shape] * len(scores))
 
-    @unittest.skip(
-        reason="After #33632, this test still passes, but many subsequential tests fail with `device-side assert triggered`"
-    )
+    @run_test_using_subprocess
     def test_beam_search_generate_dict_outputs_use_cache(self):
-        pass
+        super().test_beam_search_generate_dict_outputs_use_cache()
 
     def setUp(self):
         self.model_tester = ImageGPTModelTester(self)
@@ -355,4 +353,4 @@ class ImageGPTModelIntegrationTest(unittest.TestCase):
             [[2.3445, 2.6889, 2.7313], [1.0530, 1.2416, 0.5699], [0.2205, 0.7749, 0.3953]]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_slice, rtol=1e-4, atol=1e-4)

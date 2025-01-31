@@ -30,7 +30,7 @@
       "title": "Go to data",
       "tooltip": "Go to data",
       "type": "link",
-      "url": "http://transformers-benchmarks.huggingface.co/d/fdz33iyzln9c0a/transformers-benchmarks?orgId=1&from=${StartTime}&to=${EndTime}"
+      "url": "http://transformers-benchmarks.hf.co/d/fdz33iyzln9c0a/transformers-benchmarks?orgId=1&from=${StartTime}&to=${EndTime}"
     }
   ],
   "liveNow": true,
@@ -39,7 +39,7 @@
       "datasource": {
         "default": true,
         "type": "grafana-postgresql-datasource",
-        "uid": "de0dbhs18ho1sc"
+        "uid": "be28nkzirtb0gd"
       },
       "fieldConfig": {
         "defaults": {
@@ -77,7 +77,7 @@
             "properties": [
               {
                 "id": "custom.width",
-                "value": 364
+                "value": 202
               }
             ]
           },
@@ -101,7 +101,7 @@
             "properties": [
               {
                 "id": "custom.width",
-                "value": 708
+                "value": 524
               }
             ]
           },
@@ -113,7 +113,19 @@
             "properties": [
               {
                 "id": "custom.width",
-                "value": 388
+                "value": 353
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "model_id"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 216
               }
             ]
           }
@@ -143,12 +155,14 @@
       "targets": [
         {
           "datasource": {
-            "type": "grafana-postgresql-datasource"
+            "default": true,
+            "type": "grafana-postgresql-datasource",
+            "uid": "be28nkzirtb0gd"
           },
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT commit_id as commit_id, commit_message, gpu_name FROM benchmarks WHERE branch = '${branch}';",
+          "rawSql": "SELECT commit_id, commit_message, metadata->>'gpu_name' as gpu_name, metadata->>'model_id' as model_id, created_at AS date FROM benchmarks WHERE branch = '${branch}' AND metadata->>'gpu_name' = '${gpu_name}' ORDER BY benchmark_id DESC LIMIT ${last_n_commits};",
           "refId": "A",
           "sql": {
             "columns": [
@@ -232,7 +246,7 @@
       "datasource": {
         "default": true,
         "type": "grafana-postgresql-datasource",
-        "uid": "de0dbhs18ho1sc"
+        "uid": "be28nkzirtb0gd"
       },
       "fieldConfig": {
         "defaults": {
@@ -306,13 +320,14 @@
       "targets": [
         {
           "datasource": {
+            "default": true,
             "type": "grafana-postgresql-datasource",
-            "uid": "bdz2yss7sxo1sc"
+            "uid": "be28nkzirtb0gd"
           },
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT CAST(m.measurements->'first_eager_forward_pass_time_secs' AS double precision) AS first_eager_forward_pass_time_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = '${branch}' AND gpu_name = '${gpu_name}'",
+          "rawSql": "SELECT CAST(m.measurements->'first_eager_forward_pass_time_secs' AS double precision) AS first_eager_forward_pass_time_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = '${branch}' AND b.metadata->>'gpu_name' = '${gpu_name}' ORDER BY b.benchmark_id DESC LIMIT ${last_n_commits};",
           "refId": "A",
           "sql": {
             "columns": [
@@ -334,6 +349,19 @@
         }
       ],
       "title": "First eager forward pass",
+      "transformations": [
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "field": "time"
+              }
+            ]
+          }
+        }
+      ],
       "transparent": true,
       "type": "barchart"
     },
@@ -341,7 +369,7 @@
       "datasource": {
         "default": true,
         "type": "grafana-postgresql-datasource",
-        "uid": "de0dbhs18ho1sc"
+        "uid": "be28nkzirtb0gd"
       },
       "fieldConfig": {
         "defaults": {
@@ -418,13 +446,14 @@
       "targets": [
         {
           "datasource": {
+            "default": true,
             "type": "grafana-postgresql-datasource",
-            "uid": "bdz2yss7sxo1sc"
+            "uid": "be28nkzirtb0gd"
           },
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT CAST(m.measurements->'second_eager_forward_pass_time_secs' AS double precision) AS second_eager_forward_pass_time_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = '${branch}' AND gpu_name = '${gpu_name}'",
+          "rawSql": "SELECT CAST(m.measurements->'second_eager_forward_pass_time_secs' AS double precision) AS second_eager_forward_pass_time_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = '${branch}' AND b.metadata->>'gpu_name' = '${gpu_name}' ORDER BY b.benchmark_id DESC LIMIT ${last_n_commits};",
           "refId": "A",
           "sql": {
             "columns": [
@@ -446,6 +475,19 @@
         }
       ],
       "title": "Second eager forward pass",
+      "transformations": [
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "field": "time"
+              }
+            ]
+          }
+        }
+      ],
       "transparent": true,
       "type": "barchart"
     },
@@ -466,7 +508,7 @@
       "datasource": {
         "default": true,
         "type": "grafana-postgresql-datasource",
-        "uid": "de0dbhs18ho1sc"
+        "uid": "be28nkzirtb0gd"
       },
       "fieldConfig": {
         "defaults": {
@@ -539,13 +581,14 @@
       "targets": [
         {
           "datasource": {
+            "default": true,
             "type": "grafana-postgresql-datasource",
-            "uid": "bdz2yss7sxo1sc"
+            "uid": "be28nkzirtb0gd"
           },
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT CAST(m.measurements->'time_to_first_token_secs' AS double precision) AS time_to_first_token_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = '${branch}' AND gpu_name = '${gpu_name}'",
+          "rawSql": "SELECT CAST(m.measurements->'time_to_first_token_secs' AS double precision) AS time_to_first_token_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = '${branch}' AND b.metadata->>'gpu_name' = '${gpu_name}' ORDER BY b.benchmark_id DESC LIMIT ${last_n_commits};",
           "refId": "A",
           "sql": {
             "columns": [
@@ -567,6 +610,19 @@
         }
       ],
       "title": "Time to first token",
+      "transformations": [
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "field": "time"
+              }
+            ]
+          }
+        }
+      ],
       "transparent": true,
       "type": "barchart"
     },
@@ -574,7 +630,7 @@
       "datasource": {
         "default": true,
         "type": "grafana-postgresql-datasource",
-        "uid": "de0dbhs18ho1sc"
+        "uid": "be28nkzirtb0gd"
       },
       "fieldConfig": {
         "defaults": {
@@ -647,13 +703,14 @@
       "targets": [
         {
           "datasource": {
+            "default": true,
             "type": "grafana-postgresql-datasource",
-            "uid": "bdz2yss7sxo1sc"
+            "uid": "be28nkzirtb0gd"
           },
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT CAST(m.measurements->'time_to_second_token_secs' AS double precision) AS time_to_second_token_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = '${branch}' AND gpu_name = '${gpu_name}'",
+          "rawSql": "SELECT CAST(m.measurements->'time_to_second_token_secs' AS double precision) AS time_to_second_token_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = '${branch}' AND b.metadata->>'gpu_name' = '${gpu_name}' ORDER BY b.benchmark_id DESC LIMIT ${last_n_commits};",
           "refId": "A",
           "sql": {
             "columns": [
@@ -675,6 +732,19 @@
         }
       ],
       "title": "Time to second token",
+      "transformations": [
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "field": "time"
+              }
+            ]
+          }
+        }
+      ],
       "transparent": true,
       "type": "barchart"
     },
@@ -682,7 +752,7 @@
       "datasource": {
         "default": true,
         "type": "grafana-postgresql-datasource",
-        "uid": "de0dbhs18ho1sc"
+        "uid": "be28nkzirtb0gd"
       },
       "fieldConfig": {
         "defaults": {
@@ -755,13 +825,14 @@
       "targets": [
         {
           "datasource": {
+            "default": true,
             "type": "grafana-postgresql-datasource",
-            "uid": "bdz2yss7sxo1sc"
+            "uid": "be28nkzirtb0gd"
           },
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT CAST(m.measurements->'time_to_third_token_secs' AS double precision) AS time_to_third_token_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = '${branch}' AND gpu_name = '${gpu_name}'",
+          "rawSql": "SELECT CAST(m.measurements->'time_to_third_token_secs' AS double precision) AS time_to_third_token_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = '${branch}' AND b.metadata->>'gpu_name' = '${gpu_name}' ORDER BY b.benchmark_id DESC LIMIT ${last_n_commits};",
           "refId": "A",
           "sql": {
             "columns": [
@@ -783,6 +854,19 @@
         }
       ],
       "title": "Time to third token",
+      "transformations": [
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "field": "time"
+              }
+            ]
+          }
+        }
+      ],
       "transparent": true,
       "type": "barchart"
     },
@@ -790,7 +874,7 @@
       "datasource": {
         "default": true,
         "type": "grafana-postgresql-datasource",
-        "uid": "de0dbhs18ho1sc"
+        "uid": "be28nkzirtb0gd"
       },
       "fieldConfig": {
         "defaults": {
@@ -863,13 +947,14 @@
       "targets": [
         {
           "datasource": {
+            "default": true,
             "type": "grafana-postgresql-datasource",
-            "uid": "bdz2yss7sxo1sc"
+            "uid": "be28nkzirtb0gd"
           },
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT CAST(m.measurements->'time_to_next_token_mean_secs' AS double precision) AS time_to_next_token_mean_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = '${branch}' AND gpu_name = '${gpu_name}'",
+          "rawSql": "SELECT CAST(m.measurements->'time_to_next_token_mean_secs' AS double precision) AS time_to_next_token_mean_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = '${branch}' AND b.metadata->>'gpu_name' = '${gpu_name}' ORDER BY b.benchmark_id DESC LIMIT ${last_n_commits};",
           "refId": "A",
           "sql": {
             "columns": [
@@ -891,6 +976,19 @@
         }
       ],
       "title": "Time to subsequent next tokens mean",
+      "transformations": [
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "field": "time"
+              }
+            ]
+          }
+        }
+      ],
       "transparent": true,
       "type": "barchart"
     },
@@ -911,7 +1009,7 @@
       "datasource": {
         "default": true,
         "type": "grafana-postgresql-datasource",
-        "uid": "de0dbhs18ho1sc"
+        "uid": "be28nkzirtb0gd"
       },
       "fieldConfig": {
         "defaults": {
@@ -984,13 +1082,14 @@
       "targets": [
         {
           "datasource": {
+            "default": true,
             "type": "grafana-postgresql-datasource",
-            "uid": "bdz2yss7sxo1sc"
+            "uid": "be28nkzirtb0gd"
           },
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT CAST(m.measurements->'first_compile_generate_time_secs' AS double precision) AS first_compile_generate_time_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = '${branch}' AND gpu_name = '${gpu_name}'",
+          "rawSql": "SELECT CAST(m.measurements->'first_compile_generate_time_secs' AS double precision) AS first_compile_generate_time_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = '${branch}' AND b.metadata->>'gpu_name' = '${gpu_name}' ORDER BY b.benchmark_id DESC LIMIT ${last_n_commits};",
           "refId": "A",
           "sql": {
             "columns": [
@@ -1012,6 +1111,19 @@
         }
       ],
       "title": "First compile generate",
+      "transformations": [
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "field": "time"
+              }
+            ]
+          }
+        }
+      ],
       "transparent": true,
       "type": "barchart"
     },
@@ -1019,7 +1131,7 @@
       "datasource": {
         "default": true,
         "type": "grafana-postgresql-datasource",
-        "uid": "de0dbhs18ho1sc"
+        "uid": "be28nkzirtb0gd"
       },
       "fieldConfig": {
         "defaults": {
@@ -1092,13 +1204,14 @@
       "targets": [
         {
           "datasource": {
+            "default": true,
             "type": "grafana-postgresql-datasource",
-            "uid": "bdz2yss7sxo1sc"
+            "uid": "be28nkzirtb0gd"
           },
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT CAST(m.measurements->'second_compile_generate_time_secs' AS double precision) AS second_compile_generate_time_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = '${branch}' AND gpu_name = '${gpu_name}';",
+          "rawSql": "SELECT CAST(m.measurements->'second_compile_generate_time_secs' AS double precision) AS second_compile_generate_time_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = '${branch}' AND b.metadata->>'gpu_name' = '${gpu_name}' ORDER BY b.benchmark_id DESC LIMIT ${last_n_commits};",
           "refId": "A",
           "sql": {
             "columns": [
@@ -1120,6 +1233,19 @@
         }
       ],
       "title": "Second compile generate",
+      "transformations": [
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "field": "time"
+              }
+            ]
+          }
+        }
+      ],
       "transparent": true,
       "type": "barchart"
     },
@@ -1127,7 +1253,7 @@
       "datasource": {
         "default": true,
         "type": "grafana-postgresql-datasource",
-        "uid": "de0dbhs18ho1sc"
+        "uid": "be28nkzirtb0gd"
       },
       "fieldConfig": {
         "defaults": {
@@ -1200,13 +1326,14 @@
       "targets": [
         {
           "datasource": {
+            "default": true,
             "type": "grafana-postgresql-datasource",
-            "uid": "bdz2yss7sxo1sc"
+            "uid": "be28nkzirtb0gd"
           },
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT CAST(m.measurements->'third_compile_generate_time_secs' AS double precision) AS third_compile_generate_time_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = '${branch}' AND gpu_name = '${gpu_name}';",
+          "rawSql": "SELECT CAST(m.measurements->'third_compile_generate_time_secs' AS double precision) AS third_compile_generate_time_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = '${branch}' AND b.metadata->>'gpu_name' = '${gpu_name}' ORDER BY b.benchmark_id DESC LIMIT ${last_n_commits};",
           "refId": "A",
           "sql": {
             "columns": [
@@ -1228,6 +1355,19 @@
         }
       ],
       "title": "Third compile generate",
+      "transformations": [
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "field": "time"
+              }
+            ]
+          }
+        }
+      ],
       "transparent": true,
       "type": "barchart"
     },
@@ -1235,7 +1375,7 @@
       "datasource": {
         "default": true,
         "type": "grafana-postgresql-datasource",
-        "uid": "de0dbhs18ho1sc"
+        "uid": "be28nkzirtb0gd"
       },
       "fieldConfig": {
         "defaults": {
@@ -1308,13 +1448,14 @@
       "targets": [
         {
           "datasource": {
+            "default": true,
             "type": "grafana-postgresql-datasource",
-            "uid": "bdz2yss7sxo1sc"
+            "uid": "be28nkzirtb0gd"
           },
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT CAST(m.measurements->'fourth_compile_generate_time_secs' AS double precision) AS fourth_compile_generate_time_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = '${branch}' AND gpu_name = '${gpu_name}';",
+          "rawSql": "SELECT CAST(m.measurements->'fourth_compile_generate_time_secs' AS double precision) AS fourth_compile_generate_time_secs, left(b.commit_id, 7), m.time FROM benchmarks as b JOIN model_measurements AS m ON b.benchmark_id = m.benchmark_id WHERE b.branch = '${branch}' AND b.metadata->>'gpu_name' = '${gpu_name}' ORDER BY b.benchmark_id DESC LIMIT ${last_n_commits};",
           "refId": "A",
           "sql": {
             "columns": [
@@ -1336,11 +1477,24 @@
         }
       ],
       "title": "Fourth compile generate",
+      "transformations": [
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "field": "time"
+              }
+            ]
+          }
+        }
+      ],
       "transparent": true,
       "type": "barchart"
     },
     {
-      "collapsed": false,
+      "collapsed": true,
       "gridPos": {
         "h": 1,
         "w": 24,
@@ -1348,749 +1502,734 @@
         "y": 64
       },
       "id": 15,
-      "panels": [],
+      "panels": [
+        {
+          "datasource": {},
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": 60000,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green"
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "percent"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 9,
+            "w": 12,
+            "x": 0,
+            "y": 65
+          },
+          "id": 1,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "default": true,
+                "type": "grafana-postgresql-datasource",
+                "uid": "be28nkzirtb0gd"
+              },
+              "editorMode": "code",
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "SELECT\n  d.cpu_util,\n  d.time\nFROM\n  benchmarks AS b\n  JOIN device_measurements AS d ON b.benchmark_id = d.benchmark_id\nWHERE\n  branch = '${branch}';",
+              "refId": "A",
+              "sql": {
+                "columns": [
+                  {
+                    "parameters": [
+                      {
+                        "name": "cpu_util",
+                        "type": "functionParameter"
+                      }
+                    ],
+                    "type": "function"
+                  },
+                  {
+                    "parameters": [
+                      {
+                        "name": "mem_megabytes",
+                        "type": "functionParameter"
+                      }
+                    ],
+                    "type": "function"
+                  },
+                  {
+                    "parameters": [
+                      {
+                        "name": "gpu_util",
+                        "type": "functionParameter"
+                      }
+                    ],
+                    "type": "function"
+                  },
+                  {
+                    "parameters": [
+                      {
+                        "name": "gpu_mem_megabytes",
+                        "type": "functionParameter"
+                      }
+                    ],
+                    "type": "function"
+                  },
+                  {
+                    "parameters": [
+                      {
+                        "name": "\"time\"",
+                        "type": "functionParameter"
+                      }
+                    ],
+                    "type": "function"
+                  }
+                ],
+                "groupBy": [
+                  {
+                    "property": {
+                      "type": "string"
+                    },
+                    "type": "groupBy"
+                  }
+                ],
+                "limit": 50,
+                "whereJsonTree": {
+                  "children1": [
+                    {
+                      "id": "baa888b8-89ab-4cde-b012-31922f8671e9",
+                      "properties": {
+                        "field": "commit_id",
+                        "fieldSrc": "field",
+                        "operator": "equal",
+                        "value": [
+                          "${commit}"
+                        ],
+                        "valueError": [
+                          null
+                        ],
+                        "valueSrc": [
+                          "value"
+                        ],
+                        "valueType": [
+                          "text"
+                        ]
+                      },
+                      "type": "rule"
+                    }
+                  ],
+                  "id": "bab88a98-0123-4456-b89a-b1922f7d4f11",
+                  "type": "group"
+                },
+                "whereString": "commit_id = '${commit}'"
+              },
+              "table": "measurements"
+            }
+          ],
+          "title": "CPU Utilization",
+          "transparent": true,
+          "type": "timeseries"
+        },
+        {
+          "datasource": {},
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": 60000,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green"
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "percent"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 9,
+            "w": 12,
+            "x": 12,
+            "y": 65
+          },
+          "id": 4,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "default": true,
+                "type": "grafana-postgresql-datasource",
+                "uid": "be28nkzirtb0gd"
+              },
+              "editorMode": "code",
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "SELECT\n  b.commit_id,\n  d.gpu_util,\n  d.time\nFROM\n  benchmarks AS b\n  JOIN device_measurements AS d ON b.benchmark_id = d.benchmark_id\nWHERE\n  branch = '${branch}';",
+              "refId": "A",
+              "sql": {
+                "columns": [
+                  {
+                    "parameters": [
+                      {
+                        "name": "cpu_util",
+                        "type": "functionParameter"
+                      }
+                    ],
+                    "type": "function"
+                  },
+                  {
+                    "parameters": [
+                      {
+                        "name": "mem_megabytes",
+                        "type": "functionParameter"
+                      }
+                    ],
+                    "type": "function"
+                  },
+                  {
+                    "parameters": [
+                      {
+                        "name": "gpu_util",
+                        "type": "functionParameter"
+                      }
+                    ],
+                    "type": "function"
+                  },
+                  {
+                    "parameters": [
+                      {
+                        "name": "gpu_mem_megabytes",
+                        "type": "functionParameter"
+                      }
+                    ],
+                    "type": "function"
+                  },
+                  {
+                    "parameters": [
+                      {
+                        "name": "\"time\"",
+                        "type": "functionParameter"
+                      }
+                    ],
+                    "type": "function"
+                  }
+                ],
+                "groupBy": [
+                  {
+                    "property": {
+                      "type": "string"
+                    },
+                    "type": "groupBy"
+                  }
+                ],
+                "limit": 50,
+                "whereJsonTree": {
+                  "children1": [
+                    {
+                      "id": "baa888b8-89ab-4cde-b012-31922f8671e9",
+                      "properties": {
+                        "field": "commit_id",
+                        "fieldSrc": "field",
+                        "operator": "equal",
+                        "value": [
+                          "${commit}"
+                        ],
+                        "valueError": [
+                          null
+                        ],
+                        "valueSrc": [
+                          "value"
+                        ],
+                        "valueType": [
+                          "text"
+                        ]
+                      },
+                      "type": "rule"
+                    }
+                  ],
+                  "id": "bab88a98-0123-4456-b89a-b1922f7d4f11",
+                  "type": "group"
+                },
+                "whereString": "commit_id = '${commit}'"
+              },
+              "table": "measurements"
+            }
+          ],
+          "title": "GPU Utilization",
+          "transparent": true,
+          "type": "timeseries"
+        },
+        {
+          "datasource": {},
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": 60000,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green"
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "decmbytes"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 9,
+            "w": 12,
+            "x": 0,
+            "y": 74
+          },
+          "id": 2,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "default": true,
+                "type": "grafana-postgresql-datasource",
+                "uid": "be28nkzirtb0gd"
+              },
+              "editorMode": "code",
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "SELECT d.mem_megabytes, d.time FROM benchmarks AS b JOIN device_measurements AS d ON b.benchmark_id = d.benchmark_id WHERE branch = '${branch}';",
+              "refId": "A",
+              "sql": {
+                "columns": [
+                  {
+                    "parameters": [
+                      {
+                        "name": "cpu_util",
+                        "type": "functionParameter"
+                      }
+                    ],
+                    "type": "function"
+                  },
+                  {
+                    "parameters": [
+                      {
+                        "name": "mem_megabytes",
+                        "type": "functionParameter"
+                      }
+                    ],
+                    "type": "function"
+                  },
+                  {
+                    "parameters": [
+                      {
+                        "name": "gpu_util",
+                        "type": "functionParameter"
+                      }
+                    ],
+                    "type": "function"
+                  },
+                  {
+                    "parameters": [
+                      {
+                        "name": "gpu_mem_megabytes",
+                        "type": "functionParameter"
+                      }
+                    ],
+                    "type": "function"
+                  },
+                  {
+                    "parameters": [
+                      {
+                        "name": "\"time\"",
+                        "type": "functionParameter"
+                      }
+                    ],
+                    "type": "function"
+                  }
+                ],
+                "groupBy": [
+                  {
+                    "property": {
+                      "type": "string"
+                    },
+                    "type": "groupBy"
+                  }
+                ],
+                "limit": 50,
+                "whereJsonTree": {
+                  "children1": [
+                    {
+                      "id": "baa888b8-89ab-4cde-b012-31922f8671e9",
+                      "properties": {
+                        "field": "commit_id",
+                        "fieldSrc": "field",
+                        "operator": "equal",
+                        "value": [
+                          "${commit}"
+                        ],
+                        "valueError": [
+                          null
+                        ],
+                        "valueSrc": [
+                          "value"
+                        ],
+                        "valueType": [
+                          "text"
+                        ]
+                      },
+                      "type": "rule"
+                    }
+                  ],
+                  "id": "bab88a98-0123-4456-b89a-b1922f7d4f11",
+                  "type": "group"
+                },
+                "whereString": "commit_id = '${commit}'"
+              },
+              "table": "measurements"
+            }
+          ],
+          "title": "Memory usage",
+          "transparent": true,
+          "type": "timeseries"
+        },
+        {
+          "datasource": {},
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "axisBorderShow": false,
+                "axisCenteredZero": false,
+                "axisColorMode": "text",
+                "axisLabel": "",
+                "axisPlacement": "auto",
+                "barAlignment": 0,
+                "barWidthFactor": 0.6,
+                "drawStyle": "line",
+                "fillOpacity": 0,
+                "gradientMode": "none",
+                "hideFrom": {
+                  "legend": false,
+                  "tooltip": false,
+                  "viz": false
+                },
+                "insertNulls": 60000,
+                "lineInterpolation": "linear",
+                "lineWidth": 1,
+                "pointSize": 5,
+                "scaleDistribution": {
+                  "type": "linear"
+                },
+                "showPoints": "auto",
+                "spanNulls": false,
+                "stacking": {
+                  "group": "A",
+                  "mode": "none"
+                },
+                "thresholdsStyle": {
+                  "mode": "off"
+                }
+              },
+              "mappings": [],
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green"
+                  },
+                  {
+                    "color": "red",
+                    "value": 80
+                  }
+                ]
+              },
+              "unit": "decmbytes"
+            },
+            "overrides": []
+          },
+          "gridPos": {
+            "h": 9,
+            "w": 12,
+            "x": 12,
+            "y": 74
+          },
+          "id": 3,
+          "options": {
+            "legend": {
+              "calcs": [],
+              "displayMode": "list",
+              "placement": "bottom",
+              "showLegend": true
+            },
+            "tooltip": {
+              "mode": "single",
+              "sort": "none"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "default": true,
+                "type": "grafana-postgresql-datasource",
+                "uid": "be28nkzirtb0gd"
+              },
+              "editorMode": "code",
+              "format": "table",
+              "rawQuery": true,
+              "rawSql": "SELECT\n  d.gpu_mem_megabytes,\n  d.time\nFROM\n  benchmarks AS b\n  JOIN device_measurements AS d ON b.benchmark_id = d.benchmark_id\nWHERE\n  branch = '${branch}';",
+              "refId": "A",
+              "sql": {
+                "columns": [
+                  {
+                    "parameters": [
+                      {
+                        "name": "cpu_util",
+                        "type": "functionParameter"
+                      }
+                    ],
+                    "type": "function"
+                  },
+                  {
+                    "parameters": [
+                      {
+                        "name": "mem_megabytes",
+                        "type": "functionParameter"
+                      }
+                    ],
+                    "type": "function"
+                  },
+                  {
+                    "parameters": [
+                      {
+                        "name": "gpu_util",
+                        "type": "functionParameter"
+                      }
+                    ],
+                    "type": "function"
+                  },
+                  {
+                    "parameters": [
+                      {
+                        "name": "gpu_mem_megabytes",
+                        "type": "functionParameter"
+                      }
+                    ],
+                    "type": "function"
+                  },
+                  {
+                    "parameters": [
+                      {
+                        "name": "\"time\"",
+                        "type": "functionParameter"
+                      }
+                    ],
+                    "type": "function"
+                  }
+                ],
+                "groupBy": [
+                  {
+                    "property": {
+                      "type": "string"
+                    },
+                    "type": "groupBy"
+                  }
+                ],
+                "limit": 50,
+                "whereJsonTree": {
+                  "children1": [
+                    {
+                      "id": "baa888b8-89ab-4cde-b012-31922f8671e9",
+                      "properties": {
+                        "field": "commit_id",
+                        "fieldSrc": "field",
+                        "operator": "equal",
+                        "value": [
+                          "${commit}"
+                        ],
+                        "valueError": [
+                          null
+                        ],
+                        "valueSrc": [
+                          "value"
+                        ],
+                        "valueType": [
+                          "text"
+                        ]
+                      },
+                      "type": "rule"
+                    }
+                  ],
+                  "id": "bab88a98-0123-4456-b89a-b1922f7d4f11",
+                  "type": "group"
+                },
+                "whereString": "commit_id = '${commit}'"
+              },
+              "table": "measurements"
+            }
+          ],
+          "title": "GPU memory usage",
+          "transparent": true,
+          "type": "timeseries"
+        }
+      ],
       "title": "Usage metrics",
       "type": "row"
-    },
-    {
-      "datasource": {
-        "default": true,
-        "type": "grafana-postgresql-datasource",
-        "uid": "de0dbhs18ho1sc"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": 60000,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 0,
-        "y": 65
-      },
-      "id": 1,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "bdz2yss7sxo1sc"
-          },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT\n  d.cpu_util,\n  d.time\nFROM\n  benchmarks AS b\n  JOIN device_measurements AS d ON b.benchmark_id = d.benchmark_id\nWHERE\n  branch = '${branch}'",
-          "refId": "A",
-          "sql": {
-            "columns": [
-              {
-                "parameters": [
-                  {
-                    "name": "cpu_util",
-                    "type": "functionParameter"
-                  }
-                ],
-                "type": "function"
-              },
-              {
-                "parameters": [
-                  {
-                    "name": "mem_megabytes",
-                    "type": "functionParameter"
-                  }
-                ],
-                "type": "function"
-              },
-              {
-                "parameters": [
-                  {
-                    "name": "gpu_util",
-                    "type": "functionParameter"
-                  }
-                ],
-                "type": "function"
-              },
-              {
-                "parameters": [
-                  {
-                    "name": "gpu_mem_megabytes",
-                    "type": "functionParameter"
-                  }
-                ],
-                "type": "function"
-              },
-              {
-                "parameters": [
-                  {
-                    "name": "\"time\"",
-                    "type": "functionParameter"
-                  }
-                ],
-                "type": "function"
-              }
-            ],
-            "groupBy": [
-              {
-                "property": {
-                  "type": "string"
-                },
-                "type": "groupBy"
-              }
-            ],
-            "limit": 50,
-            "whereJsonTree": {
-              "children1": [
-                {
-                  "id": "baa888b8-89ab-4cde-b012-31922f8671e9",
-                  "properties": {
-                    "field": "commit_id",
-                    "fieldSrc": "field",
-                    "operator": "equal",
-                    "value": [
-                      "${commit}"
-                    ],
-                    "valueError": [
-                      null
-                    ],
-                    "valueSrc": [
-                      "value"
-                    ],
-                    "valueType": [
-                      "text"
-                    ]
-                  },
-                  "type": "rule"
-                }
-              ],
-              "id": "bab88a98-0123-4456-b89a-b1922f7d4f11",
-              "type": "group"
-            },
-            "whereString": "commit_id = '${commit}'"
-          },
-          "table": "measurements"
-        }
-      ],
-      "title": "CPU Utilization",
-      "transparent": true,
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "default": true,
-        "type": "grafana-postgresql-datasource",
-        "uid": "de0dbhs18ho1sc"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": 60000,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "percent"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 12,
-        "y": 65
-      },
-      "id": 4,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "bdz2yss7sxo1sc"
-          },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT\n  b.commit_id,\n  d.gpu_util,\n  d.time\nFROM\n  benchmarks AS b\n  JOIN device_measurements AS d ON b.benchmark_id = d.benchmark_id\nWHERE\n  branch = '${branch}'",
-          "refId": "A",
-          "sql": {
-            "columns": [
-              {
-                "parameters": [
-                  {
-                    "name": "cpu_util",
-                    "type": "functionParameter"
-                  }
-                ],
-                "type": "function"
-              },
-              {
-                "parameters": [
-                  {
-                    "name": "mem_megabytes",
-                    "type": "functionParameter"
-                  }
-                ],
-                "type": "function"
-              },
-              {
-                "parameters": [
-                  {
-                    "name": "gpu_util",
-                    "type": "functionParameter"
-                  }
-                ],
-                "type": "function"
-              },
-              {
-                "parameters": [
-                  {
-                    "name": "gpu_mem_megabytes",
-                    "type": "functionParameter"
-                  }
-                ],
-                "type": "function"
-              },
-              {
-                "parameters": [
-                  {
-                    "name": "\"time\"",
-                    "type": "functionParameter"
-                  }
-                ],
-                "type": "function"
-              }
-            ],
-            "groupBy": [
-              {
-                "property": {
-                  "type": "string"
-                },
-                "type": "groupBy"
-              }
-            ],
-            "limit": 50,
-            "whereJsonTree": {
-              "children1": [
-                {
-                  "id": "baa888b8-89ab-4cde-b012-31922f8671e9",
-                  "properties": {
-                    "field": "commit_id",
-                    "fieldSrc": "field",
-                    "operator": "equal",
-                    "value": [
-                      "${commit}"
-                    ],
-                    "valueError": [
-                      null
-                    ],
-                    "valueSrc": [
-                      "value"
-                    ],
-                    "valueType": [
-                      "text"
-                    ]
-                  },
-                  "type": "rule"
-                }
-              ],
-              "id": "bab88a98-0123-4456-b89a-b1922f7d4f11",
-              "type": "group"
-            },
-            "whereString": "commit_id = '${commit}'"
-          },
-          "table": "measurements"
-        }
-      ],
-      "title": "GPU Utilization",
-      "transparent": true,
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "default": true,
-        "type": "grafana-postgresql-datasource",
-        "uid": "de0dbhs18ho1sc"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": 60000,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "decmbytes"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 0,
-        "y": 74
-      },
-      "id": 2,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "bdz2yss7sxo1sc"
-          },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT d.mem_megabytes, d.time FROM benchmarks AS b JOIN device_measurements AS d ON b.benchmark_id = d.benchmark_id WHERE branch = '${branch}'",
-          "refId": "A",
-          "sql": {
-            "columns": [
-              {
-                "parameters": [
-                  {
-                    "name": "cpu_util",
-                    "type": "functionParameter"
-                  }
-                ],
-                "type": "function"
-              },
-              {
-                "parameters": [
-                  {
-                    "name": "mem_megabytes",
-                    "type": "functionParameter"
-                  }
-                ],
-                "type": "function"
-              },
-              {
-                "parameters": [
-                  {
-                    "name": "gpu_util",
-                    "type": "functionParameter"
-                  }
-                ],
-                "type": "function"
-              },
-              {
-                "parameters": [
-                  {
-                    "name": "gpu_mem_megabytes",
-                    "type": "functionParameter"
-                  }
-                ],
-                "type": "function"
-              },
-              {
-                "parameters": [
-                  {
-                    "name": "\"time\"",
-                    "type": "functionParameter"
-                  }
-                ],
-                "type": "function"
-              }
-            ],
-            "groupBy": [
-              {
-                "property": {
-                  "type": "string"
-                },
-                "type": "groupBy"
-              }
-            ],
-            "limit": 50,
-            "whereJsonTree": {
-              "children1": [
-                {
-                  "id": "baa888b8-89ab-4cde-b012-31922f8671e9",
-                  "properties": {
-                    "field": "commit_id",
-                    "fieldSrc": "field",
-                    "operator": "equal",
-                    "value": [
-                      "${commit}"
-                    ],
-                    "valueError": [
-                      null
-                    ],
-                    "valueSrc": [
-                      "value"
-                    ],
-                    "valueType": [
-                      "text"
-                    ]
-                  },
-                  "type": "rule"
-                }
-              ],
-              "id": "bab88a98-0123-4456-b89a-b1922f7d4f11",
-              "type": "group"
-            },
-            "whereString": "commit_id = '${commit}'"
-          },
-          "table": "measurements"
-        }
-      ],
-      "title": "Memory usage",
-      "transparent": true,
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "default": true,
-        "type": "grafana-postgresql-datasource",
-        "uid": "de0dbhs18ho1sc"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 0,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": 60000,
-            "lineInterpolation": "linear",
-            "lineWidth": 1,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 80
-              }
-            ]
-          },
-          "unit": "decmbytes"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 9,
-        "w": 12,
-        "x": 12,
-        "y": 74
-      },
-      "id": 3,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "grafana-postgresql-datasource",
-            "uid": "bdz2yss7sxo1sc"
-          },
-          "editorMode": "code",
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT\n  d.gpu_mem_megabytes,\n  d.time\nFROM\n  benchmarks AS b\n  JOIN device_measurements AS d ON b.benchmark_id = d.benchmark_id\nWHERE\n  branch = '${branch}'",
-          "refId": "A",
-          "sql": {
-            "columns": [
-              {
-                "parameters": [
-                  {
-                    "name": "cpu_util",
-                    "type": "functionParameter"
-                  }
-                ],
-                "type": "function"
-              },
-              {
-                "parameters": [
-                  {
-                    "name": "mem_megabytes",
-                    "type": "functionParameter"
-                  }
-                ],
-                "type": "function"
-              },
-              {
-                "parameters": [
-                  {
-                    "name": "gpu_util",
-                    "type": "functionParameter"
-                  }
-                ],
-                "type": "function"
-              },
-              {
-                "parameters": [
-                  {
-                    "name": "gpu_mem_megabytes",
-                    "type": "functionParameter"
-                  }
-                ],
-                "type": "function"
-              },
-              {
-                "parameters": [
-                  {
-                    "name": "\"time\"",
-                    "type": "functionParameter"
-                  }
-                ],
-                "type": "function"
-              }
-            ],
-            "groupBy": [
-              {
-                "property": {
-                  "type": "string"
-                },
-                "type": "groupBy"
-              }
-            ],
-            "limit": 50,
-            "whereJsonTree": {
-              "children1": [
-                {
-                  "id": "baa888b8-89ab-4cde-b012-31922f8671e9",
-                  "properties": {
-                    "field": "commit_id",
-                    "fieldSrc": "field",
-                    "operator": "equal",
-                    "value": [
-                      "${commit}"
-                    ],
-                    "valueError": [
-                      null
-                    ],
-                    "valueSrc": [
-                      "value"
-                    ],
-                    "valueType": [
-                      "text"
-                    ]
-                  },
-                  "type": "rule"
-                }
-              ],
-              "id": "bab88a98-0123-4456-b89a-b1922f7d4f11",
-              "type": "group"
-            },
-            "whereString": "commit_id = '${commit}'"
-          },
-          "table": "measurements"
-        }
-      ],
-      "title": "GPU memory usage",
-      "transparent": true,
-      "type": "timeseries"
     }
   ],
   "schemaVersion": 39,
@@ -2104,8 +2243,9 @@
           "value": "main"
         },
         "datasource": {
+          "default": true,
           "type": "grafana-postgresql-datasource",
-          "uid": "de0dbhs18ho1sc"
+          "uid": "be28nkzirtb0gd"
         },
         "definition": "SELECT DISTINCT branch FROM benchmarks;",
         "description": "",
@@ -2116,7 +2256,7 @@
         "name": "branch",
         "options": [],
         "query": "SELECT DISTINCT branch FROM benchmarks;",
-        "refresh": 2,
+        "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
         "sort": 0,
@@ -2125,12 +2265,13 @@
       {
         "current": {
           "selected": false,
-          "text": "1728662868776",
-          "value": "1728662868776"
+          "text": "1729701492845",
+          "value": "1729701492845"
         },
         "datasource": {
+          "default": true,
           "type": "grafana-postgresql-datasource",
-          "uid": "de0dbhs18ho1sc"
+          "uid": "be28nkzirtb0gd"
         },
         "definition": "SELECT created_at - INTERVAL '5 secs' FROM benchmarks WHERE branch = '${branch}' ORDER BY benchmark_id ASC LIMIT 1;",
         "description": "",
@@ -2149,12 +2290,13 @@
       {
         "current": {
           "selected": false,
-          "text": "1728663254125",
-          "value": "1728663254125"
+          "text": "1730393397577",
+          "value": "1730393397577"
         },
         "datasource": {
+          "default": true,
           "type": "grafana-postgresql-datasource",
-          "uid": "de0dbhs18ho1sc"
+          "uid": "be28nkzirtb0gd"
         },
         "definition": "SELECT time + INTERVAL '5 secs' FROM benchmarks AS b JOIN device_measurements AS d ON b.benchmark_id = d.benchmark_id WHERE branch = '${branch}' ORDER BY b.benchmark_id DESC, d.measurement_id DESC LIMIT 1;",
         "description": "",
@@ -2164,7 +2306,7 @@
         "name": "EndTime",
         "options": [],
         "query": "SELECT time + INTERVAL '5 secs' FROM benchmarks AS b JOIN device_measurements AS d ON b.benchmark_id = d.benchmark_id WHERE branch = '${branch}' ORDER BY b.benchmark_id DESC, d.measurement_id DESC LIMIT 1;",
-        "refresh": 2,
+        "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
         "sort": 0,
@@ -2178,21 +2320,43 @@
         },
         "datasource": {
           "type": "grafana-postgresql-datasource",
-          "uid": "de0dbhs18ho1sc"
+          "uid": "be28nkzirtb0gd"
         },
-        "definition": "SELECT DISTINCT gpu_name FROM benchmarks;",
+        "definition": "SELECT DISTINCT metadata->>'gpu_name' FROM benchmarks;",
+        "description": "",
         "hide": 0,
         "includeAll": false,
         "label": "GPU",
         "multi": false,
         "name": "gpu_name",
         "options": [],
-        "query": "SELECT DISTINCT gpu_name FROM benchmarks;",
+        "query": "SELECT DISTINCT metadata->>'gpu_name' FROM benchmarks;",
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
         "sort": 0,
         "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "10",
+          "value": "10"
+        },
+        "description": "The number of commits to display, going from most recent to the nth commit.",
+        "hide": 0,
+        "label": "Last # of commits",
+        "name": "last_n_commits",
+        "options": [
+          {
+            "selected": true,
+            "text": "10",
+            "value": "10"
+          }
+        ],
+        "query": "10",
+        "skipUrlSync": false,
+        "type": "textbox"
       }
     ]
   },
@@ -2206,6 +2370,6 @@
   "timezone": "browser",
   "title": "Transformers benchmarks",
   "uid": "fdz33iyzln9c0a",
-  "version": 11,
+  "version": 10,
   "weekStart": ""
 }

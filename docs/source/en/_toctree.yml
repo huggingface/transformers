@@ -139,8 +139,6 @@
     title: Export to TFLite
   - local: torchscript
     title: Export to TorchScript
-  - local: benchmarks
-    title: Benchmarks
   - local: notebooks
     title: Notebooks with examples
   - local: community
@@ -167,10 +165,14 @@
     title: AWQ
   - local: quantization/aqlm
     title: AQLM
+  - local: quantization/vptq
+    title: VPTQ
   - local: quantization/quanto
     title: Quanto
   - local: quantization/eetq
     title: EETQ
+  - local: quantization/higgs
+    title: HIGGS
   - local: quantization/hqq
     title: HQQ
   - local: quantization/fbgemm_fp8
@@ -218,6 +220,8 @@
       title: CPU inference
     - local: perf_infer_gpu_one
       title: GPU inference
+    - local: perf_infer_gpu_multi
+      title: Multi-GPU inference
     title: Optimizing inference
   - local: big_models
     title: Instantiate a big model
@@ -320,6 +324,8 @@
       sections:
       - local: model_doc/albert
         title: ALBERT
+      - local: model_doc/bamba
+        title: Bamba
       - local: model_doc/bart
         title: BART
       - local: model_doc/barthez
@@ -360,6 +366,8 @@
         title: CodeLlama
       - local: model_doc/cohere
         title: Cohere
+      - local: model_doc/cohere2
+        title: Cohere2
       - local: model_doc/convbert
         title: ConvBERT
       - local: model_doc/cpm
@@ -376,6 +384,8 @@
         title: DeBERTa-v2
       - local: model_doc/dialogpt
         title: DialoGPT
+      - local: model_doc/diffllama
+        title: DiffLlama
       - local: model_doc/distilbert
         title: DistilBERT
       - local: model_doc/dpr
@@ -392,10 +402,10 @@
         title: ESM
       - local: model_doc/falcon
         title: Falcon
+      - local: model_doc/falcon3
+        title: Falcon3
       - local: model_doc/falcon_mamba
         title: FalconMamba
-      - local: model_doc/fastspeech2_conformer
-        title: FastSpeech2Conformer
       - local: model_doc/flan-t5
         title: FLAN-T5
       - local: model_doc/flan-ul2
@@ -438,6 +448,10 @@
         title: Granite
       - local: model_doc/granitemoe
         title: GraniteMoe
+      - local: model_doc/granitevision
+        title: GraniteVision
+      - local: model_doc/helium
+        title: Helium
       - local: model_doc/herbert
         title: HerBERT
       - local: model_doc/ibert
@@ -490,6 +504,8 @@
         title: mLUKE
       - local: model_doc/mobilebert
         title: MobileBERT
+      - local: model_doc/modernbert
+        title: ModernBert
       - local: model_doc/mpnet
         title: MPNet
       - local: model_doc/mpt
@@ -514,6 +530,8 @@
         title: Nyströmformer
       - local: model_doc/olmo
         title: OLMo
+      - local: model_doc/olmo2
+        title: OLMo2
       - local: model_doc/olmoe
         title: OLMoE
       - local: model_doc/open-llama
@@ -608,6 +626,8 @@
         title: YOSO
       - local: model_doc/zamba
         title: Zamba
+      - local: model_doc/zamba2
+        title: Zamba2
       title: Text models
     - isExpanded: false
       sections:
@@ -639,6 +659,8 @@
         title: DiNAT
       - local: model_doc/dinov2
         title: DINOV2
+      - local: model_doc/dinov2_with_registers
+        title: DINOv2 with Registers
       - local: model_doc/dit
         title: DiT
       - local: model_doc/dpt
@@ -653,6 +675,8 @@
         title: GLPN
       - local: model_doc/hiera
         title: Hiera
+      - local: model_doc/ijepa
+        title: I-JEPA
       - local: model_doc/imagegpt
         title: ImageGPT
       - local: model_doc/levit
@@ -687,6 +711,8 @@
         title: SegFormer
       - local: model_doc/seggpt
         title: SegGpt
+      - local: model_doc/superglue
+        title: SuperGlue
       - local: model_doc/superpoint
         title: SuperPoint
       - local: model_doc/swiftformer
@@ -699,6 +725,10 @@
         title: Swin2SR
       - local: model_doc/table-transformer
         title: Table Transformer
+      - local: model_doc/textnet
+        title: TextNet
+      - local: model_doc/timm_wrapper
+        title: Timm Wrapper
       - local: model_doc/upernet
         title: UperNet
       - local: model_doc/van
@@ -715,6 +745,8 @@
         title: ViTMatte
       - local: model_doc/vit_msn
         title: ViTMSN
+      - local: model_doc/vitpose
+        title: ViTPose
       - local: model_doc/yolos
         title: YOLOS
       - local: model_doc/zoedepth
@@ -732,8 +764,8 @@
         title: dac
       - local: model_doc/encodec
         title: EnCodec
-      - local: model_doc/hiera
-        title: Hiera
+      - local: model_doc/fastspeech2_conformer
+        title: FastSpeech2Conformer
       - local: model_doc/hubert
         title: Hubert
       - local: model_doc/mctct
@@ -742,6 +774,8 @@
         title: Mimi
       - local: model_doc/mms
         title: MMS
+      - local: model_doc/moonshine
+        title: Moonshine
       - local: model_doc/moshi
         title: Moshi
       - local: model_doc/musicgen
@@ -804,6 +838,8 @@
         title: ALIGN
       - local: model_doc/altclip
         title: AltCLIP
+      - local: model_doc/aria
+        title: Aria
       - local: model_doc/blip
         title: BLIP
       - local: model_doc/blip-2
@@ -822,12 +858,16 @@
         title: CLIPSeg
       - local: model_doc/clvp
         title: CLVP
+      - local: model_doc/colpali
+        title: ColPali
       - local: model_doc/data2vec
         title: Data2Vec
       - local: model_doc/deplot
         title: DePlot
       - local: model_doc/donut
         title: Donut
+      - local: model_doc/emu3
+        title: Emu3
       - local: model_doc/flava
         title: FLAVA
       - local: model_doc/git
@@ -892,6 +932,8 @@
         title: Pix2Struct
       - local: model_doc/pixtral
         title: Pixtral
+      - local: model_doc/qwen2_5_vl
+        title: Qwen2.5-VL
       - local: model_doc/qwen2_audio
         title: Qwen2Audio
       - local: model_doc/qwen2_vl

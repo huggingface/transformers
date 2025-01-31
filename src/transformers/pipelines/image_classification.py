@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import warnings
 from typing import List, Union
 
 import numpy as np
@@ -113,9 +112,6 @@ class ImageClassificationPipeline(Pipeline):
     def _sanitize_parameters(self, top_k=None, function_to_apply=None, timeout=None):
         preprocess_params = {}
         if timeout is not None:
-            warnings.warn(
-                "The `timeout` argument is deprecated and will be removed in version 5 of Transformers", FutureWarning
-            )
             preprocess_params["timeout"] = timeout
         postprocess_params = {}
         if top_k is not None:
@@ -159,6 +155,9 @@ class ImageClassificationPipeline(Pipeline):
             top_k (`int`, *optional*, defaults to 5):
                 The number of top labels that will be returned by the pipeline. If the provided number is higher than
                 the number of labels available in the model configuration, it will default to the number of labels.
+            timeout (`float`, *optional*, defaults to None):
+                The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
+                the call may block forever.
 
         Return:
             A dictionary or a list of dictionaries containing result. If the input is a single image, will return a
@@ -190,9 +189,9 @@ class ImageClassificationPipeline(Pipeline):
 
     def postprocess(self, model_outputs, function_to_apply=None, top_k=5):
         if function_to_apply is None:
-            if self.model.config.problem_type == "single_label_classification" or self.model.config.num_labels == 1:
+            if self.model.config.problem_type == "multi_label_classification" or self.model.config.num_labels == 1:
                 function_to_apply = ClassificationFunction.SIGMOID
-            elif self.model.config.problem_type == "multi_label_classification" or self.model.config.num_labels > 1:
+            elif self.model.config.problem_type == "single_label_classification" or self.model.config.num_labels > 1:
                 function_to_apply = ClassificationFunction.SOFTMAX
             elif hasattr(self.model.config, "function_to_apply") and function_to_apply is None:
                 function_to_apply = self.model.config.function_to_apply

@@ -67,6 +67,7 @@ from .fill_mask import FillMaskPipeline
 from .image_classification import ImageClassificationPipeline
 from .image_feature_extraction import ImageFeatureExtractionPipeline
 from .image_segmentation import ImageSegmentationPipeline
+from .image_text_to_text import ImageTextToTextPipeline
 from .image_to_image import ImageToImagePipeline
 from .image_to_text import ImageToTextPipeline
 from .mask_generation import MaskGenerationPipeline
@@ -119,6 +120,7 @@ if is_torch_available():
         AutoModelForDocumentQuestionAnswering,
         AutoModelForImageClassification,
         AutoModelForImageSegmentation,
+        AutoModelForImageTextToText,
         AutoModelForMaskedLM,
         AutoModelForMaskGeneration,
         AutoModelForObjectDetection,
@@ -384,6 +386,17 @@ SUPPORTED_TASKS = {
         },
         "type": "multimodal",
     },
+    "image-text-to-text": {
+        "impl": ImageTextToTextPipeline,
+        "tf": (),
+        "pt": (AutoModelForImageTextToText,) if is_torch_available() else (),
+        "default": {
+            "model": {
+                "pt": ("llava-hf/llava-onevision-qwen2-0.5b-ov-hf", "2c9ba3b"),
+            }
+        },
+        "type": "multimodal",
+    },
     "object-detection": {
         "impl": ObjectDetectionPipeline,
         "tf": (),
@@ -481,7 +494,7 @@ def get_task(model: str, token: Optional[str] = None, **deprecated_kwargs) -> st
         raise RuntimeError(
             f"The model {model} does not seem to have a correct `pipeline_tag` set to infer the task automatically"
         )
-    if getattr(info, "library_name", "transformers") != "transformers":
+    if getattr(info, "library_name", "transformers") not in {"transformers", "timm"}:
         raise RuntimeError(f"This model is meant to be used with {info.library_name} not with transformers")
     task = info.pipeline_tag
     return task
@@ -601,6 +614,7 @@ def pipeline(
             - `"image-classification"`: will return a [`ImageClassificationPipeline`].
             - `"image-feature-extraction"`: will return an [`ImageFeatureExtractionPipeline`].
             - `"image-segmentation"`: will return a [`ImageSegmentationPipeline`].
+            - `"image-text-to-text"`: will return a [`ImageTextToTextPipeline`].
             - `"image-to-image"`: will return a [`ImageToImagePipeline`].
             - `"image-to-text"`: will return a [`ImageToTextPipeline`].
             - `"mask-generation"`: will return a [`MaskGenerationPipeline`].

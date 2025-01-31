@@ -14,7 +14,6 @@
 # limitations under the License.
 """Testing suite for the PyTorch Wav2Vec2 model."""
 
-import gc
 import math
 import multiprocessing
 import os
@@ -30,7 +29,8 @@ from pytest import mark
 from transformers import Wav2Vec2Config, is_torch_available
 from transformers.testing_utils import (
     CaptureLogger,
-    backend_empty_cache,
+    cleanup,
+    is_flaky,
     is_pt_flax_cross_test,
     is_pyctcdecode_available,
     is_torchaudio_available,
@@ -864,6 +864,12 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @is_flaky(
+        description="The `codevector_idx` computed with `argmax()` in `Wav2Vec2GumbelVectorQuantizer.forward` is not stable."
+    )
+    def test_batching_equivalence(self):
+        super().test_batching_equivalence()
+
     def test_model_with_adapter(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_with_adapter(*config_and_inputs)
@@ -1160,7 +1166,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
 
         logits_2 = get_logits(model_2, input_features)
 
-        self.assertTrue(torch.allclose(logits, logits_2, atol=1e-3))
+        torch.testing.assert_close(logits, logits_2, rtol=1e-3, atol=1e-3)
 
     # test that loading adapter weights with mismatched vocab sizes can be loaded
     def test_load_target_lang_with_mismatched_size(self):
@@ -1197,7 +1203,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
 
         logits_2 = get_logits(model_2, input_features)
 
-        self.assertTrue(torch.allclose(logits, logits_2, atol=1e-3))
+        torch.testing.assert_close(logits, logits_2, rtol=1e-3, atol=1e-3)
 
     def test_load_attn_adapter(self):
         processor = Wav2Vec2Processor.from_pretrained(
@@ -1244,7 +1250,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
                 model.load_adapter("ita", use_safetensors=True)
             logits_2 = get_logits(model, input_features)
 
-            self.assertTrue(torch.allclose(logits, logits_2, atol=1e-3))
+            torch.testing.assert_close(logits, logits_2, rtol=1e-3, atol=1e-3)
 
         with tempfile.TemporaryDirectory() as tempdir:
             model.save_pretrained(tempdir)
@@ -1265,7 +1271,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
 
             logits_2 = get_logits(model, input_features)
 
-            self.assertTrue(torch.allclose(logits, logits_2, atol=1e-3))
+            torch.testing.assert_close(logits, logits_2, rtol=1e-3, atol=1e-3)
 
         model = Wav2Vec2ForCTC.from_pretrained("hf-internal-testing/tiny-random-wav2vec2-adapter")
         logits = get_logits(model, input_features)
@@ -1276,7 +1282,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
 
         logits_2 = get_logits(model, input_features)
 
-        self.assertTrue(torch.allclose(logits, logits_2, atol=1e-3))
+        torch.testing.assert_close(logits, logits_2, rtol=1e-3, atol=1e-3)
 
     @slow
     def test_model_from_pretrained(self):
@@ -1460,8 +1466,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
-        gc.collect()
-        backend_empty_cache(torch_device)
+        cleanup(torch_device, gc_collect=True)
 
     def _load_datasamples(self, num_samples):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -1590,7 +1595,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         ], device=torch_device)
         # fmt: on
 
-        self.assertTrue(torch.allclose(cosine_sim_masked, expected_cosine_sim_masked, atol=1e-3))
+        torch.testing.assert_close(cosine_sim_masked, expected_cosine_sim_masked, rtol=1e-3, atol=1e-3)
 
     def test_inference_pretrained(self):
         model = Wav2Vec2ForPreTraining.from_pretrained("facebook/wav2vec2-base")
@@ -1729,7 +1734,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         expected_logits = torch.tensor([6.1186, 11.8961, 10.2931, 6.0898], device=torch_device)
 
         self.assertListEqual(predicted_ids.tolist(), expected_labels)
-        self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=1e-2))
+        torch.testing.assert_close(predicted_logits, expected_logits, rtol=1e-2, atol=1e-2)
 
     def test_inference_intent_classification(self):
         model = Wav2Vec2ForSequenceClassification.from_pretrained("superb/wav2vec2-base-superb-ic").to(torch_device)
@@ -1757,9 +1762,9 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(predicted_ids_object.tolist(), expected_labels_object)
         self.assertListEqual(predicted_ids_location.tolist(), expected_labels_location)
 
-        self.assertTrue(torch.allclose(predicted_logits_action, expected_logits_action, atol=1e-2))
-        self.assertTrue(torch.allclose(predicted_logits_object, expected_logits_object, atol=1e-2))
-        self.assertTrue(torch.allclose(predicted_logits_location, expected_logits_location, atol=1e-2))
+        torch.testing.assert_close(predicted_logits_action, expected_logits_action, rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(predicted_logits_object, expected_logits_object, rtol=1e-2, atol=1e-2)
+        torch.testing.assert_close(predicted_logits_location, expected_logits_location, rtol=1e-2, atol=1e-2)
 
     def test_inference_speaker_identification(self):
         model = Wav2Vec2ForSequenceClassification.from_pretrained("superb/wav2vec2-base-superb-sid").to(torch_device)
@@ -1780,7 +1785,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         expected_logits = torch.tensor([37.5627, 71.6362, 64.2419, 31.7778], device=torch_device)
 
         self.assertListEqual(predicted_ids.tolist(), expected_labels)
-        self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=1e-2))
+        torch.testing.assert_close(predicted_logits, expected_logits, rtol=1e-2, atol=1e-2)
 
     def test_inference_emotion_recognition(self):
         model = Wav2Vec2ForSequenceClassification.from_pretrained("superb/wav2vec2-base-superb-er").to(torch_device)
@@ -1799,7 +1804,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         expected_logits = torch.tensor([2.1722, 3.0779, 8.0287, 6.6797], device=torch_device)
 
         self.assertListEqual(predicted_ids.tolist(), expected_labels)
-        self.assertTrue(torch.allclose(predicted_logits, expected_logits, atol=1e-2))
+        torch.testing.assert_close(predicted_logits, expected_logits, rtol=1e-2, atol=1e-2)
 
     def test_phoneme_recognition(self):
         model = Wav2Vec2ForCTC.from_pretrained("facebook/wav2vec2-lv-60-espeak-cv-ft").to(torch_device)
@@ -1931,7 +1936,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         )
         self.assertEqual(labels[0, :, 0].sum(), 555)
         self.assertEqual(labels[0, :, 1].sum(), 299)
-        self.assertTrue(torch.allclose(outputs.logits[:, :4], expected_logits, atol=1e-2))
+        torch.testing.assert_close(outputs.logits[:, :4], expected_logits, rtol=1e-2, atol=1e-2)
 
     def test_inference_speaker_verification(self):
         model = Wav2Vec2ForXVector.from_pretrained("anton-l/wav2vec2-base-superb-sv").to(torch_device)

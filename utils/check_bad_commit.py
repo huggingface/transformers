@@ -46,7 +46,7 @@ result = subprocess.run(
 print(result.stdout)
 
 if len(result.stderr) > 0:
-    if "ERROR: not found: " in result.stderr:
+    if "ERROR: file or directory not found: " in result.stderr:
         print("test not found in this commit")
         exit(0)
     else:
@@ -74,6 +74,9 @@ def find_bad_commit(target_test, start_commit, end_commit):
     Returns:
         `str`: The earliest commit at which `target_test` fails.
     """
+
+    if start_commit == end_commit:
+        return start_commit
 
     create_script(target_test=target_test)
 

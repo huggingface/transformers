@@ -1,4 +1,3 @@
-import warnings
 from typing import Any, Dict, List, Union
 
 from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging, requires_backends
@@ -64,9 +63,6 @@ class ObjectDetectionPipeline(Pipeline):
     def _sanitize_parameters(self, **kwargs):
         preprocess_params = {}
         if "timeout" in kwargs:
-            warnings.warn(
-                "The `timeout` argument is deprecated and will be removed in version 5 of Transformers", FutureWarning
-            )
             preprocess_params["timeout"] = kwargs["timeout"]
         postprocess_kwargs = {}
         if "threshold" in kwargs:
@@ -89,6 +85,9 @@ class ObjectDetectionPipeline(Pipeline):
                 same format: all as HTTP(S) links, all as local paths, or all as PIL images.
             threshold (`float`, *optional*, defaults to 0.5):
                 The probability necessary to make a prediction.
+            timeout (`float`, *optional*, defaults to None):
+                The maximum time in seconds to wait for fetching images from the web. If None, no timeout is set and
+                the call may block forever.
 
         Return:
             A list of dictionaries or a list of list of dictionaries containing the result. If the input is a single

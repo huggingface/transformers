@@ -85,8 +85,9 @@ class SummarizationPipelineTests(unittest.TestCase):
                 and len(summarizer.model.trainable_weights) > 0
                 and "GPU" in summarizer.model.trainable_weights[0].device
             ):
-                with self.assertRaises(Exception):
-                    outputs = summarizer("This " * 1000)
+                if str(summarizer.device) == "cpu":
+                    with self.assertRaises(Exception):
+                        outputs = summarizer("This " * 1000)
         outputs = summarizer("This " * 1000, truncation=TruncationStrategy.ONLY_FIRST)
 
     @require_torch

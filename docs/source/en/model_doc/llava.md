@@ -40,6 +40,13 @@ The original code can be found [here](https://github.com/haotian-liu/LLaVA/tree/
 
 - Note the model has not been explicitly trained to process multiple images in the same prompt, although this is technically possible, you may experience inaccurate results.
 
+
+> [!NOTE]
+> LLaVA models after release v4.46 will raise warnings about adding `processor.patch_size = {{patch_size}}`, `processor.num_additional_image_tokens = {{num_additional_image_tokens}}` and processor.vision_feature_select_strategy = {{vision_feature_select_strategy}}`. It is strongly recommended to add the attributes to the processor if you own the model checkpoint, or open a PR if it is not owned by you.
+Adding these attributes means that LLaVA will try to infer the number of image tokens required per image and expand the text with as many `<image>` placeholders as there will be tokens. Usually it is around 500 tokens per image, so make sure that the text is not truncated as otherwise there will be failure when merging the embeddings.
+The attributes can be obtained from model config, as `model.config.vision_config.patch_size` or `model.config.vision_feature_select_strategy`. The `num_additional_image_tokens` should be `1` if the vision backbone adds a CLS token or `0` if nothing extra is added to the vision patches.
+
+
 ### Single image inference
 
 For best results, we recommend users to use the processor's `apply_chat_template()` method to format your prompt correctly. For that you need to construct a conversation history, passing in a plain string will not format your prompt. Each message in the conversation history for chat templates is a dictionary with keys "role" and "content". The "content" should be a list of dictionaries, for "text" and "image" modalities, as follows:
@@ -85,10 +92,10 @@ LLaVa also supports batched inference. Here is how you can do it:
 import requests
 from PIL import Image
 import torch
-from transformers import AutoProcessor, LLavaForConditionalGeneration
+from transformers import AutoProcessor, LlavaForConditionalGeneration
 
 # Load the model in half-precision
-model = LLavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", torch_dtype=torch.float16, device_map="auto")
+model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", torch_dtype=torch.float16, device_map="auto")
 processor = AutoProcessor.from_pretrained("llava-hf/llava-1.5-7b-hf")
 
 # Get two different images
@@ -124,7 +131,7 @@ prompt_2 = processor.apply_chat_template(conversation_2, add_generation_prompt=T
 prompts = [prompt_1, prompt_2]
 
 # We can simply feed images in the order they have to be used in the text prompt
-inputs = processor(images=[image_stop, image_cats, image_snowman], text=prompts, padding=True, return_tensors="pt").to(model.device, torch.float16)
+inputs = processor(images=[image_stop, image_cats], text=prompts, padding=True, return_tensors="pt").to(model.device, torch.float16)
 
 # Generate
 generate_ids = model.generate(**inputs, max_new_tokens=30)
@@ -155,6 +162,16 @@ For multiple turns conversation:
 "USER: <image>\n<prompt1> ASSISTANT: <answer1></s>USER: <prompt2> ASSISTANT: <answer2></s>USER: <prompt3> ASSISTANT:"
 ```
 
+## Note regarding reproducing original implementation
+
+In order to match the logits of the [original implementation](https://github.com/haotian-liu/LLaVA/tree/main), one needs to additionally specify `do_pad=True` when instantiating `LLavaImageProcessor`:
+
+```python
+from transformers import LLavaImageProcessor
+
+image_processor = LLavaImageProcessor.from_pretrained("https://huggingface.co/llava-hf/llava-1.5-7b-hf", do_pad=True)
+```
+
 ### Using Flash Attention 2
 
 Flash Attention 2 is an even faster, optimized version of the previous optimization, please refer to the [Flash Attention 2 section of performance docs](https://huggingface.co/docs/transformers/perf_infer_gpu_one).
@@ -172,6 +189,11 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 ## LlavaConfig
 
 [[autodoc]] LlavaConfig
+
+## LlavaImageProcessor
+
+[[autodoc]] LlavaImageProcessor
+    - preprocess
 
 ## LlavaProcessor
 

@@ -17,10 +17,19 @@ import os
 import tempfile
 import unittest
 
+from datasets import Dataset, DatasetDict
 from huggingface_hub import hf_hub_download
 from packaging import version
 
-from transformers import AutoModelForCausalLM, OPTForCausalLM, logging
+from transformers import (
+    AutoModelForCausalLM,
+    AutoModelForSequenceClassification,
+    AutoTokenizer,
+    OPTForCausalLM,
+    Trainer,
+    TrainingArguments,
+    logging,
+)
 from transformers.testing_utils import (
     CaptureLogger,
     require_bitsandbytes,
@@ -157,7 +166,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 peft_logits_enabled = peft_model(dummy_input).logits
 
-                self.assertTrue(torch.allclose(peft_logits, peft_logits_enabled, atol=1e-12, rtol=1e-12))
+                torch.testing.assert_close(peft_logits, peft_logits_enabled, rtol=1e-12, atol=1e-12)
                 self.assertFalse(torch.allclose(peft_logits_enabled, peft_logits_disabled, atol=1e-12, rtol=1e-12))
 
     def test_peft_add_adapter(self):
@@ -341,7 +350,6 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 self.assertFalse(
                     torch.allclose(logits_adapter_1.logits, logits_adapter_mixed.logits, atol=1e-6, rtol=1e-6)
                 )
-
                 self.assertFalse(
                     torch.allclose(logits_adapter_2.logits, logits_adapter_mixed.logits, atol=1e-6, rtol=1e-6)
                 )
@@ -349,6 +357,70 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 # multi active adapter saving not supported
                 with self.assertRaises(ValueError), tempfile.TemporaryDirectory() as tmpdirname:
                     model.save_pretrained(tmpdirname)
+
+    def test_delete_adapter(self):
+        """
+        Enhanced test for `delete_adapter` to handle multiple adapters,
+        edge cases, and proper error handling.
+        """
+        from peft import LoraConfig
+
+        for model_id in self.transformers_test_model_ids:
+            for transformers_class in self.transformers_test_model_classes:
+                model = transformers_class.from_pretrained(model_id).to(torch_device)
+
+                # Add multiple adapters
+                peft_config_1 = LoraConfig(init_lora_weights=False)
+                peft_config_2 = LoraConfig(init_lora_weights=False)
+                model.add_adapter(peft_config_1, adapter_name="adapter_1")
+                model.add_adapter(peft_config_2, adapter_name="adapter_2")
+
+                # Ensure adapters were added
+                self.assertIn("adapter_1", model.peft_config)
+                self.assertIn("adapter_2", model.peft_config)
+
+                # Delete a single adapter
+                model.delete_adapter("adapter_1")
+                self.assertNotIn("adapter_1", model.peft_config)
+                self.assertIn("adapter_2", model.peft_config)
+
+                # Delete remaining adapter
+                model.delete_adapter("adapter_2")
+                self.assertNotIn("adapter_2", model.peft_config)
+                self.assertFalse(model._hf_peft_config_loaded)
+
+                # Re-add adapters for edge case tests
+                model.add_adapter(peft_config_1, adapter_name="adapter_1")
+                model.add_adapter(peft_config_2, adapter_name="adapter_2")
+
+                # Attempt to delete multiple adapters at once
+                model.delete_adapter(["adapter_1", "adapter_2"])
+                self.assertNotIn("adapter_1", model.peft_config)
+                self.assertNotIn("adapter_2", model.peft_config)
+                self.assertFalse(model._hf_peft_config_loaded)
+
+                # Test edge cases
+                with self.assertRaisesRegex(ValueError, "The following adapter\\(s\\) are not present"):
+                    model.delete_adapter("nonexistent_adapter")
+
+                with self.assertRaisesRegex(ValueError, "The following adapter\\(s\\) are not present"):
+                    model.delete_adapter(["adapter_1", "nonexistent_adapter"])
+
+                # Deleting with an empty list or None should not raise errors
+                model.add_adapter(peft_config_1, adapter_name="adapter_1")
+                model.add_adapter(peft_config_2, adapter_name="adapter_2")
+                model.delete_adapter([])  # No-op
+                self.assertIn("adapter_1", model.peft_config)
+                self.assertIn("adapter_2", model.peft_config)
+
+                model.delete_adapter(None)  # No-op
+                self.assertIn("adapter_1", model.peft_config)
+                self.assertIn("adapter_2", model.peft_config)
+
+                # Deleting duplicate adapter names in the list
+                model.delete_adapter(["adapter_1", "adapter_1"])
+                self.assertNotIn("adapter_1", model.peft_config)
+                self.assertIn("adapter_2", model.peft_config)
 
     @require_torch_gpu
     @require_bitsandbytes
@@ -622,3 +694,119 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 msg = f"Loading adapter weights from state_dict led to missing keys in the model: {key}"
                 self.assertIn(msg, cl.out)
+
+    def test_peft_load_adapter_training_inference_mode_true(self):
+        """
+        By default, when loading an adapter, the whole model should be in eval mode and no parameter should have
+        requires_grad=False.
+        """
+        for model_id in self.peft_test_model_ids:
+            for transformers_class in self.transformers_test_model_classes:
+                peft_model = transformers_class.from_pretrained(model_id).to(torch_device)
+
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    peft_model.save_pretrained(tmpdirname)
+                    model = transformers_class.from_pretrained(peft_model.config._name_or_path)
+                    model.load_adapter(tmpdirname)
+                    assert not any(p.requires_grad for p in model.parameters())
+                    assert not any(m.training for m in model.modules())
+                    del model
+
+    def test_peft_load_adapter_training_inference_mode_false(self):
+        """
+        When passing is_trainable=True, the LoRA modules should be in training mode and their parameters should have
+        requires_grad=True.
+        """
+        for model_id in self.peft_test_model_ids:
+            for transformers_class in self.transformers_test_model_classes:
+                peft_model = transformers_class.from_pretrained(model_id).to(torch_device)
+
+                with tempfile.TemporaryDirectory() as tmpdirname:
+                    peft_model.save_pretrained(tmpdirname)
+                    model = transformers_class.from_pretrained(peft_model.config._name_or_path)
+                    model.load_adapter(tmpdirname, is_trainable=True)
+
+                    for name, module in model.named_modules():
+                        if len(list(module.children())):
+                            # only check leaf modules
+                            continue
+
+                        if "lora_" in name:
+                            assert module.training
+                            assert all(p.requires_grad for p in module.parameters())
+                        else:
+                            assert not module.training
+                            assert all(not p.requires_grad for p in module.parameters())
+
+    def test_prefix_tuning_trainer_load_best_model_at_end_error(self):
+        # Original issue: https://github.com/huggingface/peft/issues/2256
+        # There is a potential error when using load_best_model_at_end=True with a prompt learning PEFT method. This is
+        # because Trainer uses load_adapter under the hood but with some prompt learning methods, there is an
+        # optimization on the saved model to remove parameters that are not required for inference, which in turn
+        # requires a change to the model architecture. This is why load_adapter will fail in such cases and users should
+        # instead set load_best_model_at_end=False and use PeftModel.from_pretrained. As this is not obvious, we now
+        # intercept the error and add a helpful error message.
+        # This test checks this error message. It also tests the "happy path" (i.e. no error) when using LoRA.
+        from peft import LoraConfig, PrefixTuningConfig, TaskType, get_peft_model
+
+        # create a small sequence classification dataset (binary classification)
+        dataset = []
+        for i, row in enumerate(os.__doc__.splitlines()):
+            dataset.append({"text": row, "label": i % 2})
+        ds_train = Dataset.from_list(dataset)
+        ds_valid = ds_train
+        datasets = DatasetDict(
+            {
+                "train": ds_train,
+                "val": ds_valid,
+            }
+        )
+
+        # tokenizer for peft-internal-testing/tiny-OPTForCausalLM-lora cannot be loaded, thus using
+        # hf-internal-testing/tiny-random-OPTForCausalLM
+        model_id = "hf-internal-testing/tiny-random-OPTForCausalLM"
+        tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left", model_type="opt")
+
+        def tokenize_function(examples):
+            return tokenizer(examples["text"], max_length=128, truncation=True, padding="max_length")
+
+        tokenized_datasets = datasets.map(tokenize_function, batched=True)
+        # lora works, prefix-tuning is expected to raise an error
+        peft_configs = {
+            "lora": LoraConfig(task_type=TaskType.SEQ_CLS),
+            "prefix-tuning": PrefixTuningConfig(
+                task_type=TaskType.SEQ_CLS,
+                inference_mode=False,
+                prefix_projection=True,
+                num_virtual_tokens=10,
+            ),
+        }
+
+        for peft_type, peft_config in peft_configs.items():
+            base_model = AutoModelForSequenceClassification.from_pretrained(model_id, num_labels=2)
+            base_model.config.pad_token_id = tokenizer.pad_token_id
+            peft_model = get_peft_model(base_model, peft_config)
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                training_args = TrainingArguments(
+                    output_dir=tmpdirname,
+                    num_train_epochs=3,
+                    eval_strategy="epoch",
+                    save_strategy="epoch",
+                    load_best_model_at_end=True,
+                )
+                trainer = Trainer(
+                    model=peft_model,
+                    args=training_args,
+                    train_dataset=tokenized_datasets["train"],
+                    eval_dataset=tokenized_datasets["val"],
+                )
+
+                if peft_type == "lora":
+                    # LoRA works with load_best_model_at_end
+                    trainer.train()
+                else:
+                    # prefix tuning does not work, but at least users should get a helpful error message
+                    msg = "When using prompt learning PEFT methods such as PREFIX_TUNING"
+                    with self.assertRaisesRegex(RuntimeError, msg):
+                        trainer.train()

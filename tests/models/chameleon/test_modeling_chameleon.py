@@ -16,17 +16,14 @@
 
 import unittest
 
-import pytest
 import requests
 from parameterized import parameterized
 
 from transformers import ChameleonConfig, is_torch_available, is_vision_available, set_seed
 from transformers.testing_utils import (
     require_bitsandbytes,
-    require_flash_attn,
     require_read_token,
     require_torch,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -278,6 +275,7 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         {
             "feature-extraction": ChameleonModel,
             "text-generation": ChameleonForConditionalGeneration,
+            "image-text-to-text": ChameleonForConditionalGeneration,
         }
         if is_torch_available()
         else {}
@@ -321,57 +319,15 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
         # maximum sequence length, so the outputs for the short input should match.
         if scaling_type == "dynamic":
-            self.assertTrue(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
+            torch.testing.assert_close(original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5)
         else:
             self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
 
         # The output should be different for long inputs
         self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
 
-    @require_flash_attn
-    @require_read_token
-    @require_torch_gpu
-    @require_bitsandbytes
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_generate_padding_right(self):
-        """
-        Overwritting the common test as the test is flaky on tiny models
-        """
-        model = ChameleonForConditionalGeneration.from_pretrained(
-            "facebook/chameleon-7b",
-            load_in_4bit=True,
-            device_map={"": 0},
-        )
-
-        processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
-        texts = ["hi", "Hello this is a very long sentence"]
-
-        processor.tokenizer.padding_side = "right"
-
-        inputs = processor(text=texts, return_tensors="pt", padding=True).to(0)
-
-        output_native = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_native = processor.tokenizer.batch_decode(output_native)
-
-        model = ChameleonForConditionalGeneration.from_pretrained(
-            "facebook/chameleon-7b",
-            load_in_4bit=True,
-            attn_implementation="flash_attention_2",
-        )
-
-        output_fa_2 = model.generate(**inputs, max_new_tokens=20, do_sample=False)
-        output_fa_2 = processor.tokenizer.batch_decode(output_fa_2)
-
-        self.assertListEqual(output_native, output_fa_2)
-
     @unittest.skip("Chameleon forces some token ids to be -inf!")
     def test_batching_equivalence(self):
-        pass
-
-    # TODO (joao, raushan): fix me -- the problem is in `cache_position[0] == 0`, i.e. dynamic control flow
-    @unittest.skip("Chameleon is not compatible with end-to-end generation compilation")
-    def test_generate_compile_fullgraph(self):
         pass
 
 
@@ -394,7 +350,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
         inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device, torch.float16)
 
         # greedy generation outputs
-        EXPECTED_TEXT_COMPLETION = ['Describe what do you see here and tell me about the history behind it?The image depicts a star map, with a bright blue line extending across the center of the image. The line is labeled "390 light years" and is accompanied by a small black and']  # fmt: skip
+        EXPECTED_TEXT_COMPLETION = ['Describe what do you see here and tell me about the history behind it?The image depicts a star map, with a bright blue dot in the center representing the star Alpha Centauri. The star map is a representation of the night sky, showing the positions of stars in']  # fmt: skip
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
@@ -426,7 +382,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
         # greedy generation outputs
         EXPECTED_TEXT_COMPLETION = [
             'Describe what do you see here and tell me about the history behind it?The image depicts a star map, with a bright blue dot in the center representing the star Alpha Centauri. The star map is a representation of the night sky, showing the positions of stars in',
-            'What constellation is this image showing?The image is showing the constellation of Orion.'
+            'What constellation is this image showing?The image shows the constellation of Orion.The image shows the constellation of Orion.The image shows the constellation of Orion.The image shows the constellation of Orion.'
             ]  # fmt: skip
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
@@ -452,7 +408,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
         inputs = processor(images=[image, image_2], text=prompt, return_tensors="pt").to(model.device, torch.float16)
 
         # greedy generation outputs
-        EXPECTED_TEXT_COMPLETION = ['What do these two images have in common?The two images show a connection between two things that are not necessarily related. The first image shows a group of stars, while the second image shows a network of lines connecting two points. The connection between']  # fmt: skip
+        EXPECTED_TEXT_COMPLETION = ['What do these two images have in common?The two images show a connection between the night sky and the internet. The first image shows a starry night sky, with the stars arranged in a pattern that resembles the structure of the internet. The']  # fmt: skip
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)

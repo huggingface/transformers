@@ -33,9 +33,6 @@ if is_torch_available():
         RwkvForCausalLM,
         RwkvModel,
     )
-    from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_0
-else:
-    is_torch_greater_or_equal_than_2_0 = False
 
 
 class RwkvModelTester:
@@ -231,9 +228,6 @@ class RwkvModelTester:
         return config, inputs_dict
 
 
-@unittest.skipIf(
-    not is_torch_greater_or_equal_than_2_0, reason="See https://github.com/huggingface/transformers/pull/24204"
-)
 @require_torch
 class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (RwkvModel, RwkvForCausalLM) if is_torch_available() else ()
@@ -302,7 +296,7 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
                 elif "time_first" in name:
                     if param.requires_grad:
                         # check if it's a ones like
-                        self.assertTrue(torch.allclose(param.data, torch.ones_like(param.data), atol=1e-5, rtol=1e-5))
+                        torch.testing.assert_close(param.data, torch.ones_like(param.data), rtol=1e-5, atol=1e-5)
                 elif any(x in name for x in ["time_mix_key", "time_mix_receptance"]):
                     if param.requires_grad:
                         self.assertInterval(
@@ -439,9 +433,6 @@ class RwkvModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         pass
 
 
-@unittest.skipIf(
-    not is_torch_greater_or_equal_than_2_0, reason="See https://github.com/huggingface/transformers/pull/24204"
-)
 @slow
 class RWKVIntegrationTests(unittest.TestCase):
     def setUp(self):

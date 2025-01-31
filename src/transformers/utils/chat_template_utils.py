@@ -15,6 +15,7 @@
 import inspect
 import json
 import re
+import types
 from contextlib import contextmanager
 from datetime import datetime
 from functools import lru_cache
@@ -76,6 +77,7 @@ def _get_json_schema_type(param_type: str) -> Dict[str, str]:
         float: {"type": "number"},
         str: {"type": "string"},
         bool: {"type": "boolean"},
+        type(None): {"type": "null"},
         Any: {},
     }
     if is_vision_available():
@@ -97,7 +99,7 @@ def _parse_type_hint(hint: str) -> Dict:
                 "Couldn't parse this type hint, likely due to a custom class or object: ", hint
             )
 
-    elif origin is Union:
+    elif origin is Union or (hasattr(types, "UnionType") and origin is types.UnionType):
         # Recurse into each of the subtypes in the Union, except None, which is handled separately at the end
         subtypes = [_parse_type_hint(t) for t in args if t is not type(None)]
         if len(subtypes) == 1:
@@ -361,6 +363,11 @@ def _render_with_assistant_indices(
 
 @lru_cache
 def _compile_jinja_template(chat_template):
+    if not is_jinja_available():
+        raise ImportError(
+            "apply_chat_template requires jinja2 to be installed. Please install it using `pip install jinja2`."
+        )
+
     class AssistantTracker(Extension):
         # This extension is used to track the indices of assistant-generated tokens in the rendered chat
         tags = {"generation"}

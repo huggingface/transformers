@@ -16,6 +16,8 @@ import os
 import tempfile
 import unittest
 
+from packaging import version
+
 from transformers import AutoTokenizer, BertConfig, is_torch_available
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
@@ -510,11 +512,6 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_decoder()
         self.model_tester.create_and_check_model_as_decoder(*config_and_inputs)
 
-    @unittest.skip(reason="Generate needs input ids")
-    def test_inputs_embeds_matches_input_ids_with_generate(self):
-        # generate only works with input ids for bertforcausalLM
-        pass
-
     def test_model_as_decoder_with_default_input_mask(self):
         # This regression test was failing with PyTorch < 1.3
         (
@@ -686,7 +683,7 @@ class BertModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
         expected_slice = torch.tensor([[[0.4249, 0.1008, 0.7531], [0.3771, 0.1188, 0.7467], [0.4152, 0.1098, 0.7108]]])
 
-        self.assertTrue(torch.allclose(output[:, 1:4, 1:4], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_no_head_relative_embedding_key(self):
@@ -701,7 +698,7 @@ class BertModelIntegrationTest(unittest.TestCase):
             [[[0.0756, 0.3142, -0.5128], [0.3761, 0.3462, -0.5477], [0.2052, 0.3760, -0.1240]]]
         )
 
-        self.assertTrue(torch.allclose(output[:, 1:4, 1:4], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow
     def test_inference_no_head_relative_embedding_key_query(self):
@@ -716,7 +713,7 @@ class BertModelIntegrationTest(unittest.TestCase):
             [[[0.6496, 0.3784, 0.8203], [0.8148, 0.5656, 0.2636], [-0.0681, 0.5597, 0.7045]]]
         )
 
-        self.assertTrue(torch.allclose(output[:, 1:4, 1:4], expected_slice, atol=1e-4))
+        torch.testing.assert_close(output[:, 1:4, 1:4], expected_slice, rtol=1e-4, atol=1e-4)
 
     def test_sdpa_ignored_mask(self):
         pkv = []
@@ -750,3 +747,43 @@ class BertModelIntegrationTest(unittest.TestCase):
             self.assertTrue(
                 torch.allclose(res_eager.last_hidden_state, res_sdpa.last_hidden_state, atol=1e-5, rtol=1e-4)
             )
+
+    @slow
+    def test_export(self):
+        if version.parse(torch.__version__) < version.parse("2.4.0"):
+            self.skipTest(reason="This test requires torch >= 2.4 to run.")
+
+        bert_model = "google-bert/bert-base-uncased"
+        device = "cpu"
+        attn_implementation = "sdpa"
+        max_length = 512
+
+        tokenizer = AutoTokenizer.from_pretrained(bert_model)
+        inputs = tokenizer(
+            "the man worked as a [MASK].",
+            return_tensors="pt",
+            padding="max_length",
+            max_length=max_length,
+        )
+
+        model = BertForMaskedLM.from_pretrained(
+            bert_model,
+            device_map=device,
+            attn_implementation=attn_implementation,
+            use_cache=True,
+        )
+
+        logits = model(**inputs).logits
+        eg_predicted_mask = tokenizer.decode(logits[0, 6].topk(5).indices)
+        self.assertEqual(eg_predicted_mask.split(), ["carpenter", "waiter", "barber", "mechanic", "salesman"])
+
+        exported_program = torch.export.export(
+            model,
+            args=(inputs["input_ids"],),
+            kwargs={"attention_mask": inputs["attention_mask"]},
+            strict=True,
+        )
+
+        result = exported_program.module().forward(inputs["input_ids"], inputs["attention_mask"])
+        ep_predicted_mask = tokenizer.decode(result.logits[0, 6].topk(5).indices)
+        self.assertEqual(eg_predicted_mask, ep_predicted_mask)

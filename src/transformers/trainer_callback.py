@@ -18,13 +18,14 @@ Callbacks to use with the Trainer class and customize the training loop.
 
 import dataclasses
 import json
+import math
 from dataclasses import dataclass
 from typing import Dict, List, Optional, Union
 
 import numpy as np
 from tqdm.auto import tqdm
 
-from .trainer_utils import IntervalStrategy, has_length
+from .trainer_utils import HPSearchBackend, IntervalStrategy, SaveStrategy, has_length
 from .training_args import TrainingArguments
 from .utils import logging
 
@@ -64,7 +65,8 @@ class TrainerState:
             The batch size for the training dataloader. Only needed when
             `auto_find_batch_size` has been used.
         num_input_tokens_seen (`int`, *optional*, defaults to 0):
-            The number of tokens seen during training (number of input tokens, not the number of prediction tokens).
+            When tracking the inputs tokens, the number of tokens seen during training (number of input tokens, not the
+            number of prediction tokens).
         total_flos (`float`, *optional*, defaults to 0):
             The total number of floating operations done by the model since the beginning of training (stored as floats
             to avoid overflow).
@@ -148,6 +150,43 @@ class TrainerState:
         with open(json_path, "r", encoding="utf-8") as f:
             text = f.read()
         return cls(**json.loads(text))
+
+    def compute_steps(self, args, max_steps):
+        """
+        Calculates and stores the absolute value for logging,
+        eval, and save steps based on if it was a proportion
+        or not.
+        """
+        for step_kind in ("logging", "eval", "save"):
+            num_steps = getattr(args, f"{step_kind}_steps")
+            if num_steps is not None:
+                if num_steps < 1:
+                    num_steps = math.ceil(max_steps * num_steps)
+                setattr(self, f"{step_kind}_steps", num_steps)
+
+    def init_training_references(self, trainer, train_dataloader, max_steps, num_train_epochs, trial):
+        """
+        Stores the initial training references needed in `self`
+        """
+        for attr in ("model", "optimizer", "lr_scheduler"):
+            setattr(self, attr, getattr(trainer, attr))
+
+        self.train_dataloader = train_dataloader
+        if trainer.hp_name is not None and trainer._trial is not None:
+            # use self._trial because the SigOpt/Optuna hpo only call `_hp_search_setup(trial)` instead of passing trial
+            # parameter to Train when using DDP.
+            self.trial_name = trainer.hp_name(trainer._trial)
+        self.trial_params = None
+        if trial is not None:
+            from transformers.integrations import hp_params
+
+            assignments = trial.assignments if trainer.hp_search_backend == HPSearchBackend.SIGOPT else trial
+            self.trial_params = hp_params(assignments)
+
+        self.max_steps = max_steps
+        self.num_train_epochs = num_train_epochs
+        self.is_local_process_zero = trainer.is_local_process_zero()
+        self.is_world_process_zero = trainer.is_world_process_zero()
 
 
 class ExportableState:
@@ -555,7 +594,7 @@ class DefaultFlowCallback(TrainerCallback):
 
         # Save
         if (
-            args.save_strategy == IntervalStrategy.STEPS
+            args.save_strategy == SaveStrategy.STEPS
             and state.save_steps > 0
             and state.global_step % state.save_steps == 0
         ):
@@ -565,7 +604,7 @@ class DefaultFlowCallback(TrainerCallback):
         if state.global_step >= state.max_steps:
             control.should_training_stop = True
             # Save the model at the end if we have a save strategy
-            if args.save_strategy != IntervalStrategy.NO:
+            if args.save_strategy not in [SaveStrategy.NO, SaveStrategy.BEST]:
                 control.should_save = True
 
         return control
@@ -580,7 +619,7 @@ class DefaultFlowCallback(TrainerCallback):
             control.should_evaluate = True
 
         # Save
-        if args.save_strategy == IntervalStrategy.EPOCH:
+        if args.save_strategy == SaveStrategy.EPOCH:
             control.should_save = True
 
         return control
@@ -589,11 +628,21 @@ class DefaultFlowCallback(TrainerCallback):
 class ProgressCallback(TrainerCallback):
     """
     A [`TrainerCallback`] that displays the progress of training or evaluation.
+    You can modify `max_str_len` to control how long strings are truncated when logging.
     """
 
-    def __init__(self):
+    def __init__(self, max_str_len: int = 100):
+        """
+        Initialize the callback with optional max_str_len parameter to control string truncation length.
+
+        Args:
+            max_str_len (`int`):
+                Maximum length of strings to display in logs.
+                Longer strings will be truncated with a message.
+        """
         self.training_bar = None
         self.prediction_bar = None
+        self.max_str_len = max_str_len
 
     def on_train_begin(self, args, state, control, **kwargs):
         if state.is_world_process_zero:
@@ -631,7 +680,13 @@ class ProgressCallback(TrainerCallback):
             # but avoid doing any value pickling.
             shallow_logs = {}
             for k, v in logs.items():
-                shallow_logs[k] = v
+                if isinstance(v, str) and len(v) > self.max_str_len:
+                    shallow_logs[k] = (
+                        f"[String too long to display, length: {len(v)} > {self.max_str_len}. "
+                        "Consider increasing `max_str_len` if needed.]"
+                    )
+                else:
+                    shallow_logs[k] = v
             _ = shallow_logs.pop("total_flos", None)
             # round numbers so that it looks better in console
             if "epoch" in shallow_logs:
@@ -690,10 +745,14 @@ class EarlyStoppingCallback(TrainerCallback, ExportableState):
             self.early_stopping_patience_counter += 1
 
     def on_train_begin(self, args, state, control, **kwargs):
-        assert args.load_best_model_at_end, "EarlyStoppingCallback requires load_best_model_at_end = True"
+        if not args.load_best_model_at_end:
+            logger.warning(
+                "Using EarlyStoppingCallback without load_best_model_at_end=True. "
+                "Once training is finished, the best model will not be loaded automatically."
+            )
         assert (
             args.metric_for_best_model is not None
-        ), "EarlyStoppingCallback requires metric_for_best_model is defined"
+        ), "EarlyStoppingCallback requires metric_for_best_model to be defined"
         assert (
             args.eval_strategy != IntervalStrategy.NO
         ), "EarlyStoppingCallback requires IntervalStrategy of steps or epoch"

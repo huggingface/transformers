@@ -931,10 +931,17 @@ class FlavaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.model_tester = self.class_for_tester(self)
+        common_properties = ["projection_dim", "logit_scale_init_value", "init_codebook"]
+        self.config_tester = ConfigTester(
+            self, config_class=FlavaConfig, has_text_modality=False, common_properties=common_properties
+        )
 
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs_for_common()
         self.model_tester.create_and_check_model(*config_and_inputs)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
 
     @unittest.skip(reason="tested in individual model tests")
     def test_hidden_states_output(self):
@@ -1339,7 +1346,7 @@ class FlavaForPreTrainingIntegrationTest(unittest.TestCase):
         )
 
         expected_logits = torch.tensor([[16.1291, 8.4033], [16.1291, 8.4033]], device=torch_device)
-        self.assertTrue(torch.allclose(outputs.contrastive_logits_per_image, expected_logits, atol=1e-3))
+        torch.testing.assert_close(outputs.contrastive_logits_per_image, expected_logits, rtol=1e-3, atol=1e-3)
         self.assertAlmostEqual(outputs.loss_info.mmm_text.item(), 2.0727925, places=4)
         self.assertAlmostEqual(outputs.loss_info.mmm_image.item(), 7.0282096, places=4)
         self.assertAlmostEqual(outputs.loss.item(), 11.3792324, places=4)
@@ -1390,7 +1397,7 @@ class FlavaForPreTrainingIntegrationTest(unittest.TestCase):
         )
 
         expected_logits = torch.tensor([[16.1291, 8.4033], [16.1291, 8.4033]], device=torch_device)
-        self.assertTrue(torch.allclose(outputs.contrastive_logits_per_image, expected_logits, atol=1e-3))
+        torch.testing.assert_close(outputs.contrastive_logits_per_image, expected_logits, rtol=1e-3, atol=1e-3)
         self.assertAlmostEqual(outputs.loss_info.mmm_text.item(), 2.0727925, places=4)
         self.assertAlmostEqual(outputs.loss_info.mmm_image.item(), 6.8965902, places=4)
         self.assertAlmostEqual(outputs.loss.item(), 9.6084213, places=4)

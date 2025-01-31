@@ -316,9 +316,6 @@ class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     # The small UMT5 model needs higher percentages for CPU/MP tests
     model_split_percents = [0.5, 0.8, 0.9]
 
-    # used in `test_torch_compile`
-    _torch_compile_test_ckpt = "google/umt5-small"
-
     def setUp(self):
         self.model_tester = UMT5ModelTester(self)
 
