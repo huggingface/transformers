@@ -217,6 +217,7 @@ class ModernBertModelTester:
                 "test_group_beam_search_generate_dict_output",
                 "test_generate_from_inputs_embeds_0_greedy",
                 "test_generate_from_inputs_embeds_1_beam_search",
+                "test_assisted_decoding_matches_greedy_search_1",
                 "test_generate_from_inputs_embeds_2_group_beam_search",
                 "test_generate_from_inputs_embeds_3_group_beam_search_dict_output",
                 "test_generate_from_inputs_embeds_4_group_beam_search_dict_output_use_cache",
@@ -261,6 +262,7 @@ class ModernBertModelTester:
                 # as the others don't support outputted attentions
                 "test_attention_outputs",
                 "test_beam_sample_generate_dict_output",
+                "test_assisted_decoding_matches_greedy_search_1",
                 "test_assisted_decoding_matches_greedy_search_1_same",
                 "test_assisted_decoding_matches_greedy_search_0_random",
                 "test_hidden_states_output",
