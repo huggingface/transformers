@@ -1314,6 +1314,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     def __init__(self, config: PretrainedConfig, *inputs, **kwargs):
         super().__init__()
+
+        if (torch.version.hip and not torch.cuda.is_initialized()):
+            torch.cuda.init()
+
         if not isinstance(config, PretrainedConfig):
             raise ValueError(
                 f"Parameter config in `{self.__class__.__name__}(config)` should be an instance of class "
