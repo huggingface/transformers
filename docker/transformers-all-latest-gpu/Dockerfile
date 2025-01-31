@@ -9,7 +9,7 @@ SHELL ["sh", "-lc"]
 # The following `ARG` are mainly used to specify the versions explicitly & directly in this docker file, and not meant
 # to be used as arguments for docker build (so far).
 
-ARG PYTORCH='2.5.1'
+ARG PYTORCH='2.6.0'
 # (not always a valid torch version)
 ARG INTEL_TORCH_EXT='2.3.0'
 # Example: `cu102`, `cu113`, etc.
@@ -64,6 +64,9 @@ RUN python3 -m pip install --no-cache-dir python-Levenshtein
 
 # For `FastSpeech2ConformerTokenizer` tokenizer
 RUN python3 -m pip install --no-cache-dir g2p-en
+
+# For Some bitsandbytes tests
+RUN python3 -m pip install --no-cache-dir einops
 
 # When installing in editable mode, `transformers` is not recognized as a package.
 # this line must be added in order for python to be aware of transformers.
