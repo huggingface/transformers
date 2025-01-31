@@ -1190,8 +1190,12 @@ class DabDetrDecoder(DabDetrPreTrainedModel):
 
             # modulated Height Width attentions
             reference_anchor_size = self.ref_anchor_head(hidden_states).sigmoid()  # nq, bs, 2
-            query_sine_embed[..., self.hidden_size // 2 :] *= (reference_anchor_size[..., 0] / obj_center[..., 2]).unsqueeze(-1)
-            query_sine_embed[..., : self.hidden_size // 2] *= (reference_anchor_size[..., 1] / obj_center[..., 3]).unsqueeze(-1)
+            query_sine_embed[..., self.hidden_size // 2 :] *= (
+                reference_anchor_size[..., 0] / obj_center[..., 2]
+            ).unsqueeze(-1)
+            query_sine_embed[..., : self.hidden_size // 2] *= (
+                reference_anchor_size[..., 1] / obj_center[..., 3]
+            ).unsqueeze(-1)
 
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
