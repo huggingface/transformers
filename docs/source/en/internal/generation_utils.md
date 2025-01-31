@@ -421,6 +421,11 @@ A [`Constraint`] can be used to force the generation to include specific tokens 
     - update_ssm_state
     - reset
 
+[[autodoc]] SharedCache
+    - shared_layer_idx
+    - update
+    - get_seq_length
+
 ## Watermark Utils
 
 [[autodoc]] WatermarkingConfig

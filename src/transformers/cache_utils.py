@@ -2217,26 +2217,27 @@ class SharedCache(DynamicCache):
         ```python
         >>> from transformers import AutoTokenizer, AutoModelForCausalLM, SharedCache
 
-        >>> model = AutoModelForCausalLM.from_pretrained("JingzeShi/Doge-20M-Instruct")
-        >>> tokenizer = AutoTokenizer.from_pretrained("JingzeShi/Doge-20M-Instruct")
+        >>> model = AutoModelForCausalLM.from_pretrained("JingzeShi/Doge-60M-Instruct")
+        >>> tokenizer = AutoTokenizer.from_pretrained("JingzeShi/Doge-60M-Instruct")
 
         >>> inputs = tokenizer(text="My name is Doge", return_tensors="pt")
 
         >>> # Prepare a cache class and pass it to model
-        >>> past_key_values = SharedCache(shared_layer_groups=2)
+        >>> past_key_values = SharedCache(shared_cache_layer_groups=2)
         >>> outputs = model(**inputs, past_key_values=past_key_values, use_cache=True)
         >>> outputs.past_key_values # access cache filled with key/values from generation
         SharedCache()
         ```
     """
+
     @deprecate_kwarg("num_hidden_layers", version="4.47.0")
     def __init__(
-        self, 
+        self,
         shared_cache_layer_groups: Optional[int] = None,
     ) -> None:
         super().__init__()
         self.shared_cache_layer_groups = shared_cache_layer_groups if shared_cache_layer_groups is not None else 1
-    
+
     @property
     def shared_layer_indices(self) -> List[int]:
         return [i for i in range(len(self)) if i % self.shared_cache_layer_groups == 0]
@@ -2292,10 +2293,12 @@ class SharedCache(DynamicCache):
                 pass
             else:
                 self.key_cache[shared_layer_idx] = torch.cat([self.key_cache[shared_layer_idx], key_states], dim=-2)
-                self.value_cache[shared_layer_idx] = torch.cat([self.value_cache[shared_layer_idx], value_states], dim=-2)
+                self.value_cache[shared_layer_idx] = torch.cat(
+                    [self.value_cache[shared_layer_idx], value_states], dim=-2
+                )
 
         return self.key_cache[shared_layer_idx], self.value_cache[shared_layer_idx]
-    
+
     def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         # TODO: deprecate this function in favor of `cache_position`
@@ -2311,7 +2314,7 @@ class SharedCache(DynamicCache):
     def get_max_cache_shape(self) -> Optional[int]:
         """Returns the maximum sequence length of the cache object. SharedCache does not have a maximum length."""
         return None
-    
+
     def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor]]:
         """Converts the `SharedCache` instance into the its equivalent in the legacy cache format. Used for
         backward compatibility."""
@@ -2319,7 +2322,7 @@ class SharedCache(DynamicCache):
         for layer_idx in range(len(self)):
             legacy_cache += ((self.key_cache[layer_idx], self.value_cache[layer_idx]),)
         return legacy_cache
-    
+
     @classmethod
     @deprecate_kwarg("num_hidden_layers", version="4.47.0")
     def from_legacy_cache(
@@ -2333,7 +2336,7 @@ class SharedCache(DynamicCache):
                 key_states, value_states = past_key_values[layer_idx]
                 cache.update(key_states, value_states, layer_idx)
         return cache
-    
+
     def crop(self, max_length: int):
         """Crop the past key values up to a new `max_length` in terms of tokens. `max_length` can also be
         negative to remove `max_length` tokens. This is used in assisted decoding and contrastive search."""
@@ -2349,11 +2352,9 @@ class SharedCache(DynamicCache):
             if self.key_cache[idx] != []:
                 self.key_cache[idx] = self.key_cache[idx][..., :max_length, :]
                 self.value_cache[idx] = self.value_cache[idx][..., :max_length, :]
-    
+
     @deprecate_kwarg("num_hidden_layers", version="4.47.0")
-    def batch_split(
-        self, full_batch_size: int, split_size: int, num_hidden_layers: int = None
-    ) -> List["SharedCache"]:
+    def batch_split(self, full_batch_size: int, split_size: int, num_hidden_layers: int = None) -> List["SharedCache"]:
         """Split the current instance into a list of `SharedCache` by the batch size. This will be used by
         `_split_model_inputs()` in `generation.utils`"""
         out = []
@@ -2364,7 +2365,7 @@ class SharedCache(DynamicCache):
             current_split.value_cache = [tensor[i : i + split_size] for tensor in self.value_cache]
             out.append(current_split)
         return out
-    
+
     @classmethod
     @deprecate_kwarg("num_hidden_layers", version="4.47.0")
     def from_batch_splits(cls, splits: List["SharedCache"], num_hidden_layers: int = None) -> "SharedCache":
@@ -2379,7 +2380,7 @@ class SharedCache(DynamicCache):
                 layer_values = torch.cat(value_cache, dim=0)
                 cache.update(layer_keys, layer_values, idx)
         return cache
-    
+
     def batch_repeat_interleave(self, repeats: int):
         """Repeat the cache `repeats` times in the batch dimension. Used in contrastive search."""
         for layer_idx in range(len(self)):

@@ -41,9 +41,9 @@ if is_torch_available():
         GenerationConfig,
         GPT2LMHeadModel,
         LlamaConfig,
+        SharedCache,
         SinkCache,
         StaticCache,
-        SharedCache,
         convert_and_export_with_cache,
     )
     from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_3
@@ -226,7 +226,7 @@ class CacheTest(unittest.TestCase):
                 n_static_value_caches = n_static_value_caches + 1
         self.assertEqual(n_static_key_caches, model.config.num_hidden_layers)
         self.assertEqual(n_static_value_caches, model.config.num_hidden_layers)
-    
+
     def test_shared_cache_retrocompatibility(self):
         """Tests that we can convert back and forth between the legacy cache format and SharedCache"""
         legacy_cache = ()
@@ -238,7 +238,7 @@ class CacheTest(unittest.TestCase):
             new_value = torch.rand((2, 4, 8, 16))
             new_cache.update(new_key, new_value, layer_idx)
             legacy_cache += ((new_key, new_value),)
-        
+
         # Sanity check 1: they must have the same shapes
         self.assertTrue(len(legacy_cache), len(new_cache))
         for layer_idx in range(10):
@@ -638,13 +638,15 @@ class CacheIntegrationTest(unittest.TestCase):
         model.generate(generation_config=offloaded, **inputs)
         offloaded_peak_memory = torch.cuda.max_memory_allocated(device)
         assert offloaded_peak_memory < original_peak_memory
-    
+
     @require_torch_gpu
     def test_shared_cache_uses_less_memory_than_dynamic_cache(self):
         """Tests that SharedCache uses less memory than the default DynamicCache"""
         model_name = "meta-llama/Llama-2-7b-hf"
         tokenizer = AutoTokenizer.from_pretrained(model_name)
-        model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", torch_dtype=torch.float16, trust_remote_code=True)
+        model = AutoModelForCausalLM.from_pretrained(
+            model_name, device_map="auto", torch_dtype=torch.float16, trust_remote_code=True
+        )
         device = model.device
         input_text = "Fun fact:"
         inputs = tokenizer(input_text, return_tensors="pt").to(device)

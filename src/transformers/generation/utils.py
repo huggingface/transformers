@@ -32,6 +32,7 @@ from ..cache_utils import (
     EncoderDecoderCache,
     OffloadedCache,
     QuantizedCacheConfig,
+    SharedCache,
     StaticCache,
 )
 from ..configuration_utils import PretrainedConfig
@@ -1775,6 +1776,9 @@ class GenerationMixin:
                 model_kwargs[cache_name] = cache_class(cache_config)
             elif generation_config.cache_implementation == "offloaded":
                 model_kwargs[cache_name] = OffloadedCache()
+            elif generation_config.cache_implementation == "shared":
+                cache_config = generation_config.cache_config if generation_config.cache_config is not None else None
+                model_kwargs[cache_name] = SharedCache(cache_config)
 
         # Use DynamicCache() instance by default. This will avoid back and forth from legacy format that
         # keeps copying the cache thus using much more memory
