@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 Baidu Inc and The HuggingFace Inc. team.
+# Copyright 2025 Baidu Inc and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -39,6 +39,7 @@ class DFineResNetStageConfig(NamedTuple):
 
 class DFineResNetConfig(RTDetrResNetConfig):
     model_type = "d-fine-resnet"
+
     def __init__(
         self,
         stem_channels=[3, 32, 48],
@@ -56,22 +57,23 @@ class DFineResNetPreTrainedModel(RTDetrResNetPreTrainedModel):
 
 class DFineResNetConvLayer(RTDetrResNetConvLayer):
     def __init__(
-            self, 
-            in_channels: int, 
-            out_channels: int, 
-            kernel_size: int, 
-            stride: int = 1,
-            groups: int = 1, 
-            activation: str = "relu"):
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int,
+        stride: int = 1,
+        groups: int = 1,
+        activation: str = "relu",
+    ):
         super().__init__(in_channels, out_channels, kernel_size, stride, activation)
         self.convolution = nn.Conv2d(
-            in_channels, 
-            out_channels, 
-            kernel_size=kernel_size, 
-            stride=stride, 
-            groups=groups, 
-            padding=(kernel_size - 1) // 2, 
-            bias=False
+            in_channels,
+            out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
+            groups=groups,
+            padding=(kernel_size - 1) // 2,
+            bias=False,
         )
         self.lab = nn.Identity()
 
@@ -85,24 +87,14 @@ class DFineResNetConvLayer(RTDetrResNetConvLayer):
 
 class DFineResNetConvLayerLight(nn.Module):
     def __init__(
-            self,
-            in_chs,
-            out_chs,
-            kernel_size,
+        self,
+        in_chs,
+        out_chs,
+        kernel_size,
     ):
         super().__init__()
-        self.conv1 = DFineResNetConvLayer(
-            in_chs,
-            out_chs,
-            kernel_size=1,
-            activation=None
-        )
-        self.conv2 = DFineResNetConvLayer(
-            out_chs,
-            out_chs,
-            kernel_size=kernel_size,
-            groups=out_chs
-        )
+        self.conv1 = DFineResNetConvLayer(in_chs, out_chs, kernel_size=1, activation=None)
+        self.conv2 = DFineResNetConvLayer(out_chs, out_chs, kernel_size=kernel_size, groups=out_chs)
 
     def forward(self, x):
         x = self.conv1(x)
@@ -135,44 +127,44 @@ class DFineResNetEmbeddings(nn.Module):
         super().__init__()
 
         self.stem1 = DFineResNetConvLayer(
-                    config.stem_channels[0],
-                    config.stem_channels[1],
-                    kernel_size=3,
-                    stride=2,
-                    activation=config.hidden_act,
-                )
+            config.stem_channels[0],
+            config.stem_channels[1],
+            kernel_size=3,
+            stride=2,
+            activation=config.hidden_act,
+        )
         self.stem2a = DFineResNetConvLayer(
-                    config.stem_channels[1],
-                    config.stem_channels[1] // 2,
-                    kernel_size=2,
-                    stride=1,
-                    activation=config.hidden_act,
-                )
+            config.stem_channels[1],
+            config.stem_channels[1] // 2,
+            kernel_size=2,
+            stride=1,
+            activation=config.hidden_act,
+        )
         self.stem2b = DFineResNetConvLayer(
-                    config.stem_channels[1] // 2,
-                    config.stem_channels[1],
-                    kernel_size=2,
-                    stride=1,
-                    activation=config.hidden_act,
-                )
+            config.stem_channels[1] // 2,
+            config.stem_channels[1],
+            kernel_size=2,
+            stride=1,
+            activation=config.hidden_act,
+        )
         self.stem3 = DFineResNetConvLayer(
-                    config.stem_channels[1] * 2,
-                    config.stem_channels[1],
-                    kernel_size=3,
-                    stride=2,
-                    activation=config.hidden_act,
-                )
+            config.stem_channels[1] * 2,
+            config.stem_channels[1],
+            kernel_size=3,
+            stride=2,
+            activation=config.hidden_act,
+        )
         self.stem4 = DFineResNetConvLayer(
-                    config.stem_channels[1],
-                    config.stem_channels[2],
-                    kernel_size=1,
-                    stride=1,
-                    activation=config.hidden_act,
-                )
+            config.stem_channels[1],
+            config.stem_channels[2],
+            kernel_size=1,
+            stride=1,
+            activation=config.hidden_act,
+        )
 
         self.pool = nn.MaxPool2d(kernel_size=2, stride=1, ceil_mode=True)
         self.num_channels = config.num_channels
-    
+
     def forward(self, pixel_values: Tensor) -> Tensor:
         num_channels = pixel_values.shape[1]
         if num_channels != self.num_channels:
@@ -193,16 +185,17 @@ class DFineResNetEmbeddings(nn.Module):
 
 class DFineResNetBasicLayer(nn.Module):
     def __init__(
-            self,
-            in_chs,
-            mid_chs,
-            out_chs,
-            layer_num,
-            kernel_size=3,
-            residual=False,
-            light_block=False,
-            agg='ese',
-            drop_path=0.):
+        self,
+        in_chs,
+        mid_chs,
+        out_chs,
+        layer_num,
+        kernel_size=3,
+        residual=False,
+        light_block=False,
+        agg="ese",
+        drop_path=0.0,
+    ):
         super().__init__()
         self.residual = residual
 
@@ -210,11 +203,7 @@ class DFineResNetBasicLayer(nn.Module):
         for i in range(layer_num):
             if light_block:
                 self.layers.append(
-                    DFineResNetConvLayerLight(
-                        in_chs if i == 0 else mid_chs,
-                        mid_chs,
-                        kernel_size=kernel_size
-                    )
+                    DFineResNetConvLayerLight(in_chs if i == 0 else mid_chs, mid_chs, kernel_size=kernel_size)
                 )
             else:
                 self.layers.append(
@@ -228,37 +217,22 @@ class DFineResNetBasicLayer(nn.Module):
 
         # feature aggregation
         total_chs = in_chs + layer_num * mid_chs
-        if agg == 'se':
-            aggregation_squeeze_conv = DFineResNetConvLayer(
-                total_chs,
-                out_chs // 2,
-                kernel_size=1,
-                stride=1
-            )
-            aggregation_excitation_conv = DFineResNetConvLayer(
-                out_chs // 2,
-                out_chs,
-                kernel_size=1,
-                stride=1
-            )
+        if agg == "se":
+            aggregation_squeeze_conv = DFineResNetConvLayer(total_chs, out_chs // 2, kernel_size=1, stride=1)
+            aggregation_excitation_conv = DFineResNetConvLayer(out_chs // 2, out_chs, kernel_size=1, stride=1)
             self.aggregation = nn.Sequential(
                 aggregation_squeeze_conv,
                 aggregation_excitation_conv,
             )
         else:
-            aggregation_conv = DFineResNetConvLayer(
-                total_chs,
-                out_chs,
-                kernel_size=1,
-                stride=1
-            )
+            aggregation_conv = DFineResNetConvLayer(total_chs, out_chs, kernel_size=1, stride=1)
             att = EseModule(out_chs)
             self.aggregation = nn.Sequential(
                 aggregation_conv,
                 att,
             )
         self.drop_path = nn.Dropout(drop_path) if drop_path else nn.Identity()
-    
+
     def forward(self, x):
         identity = x
         output = [x]
@@ -274,26 +248,21 @@ class DFineResNetBasicLayer(nn.Module):
 
 class DFineResNetStage(nn.Module):
     def __init__(
-            self, 
-            in_chs,
-            mid_chs,
-            out_chs,
-            block_num,
-            layer_num,
-            downsample=True,
-            light_block=False,
-            kernel_size=3,
-            agg='se',
-            drop_path=0.):
+        self,
+        in_chs,
+        mid_chs,
+        out_chs,
+        block_num,
+        layer_num,
+        downsample=True,
+        light_block=False,
+        kernel_size=3,
+        agg="se",
+        drop_path=0.0,
+    ):
         super().__init__()
         if downsample:
-            self.downsample = DFineResNetConvLayer(
-                in_chs,
-                in_chs,
-                kernel_size=3,
-                stride=2,
-                groups=in_chs
-            )
+            self.downsample = DFineResNetConvLayer(in_chs, in_chs, kernel_size=3, stride=2, groups=in_chs)
         else:
             self.downsample = nn.Identity()
 
@@ -309,11 +278,11 @@ class DFineResNetStage(nn.Module):
                     kernel_size=kernel_size,
                     light_block=light_block,
                     agg=agg,
-                    drop_path=drop_path[i] if isinstance(drop_path, (list, tuple)) else drop_path
+                    drop_path=drop_path[i] if isinstance(drop_path, (list, tuple)) else drop_path,
                 )
             )
         self.blocks = nn.Sequential(*blocks_list)
-    
+
     def forward(self, x):
         x = self.downsample(x)
         x = self.blocks(x)
@@ -326,12 +295,15 @@ class DFineResNetEncoder(nn.Module):
         self.stages = nn.ModuleList([])
         for _, stage in enumerate(config.stage_config):
             in_channels, mid_channels, out_channels, block_num, downsample, light_block, kernel_size, layer_num = stage
-            self.stages.append(DFineResNetStage(in_channels, mid_channels, out_channels, block_num, layer_num, downsample, light_block, kernel_size ))
-    
+            self.stages.append(
+                DFineResNetStage(
+                    in_channels, mid_channels, out_channels, block_num, layer_num, downsample, light_block, kernel_size
+                )
+            )
+
     def forward(
         self, hidden_state: Tensor, output_hidden_states: bool = False, return_dict: bool = True
     ) -> BaseModelOutputWithNoAttention:
-        
         hidden_states = () if output_hidden_states else None
 
         for stage_module in self.stages:

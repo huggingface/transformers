@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 Baidu Inc and The HuggingFace Inc. team.
+# Copyright 2025 Baidu Inc and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -42,7 +42,9 @@ from ...activations import ACT2CLS
 class DFineConfig(RTDetrConfig):
     model_type = "d-fine"
 
-    def __init__(self, decoder_offset_scale=0.5, eval_idx=-1, layer_scale=1, reg_max=32, reg_scale=4., **super_kwargs):
+    def __init__(
+        self, decoder_offset_scale=0.5, eval_idx=-1, layer_scale=1, reg_max=32, reg_scale=4.0, **super_kwargs
+    ):
         super().__init__(**super_kwargs)
 
         self.decoder_offset_scale = decoder_offset_scale
@@ -86,9 +88,7 @@ def deformable_attention_core_func_v2(
 
     sampling_value_list = []
     for level, (height, width) in enumerate(value_spatial_shapes):
-        value_l = (
-            value_list[level].flatten(2).transpose(1, 2).reshape(bs * n_head, hidden_dim, height, width)
-        )
+        value_l = value_list[level].flatten(2).transpose(1, 2).reshape(bs * n_head, hidden_dim, height, width)
         sampling_grid_l: torch.Tensor = sampling_locations_list[level]
 
         if method == "default":
@@ -98,7 +98,9 @@ def deformable_attention_core_func_v2(
 
         elif method == "discrete":
             # n * m, seq, n, 2
-            sampling_coord = (sampling_grid_l * torch.tensor([[width, height]], device=value_l.device) + 0.5).to(torch.int64)
+            sampling_coord = (sampling_grid_l * torch.tensor([[width, height]], device=value_l.device) + 0.5).to(
+                torch.int64
+            )
 
             # FIX ME? for rectangle input
             sampling_coord = sampling_coord.clamp(0, height - 1)
@@ -111,7 +113,9 @@ def deformable_attention_core_func_v2(
             )
             sampling_value_l: torch.Tensor = value_l[s_idx, :, sampling_coord[..., 1], sampling_coord[..., 0]]  # n l c
 
-            sampling_value_l = sampling_value_l.permute(0, 2, 1).reshape(bs * n_head, hidden_dim, Len_q, num_points_list[level])
+            sampling_value_l = sampling_value_l.permute(0, 2, 1).reshape(
+                bs * n_head, hidden_dim, Len_q, num_points_list[level]
+            )
 
         sampling_value_list.append(sampling_value_l)
 
@@ -182,22 +186,31 @@ class DFineMultiscaleDeformableAttention(nn.Module):
         init.constant_(self.attention_weights.bias, 0)
 
     def forward(
-        self, hidden_states: torch.Tensor, reference_points: torch.Tensor, encoder_hidden_states: torch.Tensor, spatial_shapes: List[int]
+        self,
+        hidden_states: torch.Tensor,
+        reference_points: torch.Tensor,
+        encoder_hidden_states: torch.Tensor,
+        spatial_shapes: List[int],
     ):
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
 
         sampling_offsets: torch.Tensor = self.sampling_offsets(hidden_states)
-        sampling_offsets = sampling_offsets.reshape(batch_size, num_queries, self.n_heads, sum(self.num_points_list), 2)
+        sampling_offsets = sampling_offsets.reshape(
+            batch_size, num_queries, self.n_heads, sum(self.num_points_list), 2
+        )
 
-        attention_weights = self.attention_weights(hidden_states).reshape(batch_size, num_queries, self.n_heads, sum(self.num_points_list))
+        attention_weights = self.attention_weights(hidden_states).reshape(
+            batch_size, num_queries, self.n_heads, sum(self.num_points_list)
+        )
         attention_weights = F.softmax(attention_weights, dim=-1)
         value = encoder_hidden_states.view(batch_size, sequence_length, self.n_heads, self.d_model // self.n_heads)
         if reference_points.shape[-1] == 2:
             offset_normalizer = torch.tensor(spatial_shapes)
             offset_normalizer = offset_normalizer.flip([1]).reshape(1, 1, 1, self.n_levels, 1, 2)
             sampling_locations = (
-                reference_points.reshape(batch_size, num_queries, 1, self.n_levels, 1, 2) + sampling_offsets / offset_normalizer
+                reference_points.reshape(batch_size, num_queries, 1, self.n_levels, 1, 2)
+                + sampling_offsets / offset_normalizer
             )
         elif reference_points.shape[-1] == 4:
             # reference_points [8, 480, None, 1,  4]
@@ -215,7 +228,7 @@ class DFineMultiscaleDeformableAttention(nn.Module):
         )
 
         return output, attention_weights
-    
+
 
 class Gate(nn.Module):
     def __init__(self, d_model):
@@ -312,7 +325,7 @@ class DFineDecoderLayer(RTDetrDecoderLayer):
 
 
 class DFineConvEncoder(RTDetrConvEncoder):
-    def __init__(self, config: DFineConfig ):
+    def __init__(self, config: DFineConfig):
         super().__init__(config)
         self.intermediate_channel_sizes = config.encoder_in_channels
 
@@ -393,7 +406,7 @@ class Integral(nn.Module):
         x = F.softmax(x.reshape(-1, self.reg_max + 1), dim=1)
         x = F.linear(x, project.to(x.device)).reshape(-1, 4)
         return x.reshape(list(shape[:-1]) + [-1])
-    
+
 
 class DFineDecoder(RTDetrDecoder):
     """
@@ -455,7 +468,6 @@ class DFineDecoder(RTDetrDecoder):
 
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
-        
 
         # decoder layers
         all_hidden_states = () if output_hidden_states else None
@@ -466,7 +478,7 @@ class DFineDecoder(RTDetrDecoder):
         intermediate_logits = ()
 
         output_detach = pred_corners_undetach = 0
-        #value = self.value_op(inputs_embeds, None, None, memory_mask, spatial_shapes)
+        # value = self.value_op(inputs_embeds, None, None, memory_mask, spatial_shapes)
 
         project = weighting_function(self.reg_max, self.up, self.reg_scale)
         ref_points_detach = F.sigmoid(reference_points)
@@ -474,7 +486,7 @@ class DFineDecoder(RTDetrDecoder):
         for i, decoder_layer in enumerate(self.layers):
             ref_points_input = ref_points_detach.unsqueeze(2)
             query_pos_embed = self.query_pos_head(ref_points_detach).clamp(min=-10, max=10)
-            
+
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -510,7 +522,7 @@ class DFineDecoder(RTDetrDecoder):
             if self.class_embed is not None:
                 logits = self.class_embed[i](hidden_states)
                 intermediate_logits += (logits,)
-        
+
         # Keep batch_size as first dimension
         intermediate = torch.stack(intermediate, dim=1)
         intermediate_reference_points = torch.stack(intermediate_reference_points, dim=1)
@@ -703,7 +715,9 @@ class DFineVggBlock(RTDetrRepVggBlock):
 
 
 class DFineConvNormLayer(RTDetrConvNormLayer):
-    def __init__(self, config, in_channels, out_channels, kernel_size, stride, groups=1, padding=None, activation=None):
+    def __init__(
+        self, config, in_channels, out_channels, kernel_size, stride, groups=1, padding=None, activation=None
+    ):
         super().__init__(config, in_channels, out_channels, kernel_size, stride, padding=None, activation=None)
         self.conv = nn.Conv2d(
             in_channels,
@@ -745,7 +759,9 @@ class DFineCSPRepLayer(nn.Module):
         hidden_channels = int(out_channels * config.hidden_expansion)
         self.conv1 = DFineConvNormLayer(config, in_channels, hidden_channels, 1, 1, activation=activation)
         self.conv2 = DFineConvNormLayer(config, in_channels, hidden_channels, 1, 1, activation=activation)
-        self.bottlenecks = nn.Sequential(*[DFineRepVggBlock(config, hidden_channels, hidden_channels) for _ in range(num_blocks)])
+        self.bottlenecks = nn.Sequential(
+            *[DFineRepVggBlock(config, hidden_channels, hidden_channels) for _ in range(num_blocks)]
+        )
         if hidden_channels != out_channels:
             self.conv3 = DFineConvNormLayer(config, hidden_channels, out_channels, 1, 1, activation=activation)
         else:
@@ -757,22 +773,25 @@ class DFineCSPRepLayer(nn.Module):
         hidden_state_1 = self.bottlenecks(hidden_state_1).to(device)
         hidden_state_2 = self.conv2(hidden_state).to(device)
         return self.conv3(hidden_state_1 + hidden_state_2)
-        
+
 
 class RepNCSPELAN4(nn.Module):
     # csp-elan
-    def __init__(self, config: DFineConfig,
-                 act="silu"):
+    def __init__(self, config: DFineConfig, act="silu"):
         super().__init__()
         c1 = config.encoder_hidden_dim * 2
         c2 = config.encoder_hidden_dim
         c3 = config.encoder_hidden_dim * 2
         c4 = round(config.hidden_expansion * config.encoder_hidden_dim // 2)
-        self.c = c3//2
+        self.c = c3 // 2
         self.cv1 = DFineConvNormLayer(config, c1, c3, 1, 1, activation=act)
-        self.cv2 = nn.Sequential(DFineCSPRepLayer(config, c3//2, c4 ), DFineConvNormLayer(config, c4, c4, 3, 1, activation=act))
-        self.cv3 = nn.Sequential(DFineCSPRepLayer(config, c4, c4 ), DFineConvNormLayer(config, c4, c4, 3, 1, activation=act))
-        self.cv4 = DFineConvNormLayer(config, c3+(2*c4), c2, 1, 1, activation=act)
+        self.cv2 = nn.Sequential(
+            DFineCSPRepLayer(config, c3 // 2, c4), DFineConvNormLayer(config, c4, c4, 3, 1, activation=act)
+        )
+        self.cv3 = nn.Sequential(
+            DFineCSPRepLayer(config, c4, c4), DFineConvNormLayer(config, c4, c4, 3, 1, activation=act)
+        )
+        self.cv4 = DFineConvNormLayer(config, c3 + (2 * c4), c2, 1, 1, activation=act)
 
     def forward_chunk(self, x):
         y = list(self.cv1(x).chunk(2, 1))
@@ -818,22 +837,21 @@ class DFineHybridEncoder(RTDetrHybridEncoder):
         self.lateral_convs = nn.ModuleList()
         self.fpn_blocks = nn.ModuleList()
         for _ in range(len(self.in_channels) - 1, 0, -1):
-            self.lateral_convs.append(DFineConvNormLayer(config, self.encoder_hidden_dim, self.encoder_hidden_dim, 1, 1))
-            self.fpn_blocks.append(
-                RepNCSPELAN4(config)
+            self.lateral_convs.append(
+                DFineConvNormLayer(config, self.encoder_hidden_dim, self.encoder_hidden_dim, 1, 1)
             )
-        
+            self.fpn_blocks.append(RepNCSPELAN4(config))
+
         # bottom-up pan
         self.downsample_convs = nn.ModuleList()
         self.pan_blocks = nn.ModuleList()
         for _ in range(len(self.in_channels) - 1):
-            self.downsample_convs.append(nn.Sequential(
-                SCDown(config, self.encoder_hidden_dim, self.encoder_hidden_dim, 3, 2),
+            self.downsample_convs.append(
+                nn.Sequential(
+                    SCDown(config, self.encoder_hidden_dim, self.encoder_hidden_dim, 3, 2),
                 )
             )
-            self.pan_blocks.append(
-                RepNCSPELAN4(config)
-            )
+            self.pan_blocks.append(RepNCSPELAN4(config))
 
 
 __all__ = [
