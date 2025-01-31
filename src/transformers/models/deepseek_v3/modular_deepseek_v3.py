@@ -13,14 +13,15 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import logging
 from ..llama.modeling_llama import (
+    LlamaForCausalLM,
     LlamaForSequenceClassification,
+    LlamaModel,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
     eager_attention_forward,
 )
-from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel
 from .configuration_deepseek_v3 import DeepseekV3Config
 
 
@@ -122,60 +123,27 @@ class DeepseekV3MoE(nn.Module):
         orig_shape = hidden_states.shape
         topk_indices, topk_weights, router_logits = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.moe_infer(hidden_states, topk_indices, topk_weights).view(*orig_shape)
+        hidden_states = self.moe(hidden_states, topk_indices, topk_weights).view(*orig_shape)
         hidden_states = hidden_states + self.shared_experts(residuals)
         return hidden_states, router_logits
 
-    def moe_infer(self, hidden_states: torch.Tensor, topk_indices: torch.Tensor, topk_weights: torch.Tensor):
-        """
-        Perform inference using a Mixture of Experts (MoE) model.
-        Args:
-            hidden_states (torch.Tensor): Input hidden states.
-            topk_indices (torch.Tensor): Indices of the top-k experts for each token.
-            topk_weights (torch.Tensor): Weights associated with the top-k experts.
+    def moe(self, hidden_states: torch.Tensor, topk_indices: torch.Tensor, topk_weights: torch.Tensor):
+        final_hidden_states = torch.zeros_like(hidden_states, dtype=topk_weights.dtype)
+        expert_mask = torch.nn.functional.one_hot(topk_indices, num_classes=len(self.experts))
+        expert_mask = expert_mask.permute(2, 0, 1)
 
-        Returns:
-            torch.Tensor: Output of the MoE model.
-        """
-        num_experts = len(self.experts)
-        batch_size, num_topk = topk_indices.shape
-        with torch.no_grad():
-            # Count the number of tokens assigned to each expert
-            expert_counts = topk_indices.new_zeros((batch_size, num_experts))
-            expert_counts.scatter_(1, topk_indices, 1)
-            tokens_per_expert = expert_counts.sum(dim=0)
-
-            # Sort tokens by their assigned expert
-            sorted_indices = topk_indices.view(-1).argsort()
-            sorted_tokens = hidden_states[sorted_indices // num_topk]
-            tokens_per_expert = tokens_per_expert.cpu().numpy()
-
-            # Process tokens through their assigned experts
-            expert_outputs = []
-            current_pos = 0
-
-        for expert_idx, num_tokens in enumerate(tokens_per_expert):
-            if num_tokens == 0:
-                continue
-
-            next_pos = current_pos + num_tokens
+        for expert_idx in range(len(self.experts)):
             expert = self.experts[expert_idx]
-            expert_tokens = sorted_tokens[current_pos:next_pos]
-            expert_outputs.append(expert(expert_tokens))
-            current_pos = next_pos
+            mask = expert_mask[expert_idx]
+            token_indices, weight_indices = torch.where(mask)
 
-        # Combine the outputs from all experts
-        expert_outputs = torch.cat(expert_outputs, dim=0) if expert_outputs else sorted_tokens.new_empty(0)
-
-        # Reorder the outputs to match the original token sequence
-        reordered_outputs = torch.empty_like(expert_outputs)
-        reordered_outputs[sorted_indices] = expert_outputs
-
-        # Reshape and apply the expert weights
-        reordered_outputs = reordered_outputs.view(batch_size, num_topk, -1).type(topk_weights.dtype)
-        moe_output = torch.matmul(topk_weights.unsqueeze(1), reordered_outputs)
-        moe_output = moe_output.sum(dim=1).type(hidden_states.dtype)
-        return moe_output
+            if token_indices.numel() > 0:
+                expert_weights = topk_weights[token_indices, weight_indices]
+                expert_input = hidden_states[token_indices]
+                expert_output = expert(expert_input)
+                weighted_output = expert_output * expert_weights.unsqueeze(-1)
+                final_hidden_states.index_add_(0, token_indices, weighted_output)
+        return final_hidden_states.type(hidden_states.dtype)
 
 
 class DeepseekV3Attention(nn.Module):
@@ -365,18 +333,7 @@ class DeepseekV3PreTrainedModel(LlamaPreTrainedModel):
     pass
 
 
-def permute_for_rope(input_tensor, n_heads, dim1, dim2):
-    """
-    When you go from the complex ROPE formulation to sin and cos one, you need
-    to permute the query and key weights (to avoid doing it on the fly)
-    """
-    input_tensor = input_tensor.reshape(dim1, dim2)
-    input_tensor = input_tensor.view(n_heads, dim1 // n_heads // 2, 2, dim2)
-    input_tensor = input_tensor.transpose(1, 2).reshape(dim1, dim2)
-    return input_tensor
-
-
-class DeepseekV3Model(MixtralModel):
+class DeepseekV3Model(LlamaModel):
     def __init__(self, config):
         super().__init__(config)
         self._register_load_state_dict_pre_hook(self.load_hook)
@@ -384,19 +341,49 @@ class DeepseekV3Model(MixtralModel):
 
     def load_hook(self, state_dict, prefix, *args):
         """
-        Weights have to be permutted for correct rope formulation. We can't do this in the weights
-        as every other framework already uses the `Llama` orginal function (which is copyrighted btw).
+        Weights have to be permuted for correct rope formulation. We can't do this in the weights
+        as every other framework already uses the `Llama` original function (which is copyrighted btw).
         And I am not even sure it's better.... anyways end of my rant
         """
+
+        def permute_for_rope(input_tensor):
+            """
+            When you go from the complex ROPE formulation to sin and cos one, you need
+            to permute the query and key weights (to avoid doing it on the fly)
+            """
+            n_heads, dim1, dim2 = input_tensor.shape[0], input_tensor.shape[1], input_tensor.shape[2]
+            input_tensor = input_tensor.reshape(n_heads * dim1, dim2)
+            input_tensor = input_tensor.view(n_heads, dim1 // 2, 2, dim2)
+            input_tensor = input_tensor.transpose(1, 2).reshape(n_heads, dim1, dim2)
+            return input_tensor
+
+        def permute_layer_for_rope(key, num_heads, head_dim, rope_dim):
+            weight = state_dict[key]
+            weight = weight.view(num_heads, head_dim, -1)
+            weight_rot = weight[:, -rope_dim:]
+            weight_rot = permute_for_rope(weight_rot)
+            weight[:, -rope_dim:] = weight_rot
+            weight = weight.view(-1, weight.shape[-1])
+            state_dict[key] = weight
+
         for k in state_dict:
             if "q_b_proj." in k:
-                weight = state_dict.pop(k[: self.qk_nope_head_dim])
-            if "k_b_proj." in k:
-                weight = state_dict.pop(k[self.qk_nope_head_dim :])
-            state_dict[k] = permute_for_rope(weight, weight.shape[0], weight.shape[1], weight.shape[2])
+                permute_layer_for_rope(
+                    k,
+                    num_heads=self.config.num_attention_heads,
+                    head_dim=self.config.q_head_dim,
+                    rope_dim=self.config.qk_rope_head_dim,
+                )
+            if "kv_a_proj_with_mqa." in k:
+                permute_layer_for_rope(
+                    k,
+                    num_heads=1,
+                    head_dim=self.config.kv_lora_rank + self.config.qk_rope_head_dim,
+                    rope_dim=self.config.qk_rope_head_dim,
+                )
 
 
-class DeepseekV3ForCausalLM(MixtralForCausalLM):
+class DeepseekV3ForCausalLM(LlamaForCausalLM):
     pass
 
 
