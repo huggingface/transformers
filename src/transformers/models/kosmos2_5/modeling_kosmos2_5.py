@@ -463,6 +463,7 @@ class Kosmos2_5VisionAttention(nn.Module):
         self.dropout = config.attention_dropout
         self.inner_dim = self.n_heads * self.key_value_proj_dim
         self.is_causal = False
+        self.scaling = self.key_value_proj_dim ** -0.5
 
         # Mesh TensorFlow initialization to avoid scaling before softmax
         self.query = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
@@ -514,7 +515,7 @@ class Kosmos2_5VisionAttention(nn.Module):
             value_states,
             attention_mask,
             dropout=0.0 if not self.training else self.dropout,
-            scaling=1.0,
+            scaling=self.scaling,
             **kwargs,
         )
 
