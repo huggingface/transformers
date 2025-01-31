@@ -271,14 +271,14 @@ class GotOcr2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 @require_torch
 class GotOcr2IntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.processor = AutoProcessor.from_pretrained("yonigozlan/GOT-OCR-2.0-hf")
+        self.processor = AutoProcessor.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf")
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
     @slow
     def test_small_model_integration_test_got_ocr_stop_strings(self):
-        model_id = "yonigozlan/GOT-OCR-2.0-hf"
+        model_id = "stepfun-ai/GOT-OCR-2.0-hf"
         model = GotOcr2ForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
         image = load_image(
             "https://huggingface.co/datasets/hf-internal-testing/fixtures_ocr/resolve/main/iam_picture.jpeg"
@@ -301,7 +301,7 @@ class GotOcr2IntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_got_ocr_format(self):
-        model_id = "yonigozlan/GOT-OCR-2.0-hf"
+        model_id = "stepfun-ai/GOT-OCR-2.0-hf"
         model = GotOcr2ForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
         image = load_image(
             "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
@@ -317,7 +317,7 @@ class GotOcr2IntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_got_ocr_fine_grained(self):
-        model_id = "yonigozlan/GOT-OCR-2.0-hf"
+        model_id = "stepfun-ai/GOT-OCR-2.0-hf"
         model = GotOcr2ForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
         image = load_image(
             "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/multi_box.png"
@@ -333,7 +333,7 @@ class GotOcr2IntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_got_ocr_crop_to_patches(self):
-        model_id = "yonigozlan/GOT-OCR-2.0-hf"
+        model_id = "stepfun-ai/GOT-OCR-2.0-hf"
         model = GotOcr2ForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
         image = load_image(
             "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/one_column.png"
@@ -349,7 +349,7 @@ class GotOcr2IntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_got_ocr_multi_pages(self):
-        model_id = "yonigozlan/GOT-OCR-2.0-hf"
+        model_id = "stepfun-ai/GOT-OCR-2.0-hf"
         model = GotOcr2ForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
         image1 = load_image(
             "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/one_column.png"
@@ -368,7 +368,7 @@ class GotOcr2IntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_got_ocr_batched(self):
-        model_id = "yonigozlan/GOT-OCR-2.0-hf"
+        model_id = "stepfun-ai/GOT-OCR-2.0-hf"
         model = GotOcr2ForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
         image1 = load_image(
             "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/multi_box.png"
