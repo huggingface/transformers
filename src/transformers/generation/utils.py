@@ -1677,7 +1677,7 @@ class GenerationMixin:
         batch_size: int,
         max_cache_length: int,
         device: torch.device,
-    ) -> bool:
+    ) -> None:
         """
         Prepares the cache for generation (if applicable), given `generate`'s parameterization. If a cache is
         instantiated, writes it to `model_kwargs`, under the name expected by the model.

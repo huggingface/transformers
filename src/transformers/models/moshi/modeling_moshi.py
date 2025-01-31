@@ -1062,7 +1062,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
     """
 
     config_class = MoshiDepthConfig
-    _supports_static_cache = False  # When switching this to true, delete the overwritten `_get_cache` method
+    _supports_static_cache = False  # When switching to true, delete the overwritten `_prepare_cache_for_generation`
 
     def __init__(self, config: MoshiDepthConfig):
         super().__init__(config)
@@ -1442,14 +1442,24 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
                 )
         return causal_mask
 
-    def _get_cache(self, *args, **kwargs):
+    def _prepare_cache_for_generation(
+        self,
+        generation_config: GenerationConfig,
+        model_kwargs: Dict,
+        assistant_model: PreTrainedModel,
+        batch_size: int,
+        max_cache_length: int,
+        device: torch.device,
+    ) -> None:
         """
         Overwritten: Moshi doesn't support compilation, yet it defaults to the sliding window cache implementation.
         The sliding window cache is compileable, which may trigger automatic compilation. This overwrite disables it.
         """
-        cache = super()._get_cache(*args, **kwargs)
-        cache.is_compileable = False
-        return cache
+        super()._prepare_cache_for_generation(
+            generation_config, model_kwargs, assistant_model, batch_size, max_cache_length, device
+        )
+        if "past_key_values" in model_kwargs:
+            model_kwargs["past_key_values"].is_compileable = False
 
 
 @add_start_docstrings(
@@ -1922,7 +1932,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
     supports_gradient_checkpointing = True
     _supports_flash_attn_2 = True
     _supports_sdpa = True
-    _supports_static_cache = False  # When switching this to true, delete the overwritten `_get_cache` method
+    _supports_static_cache = False  # When switching to true, delete the overwritten `_prepare_cache_for_generation`
 
     def __init__(self, config: MoshiConfig):
         super().__init__(config)
@@ -2738,14 +2748,24 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
             for layer_past in past_key_values
         )
 
-    def _get_cache(self, *args, **kwargs):
+    def _prepare_cache_for_generation(
+        self,
+        generation_config: GenerationConfig,
+        model_kwargs: Dict,
+        assistant_model: PreTrainedModel,
+        batch_size: int,
+        max_cache_length: int,
+        device: torch.device,
+    ) -> None:
         """
         Overwritten: Moshi doesn't support compilation, yet it defaults to the sliding window cache implementation.
         The sliding window cache is compileable, which may trigger automatic compilation. This overwrite disables it.
         """
-        cache = super()._get_cache(*args, **kwargs)
-        cache.is_compileable = False
-        return cache
+        super()._prepare_cache_for_generation(
+            generation_config, model_kwargs, assistant_model, batch_size, max_cache_length, device
+        )
+        if "past_key_values" in model_kwargs:
+            model_kwargs["past_key_values"].is_compileable = False
 
 
 __all__ = ["MoshiForCausalLM", "MoshiForConditionalGeneration", "MoshiModel", "MoshiPreTrainedModel"]
