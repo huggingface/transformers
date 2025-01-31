@@ -209,7 +209,7 @@ class DeepseekV3Attention(nn.Module):
         batch_size, seq_length = input_shape
 
         q_states = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states))).view(hidden_shape).transpose(1, 2)
-        q_rot, q_pass = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
+        q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
         k_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
@@ -221,9 +221,10 @@ class DeepseekV3Attention(nn.Module):
 
         cos, sin = position_embeddings
         q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
+        k_rot = k_rot.expand(batch_size, self.num_heads, seq_length, self.qk_rope_head_dim)
 
-        query_states = torch.cat(q_rot, q_pass, dim=-1)
-        key_states = torch.cat(k_rot, k_pass, dim=-1)
+        query_states = torch.cat((q_pass, q_rot), dim=-1)
+        key_states = torch.cat((k_pass, k_rot), dim=-1)
 
         if self.config._attn_implementation == "flash_attention_2" and self.q_head_dim != self.v_head_dim:
             value_states = F.pad(value_states, [0, self.q_head_dim - self.v_head_dim])
