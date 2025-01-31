@@ -17,7 +17,7 @@
 
 # TODO: remove these
 from icecream import ic
-# from pack_minimax import show_tensor
+from pack_minimax import show_tensor
 
 from typing import Callable, List, Optional, Tuple, Union
 
@@ -254,6 +254,18 @@ class MiniMaxText01RMSNorm(MixtralRMSNorm):
     pass
 
 
+class MiniMaxText01Cache(DynamicCache):
+    def __init__(self):
+        super().__init__()
+        self.kv_cache: dict[int: torch.Tensor] = {}
+
+    def set_kv_cache(self, kv_cache, layer_idx):
+        self.kv_cache[layer_idx] = kv_cache
+
+    def get_kv_cache(self, layer_idx):
+        return self.kv_cache.get(layer_idx)
+
+
 class MiniMaxText01LightningAttentionDecay(nn.Module):
     def __init__(self, config: MiniMaxText01Config, layer_idx: int):
         super().__init__()
@@ -336,63 +348,55 @@ class MiniMaxText01LightningAttention(nn.Module):
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
-        # apply attention_mask
-        if attention_mask is not None:
-            value_states = value_states.masked_fill((1 - attention_mask).unsqueeze(1).unsqueeze(-1).to(torch.bool), 0)
+        kv_cache = past_key_value.get_kv_cache(self.layer_idx)
 
-        query_states = F.pad(query_states, (0, 0, 0, padding))
-        key_states = F.pad(key_states, (0, 0, 0, padding))
-        value_states = F.pad(value_states, (0, 0, 0, padding))
+        if kv_cache is None:
+            kv_cache = torch.zeros(batch_size, self.num_heads, 1, self.head_dim, self.head_dim).to(value_states)
 
-        query_states = query_states.reshape(batch_size, self.num_heads, num_blocks, self.block_size, self.head_dim)
-        key_states = key_states.reshape(batch_size, self.num_heads, num_blocks, self.block_size, self.head_dim)
-        value_states = value_states.reshape(batch_size, self.num_heads, num_blocks, self.block_size, self.head_dim)
+            # apply attention_mask
+            if attention_mask is not None:
+                value_states = value_states.masked_fill((1 - attention_mask).unsqueeze(1).unsqueeze(-1).to(torch.bool), 0)
 
-        # Dynamic Cache
-        if past_key_value is None:
-            kv_cache = DynamicCache()
+            query_states = F.pad(query_states, (0, 0, 0, padding))
+            key_states = F.pad(key_states, (0, 0, 0, padding))
+            value_states = F.pad(value_states, (0, 0, 0, padding))
+
+            query_states = query_states.reshape(batch_size, self.num_heads, num_blocks, self.block_size, self.head_dim)
+            key_states = key_states.reshape(batch_size, self.num_heads, num_blocks, self.block_size, self.head_dim)
+            value_states = value_states.reshape(batch_size, self.num_heads, num_blocks, self.block_size, self.head_dim)
+
+            # get decay factors
+            key_decay, query_decay, diagonal_decay, block_decay = self.decay_factors(query_states, seq_len)
+
+            # intra: ( Q @ K.T ) @ V -> QK * V
+            attn_weights_intra = torch.matmul(query_states, key_states.transpose(-1, -2))
+            attn_output_intra = torch.matmul(attn_weights_intra * diagonal_decay, value_states)
+
+            # inter: Q @ ( K.T @ V ) -> Q * KV
+            attn_weights_inter = torch.matmul((key_states * key_decay).transpose(-1, -2), value_states)
+            attn_weights_inter = torch.cat([kv_cache, attn_weights_inter], dim=2)
+            for i in range(num_blocks):
+                attn_weights_inter[:, :, i + 1, :, :] += attn_weights_inter[:, :, i, :, :] * block_decay[:, i, :, :]
+            kv_cache = attn_weights_inter[:, :, -1, :, :]
+            attn_weights_inter = attn_weights_inter[:, :, :-1, :, :]
+            attn_output_inter = torch.matmul(query_states * query_decay, attn_weights_inter)
+
+            # inter + intra
+            attn_output = attn_output_inter + attn_output_intra
+            attn_output = attn_output.reshape(batch_size, self.num_heads, seq_len + padding, self.head_dim)
+            attn_output = attn_output[:, :, :seq_len, :]
         else:
-            kv_cache = past_key_value
-
-        # update the kv_cache with the new key and value states
-        kv_cache.update(
-            key_states, value_states, layer_idx=self.layer_idx
-            )
-
-        # Retrieve the cached key and value states
-        cached_keys, cached_values = kv_cache[self.layer_idx] # Shape: [batch_size, num_heads, seq_len, head_dim]
-        
-        # # TODO: get from past_key_value[layer_idx]
-        # next_cache = torch.zeros(batch_size, self.num_heads, 1, self.head_dim, self.head_dim).to(value_states)
-
-        # get decay factors
-        key_decay, query_decay, diagonal_decay, block_decay = self.decay_factors(query_states, seq_len)
-
-        # intra: ( Q @ K.T ) @ V -> QK * V
-        # attn_weights_intra = torch.matmul(query_states, key_states.transpose(-1, -2))
-        # Calculate the attention weights using the cached key and value states
-        attn_weights_intra = torch.matmul(query_states, cached_keys.transpose(-1, -2))
-        attn_output_intra = torch.matmul(attn_weights_intra * diagonal_decay, cached_values)
-
-        # inter: Q @ ( K.T @ V ) -> Q * KV
-        attn_weights_inter = torch.matmul((cached_keys * key_decay).transpose(-1, -2), cached_values)
-        attn_weights_inter = torch.cat([torch.zeros_like(attn_weights_inter[:, :, :1]), attn_weights_inter], dim=2)
-
-        # attn_weights_inter = torch.cat([next_cache, attn_weights_inter], dim=2)
-
-        for i in range(num_blocks):
-            attn_weights_inter[:, :, i + 1, :, :] += attn_weights_inter[:, :, i, :, :] * block_decay[:, i, :, :]
-        
-        # next_cache = attn_weights_inter[:, :, -1, :, :]
-        # attn_weights_inter = attn_weights_inter[:, :, :-1, :, :]
-        # attn_output_inter = torch.matmul(query_states * query_decay, attn_weights_inter)
-
-        attn_output_inter = torch.matmul(query_states * query_decay, attn_weights_inter[:, :, :-1, :, :])
-
-        # inter + intra
-        attn_output = attn_output_inter + attn_output_intra
-        attn_output = attn_output.reshape(batch_size, self.num_heads, seq_len + padding, self.head_dim)
-        attn_output = attn_output[:, :, :seq_len, :]
+            ratio = 0.23 # TODO: get from decay
+            attn_output = []
+            for i in range(seq_len):
+                kv_cache = ratio * kv_cache + torch.einsum(
+                    "... n d, ... n e -> ... d e",
+                    key_states[:, :, i : i + 1],
+                    value_states[:, :, i : i + 1],
+                )
+                attn_output_i = torch.einsum("... n e, ... e d -> ... n d", query_states[:, :, i : i + 1], kv_cache)
+                attn_output.append(attn_output_i)
+            attn_output = torch.concat(attn_output, dim=-2)
 
         # final output projection
         attn_output = attn_output.transpose(1, 2)
@@ -401,16 +405,16 @@ class MiniMaxText01LightningAttention(nn.Module):
         attn_output = F.sigmoid(self.output_gate(hidden_states)) * attn_output
         attn_output = self.out_proj(attn_output)
 
-        print("KV Cache:", kv_cache)
-        # # TODO: put to past_key_value[layer_idx]
-        # next_cache
+        # update cache
+        past_key_value.set_kv_cache(kv_cache, self.layer_idx)
 
         # TODO: remove these
-        # print()
-        # print(self.layer_idx)
-        # print("Next Cache:",next_cache)
+        print()
+        print(self.layer_idx)
+        print(kv_cache)
 
         return attn_output, None
+
 
 class MiniMaxText01Attention(MixtralAttention):
     pass
@@ -443,7 +447,6 @@ class MiniMaxText01DecoderLayer(MixtralDecoderLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        causal_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
@@ -458,8 +461,6 @@ class MiniMaxText01DecoderLayer(MixtralDecoderLayer):
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.Tensor`, *optional*): attention mask of size
                 `(batch, sequence_length)` where padding elements are indicated by 0.
-            causal_mask (`torch.Tensor`, *optional*): causal attention mask of size
-                `(batch, 1, query_length, key_value_length)` where padding elements are indicated by 0.
             past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
@@ -484,7 +485,6 @@ class MiniMaxText01DecoderLayer(MixtralDecoderLayer):
             residual = hidden_states
 
         # Self Attention
-        attention_mask = attention_mask if self.attn_type == 0 else causal_mask
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
             position_embeddings=position_embeddings,
@@ -565,7 +565,7 @@ class MiniMaxText01Model(MixtralModel):
                 use_cache = False
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = MiniMaxText01Cache()
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -596,12 +596,17 @@ class MiniMaxText01Model(MixtralModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
+            if decoder_layer.attn_type == 0:
+                # lightning attention uses original attention_mask, and uses it only for the first step
+                input_attention_mask = attention_mask
+            else:
+                input_attention_mask = causal_mask
+
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,
                     hidden_states,
-                    attention_mask,
-                    causal_mask,
+                    input_attention_mask,
                     position_ids,
                     past_key_values,
                     output_attentions,
@@ -613,8 +618,7 @@ class MiniMaxText01Model(MixtralModel):
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,
-                    attention_mask=attention_mask,
-                    causal_mask=causal_mask,
+                    attention_mask=input_attention_mask,
                     position_ids=position_ids,
                     past_key_value=past_key_values,
                     output_attentions=output_attentions,
@@ -653,6 +657,13 @@ class MiniMaxText01ForCausalLM(MixtralForCausalLM):
     def __init__(self, config):
         super().__init__(config)
         self.model = MiniMaxText01Model(config)
+
+    def _prepare_cache_for_generation(
+            self, generation_config, model_kwargs, assistant_model, batch_size, max_cache_length, device
+        ):
+        if model_kwargs.get("past_key_values") is None:
+            model_kwargs["past_key_values"] = MiniMaxText01Cache()
+        super()._prepare_cache_for_generation(generation_config, model_kwargs, assistant_model, batch_size, max_cache_length, device)
 
 
 class MiniMaxText01ForSequenceClassification(MixtralForSequenceClassification):
