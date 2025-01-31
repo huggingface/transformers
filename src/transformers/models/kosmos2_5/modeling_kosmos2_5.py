@@ -1386,7 +1386,7 @@ class Kosmos2_5ImageToTextProjection(nn.Module):
         self.latent_query = nn.Parameter(torch.randn(config.latent_query_num, config.text_config.embed_dim))
 
         # Ignore copy
-        self.x_attn = KOSMOS2_5_TEXT_ATTENTION_CLASSES[config._attn_implementation](
+        self.x_attn = Kosmos2_5TextAttention(
             config.text_config,
             config.text_config.embed_dim,
             config.text_config.attention_heads,
