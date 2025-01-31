@@ -1062,6 +1062,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
     """
 
     config_class = MoshiDepthConfig
+    _supports_static_cache = False  # When switching this to true, delete the overwritten `_get_cache` method
 
     def __init__(self, config: MoshiDepthConfig):
         super().__init__(config)
@@ -1440,6 +1441,15 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
                     padding_mask, min_dtype
                 )
         return causal_mask
+
+    def _get_cache(self, *args, **kwargs):
+        """
+        Overwritten: Moshi doesn't support compilation, yet it defaults to the sliding window cache implementation.
+        The sliding window cache is compileable, which may trigger automatic compilation. This overwrite disables it.
+        """
+        cache = super()._get_cache(*args, **kwargs)
+        cache.is_compileable = False
+        return cache
 
 
 @add_start_docstrings(
@@ -1912,6 +1922,7 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
     supports_gradient_checkpointing = True
     _supports_flash_attn_2 = True
     _supports_sdpa = True
+    _supports_static_cache = False  # When switching this to true, delete the overwritten `_get_cache` method
 
     def __init__(self, config: MoshiConfig):
         super().__init__(config)
@@ -2726,6 +2737,15 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
             tuple(past_state.index_select(0, beam_idx.to(past_state.device)) for past_state in layer_past)
             for layer_past in past_key_values
         )
+
+    def _get_cache(self, *args, **kwargs):
+        """
+        Overwritten: Moshi doesn't support compilation, yet it defaults to the sliding window cache implementation.
+        The sliding window cache is compileable, which may trigger automatic compilation. This overwrite disables it.
+        """
+        cache = super()._get_cache(*args, **kwargs)
+        cache.is_compileable = False
+        return cache
 
 
 __all__ = ["MoshiForCausalLM", "MoshiForConditionalGeneration", "MoshiModel", "MoshiPreTrainedModel"]
