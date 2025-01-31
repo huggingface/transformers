@@ -4810,7 +4810,7 @@ class ModelTesterMixin:
             self.assertTrue(torch.allclose(all_logits[:, -1:, :], last_token_logits, atol=1e-5))
 
     @slow
-    @require_torch_greater_or_equal("2.3")
+    @require_torch_greater_or_equal("2.5")
     def test_torch_export(self, config=None, inputs_dict=None, tolerance=1e-4):
         """
         Test if model can be exported with torch.export.export()
