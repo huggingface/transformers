@@ -51,12 +51,6 @@ def ForCausalLMLoss(
         all_logits = torch.cat(all_logits, dim=0)
         logits = all_logits.reshape(logits.size(0), -1, logits.size(-1))
 
-        # the last token may have gotten clipped during sharding
-        # we need to fix this but it causes issues with attention
-        # for now we just leave it clipped
-        if logits.size(1) > labels.size(1):
-            labels = labels[:, logits.size(1)]
-
     # Upcast to float if we need to compute the loss to avoid potential precision issues
     logits = logits.float()
     # Shift so that tokens < n predict n

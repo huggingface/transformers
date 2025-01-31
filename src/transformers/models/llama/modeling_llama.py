@@ -922,6 +922,11 @@ class LlamaModel(LlamaPreTrainedModel):
         output_attentions: bool,
     ):
         if self.config._attn_implementation == "flash_attention_2":
+            # Fix different sequence shards going to different attn implementations (fixed vs. varlen) by just forcing
+            # the use of the fixed length implementation.
+            if getattr(self, "sp_size", 1) > 1:
+                return None
+
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None
