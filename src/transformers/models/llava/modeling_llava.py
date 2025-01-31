@@ -280,6 +280,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
         pixel_values: torch.FloatTensor,
         vision_feature_layer: Union[int, List[int]],
         vision_feature_select_strategy: str,
+        **kwargs,
     ):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
@@ -300,8 +301,9 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
         if vision_feature_select_strategy not in ["default", "full"]:
             raise ValueError(f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}")
 
+        kwargs = {k: v for k, v in kwargs.items() if v is not None}
         # this is not memory efficient at all (output_hidden_states=True) will save all the hidden states.
-        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
+        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True, **kwargs)
 
         # If we have one vision feature layer, return the corresponding hidden states,
         # otherwise, select the hidden states of each feature layer and concatenate them
@@ -422,6 +424,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
+        image_sizes: torch.Tensor = None,
     ) -> Union[Tuple, LlavaCausalLMOutputWithPast]:
         r"""
         Args:
@@ -492,6 +495,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
                 pixel_values=pixel_values,
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
+                image_sizes=image_sizes,
             )
 
             n_image_tokens = (input_ids == self.config.image_token_index).sum().item()
