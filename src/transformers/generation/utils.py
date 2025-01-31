@@ -3183,7 +3183,7 @@ class GenerationMixin:
 
         model_forward = self.__call__
         if isinstance(model_kwargs.get("past_key_values"), Cache):
-            is_compileable = model_kwargs["past_key_values"].is_compileable
+            is_compileable = model_kwargs["past_key_values"].is_compileable and self._supports_static_cache
             if is_compileable and (
                 self.device.type == "cuda" or generation_config.compile_config._compile_all_devices
             ):
