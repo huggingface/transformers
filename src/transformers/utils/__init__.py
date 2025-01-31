@@ -320,3 +320,21 @@ def get_available_devices() -> FrozenSet[str]:
         devices.add("musa")
 
     return frozenset(devices)
+
+
+def is_offline_mode() -> bool:
+    """
+    Checks if the system is in offline mode.
+
+    Returns:
+        `bool`: True if the system is in offline mode, False otherwise.
+    """
+    return os.getenv("HF_HUB_OFFLINE", "0") == "1"
+
+
+def handle_offline_usage():
+    """
+    Handles offline usage by setting the appropriate environment variables.
+    """
+    os.environ["HF_HUB_OFFLINE"] = "1"
+    os.environ["HF_DATASETS_OFFLINE"] = "1"

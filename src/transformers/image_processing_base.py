@@ -551,6 +551,51 @@ class ImageProcessingMixin(PushToHubMixin):
         else:
             raise TypeError(f"only a single or a list of entries is supported but got type={type(image_url_or_urls)}")
 
+    @classmethod
+    def from_pretrained_offline(
+        cls: Type[ImageProcessorType],
+        pretrained_model_name_or_path: Union[str, os.PathLike],
+        local_files_only: bool = True,
+        **kwargs,
+    ) -> ImageProcessorType:
+        """
+        Instantiate a type of [`~image_processing_utils.ImageProcessingMixin`] from an image processor using only local files.
+
+        Args:
+            pretrained_model_name_or_path (`str` or `os.PathLike`):
+                This can be either:
+
+                - a string, the *model id* of a pretrained image_processor hosted inside a model repo on
+                  huggingface.co.
+                - a path to a *directory* containing a image processor file saved using the
+                  [`~image_processing_utils.ImageProcessingMixin.save_pretrained`] method, e.g.,
+                  `./my_model_directory/`.
+                - a path or url to a saved image processor JSON *file*, e.g.,
+                  `./my_model_directory/preprocessor_config.json`.
+            local_files_only (`bool`, *optional*, defaults to `True`):
+                Whether to only use local files for loading the image processor.
+
+            kwargs (`Dict[str, Any]`, *optional*):
+                Additional keyword arguments passed along to the `from_pretrained` method.
+
+        Returns:
+            A image processor of type [`~image_processing_utils.ImageProcessingMixin`].
+        """
+        return cls.from_pretrained(pretrained_model_name_or_path, local_files_only=local_files_only, **kwargs)
+
+    def save_pretrained_offline(self, save_directory: Union[str, os.PathLike], **kwargs):
+        """
+        Save an image processor object to the directory `save_directory` for offline usage.
+
+        Args:
+            save_directory (`str` or `os.PathLike`):
+                Directory where the image processor JSON file will be saved (will be created if it does not exist).
+
+            kwargs (`Dict[str, Any]`, *optional*):
+                Additional keyword arguments passed along to the `save_pretrained` method.
+        """
+        self.save_pretrained(save_directory, **kwargs)
+
 
 ImageProcessingMixin.push_to_hub = copy_func(ImageProcessingMixin.push_to_hub)
 if ImageProcessingMixin.push_to_hub.__doc__ is not None:

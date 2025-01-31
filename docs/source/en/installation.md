@@ -266,6 +266,34 @@ See the [How to download files from the Hub](https://huggingface.co/docs/hub/how
 
 </Tip>
 
+## Offline usage on Android and PC
+
+To use 🤗 Transformers offline on Android and PC, follow these steps:
+
+1. Download the required model files and tokenizers as described in the "Fetch models and tokenizers to use offline" section above.
+2. Transfer the downloaded files to your Android device or PC.
+3. On your Android device or PC, specify the local paths to the downloaded files when loading the models and tokenizers.
+
+For example, on Android:
+
+```py
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+
+tokenizer = AutoTokenizer.from_pretrained("/path/to/local/directory/bigscience_t0")
+model = AutoModelForSeq2SeqLM.from_pretrained("/path/to/local/directory/bigscience_t0")
+```
+
+And on PC:
+
+```py
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+
+tokenizer = AutoTokenizer.from_pretrained("C:/path/to/local/directory/bigscience_t0")
+model = AutoModelForSeq2SeqLM.from_pretrained("C:/path/to/local/directory/bigscience_t0")
+```
+
+By following these steps, you can use 🤗 Transformers offline on both Android and PC without needing an internet connection.
+
 ## Troubleshooting
 
 See below for some of the more common installation issues and how to resolve them.
@@ -296,5 +324,3 @@ Alternatively, create and activate a virtual environment as shown below.
 python -m venv env
 .\env\Scripts\activate
 ```
-
-

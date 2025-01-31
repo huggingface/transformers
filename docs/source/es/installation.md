@@ -240,3 +240,62 @@ Una vez que el archivo se descargue y se almacene en caché localmente, especifi
 Para más detalles sobre cómo descargar archivos almacenados en el Hub consulta la sección [How to download files from the Hub](https://huggingface.co/docs/hub/how-to-downstream).
 
 </Tip>
+
+## Uso offline en Android y PC
+
+Para usar 🤗 Transformers offline en Android y PC, sigue estos pasos:
+
+1. Descarga los archivos de modelo y tokenizadores requeridos como se describe en la sección "Obtener modelos y tokenizers para uso offline" anterior.
+2. Transfiere los archivos descargados a tu dispositivo Android o PC.
+3. En tu dispositivo Android o PC, especifica las rutas locales a los archivos descargados al cargar los modelos y tokenizadores.
+
+Por ejemplo, en Android:
+
+```py
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+
+tokenizer = AutoTokenizer.from_pretrained("/path/to/local/directory/bigscience_t0")
+model = AutoModelForSeq2SeqLM.from_pretrained("/path/to/local/directory/bigscience_t0")
+```
+
+Y en PC:
+
+```py
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+
+tokenizer = AutoTokenizer.from_pretrained("C:/path/to/local/directory/bigscience_t0")
+model = AutoModelForSeq2SeqLM.from_pretrained("C:/path/to/local/directory/bigscience_t0")
+```
+
+Siguiendo estos pasos, puedes usar 🤗 Transformers offline tanto en Android como en PC sin necesidad de una conexión a internet.
+
+## Solución de problemas
+
+A continuación, se presentan algunos de los problemas de instalación más comunes y cómo resolverlos.
+
+### Versión de Python no compatible
+
+Asegúrate de estar utilizando Python 3.9 o una versión posterior. Ejecuta el siguiente comando para verificar la versión de Python.
+
+```
+python --version
+```
+
+### Dependencias faltantes
+
+Instala todas las dependencias requeridas ejecutando el siguiente comando. Asegúrate de estar en el directorio del proyecto antes de ejecutar el comando.
+
+```
+pip install -r requirements.txt
+```
+
+### Problemas específicos de Windows
+
+Si encuentras problemas en Windows, es posible que debas activar el Modo de Desarrollador. Navega a Configuración de Windows > Para desarrolladores > Modo de desarrollador.
+
+Alternativamente, crea y activa un entorno virtual como se muestra a continuación.
+
+```
+python -m venv env
+.\env\Scripts\activate
+```

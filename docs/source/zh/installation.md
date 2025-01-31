@@ -254,3 +254,31 @@ python examples/pytorch/translation/run_translation.py --model_name_or_path goog
 请参阅 [如何从 Hub 下载文件](https://huggingface.co/docs/hub/how-to-downstream) 部分，获取有关下载存储在 Hub 上文件的更多详细信息。
 
 </Tip>
+
+## 在 Android 和 PC 上离线使用
+
+要在 Android 和 PC 上离线使用 🤗 Transformers，请按照以下步骤操作：
+
+1. 按照上面“获取离线时使用的模型和分词器”部分的说明下载所需的模型文件和分词器。
+2. 将下载的文件传输到你的 Android 设备或 PC。
+3. 在你的 Android 设备或 PC 上，指定加载模型和分词器时下载文件的本地路径。
+
+例如，在 Android 上：
+
+```py
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+
+tokenizer = AutoTokenizer.from_pretrained("/path/to/local/directory/bigscience_t0")
+model = AutoModelForSeq2SeqLM.from_pretrained("/path/to/local/directory/bigscience_t0")
+```
+
+在 PC 上：
+
+```py
+from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+
+tokenizer = AutoTokenizer.from_pretrained("C:/path/to/local/directory/bigscience_t0")
+model = AutoModelForSeq2SeqLM.from_pretrained("C:/path/to/local/directory/bigscience_t0")
+```
+
+通过执行这些步骤，你可以在 Android 和 PC 上离线使用 🤗 Transformers，而无需互联网连接。
