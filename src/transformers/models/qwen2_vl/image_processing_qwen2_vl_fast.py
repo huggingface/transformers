@@ -39,6 +39,8 @@ from ...image_utils import (
     get_image_size,
     get_image_type,
     infer_channel_dimension_format,
+    make_batched_videos,
+    make_flat_list_of_images,
     make_list_of_images,
     valid_images,
     validate_preprocess_arguments,
@@ -51,7 +53,7 @@ from ...utils import (
     is_vision_available,
     logging,
 )
-from .image_processing_qwen2_vl import make_batched_images, make_batched_videos, smart_resize
+from .image_processing_qwen2_vl import smart_resize
 
 
 if is_torch_available():
@@ -350,7 +352,7 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
         image_std = tuple(image_std) if isinstance(image_std, list) else image_std
 
         if images is not None:
-            images = make_batched_images(images)
+            images = make_flat_list_of_images(images)
         if videos is not None:
             videos = make_batched_videos(videos)
 
