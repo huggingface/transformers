@@ -26,6 +26,7 @@ from transformers.models.beit.modeling_beit import (
     BeitRelativePositionBias,
     BeitSelfAttention,
 )
+from transformers.models.got_ocr2.image_processing_got_ocr2 import GotOcr2ImageProcessor
 from transformers.models.llava.modeling_llava import (
     LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
@@ -91,6 +92,8 @@ class InternVLVisionConfig(PretrainedConfig):
             The size (resolution) of each patch.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
+        use_mask_token (`bool`, *optional*, defaults to `False`):
+            Whether to use a mask token for masked image modeling.
         use_absolute_position_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to use BERT-style absolute position embeddings.
         use_relative_position_bias (`bool`, *optional*, defaults to `False`):
@@ -136,6 +139,7 @@ class InternVLVisionConfig(PretrainedConfig):
         image_size=224,
         patch_size=16,
         num_channels=3,
+        use_mask_token=False,
         use_absolute_position_embeddings=False,
         use_relative_position_bias=False,
         use_shared_relative_position_bias=False,
@@ -159,6 +163,7 @@ class InternVLVisionConfig(PretrainedConfig):
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
+        self.use_mask_token = use_mask_token
         self.use_absolute_position_embeddings = use_absolute_position_embeddings
         self.use_relative_position_bias = use_relative_position_bias
         self.use_shared_relative_position_bias = use_shared_relative_position_bias
@@ -184,9 +189,9 @@ class InternVLConfig(PretrainedConfig):
             The config object or dictionary of the text backbone.
         ignore_index (`int`, *optional*, defaults to -100):
             The ignore index for the loss function.
-        image_token_index (`int`, *optional*, defaults to 151859):
+        image_token_index (`int`, *optional*, defaults to 151667):
             The image token index to encode the image prompt.
-        image_seq_length (`int`, *optional*, defaults to 576):
+        image_seq_length (`int`, *optional*, defaults to 256):
             Sequence length of one image embedding.
 
     ```python
@@ -204,8 +209,8 @@ class InternVLConfig(PretrainedConfig):
         vision_config=None,
         text_config=None,
         ignore_index=-100,
-        image_token_index=151859,
-        image_seq_length=576,
+        image_token_index=151667,
+        image_seq_length=256,
         downsample_ratio=0.5,
         projector_hidden_act="gelu",
         vision_feature_layer=-1,
@@ -216,6 +221,7 @@ class InternVLConfig(PretrainedConfig):
         self.image_seq_length = image_seq_length
         self.downsample_ratio = downsample_ratio
         self.projector_hidden_act = projector_hidden_act
+        self.vision_feature_layer = vision_feature_layer
 
         if vision_config is None:
             self.vision_config = InternVLVisionConfig(
@@ -337,6 +343,10 @@ __all__ = ["InternVLVisionConfig", "InternVLConfig"]
 #     max_patches: Optional[int]
 
 
+class InternVLImageProcessor(GotOcr2ImageProcessor):
+    pass
+
+
 # TODO
 class InternVLProcessorKwargs(ProcessingKwargs, total=False):
     # text_kwargs: InternVLTextKwargs
@@ -374,7 +384,11 @@ class InternVLProcessor(ProcessorMixin):
     image_processor_class = "InternVLImageProcessor"
     tokenizer_class = "PreTrainedTokenizerFast"
 
-    def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
+    def __init__(
+        self, image_processor=None, tokenizer=None, image_seq_length: int = 256, chat_template=None, **kwargs
+    ):
+        self.image_seq_length = image_seq_length
+
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
@@ -417,12 +431,31 @@ class InternVLProcessor(ProcessorMixin):
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
-
         output_kwargs = self._merge_kwargs(
             InternVLProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
+        if not isinstance(text, (list, tuple)):
+            text = [text]
+        if not isinstance(images, (list, tuple)):
+            images = [images]
+
+        for index, image_group in enumerate(images):
+            image_group = self.image_processor.crop_image_to_patches(
+                image_group,
+                patch_size=output_kwargs["images_kwargs"].get("size"),
+                min_patches=1,
+                max_patches=12,
+            )
+            images[index] = image_group
+            for i, prompt in enumerate(text):
+                if "<image>" in prompt:
+                    text[i] = prompt.replace(
+                        "<image>", f"<img>{'<IMG_CONTEXT>'*self.image_seq_length* len(image_group)}</img>", 1
+                    )
+                    break
+
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
         image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
 
@@ -586,7 +619,7 @@ class InternVLCausalLMOutputWithPast(LlavaCausalLMOutputWithPast):
 class InternVLForConditionalGeneration(LlavaForConditionalGeneration):
     def __init__(self, config: InternVLConfig):
         super().__init__(config)
-        self.vision_tower = InternVLVisionModel(config.vision_config)
+        self.vision_tower = InternVLVisionModel(config.vision_config, add_pooling_layer=False)
 
         self.multi_modal_projector = InternVLMultiModalProjector(config)
         self.vocab_size = config.text_config.vocab_size
@@ -599,7 +632,7 @@ class InternVLForConditionalGeneration(LlavaForConditionalGeneration):
 
         self.post_init()
 
-    def pixel_shuffle(vision_features, scale_factor=0.5):
+    def pixel_shuffle(self, vision_features, scale_factor=0.5):
         """Perform pixel shuffle downsampling on vision features.
 
         Args:
@@ -618,7 +651,7 @@ class InternVLForConditionalGeneration(LlavaForConditionalGeneration):
 
         # Reshape to allow downsampling
         vision_features = vision_features.view(
-            batch_size, width, int(height * scale_factor), int(channels * scale_factor)
+            batch_size, width, int(height * scale_factor), int(channels / scale_factor)
         )
         # Permute dimensions to align downsampled axis correctly
         vision_features = vision_features.permute(0, 2, 1, 3).contiguous()
@@ -656,15 +689,15 @@ class InternVLForConditionalGeneration(LlavaForConditionalGeneration):
         # Calculate dimensions based on vision features
         channels = vision_features.shape[1]
         feature_size = int(channels**0.5)
+        batch_size = vision_features.shape[0]
 
         # Reshape tensor to spatial dimensions
-        vision_features = vision_features.reshape(-1, feature_size, feature_size, vision_features.shape[-1])
+        vision_features = vision_features.reshape(batch_size, feature_size, feature_size, -1)
 
         # Apply downsampling using pixel shuffle
         vision_features = self.pixel_shuffle(vision_features, scale_factor=downsample_ratio)
 
         # Reshape tensor to prepare for projection
-        batch_size = vision_features.shape[0]
         vision_features = vision_features.reshape(batch_size, -1, vision_features.shape[-1])
 
         # Project features through multi-modal projector
@@ -802,5 +835,6 @@ __all__ = [
     "InternVLConfig",
     "InternVLProcessor",
     "InternVLPreTrainedModel",
+    "InternVLImageProcessor",
     "InternVLForConditionalGeneration",
 ]

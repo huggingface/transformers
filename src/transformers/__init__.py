@@ -1251,6 +1251,7 @@ else:
     _import_structure["models.idefics3"].extend(["Idefics3ImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
     _import_structure["models.instructblipvideo"].extend(["InstructBlipVideoImageProcessor"])
+    _import_structure["models.internvl"].extend(["InternVLImageProcessor"])
     _import_structure["models.layoutlmv2"].extend(["LayoutLMv2FeatureExtractor", "LayoutLMv2ImageProcessor"])
     _import_structure["models.layoutlmv3"].extend(["LayoutLMv3FeatureExtractor", "LayoutLMv3ImageProcessor"])
     _import_structure["models.levit"].extend(["LevitFeatureExtractor", "LevitImageProcessor"])
@@ -6442,7 +6443,7 @@ if TYPE_CHECKING:
         from .image_processing_utils_fast import BaseImageProcessorFast
         from .models.deformable_detr import DeformableDetrImageProcessorFast
         from .models.detr import DetrImageProcessorFast
-        from .models.internvl import InternVLImageProcessorFast
+        from .models.internvl import InternVLImageProcessor
         from .models.pixtral import PixtralImageProcessorFast
         from .models.qwen2_vl import Qwen2VLImageProcessorFast
         from .models.rt_detr import RTDetrImageProcessorFast
@@ -7519,7 +7520,12 @@ if TYPE_CHECKING:
             InstructBlipVideoQFormerModel,
             InstructBlipVideoVisionModel,
         )
-        from .models.internvl import InternVLForConditionalGeneration, InternVLModel, InternVLPreTrainedModel
+        from .models.internvl import (
+            InternVLForConditionalGeneration,
+            InternVLModel,
+            InternVLPreTrainedModel,
+            InternVLProcessor,
+        )
         from .models.jamba import (
             JambaForCausalLM,
             JambaForSequenceClassification,

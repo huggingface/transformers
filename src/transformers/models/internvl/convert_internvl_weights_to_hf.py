@@ -23,13 +23,15 @@ from transformers import (
     AutoTokenizer,
     InternVLConfig,
     InternVLForConditionalGeneration,
+    InternVLImageProcessor,
+    InternVLProcessor,
     is_vision_available,
 )
 from transformers.tokenization_utils import AddedToken
 
 
 if is_vision_available():
-    pass
+    from transformers.image_utils import load_image
 # fmt: off
 ORIGINAL_TO_CONVERTED_KEY_MAPPING_VISION = {
     # Vision encoder mapping
@@ -46,6 +48,17 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING_VISION = {
     r"norm2":                                       r"layernorm_after",
 
 }
+ORIGINAL_TO_CONVERTED_KEY_MAPPING_TEXT = {
+    # Vision encoder mapping
+    # r"language_model":                                 r"vision_tower",
+}
+
+ORIGINAL_TO_CONVERTED_KEY_MAPPING_MULTI = {
+    # Vision encoder mapping
+    r"mlp1.0":                                 r"multi_modal_projector.layer_norm",
+    r"mlp1.1":                                 r"multi_modal_projector.linear_1",
+    r"mlp1.3":                                 r"multi_modal_projector.linear_2",
+}
 # fmt: on
 
 CONTEXT_LENGTH = 8192
@@ -58,11 +71,28 @@ def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
     """
     output_dict = {}
     if state_dict_keys is not None:
-        old_text = "\n".join([key for key in state_dict_keys if key.startswith("vision_model")])
-        new_text = old_text
+        old_text_vision = "\n".join([key for key in state_dict_keys if key.startswith("vision_model")])
+        new_text = old_text_vision
         for pattern, replacement in ORIGINAL_TO_CONVERTED_KEY_MAPPING_VISION.items():
             new_text = re.sub(pattern, replacement, new_text)
-        output_dict = dict(zip(old_text.split("\n"), new_text.split("\n")))
+        output_dict = dict(zip(old_text_vision.split("\n"), new_text.split("\n")))
+        old_text_language = "\n".join([key for key in state_dict_keys if key.startswith("language_model")])
+        new_text = old_text_language
+        for pattern, replacement in ORIGINAL_TO_CONVERTED_KEY_MAPPING_TEXT.items():
+            new_text = re.sub(pattern, replacement, new_text)
+        output_dict.update(dict(zip(old_text_language.split("\n"), new_text.split("\n"))))
+        old_text_multi = "\n".join(
+            [
+                key
+                for key in state_dict_keys
+                if not (key.startswith("language_model") or key.startswith("vision_model"))
+            ]
+        )
+        new_text = old_text_multi
+        for pattern, replacement in ORIGINAL_TO_CONVERTED_KEY_MAPPING_MULTI.items():
+            new_text = re.sub(pattern, replacement, new_text)
+        output_dict.update(dict(zip(old_text_multi.split("\n"), new_text.split("\n"))))
+
     return output_dict
 
 
@@ -107,10 +137,21 @@ def write_model(
     print("Converting model...")
     all_keys = list(state_dict_old.keys())
     new_keys = convert_old_keys_to_new_keys(all_keys)
+    dim = config.vision_config.hidden_size
     state_dict = {}
     for key in all_keys:
         new_key = new_keys[key]
-        state_dict[new_key] = state_dict_old[key]
+        if "attn.qkv" in key:
+            new_key_query = new_key.replace("attn.qkv", "attention.attention.query")
+            state_dict[new_key_query] = state_dict_old[key][:dim]
+
+            new_key_key = new_key.replace("attn.qkv", "attention.attention.key")
+            state_dict[new_key_key] = state_dict_old[key][dim : 2 * dim]
+
+            new_key_value = new_key.replace("attn.qkv", "attention.attention.value")
+            state_dict[new_key_value] = state_dict_old[key][-dim:]
+        else:
+            state_dict[new_key] = state_dict_old[key]
 
     del state_dict_old
     gc.collect()
@@ -130,17 +171,18 @@ def write_model(
     # del state_dict, model
 
     # # Safety check: reload the converted model
-    # gc.collect()
-    # print("Reloading the model to check if it's saved correctly.")
-    # model = InternVLForConditionalGeneration.from_pretrained(model_path, device_map="auto")
-    # processor = InternVLProcessor.from_pretrained(model_path)
-    # image = load_image(
-    #     "https://huggingface.co/datasets/hf-internal-testing/fixtures_got_ocr/resolve/main/image_ocr.jpg"
-    # )
+    gc.collect()
+    print("Reloading the model to check if it's saved correctly.")
+    model = InternVLForConditionalGeneration.from_pretrained(model_path, device_map="auto", torch_dtype=torch.bfloat16)
+    image_processor = InternVLImageProcessor.from_pretrained(model_path)
+    tokenizer = AutoTokenizer.from_pretrained(model_path)
+    processor = InternVLProcessor(image_processor=image_processor, tokenizer=tokenizer)
+    image = load_image("./000000039769.jpg")
+    prompt = "<|im_start|>user\n<image>\nPlease describe the image shortly.<|im_end|>\n<|im_start|>assistant"
+    inputs = processor(images=[image], text=prompt, return_tensors="pt").to(model.device, torch.bfloat16)
 
-    # inputs = processor(image, return_tensors="pt", format=True).to(model.device, dtype=model.dtype)
-    # generate_ids = model.generate(**inputs, do_sample=False, num_beams=1, max_new_tokens=4)
-    # decoded_output = processor.decode(generate_ids[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
+    output = model.generate(**inputs, max_new_tokens=200, do_sample=False)
+    print(processor.decode(output[0][2:], skip_special_tokens=True))
     # expected_output = "\\title{\nR"
     # print("Decoded output:", decoded_output)
     # assert decoded_output == expected_output
@@ -236,20 +278,21 @@ def write_tokenizer(save_dir: str, push_to_hub: bool = False):
     #     tokenizer.push_to_hub("stepfun-ai/GOT-OCR-2.0-hf", use_temp_dir=True)
 
 
-# def write_image_processor(save_dir: str, push_to_hub: bool = False):
-#     image_processor = GotOcr2ImageProcessor(
-#         do_resize=True,
-#         size={"height": 1024, "width": 1024},
-#         do_rescale=True,
-#         rescale_factor=1 / 255,
-#         do_normalize=True,
-#         image_mean=[0.48145466, 0.4578275, 0.40821073],
-#         image_std=[0.26862954, 0.26130258, 0.27577711],
-#     )
+def write_image_processor(save_dir: str, push_to_hub: bool = False):
+    image_processor = InternVLImageProcessor(
+        do_resize=True,
+        size={"height": 448, "width": 448},
+        do_rescale=True,
+        rescale_factor=1 / 255,
+        do_normalize=True,
+        do_center_crop=True,
+        image_mean=[0.485, 0.456, 0.406],
+        image_std=[0.229, 0.224, 0.225],
+    )
 
-#     image_processor.save_pretrained(save_dir)
-#     if push_to_hub:
-#         image_processor.push_to_hub("stepfun-ai/GOT-OCR-2.0-hf", use_temp_dir=True)
+    image_processor.save_pretrained(save_dir)
+    # if push_to_hub:
+    #     image_processor.push_to_hub("stepfun-ai/GOT-OCR-2.0-hf", use_temp_dir=True)
 
 
 def main():
@@ -274,10 +317,10 @@ def main():
         push_to_hub=args.push_to_hub,
     )
 
-    # write_image_processor(
-    #     save_dir=args.output_dir,
-    #     push_to_hub=args.push_to_hub,
-    # )
+    write_image_processor(
+        save_dir=args.output_dir,
+        push_to_hub=args.push_to_hub,
+    )
     write_model(
         model_path=args.output_dir,
         input_base_path=args.input_dir,

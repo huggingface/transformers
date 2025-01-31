@@ -29,20 +29,6 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 
 
-# class InternVLTextKwargs(TextKwargs, total=False):
-#     format: Optional[bool]
-
-
-# class InternVLImagesKwargs(ImagesKwargs, total=False):
-#     box: Optional[Union[List, Tuple[float, float], Tuple[float, float, float, float]]]
-#     color: Optional[str]
-#     num_image_tokens: Optional[int]
-#     multi_page: Optional[bool]
-#     crop_to_patches: Optional[bool]
-#     min_patches: Optional[int]
-#     max_patches: Optional[int]
-
-
 # TODO
 class InternVLProcessorKwargs(ProcessingKwargs, total=False):
     # text_kwargs: InternVLTextKwargs
@@ -80,7 +66,11 @@ class InternVLProcessor(ProcessorMixin):
     image_processor_class = "InternVLImageProcessor"
     tokenizer_class = "PreTrainedTokenizerFast"
 
-    def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
+    def __init__(
+        self, image_processor=None, tokenizer=None, image_seq_length: int = 256, chat_template=None, **kwargs
+    ):
+        self.image_seq_length = image_seq_length
+
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
     def __call__(
@@ -123,12 +113,31 @@ class InternVLProcessor(ProcessorMixin):
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
-
         output_kwargs = self._merge_kwargs(
             InternVLProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
+        if not isinstance(text, (list, tuple)):
+            text = [text]
+        if not isinstance(images, (list, tuple)):
+            images = [images]
+
+        for index, image_group in enumerate(images):
+            image_group = self.image_processor.crop_image_to_patches(
+                image_group,
+                patch_size=output_kwargs["images_kwargs"].get("size"),
+                min_patches=1,
+                max_patches=12,
+            )
+            images[index] = image_group
+            for i, prompt in enumerate(text):
+                if "<image>" in prompt:
+                    text[i] = prompt.replace(
+                        "<image>", f"<img>{'<IMG_CONTEXT>'*self.image_seq_length* len(image_group)}</img>", 1
+                    )
+                    break
+
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
         image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
 

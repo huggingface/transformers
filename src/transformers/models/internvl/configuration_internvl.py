@@ -57,6 +57,8 @@ class InternVLVisionConfig(PretrainedConfig):
             The size (resolution) of each patch.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
+        use_mask_token (`bool`, *optional*, defaults to `False`):
+            Whether to use a mask token for masked image modeling.
         use_absolute_position_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to use BERT-style absolute position embeddings.
         use_relative_position_bias (`bool`, *optional*, defaults to `False`):
@@ -102,6 +104,7 @@ class InternVLVisionConfig(PretrainedConfig):
         image_size=224,
         patch_size=16,
         num_channels=3,
+        use_mask_token=False,
         use_absolute_position_embeddings=False,
         use_relative_position_bias=False,
         use_shared_relative_position_bias=False,
@@ -125,6 +128,7 @@ class InternVLVisionConfig(PretrainedConfig):
         self.image_size = image_size
         self.patch_size = patch_size
         self.num_channels = num_channels
+        self.use_mask_token = use_mask_token
         self.use_absolute_position_embeddings = use_absolute_position_embeddings
         self.use_relative_position_bias = use_relative_position_bias
         self.use_shared_relative_position_bias = use_shared_relative_position_bias
@@ -150,9 +154,9 @@ class InternVLConfig(PretrainedConfig):
             The config object or dictionary of the text backbone.
         ignore_index (`int`, *optional*, defaults to -100):
             The ignore index for the loss function.
-        image_token_index (`int`, *optional*, defaults to 151859):
+        image_token_index (`int`, *optional*, defaults to 151667):
             The image token index to encode the image prompt.
-        image_seq_length (`int`, *optional*, defaults to 576):
+        image_seq_length (`int`, *optional*, defaults to 256):
             Sequence length of one image embedding.
 
     ```python
@@ -170,8 +174,8 @@ class InternVLConfig(PretrainedConfig):
         vision_config=None,
         text_config=None,
         ignore_index=-100,
-        image_token_index=151859,
-        image_seq_length=576,
+        image_token_index=151667,
+        image_seq_length=256,
         downsample_ratio=0.5,
         projector_hidden_act="gelu",
         vision_feature_layer=-1,
@@ -182,6 +186,7 @@ class InternVLConfig(PretrainedConfig):
         self.image_seq_length = image_seq_length
         self.downsample_ratio = downsample_ratio
         self.projector_hidden_act = projector_hidden_act
+        self.vision_feature_layer = vision_feature_layer
 
         if vision_config is None:
             self.vision_config = InternVLVisionConfig(

@@ -1036,7 +1036,7 @@ class InternVLCausalLMOutputWithPast(ModelOutput):
 class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin):
     def __init__(self, config: InternVLConfig):
         super().__init__(config)
-        self.vision_tower = InternVLVisionModel(config.vision_config)
+        self.vision_tower = InternVLVisionModel(config.vision_config, add_pooling_layer=False)
 
         self.multi_modal_projector = InternVLMultiModalProjector(config)
         self.vocab_size = config.text_config.vocab_size
@@ -1090,15 +1090,15 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
         # Calculate dimensions based on vision features
         channels = vision_features.shape[1]
         feature_size = int(channels**0.5)
+        batch_size = vision_features.shape[0]
 
         # Reshape tensor to spatial dimensions
-        vision_features = vision_features.reshape(-1, feature_size, feature_size, vision_features.shape[-1])
+        vision_features = vision_features.reshape(batch_size, feature_size, feature_size, -1)
 
         # Apply downsampling using pixel shuffle
         vision_features = self.pixel_shuffle(vision_features, scale_factor=downsample_ratio)
 
         # Reshape tensor to prepare for projection
-        batch_size = vision_features.shape[0]
         vision_features = vision_features.reshape(batch_size, -1, vision_features.shape[-1])
 
         # Project features through multi-modal projector
@@ -1343,7 +1343,7 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
 
         return model_inputs
 
-    def pixel_shuffle(vision_features, scale_factor=0.5):
+    def pixel_shuffle(self, vision_features, scale_factor=0.5):
         """Perform pixel shuffle downsampling on vision features.
 
         Args:
@@ -1362,7 +1362,7 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
 
         # Reshape to allow downsampling
         vision_features = vision_features.view(
-            batch_size, width, int(height * scale_factor), int(channels * scale_factor)
+            batch_size, width, int(height * scale_factor), int(channels / scale_factor)
         )
         # Permute dimensions to align downsampled axis correctly
         vision_features = vision_features.permute(0, 2, 1, 3).contiguous()
