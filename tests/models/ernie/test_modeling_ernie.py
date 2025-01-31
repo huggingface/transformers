@@ -442,8 +442,6 @@ class ErnieModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         if is_torch_available()
         else ()
     )
-    # TODO @joao: `ErnieForMaskedLM` can't call `generate`, but `can_generate` returns `True`. Fix after merging #33203
-    all_generative_model_classes = (ErnieForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": ErnieModel,

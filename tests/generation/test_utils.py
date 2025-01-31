@@ -28,7 +28,7 @@ import pytest
 from packaging import version
 from parameterized import parameterized
 
-from transformers import AutoConfig, AutoTokenizer, GenerationConfig, is_torch_available, pipeline
+from transformers import AutoConfig, AutoProcessor, AutoTokenizer, is_torch_available, pipeline
 from transformers.testing_utils import (
     is_flaky,
     require_accelerate,
@@ -61,8 +61,6 @@ if is_torch_available():
         AutoModelForSeq2SeqLM,
         AutoModelForSpeechSeq2Seq,
         AutoModelForVision2Seq,
-        AutoProcessor,
-        AutoTokenizer,
         BartForCausalLM,
         BartForConditionalGeneration,
         BartTokenizer,

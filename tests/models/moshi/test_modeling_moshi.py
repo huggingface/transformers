@@ -152,9 +152,6 @@ class MoshiDecoderTester:
 @require_torch
 class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MoshiModel, MoshiForCausalLM) if is_torch_available() else ()
-    all_generative_model_classes = (
-        (MoshiForCausalLM,) if is_torch_available() else ()
-    )  # we don't want to run all the generation tests, only a specific subset
     test_pruning = False
     test_resize_embeddings = True
     test_head_masking = False
@@ -524,7 +521,6 @@ class MoshiTester:
 @require_torch
 class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (MoshiForConditionalGeneration,) if is_torch_available() else ()
-    all_generative_model_classes = (MoshiForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False  # training is not supported yet for Moshi
     test_headmasking = False
     test_resize_embeddings = False
