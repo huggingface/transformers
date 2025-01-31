@@ -2062,6 +2062,53 @@ class GenerationTesterMixin:
                 self._check_similar_generate_outputs(dynamic_result, compiled_result)
 
     @pytest.mark.generate
+    def test_generate_compilation_all_outputs(self):
+        """
+        Tests that all optional outputs are behaving as expected when compilation is triggered.
+        In essence, it's the same as `test_greedy_generate_dict_outputs`, but with automatic compilation triggered.
+        """
+        for model_class in self.all_generative_model_classes:
+            if not model_class._supports_static_cache:
+                self.skipTest("This model doesn't support static cache (= no expectations of compilation support)")
+
+            config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+
+            model = model_class(config).to(torch_device).eval()
+            has_defined_cache_implementation = model.generation_config.cache_implementation is not None
+            if not has_defined_cache_implementation:
+                model.generation_config.cache_implementation = "static"
+
+            logits_processor_kwargs = self._get_logits_processor_kwargs(do_sample=False, config=model.config)
+            output_generate = model.generate(
+                do_sample=False,
+                num_beams=1,
+                max_new_tokens=self.max_new_tokens,
+                min_new_tokens=self.max_new_tokens,
+                output_attentions=True,
+                output_hidden_states=True,
+                output_scores=True,
+                output_logits=True,
+                return_dict_in_generate=True,
+                use_cache=True,
+                **logits_processor_kwargs,
+                **inputs_dict,
+            )
+
+            # Sanity check: compilation happened
+            self.assertTrue(hasattr(model, "_compiled_call"))
+
+            if model.config.is_encoder_decoder:
+                self.assertTrue(output_generate.sequences.shape[-1] == self.max_new_tokens + 1)
+                self.assertIsInstance(output_generate, GenerateEncoderDecoderOutput)
+            else:
+                self.assertTrue(
+                    output_generate.sequences.shape[-1] == self.max_new_tokens + inputs_dict["input_ids"].shape[-1]
+                )
+                self.assertIsInstance(output_generate, GenerateDecoderOnlyOutput)
+
+            self._check_outputs(output_generate, model.config, use_cache=True)
+
+    @pytest.mark.generate
     def test_generate_methods_with_logits_to_keep(self):
         for model_class in self.all_generative_model_classes:
             if "logits_to_keep" not in set(inspect.signature(model_class.forward).parameters.keys()):
