@@ -320,12 +320,12 @@ class MixtralModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
 
     def test_generate_from_inputs_embeds_with_static_cache(self):
-        if rocmUtils.is_rocm_skippable(arch='gfx90a'):
+        if rocmUtils.is_rocm_skippable(arch=['gfx90a','gfx942']):
             torch._dynamo.config.capture_dynamic_output_shape_ops = True
         super().test_generate_from_inputs_embeds_with_static_cache()
 
     def test_generate_with_static_cache(self):
-        if rocmUtils.is_rocm_skippable(arch='gfx90a'):
+        if rocmUtils.is_rocm_skippable(arch=['gfx90a','gfx942']):
             torch._dynamo.config.capture_dynamic_output_shape_ops = True
         super().test_generate_with_static_cache()
 
