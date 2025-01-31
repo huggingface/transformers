@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 The HuggingFace Inc. team.
+# Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -66,7 +66,6 @@ def get_d_fine_config(model_name: str) -> DFineConfig:
         config.hidden_expansion = 1.0
         config.decoder_layers = 6
 
-
     return config
 
 
@@ -74,7 +73,7 @@ def load_original_state_dict(repo_id, model_name):
     directory_path = hf_hub_download(repo_id=repo_id, filename=f"{model_name}.pth")
 
     original_state_dict = {}
-    model = torch.load(directory_path, map_location="cpu")['model']
+    model = torch.load(directory_path, map_location="cpu")["model"]
     for key in model.keys():
         original_state_dict[key] = model[key]
 
@@ -230,7 +229,7 @@ def create_rename_keys(config):
                             f"model.backbone.model.encoder.stages.{stage_idx}.downsample.normalization.{last}",
                         )
                     )
-    
+
     # fmt: on
     for i in range(config.encoder_layers):
         # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
@@ -294,7 +293,7 @@ def create_rename_keys(config):
                 f"model.encoder.encoder.{i}.layers.0.final_layer_norm.bias",
             )
         )
-    
+
     for j in range(0, 3):
         rename_keys.append((f"encoder.input_proj.{j}.conv.weight", f"model.encoder_input_proj.{j}.0.weight"))
         for last in last_key:
@@ -316,19 +315,34 @@ def create_rename_keys(config):
                 )
             if j == 2 or j == 3:
                 rename_keys.append(
-                    (f"encoder.fpn_blocks.{i}.cv{j}.1.conv.weight", f"model.encoder.fpn_blocks.{i}.cv{j}.1.conv.weight")
+                    (
+                        f"encoder.fpn_blocks.{i}.cv{j}.1.conv.weight",
+                        f"model.encoder.fpn_blocks.{i}.cv{j}.1.conv.weight",
+                    )
                 )
                 rename_keys.append(
-                    (f"encoder.fpn_blocks.{i}.cv{j}.1.conv.weight", f"model.encoder.fpn_blocks.{i}.cv{j}.1.conv.weight")
+                    (
+                        f"encoder.fpn_blocks.{i}.cv{j}.1.conv.weight",
+                        f"model.encoder.fpn_blocks.{i}.cv{j}.1.conv.weight",
+                    )
                 )
                 rename_keys.append(
-                    (f"encoder.fpn_blocks.{i}.cv{j}.0.conv1.conv.weight", f"model.encoder.fpn_blocks.{i}.cv{j}.0.conv1.conv.weight")
+                    (
+                        f"encoder.fpn_blocks.{i}.cv{j}.0.conv1.conv.weight",
+                        f"model.encoder.fpn_blocks.{i}.cv{j}.0.conv1.conv.weight",
+                    )
                 )
                 rename_keys.append(
-                    (f"encoder.fpn_blocks.{i}.cv{j}.0.conv2.conv.weight", f"model.encoder.fpn_blocks.{i}.cv{j}.0.conv2.conv.weight")
+                    (
+                        f"encoder.fpn_blocks.{i}.cv{j}.0.conv2.conv.weight",
+                        f"model.encoder.fpn_blocks.{i}.cv{j}.0.conv2.conv.weight",
+                    )
                 )
                 rename_keys.append(
-                    (f"encoder.fpn_blocks.{i}.cv{j}.1.conv.weight", f"model.encoder.fpn_blocks.{i}.cv{j}.1.conv.weight")
+                    (
+                        f"encoder.fpn_blocks.{i}.cv{j}.1.conv.weight",
+                        f"model.encoder.fpn_blocks.{i}.cv{j}.1.conv.weight",
+                    )
                 )
                 for last in last_key:
                     rename_keys.append(
@@ -352,14 +366,14 @@ def create_rename_keys(config):
                         )
                     )
 
-        #lateral_convs
+        # lateral_convs
         rename_keys.append((f"encoder.lateral_convs.{i}.conv.weight", f"model.encoder.lateral_convs.{i}.conv.weight"))
         for last in last_key:
             rename_keys.append(
                 (f"encoder.lateral_convs.{i}.norm.{last}", f"model.encoder.lateral_convs.{i}.norm.{last}")
             )
 
-        #fpn_bottlenecks
+        # fpn_bottlenecks
         for c in range(2, 4):
             for j in range(3):
                 for k in range(1, 3):
@@ -390,14 +404,20 @@ def create_rename_keys(config):
                             )
                         )
 
-        #pan_block
+        # pan_block
         for j in range(1, 5):
             if j == 2 or j == 3:
                 rename_keys.append(
-                    (f"encoder.pan_blocks.{i}.cv{j}.0.conv1.conv.weight", f"model.encoder.pan_blocks.{i}.cv{j}.0.conv1.conv.weight")
+                    (
+                        f"encoder.pan_blocks.{i}.cv{j}.0.conv1.conv.weight",
+                        f"model.encoder.pan_blocks.{i}.cv{j}.0.conv1.conv.weight",
+                    )
                 )
                 rename_keys.append(
-                    (f"encoder.pan_blocks.{i}.cv{j}.0.conv2.conv.weight", f"model.encoder.pan_blocks.{i}.cv{j}.0.conv2.conv.weight")
+                    (
+                        f"encoder.pan_blocks.{i}.cv{j}.0.conv2.conv.weight",
+                        f"model.encoder.pan_blocks.{i}.cv{j}.0.conv2.conv.weight",
+                    )
                 )
                 for last in last_key:
                     rename_keys.append(
@@ -414,7 +434,10 @@ def create_rename_keys(config):
                         )
                     )
                 rename_keys.append(
-                    (f"encoder.pan_blocks.{i}.cv{j}.1.conv.weight", f"model.encoder.pan_blocks.{i}.cv{j}.1.conv.weight")
+                    (
+                        f"encoder.pan_blocks.{i}.cv{j}.1.conv.weight",
+                        f"model.encoder.pan_blocks.{i}.cv{j}.1.conv.weight",
+                    )
                 )
                 for last in last_key:
                     rename_keys.append(
@@ -435,7 +458,7 @@ def create_rename_keys(config):
                     )
                 )
 
-        #pan_bottlenecks
+        # pan_bottlenecks
         for c in range(2, 4):
             for j in range(3):
                 for k in range(1, 3):
@@ -453,7 +476,7 @@ def create_rename_keys(config):
                             )
                         )
 
-    #downsample_convs
+    # downsample_convs
     rename_keys.append(
         (f"encoder.downsample_convs.0.0.cv1.conv.weight", f"model.encoder.downsample_convs.0.0.cv1.conv.weight")
     )
@@ -575,7 +598,7 @@ def create_rename_keys(config):
                 f"model.decoder.lqe_layers.{i}.reg_conf.layers.1.bias",
             )
         )
-       
+
         rename_keys.append(
             (f"decoder.decoder.layers.{i}.norm1.weight", f"model.decoder.layers.{i}.self_attn_layer_norm.weight")
         )
@@ -643,7 +666,6 @@ def create_rename_keys(config):
                 f"model.decoder.bbox_embed.{i}.layers.2.bias",
             )
         )
-    
 
     # decoder projection
     for i in range(len(config.decoder_in_channels)):
@@ -768,9 +790,9 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
         state_dict.pop("model.decoder.valid_mask")
         state_dict.pop("model.decoder.anchors")
 
-    #those parameters are comming from config
-    #state_dict.pop("decoder.up")
-    #state_dict.pop("decoder.reg_scale")
+    # those parameters are comming from config
+    # state_dict.pop("decoder.up")
+    # state_dict.pop("decoder.reg_scale")
     state_dict.pop("decoder.decoder.up")
     state_dict.pop("decoder.decoder.reg_scale")
 
