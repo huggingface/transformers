@@ -1,5 +1,5 @@
 # coding = utf-8
-# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -738,11 +738,11 @@ class RtDetrV2ModelIntegrationTest(unittest.TestCase):
             ]
         ).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_logits, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, atol=1e-4)
 
         expected_shape_boxes = torch.Size((1, 300, 4))
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
-        self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4))
+        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4)
 
         # verify postprocessing
         results = image_processor.post_process_object_detection(
@@ -764,4 +764,4 @@ class RtDetrV2ModelIntegrationTest(unittest.TestCase):
 
         self.assertTrue(torch.allclose(results["scores"][:4], expected_scores, atol=1e-4))
         self.assertSequenceEqual(results["labels"][:4].tolist(), expected_labels)
-        self.assertTrue(torch.allclose(results["boxes"][:4], expected_slice_boxes, atol=1e-4))
+        torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, atol=1e-4)

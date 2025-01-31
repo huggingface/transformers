@@ -166,6 +166,8 @@ class RtDetrV2Config(PretrainedConfig):
             The number of feature levels used by the decoder.
         decoder_offset_scale (`float`, *optional*, defaults to 0.5):
             Scaling factor applied to the attention offsets in the decoder.
+        decoder_method (`str`, *optional*, defaults to `"default"`):
+            The method to use for the decoder: `"default"` or `"discrete"`.
 
     Examples:
 
@@ -254,6 +256,7 @@ class RtDetrV2Config(PretrainedConfig):
         eos_coefficient=1e-4,
         decoder_n_levels=3,  # default value
         decoder_offset_scale=0.5,  # default value
+        decoder_method="default",
         **kwargs,
     ):
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
@@ -356,14 +359,7 @@ class RtDetrV2Config(PretrainedConfig):
         # add the new attributes with the given values or defaults
         self.decoder_n_levels = decoder_n_levels
         self.decoder_offset_scale = decoder_offset_scale
-
-    @property
-    def num_attention_heads(self) -> int:
-        return self.encoder_attention_heads
-
-    @property
-    def hidden_size(self) -> int:
-        return self.d_model
+        self.decoder_method = decoder_method
 
     @classmethod
     def from_backbone_configs(cls, backbone_config: PretrainedConfig, **kwargs):

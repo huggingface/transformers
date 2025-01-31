@@ -257,6 +257,7 @@ class RtDetrV2MultiscaleDeformableAttention(nn.Module):
 
         self.disable_custom_kernels = config.disable_custom_kernels
         self.offset_scale = config.decoder_offset_scale
+        self.method = config.decoder_method
         # Initialize n_points list and scale
         n_points_list = [self.n_points for _ in range(self.n_levels)]
         self.n_points_list = n_points_list
@@ -322,7 +323,7 @@ class RtDetrV2MultiscaleDeformableAttention(nn.Module):
         # V2-specific attention implementation choice
         if self.disable_custom_kernels:
             output = multi_scale_deformable_attention_v2(
-                value, spatial_shapes, sampling_locations, attention_weights, self.n_points_list
+                value, spatial_shapes, sampling_locations, attention_weights, self.n_points_list, self.method
             )
         else:
             try:
@@ -336,7 +337,7 @@ class RtDetrV2MultiscaleDeformableAttention(nn.Module):
                 )
             except Exception:
                 output = multi_scale_deformable_attention_v2(
-                    value, spatial_shapes, sampling_locations, attention_weights, self.n_points_list
+                    value, spatial_shapes, sampling_locations, attention_weights, self.n_points_list, self.method
                 )
 
         output = self.output_proj(output)
