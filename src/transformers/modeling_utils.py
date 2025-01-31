@@ -901,7 +901,6 @@ def _load_state_dict_into_meta_model(
                 setattr(module, tensor_name, value)
             # TODO: consider removing used param_parts from state_dict before return
 
-
         # In this case, let's parallelize the modules!
         if device_mesh is not None:
             # Immediate parent
@@ -923,10 +922,9 @@ def _load_state_dict_into_meta_model(
             # We can only apply the tp_plan after all parameters of the current module have been correctly initialized (e.g.
             # if we have bias, we need both `weights` and `bias` to be initialized)
             process_device = list(device_map.values())[0]
-            all_module_parameters_initialized = (
-                all(m.device == process_device for m in parent_module.parameters(recurse=False))
-                and all(m.device == process_device for m in parent_module.buffers(recurse=False))
-            )
+            all_module_parameters_initialized = all(
+                m.device == process_device for m in parent_module.parameters(recurse=False)
+            ) and all(m.device == process_device for m in parent_module.buffers(recurse=False))
             if current_module_plan is not None and all_module_parameters_initialized:
                 torch.distributed.tensor.parallel.parallelize_module(
                     parent_module,
@@ -3493,10 +3491,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # `device_map` pointing to the correct device
         device_mesh = None
         if tp_plan is not None:
+            if not is_torch_greater_or_equal("2.5"):
+                raise EnvironmentError("tensor parallel is only supported for `torch>=2.5`.")
             if not torch.distributed.is_initialized():
                 raise ValueError("Tensor Parallel requires torch.distributed to be initialized first.")
-            if not model.supports_tp_plan:
-                raise NotImplementedError("This model does not have a tensor parallel plan.")
 
             # Detect the accelerator on the machine. If no accelerator is available, it returns CPU.
             device_type = torch._C._get_accelerator().type
@@ -3505,7 +3503,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             tp_device = torch.device(device_type, torch.distributed.get_rank() % device_module.device_count())
             # This is the easiest way to dispatch to the current process device
             device_map = tp_device
-            
+
             # Assuming sharding the model onto the world
             world_size = torch.distributed.get_world_size()
             device_mesh = torch.distributed.init_device_mesh(tp_device.type, (world_size,))
@@ -4185,6 +4183,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         with ContextManagers(init_contexts):
             # Let's make sure we don't run the init function of buffer modules
             model = cls(config, *model_args, **model_kwargs)
+
+        if device_mesh is not None and not model.supports_tp_plan:
+            raise NotImplementedError("This model does not have a tensor parallel plan.")
 
         # make sure we use the model's config since the __init__ call might have copied it
         config = model.config
@@ -5176,7 +5177,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     def tensor_parallel(self, device_mesh):
         """
-        Tensor parallelize the model across the given device mesh.
+        Tensor parallelize the model across the given device mesh. This function is a helper to be called after the model
+        was already loaded in memory, note however that this means that each process will first initialize the whole model,
+        then parallelize it accross devices. Thus there is a huge waste of GPU memory, and this can lead to OOM at loading time.
+
+        Calling `from_pretrained(..., tp_plan="auto")` is prefered, and will parallelize module-by-module during initialization,
+        so that the expected per-device memory spike at loading time is not larger than the final model size on each device.
 
         Args:
             device_mesh (`torch.distributed.DeviceMesh`):
