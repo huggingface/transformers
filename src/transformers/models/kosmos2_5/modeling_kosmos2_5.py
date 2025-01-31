@@ -1013,7 +1013,7 @@ class Kosmos2_5TextAttention(nn.Module):
             value_states,
             attention_mask,
             dropout=0.0 if not self.training else self.dropout,
-            scaling=1.0,  # We don't use `self.scaling` as it's done already.
+            scaling=1.0,  # We don't use `self.scaling` as it's already applied to `query_states` above .
             **kwargs,
         )
 
