@@ -2469,6 +2469,44 @@ class GenerationTesterMixin:
 
         self.assertTrue(flag)
 
+
+@require_torch
+class UtilsFunctionsTest(unittest.TestCase):
+    def test_speculative_sampling(self):
+        # assume vocab size 10, input length 5 + 3 generated candidates
+        candidate_input_ids = torch.tensor([[8, 0, 3, 9, 8, 1, 4, 5]])  # input tokens
+        candidate_logits = torch.tensor(
+            [
+                [
+                    [-10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # generated 1
+                    [-10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # generated 4
+                    [-10.0, -10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0],  # generated 5
+                ]
+            ]
+        )
+        candidate_length = 3
+        inf = float("inf")
+        new_logits = torch.tensor(
+            [
+                [
+                    [-10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # accepts 1
+                    [-10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # accepts 4
+                    [-inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, 10.0, -inf],  # rejects 5, accepts 8
+                    [-10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # N/A
+                ]
+            ]
+        )
+        last_assistant_token_is_eos = False
+        validated_tokens, n_matches = _speculative_sampling(
+            candidate_input_ids,
+            candidate_logits,
+            candidate_length,
+            new_logits,
+            last_assistant_token_is_eos,
+        )
+        self.assertTrue(n_matches.item() == 2)
+        self.assertTrue(validated_tokens.tolist()[0] == [1, 4, 8])
+
     def test_speculative_sampling_target_distribution(self):
         """
         Asserts that the target distribution is preserved.
@@ -4251,44 +4289,6 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
         model.generate(input_ids, do_sample=False, max_time=None, max_length=MAX_LENGTH)
         duration = datetime.datetime.now() - start
         self.assertGreater(duration, datetime.timedelta(seconds=1.5 * MAX_TIME))
-
-
-@require_torch
-class UtilsFunctionsTest(unittest.TestCase):
-    def test_speculative_sampling(self):
-        # assume vocab size 10, input length 5 + 3 generated candidates
-        candidate_input_ids = torch.tensor([[8, 0, 3, 9, 8, 1, 4, 5]])  # input tokens
-        candidate_logits = torch.tensor(
-            [
-                [
-                    [-10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # generated 1
-                    [-10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # generated 4
-                    [-10.0, -10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0],  # generated 5
-                ]
-            ]
-        )
-        candidate_length = 3
-        inf = float("inf")
-        new_logits = torch.tensor(
-            [
-                [
-                    [-10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # accepts 1
-                    [-10.0, -10.0, -10.0, -10.0, 10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # accepts 4
-                    [-inf, -inf, -inf, -inf, -inf, -inf, -inf, -inf, 10.0, -inf],  # rejects 5, accepts 8
-                    [-10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0, -10.0],  # N/A
-                ]
-            ]
-        )
-        last_assistant_token_is_eos = False
-        validated_tokens, n_matches = _speculative_sampling(
-            candidate_input_ids,
-            candidate_logits,
-            candidate_length,
-            new_logits,
-            last_assistant_token_is_eos,
-        )
-        self.assertTrue(n_matches.item() == 2)
-        self.assertTrue(validated_tokens.tolist()[0] == [1, 4, 8])
 
 
 @require_torch
