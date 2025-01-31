@@ -1,5 +1,3 @@
-import os
-
 from tokenizers import Regex, Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import BPE
 
