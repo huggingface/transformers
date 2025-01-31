@@ -158,7 +158,6 @@ class AriaProcessor(ProcessorMixin):
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
         image_processor_input_names = self.image_processor.model_input_names
-
         # Remove `num_crops`, it is popped and used only when processing. Make a copy of list when remocing
         # otherwise `self.image_processor.model_input_names` is also modified
         image_processor_input_names = [name for name in image_processor_input_names if name != "num_crops"]

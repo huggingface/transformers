@@ -379,6 +379,9 @@ class ChatTemplateKwargs(TypedDict, total=False):
         The backend to use when loading the video which will be used only when there are videos in the conversation.
         Can be any of ["decord", "pyav", "opencv", "torchvision"]. Defaults to "pyav" because it is the only backend
         that supports all types of sources to load from.
+    video_fps (`int`, *optional*):
+        Number of frames to sample per second. Should be passed only when `num_frames=None`.
+        If not specified and `num_frames==None`, all frames are sampled.
     """
 
     tokenize: Optional[bool] = False
@@ -390,6 +393,7 @@ class ChatTemplateKwargs(TypedDict, total=False):
     return_assistant_tokens_mask: Optional[bool] = False
     num_frames: Optional[int] = None
     video_load_backend: Optional[str] = "pyav"
+    video_fps: Optional[int] = None
 
 
 class AllKwargsForChatTemplate(
@@ -1212,6 +1216,7 @@ class ProcessorMixin(PushToHubMixin):
         tokenize = chat_template_kwargs.pop("tokenize")
         return_dict = chat_template_kwargs.pop("return_dict")
         num_frames = chat_template_kwargs.pop("num_frames")
+        video_fps = chat_template_kwargs.pop("video_fps")
         video_load_backend = chat_template_kwargs.pop("video_load_backend")
 
         prompt = self.tokenizer.apply_chat_template(
@@ -1231,26 +1236,37 @@ class ProcessorMixin(PushToHubMixin):
             conversations = [conversation]
             is_batched = False
 
-        # We will have to return all processed inputs in a dict
-        # Currently all processors can accept flat list of visuals, but not all can accept nested list of batches
-        # So we'll make a simple list of images in the order they appear
         if tokenize:
             batch_images, batch_videos = [], []
             for conversation in conversations:
                 images, videos = [], []
                 for message in conversation:
                     visuals = [content for content in message["content"] if content["type"] in ["image", "video"]]
-                    for vision_info in visuals:
-                        if vision_info["type"] == "image":
-                            for key in ["image", "url", "path", "base64"]:
-                                if key in vision_info:
-                                    images.append(load_image(vision_info[key]))
-                        elif vision_info["type"] == "video":
-                            for key in ["video", "url", "path"]:
-                                if key in vision_info:
-                                    videos.append(
-                                        load_video(vision_info[key], num_frames=num_frames, backend=video_load_backend)
-                                    )
+                    image_fnames = [
+                        vision_info[key]
+                        for vision_info in visuals
+                        for key in ["image", "url", "path", "base64"]
+                        if key in vision_info and vision_info["type"] == "image"
+                    ]
+                    video_fnames = [
+                        vision_info[key]
+                        for vision_info in visuals
+                        for key in ["video", "url", "path"]
+                        if key in vision_info and vision_info["type"] == "video"
+                    ]
+                    for fname in image_fnames:
+                        images.append(load_image(fname))
+                    for fname in video_fnames:
+                        if isinstance(fname, (list, tuple)) and isinstance(fname[0], str):
+                            video = [np.array(load_image(image_fname)).T for image_fname in fname]
+                            # create a 4D video because `load_video` always returns a 4D array
+                            video = np.stack(video)
+                        else:
+                            video = load_video(fname, num_frames=num_frames, fps=video_fps, backend=video_load_backend)
+                        videos.append(video)
+
+                # Currently all processors can accept accept nested list of batches, but not flat list of visuals
+                # So we'll make a batched list of images and let the processor handle it
                 if images:
                     batch_images.append(images)
                 if videos:

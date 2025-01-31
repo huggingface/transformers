@@ -202,6 +202,8 @@ class MllamaProcessor(ProcessorMixin):
             The image processor is a required input.
         tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`]):
             The tokenizer is a required input.
+        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
+            in a chat into a tokenizable string.
 
     """
 

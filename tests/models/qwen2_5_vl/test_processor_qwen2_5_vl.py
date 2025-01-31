@@ -244,13 +244,69 @@ class Qwen2_5_VLProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         out_dict = processor.apply_chat_template(messages, add_generation_prompt=True, tokenize=True, return_dict=True)
         self.assertListEqual(list(out_dict.keys()), ["input_ids", "attention_mask"])
 
-        # add video URL for return dict
+        # Add video URL for return dict and load with `num_frames` arg
         messages[0][0]["content"][0] = {
             "type": "video",
             "url": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/720/Big_Buck_Bunny_720_10s_10MB.mp4",
         }
+        num_frames = 3
         out_dict_with_video = processor.apply_chat_template(
-            messages, add_generation_prompt=True, tokenize=True, return_dict=True
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            num_frames=num_frames,
+        )
+        self.assertTrue(self.videos_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 115200)
+
+        # Load with `video_fps` arg
+        video_fps = 1
+        out_dict_with_video = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+            video_fps=video_fps,
+        )
+        self.assertTrue(self.videos_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 288000)
+
+        # Load with `video_fps` and `num_frames` args, should raise an error
+        with self.assertRaises(ValueError):
+            out_dict_with_video = processor.apply_chat_template(
+                messages,
+                add_generation_prompt=True,
+                tokenize=True,
+                return_dict=True,
+                video_fps=video_fps,
+                num_frames=num_frames,
+            )
+
+        # Load without any arg should load the whole video
+        out_dict_with_video = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 8640000)
+
+        # Load video as a list of frames (i.e. images). NOTE: each frame should have same size
+        # because we assume they come from one video
+        messages[0][0]["content"][0] = {
+            "type": "video",
+            "url": [
+                "https://www.ilankelman.org/stopsigns/australia.jpg",
+                "https://www.ilankelman.org/stopsigns/australia.jpg",
+            ],
+        }
+        out_dict_with_video = processor.apply_chat_template(
+            messages,
+            add_generation_prompt=True,
+            tokenize=True,
+            return_dict=True,
+        )
+        self.assertTrue(self.videos_input_name in out_dict_with_video)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 71280)
