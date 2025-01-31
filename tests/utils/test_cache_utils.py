@@ -43,6 +43,7 @@ if is_torch_available():
         LlamaConfig,
         SinkCache,
         StaticCache,
+        SharedCache,
         convert_and_export_with_cache,
     )
     from transformers.pytorch_utils import is_torch_greater_or_equal_than_2_3
@@ -225,6 +226,54 @@ class CacheTest(unittest.TestCase):
                 n_static_value_caches = n_static_value_caches + 1
         self.assertEqual(n_static_key_caches, model.config.num_hidden_layers)
         self.assertEqual(n_static_value_caches, model.config.num_hidden_layers)
+    
+    def test_shared_cache_retrocompatibility(self):
+        """Tests that we can convert back and forth between the legacy cache format and SharedCache"""
+        legacy_cache = ()
+        new_cache = SharedCache()
+
+        # Creates a new cache with 10 layers in both formats
+        for layer_idx in range(10):
+            new_key = torch.rand((2, 4, 8, 16))
+            new_value = torch.rand((2, 4, 8, 16))
+            new_cache.update(new_key, new_value, layer_idx)
+            legacy_cache += ((new_key, new_value),)
+        
+        # Sanity check 1: they must have the same shapes
+        self.assertTrue(len(legacy_cache), len(new_cache))
+        for layer_idx in range(10):
+            self.assertTrue(len(legacy_cache[layer_idx]), len(legacy_cache[layer_idx]))
+            for key_value_idx in range(2):
+                self.assertTrue(
+                    legacy_cache[layer_idx][key_value_idx].shape == new_cache[layer_idx][key_value_idx].shape
+                )
+
+        # Sanity check 2: we can get the sequence length in multiple ways with SharedCache, and they return the
+        # expected value
+        self.assertTrue(legacy_cache[0][0].shape[-2] == new_cache[0][0].shape[-2] == new_cache.get_seq_length() == 8)
+
+        # Sanity check 3: they must be equal, and both support indexing
+        for layer_idx in range(10):
+            for key_value_idx in range(2):
+                self.assertTrue(
+                    torch.allclose(new_cache[layer_idx][key_value_idx], legacy_cache[layer_idx][key_value_idx])
+                )
+
+        # Test 1: We can convert from legacy to new with no changes
+        from_legacy = SharedCache.from_legacy_cache(legacy_cache)
+        for layer_idx in range(10):
+            for key_value_idx in range(2):
+                self.assertTrue(
+                    torch.allclose(from_legacy[layer_idx][key_value_idx], legacy_cache[layer_idx][key_value_idx])
+                )
+
+        # Test 2: We can convert from new to legacy with no changes
+        to_legacy = new_cache.to_legacy_cache()
+        for layer_idx in range(10):
+            for key_value_idx in range(2):
+                self.assertTrue(
+                    torch.allclose(to_legacy[layer_idx][key_value_idx], new_cache[layer_idx][key_value_idx])
+                )
 
 
 @require_torch_gpu
@@ -589,6 +638,31 @@ class CacheIntegrationTest(unittest.TestCase):
         model.generate(generation_config=offloaded, **inputs)
         offloaded_peak_memory = torch.cuda.max_memory_allocated(device)
         assert offloaded_peak_memory < original_peak_memory
+    
+    @require_torch_gpu
+    def test_shared_cache_uses_less_memory_than_dynamic_cache(self):
+        """Tests that SharedCache uses less memory than the default DynamicCache"""
+        model_name = "meta-llama/Llama-2-7b-hf"
+        tokenizer = AutoTokenizer.from_pretrained(model_name)
+        model = AutoModelForCausalLM.from_pretrained(model_name, device_map="auto", torch_dtype=torch.float16, trust_remote_code=True)
+        device = model.device
+        input_text = "Fun fact:"
+        inputs = tokenizer(input_text, return_tensors="pt").to(device)
+        common = {
+            "min_new_tokens": 20,
+            "max_new_tokens": 20,
+            "early_stopping": False,
+        }
+        generation_config = GenerationConfig(**common)
+        dynamic_cache = DynamicCache()
+        shared_cache = SharedCache(shared_cache_layer_groups=2)
+        torch.cuda.reset_peak_memory_stats(device)
+        model.generate(generation_config=generation_config, **inputs, past_key_values=dynamic_cache)
+        original_peak_memory = torch.cuda.max_memory_allocated(device)
+        torch.cuda.reset_peak_memory_stats(device)
+        model.generate(generation_config=generation_config, **inputs, past_key_values=shared_cache)
+        shared_peak_memory = torch.cuda.max_memory_allocated(device)
+        assert shared_peak_memory < original_peak_memory
 
     @require_torch_gpu
     def test_cache_copy(self):
