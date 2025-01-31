@@ -1343,10 +1343,10 @@ else:
         "QuantizedCache",
         "QuantizedCacheConfig",
         "QuantoQuantizedCache",
+        "SharedCache",
         "SinkCache",
         "SlidingWindowCache",
         "StaticCache",
-        "SharedCache",
     ]
     _import_structure["data.datasets"] = [
         "GlueDataset",
