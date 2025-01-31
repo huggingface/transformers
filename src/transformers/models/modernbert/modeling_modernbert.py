@@ -378,8 +378,6 @@ def eager_attention_forward(
         query = query_new
     else:
         # For initial forward pass
-        position_ids = torch.arange(query.size(-2), device=query.device)
-        position_ids = position_ids.unsqueeze(0).expand(bs, -1)
         cos, sin = module.rotary_emb(qkv, position_ids=position_ids)
         query, key = apply_rotary_pos_emb(query, key, cos, sin)
 
@@ -388,8 +386,11 @@ def eager_attention_forward(
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scale
 
     final_attention_mask = None
+    # the local mask will override the global mask
     if local_attention != (-1, -1):
         final_attention_mask = sliding_window_mask
+    elif final_attention_mask is None and attention_mask is not None:
+        final_attention_mask = attention_mask
 
     # Handle masking similar to SDPA version
     if is_causal:
@@ -411,9 +412,12 @@ def eager_attention_forward(
         else:
             final_attention_mask = causal_mask
 
-    # Apply attention mask from input if provided and no other masks are active
-    elif final_attention_mask is None and attention_mask is not None:
-        final_attention_mask = attention_mask
+    if final_attention_mask is not None:
+        # Replace -inf with a large negative number to avoid NaN issues
+        min_value = torch.finfo(final_attention_mask.dtype).min
+        final_attention_mask = torch.where(
+            torch.isinf(final_attention_mask), torch.full_like(final_attention_mask, min_value), final_attention_mask
+        )
 
     # Apply attention mask if any
     if final_attention_mask is not None:
@@ -421,6 +425,8 @@ def eager_attention_forward(
 
     # upcast attention to fp32
     attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    # Zero out any remaining NaN values in the output
+    attn_weights = torch.nan_to_num(attn_weights, 0.0)
     attn_weights = nn.functional.dropout(attn_weights, p=module.attention_dropout, training=module.training)
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
@@ -450,18 +456,8 @@ def flash_attention_forward(
     **_kwargs,
 ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, Tuple[torch.Tensor, torch.Tensor]]]:
     qkv = rotary_emb(qkv, cu_seqlens=cu_seqlens, max_seqlen=max_seqlen)
-    original_seq_len = qkv.size(0)
-    if past_key_value is not None:
-        past_k, past_v = past_key_value
-        # Reshape from [batch, num_heads, seq, head_dim] to [seq, num_heads, head_dim]
-        past_k = past_k.squeeze(0).transpose(0, 1)
-        past_v = past_v.squeeze(0).transpose(0, 1)
-
-        q = qkv[:, 0]
-        k = torch.cat([past_k, qkv[:, 1]], dim=0)
-        v = torch.cat([past_v, qkv[:, 2]], dim=0)
-        q = torch.cat([torch.zeros_like(past_k, device=q.device, dtype=q.dtype), q], dim=0)
-        qkv = torch.stack([q, k, v], dim=1)
+    if past_key_value is not None or use_cache:
+        raise ValueError("use_cache is not supported for Flash Attention 2 due to local layers and unpadding")
 
     # Flash attention logic stays exactly the same
     convert_dtype = qkv.dtype not in (torch.float16, torch.bfloat16)
@@ -489,15 +485,7 @@ def flash_attention_forward(
             causal=is_causal,
         )
 
-    if past_key_value is not None:
-        attn = attn[-original_seq_len:]
-
     outputs = (attn.view(bs, dim),)
-    if use_cache:
-        k, v = qkv[:, 1], qkv[:, 2]
-        k = k.transpose(0, 1)
-        v = v.transpose(0, 1)
-        outputs = outputs + ((k, v),)
     return outputs
 
 
@@ -534,14 +522,15 @@ def sdpa_attention_forward(
         query = query_new
     else:
         # For initial forward pass
-        position_ids = torch.arange(query.size(-2), device=query.device)
-        position_ids = position_ids.unsqueeze(0).expand(bs, -1)
         cos, sin = module.rotary_emb(qkv, position_ids=position_ids)
         query, key = apply_rotary_pos_emb(query, key, cos, sin)
 
     final_attention_mask = None
+    # the local mask will override the global mask
     if local_attention != (-1, -1):
         final_attention_mask = sliding_window_mask
+    elif final_attention_mask is None and attention_mask is not None:
+        final_attention_mask = attention_mask
 
     # Figure out the attention mask
     #   if is_causal, we need to create a causal mask
@@ -557,20 +546,22 @@ def sdpa_attention_forward(
         else:
             # Create causal mask for the full sequence
             seq_len = key.size(-2)
-            # Create upper triangular matrix of ones (for positions to mask)
             causal_mask = torch.triu(
                 torch.full((seq_len, seq_len), torch.finfo(attention_mask.dtype).min, device=query.device), diagonal=1
             ).expand(1, 1, seq_len, seq_len)
 
-        # Combine masks if local attention is active
+        # Combine masks with padding/local mask if present
         if final_attention_mask is not None:
             final_attention_mask = final_attention_mask + causal_mask
         else:
             final_attention_mask = causal_mask
 
-    # Apply attention mask from input if provided and no other masks are active
-    elif final_attention_mask is None and attention_mask is not None:
-        final_attention_mask = attention_mask
+    if final_attention_mask is not None:
+        # Replace -inf with a large negative number to avoid NaN issues
+        min_value = torch.finfo(final_attention_mask.dtype).min
+        final_attention_mask = torch.where(
+            torch.isinf(final_attention_mask), torch.full_like(final_attention_mask, min_value), final_attention_mask
+        )
 
     attn_output = (
         F.scaled_dot_product_attention(
@@ -578,12 +569,17 @@ def sdpa_attention_forward(
             key,
             value,
             dropout_p=module.attention_dropout if module.training else 0.0,
-            attn_mask=(final_attention_mask == 0) if final_attention_mask is not None else None,
+            # convert from float to bool
+            attn_mask=(final_attention_mask >= 0) if final_attention_mask is not None else None,
             is_causal=False,  # attn masks handled above
         )
         .transpose(1, 2)
         .contiguous()
     )
+
+    # Zero out any remaining NaN values in the output
+    attn_output = torch.nan_to_num(attn_output, 0.0)
+
     attn_output = attn_output.view(bs, -1, dim)
     outputs = (attn_output,)
     if use_cache:
@@ -1824,8 +1820,8 @@ class ModernBertForCausalLM(ModernBertPreTrainedModel, GenerationMixin):
             raise ValueError("Training is not supported for pseudo-causal generation")
 
         # For generation or single token prediction
-        if return_single_token_logits or use_cache: # NOTE: cache cannot be used but is a sign we are doing generation
-            # For batched generation, all sequences will have same length, otherwise raise an error
+        if return_single_token_logits or use_cache:  # NOTE: cache cannot be used but is a sign we are doing generation
+            # mask token should be added here, so error if some already exist
             if self.config.mask_token_id in input_ids.any():
                 raise ValueError("Mask token found in input_ids during generation")
 
@@ -1841,22 +1837,19 @@ class ModernBertForCausalLM(ModernBertPreTrainedModel, GenerationMixin):
                 else self.decoder(self.head(outputs.last_hidden_state))
             )
 
-            breakpoint()
-
             # Get just the next token logits but reshape to match expected format
             new_logit = output_logits[:, seq_len, :].unsqueeze(1)  # Shape: (batch_size, 1, vocab_size)
             seq_len = input_ids.shape[1]
 
             # Create zero logits for all positions except the last
             zero_logits = torch.zeros(
-                (batch_size, seq_len - self.config.num_future_masks, self.config.vocab_size), device=new_logit.device, dtype=new_logit.dtype
+                (batch_size, seq_len - 2, self.config.vocab_size), device=new_logit.device, dtype=new_logit.dtype
             )
 
             # Concat to get proper shape while ensuring only the last position has real logits, even with batches
             logits = torch.cat([zero_logits, new_logit], dim=1)
 
-        else: # e.g. we are doing likelihood
-
+        else:  # e.g. we are doing likelihood
             # NOTE: must turn every token into a instance, since it can only predict logits for one token at a time
             # This means the batch size will explode. If you get OOM errors, try reducing the batch size to one
             batched_inputs = torch.zeros(
