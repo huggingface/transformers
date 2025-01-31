@@ -4366,7 +4366,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
                 pass
 
-        # Dispatch model with hooks on all devices if necessary (not needed with a tp_plan, so we skip it as it
+        # Dispatch model with hooks on all devices if necessary (not needed with a tp_plan, so we skip it as it slightly
         # harm performances)
         if device_map is not None and device_mesh is None:
             device_map_kwargs = {
