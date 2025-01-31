@@ -56,6 +56,7 @@ if is_torch_available():
         OffloadedStaticCache,
         QuantizedCacheConfig,
         QuantoQuantizedCache,
+        SharedCache,
         SlidingWindowCache,
         StaticCache,
         StaticCacheConfig,
@@ -63,6 +64,7 @@ if is_torch_available():
     from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
 
     CACHE_CONFIG_MAPPING["quantized"] = QuantizedCacheConfig
+    CACHE_CONFIG_MAPPING["shared"] = SharedCache
     CACHE_CONFIG_MAPPING["static"] = StaticCacheConfig
     NEED_SETUP_CACHE_CLASSES_MAPPING = {
         "static": StaticCache,
@@ -178,6 +180,7 @@ class GenerationConfig(PushToHubMixin):
             - `"static"`: [`StaticCache`]
             - `"offloaded_static"`: [`OffloadedStaticCache`]
             - `"sliding_window"`: [`SlidingWindowCache`]
+            - `"shared"`: [`SharedCache`]
             - `"hybrid"`: [`HybridCache`]
             - `"mamba"`: [`MambaCache`]
             - `"quantized"`: [`QuantizedCache`]
