@@ -922,9 +922,10 @@ def _load_state_dict_into_meta_model(
 
             # We can only apply the tp_plan after all parameters of the current module have been correctly initialized (e.g.
             # if we have bias, we need both `weights` and `bias` to be initialized)
+            process_device = list(device_map.values())[0]
             all_module_parameters_initialized = (
-                all(m.device != torch.device("meta") for m in parent_module.parameters(recurse=False))
-                and all(m.device != torch.device("meta") for m in parent_module.buffers(recurse=False))
+                all(m.device == process_device for m in parent_module.parameters(recurse=False))
+                and all(m.device == process_device for m in parent_module.buffers(recurse=False))
             )
             if current_module_plan is not None and all_module_parameters_initialized:
                 torch.distributed.tensor.parallel.parallelize_module(
@@ -3603,7 +3604,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if low_cpu_mem_usage is None:
                 low_cpu_mem_usage = True
             elif not low_cpu_mem_usage:
-                raise ValueError("Passing along a `device_map` requires `low_cpu_mem_usage=True`")
+                raise ValueError("Passing along a `device_map` or a `tp_plan` requires `low_cpu_mem_usage=True`")
 
         if low_cpu_mem_usage:
             if is_deepspeed_zero3_enabled():
@@ -3612,7 +3613,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 )
             elif not is_accelerate_available():
                 raise ImportError(
-                    f"Using `low_cpu_mem_usage=True` or a `device_map` requires Accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
+                    f"Using `low_cpu_mem_usage=True`, a `device_map` or a `tp_plan` requires Accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
                 )
 
         # handling bnb config from kwargs, remove after `load_in_{4/8}bit` deprecation.
@@ -4861,7 +4862,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 state_dict = load_state_dict(
                     shard_file, is_quantized=is_quantized, map_location=map_location, weights_only=weights_only
                 )
-                print(f"STATE_DICT: {state_dict.keys()}")
 
                 # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
                 # matching the weights in the model.
