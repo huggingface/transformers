@@ -477,7 +477,7 @@ class Kosmos2_5VisionAttention(nn.Module):
         hidden_states,
         attention_mask=None,
         position_bias=None,
-        output_attentions=False,
+        **kwargs,
     ):
         """
         Self-attention block
@@ -497,174 +497,42 @@ class Kosmos2_5VisionAttention(nn.Module):
         key_states = key_states.view(batch_size, seq_length, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
         value_states = value_states.view(batch_size, seq_length, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
 
-        attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.key_value_proj_dim)
-
-        if attention_mask is not None:
-            causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-            attn_weights = attn_weights + causal_mask
-
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-        attn_output = torch.matmul(attn_weights, value_states)
-        attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.reshape(batch_size, seq_length, -1)
-        attn_output = self.output(attn_output)
-
-        if not output_attentions:
-            attn_weights = None
-
-        return attn_output, attn_weights
-
-
-class Kosmos2_5VisionFlashAttention2(Kosmos2_5VisionAttention):
-    """
-    Kosmos-2.5 vision encoder flash attention module. This module inherits from `Kosmos2_5VisionAttention` as the
-    weights of the module stays untouched. The only required change would be on the forward pass where it needs to
-    correctly call the public API of flash attention and deal with padding tokens in case the input contains any of
-    them.
-    """
-
-    def __init__(self, *args, **kwargs):
-        super().__init__(*args, **kwargs)
-
-        # TODO: Should be removed once Flash Attention for RoCm is bumped to 2.1.
-        # flash_attn<2.1 generates top-left aligned causal mask, while what is needed here is bottom-right alignement, that was made default for flash_attn>=2.1. This attribute is used to handle this difference. Reference: https://github.com/Dao-AILab/flash-attention/releases/tag/v2.1.0.
-        # Beware that with flash_attn<2.1, using q_seqlen != k_seqlen (except for the case q_seqlen == 1) produces a wrong mask (top-left).
-        self._flash_attn_uses_top_left_mask = not is_flash_attn_greater_or_equal_2_10()
-
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        position_bias=None,
-        output_attentions=False,
-    ):
-        """
-        Flash attn Self-attention block
-        """
-        output_attentions = False
-        # Input is (batch_size, seq_length, dim)
-        # Mask is (batch_size, key_length) (non-causal) or (batch_size, key_length, key_length)
-        batch_size, seq_length, _ = hidden_states.size()
-        # (batch_size, seq_length, inner_dim)
-        query_states = self.query(hidden_states)
-        key_states = self.key(hidden_states)
-        value_states = self.value(hidden_states)
-
-        # (batch_size, seq_length, self.n_heads , self.key_value_proj_dim)
-        query_states = query_states.view(batch_size, seq_length, self.n_heads, self.key_value_proj_dim)
-        key_states = key_states.view(batch_size, seq_length, self.n_heads, self.key_value_proj_dim)
-        value_states = value_states.view(batch_size, seq_length, self.n_heads, self.key_value_proj_dim)
-
-        input_dtype = query_states.dtype
-        if input_dtype == torch.float32:
-            if torch.is_autocast_enabled():
-                target_dtype = torch.get_autocast_gpu_dtype()
-            # Handle the case where the model is quantized
-            elif hasattr(self.config, "_pre_quantization_dtype"):
-                target_dtype = self.config._pre_quantization_dtype
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
+                logger.warning_once(
+                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
+                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
+                )
             else:
-                target_dtype = self.query.weight.dtype
+                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-            logger.warning_once(
-                f"The input hidden states seems to be silently casted in float32, this might be related to"
-                f" the fact you have upcasted embedding or layer norm layers in float32. We will cast back the input in"
-                f" {target_dtype}."
-            )
-
-            query_states = query_states.to(target_dtype)
-            key_states = key_states.to(target_dtype)
-            value_states = value_states.to(target_dtype)
-        attn_output = _flash_attention_forward(
+        attn_output, attn_weights = attention_interface(
+            self,
             query_states,
             key_states,
             value_states,
             attention_mask,
-            seq_length,
-            dropout=self.dropout,
-            sliding_window=getattr(self, "sliding_window", None),
-            use_top_left_mask=self._flash_attn_uses_top_left_mask,
-            is_causal=self.is_causal,
+            dropout=0.0 if not self.training else self.dropout,
+            scaling=1.0,
+            **kwargs,
         )
 
-        attn_output = attn_output.view(batch_size, -1, self.inner_dim)
-        attn_output = self.output(attn_output)
+        # attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.key_value_proj_dim)
+        #
+        # if attention_mask is not None:
+        #     causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+        #     attn_weights = attn_weights + causal_mask
+        #
+        # attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
+        # attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
+        # attn_output = torch.matmul(attn_weights, value_states)
+        # attn_output = attn_output.transpose(1, 2).contiguous()
 
-        if not output_attentions:
-            attn_weights = None
+        attn_output = attn_output.reshape(batch_size, seq_length, -1)
+        attn_output = self.output(attn_output)
 
         return attn_output, attn_weights
-
-
-class Kosmos2_5VisionSdpaAttention(Kosmos2_5VisionAttention):
-    """
-    Kosmos-2.5 vision encoder attention module using torch.nn.functional.scaled_dot_product_attention. This module
-    inherits from` Kosmos2_5VisionAttention` as the weights of the module stays untouched. The only changes are on the
-    forward pass to adapt to SDPA API.
-    """
-
-    def forward(
-        self,
-        hidden_states,
-        attention_mask=None,
-        position_bias=None,
-        output_attentions=False,
-    ):
-        if output_attentions:
-            logger.warning_once(
-                "LlamaModel is using LlamaSdpaAttention, but `torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to the manual attention implementation, "
-                'but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-            )
-            return super().forward(
-                hidden_states=hidden_states,
-                attention_mask=attention_mask,
-                position_bias=position_bias,
-                output_attentions=output_attentions,
-            )
-        batch_size, seq_length, _ = hidden_states.size()
-
-        query_states = self.query(hidden_states)
-        key_states = self.key(hidden_states)
-        value_states = self.value(hidden_states)
-
-        query_states = query_states.view(batch_size, seq_length, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
-        key_states = key_states.view(batch_size, seq_length, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
-        value_states = value_states.view(batch_size, seq_length, self.n_heads, self.key_value_proj_dim).transpose(1, 2)
-        causal_mask = attention_mask
-        if attention_mask is not None:
-            # Slice the causal_mask to match key_states' last dimension
-            causal_mask = causal_mask[:, :, :, : key_states.shape[-2]]
-
-        if query_states.device.type == "cuda" and causal_mask is not None:
-            query_states = query_states.contiguous()
-            key_states = key_states.contiguous()
-            value_states = value_states.contiguous()
-
-        # We dispatch to SDPA's Flash Attention or Efficient kernels via this `is_causal` if statement instead of an inline conditional assignment
-        # in SDPA to support both torch.compile's dynamic shapes and full graph options. An inline conditional prevents dynamic shapes from compiling.
-        is_causal = True if causal_mask is None and seq_length > 1 else False
-
-        attn_output = torch.nn.functional.scaled_dot_product_attention(
-            query_states,
-            key_states,
-            value_states,
-            attn_mask=attention_mask,
-            dropout_p=self.dropout if self.training else 0.0,
-            is_causal=is_causal,
-        )
-        attn_output = attn_output.transpose(1, 2).contiguous()
-        attn_output = attn_output.view(batch_size, seq_length, -1)
-
-        attn_output = self.output(attn_output)
-
-        return attn_output, None
-
-
-KOSMOS2_5_VISION_ATTENTION_CLASSES = {
-    "eager": Kosmos2_5VisionAttention,
-    "flash_attention_2": Kosmos2_5VisionFlashAttention2,
-    "sdpa": Kosmos2_5VisionSdpaAttention,
-}
 
 
 class Kosmos2_5VisionLayer(nn.Module):
@@ -675,7 +543,7 @@ class Kosmos2_5VisionLayer(nn.Module):
 
         self.config = config
 
-        self.attention = KOSMOS2_5_VISION_ATTENTION_CLASSES[config._attn_implementation](config)
+        self.attention = Kosmos2_5VisionAttention(config)
         self.mlp = Kosmos2_5VisionMlp(config)
         self.pre_mlp_layer_norm = Kosmos2_5LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.pre_attention_layer_norm = Kosmos2_5LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
@@ -685,19 +553,18 @@ class Kosmos2_5VisionLayer(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
+        # Do we need **kwargs here,
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         residual = hidden_states
 
         # in  Kosmos2_5Vision, layernorm is applied before self-attention
         hidden_states = self.pre_attention_layer_norm(hidden_states)
 
-        self_attention_outputs = self.attention(
+        attention_output, self_attn_weights = self.attention(
             hidden_states,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
         )
-        attention_output = self_attention_outputs[0]
-        outputs = self_attention_outputs[1:]  # add self attentions if we output attention weights
 
         # first residual connection
         hidden_states = attention_output + residual
@@ -706,7 +573,9 @@ class Kosmos2_5VisionLayer(nn.Module):
         layer_output = self.pre_mlp_layer_norm(hidden_states)
         layer_output = self.mlp(layer_output) + hidden_states  # second residual connection
 
-        outputs = (layer_output,) + outputs
+        outputs = (layer_output,)
+        if output_attentions:
+            outputs += (self_attn_weights,)
 
         return outputs
 
