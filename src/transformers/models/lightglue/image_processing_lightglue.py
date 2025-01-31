@@ -425,6 +425,8 @@ class LightGlueImageProcessor(BaseImageProcessor):
         """
         if is_matplotlib_available():
             import matplotlib.pyplot as plt
+        else:
+            raise ImportError("Please install matplotlib to use `plot_keypoint_matching` method")
 
         images = validate_and_format_image_pairs(images)
         images = [to_numpy_array(image) for image in images]
