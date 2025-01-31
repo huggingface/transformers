@@ -13,15 +13,14 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import logging
 from ..llama.modeling_llama import (
-    LlamaForCausalLM,
     LlamaForSequenceClassification,
-    LlamaModel,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
+    apply_rotary_pos_emb,
     eager_attention_forward,
-    rotate_half,
 )
+from ..mixtral.modeling_mixtral import MixtralForCausalLM, MixtralModel
 from .configuration_deepseek_v3 import DeepseekV3Config
 
 
@@ -42,39 +41,6 @@ def yarn_get_mscale(scale=1, mscale=1):
     return 0.1 * mscale * math.log(scale) + 1.0
 
 
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_length, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_length, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_length, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-
-    b, h, s, d = q.shape
-    q = q.view(b, h, s, d // 2, 2).transpose(4, 3).reshape(b, h, s, d)
-
-    b, h, s, d = k.shape
-    k = k.view(b, h, s, d // 2, 2).transpose(4, 3).reshape(b, h, s, d)
-
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    return q_embed, k_embed
-
-
 class DeepseekV3MLP(nn.Module):
     def __init__(self, config, hidden_size=None, intermediate_size=None):
         super().__init__()
@@ -92,7 +58,7 @@ class DeepseekV3MLP(nn.Module):
         return down_proj
 
 
-class MoEGate(nn.Module):
+class DeepseekV3TopkRouter(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -101,7 +67,6 @@ class MoEGate(nn.Module):
         self.routed_scaling_factor = config.routed_scaling_factor
         self.n_group = config.n_group
         self.topk_group = config.topk_group
-        self.norm_topk_prob = config.norm_topk_prob
 
         self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
         self.e_score_correction_bias = nn.Parameter(torch.empty((self.n_routed_experts)))
@@ -109,9 +74,9 @@ class MoEGate(nn.Module):
     def forward(self, hidden_states):
         batch_size, seq_length = hidden_states.shape[:-1]
         hidden_states = hidden_states.view(-1, self.config.hidden_size)
-        logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
+        router_logits = F.linear(hidden_states.type(torch.float32), self.weight.type(torch.float32))
 
-        scores = logits.sigmoid()
+        scores = router_logits.sigmoid()
         scores_for_choice = scores.view(-1, self.n_routed_experts) + self.e_score_correction_bias.unsqueeze(0)
         group_scores = (
             scores_for_choice.view(-1, self.n_group, self.n_routed_experts // self.n_group)
@@ -129,11 +94,10 @@ class MoEGate(nn.Module):
         scores_for_choice = scores_for_choice.masked_fill(~score_mask.bool(), 0.0)  # [n, e]
         _, topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)
         topk_weights = scores.gather(1, topk_indices)
-        if self.norm_topk_prob:
-            denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
-            topk_weights /= denominator
+        denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
+        topk_weights /= denominator
         topk_weights = topk_weights * self.routed_scaling_factor  # must multiply the scaling factor
-        return topk_indices, topk_weights
+        return topk_indices, topk_weights, router_logits
 
 
 class DeepseekV3MoE(nn.Module):
@@ -150,24 +114,21 @@ class DeepseekV3MoE(nn.Module):
                 for _ in range(config.n_routed_experts)
             ]
         )
-        self.gate = MoEGate(config)
-        intermediate_size = config.moe_intermediate_size * config.n_shared_experts
-        self.shared_experts = DeepseekV3MLP(config=config, intermediate_size=intermediate_size)
+        self.gate = DeepseekV3TopkRouter(config)
+        self.shared_experts = DeepseekV3MLP(config=config, intermediate_size=config.moe_intermediate_size)
 
     def forward(self, hidden_states):
-        identity = hidden_states
+        residuals = hidden_states
         orig_shape = hidden_states.shape
-        topk_indices, topk_weights = self.gate(hidden_states)
+        topk_indices, topk_weights, router_logits = self.gate(hidden_states)
         hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        y = self.moe_infer(hidden_states, topk_indices, topk_weights).view(*orig_shape)
-        y = y + self.shared_experts(identity)
-        return y
+        hidden_states = self.moe_infer(hidden_states, topk_indices, topk_weights).view(*orig_shape)
+        hidden_states = hidden_states + self.shared_experts(residuals)
+        return hidden_states, router_logits
 
-    @torch.no_grad()
     def moe_infer(self, hidden_states: torch.Tensor, topk_indices: torch.Tensor, topk_weights: torch.Tensor):
         """
         Perform inference using a Mixture of Experts (MoE) model.
-
         Args:
             hidden_states (torch.Tensor): Input hidden states.
             topk_indices (torch.Tensor): Indices of the top-k experts for each token.
@@ -178,20 +139,20 @@ class DeepseekV3MoE(nn.Module):
         """
         num_experts = len(self.experts)
         batch_size, num_topk = topk_indices.shape
+        with torch.no_grad():
+            # Count the number of tokens assigned to each expert
+            expert_counts = topk_indices.new_zeros((batch_size, num_experts))
+            expert_counts.scatter_(1, topk_indices, 1)
+            tokens_per_expert = expert_counts.sum(dim=0)
 
-        # Count the number of tokens assigned to each expert
-        expert_counts = topk_indices.new_zeros((batch_size, num_experts))
-        expert_counts.scatter_(1, topk_indices, 1)
-        tokens_per_expert = expert_counts.sum(dim=0)
+            # Sort tokens by their assigned expert
+            sorted_indices = topk_indices.view(-1).argsort()
+            sorted_tokens = hidden_states[sorted_indices // num_topk]
+            tokens_per_expert = tokens_per_expert.cpu().numpy()
 
-        # Sort tokens by their assigned expert
-        sorted_indices = topk_indices.view(-1).argsort()
-        sorted_tokens = hidden_states[sorted_indices // num_topk]
-        tokens_per_expert = tokens_per_expert.cpu().numpy()
-
-        # Process tokens through their assigned experts
-        expert_outputs = []
-        current_pos = 0
+            # Process tokens through their assigned experts
+            expert_outputs = []
+            current_pos = 0
 
         for expert_idx, num_tokens in enumerate(tokens_per_expert):
             if num_tokens == 0:
@@ -279,26 +240,22 @@ class DeepseekV3Attention(nn.Module):
         hidden_shape = (*input_shape, self.num_heads, -1)
         batch_size, seq_length = input_shape
 
-        q = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states))).view(hidden_shape).transpose(1, 2)
-        q_nope, q_pe = torch.split(q, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
+        q_states = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states))).view(hidden_shape).transpose(1, 2)
+        q_rot, q_pass = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
 
         compressed_kv = self.kv_a_proj_with_mqa(hidden_states)
-        compressed_kv, k_pe = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
-        k_pe = k_pe.view(*input_shape, 1, self.qk_rope_head_dim).transpose(1, 2)
-        kv = self.kv_b_proj(self.kv_a_layernorm(compressed_kv)).view(hidden_shape).transpose(1, 2)
+        k_pass, k_rot = torch.split(compressed_kv, [self.kv_lora_rank, self.qk_rope_head_dim], dim=-1)
 
-        k_nope, value_states = torch.split(kv, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
+        k_pass = self.kv_b_proj(self.kv_a_layernorm(k_pass)).view(hidden_shape).transpose(1, 2)
+        k_pass, value_states = torch.split(k_pass, [self.qk_nope_head_dim, self.v_head_dim], dim=-1)
+
+        k_rot = k_rot.view(*input_shape, 1, self.qk_rope_head_dim).transpose(1, 2)
 
         cos, sin = position_embeddings
-        q_pe, k_pe = apply_rotary_pos_emb(q_pe, k_pe, cos, sin)
+        q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
 
-        query_states = k_pe.new_empty(batch_size, self.num_heads, seq_length, self.q_head_dim)
-        query_states[:, :, :, : self.qk_nope_head_dim] = q_nope
-        query_states[:, :, :, self.qk_nope_head_dim :] = q_pe
-
-        key_states = k_pe.new_empty(batch_size, self.num_heads, seq_length, self.q_head_dim)
-        key_states[:, :, :, : self.qk_nope_head_dim] = k_nope
-        key_states[:, :, :, self.qk_nope_head_dim :] = k_pe
+        query_states = torch.cat(q_rot, q_pass, dim=-1)
+        key_states = torch.cat(k_rot, k_pass, dim=-1)
 
         if self.config._attn_implementation == "flash_attention_2" and self.q_head_dim != self.v_head_dim:
             value_states = F.pad(value_states, [0, self.q_head_dim - self.v_head_dim])
@@ -359,6 +316,7 @@ class DeepseekV3DecoderLayer(nn.Module):
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Cache] = None,
         output_attentions: Optional[bool] = False,
+        output_router_logits: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
@@ -386,11 +344,19 @@ class DeepseekV3DecoderLayer(nn.Module):
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
+
+        if isinstance(hidden_states, tuple):
+            hidden_states, router_logits = hidden_states
+        else:
+            router_logits = (torch.zeros((1,), device=hidden_states.device, dtype=torch.int64),)
+
         hidden_states = residual + hidden_states
 
         outputs = (hidden_states,)
         if output_attentions:
             outputs += (self_attn_weights,)
+        if output_router_logits:
+            outputs += (router_logits,)
 
         return outputs
 
@@ -399,11 +365,38 @@ class DeepseekV3PreTrainedModel(LlamaPreTrainedModel):
     pass
 
 
-class DeepseekV3Model(LlamaModel):
-    pass
+def permute_for_rope(input_tensor, n_heads, dim1, dim2):
+    """
+    When you go from the complex ROPE formulation to sin and cos one, you need
+    to permute the query and key weights (to avoid doing it on the fly)
+    """
+    input_tensor = input_tensor.reshape(dim1, dim2)
+    input_tensor = input_tensor.view(n_heads, dim1 // n_heads // 2, 2, dim2)
+    input_tensor = input_tensor.transpose(1, 2).reshape(dim1, dim2)
+    return input_tensor
 
 
-class DeepseekV3ForCausalLM(LlamaForCausalLM):
+class DeepseekV3Model(MixtralModel):
+    def __init__(self, config):
+        super().__init__(config)
+        self._register_load_state_dict_pre_hook(self.load_hook)
+        self.post_init()
+
+    def load_hook(self, state_dict, prefix, *args):
+        """
+        Weights have to be permutted for correct rope formulation. We can't do this in the weights
+        as every other framework already uses the `Llama` orginal function (which is copyrighted btw).
+        And I am not even sure it's better.... anyways end of my rant
+        """
+        for k in state_dict:
+            if "q_b_proj." in k:
+                weight = state_dict.pop(k[: self.qk_nope_head_dim])
+            if "k_b_proj." in k:
+                weight = state_dict.pop(k[self.qk_nope_head_dim :])
+            state_dict[k] = permute_for_rope(weight, weight.shape[0], weight.shape[1], weight.shape[2])
+
+
+class DeepseekV3ForCausalLM(MixtralForCausalLM):
     pass
 
 
