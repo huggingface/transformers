@@ -2230,16 +2230,16 @@ class SharedCache(DynamicCache):
         ```
     """
     @deprecate_kwarg("num_hidden_layers", version="4.47.0")
-    def __init__(self, num_hidden_layers: Optional[int] = None, shared_layer_groups: Optional[int] = None) -> None:
+    def __init__(
+        self, 
+        shared_cache_layer_groups: Optional[int] = None,
+    ) -> None:
         super().__init__()
-        self._seen_tokens = 0  # Used in `generate` to keep tally of how many tokens the cache has seen
-        self.shared_layer_groups = shared_layer_groups if shared_layer_groups is not None else 1
-        self.key_cache: List[torch.Tensor] = []
-        self.value_cache: List[torch.Tensor] = []
+        self.shared_cache_layer_groups = shared_cache_layer_groups if shared_cache_layer_groups is not None else 1
     
     @property
     def shared_layer_indices(self) -> List[int]:
-        return [i for i in range(len(self)) if i % self.shared_layer_groups == 0]
+        return [i for i in range(len(self)) if i % self.shared_cache_layer_groups == 0]
 
     def shared_layer_idx(self, layer_idx: int) -> int:
         if len(self.shared_layer_indices) == 0:
