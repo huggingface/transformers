@@ -28,7 +28,7 @@ from ...modeling_rope_utils import rope_config_validation
 class DogeConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DogeModel`]. It is used to instantiate an Doge
-    model according to the specified arguments, defining the model architecture like [JingzeShi/Doge-20M](https://huggingface.co/JingzeShi/Doge-20M).
+    model according to the specified arguments, defining the model architecture like [SmallDoge/Doge-20M](https://huggingface.co/SmallDoge/Doge-20M).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.

@@ -25,7 +25,7 @@ Doge is a series of small language models based on the [Doge](https://github.com
 
 As shown in the figure below, the sequence transformation part of the Doge architecture uses `Dynamic Mask Attention`, which can be understood as using self-attention related to value states during training, and using state-space without past state decay during inference, to solve the problem of existing Transformers or SSMs getting lost in long text. The state transformation part of Doge uses `Cross Domain Mixture of Experts`, which consists of dense linear layers and sparse embedding layers, and can additionally increase sparse parameters to continue training from dense weight checkpoints without retraining the entire model, thereby reducing the cost of continuous iteration of the model. In addition, Doge also uses `RMSNorm` and `Residual` with learnable parameters to adapt the gradient range of deep models.
 
-Checkout all Doge model checkpoints [here](https://huggingface.co/collections/JingzeShi/doge-slm-677fd879f8c4fd0f43e05458).
+Checkout all Doge model checkpoints [here](https://huggingface.co/collections/SmallDoge/doge-slm-679cc991f027c4a3abbded4a).
 
 
 ## Usage
@@ -36,8 +36,8 @@ Checkout all Doge model checkpoints [here](https://huggingface.co/collections/Ji
 ```python
 from transformers import AutoTokenizer, AutoModelForCausalLM
 
-tokenizer = AutoTokenizer.from_pretrained("JingzeShi/Doge-20M")
-model = AutoModelForCausalLM.from_pretrained("JingzeShi/Doge-20M")
+tokenizer = AutoTokenizer.from_pretrained("SmallDoge/Doge-20M")
+model = AutoModelForCausalLM.from_pretrained("SmallDoge/Doge-20M")
 inputs = tokenizer("Hey how are you doing?", return_tensors="pt")
 
 outputs = model.generate(**inputs, max_new_tokens=100)
@@ -51,8 +51,8 @@ print(tokenizer.batch_decode(outputs))
 ```python
 from transformers import AutoTokenizer, AutoModelForCausalLM, GenerationConfig, TextStreamer
 
-tokenizer = AutoTokenizer.from_pretrained("JingzeShi/Doge-20M-Instruct")
-model = AutoModelForCausalLM.from_pretrained("JingzeShi/Doge-20M-Instruct")
+tokenizer = AutoTokenizer.from_pretrained("SmallDoge/Doge-20M-Instruct")
+model = AutoModelForCausalLM.from_pretrained("SmallDoge/Doge-20M-Instruct")
 
 generation_config = GenerationConfig(
       max_new_tokens=100, 

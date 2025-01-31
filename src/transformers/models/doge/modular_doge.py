@@ -65,7 +65,7 @@ _CONFIG_FOR_DOC = "DogeConfig"
 class DogeConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DogeModel`]. It is used to instantiate an Doge
-    model according to the specified arguments, defining the model architecture like [JingzeShi/Doge-20M](https://huggingface.co/JingzeShi/Doge-20M).
+    model according to the specified arguments, defining the model architecture like [SmallDoge/Doge-20M](https://huggingface.co/SmallDoge/Doge-20M).
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -1123,8 +1123,8 @@ class DogeForCausalLM(DogePreTrainedModel, GenerationMixin):
         ```python
          >>> from transformers import AutoTokenizer, AutoModelForCausalLM
 
-        >>> model = AutoModelForCausalLM.from_pretrained("JingzeShi/Doge-20M")
-        >>> tokenizer = AutoTokenizer.from_pretrained("JingzeShi/Doge-20M")
+        >>> model = AutoModelForCausalLM.from_pretrained("SmallDoge/Doge-20M")
+        >>> tokenizer = AutoTokenizer.from_pretrained("SmallDoge/Doge-20M")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")

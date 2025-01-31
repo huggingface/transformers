@@ -986,8 +986,8 @@ class DogeForCausalLM(DogePreTrainedModel, GenerationMixin):
         ```python
          >>> from transformers import AutoTokenizer, AutoModelForCausalLM
 
-        >>> model = AutoModelForCausalLM.from_pretrained("JingzeShi/Doge-20M")
-        >>> tokenizer = AutoTokenizer.from_pretrained("JingzeShi/Doge-20M")
+        >>> model = AutoModelForCausalLM.from_pretrained("SmallDoge/Doge-20M")
+        >>> tokenizer = AutoTokenizer.from_pretrained("SmallDoge/Doge-20M")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
