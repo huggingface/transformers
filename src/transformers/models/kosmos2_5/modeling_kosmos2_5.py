@@ -1020,10 +1020,6 @@ class Kosmos2_5TextAttention(nn.Module):
             attn_output = self.inner_attn_ln(attn_output)
 
         attn_output = self.out_proj(attn_output)
-
-        if not output_attentions:
-            attn_weights = None
-
         return attn_output, attn_weights
 
 
