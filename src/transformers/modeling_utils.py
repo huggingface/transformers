@@ -920,7 +920,7 @@ def _load_state_dict_into_meta_model(
                     break
 
             # We can only apply the tp_plan after all parameters of the current module have been correctly initialized (e.g.
-            # if we have bias, we need both `weights` and `bias` to be initialized)
+            # if we have bias, we need both `weights` and `bias` of a nn.Linear to be initialized)
             process_device = list(device_map.values())[0]
             all_module_parameters_initialized = all(
                 m.device == process_device for m in parent_module.parameters(recurse=False)
