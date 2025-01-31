@@ -47,11 +47,11 @@ The abstract from the paper is the following:
 The original code can be found [here](https://github.com/answerdotai/modernbert).
 
 ### ModernBERT as a CausalLM
-ModernBERT can also be used as a decoder-only model, either with the same architecture but trained using causal language modeling, or through the use of iterative masking tokens. This was proposed in the paper [TODO](). 
+ModernBERT can also be used as a decoder-only model, either with the same architecture but trained using causal language modeling, or through the use of iterative masking tokens (e.g. predicting [MASK], replacing it, and continuing). Note that in the iterative masking case it cannot use kv caches, since it uses bidirectional attention.
 
-### Tokenizer
+#### Causal Tokenizer
 
-The tokenizer for ModernBERT is the same as a PreTrainedTokenizerFast if you're using it as an encoder or modified slightly to not include the EOS token if used as a decoder. For the decoder case, be sure to include `is_causal=False` in your tokenizer config.
+The defeault tokenizer for ModernBERT (encoder-only) is the same as a PreTrainedTokenizerFast. If you want to use it as a decoder-only model it is modified slightly to not include the EOS token. In this decoder-only case, be sure to include `is_causal=False` in your tokenizer config.
 
 ## Resources
 
