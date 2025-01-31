@@ -620,32 +620,40 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
         self.assertIsNotNone(model)
 
     def _check_attentions_for_generate(
-        self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
+        self,
+        batch_size,
+        attentions,
+        min_length,
+        max_length,
+        config,
+        past_key_values,
     ):
         self.assertIsInstance(attentions, tuple)
         self.assertListEqual(
             [isinstance(iter_attentions, list) for iter_attentions in attentions], [True] * len(attentions)
         )
-        self.assertEqual(len(attentions), (max_length - min_length) * num_beam_groups)
+        self.assertEqual(len(attentions), (max_length - min_length))
+
+        has_cache = past_key_values is not None
 
         for idx, iter_attentions in enumerate(attentions):
-            tgt_len = min_length + idx if not use_cache else 1
+            tgt_len = min_length + idx if not has_cache else 1
             num_chunks = tgt_len // config.local_attn_chunk_length + (tgt_len % config.local_attn_chunk_length != 0)
             tgt_chunk_len = config.local_attn_chunk_length
             src_chunk_len = config.local_attn_chunk_length * (
                 1 + config.local_num_chunks_after + config.local_num_chunks_before
             )
 
-            if use_cache:
+            if has_cache:
                 expected_shape = (
-                    batch_size * num_beam_groups,
+                    batch_size,
                     config.num_attention_heads,
                     tgt_len,
                     min_length // config.local_attn_chunk_length + 1 + idx,
                 )
             else:
                 expected_shape = (
-                    batch_size * num_beam_groups,
+                    batch_size,
                     config.num_attention_heads,
                     num_chunks,
                     tgt_chunk_len,
@@ -657,14 +665,20 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
             )
 
     def _check_hidden_states_for_generate(
-        self, batch_size, hidden_states, min_length, max_length, config, use_cache=False, num_beam_groups=1
+        self,
+        batch_size,
+        hidden_states,
+        min_length,
+        max_length,
+        config,
+        use_cache=False,
     ):
         self.assertIsInstance(hidden_states, tuple)
         self.assertListEqual(
             [isinstance(iter_hidden_states, list) for iter_hidden_states in hidden_states],
             [True] * len(hidden_states),
         )
-        self.assertEqual(len(hidden_states), (max_length - min_length) * num_beam_groups)
+        self.assertEqual(len(hidden_states), (max_length - min_length))
 
         for idx, iter_hidden_states in enumerate(hidden_states):
             seq_len = min_length + idx
@@ -675,7 +689,7 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
             if use_cache:
                 seq_len = 1
 
-            expected_shape = (batch_size * num_beam_groups, seq_len, config.hidden_size)
+            expected_shape = (batch_size, seq_len, config.hidden_size)
             # check hidden size
             self.assertListEqual(
                 [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states],
@@ -788,26 +802,26 @@ class ReformerLSHAttnModelTest(
         )
         self.config_tester = ConfigTester(self, config_class=ReformerConfig, hidden_size=37)
 
-    def _check_attentions_for_generate(
-        self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
-    ):
+    def _check_attentions_for_generate(self, batch_size, attentions, min_length, max_length, config, past_key_values):
         self.assertIsInstance(attentions, tuple)
         self.assertListEqual(
             [isinstance(iter_attentions, list) for iter_attentions in attentions], [True] * len(attentions)
         )
-        self.assertEqual(len(attentions), (max_length - min_length) * num_beam_groups)
+        self.assertEqual(len(attentions), (max_length - min_length))
+
+        has_cache = past_key_values is not None
 
         for idx, iter_attentions in enumerate(attentions):
-            tgt_len = min_length + idx if not use_cache else 1
+            tgt_len = min_length + idx if not has_cache else 1
             num_chunks = tgt_len // config.lsh_attn_chunk_length + (tgt_len % config.lsh_attn_chunk_length != 0)
             tgt_chunk_len = config.lsh_attn_chunk_length
             src_chunk_len = config.lsh_attn_chunk_length * (
                 1 + config.lsh_num_chunks_after + config.lsh_num_chunks_before
             )
 
-            if use_cache:
+            if has_cache:
                 expected_shape = (
-                    batch_size * num_beam_groups,
+                    batch_size,
                     config.num_attention_heads,
                     config.num_hashes,
                     tgt_len,
@@ -815,7 +829,7 @@ class ReformerLSHAttnModelTest(
                 )
             else:
                 expected_shape = (
-                    batch_size * num_beam_groups,
+                    batch_size,
                     config.num_attention_heads,
                     num_chunks * config.num_hashes,
                     tgt_chunk_len,
@@ -827,14 +841,20 @@ class ReformerLSHAttnModelTest(
             )
 
     def _check_hidden_states_for_generate(
-        self, batch_size, hidden_states, min_length, max_length, config, use_cache=False, num_beam_groups=1
+        self,
+        batch_size,
+        hidden_states,
+        min_length,
+        max_length,
+        config,
+        use_cache=False,
     ):
         self.assertIsInstance(hidden_states, tuple)
         self.assertListEqual(
             [isinstance(iter_hidden_states, list) for iter_hidden_states in hidden_states],
             [True] * len(hidden_states),
         )
-        self.assertEqual(len(hidden_states), (max_length - min_length) * num_beam_groups)
+        self.assertEqual(len(hidden_states), (max_length - min_length))
 
         for idx, iter_hidden_states in enumerate(hidden_states):
             seq_len = min_length + idx if not use_cache else 1
@@ -845,7 +865,7 @@ class ReformerLSHAttnModelTest(
             if use_cache:
                 seq_len = 1
 
-            expected_shape = (batch_size * num_beam_groups, seq_len, config.hidden_size)
+            expected_shape = (batch_size, seq_len, config.hidden_size)
             # check hidden size
             self.assertListEqual(
                 [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states],

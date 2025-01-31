@@ -72,7 +72,14 @@ if is_torch_available():
         SpeechEncoderDecoderModel,
         T5ForConditionalGeneration,
     )
-    from transformers.cache_utils import Cache, DynamicCache, EncoderDecoderCache, QuantoQuantizedCache, StaticCache
+    from transformers.cache_utils import (
+        Cache,
+        DynamicCache,
+        EncoderDecoderCache,
+        HybridCache,
+        QuantoQuantizedCache,
+        StaticCache,
+    )
     from transformers.generation import (
         BeamSampleDecoderOnlyOutput,
         BeamSampleEncoderDecoderOutput,
@@ -2228,6 +2235,7 @@ class GenerationTesterMixin:
         gen_len = (
             output.sequences.shape[-1] - 1 if config.is_encoder_decoder else output.sequences.shape[-1] - seq_length
         )
+        past_key_values = getattr(output, "past_key_values", None)
 
         # in some models we subsample the sequence length in inner layers
         if hasattr(self.model_tester, "get_subsampled_output_lengths"):
@@ -2253,7 +2261,7 @@ class GenerationTesterMixin:
                     min_length=1,
                     max_length=output.sequences.shape[-1],
                     config=config,
-                    use_cache=use_cache,
+                    past_key_values=past_key_values,
                 )
             else:
                 # if use_cache first input is equal to no use_cache, so skip here
@@ -2265,7 +2273,7 @@ class GenerationTesterMixin:
                     min_length=min_length,
                     max_length=output.sequences.shape[-1],
                     config=config,
-                    use_cache=use_cache,
+                    past_key_values=past_key_values,
                 )
 
         # Hidden States
@@ -2319,7 +2327,6 @@ class GenerationTesterMixin:
         )
         if has_standard_cache:
             if use_cache:
-                past_key_values = output.past_key_values
                 past_sequence_length = output.sequences.shape[-1] - 1
                 self._check_past_key_values_for_generate(
                     internal_batch_size,
@@ -2328,7 +2335,7 @@ class GenerationTesterMixin:
                     config=config,
                 )
             elif use_cache is False:
-                self.assertTrue(output.past_key_values is None)
+                self.assertTrue(past_key_values is None)
 
     def _check_scores(self, batch_size, scores, length, config):
         vocab_size = config.get_text_config(decoder=True).vocab_size
@@ -2346,21 +2353,22 @@ class GenerationTesterMixin:
         self.assertTrue(vocab_diff in [0, 1])
         self.assertListEqual([vocab_size - score.shape[-1] for score in scores], [vocab_diff] * len(scores))
 
-    def _check_attentions_for_generate(
-        self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
-    ):
+    def _check_attentions_for_generate(self, batch_size, attentions, min_length, max_length, config, past_key_values):
         self.assertIsInstance(attentions, tuple)
         self.assertListEqual(
             [isinstance(iter_attentions, tuple) for iter_attentions in attentions], [True] * len(attentions)
         )
-        self.assertEqual(len(attentions), (max_length - min_length) * num_beam_groups)
+        self.assertEqual(len(attentions), (max_length - min_length))
+
+        has_cache = past_key_values is not None
+        has_static_cache = isinstance(past_key_values, (StaticCache, HybridCache))
 
         for idx, iter_attentions in enumerate(attentions):
-            tgt_len = min_length + idx if not use_cache else 1
-            src_len = min_length + idx
+            tgt_len = min_length + idx if not has_cache else 1
+            src_len = min_length + idx if not has_static_cache else past_key_values.get_max_cache_shape()
 
             expected_shape = (
-                batch_size * num_beam_groups,
+                batch_size,
                 config.num_attention_heads,
                 tgt_len,
                 src_len,
@@ -2379,18 +2387,18 @@ class GenerationTesterMixin:
         )
 
     def _check_hidden_states_for_generate(
-        self, batch_size, hidden_states, min_length, max_length, config, use_cache=False, num_beam_groups=1
+        self, batch_size, hidden_states, min_length, max_length, config, use_cache=False
     ):
         self.assertIsInstance(hidden_states, tuple)
         self.assertListEqual(
             [isinstance(iter_hidden_states, tuple) for iter_hidden_states in hidden_states],
             [True] * len(hidden_states),
         )
-        self.assertEqual(len(hidden_states), (max_length - min_length) * num_beam_groups)
+        self.assertEqual(len(hidden_states), (max_length - min_length))
 
         for idx, iter_hidden_states in enumerate(hidden_states):
             seq_len = min_length + idx if not use_cache else 1
-            expected_shape = (batch_size * num_beam_groups, seq_len, config.hidden_size)
+            expected_shape = (batch_size, seq_len, config.hidden_size)
             # check hidden size
             self.assertListEqual(
                 [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states],
@@ -2405,7 +2413,7 @@ class GenerationTesterMixin:
             [encoder_expected_shape] * len(hidden_states),
         )
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config, num_beam_groups=1):
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         self.assertIsInstance(past_key_values, (tuple, Cache))
 
         # Encoder-decoder models: pull and verify the decoder cache
@@ -2414,7 +2422,7 @@ class GenerationTesterMixin:
 
         # (batch, head, seq_length, head_features)
         expected_shape = (
-            batch_size * num_beam_groups,
+            batch_size,
             config.num_key_value_heads if hasattr(config, "num_key_value_heads") else config.num_attention_heads,
             seq_length,
             config.hidden_size // config.num_attention_heads,

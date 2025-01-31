@@ -755,9 +755,7 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
             )
             self.assertIsNotNone(output_ids_generate)
 
-    def _check_attentions_for_generate(
-        self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
-    ):
+    def _check_attentions_for_generate(self, batch_size, attentions, min_length, max_length, config, past_key_values):
         """
         Overwrite from generation tests because Idefics has only SDPA layers.
         Do not skip because we still want generation tests to run. Rather we can remove checks for shape.

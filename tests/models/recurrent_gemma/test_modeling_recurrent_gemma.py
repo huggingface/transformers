@@ -398,18 +398,24 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
         pass
 
     def _check_hidden_states_for_generate(
-        self, batch_size, hidden_states, min_length, max_length, config, use_cache=False, num_beam_groups=1
+        self,
+        batch_size,
+        hidden_states,
+        min_length,
+        max_length,
+        config,
+        use_cache=False,
     ):
         self.assertIsInstance(hidden_states, tuple)
         self.assertListEqual(
             [isinstance(iter_hidden_states, tuple) for iter_hidden_states in hidden_states],
             [True] * len(hidden_states),
         )
-        self.assertEqual(len(hidden_states), (max_length - min_length) * num_beam_groups)
+        self.assertEqual(len(hidden_states), (max_length - min_length))
 
         for idx, iter_hidden_states in enumerate(hidden_states):
             seq_len = min_length + idx if not use_cache else 1
-            expected_shape = (batch_size * num_beam_groups, seq_len, config.hidden_size)
+            expected_shape = (batch_size, seq_len, config.hidden_size)
             # check hidden size
             self.assertListEqual(
                 [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states],

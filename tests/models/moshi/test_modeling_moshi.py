@@ -572,7 +572,13 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         return config, filtered_inputs_dict
 
     def _check_hidden_states_for_generate(
-        self, batch_size, hidden_states, min_length, max_length, config, use_cache=False, num_beam_groups=1
+        self,
+        batch_size,
+        hidden_states,
+        min_length,
+        max_length,
+        config,
+        use_cache=False,
     ):
         # Overwrite because the generate method actually alway uses `inputs_embeds` so `use_cache` is always `True`
         self.assertIsInstance(hidden_states, tuple)
@@ -580,11 +586,11 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             [isinstance(iter_hidden_states, tuple) for iter_hidden_states in hidden_states],
             [True] * len(hidden_states),
         )
-        self.assertEqual(len(hidden_states), (max_length - min_length) * num_beam_groups)
+        self.assertEqual(len(hidden_states), (max_length - min_length))
 
         for idx, iter_hidden_states in enumerate(hidden_states):
             seq_len = min_length if idx == 0 else 1
-            expected_shape = (batch_size * num_beam_groups, seq_len, config.hidden_size)
+            expected_shape = (batch_size, seq_len, config.hidden_size)
             # check hidden size
             self.assertListEqual(
                 [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states],
@@ -598,7 +604,13 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         )
 
     def _check_hidden_states_for_generate(
-        self, batch_size, hidden_states, min_length, max_length, config, use_cache=False, num_beam_groups=1
+        self,
+        batch_size,
+        hidden_states,
+        min_length,
+        max_length,
+        config,
+        use_cache=False,
     ):
         # Overwrite because the generate method actually alway uses `inputs_embeds` so `use_cache` is always `True`
         self.assertIsInstance(hidden_states, tuple)
@@ -606,11 +618,11 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             [isinstance(iter_hidden_states, tuple) for iter_hidden_states in hidden_states],
             [True] * len(hidden_states),
         )
-        self.assertEqual(len(hidden_states), (max_length - min_length) * num_beam_groups)
+        self.assertEqual(len(hidden_states), (max_length - min_length))
 
         for idx, iter_hidden_states in enumerate(hidden_states):
             seq_len = 1
-            expected_shape = (batch_size * num_beam_groups, seq_len, config.hidden_size)
+            expected_shape = (batch_size, seq_len, config.hidden_size)
             # check hidden size
             self.assertListEqual(
                 [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states],
@@ -618,21 +630,27 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             )
 
     def _check_attentions_for_generate(
-        self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
+        self,
+        batch_size,
+        attentions,
+        min_length,
+        max_length,
+        config,
+        past_key_values,
     ):
         # Overwrite because the generate method actually alway uses `inputs_embeds` so `use_cache` is always `True`
         self.assertIsInstance(attentions, tuple)
         self.assertListEqual(
             [isinstance(iter_attentions, tuple) for iter_attentions in attentions], [True] * len(attentions)
         )
-        self.assertEqual(len(attentions), (max_length - min_length) * num_beam_groups)
+        self.assertEqual(len(attentions), (max_length - min_length))
 
         for idx, iter_attentions in enumerate(attentions):
             tgt_len = 1
             src_len = min_length + idx
 
             expected_shape = (
-                batch_size * num_beam_groups,
+                batch_size,
                 config.num_attention_heads,
                 tgt_len,
                 src_len,

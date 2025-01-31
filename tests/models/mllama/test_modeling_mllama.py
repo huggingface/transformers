@@ -323,30 +323,37 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
             torch.testing.assert_close(out_embeds, out_ids)
 
     def _check_attentions_for_generate(
-        self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
+        self,
+        batch_size,
+        attentions,
+        min_length,
+        max_length,
+        config,
+        past_key_values,
     ):
         # Mllama has cross attention layers and those have a different shape than normal attention layers
         self.assertIsInstance(attentions, tuple)
         self.assertListEqual(
             [isinstance(iter_attentions, tuple) for iter_attentions in attentions], [True] * len(attentions)
         )
-        self.assertEqual(len(attentions), (max_length - min_length) * num_beam_groups)
+        self.assertEqual(len(attentions), (max_length - min_length))
 
         cross_attention_layers = self.model_tester.text_config["cross_attention_layers"]
+        has_cache = past_key_values is not None
 
         for idx, iter_attentions in enumerate(attentions):
-            tgt_len = min_length + idx if not use_cache else 1
+            tgt_len = min_length + idx if not has_cache else 1
             src_len = min_length + idx
 
             expected_shape = (
-                batch_size * num_beam_groups,
+                batch_size,
                 config.num_attention_heads,
                 tgt_len,
                 src_len,
             )
 
             expected_shape_cross = (
-                batch_size * num_beam_groups,
+                batch_size,
                 config.num_attention_heads,
                 tgt_len,
                 self.model_tester.image_length,
