@@ -1224,13 +1224,14 @@ class DabDetrDecoder(DabDetrPreTrainedModel):
             # iter update
             hidden_states = layer_outputs[0]
 
-            new_reference_points = self.bbox_embed(hidden_states)
+            if self.bbox_embed is not None:
+                new_reference_points = self.bbox_embed(hidden_states)
 
-            new_reference_points[..., : self.config.query_dim] += inverse_sigmoid(reference_points)
-            new_reference_points = new_reference_points[..., : self.config.query_dim].sigmoid()
-            if layer_id != self.num_layers - 1:
-                ref_points.append(new_reference_points)
-            reference_points = new_reference_points.detach()
+                new_reference_points[..., : self.config.query_dim] += inverse_sigmoid(reference_points)
+                new_reference_points = new_reference_points[..., : self.config.query_dim].sigmoid()
+                if layer_id != self.num_layers - 1:
+                    ref_points.append(new_reference_points)
+                reference_points = new_reference_points.detach()
 
             intermediate.append(self.layernorm(hidden_states))
 
