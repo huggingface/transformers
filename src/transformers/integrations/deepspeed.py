@@ -57,6 +57,7 @@ else:
 
 
 if is_deepspeed_available():
+    import deepspeed.comm as dist
     from deepspeed.sequence.layer import _SeqAllToAll
     from deepspeed.utils import groups as deepspeed_groups
 
@@ -503,3 +504,86 @@ def support_deepspeed_ulysses(module):
     module.sp_size = sp_size
 
     return module
+
+
+def deepspeed_ulysses_cross_entropy(
+    input,
+    target,
+    ignore_index=-100,
+    reduction="mean",
+):
+    sp_group = deepspeed_groups._get_sequence_parallel_group()
+
+    if ignore_index != -100:
+        raise ValueError("ignore_index not currently supported with DeepSpeed Ulysses")
+
+    loss = vocab_sequence_parallel_cross_entropy(
+        input.unsqueeze(1),
+        target.unsqueeze(1),
+        sp_group=sp_group,
+    ).squeeze(1)
+
+    if reduction == "mean":
+        loss = loss[torch.nonzero(loss)].mean()
+
+    if reduction == "sum":
+        loss = loss.sum()
+
+    return loss
+
+
+# Copyright (c) Microsoft Corporation.
+# SPDX-License-Identifier: Apache-2.0
+# DeepSpeed Team
+class _VocabSequenceParallelCrossEntropy(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, vocab_seq_parallel_logits, target, sp_group, ignore_index):
+        # vocab_seq_parallel_logits: [S/P, B, V]
+        # target: [S/P, B]
+        # return: [S, B]
+
+        # Need softmax for backward
+        ctx.ignore_index = ignore_index
+        ctx.vocab_size = vocab_seq_parallel_logits.size(2)
+        softmax = torch.nn.functional.softmax(vocab_seq_parallel_logits, dim=-1)
+        loss = torch.nn.functional.nll_loss(
+            softmax.log().view(-1, ctx.vocab_size), target.view(-1), ignore_index=ignore_index, reduction="none"
+        )
+
+        sp_size = dist.get_world_size(sp_group)
+        sp_rank = dist.get_rank(sp_group)
+        ctx.sp_size = sp_size
+        ctx.sp_rank = sp_rank
+        ctx.seqlen = vocab_seq_parallel_logits.size(0) * sp_size
+        batch_size = vocab_seq_parallel_logits.size(1)
+
+        loss_all = torch.empty(
+            ctx.seqlen, batch_size, dtype=vocab_seq_parallel_logits.dtype, device=vocab_seq_parallel_logits.device
+        )
+
+        dist.all_gather_into_tensor(loss_all, loss, group=sp_group)
+        ctx.save_for_backward(softmax, target)
+
+        return loss_all
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        softmax, target = ctx.saved_tensors
+
+        step_seqlen = ctx.seqlen // ctx.sp_size
+        sp_rank = ctx.sp_rank
+        grad_output_part = grad_output[step_seqlen * sp_rank : step_seqlen * (sp_rank + 1), :].unsqueeze(dim=-1)
+
+        grad_input = softmax
+        grad_2d = grad_input.view(-1, ctx.vocab_size)
+        arange_1d = torch.arange(start=0, end=grad_2d.size()[0], device=grad_2d.device)
+
+        ignore_mask = target.view(-1) == ctx.ignore_index
+        grad_2d[arange_1d[~ignore_mask], target.view(-1)[~ignore_mask]] -= 1
+        grad_input.mul_(grad_output_part)
+        grad_2d[ignore_mask.view(-1), :] = 0
+        return grad_input, None, None, None, None
+
+
+def vocab_sequence_parallel_cross_entropy(vocab_parallel_logits, target, sp_group, ignore_index=-100):
+    return _VocabSequenceParallelCrossEntropy.apply(vocab_parallel_logits, target, sp_group, ignore_index)
