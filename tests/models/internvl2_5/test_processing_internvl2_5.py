@@ -40,8 +40,8 @@ class InternVL2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
-        image_processor = InternVL2_5ImageProcessor.from_pretrained("thisisiron/InternVL2_5-4B")
-        tokenizer = Qwen2TokenizerFast.from_pretrained("thisisiron/InternVL2_5-4B")
+        image_processor = InternVL2_5ImageProcessor.from_pretrained("thisisiron/InternVL2_5-1B")
+        tokenizer = Qwen2TokenizerFast.from_pretrained("thisisiron/InternVL2_5-1B")
 
         processor = InternVL2_5Processor(
             image_processor=image_processor,
@@ -59,7 +59,7 @@ class InternVL2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         shutil.rmtree(self.tmpdirname)
 
     def test_chat_template(self):
-        processor = InternVL2_5Processor.from_pretrained("thisisiron/InternVL2_5-4B")
+        processor = InternVL2_5Processor.from_pretrained("thisisiron/InternVL2_5-1B")
         expected_prompt = "<|im_start|>user\n<image>\nWhat is shown in this image?<|im_end|>\n<|im_start|>assistant\n"
 
         messages = [
@@ -76,7 +76,7 @@ class InternVL2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(expected_prompt, formatted_prompt)
 
     def test_chat_template_type2(self):
-        processor = InternVL2_5Processor.from_pretrained("thisisiron/InternVL2_5-4B")
+        processor = InternVL2_5Processor.from_pretrained("thisisiron/InternVL2_5-1B")
         expected_prompt = "<|im_start|>user\n<image>\nWhat is shown in this image?<|im_end|>\n<|im_start|>assistant\n"
 
         messages = [
