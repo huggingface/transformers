@@ -4241,11 +4241,30 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if hf_quantizer is not None:
                 hf_quantizer.validate_environment(device_map=device_map)
 
+            if gguf_path:
+                remapped_devices = set()
+                for name, device in device_map.items():
+                    if device == "disk":
+                        device_map[name] = "cpu"
+                        remapped_devices.add(name)
+                if len(remapped_devices) > 0:
+                    logger.warning(
+                        "Accelerate has auto-mapped modules to disk but disk offload is not supported for "
+                        "models loaded from GGUF files. Remapping modules to the cpu: "
+                        ", ".join(remapped_devices)
+                    )
+
         elif device_map is not None:
             model.tie_weights()
             tied_params = find_tied_parameters(model)
             # check if we don't have tied param in different devices
             check_tied_parameters_on_same_device(tied_params, device_map)
+
+        if gguf_path and device_map is not None and "disk" in device_map.values():
+            raise NotImplementedError(
+                "One or more modules is configured to be mapped to disk. Disk offload is not supported for models "
+                "loaded from GGUF files."
+            )
 
         if from_tf:
             if resolved_archive_file.endswith(".index"):
