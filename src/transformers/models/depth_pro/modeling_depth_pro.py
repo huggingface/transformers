@@ -196,7 +196,7 @@ def merge_patches(patches: torch.Tensor, batch_size: int, padding: int) -> torch
                 # remove paddings
                 _, _, box_h, box_w = box.shape
                 pad_top, pad_bottom, pad_left, pad_right = paddings
-                box = box[:, :, pad_top:box_h - pad_bottom, pad_left:box_w - pad_right]
+                box = box[:, :, pad_top : box_h - pad_bottom, pad_left : box_w - pad_right]
 
                 boxes_in_row.append(box)
                 i += 1
