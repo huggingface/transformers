@@ -17,7 +17,11 @@ from transformers import AutoModel, LlamaForCausalLM, Phi3ForCausalLM, Qwen2ForC
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, CausalLMOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPooling,
+    CausalLMOutputWithPast,
+)
 from ...modeling_utils import PreTrainedModel
 from ...utils import is_flash_attn_2_available, logging
 from .configuration_internvl2_5 import InternVL2_5Config, InternVL2_5VisionConfig
@@ -49,7 +53,15 @@ class FlashAttention(nn.Module):
         self.softmax_scale = softmax_scale
         self.dropout_p = attention_dropout
 
-    def forward(self, qkv, key_padding_mask=None, causal=False, cu_seqlens=None, max_s=None, need_weights=False):
+    def forward(
+        self,
+        qkv,
+        key_padding_mask=None,
+        causal=False,
+        cu_seqlens=None,
+        max_s=None,
+        need_weights=False,
+    ):
         """Implements the multihead softmax attention.
         Arguments
         ---------
@@ -69,7 +81,11 @@ class FlashAttention(nn.Module):
                 qkv = qkv.reshape(batch_size * seqlen, *qkv.shape[2:])
                 max_s = seqlen
                 cu_seqlens = torch.arange(
-                    0, (batch_size + 1) * seqlen, step=seqlen, dtype=torch.int32, device=qkv.device
+                    0,
+                    (batch_size + 1) * seqlen,
+                    step=seqlen,
+                    dtype=torch.int32,
+                    device=qkv.device,
                 )
                 output = flash_attn_varlen_qkvpacked_func(
                     qkv,
@@ -119,7 +135,7 @@ class FlashAttention(nn.Module):
         return output, None
 
 
-def drop_path(x, drop_prob: float = 0., training: bool = False, scale_by_keep: bool = True):
+def drop_path(x, drop_prob: float = 0.0, training: bool = False, scale_by_keep: bool = True):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
     This is the same as the DropConnect impl I created for EfficientNet, etc networks, however,
@@ -129,7 +145,7 @@ def drop_path(x, drop_prob: float = 0., training: bool = False, scale_by_keep: b
     'survival rate' as the argument.
 
     """
-    if drop_prob == 0. or not training:
+    if drop_prob == 0.0 or not training:
         return x
     keep_prob = 1 - drop_prob
     shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
@@ -140,9 +156,9 @@ def drop_path(x, drop_prob: float = 0., training: bool = False, scale_by_keep: b
 
 
 class DropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks).
-    """
-    def __init__(self, drop_prob: float = 0., scale_by_keep: bool = True):
+    """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks)."""
+
+    def __init__(self, drop_prob: float = 0.0, scale_by_keep: bool = True):
         super(DropPath, self).__init__()
         self.drop_prob = drop_prob
         self.scale_by_keep = scale_by_keep
@@ -151,7 +167,7 @@ class DropPath(nn.Module):
         return drop_path(x, self.drop_prob, self.training, self.scale_by_keep)
 
     def extra_repr(self):
-        return f'drop_prob={round(self.drop_prob,3):0.3f}'
+        return f"drop_prob={round(self.drop_prob,3):0.3f}"
 
 
 class InternVL2_5RMSNorm(nn.Module):
@@ -187,7 +203,10 @@ class InternVL2_5VisionEmbeddings(nn.Module):
         )
 
         self.patch_embedding = nn.Conv2d(
-            in_channels=3, out_channels=self.embed_dim, kernel_size=self.patch_size, stride=self.patch_size
+            in_channels=3,
+            out_channels=self.embed_dim,
+            kernel_size=self.patch_size,
+            stride=self.patch_size,
         )
 
         self.num_patches = (self.image_size // self.patch_size) ** 2
@@ -199,7 +218,12 @@ class InternVL2_5VisionEmbeddings(nn.Module):
         target_dtype = pos_embed.dtype
         pos_embed = (
             pos_embed.float()
-            .reshape(1, self.image_size // self.patch_size, self.image_size // self.patch_size, -1)
+            .reshape(
+                1,
+                self.image_size // self.patch_size,
+                self.image_size // self.patch_size,
+                -1,
+            )
             .permute(0, 3, 1, 2)
         )
         pos_embed = (
@@ -218,7 +242,10 @@ class InternVL2_5VisionEmbeddings(nn.Module):
         class_embeds = self.class_embedding.expand(batch_size, 1, -1).to(target_dtype)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
         position_embedding = torch.cat(
-            [self.position_embedding[:, :1, :], self._get_pos_embed(self.position_embedding[:, 1:, :], height, width)],
+            [
+                self.position_embedding[:, :1, :],
+                self._get_pos_embed(self.position_embedding[:, 1:, :], height, width),
+            ],
             dim=1,
         )
         embeddings = embeddings + position_embedding.to(target_dtype)
@@ -318,7 +345,12 @@ class InternVL2_5FlashAttention(nn.Module):
             k = self.k_norm(k.flatten(-2, -1)).view(k.shape)
             qkv = torch.stack([q, k, v], dim=2)
 
-        context, _ = self.inner_attn(qkv, key_padding_mask=key_padding_mask, need_weights=need_weights, causal=False)
+        context, _ = self.inner_attn(
+            qkv,
+            key_padding_mask=key_padding_mask,
+            need_weights=need_weights,
+            causal=False,
+        )
 
         # outs = self.proj(rearrange(context, "b s h d -> b s (h d)"))
         b, s, h, d = context.shape
@@ -327,7 +359,10 @@ class InternVL2_5FlashAttention(nn.Module):
         return outs
 
 
-InternVL2_5_VISION_ATTENTION_CLASSES = {"eager": InternVL2_5Attention, "flash_attention_2": InternVL2_5FlashAttention}
+InternVL2_5_VISION_ATTENTION_CLASSES = {
+    "eager": InternVL2_5Attention,
+    "flash_attention_2": InternVL2_5FlashAttention,
+}
 
 
 class InternVL2_5MLP(nn.Module):
@@ -346,7 +381,12 @@ class InternVL2_5MLP(nn.Module):
 
 
 class InternVL2_5VisionEncoderLayer(nn.Module):
-    def __init__(self, config: InternVL2_5VisionConfig, attn_implementation, drop_path_rate: float):
+    def __init__(
+        self,
+        config: InternVL2_5VisionConfig,
+        attn_implementation,
+        drop_path_rate: float,
+    ):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.intermediate_size = config.intermediate_size
@@ -365,7 +405,11 @@ class InternVL2_5VisionEncoderLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-    ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor], Optional[Tuple[torch.FloatTensor]]]:
+    ) -> Tuple[
+        torch.FloatTensor,
+        Optional[torch.FloatTensor],
+        Optional[Tuple[torch.FloatTensor]],
+    ]:
         """
         Args:
             hidden_states (`Tuple[torch.FloatTensor, Optional[torch.FloatTensor]]`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -500,7 +544,12 @@ class InternVL2_5VisionModel(InternVL2_5PreTrainedModel):
         _, num_positions, embed_dim = pos_emb.shape
         cls_emb = pos_emb[:, :1, :]
         pos_emb = pos_emb[:, 1:, :].reshape(1, old_size // patch_size, old_size // patch_size, -1).permute(0, 3, 1, 2)
-        pos_emb = F.interpolate(pos_emb.float(), size=new_size // patch_size, mode="bicubic", align_corners=False)
+        pos_emb = F.interpolate(
+            pos_emb.float(),
+            size=new_size // patch_size,
+            mode="bicubic",
+            align_corners=False,
+        )
         pos_emb = pos_emb.to(cls_emb.dtype).reshape(1, embed_dim, -1).permute(0, 2, 1)
         pos_emb = torch.cat([cls_emb, pos_emb], dim=1)
         self.embeddings.position_embedding = nn.Parameter(pos_emb)
@@ -755,7 +804,12 @@ class InternVL2_5ForConditionalGeneration(InternVL2_5PreTrainedModel, Generation
         # N, W, H * scale, C // scale --> N, H * scale, W, C // scale
         x = x.permute(0, 2, 1, 3).contiguous()
         # N, H * scale, W, C // scale --> N, H * scale, W * scale, C // (scale ** 2)
-        x = x.view(n, int(h * scale_factor), int(w * scale_factor), int(c / (scale_factor * scale_factor)))
+        x = x.view(
+            n,
+            int(h * scale_factor),
+            int(w * scale_factor),
+            int(c / (scale_factor * scale_factor)),
+        )
         if self.ps_version == "v1":
             warnings.warn(
                 "In ps_version 'v1', the height and width have not been swapped back, "
