@@ -84,7 +84,7 @@ Pass `messages` and a list of tools to [`~PreTrainedTokenizerBase.apply_chat_tem
 
 ```py
 inputs = tokenizer.apply_chat_template(messages, tools=tools, add_generation_prompt=True, return_dict=True, return_tensors="pt")
-inputs = {k: v.to(model.device) for k, v in inputs.items()}
+inputs = {k: v for k, v in inputs.items()}
 outputs = model.generate(**inputs, max_new_tokens=128)
 print(tokenizer.decode(outputs[0][len(inputs["input_ids"][0]):]))
 ```
@@ -114,7 +114,7 @@ Allow the assistant to read the function outputs and chat with the user.
 
 ```py
 inputs = tokenizer.apply_chat_template(messages, tools=tools, add_generation_prompt=True, return_dict=True, return_tensors="pt")
-inputs = {k: v.to(model.device) for k, v in inputs.items()}
+inputs = {k: v for k, v in inputs.items()}
 out = model.generate(**inputs, max_new_tokens=128)
 print(tokenizer.decode(out[0][len(inputs["input_ids"][0]):]))
 ```
@@ -136,7 +136,7 @@ messages.append({"role": "assistant", "tool_calls": [{"type": "function", "id": 
 
 ```py
 inputs = tokenizer.apply_chat_template(messages, tools=tools, add_generation_prompt=True, return_dict=True, return_tensors="pt")
-inputs = {k: v.to(model.device) for k, v in inputs.items()}
+inputs = {k: v for k, v in inputs.items()}
 out = model.generate(**inputs, max_new_tokens=128)
 print(tokenizer.decode(out[0][len(inputs["input_ids"][0]):]))
 ```
