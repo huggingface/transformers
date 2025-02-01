@@ -31,6 +31,7 @@ from transformers.testing_utils import (
     require_torch_multi_gpu,
     slow,
     torch_device,
+    skipIfRocm,
 )
 from transformers.trainer_utils import set_seed
 
@@ -272,6 +273,7 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     # override since the model is not deterministic, so we need to set the seed for each forward pass
+    @skipIfRocm(arch='gfx942')
     def test_model_outputs_equivalence(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

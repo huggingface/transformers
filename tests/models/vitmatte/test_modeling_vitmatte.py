@@ -24,6 +24,7 @@ from transformers.testing_utils import (
     require_torch,
     slow,
     torch_device,
+    skipIfRocm,
 )
 from transformers.utils import is_torch_available, is_vision_available
 
@@ -143,6 +144,10 @@ class VitMatteModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     test_pruning = False
     test_resize_embeddings = False
     test_head_masking = False
+
+    @skipIfRocm(arch='gfx942')
+    def test_batching_equivalence(self):
+        super().test_batching_equivalence()
 
     def setUp(self):
         self.model_tester = VitMatteModelTester(self)

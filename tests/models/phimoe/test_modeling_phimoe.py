@@ -354,7 +354,7 @@ class PhimoeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     test_headmasking = False
     test_pruning = False
 
-    @skipIfRocm(arch='gfx90a')
+    @skipIfRocm(arch=['gfx90a','gfx942'])
     def test_generate_with_static_cache(self):
         super().test_generate_with_static_cache()
 

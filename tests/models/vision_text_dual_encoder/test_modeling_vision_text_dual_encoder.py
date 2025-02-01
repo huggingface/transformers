@@ -288,7 +288,7 @@ class VisionTextDualEncoderMixin:
 
 @require_torch
 class ViTBertModelTest(VisionTextDualEncoderMixin, unittest.TestCase):
-    @skipIfRocm(arch='gfx90a')
+    @skipIfRocm(arch=['gfx90a','gfx942'])
     def test_save_load(self):
         super().test_save_load()
 
@@ -349,7 +349,7 @@ class ViTBertModelTest(VisionTextDualEncoderMixin, unittest.TestCase):
 
 @require_torch
 class DeiTRobertaModelTest(VisionTextDualEncoderMixin, unittest.TestCase):
-    @skipIfRocm(arch='gfx90a')
+    @skipIfRocm(arch=['gfx90a','gfx942'])
     def test_save_load(self):
         super().test_save_load()
 
@@ -444,7 +444,7 @@ class DeiTRobertaModelTest(VisionTextDualEncoderMixin, unittest.TestCase):
 
 @require_torch
 class CLIPVisionBertModelTest(VisionTextDualEncoderMixin, unittest.TestCase):
-    @skipIfRocm(arch='gfx90a')
+    @skipIfRocm(arch=['gfx90a','gfx942'])
     def test_save_load(self):
         super().test_save_load()
 

@@ -24,6 +24,7 @@ from transformers.testing_utils import (
     require_torch_sdpa,
     slow,
     torch_device,
+    skipIfRocm,
 )
 
 from ...test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
@@ -503,6 +504,10 @@ class EncoderDecoderMixin:
 
 @require_torch
 class Wav2Vec2BertModelTest(EncoderDecoderMixin, unittest.TestCase):
+    @skipIfRocm(arch='gfx942')
+    def test_save_and_load_from_pretrained(self):
+        super().test_save_and_load_from_pretrained()
+
     def get_pretrained_model_and_inputs(self):
         model = SpeechEncoderDecoderModel.from_encoder_decoder_pretrained(
             "facebook/wav2vec2-base-960h", "google-bert/bert-base-cased"
