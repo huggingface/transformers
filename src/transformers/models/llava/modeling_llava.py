@@ -498,7 +498,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
                 image_sizes=image_sizes,
             )
 
-            n_image_tokens = (input_ids == self.config.image_token_index).sum().item()
+            n_image_tokens = (input_ids == self.config.image_token_index).sum()
             n_image_features = image_features.shape[0] * image_features.shape[1]
             if n_image_tokens != n_image_features:
                 raise ValueError(
