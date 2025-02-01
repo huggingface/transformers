@@ -1042,7 +1042,7 @@ class DepthProFOVModel(nn.Module):
 
         fov_features = fov_features + global_features
         fov_output = self.head(fov_features)
-        fov_output = fov_output.squeeze()
+        fov_output = fov_output.flatten()
 
         return fov_output
 
