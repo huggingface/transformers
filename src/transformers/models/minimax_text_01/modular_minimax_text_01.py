@@ -276,7 +276,7 @@ class MiniMaxText01LightningAttentionDecay(nn.Module):
         self.num_hidden_layers = config.num_hidden_layers
         self.block_size = config.block_size
 
-    def forward(self, x, seq_len):
+    def forward(self, x, seq_len, return_slope_rate=False):
         num_blocks = (seq_len + self.block_size - 1) // self.block_size
         padding = num_blocks * self.block_size - seq_len
 
@@ -284,8 +284,11 @@ class MiniMaxText01LightningAttentionDecay(nn.Module):
         block_size_range = torch.arange(self.block_size).to(x) + 1
 
         slope_rate = (1 / (2 ** (8 / self.num_heads))) ** num_heads_range
-        slope_rate *= 1 - self.layer_idx / (self.num_hidden_layers - 1) + 1e-5  # check small addition
+        slope_rate *= 1 - self.layer_idx / (self.num_hidden_layers - 1) + 1e-5
         slope_rate = slope_rate[:, None, None]
+
+        if return_slope_rate:
+            return slope_rate
 
         query_decay = torch.exp(-slope_rate * block_size_range[:, None])
         query_decay = query_decay[:, None, :, :]
@@ -386,7 +389,8 @@ class MiniMaxText01LightningAttention(nn.Module):
             attn_output = attn_output.reshape(batch_size, self.num_heads, seq_len + padding, self.head_dim)
             attn_output = attn_output[:, :, :seq_len, :]
         else:
-            ratio = 0.23 # TODO: get from decay
+            slope_rate = self.decay_factors(query_states, seq_len, return_slope_rate=True)
+            ratio = torch.exp(-slope_rate)
             attn_output = []
             for i in range(seq_len):
                 kv_cache = ratio * kv_cache + torch.einsum(
