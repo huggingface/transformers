@@ -47,8 +47,8 @@ class DepthProOutput(ModelOutput):
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, n_patches_per_batch, sequence_length, hidden_size)`):
             Sequence of hidden-states at the output of the last layer of the model.
-        features (`List[torch.FloatTensor]`, *optional*:
-            Features from scaled images and hidden_states.
+        features (`Union[torch.FloatTensor, List[torch.FloatTensor]]`, *optional*):
+            Features from encoders. Can be a single feature or a list of features.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
             one for the output of each layer) of shape `(batch_size, n_patches_per_batch, sequence_length, hidden_size)`.
@@ -63,7 +63,7 @@ class DepthProOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor = None
-    features: Optional[List[torch.FloatTensor]] = None
+    features: Union[torch.FloatTensor, List[torch.FloatTensor]] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
@@ -98,138 +98,6 @@ class DepthProDepthEstimatorOutput(ModelOutput):
     fov: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
-
-
-class DepthProFeatureUpsampleBlock(nn.Module):
-    def __init__(
-        self,
-        config: DepthProConfig,
-        input_dims: int,
-        intermediate_dims: int,
-        output_dims: int,
-        n_upsample_layers: int,
-        use_proj: bool = True,
-        bias: bool = False,
-    ):
-        super().__init__()
-        self.config = config
-        self.layers = nn.ModuleList()
-
-        # create first projection layer
-        if use_proj:
-            proj = nn.Conv2d(
-                in_channels=input_dims,
-                out_channels=intermediate_dims,
-                kernel_size=1,
-                stride=1,
-                padding=0,
-                bias=bias,
-            )
-            self.layers.append(proj)
-
-        # create following upsample layers
-        for i in range(n_upsample_layers):
-            in_channels = intermediate_dims if i == 0 else output_dims
-            layer = nn.ConvTranspose2d(
-                in_channels=in_channels,
-                out_channels=output_dims,
-                kernel_size=2,
-                stride=2,
-                padding=0,
-                bias=bias,
-            )
-            self.layers.append(layer)
-
-    def forward(self, features: torch.Tensor) -> torch.Tensor:
-        for layer in self.layers:
-            features = layer(features)
-        return features
-
-
-class DepthProFeatureUpsample(nn.Module):
-    def __init__(self, config: DepthProConfig):
-        super().__init__()
-        self.config = config
-        self.n_scaled_images = len(self.config.scaled_images_ratios)
-        self.n_intermediate_hooks = len(self.config.intermediate_hook_ids)
-
-        # for image_features
-        self.image_block = DepthProFeatureUpsampleBlock(
-            config=config,
-            input_dims=config.image_model_config.hidden_size,
-            intermediate_dims=config.image_model_config.hidden_size,
-            output_dims=config.scaled_images_feature_dims[0],
-            n_upsample_layers=1,
-            use_proj=False,
-            bias=True,
-        )
-
-        # for scaled_images_features
-        self.scaled_images = nn.ModuleList()
-        for i, feature_dims in enumerate(config.scaled_images_feature_dims):
-            block = DepthProFeatureUpsampleBlock(
-                config=config,
-                input_dims=config.patch_model_config.hidden_size,
-                intermediate_dims=feature_dims,
-                output_dims=feature_dims,
-                n_upsample_layers=1,
-            )
-            self.scaled_images.append(block)
-
-        # for intermediate_features
-        self.intermediate = nn.ModuleList()
-        for i, feature_dims in enumerate(config.intermediate_feature_dims):
-            intermediate_dims = config.fusion_hidden_size if i == 0 else feature_dims
-            block = DepthProFeatureUpsampleBlock(
-                config=config,
-                input_dims=config.patch_model_config.hidden_size,
-                intermediate_dims=intermediate_dims,
-                output_dims=feature_dims,
-                n_upsample_layers=2 + i,
-            )
-            self.intermediate.append(block)
-
-    def forward(self, features: List[torch.Tensor]) -> List[torch.Tensor]:
-        features[0] = self.image_block(features[0])
-
-        for i in range(self.n_scaled_images):
-            features[i + 1] = self.scaled_images[i](features[i + 1])
-
-        for i in range(self.n_intermediate_hooks):
-            features[self.n_scaled_images + i + 1] = self.intermediate[i](features[self.n_scaled_images + i + 1])
-
-        return features
-
-
-class DepthProFeatureProjection(nn.Module):
-    def __init__(self, config: DepthProConfig):
-        super().__init__()
-        self.config = config
-
-        combined_feature_dims = config.scaled_images_feature_dims + config.intermediate_feature_dims
-        self.projections = nn.ModuleList()
-        for i, in_channels in enumerate(combined_feature_dims):
-            if i == len(combined_feature_dims) - 1 and in_channels == config.fusion_hidden_size:
-                # projection for last layer can be ignored if input and output channels already match
-                self.projections.append(nn.Identity())
-            else:
-                self.projections.append(
-                    nn.Conv2d(
-                        in_channels=in_channels,
-                        out_channels=config.fusion_hidden_size,
-                        kernel_size=3,
-                        stride=1,
-                        padding=1,
-                        bias=False,
-                    )
-                )
-
-    def forward(self, features: List[torch.Tensor]) -> List[torch.Tensor]:
-        projected_features = []
-        for i, projection in enumerate(self.projections):
-            upsampled_feature = projection(features[i])
-            projected_features.append(upsampled_feature)
-        return projected_features
 
 
 def split_to_patches(pixel_values: torch.Tensor, patch_size: int, overlap_ratio: float) -> torch.Tensor:
@@ -369,11 +237,10 @@ def reconstruct_feature_maps(
     return features
 
 
-class DepthProEncoder(nn.Module):
+class DepthProPatchEncoder(nn.Module):
     def __init__(self, config: DepthProConfig):
         super().__init__()
         self.config = config
-        self.fusion_hidden_size = config.fusion_hidden_size
 
         self.intermediate_hook_ids = config.intermediate_hook_ids
         self.intermediate_feature_dims = config.intermediate_feature_dims
@@ -382,48 +249,17 @@ class DepthProEncoder(nn.Module):
         self.scaled_images_feature_dims = config.scaled_images_feature_dims
         self.merge_padding_value = config.merge_padding_value
 
-        self.n_scaled_images = len(self.scaled_images_ratios)
-        self.n_intermediate_hooks = len(self.intermediate_hook_ids)
+        self.n_scaled_images = len(config.scaled_images_ratios)
+        self.n_intermediate_hooks = len(config.intermediate_hook_ids)
+        self.out_size = config.image_model_config.image_size // config.image_model_config.patch_size
 
-        # patch encoder
-        self.patch_encoder = AutoModel.from_config(config.patch_model_config)
-
-        # image encoder
-        self.image_encoder = AutoModel.from_config(config.image_model_config)
-
-        # upsample features
-        self.feature_upsample = DepthProFeatureUpsample(config)
-
-        # for STEP 7: fuse low_res and image features
-        self.fuse_image_with_low_res = nn.Conv2d(
-            in_channels=config.scaled_images_feature_dims[0] * 2,
-            out_channels=config.scaled_images_feature_dims[0],
-            kernel_size=1,
-            stride=1,
-            padding=0,
-            bias=True,
-        )
-
-        # project features
-        self.feature_projection = DepthProFeatureProjection(config)
+        self.model = AutoModel.from_config(config.patch_model_config)
 
     def forward(
         self,
         pixel_values: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-        return_dict: bool = True,
-    ) -> Union[tuple, DepthProOutput]:
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        if pixel_values.dim() != 4:
-            raise ValueError("Input tensor must have shape (batch_size, num_channels, height, width).")
-
+    ) -> List[torch.Tensor]:
         batch_size, num_channels, height, width = pixel_values.shape
 
         if min(self.scaled_images_ratios) * min(height, width) < self.config.patch_size:
@@ -457,39 +293,23 @@ class DepthProEncoder(nn.Module):
         n_patches_per_scaled_image = [len(i) for i in scaled_images]
         patches = torch.cat(scaled_images[::-1], dim=0)  # -1 as patch encoder expects high res patches first
 
-        # STEP 3: apply patch and image encoder
+        # STEP 3: apply patch encoder
 
-        patch_encodings = self.patch_encoder(
+        encodings = self.model(
             # each patch is processed as a separate batch
             patches,
             head_mask=head_mask,
             # required for intermediate features
             output_hidden_states=self.n_intermediate_hooks > 0,
-            return_dict=return_dict,
         )
 
-        scaled_images_last_hidden_state = torch.split_with_sizes(patch_encodings[0], n_patches_per_scaled_image[::-1])
-        scaled_images_last_hidden_state = scaled_images_last_hidden_state[::-1]
+        scaled_images_last_hidden_state = torch.split_with_sizes(encodings[0], n_patches_per_scaled_image[::-1])
         # -1 (reverse list) as patch encoder returns high res patches first, we need low res first
-
-        # scale the image to patch size for image_encoder
-        image_scaled_to_patch_size = F.interpolate(
-            pixel_values,
-            size=(self.config.patch_size, self.config.patch_size),
-            mode="bilinear",
-            align_corners=False,
-        )
-        image_encodings = self.image_encoder(
-            pixel_values=image_scaled_to_patch_size,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-        )
+        scaled_images_last_hidden_state = scaled_images_last_hidden_state[::-1]
 
         # calculate base height and width
         # base height and width are the dimensions of the lowest resolution features
-        out_size = torch_int(image_encodings[0].shape[1] ** 0.5)
-        exponent_value = torch_int(math.log2(width / out_size))
+        exponent_value = torch_int(math.log2(width / self.out_size))
         base_height = height // 2**exponent_value
         base_width = width // 2**exponent_value
 
@@ -515,7 +335,7 @@ class DepthProEncoder(nn.Module):
         intermediate_features = []
         for i in range(self.n_intermediate_hooks):
             # +1 to correct index position as hidden_states contain embedding output as well
-            hidden_state = patch_encodings[2][self.intermediate_hook_ids[i] + 1]
+            hidden_state = encodings[2][self.intermediate_hook_ids[i] + 1]
             padding = torch_int(self.merge_padding_value * (1 / self.scaled_images_ratios[-1]))
             output_height = base_height * 2 ** (self.n_scaled_images - 1)
             output_width = base_width * 2 ** (self.n_scaled_images - 1)
@@ -527,39 +347,112 @@ class DepthProEncoder(nn.Module):
             )
             intermediate_features.append(features)
 
-        # STEP 6: get image features - (6) in diagram
+        # STEP 7: combine all features
+        features = [*scaled_images_features, *intermediate_features]
 
-        image_features = reconstruct_feature_maps(
-            image_encodings[0],
+        return features
+
+
+class DepthProImageEncoder(nn.Module):
+    def __init__(self, config: DepthProConfig):
+        super().__init__()
+        self.config = config
+        self.out_size = config.image_model_config.image_size // config.image_model_config.patch_size
+
+        self.model = AutoModel.from_config(config.image_model_config)
+
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ) -> Union[tuple, DepthProOutput]:
+        batch_size, num_channels, height, width = pixel_values.shape
+
+        # scale the image to patch size for image_encoder
+        pixel_values = F.interpolate(
+            pixel_values,
+            size=(self.config.patch_size, self.config.patch_size),
+            mode="bilinear",
+            align_corners=False,
+        )
+        encodings = self.model(
+            pixel_values=pixel_values,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+        )
+
+        # calculate base height and width
+        # base height and width are the dimensions of the lowest resolution features
+        exponent_value = torch_int(math.log2(width / self.out_size))
+        base_height = height // 2**exponent_value
+        base_width = width // 2**exponent_value
+
+        features = reconstruct_feature_maps(
+            encodings[0],
             batch_size=batch_size,
             padding=0,
             output_size=(base_height, base_width),
         )
 
-        # STEP 7: combine all features
-        features = [
-            image_features,
-            *scaled_images_features,
-            *intermediate_features,
-        ]
+        if not return_dict:
+            return (encodings[0], features) + encodings[2:]  # ignore last_hidden_state and poooler output
 
-        # STEP 8: upsample features
-        features = self.feature_upsample(features)
+        return DepthProOutput(
+            last_hidden_state=encodings.last_hidden_state,
+            features=features,
+            hidden_states=encodings.hidden_states,
+            attentions=encodings.attentions,
+        )
 
-        # STEP 9: apply fusion
-        # (global features = low res features + image features)
-        # fuses image_features with lowest resolution features as they are of same size
-        global_features = torch.cat((features[1], features[0]), dim=1)
-        global_features = self.fuse_image_with_low_res(global_features)
-        features = [global_features, *features[2:]]
 
-        # STEP 10: project features
-        features = self.feature_projection(features)
+class DepthProEncoder(nn.Module):
+    def __init__(self, config: DepthProConfig):
+        super().__init__()
+        self.config = config
+        self.intermediate_hook_ids = config.intermediate_hook_ids
+        self.intermediate_feature_dims = config.intermediate_feature_dims
+        self.scaled_images_ratios = config.scaled_images_ratios
+        self.scaled_images_overlap_ratios = config.scaled_images_overlap_ratios
+        self.scaled_images_feature_dims = config.scaled_images_feature_dims
+        self.merge_padding_value = config.merge_padding_value
 
-        # STEP 11: return output
+        self.n_scaled_images = len(self.scaled_images_ratios)
+        self.n_intermediate_hooks = len(self.intermediate_hook_ids)
+
+        self.patch_encoder = DepthProPatchEncoder(config)
+        self.image_encoder = DepthProImageEncoder(config)
+
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: bool = False,
+        output_hidden_states: bool = False,
+        return_dict: bool = True,
+    ) -> Union[tuple, DepthProOutput]:
+        batch_size, num_channels, height, width = pixel_values.shape
+
+        patch_features = self.patch_encoder(
+            pixel_values,
+            head_mask=head_mask,
+        )
+        image_encodings = self.image_encoder(
+            pixel_values,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=return_dict,
+        )
+        image_features = image_encodings[1]  # index 1 contains features
+
+        features = [image_features, *patch_features]
 
         if not return_dict:
-            return (image_encodings[0], features) + image_encodings[2:]  # ignore last_hidden_state and poooler output
+            return (image_encodings[0], features) + image_encodings[2:]
 
         return DepthProOutput(
             last_hidden_state=image_encodings.last_hidden_state,
@@ -567,6 +460,164 @@ class DepthProEncoder(nn.Module):
             hidden_states=image_encodings.hidden_states,
             attentions=image_encodings.attentions,
         )
+
+
+class DepthProFeatureUpsampleBlock(nn.Module):
+    def __init__(
+        self,
+        config: DepthProConfig,
+        input_dims: int,
+        intermediate_dims: int,
+        output_dims: int,
+        n_upsample_layers: int,
+        use_proj: bool = True,
+        bias: bool = False,
+    ):
+        super().__init__()
+        self.config = config
+        self.layers = nn.ModuleList()
+
+        # create first projection layer
+        if use_proj:
+            proj = nn.Conv2d(
+                in_channels=input_dims,
+                out_channels=intermediate_dims,
+                kernel_size=1,
+                stride=1,
+                padding=0,
+                bias=bias,
+            )
+            self.layers.append(proj)
+
+        # create following upsample layers
+        for i in range(n_upsample_layers):
+            in_channels = intermediate_dims if i == 0 else output_dims
+            layer = nn.ConvTranspose2d(
+                in_channels=in_channels,
+                out_channels=output_dims,
+                kernel_size=2,
+                stride=2,
+                padding=0,
+                bias=bias,
+            )
+            self.layers.append(layer)
+
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        for layer in self.layers:
+            features = layer(features)
+        return features
+
+
+class DepthProFeatureUpsample(nn.Module):
+    def __init__(self, config: DepthProConfig):
+        super().__init__()
+        self.config = config
+        self.n_scaled_images = len(self.config.scaled_images_ratios)
+        self.n_intermediate_hooks = len(self.config.intermediate_hook_ids)
+
+        # for image_features
+        self.image_block = DepthProFeatureUpsampleBlock(
+            config=config,
+            input_dims=config.image_model_config.hidden_size,
+            intermediate_dims=config.image_model_config.hidden_size,
+            output_dims=config.scaled_images_feature_dims[0],
+            n_upsample_layers=1,
+            use_proj=False,
+            bias=True,
+        )
+
+        # for scaled_images_features
+        self.scaled_images = nn.ModuleList()
+        for i, feature_dims in enumerate(config.scaled_images_feature_dims):
+            block = DepthProFeatureUpsampleBlock(
+                config=config,
+                input_dims=config.patch_model_config.hidden_size,
+                intermediate_dims=feature_dims,
+                output_dims=feature_dims,
+                n_upsample_layers=1,
+            )
+            self.scaled_images.append(block)
+
+        # for intermediate_features
+        self.intermediate = nn.ModuleList()
+        for i, feature_dims in enumerate(config.intermediate_feature_dims):
+            intermediate_dims = config.fusion_hidden_size if i == 0 else feature_dims
+            block = DepthProFeatureUpsampleBlock(
+                config=config,
+                input_dims=config.patch_model_config.hidden_size,
+                intermediate_dims=intermediate_dims,
+                output_dims=feature_dims,
+                n_upsample_layers=2 + i,
+            )
+            self.intermediate.append(block)
+
+    def forward(self, features: List[torch.Tensor]) -> List[torch.Tensor]:
+        features[0] = self.image_block(features[0])
+
+        for i in range(self.n_scaled_images):
+            features[i + 1] = self.scaled_images[i](features[i + 1])
+
+        for i in range(self.n_intermediate_hooks):
+            features[self.n_scaled_images + i + 1] = self.intermediate[i](features[self.n_scaled_images + i + 1])
+
+        return features
+
+
+class DepthProFeatureProjection(nn.Module):
+    def __init__(self, config: DepthProConfig):
+        super().__init__()
+        self.config = config
+
+        combined_feature_dims = config.scaled_images_feature_dims + config.intermediate_feature_dims
+        self.projections = nn.ModuleList()
+        for i, in_channels in enumerate(combined_feature_dims):
+            if i == len(combined_feature_dims) - 1 and in_channels == config.fusion_hidden_size:
+                # projection for last layer can be ignored if input and output channels already match
+                self.projections.append(nn.Identity())
+            else:
+                self.projections.append(
+                    nn.Conv2d(
+                        in_channels=in_channels,
+                        out_channels=config.fusion_hidden_size,
+                        kernel_size=3,
+                        stride=1,
+                        padding=1,
+                        bias=False,
+                    )
+                )
+
+    def forward(self, features: List[torch.Tensor]) -> List[torch.Tensor]:
+        projected_features = []
+        for i, projection in enumerate(self.projections):
+            upsampled_feature = projection(features[i])
+            projected_features.append(upsampled_feature)
+        return projected_features
+
+
+class DepthProNeck(nn.Module):
+    def __init__(self, config: DepthProConfig):
+        super().__init__()
+        self.config = config
+
+        self.feature_upsample = DepthProFeatureUpsample(config)
+        self.fuse_image_with_low_res = nn.Conv2d(
+            in_channels=config.scaled_images_feature_dims[0] * 2,
+            out_channels=config.scaled_images_feature_dims[0],
+            kernel_size=1,
+            stride=1,
+            padding=0,
+            bias=True,
+        )
+        self.feature_projection = DepthProFeatureProjection(config)
+
+    def forward(self, features: List[torch.Tensor]) -> List[torch.Tensor]:
+        features = self.feature_upsample(features)
+        # global features = low res features + image features
+        global_features = torch.cat((features[1], features[0]), dim=1)
+        global_features = self.fuse_image_with_low_res(global_features)
+        features = [global_features, *features[2:]]
+        features = self.feature_projection(features)
+        return features
 
 
 # General docstring
@@ -660,22 +711,20 @@ class DepthProModel(DepthProPreTrainedModel):
         super().__init__(config)
         self.config = config
         self.encoder = DepthProEncoder(config)
+        self.neck = DepthProNeck(config)
         # Initialize weights and apply final processing
         self.post_init()
 
     def get_input_embeddings(self):
-        # TODO: return hidden_states from patch_encodings instead of image_encodings
-        # return self.encoder.patch_encoder.embeddings.patch_embeddings
-        return self.encoder.image_encoder.embeddings.patch_embeddings
+        return self.encoder.image_encoder.model.get_input_embeddings()
 
     def _prune_heads(self, heads_to_prune):
         """
         Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
         class PreTrainedModel
         """
-        for layer, heads in heads_to_prune.items():
-            self.encoder.patch_encoder.encoder.layer[layer].attention.prune_heads(heads)
-            self.encoder.image_encoder.encoder.layer[layer].attention.prune_heads(heads)
+        self.encoder.patch_encoder.model._prune_heads(heads_to_prune)
+        self.encoder.image_encoder.model._prune_heads(heads_to_prune)
 
     @add_start_docstrings_to_model_forward(DEPTH_PRO_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
@@ -727,8 +776,18 @@ class DepthProModel(DepthProPreTrainedModel):
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
         )
+        features = encodings[1]  # index 1 contains features
+        features = self.neck(features)
 
-        return encodings
+        if not return_dict:
+            return (encodings[0], features) + encodings[2:]
+
+        return DepthProOutput(
+            last_hidden_state=encodings.last_hidden_state,
+            features=features,
+            hidden_states=encodings.hidden_states,
+            attentions=encodings.attentions,
+        )
 
 
 # Copied from transformers.models.dpt.modeling_dpt.DPTPreActResidualLayer DPT->DepthPro
@@ -863,25 +922,63 @@ class DepthProFeatureFusionStage(nn.Module):
         return fused_hidden_states
 
 
-class DepthProFOVModel(nn.Module):
+class DepthProFOVEncoder(nn.Module):
+    def __init__(self, config: DepthProConfig):
+        super().__init__()
+        self.config = config
+        self.out_size = config.image_model_config.image_size // config.image_model_config.patch_size
+
+        self.model = AutoModel.from_config(config.fov_model_config)
+        self.neck = nn.Linear(config.fov_model_config.hidden_size, config.fusion_hidden_size // 2)
+
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        head_mask: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        batch_size, num_channels, height, width = pixel_values.shape
+
+        # scale the image to patch size for image_encoder
+        pixel_values = F.interpolate(
+            pixel_values,
+            size=(self.config.patch_size, self.config.patch_size),
+            mode="bilinear",
+            align_corners=False,
+        )
+        encodings = self.model(
+            pixel_values=pixel_values,
+            head_mask=head_mask,
+        )
+        hidden_state = encodings[0]
+        hidden_state = self.neck(hidden_state)
+
+        # calculate base height and width
+        # base height and width are the dimensions of the lowest resolution features
+        exponent_value = torch_int(math.log2(width / self.out_size))
+        base_height = height // 2**exponent_value
+        base_width = width // 2**exponent_value
+
+        features = reconstruct_feature_maps(
+            hidden_state,
+            batch_size=batch_size,
+            padding=0,
+            output_size=(base_height, base_width),
+        )
+
+        return features
+
+
+class DepthProFOVHead(nn.Module):
     def __init__(self, config: DepthProConfig):
         super().__init__()
         self.config = config
         self.fusion_hidden_size = config.fusion_hidden_size
-
-        self.out_size = config.fov_model_config.image_size // config.fov_model_config.patch_size
-
-        self.encoder = AutoModel.from_config(config.fov_model_config)
-        self.encoder_neck = nn.Linear(config.fov_model_config.hidden_size, self.fusion_hidden_size // 2)
-        self.global_neck = nn.Sequential(
-            nn.Conv2d(self.fusion_hidden_size, self.fusion_hidden_size // 2, kernel_size=3, stride=2, padding=1),
-            nn.ReLU(True),
-        )
+        self.out_size = config.image_model_config.image_size // config.image_model_config.patch_size
 
         # create initial head layers
-        self.head = nn.Sequential()
+        self.layers = nn.ModuleList()
         for i in range(config.num_fov_head_layers):
-            self.head.append(
+            self.layers.append(
                 nn.Conv2d(
                     math.ceil(self.fusion_hidden_size / 2 ** (i + 1)),
                     math.ceil(self.fusion_hidden_size / 2 ** (i + 2)),
@@ -890,15 +987,40 @@ class DepthProFOVModel(nn.Module):
                     padding=1,
                 )
             )
-            self.head.append(nn.ReLU(True))
+            self.layers.append(nn.ReLU(True))
         # calculate expected shapes to finally generate a scalar output from final head layer
         final_in_channels = math.ceil(self.fusion_hidden_size / 2 ** (config.num_fov_head_layers + 1))
         final_kernal_size = torch_int((self.out_size - 1) / 2**config.num_fov_head_layers + 1)
-        self.head.append(
+        self.layers.append(
             nn.Conv2d(
                 in_channels=final_in_channels, out_channels=1, kernel_size=final_kernal_size, stride=1, padding=0
             )
         )
+
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        features = F.interpolate(
+            features,
+            size=(self.out_size, self.out_size),
+            mode="bilinear",
+            align_corners=False,
+        )
+        for layer in self.layers:
+            features = layer(features)
+        return features
+
+
+class DepthProFOVModel(nn.Module):
+    def __init__(self, config: DepthProConfig):
+        super().__init__()
+        self.config = config
+        self.fusion_hidden_size = config.fusion_hidden_size
+
+        self.fov_encoder = DepthProFOVEncoder(config)
+        self.global_neck = nn.Sequential(
+            nn.Conv2d(self.fusion_hidden_size, self.fusion_hidden_size // 2, kernel_size=3, stride=2, padding=1),
+            nn.ReLU(True),
+        )
+        self.head = DepthProFOVHead(config)
 
     def forward(
         self,
@@ -906,39 +1028,12 @@ class DepthProFOVModel(nn.Module):
         global_features: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
-        batch_size, num_channels, height, width = pixel_values.shape
-
-        image_scaled_to_patch_size = F.interpolate(
-            pixel_values,
-            size=(self.config.patch_size, self.config.patch_size),
-            mode="bilinear",
-            align_corners=False,
-        )
-        encodings = self.encoder(
-            image_scaled_to_patch_size,
-            head_mask=head_mask,
-        )
-        hidden_state = encodings[0]
-        hidden_state = self.encoder_neck(hidden_state)
-
-        fov_features = reconstruct_feature_maps(
-            hidden_state,
-            batch_size=batch_size,
-            padding=0,
-            output_size=(self.out_size, self.out_size),
-        )
-
+        fov_features = self.fov_encoder(pixel_values, head_mask)
         global_features = self.global_neck(global_features)
-        global_features = F.interpolate(
-            global_features,
-            size=(self.out_size, self.out_size),
-            mode="bilinear",
-            align_corners=False,
-        )
 
         fov_features = fov_features + global_features
         fov_output = self.head(fov_features)
-        fov_output = fov_output.reshape(batch_size)
+        fov_output = fov_output.squeeze()
 
         return fov_output
 
