@@ -21,21 +21,16 @@ from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
-from ...utils import logging
+from ...utils import is_flash_attn_2_available, logging
 from .configuration_internvl2_5 import InternVL2_5Config, InternVL2_5VisionConfig
 
 
-logger = logging.get_logger(__name__)
-
-
-try:
+if is_flash_attn_2_available():
     from flash_attn.bert_padding import pad_input, unpad_input
     from flash_attn.flash_attn_interface import flash_attn_varlen_qkvpacked_func
-
-    has_flash_attn = True
-except:
-    print("FlashAttention2 is not installed.")
+else:
     has_flash_attn = False
+
 
 logger = logging.get_logger(__name__)
 

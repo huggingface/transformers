@@ -184,7 +184,7 @@ class InternVL2_5Config(PretrainedConfig):
         # # By default, we use tie_word_embeddings=False for models of all sizes.
         self.tie_word_embeddings = tie_word_embeddings
         self.text_config.tie_word_embeddings = self.tie_word_embeddings
-        if tie_word_embeddings != False:
+        if tie_word_embeddings:
             raise ValueError("InternVL2_5Config: tie_word_embeddings must be False")
         super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
 

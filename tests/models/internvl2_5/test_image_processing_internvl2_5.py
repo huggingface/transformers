@@ -226,13 +226,13 @@ class InternVL2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
     def test_find_closest_aspect_ratio(self):
         min_num = self.image_processor_tester.min_tiles
         max_num = self.image_processor_tester.max_tiles
-        target_ratios = set(
+        target_ratios = {
             (i, j)
             for n in range(min_num, max_num + 1)
             for i in range(1, n + 1)
             for j in range(1, n + 1)
             if i * j <= max_num and i * j >= min_num
-        )
+        }
 
         # Test with various aspect ratios
         test_cases = [
