@@ -26,7 +26,7 @@ The abstract from the paper is the following:
 
 *We present a foundation model for zero-shot metric monocular depth estimation. Our model, Depth Pro, synthesizes high-resolution depth maps with unparalleled sharpness and high-frequency details. The predictions are metric, with absolute scale, without relying on the availability of metadata such as camera intrinsics. And the model is fast, producing a 2.25-megapixel depth map in 0.3 seconds on a standard GPU. These characteristics are enabled by a number of technical contributions, including an efficient multi-scale vision transformer for dense prediction, a training protocol that combines real and synthetic datasets to achieve high metric accuracy alongside fine boundary tracing, dedicated evaluation metrics for boundary accuracy in estimated depth maps, and state-of-the-art focal length estimation from a single image. Extensive experiments analyze specific design choices and demonstrate that Depth Pro outperforms prior work along multiple dimensions.*
 
-<img src="https://raw.githubusercontent.com/apple/ml-depth-pro/main/data/depth-pro-teaser.jpg"
+<img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/depth_pro_teaser.png"
 alt="drawing" width="600"/>
 
 <small> DepthPro Outputs. Taken from the <a href="https://github.com/apple/ml-depth-pro" target="_blank">official code</a>. </small>
@@ -112,19 +112,6 @@ Or set `use_fov_model=True` when initializing the model, which overrides the val
 >>> config = DepthProConfig()
 >>> model = DepthProForDepthEstimation(config, use_fov_model=True)
 ```
-
-### Image Resolution and Aspect Ratio
-
-The network can process images of different resolutions and aspect ratios and the predicted depth size can be calculated using the following formula:
-
-$\text{Predicted Depth Size} = \frac{2^{N+1} \cdot S}{P}$
-
-Where:
-- $N = \text{len}(\text{intermediate\_hook\_ids}) + \text{len}(\text{scaled\_images\_ratios})$
-- $S = \text{image\_model\_config.image\_size}$
-- $P = \text{image\_model\_config.patch\_size}$
-
-The aspect ratio of the raw predicted depth is maintained as the aspect ratio of the input image.
 
 ### Using Scaled Dot Product Attention (SDPA)
 
