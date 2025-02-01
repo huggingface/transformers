@@ -177,18 +177,27 @@ def merge_patches(patches: torch.Tensor, batch_size: int, padding: int) -> torch
             boxes_in_row = []
             for w in range(sqrt_n_patches_per_batch):
                 box = patches[batch_size * i : batch_size * (i + 1)]
+
+                # collect paddings
+                paddings = [0, 0, 0, 0]
                 if h != 0:
                     # remove pad from height if box is not at top border
-                    box = box[..., padding:, :]
+                    paddings[0] = padding
                 if w != 0:
                     # remove pad from width if box is not at left border
-                    box = box[..., :, padding:]
+                    paddings[2] = padding
                 if h != sqrt_n_patches_per_batch - 1:
                     # remove pad from height if box is not at bottom border
-                    box = box[..., : box.shape[-2] - padding, :]
+                    paddings[1] = padding
                 if w != sqrt_n_patches_per_batch - 1:
                     # remove pad from width if box is not at right border
-                    box = box[..., :, : box.shape[-1] - padding]
+                    paddings[3] = padding
+
+                # remove paddings
+                _, _, box_h, box_w = box.shape
+                pad_top, pad_bottom, pad_left, pad_right = paddings
+                box = box[:, :, pad_top:box_h - pad_bottom, pad_left:box_w - pad_right]
+
                 boxes_in_row.append(box)
                 i += 1
             boxes_in_row = torch.cat(boxes_in_row, dim=-1)
