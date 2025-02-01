@@ -295,10 +295,11 @@ class DabDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                     elif tuple_object is None:
                         return
                     else:
-                        self.assertTrue(
-                            torch.allclose(
-                                set_nan_tensor_to_zero(tuple_object), set_nan_tensor_to_zero(dict_object), atol=1e-5
-                            ),
+                        torch.testing.assert_close(
+                            set_nan_tensor_to_zero(tuple_object),
+                            set_nan_tensor_to_zero(dict_object),
+                            atol=1e-5,
+                            rtol=1e-5,
                             msg=(
                                 "Tuple and dict output are not equal. Difference:"
                                 f" {torch.max(torch.abs(tuple_object - dict_object))}. Tuple has `nan`:"
@@ -735,8 +736,11 @@ class DabDetrModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
                     # Modifed from RT-DETR
                     elif "class_embed" in name and "bias" in name:
                         bias_tensor = torch.full_like(param.data, bias_value)
-                        self.assertTrue(
-                            torch.allclose(param.data, bias_tensor, atol=1e-4),
+                        torch.testing.assert_close(
+                            param.data,
+                            bias_tensor,
+                            atol=1e-4,
+                            rtol=1e-4,
                             msg=f"Parameter {name} of model {model_class} seems not properly initialized",
                         )
                     elif "activation_fn" in name and config.activation_function == "prelu":
@@ -793,7 +797,7 @@ class DabDetrModelIntegrationTests(unittest.TestCase):
         expected_slice = torch.tensor(
             [[-0.4879, -0.2594, 0.4524], [-0.4997, -0.4258, 0.4329], [-0.8220, -0.4996, 0.0577]]
         ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=2e-4))
+        torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, atol=2e-4, rtol=2e-4)
 
     def test_inference_object_detection_head(self):
         model = DabDetrForObjectDetection.from_pretrained(CHECKPOINT).to(torch_device)
@@ -812,14 +816,14 @@ class DabDetrModelIntegrationTests(unittest.TestCase):
         expected_slice_logits = torch.tensor(
             [[-10.1765, -5.5243, -8.9324], [-9.8138, -5.6721, -7.5161], [-10.3054, -5.6081, -8.5931]]
         ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits, atol=3e-4))
+        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_slice_logits, atol=3e-4, rtol=3e-4)
 
         expected_shape_boxes = torch.Size((1, model.config.num_queries, 4))
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
         expected_slice_boxes = torch.tensor(
             [[0.3708, 0.3000, 0.2753], [0.5211, 0.6125, 0.9495], [0.2897, 0.6730, 0.5459]]
         ).to(torch_device)
-        self.assertTrue(torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4))
+        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_slice_boxes, atol=1e-4, rtol=1e-4)
 
         # verify postprocessing
         results = image_processor.post_process_object_detection(
