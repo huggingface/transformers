@@ -20,7 +20,7 @@ import numpy as np
 
 
 if TYPE_CHECKING:
-    from ...modeling_outputs import DepthProDepthEstimatorOutput
+    from .modeling_depth_pro import DepthProDepthEstimatorOutput
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import to_channel_dimension_format
