@@ -1858,7 +1858,7 @@ class GenerationTesterMixin:
                     )
 
     @pytest.mark.generate
-    def test_continue_generate_from_inputs_embeds(self):
+    def test_generate_continue_from_inputs_embeds(self):
         """Tests that we can continue generation from `inputs_embeds` and past key values returned from a previous `generate` call."""
         for model_class in self.all_generative_model_classes:
             if any(model_name in model_class.__name__.lower() for model_name in ["imagegpt"]):
@@ -1867,6 +1867,9 @@ class GenerationTesterMixin:
                 self.skipTest(reason="TODO: needs modeling or test input preparation fixes for compatibility")
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+
+            if "token_type_ids" in inputs_dict:
+                del inputs_dict["token_type_ids"]
 
             if config.is_encoder_decoder:
                 self.skipTest(reason="This model is encoder-decoder")
@@ -1877,6 +1880,11 @@ class GenerationTesterMixin:
 
             if "inputs_embeds" not in inspect.signature(model.prepare_inputs_for_generation).parameters.keys():
                 self.skipTest(reason="This model does not support `inputs_embeds` in generation")
+
+            # If "past_key_values" is not returned, skip the test (e.g. RWKV uses a different cache name and format)
+            outputs = model(**inputs_dict)
+            if "past_key_values" not in outputs:
+                self.skipTest(reason="This model doesn't return `past_key_values`")
 
             pixel_values_is_mutually_exclusive = any(
                 model_name in model_class.__name__.lower()
@@ -1889,39 +1897,42 @@ class GenerationTesterMixin:
 
             input_ids = inputs_dict.pop("input_ids")
 
-            model.config.use_cache = True
+            model.generation_config.pad_token_id = model.generation_config.eos_token_id = -1
+            model.generation_config.forced_eos_token_id = None
             model.config.is_decoder = True
-            max_cache_len = 10
+            model.generation_config.use_cache = True
 
-            inputs_embeds = model.get_input_embeddings()(input_ids[0].unsqueeze(0))
             generation_kwargs = {
-                "max_length": max_cache_len,
                 "return_dict_in_generate": True,
                 "do_sample": False,
             }
 
-            # Generate the first batch of tokens and capture the `past_key_values` in cache
-            with torch.no_grad():
-                prompt_cache = model(inputs_embeds=inputs_embeds, **generation_kwargs).past_key_values
+            # Traditional way of generating text, with `return_dict_in_generate` to return the past key values.
+            input_embeds = model.get_input_embeddings()(input_ids)
+            outputs = model.generate(inputs_embeds=input_embeds, max_new_tokens=4, **generation_kwargs)
 
-            # Concatenate the new input embeddings for continuation.
-            new_inputs_embeds = torch.cat(
-                [inputs_embeds, model.get_input_embeddings()(input_ids[1].unsqueeze(0))], dim=1
+            # Let's generate again, but passing the past key values in between (3 + 1 = 4 tokens)
+            initial_output = model.generate(inputs_embeds=input_embeds, max_new_tokens=3, **generation_kwargs)
+            continued_embeds = torch.cat([input_embeds, model.get_input_embeddings()(initial_output.sequences)], dim=1)
+            cached_output = model.generate(
+                inputs_embeds=continued_embeds,
+                max_new_tokens=1,
+                past_key_values=initial_output.past_key_values,
+                **generation_kwargs,
             )
 
-            # Continue generation using the concatenated `inputs_embeds` and the original `past_key_values`
-            outputs_continued = model.generate(
-                inputs_embeds=new_inputs_embeds, past_key_values=prompt_cache, **generation_kwargs
-            )
-            # Generate the sequence by combining the original two input_ids and generating the entire sequence in one go.
-            combined_inputs = input_ids.flatten().unsqueeze(0)
-            combined_embeds = model.get_input_embeddings()(combined_inputs)
-
-            # Generate using the combined input embeddings (no cache passed)
-            outputs_combined = model.generate(inputs_embeds=combined_embeds, **generation_kwargs)
-
-            # Verify that the generated sequences are identical
-            self.assertListEqual(outputs_continued.sequences.tolist(), outputs_combined.sequences.tolist())
+            # Combine the (3 + 1) generated tokens and verify it matches with full generation.
+            combined_output_sequences = torch.concat([initial_output.sequences, cached_output.sequences], axis=1)
+            self.assertListEqual(outputs.sequences.tolist(), combined_output_sequences.tolist())
+            # The two sets of past kv should be equal to each other
+            for layer_idx in range(len(cached_output.past_key_values)):
+                for kv_idx in range(len(cached_output.past_key_values[layer_idx])):
+                    self.assertTrue(
+                        torch.allclose(
+                            outputs.past_key_values[layer_idx][kv_idx],
+                            cached_output.past_key_values[layer_idx][kv_idx],
+                        )
+                    )
 
     @parameterized.expand([("offloaded",)])  # ("offloaded_static",) TODO: @raushan fixme in some models (eg T5)
     @require_torch_gpu
