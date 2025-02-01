@@ -520,6 +520,10 @@ _import_structure = {
         "InstructBlipVideoQFormerConfig",
         "InstructBlipVideoVisionConfig",
     ],
+    "models.internvl2_5": [
+        "InternVL2_5Config",
+        "InternVL2_5Processor",
+    ],
     "models.jamba": ["JambaConfig"],
     "models.jetmoe": ["JetMoeConfig"],
     "models.kosmos2": [
@@ -1244,6 +1248,7 @@ else:
     _import_structure["models.idefics3"].extend(["Idefics3ImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
     _import_structure["models.instructblipvideo"].extend(["InstructBlipVideoImageProcessor"])
+    _import_structure["models.internvl2_5"].extend(["InternVL2_5ImageProcessor"])
     _import_structure["models.layoutlmv2"].extend(["LayoutLMv2FeatureExtractor", "LayoutLMv2ImageProcessor"])
     _import_structure["models.layoutlmv3"].extend(["LayoutLMv3FeatureExtractor", "LayoutLMv3ImageProcessor"])
     _import_structure["models.levit"].extend(["LevitFeatureExtractor", "LevitImageProcessor"])
@@ -2613,6 +2618,12 @@ else:
             "InstructBlipVideoPreTrainedModel",
             "InstructBlipVideoQFormerModel",
             "InstructBlipVideoVisionModel",
+        ]
+    )
+    _import_structure["models.internvl2_5"].extend(
+        [
+            "InternVL2_5ForConditionalGeneration",
+            "InternVL2_5PreTrainedModel",
         ]
     )
     _import_structure["models.jamba"].extend(
@@ -5589,6 +5600,10 @@ if TYPE_CHECKING:
         InstructBlipVideoQFormerConfig,
         InstructBlipVideoVisionConfig,
     )
+    from .models.internvl2_5 import (
+        InternVL2_5Config,
+        InternVL2_5Processor,
+    )
     from .models.jamba import JambaConfig
     from .models.jetmoe import JetMoeConfig
     from .models.kosmos2 import (
@@ -6348,6 +6363,7 @@ if TYPE_CHECKING:
         from .models.idefics3 import Idefics3ImageProcessor
         from .models.imagegpt import ImageGPTFeatureExtractor, ImageGPTImageProcessor
         from .models.instructblipvideo import InstructBlipVideoImageProcessor
+        from .models.internvl2_5 import InternVL2_5ImageProcessor
         from .models.layoutlmv2 import (
             LayoutLMv2FeatureExtractor,
             LayoutLMv2ImageProcessor,
@@ -7490,6 +7506,10 @@ if TYPE_CHECKING:
             InstructBlipVideoPreTrainedModel,
             InstructBlipVideoQFormerModel,
             InstructBlipVideoVisionModel,
+        )
+        from .models.internvl2_5 import (
+            InternVL2_5ForConditionalGeneration,
+            InternVL2_5PreTrainedModel,
         )
         from .models.jamba import (
             JambaForCausalLM,

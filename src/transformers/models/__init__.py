@@ -130,6 +130,7 @@ from . import (
     informer,
     instructblip,
     instructblipvideo,
+    internvl2_5,
     jamba,
     jetmoe,
     kosmos2,
