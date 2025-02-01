@@ -276,3 +276,14 @@ print(tokenizer.batch_decode(generated_ids[:, input_length:], skip_special_token
 
 </hfoption>
 </hfoptions>
+
+## Resources
+
+Take a look below for some more specific and specialized text generation libraries.
+
+- [Optimum](https://github.com/huggingface/optimum): an extension of Transformers focused on optimizing training and inference on specific hardware devices
+- [Outlines](https://github.com/dottxt-ai/outlines): a library for constrained text generation (generate JSON files for example).
+- [SynCode](https://github.com/uiuc-focal-lab/syncode): a library for context-free grammar guided generation (JSON, SQL, Python).
+- [Text Generation Inference](https://github.com/huggingface/text-generation-inference): a production-ready server for LLMs.
+- [Text generation web UI](https://github.com/oobabooga/text-generation-webui): a Gradio web UI for text generation.
+- [logits-processor-zoo](https://github.com/NVIDIA/logits-processor-zoo): additional logits processors for controlling text generation.

@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Loading
+# Loading models
 
 Transformers provides many pretrained models that are ready to use with a single line of code. It requires a model class and the [`~PreTrainedModel.from_pretrained`] method.
 

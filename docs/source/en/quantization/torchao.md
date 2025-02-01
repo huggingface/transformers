@@ -22,6 +22,8 @@ pip install --upgrade torch torchao transformers
 
 torchao supports int8 weight quantization and int8 dynamic quantization of weights. Create a [`TorchAoConfig`] and specify the quantization type and `group_size` of the weights to quantize.
 
+Set the `cache_implementation` to `"static"` to automatically [torch.compile](https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html) the forward method.
+
 ```py
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
@@ -33,16 +35,14 @@ quantized_model = AutoModelForCausalLM.from_pretrained(
     device_map="auto",
     quantization_config=quantization_config
 )
-```
 
-## torch.compile
+tokenizer = AutoTokenizer.from_pretrained("meta-llama/Meta-Llama-3-8B")
+input_text = "What are we having for dinner?"
+input_ids = tokenizer(input_text, return_tensors="pt").to("cuda")
 
-Wrap the quantized model with [torch.compile](https://pytorch.org/tutorials/intermediate/torch_compile_tutorial.html) for even faster generation.
-
-```py
-import torchao
-
-quantized_model = torch.compile(quantized_model, mode="max-autotune")
+# auto-compile the quantized model with `cache_implementation="static"` to get speed up
+output = quantized_model.generate(**input_ids, max_new_tokens=10, cache_implementation="static")
+print(tokenizer.decode(output[0], skip_special_tokens=True))
 ```
 
 ## Serialization
