@@ -2,17 +2,17 @@
   sections:
   - local: index
     title: Transformers
-  - local: quicktour
-    title: Quickstart
   - local: installation
     title: Installation
+  - local: quicktour
+    title: Quickstart
 - title: Base classes
   isExpanded: False
   sections:
   - title: Models
     sections:
     - local: models
-      title: Loading
+      title: Loading models
     - local: custom_models
       title: Customizing models
     - local: how_to_hack_models
@@ -20,7 +20,7 @@
     - local: model_sharing
       title: Sharing
     - local: add_new_model
-      title: Adding a new model
+      title: Adding a new model to Transformers
     - local: modular_transformers
       title: Modular Transformers
     - local: task_summary
@@ -35,8 +35,6 @@
     sections:
     - local: fast_tokenizers
       title: Tokenizers
-    - local: tiktoken
-      title: tiktoken
     - local: image_processors
       title: Image processors
     - local: backbones
@@ -82,7 +80,7 @@
       title: Getting the most out of LLMs
     - local: perplexity
       title: Perplexity of fixed-length models
-  - title: Chat
+  - title: Chat with models
     sections:
     - local: conversations
       title: Chat basics
@@ -98,14 +96,14 @@
     sections:
     - local: perf_torch_compile
       title: torch.compile
-    - local: tf_xla
-      title: XLA
     - local: perf_infer_gpu_one
       title: GPU
     - local: perf_infer_gpu_multi
       title: Distributed GPU inference
     - local: perf_infer_cpu
       title: CPU
+    - local: tf_xla
+      title: XLA
   - local: agents
     title: Agents
   - local: tools
@@ -199,6 +197,8 @@
     title: ONNX
   - local: tflite
     title: LiteRT
+  - local: executorch
+    title: ExecuTorch
   - local: torchscript
     title: TorchScript
 - title: Resources

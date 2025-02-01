@@ -13,7 +13,10 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# Adding a new model
+# Adding a new model to Transformers
+
+> [!TIP]
+> Try adding new models with a more [modular](./modular_transformers) approach first. This makes it significantly easier to contribute a model to Transformers!
 
 Many of the models in Transformers are contributed by developers and researchers. As an open-source first project, we're invested in empowering the community to actively and independently add more models.
 
@@ -40,7 +43,7 @@ Some of these design choices are:
 
 - composition > over-abstraction
 - duplicate code isn't always bad if it greatly improves readability and accessibility
-- model files are self-contained and all the necessary model code is found in the `modeling.py` file
+- model files are self-contained and all the necessary model code is found in the `modeling_mymodel.py` file
 
 These design choices are important *for everyone* interacting with the model. It is easier to read, understand, and modify.
 
@@ -73,15 +76,6 @@ A model is saved to a `model.safetensors` file and a configuration is saved to a
 
 Transformers prefers a clean and readable code over a more abstracted code style. Some of the code style choices include:
 
-- The forward pass is written in the `modeling.py` file, completely independent of other models in the library. To reuse a block from another model, copy the code and paste it with a `# Copied from` comment above it. For example, the `RobertaSelfAttention` class is copied from the `BertSelfAttention` class.
-
-  ```py
-  # Copied from transformers.models.bert.modeling_bert.BertSelfAttention with Bert->Roberta
-  class RobertaSelfAttention(nn.Module):
-  ```
-
-  Refer to the [Check copies](./pr_checks#check-copies) docs for more information about the `# Copied from` comment.
-
 - The code should be accessible to non-English users. Pick descriptive variable names and avoid abbreviations. For example, "activation" is preferred over "act". One letter variables names are highly discouraged unless it's an index in a for loop.
 
 - Explicit code is preferred - even if it's longer - over shorter code.
@@ -108,7 +102,7 @@ Now is a good time to get familiar with BrandNewBert. It is helpful to read a mo
 In addition to learning more about your model, use the tips below to help you add a model faster.
 
 > [!TIP]
-> Each contributor has a unique style and workflow for porting models to Transformers. It may be helpful to take a look at how [GPT2](https://medium.com/huggingface/from-tensorflow-to-pytorch-265f40ef2a28) and [WMT19](https://huggingface.co/blog/porting-fsmt) were ported.
+> Each contributor has a unique style and workflow for adding models to Transformers. Take a look at how [Gemma](https://github.com/huggingface/transformers/pull/29167) was added for an example.
 
 - Don't reinvent the wheel! Take your time to explore existing models and tokenizers to see what you can copy and reuse. [Grep](https://www.gnu.org/software/grep/) and [ripgrep](https://github.com/BurntSushi/ripgrep) are great tools for this.
 - This is more of an engineering than a science challenge. Focus on the more practical (setting up an efficient debugging environment for example) instead of the theorertical aspects of the model.
@@ -521,6 +515,9 @@ All features unique to BrandNewBert should be tested in a separate test under `B
 - future contributors can quickly test changes to the model by running these special tests
 
 ## Implement tokenizer
+
+> [!TIP]
+> We recommend adding a fast tokenizer ([`PreTrainedTokenizerFast`]) to give users the best performance. Feel free to tag [@ArthurZucker](https://github.com/ArthurZucker) or [@itazap](https://github.com/itazap) in your PR for help on how to add [`PreTrainedTokenizerFast`].
 
 With the model out of the way, time to focus on the tokenizer. The tokenizer should be identical or very similar to an existing tokenizer in Transformers.
 

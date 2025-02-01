@@ -22,12 +22,22 @@ Transformers supports many quantization methods, each with their pros and cons, 
 
 Use the Space below to help you pick a quantization method depending on your hardware and number of bits to quantize to.
 
-<iframe
-	src="https://stevhliu-quantization-methods.hf.space"
-	frameborder="0"
-	width="850"
-	height="450"
-></iframe>
+| Quantization Method                           | On the fly quantization | CPU             | CUDA GPU | ROCm GPU  | Metal (Apple Silicon)              | Intel GPU       | Torch compile() | Bits          | PEFT Fine Tuning | Serializable with 🤗Transformers | 🤗Transformers Support  | Link to library                             |
+|-----------------------------------------------|----------------------|-----------------|----------|-----------|------------------------------------|-----------------|-----------------|---------------|------------------|-----------------------------|-------------------------|---------------------------------------------|
+| [AQLM](./aqlm.md)                             | 🔴                   | 🟢              |     🟢     | 🔴        | 🔴                                 | 🔴              | 🟢              | 1/2         | 🟢               | 🟢                          | 🟢                      | https://github.com/Vahe1994/AQLM            |
+| [AWQ](./awq.md)                               | 🔴                   | 🟢              | 🟢        | 🟢        | 🔴                                 | 🟢              | ?               | 4             | 🟢               | 🟢                          | 🟢                      | https://github.com/casper-hansen/AutoAWQ    |
+| [bitsandbytes](./bitsandbytes.md)             | 🟢                   | 🟡 |     🟢     | 🟡 | 🔴                    | 🟡 | 🔴 | 4/8         | 🟢               | 🟢                          | 🟢                      | https://github.com/bitsandbytes-foundation/bitsandbytes |
+| [compressed-tensors](./compressed_tensors.md) | 🔴                   | 🟢              |     🟢     | 🟢        | 🔴                                 | 🔴              | 🔴              | 1/8         | 🟢               | 🟢                          | 🟢                      | https://github.com/neuralmagic/compressed-tensors |
+| [EETQ](./eetq.md)                             | 🟢                   | 🔴              | 🟢        | 🔴        | 🔴                                 | 🔴              | ?               | 8             | 🟢               | 🟢                          | 🟢                      | https://github.com/NetEase-FuXi/EETQ        |
+| [GGUF / GGML (llama.cpp)](../gguf.md)         | 🟢                   | 🟢              | 🟢        | 🔴        | 🟢                                 | 🔴              | 🔴              | 1/8         | 🔴               | [See Notes](../gguf.md)     | [See Notes](../gguf.md) | https://github.com/ggerganov/llama.cpp      |
+| [GPTQModel](./gptq.md)                        | 🔴                   | 🟢 | 🟢        | 🟢        | 🟢                                 | 🟢 | 🔴              | 2/3/4/8 | 🟢               | 🟢                          | 🟢                      | https://github.com/ModelCloud/GPTQModel        |
+| [AutoGPTQ](./gptq.md)                         | 🔴                   | 🔴              | 🟢        | 🟢        | 🔴                                 | 🔴              | 🔴              | 2/3/4/8 | 🟢               | 🟢                          | 🟢                      | https://github.com/AutoGPTQ/AutoGPTQ        |
+| [HIGGS](./higgs.md)                           | 🟢                   | 🔴              | 🟢        | 🔴        | 🔴                                 | 🔴              | 🟢              | 2/4         | 🔴               | 🟢                          | 🟢                      | https://github.com/HanGuo97/flute           |       
+| [HQQ](./hqq.md)                               | 🟢                   | 🟢              | 🟢        | 🔴        | 🔴                                 | 🔴              | 🟢              | 1/8         | 🟢               | 🔴                          | 🟢                      | https://github.com/mobiusml/hqq/            |
+| [optimum-quanto](./quanto.md)                 | 🟢                   | 🟢              | 🟢        | 🔴        | 🟢                                 | 🔴              | 🟢              | 2/4/8     | 🔴               | 🔴                          | 🟢                      | https://github.com/huggingface/optimum-quanto       |
+| [FBGEMM_FP8](./fbgemm_fp8.md)                 | 🟢                   | 🔴              | 🟢        | 🔴        | 🔴                                 | 🔴              | 🔴              | 8             | 🔴               | 🟢                          | 🟢                      | https://github.com/pytorch/FBGEMM       |
+| [torchao](./torchao.md)                       | 🟢                   |                 | 🟢        | 🔴        | 🟡 | 🔴              |                 | 4/8         |                  | 🟢🔴                        | 🟢                      | https://github.com/pytorch/ao       |
+| [VPTQ](./vptq.md)                             | 🔴                   | 🔴              |     🟢     | 🟡        | 🔴                                 | 🔴              | 🟢              | 1/8         | 🔴               | 🟢                          | 🟢                      | https://github.com/microsoft/VPTQ            |
 
 ## Resources
 

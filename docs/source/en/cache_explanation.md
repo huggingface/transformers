@@ -24,14 +24,14 @@ To predict the 1000th token, the model requires information from the previous 99
 
 To predict the 1001th token, you need the same information from the previous 999 tokens in addition to any information from the 1000th token. This is a lot of matrix multiplications a model has to compute over and over for each token!
 
-A key-value (KV) cache eliminates this inefficiency by storing kv pairs derived from the self-attention layers of previously processed tokens. The stored kv pairs are retrieved from the cache and reused for subsequent tokens, avoiding the need to recompute.
+A key-value (KV) cache eliminates this inefficiency by storing kv pairs derived from the attention layers of previously processed tokens. The stored kv pairs are retrieved from the cache and reused for subsequent tokens, avoiding the need to recompute.
 
 > [!WARNING]
 > Caching should only be used for **inference**. It may cause unexpected errors if it's enabled during training.
 
 ## Cache class
 
-When you use Transformers' [`Cache`] class, the attention module performs several critical steps to integrate past and present information.
+When you use Transformers' [`Cache`] class, the self-attention module performs several critical steps to integrate past and present information.
 
 1. The attention module concatenates current kv pairs with past kv pairs stored in the cache. This creates attentions weights with the shape `(new_tokens_length, past_kv_length + new_tokens_length)`. The current and past kv pairs are essentially combined to compute the attention scores, ensuring a model is aware of previous context and the current input.
 
