@@ -37,7 +37,8 @@ from ...utils.import_utils import is_torch_available, is_torchvision_available
 
 
 if TYPE_CHECKING:
-    from ...modeling_outputs import DepthProDepthEstimatorOutput
+    from .modeling_depth_pro import DepthProDepthEstimatorOutput
+
 logger = logging.get_logger(__name__)
 
 
