@@ -16,14 +16,12 @@ class InternVL2_5Processor(ProcessorMixin):
     Constructs a InternVL processor which wraps a InternVL image processor and a tokenizer into a single processor.
 
     Args:
-        image_processor (`InternVLImageProcessor`):
+        image_processor (`InternVLImageProcessor`, *optional*):
             The image processor is a required input.
-        tokenizer (`PreTrainedTokenizerBase`):
+        tokenizer (`PreTrainedTokenizerBase`, *optional*):
             The tokenizer is a required input.
         chat_template (`str`, *optional*):
             A Jinja template which will be used to format chat conversations.
-        image_token (`str`, *optional*, defaults to "<image>"):
-            Special token used to denote image placeholders in text.
     """
 
     attributes = ["image_processor", "tokenizer"]

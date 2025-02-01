@@ -94,6 +94,7 @@ class InternVL2_5ImageProcessor(BaseImageProcessor):
             Whether to resize the image's (height, width) dimensions to the specified size.
         size (`Dict[str, int]` *optional*, defaults to `{"height": 448, "width": 448}`):
             Size of output image after resizing.
+        dynamic_size (`Dict`, *optional*): <fill_docstring>
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
             Resampling filter to use if resizing the image.
         do_rescale (`bool`, *optional*, defaults to `True`):
@@ -112,8 +113,9 @@ class InternVL2_5ImageProcessor(BaseImageProcessor):
             Minimum number of tiles to split image into.
         max_tiles (`int`, *optional*, defaults to 12):
             Maximum number of tiles to split image into.
-        use_thumbnail (`bool`, *optional*, defaults to True):
+        use_thumbnail (`bool`, *optional*, defaults to `True`):
             Whether to include a thumbnail of the full image in addition to tiles.
+        num_image_token (`int`, *optional*, defaults to 256): <fill_docstring>
     """
 
     model_input_names = ["pixel_values"]
