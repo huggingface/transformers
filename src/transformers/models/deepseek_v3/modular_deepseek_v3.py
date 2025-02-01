@@ -206,7 +206,6 @@ class DeepseekV3Attention(nn.Module):
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, self.num_heads, -1)
-        batch_size, seq_length = input_shape
 
         q_states = self.q_b_proj(self.q_a_layernorm(self.q_a_proj(hidden_states))).view(hidden_shape).transpose(1, 2)
         q_pass, q_rot = torch.split(q_states, [self.qk_nope_head_dim, self.qk_rope_head_dim], dim=-1)
@@ -221,7 +220,7 @@ class DeepseekV3Attention(nn.Module):
 
         cos, sin = position_embeddings
         q_rot, k_rot = apply_rotary_pos_emb(q_rot, k_rot, cos, sin)
-        k_rot = k_rot.expand(batch_size, self.num_heads, seq_length, self.qk_rope_head_dim)
+        k_rot = k_rot.expand(-1, self.num_heads, -1, -1)
 
         query_states = torch.cat((q_pass, q_rot), dim=-1)
         key_states = torch.cat((k_pass, k_rot), dim=-1)
