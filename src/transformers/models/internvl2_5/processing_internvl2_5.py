@@ -20,15 +20,16 @@ class InternVL2_5Processor(ProcessorMixin):
             The image processor is a required input.
         tokenizer (`PreTrainedTokenizerBase`):
             The tokenizer is a required input.
-        chat_template (`str`, *optional*): 
+        chat_template (`str`, *optional*):
             A Jinja template which will be used to format chat conversations.
         image_token (`str`, *optional*, defaults to "<image>"):
             Special token used to denote image placeholders in text.
     """
+
     attributes = ["image_processor", "tokenizer"]
     valid_kwargs = ["chat_template"]
     image_processor_class = "InternVL2_5ImageProcessor"
-    tokenizer_class = ("AutoTokenizer")
+    tokenizer_class = "AutoTokenizer"
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
@@ -41,9 +42,8 @@ class InternVL2_5Processor(ProcessorMixin):
         images: Optional[ImageInput] = None,
         text: Optional[Union[TextInput, PreTokenizedInput, List[TextInput], List[PreTokenizedInput]]] = None,
         padding: bool = False,
-        **kwargs
+        **kwargs,
     ) -> BatchFeature:
-
         if text is None:
             raise ValueError("Input text cannot be None")
 
@@ -60,7 +60,7 @@ class InternVL2_5Processor(ProcessorMixin):
             encoding.update(image_inputs)
 
             # Check if number of images matches placeholders
-            if len(image_inputs['num_patches']) != total_placeholders:
+            if len(image_inputs["num_patches"]) != total_placeholders:
                 raise ValueError(
                     f"Number of image placeholders ({total_placeholders}) does not match "
                     f"number of processed images ({len(image_inputs['num_patches'])})"
@@ -72,17 +72,12 @@ class InternVL2_5Processor(ProcessorMixin):
                     text[i] = text[i].replace(
                         self.image_placeholder,
                         f"<img>{('<|place_holder|>' * image_inputs['num_patches'][index] * self.num_image_token)}</img>",
-                        1
+                        1,
                     )
                     index += 1
                 text[i] = text[i].replace("<|place_holder|>", self.image_token)
 
-        text_features = self.tokenizer(
-            text,
-            add_special_tokens=True,
-            padding=padding,
-            **kwargs
-        )
+        text_features = self.tokenizer(text, add_special_tokens=True, padding=padding, **kwargs)
         encoding.update(text_features)
 
         return BatchFeature(data=encoding)

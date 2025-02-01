@@ -28,13 +28,13 @@ from .configuration_internvl2_5 import InternVL2_5Config, InternVL2_5VisionConfi
 logger = logging.get_logger(__name__)
 
 
-
 try:
     from flash_attn.bert_padding import pad_input, unpad_input
     from flash_attn.flash_attn_interface import flash_attn_varlen_qkvpacked_func
+
     has_flash_attn = True
 except:
-    print('FlashAttention2 is not installed.')
+    print("FlashAttention2 is not installed.")
     has_flash_attn = False
 
 logger = logging.get_logger(__name__)
@@ -56,8 +56,7 @@ class FlashAttention(nn.Module):
         self.softmax_scale = softmax_scale
         self.dropout_p = attention_dropout
 
-    def forward(self, qkv, key_padding_mask=None, causal=False, cu_seqlens=None,
-                max_s=None, need_weights=False):
+    def forward(self, qkv, key_padding_mask=None, causal=False, cu_seqlens=None, max_s=None, need_weights=False):
         """Implements the multihead softmax attention.
         Arguments
         ---------
@@ -73,32 +72,47 @@ class FlashAttention(nn.Module):
             batch_size = qkv.shape[0]
             seqlen = qkv.shape[1]
             if key_padding_mask is None:
-                qkv = rearrange(qkv, 'b s ... -> (b s) ...')
+                qkv = rearrange(qkv, "b s ... -> (b s) ...")
                 max_s = seqlen
-                cu_seqlens = torch.arange(0, (batch_size + 1) * seqlen, step=seqlen, dtype=torch.int32,
-                                          device=qkv.device)
-                output = flash_attn_varlen_qkvpacked_func(
-                    qkv, cu_seqlens, max_s, self.dropout_p if self.training else 0.0,
-                    softmax_scale=self.softmax_scale, causal=causal
+                cu_seqlens = torch.arange(
+                    0, (batch_size + 1) * seqlen, step=seqlen, dtype=torch.int32, device=qkv.device
                 )
-                output = rearrange(output, '(b s) ... -> b s ...', b=batch_size)
+                output = flash_attn_varlen_qkvpacked_func(
+                    qkv,
+                    cu_seqlens,
+                    max_s,
+                    self.dropout_p if self.training else 0.0,
+                    softmax_scale=self.softmax_scale,
+                    causal=causal,
+                )
+                output = rearrange(output, "(b s) ... -> b s ...", b=batch_size)
             else:
                 nheads = qkv.shape[-2]
-                x = rearrange(qkv, 'b s three h d -> b s (three h d)')
+                x = rearrange(qkv, "b s three h d -> b s (three h d)")
                 x_unpad, indices, cu_seqlens, max_s = unpad_input(x, key_padding_mask)
-                x_unpad = rearrange(x_unpad, 'nnz (three h d) -> nnz three h d', three=3, h=nheads)
+                x_unpad = rearrange(x_unpad, "nnz (three h d) -> nnz three h d", three=3, h=nheads)
                 output_unpad = flash_attn_varlen_qkvpacked_func(
-                    x_unpad, cu_seqlens, max_s, self.dropout_p if self.training else 0.0,
-                    softmax_scale=self.softmax_scale, causal=causal
+                    x_unpad,
+                    cu_seqlens,
+                    max_s,
+                    self.dropout_p if self.training else 0.0,
+                    softmax_scale=self.softmax_scale,
+                    causal=causal,
                 )
-                output = rearrange(pad_input(rearrange(output_unpad, 'nnz h d -> nnz (h d)'),
-                                             indices, batch_size, seqlen),
-                                   'b s (h d) -> b s h d', h=nheads)
+                output = rearrange(
+                    pad_input(rearrange(output_unpad, "nnz h d -> nnz (h d)"), indices, batch_size, seqlen),
+                    "b s (h d) -> b s h d",
+                    h=nheads,
+                )
         else:
             assert max_s is not None
             output = flash_attn_varlen_qkvpacked_func(
-                qkv, cu_seqlens, max_s, self.dropout_p if self.training else 0.0,
-                softmax_scale=self.softmax_scale, causal=causal
+                qkv,
+                cu_seqlens,
+                max_s,
+                self.dropout_p if self.training else 0.0,
+                softmax_scale=self.softmax_scale,
+                causal=causal,
             )
 
         return output, None
@@ -119,8 +133,8 @@ class InternVL2_5RMSNorm(nn.Module):
 
 
 NORM2FN = {
-    'rms_norm': InternVL2_5RMSNorm,
-    'layer_norm': nn.LayerNorm,
+    "rms_norm": InternVL2_5RMSNorm,
+    "layer_norm": nn.LayerNorm,
 }
 
 
@@ -147,10 +161,17 @@ class InternVL2_5VisionEmbeddings(nn.Module):
 
     def _get_pos_embed(self, pos_embed, H, W):
         target_dtype = pos_embed.dtype
-        pos_embed = pos_embed.float().reshape(
-            1, self.image_size // self.patch_size, self.image_size // self.patch_size, -1).permute(0, 3, 1, 2)
-        pos_embed = F.interpolate(pos_embed, size=(H, W), mode='bicubic', align_corners=False). \
-            reshape(1, -1, H * W).permute(0, 2, 1).to(target_dtype)
+        pos_embed = (
+            pos_embed.float()
+            .reshape(1, self.image_size // self.patch_size, self.image_size // self.patch_size, -1)
+            .permute(0, 3, 1, 2)
+        )
+        pos_embed = (
+            F.interpolate(pos_embed, size=(H, W), mode="bicubic", align_corners=False)
+            .reshape(1, -1, H * W)
+            .permute(0, 2, 1)
+            .to(target_dtype)
+        )
         return pos_embed
 
     def forward(self, pixel_values: torch.FloatTensor) -> torch.Tensor:
@@ -160,10 +181,10 @@ class InternVL2_5VisionEmbeddings(nn.Module):
         patch_embeds = patch_embeds.flatten(2).transpose(1, 2)
         class_embeds = self.class_embedding.expand(batch_size, 1, -1).to(target_dtype)
         embeddings = torch.cat([class_embeds, patch_embeds], dim=1)
-        position_embedding = torch.cat([
-            self.position_embedding[:, :1, :],
-            self._get_pos_embed(self.position_embedding[:, 1:, :], height, width)
-        ], dim=1)
+        position_embedding = torch.cat(
+            [self.position_embedding[:, :1, :], self._get_pos_embed(self.position_embedding[:, 1:, :], height, width)],
+            dim=1,
+        )
         embeddings = embeddings + position_embedding.to(target_dtype)
         return embeddings
 
@@ -180,11 +201,11 @@ class InternVL2_5Attention(nn.Module):
 
         if self.head_dim * self.num_heads != self.embed_dim:
             raise ValueError(
-                f'embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:'
-                f' {self.num_heads}).'
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+                f" {self.num_heads})."
             )
 
-        self.scale = self.head_dim ** -0.5
+        self.scale = self.head_dim**-0.5
         self.qkv = nn.Linear(self.embed_dim, 3 * self.embed_dim, bias=config.qkv_bias)
         self.attn_drop = nn.Dropout(config.attention_dropout)
         self.proj_drop = nn.Dropout(config.dropout)
@@ -207,7 +228,7 @@ class InternVL2_5Attention(nn.Module):
             q = self.q_norm(q.transpose(1, 2).flatten(-2, -1)).view(B_, N_, H_, D_).transpose(1, 2)
             k = self.k_norm(k.transpose(1, 2).flatten(-2, -1)).view(B_, N_, H_, D_).transpose(1, 2)
 
-        attn = ((q * self.scale) @ k.transpose(-2, -1))
+        attn = (q * self.scale) @ k.transpose(-2, -1)
         attn = attn.softmax(dim=-1)
         attn = self.attn_drop(attn)
 
@@ -232,8 +253,8 @@ class InternVL2_5FlashAttention(nn.Module):
 
         if self.head_dim * self.num_heads != self.embed_dim:
             raise ValueError(
-                f'embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:'
-                f' {self.num_heads}).'
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+                f" {self.num_heads})."
             )
 
         self.qkv = nn.Linear(self.embed_dim, 3 * self.embed_dim, bias=config.qkv_bias)
@@ -251,7 +272,7 @@ class InternVL2_5FlashAttention(nn.Module):
 
     def forward(self, x: torch.Tensor, key_padding_mask=None, need_weights=False) -> torch.Tensor:
         qkv = self.qkv(x)
-        qkv = rearrange(qkv, 'b s (three h d) -> b s three h d', three=3, h=self.num_heads)
+        qkv = rearrange(qkv, "b s (three h d) -> b s three h d", three=3, h=self.num_heads)
 
         if self.qk_normalization:
             q, k, v = qkv.unbind(2)
@@ -259,19 +280,14 @@ class InternVL2_5FlashAttention(nn.Module):
             k = self.k_norm(k.flatten(-2, -1)).view(k.shape)
             qkv = torch.stack([q, k, v], dim=2)
 
-        context, _ = self.inner_attn(
-            qkv, key_padding_mask=key_padding_mask, need_weights=need_weights, causal=False
-        )
+        context, _ = self.inner_attn(qkv, key_padding_mask=key_padding_mask, need_weights=need_weights, causal=False)
 
-        outs = self.proj(rearrange(context, 'b s h d -> b s (h d)'))
+        outs = self.proj(rearrange(context, "b s h d -> b s (h d)"))
         outs = self.proj_drop(outs)
         return outs
 
 
-InternVL2_5_VISION_ATTENTION_CLASSES = {
-    "eager": InternVL2_5Attention,
-    "flash_attention_2": InternVL2_5FlashAttention
-}
+InternVL2_5_VISION_ATTENTION_CLASSES = {"eager": InternVL2_5Attention, "flash_attention_2": InternVL2_5FlashAttention}
 
 
 class InternVL2_5MLP(nn.Module):
@@ -303,20 +319,24 @@ class InternVL2_5VisionEncoderLayer(nn.Module):
 
         self.ls1 = nn.Parameter(config.initializer_factor * torch.ones(self.embed_dim))
         self.ls2 = nn.Parameter(config.initializer_factor * torch.ones(self.embed_dim))
-        self.drop_path1 = DropPath(drop_path_rate) if drop_path_rate > 0. else nn.Identity()
-        self.drop_path2 = DropPath(drop_path_rate) if drop_path_rate > 0. else nn.Identity()
+        self.drop_path1 = DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path2 = DropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
 
     def forward(
-            self,
-            hidden_states: torch.Tensor,
+        self,
+        hidden_states: torch.Tensor,
     ) -> Tuple[torch.FloatTensor, Optional[torch.FloatTensor], Optional[Tuple[torch.FloatTensor]]]:
         """
         Args:
             hidden_states (`Tuple[torch.FloatTensor, Optional[torch.FloatTensor]]`): input to the layer of shape `(batch, seq_len, embed_dim)`
         """
-        hidden_states = hidden_states + self.drop_path1(self.attn(self.norm1(hidden_states).to(hidden_states.dtype)) * self.ls1)
+        hidden_states = hidden_states + self.drop_path1(
+            self.attn(self.norm1(hidden_states).to(hidden_states.dtype)) * self.ls1
+        )
 
-        hidden_states = hidden_states + self.drop_path2(self.mlp(self.norm2(hidden_states).to(hidden_states.dtype)) * self.ls2)
+        hidden_states = hidden_states + self.drop_path2(
+            self.mlp(self.norm2(hidden_states).to(hidden_states.dtype)) * self.ls2
+        )
 
         return hidden_states
 
@@ -330,20 +350,25 @@ class InternVL2_5VisionEncoder(nn.Module):
         config (`InternConfig`):
             The corresponding vision configuration for the `InternEncoder`.
     """
+
     def __init__(self, config: InternVL2_5VisionConfig):
         super().__init__()
 
         # stochastic depth decay rule
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers)]
-        self.layers = nn.ModuleList([
-            InternVL2_5VisionEncoderLayer(config, config._attn_implementation, dpr[idx]) for idx in range(config.num_hidden_layers)])
+        self.layers = nn.ModuleList(
+            [
+                InternVL2_5VisionEncoderLayer(config, config._attn_implementation, dpr[idx])
+                for idx in range(config.num_hidden_layers)
+            ]
+        )
         self.gradient_checkpointing = False
 
     def forward(
-            self,
-            inputs_embeds,
-            output_hidden_states: Optional[bool] = None,
-            return_dict: Optional[bool] = None,
+        self,
+        inputs_embeds,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
     ) -> Union[Tuple, BaseModelOutput]:
         r"""
         Args:
@@ -367,9 +392,7 @@ class InternVL2_5VisionEncoder(nn.Module):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
             if self.gradient_checkpointing and self.training:
-                layer_outputs = torch.utils.checkpoint.checkpoint(
-                    encoder_layer,
-                    hidden_states)
+                layer_outputs = torch.utils.checkpoint.checkpoint(encoder_layer, hidden_states)
             else:
                 layer_outputs = encoder_layer(
                     hidden_states,
@@ -381,16 +404,19 @@ class InternVL2_5VisionEncoder(nn.Module):
 
         if not return_dict:
             return tuple(v for v in [hidden_states, encoder_states] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states
-        )
+        return BaseModelOutput(last_hidden_state=hidden_states, hidden_states=encoder_states)
 
 
 class InternVL2_5PreTrainedModel(PreTrainedModel):
     config_class = InternVL2_5Config
     base_model_prefix = "model"
-    _no_split_modules = ['InternVL2_5VisionModel', 'LlamaDecoderLayer', 'InternLM2DecoderLayer',
-                         'Phi3DecoderLayer', 'Qwen2DecoderLayer']
+    _no_split_modules = [
+        "InternVL2_5VisionModel",
+        "LlamaDecoderLayer",
+        "InternLM2DecoderLayer",
+        "Phi3DecoderLayer",
+        "Qwen2DecoderLayer",
+    ]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
     _supports_cache_class = True
@@ -419,10 +445,9 @@ class InternVL2_5PreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-
 class InternVL2_5VisionModel(InternVL2_5PreTrainedModel):
     config_class = InternVL2_5VisionConfig
-    _no_split_modules = ['InternVL2_5VisionEncoderLayer']
+    _no_split_modules = ["InternVL2_5VisionEncoderLayer"]
 
     def __init__(self, config: InternVL2_5VisionConfig):
         super().__init__(config)
@@ -435,22 +460,22 @@ class InternVL2_5VisionModel(InternVL2_5PreTrainedModel):
         _, num_positions, embed_dim = pos_emb.shape
         cls_emb = pos_emb[:, :1, :]
         pos_emb = pos_emb[:, 1:, :].reshape(1, old_size // patch_size, old_size // patch_size, -1).permute(0, 3, 1, 2)
-        pos_emb = F.interpolate(pos_emb.float(), size=new_size // patch_size, mode='bicubic', align_corners=False)
+        pos_emb = F.interpolate(pos_emb.float(), size=new_size // patch_size, mode="bicubic", align_corners=False)
         pos_emb = pos_emb.to(cls_emb.dtype).reshape(1, embed_dim, -1).permute(0, 2, 1)
         pos_emb = torch.cat([cls_emb, pos_emb], dim=1)
         self.embeddings.position_embedding = nn.Parameter(pos_emb)
         self.embeddings.image_size = new_size
-        logger.info('Resized position embeddings from {} to {}'.format(old_size, new_size))
+        logger.info("Resized position embeddings from {} to {}".format(old_size, new_size))
 
     def get_input_embeddings(self):
         return self.embeddings
 
     def forward(
-            self,
-            pixel_values: Optional[torch.FloatTensor] = None,
-            output_hidden_states: Optional[bool] = None,
-            return_dict: Optional[bool] = None,
-            pixel_embeds: Optional[torch.FloatTensor] = None,
+        self,
+        pixel_values: Optional[torch.FloatTensor] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        pixel_embeds: Optional[torch.FloatTensor] = None,
     ) -> Union[Tuple, BaseModelOutputWithPooling]:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -458,7 +483,7 @@ class InternVL2_5VisionModel(InternVL2_5PreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if pixel_values is None and pixel_embeds is None:
-            raise ValueError('You have to specify pixel_values or pixel_embeds')
+            raise ValueError("You have to specify pixel_values or pixel_embeds")
 
         if pixel_embeds is not None:
             hidden_states = pixel_embeds
@@ -466,7 +491,7 @@ class InternVL2_5VisionModel(InternVL2_5PreTrainedModel):
             if len(pixel_values.shape) == 4:
                 hidden_states = self.embeddings(pixel_values)
             else:
-                raise ValueError(f'wrong pixel_values size: {pixel_values.shape}')
+                raise ValueError(f"wrong pixel_values size: {pixel_values.shape}")
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
             output_hidden_states=output_hidden_states,
@@ -487,7 +512,6 @@ class InternVL2_5VisionModel(InternVL2_5PreTrainedModel):
 
 
 class InternVL2_5ForConditionalGeneration(InternVL2_5PreTrainedModel, GenerationMixin):
-
     def __init__(self, config: InternVL2_5Config):
         super().__init__(config)
 
@@ -496,22 +520,20 @@ class InternVL2_5ForConditionalGeneration(InternVL2_5PreTrainedModel, Generation
         self.downsample_ratio = config.downsample_ratio
         self.ps_version = config.pixel_shuffle_version
 
-        logger.info(f'ps_version: {self.ps_version}')
+        logger.info(f"ps_version: {self.ps_version}")
 
         self.vision_model = InternVL2_5VisionModel(config.vision_config)
 
-        if config.text_config.model_type == 'llama':
+        if config.text_config.model_type == "llama":
             self.language_model = LlamaForCausalLM(config.text_config)
-        elif config.text_config.model_type == 'phi3':
+        elif config.text_config.model_type == "phi3":
             self.language_model = Phi3ForCausalLM(config.text_config)
-        elif config.text_config.model_type == 'qwen2':
+        elif config.text_config.model_type == "qwen2":
             self.language_model = Qwen2ForCausalLM(config.text_config)
-        elif config.text_config.model_type == 'internlm2':
-            self.language_model = AutoModel.from_config(
-                config.text_config
-            )
+        elif config.text_config.model_type == "internlm2":
+            self.language_model = AutoModel.from_config(config.text_config)
         else:
-            raise NotImplementedError(f'{config.text_config.model_type} is not implemented.')
+            raise NotImplementedError(f"{config.text_config.model_type} is not implemented.")
 
         if self.language_model._tied_weights_keys is not None:
             self._tied_weights_keys = [f"language_model.{k}" for k in self.language_model._tied_weights_keys]
@@ -523,7 +545,7 @@ class InternVL2_5ForConditionalGeneration(InternVL2_5PreTrainedModel, Generation
             nn.LayerNorm(vit_hidden_size * int(1 / self.downsample_ratio) ** 2),
             nn.Linear(vit_hidden_size * int(1 / self.downsample_ratio) ** 2, llm_hidden_size),
             nn.GELU(),
-            nn.Linear(llm_hidden_size, llm_hidden_size)
+            nn.Linear(llm_hidden_size, llm_hidden_size),
         )
         self.img_context_token_id = config.image_token_id
         self.num_samples = 0
@@ -556,8 +578,8 @@ class InternVL2_5ForConditionalGeneration(InternVL2_5PreTrainedModel, Generation
 
     def forward(
         self,
-        input_ids: torch.LongTensor=None,
-        pixel_values: torch.FloatTensor=None,
+        input_ids: torch.LongTensor = None,
+        pixel_values: torch.FloatTensor = None,
         inputs_embeds: torch.FloatTensor = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
@@ -588,7 +610,7 @@ class InternVL2_5ForConditionalGeneration(InternVL2_5PreTrainedModel, Generation
         if pixel_values is not None:
             num_patches = pixel_values.shape[0]
 
-            image_flags=torch.tensor([1] * num_patches, dtype=torch.long).to(pixel_values.device)
+            image_flags = torch.tensor([1] * num_patches, dtype=torch.long).to(pixel_values.device)
 
             image_flags = image_flags.squeeze(-1)
 
@@ -600,16 +622,20 @@ class InternVL2_5ForConditionalGeneration(InternVL2_5PreTrainedModel, Generation
             inputs_embeds = inputs_embeds.reshape(B * N, C)
 
             if torch.distributed.is_initialized() and torch.distributed.get_rank() == 0:
-                print(f'dynamic ViT batch size: {vit_batch_size}, images per sample: {vit_batch_size / B}, dynamic token length: {N}')
+                print(
+                    f"dynamic ViT batch size: {vit_batch_size}, images per sample: {vit_batch_size / B}, dynamic token length: {N}"
+                )
 
             input_ids = input_ids.reshape(B * N)
-            selected = (input_ids == self.img_context_token_id)
+            selected = input_ids == self.img_context_token_id
             try:
                 inputs_embeds[selected] = inputs_embeds[selected] * 0.0 + vit_embeds.reshape(-1, C)
             except Exception as e:
                 vit_embeds = vit_embeds.reshape(-1, C)
-                print(f'warning: {e}, inputs_embeds[selected].shape={inputs_embeds[selected].shape}, '
-                    f'vit_embeds.shape={vit_embeds.shape}')
+                print(
+                    f"warning: {e}, inputs_embeds[selected].shape={inputs_embeds[selected].shape}, "
+                    f"vit_embeds.shape={vit_embeds.shape}"
+                )
                 n_token = selected.sum()
                 inputs_embeds[selected] = inputs_embeds[selected] * 0.0 + vit_embeds[:n_token]
                 ignore_flag = True
@@ -638,7 +664,7 @@ class InternVL2_5ForConditionalGeneration(InternVL2_5PreTrainedModel, Generation
             shift_labels = labels[..., 1:].contiguous()
             shift_weights = loss_weight[..., 1:].contiguous()
             # Flatten the tokens
-            loss_fct = CrossEntropyLoss(reduction='none')
+            loss_fct = CrossEntropyLoss(reduction="none")
             shift_logits = shift_logits.view(-1, self.language_model.config.vocab_size)
             shift_labels = shift_labels.view(-1)
             shift_weights = shift_weights.view(-1)
@@ -688,11 +714,12 @@ class InternVL2_5ForConditionalGeneration(InternVL2_5PreTrainedModel, Generation
         # N, W, H * scale, C // scale --> N, H * scale, W, C // scale
         x = x.permute(0, 2, 1, 3).contiguous()
         # N, H * scale, W, C // scale --> N, H * scale, W * scale, C // (scale ** 2)
-        x = x.view(n, int(h * scale_factor), int(w * scale_factor),
-                   int(c / (scale_factor * scale_factor)))
-        if self.ps_version == 'v1':
-            warnings.warn("In ps_version 'v1', the height and width have not been swapped back, "
-                          'which results in a transposed image.')
+        x = x.view(n, int(h * scale_factor), int(w * scale_factor), int(c / (scale_factor * scale_factor)))
+        if self.ps_version == "v1":
+            warnings.warn(
+                "In ps_version 'v1', the height and width have not been swapped back, "
+                "which results in a transposed image."
+            )
         else:
             x = x.permute(0, 2, 1, 3).contiguous()
         return x
@@ -700,14 +727,12 @@ class InternVL2_5ForConditionalGeneration(InternVL2_5PreTrainedModel, Generation
     def extract_feature(self, pixel_values):
         if self.select_layer == -1:
             vit_embeds = self.vision_model(
-                pixel_values=pixel_values,
-                output_hidden_states=False,
-                return_dict=True).last_hidden_state
+                pixel_values=pixel_values, output_hidden_states=False, return_dict=True
+            ).last_hidden_state
         else:
             vit_embeds = self.vision_model(
-                pixel_values=pixel_values,
-                output_hidden_states=True,
-                return_dict=True).hidden_states[self.select_layer]
+                pixel_values=pixel_values, output_hidden_states=True, return_dict=True
+            ).hidden_states[self.select_layer]
         vit_embeds = vit_embeds[:, 1:, :]
 
         h = w = int(vit_embeds.shape[1] ** 0.5)

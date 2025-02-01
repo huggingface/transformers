@@ -16,9 +16,9 @@ from transformers import (
 
 
 DTYPE2HF = {
-        torch.bfloat16: "bfloat16",
-        torch.float16: "float16",
-        torch.float32: "float32",
+    torch.bfloat16: "bfloat16",
+    torch.float16: "float16",
+    torch.float32: "float32",
 }
 
 
@@ -37,18 +37,14 @@ def compare_models(original_model, converted_model, processor, messages, image_u
 
     # Get predictions from converted model
     with torch.no_grad():
-        converted_outputs = converted_model.generate(
-            **inputs
-        )
-        converted_output = converted_outputs[0][len(inputs["input_ids"][0]):]
+        converted_outputs = converted_model.generate(**inputs)
+        converted_output = converted_outputs[0][len(inputs["input_ids"][0]) :]
         converted_result = processor.tokenizer.decode(converted_output, skip_special_tokens=True)
 
     inputs.pop("num_patches")
     # Get predictions from original model
     with torch.no_grad():
-        original_outputs = original_model.generate(
-            **inputs
-        )
+        original_outputs = original_model.generate(**inputs)
         original_result = processor.tokenizer.decode(original_outputs[0], skip_special_tokens=True)
 
     # Compare outputs
@@ -72,7 +68,7 @@ def convert_hf_config(model_name, output_dir, push_to_hub=False):
 
     image_size = internvl_config.force_image_size or internvl_config.vision_config.image_size
     patch_size = internvl_config.vision_config.patch_size
-    num_image_token = int((image_size // patch_size) ** 2 * (internvl_config.downsample_ratio ** 2))
+    num_image_token = int((image_size // patch_size) ** 2 * (internvl_config.downsample_ratio**2))
 
     hf_config = {
         "model_type": "internvl2_5",
@@ -101,21 +97,16 @@ def convert_hf_config(model_name, output_dir, push_to_hub=False):
             "_attn_implementation": "flash_attention_2" if internvl_config.vision_config.use_flash_attn else "eager",
         },
         "text_config": internvl_config.llm_config.to_dict(),
-
         "max_dynamic_patch": internvl_config.max_dynamic_patch,
         "min_dynamic_patch": internvl_config.min_dynamic_patch,
         "use_thumbnail": internvl_config.use_thumbnail,
         "dynamic_image_size": internvl_config.dynamic_image_size,
         "force_image_size": internvl_config.force_image_size,
-
         "pixel_shuffle_version": internvl_config.ps_version,
         "select_layer": internvl_config.select_layer,
         "downsample_ratio": internvl_config.downsample_ratio,
-
         "torch_dtype": DTYPE2HF[internvl_config.torch_dtype],
-
         "num_image_token": num_image_token,
-
         "bos_token_id": internvl_tokenizer.bos_token_id,
         "eos_token_id": internvl_tokenizer.eos_token_id,
         "image_token_id": internvl_tokenizer.convert_tokens_to_ids("<IMG_CONTEXT>"),
@@ -124,75 +115,61 @@ def convert_hf_config(model_name, output_dir, push_to_hub=False):
     }
 
     config = InternVL2_5Config(**hf_config)
-    model = InternVL2_5ForConditionalGeneration.from_pretrained(
-        hf_url,
-        config=config,
-        torch_dtype="auto"
-    ).eval().cuda()
+    model = (
+        InternVL2_5ForConditionalGeneration.from_pretrained(hf_url, config=config, torch_dtype="auto").eval().cuda()
+    )
 
     # Load original model
-    internvl_model = AutoModel.from_pretrained(
-        hf_url,
-        trust_remote_code=True,
-        torch_dtype="auto"
-    ).eval().cuda()
+    internvl_model = AutoModel.from_pretrained(hf_url, trust_remote_code=True, torch_dtype="auto").eval().cuda()
 
     internvl_model.img_context_token_id = model.config.image_token_id
-
 
     image_processor = InternVL2_5ImageProcessor(
         size={"height": image_size, "width": image_size},
         min_tiles=internvl_config.min_dynamic_patch,
         max_tiles=internvl_config.max_dynamic_patch,
         use_thumbnail=internvl_config.use_thumbnail,
-        num_image_token=num_image_token
+        num_image_token=num_image_token,
     )
 
     internvl_tokenizer.chat_template = (
         "{% set system_message = 'You are a helpful assistant.' %}"
         "{% if messages[0]['role'] == 'system' %}"
-            "{% set loop_messages = messages[1:] %}"
-            "{% set system_message = messages[0]['content'] %}"
+        "{% set loop_messages = messages[1:] %}"
+        "{% set system_message = messages[0]['content'] %}"
         "{% else %}"
-            "{% set loop_messages = messages %}"
+        "{% set loop_messages = messages %}"
         "{% endif %}"
         "{{ '<|im_start|>system\\n' + system_message + '<|im_end|>\\n' }}"
         "{% for message in loop_messages %}"
-            "{% set content = message['content'] %}"
-            "{% if message['role'] == 'user' %}"
-                "{% if content is iterable and content is sequence and content[0]['type'] == 'image' %}"
-                    "{{ '<|im_start|>user\\n<image>\\n' + content[1]['text'] + '<|im_end|>\\n<|im_start|>assistant\\n' }}"
-                "{% else %}"
-                    "{{ '<|im_start|>user\\n' + content + '<|im_end|>\\n<|im_start|>assistant\\n' }}"
-                "{% endif %}"
-            "{% elif message['role'] == 'assistant' %}"
-                "{% if content is iterable and content is sequence %}"
-                    "{% for part in content %}"
-                        "{% if part['type'] == 'text' %}"
-                            "{{ part['text'] }}"
-                        "{% endif %}"
-                    "{% endfor %}"
-                    "{{ '<|im_end|>\\n' }}"
-                "{% else %}"
-                    "{{ content + '<|im_end|>\\n' }}"
-                "{% endif %}"
-            "{% endif %}"
+        "{% set content = message['content'] %}"
+        "{% if message['role'] == 'user' %}"
+        "{% if content is iterable and content is sequence and content[0]['type'] == 'image' %}"
+        "{{ '<|im_start|>user\\n<image>\\n' + content[1]['text'] + '<|im_end|>\\n<|im_start|>assistant\\n' }}"
+        "{% else %}"
+        "{{ '<|im_start|>user\\n' + content + '<|im_end|>\\n<|im_start|>assistant\\n' }}"
+        "{% endif %}"
+        "{% elif message['role'] == 'assistant' %}"
+        "{% if content is iterable and content is sequence %}"
+        "{% for part in content %}"
+        "{% if part['type'] == 'text' %}"
+        "{{ part['text'] }}"
+        "{% endif %}"
+        "{% endfor %}"
+        "{{ '<|im_end|>\\n' }}"
+        "{% else %}"
+        "{{ content + '<|im_end|>\\n' }}"
+        "{% endif %}"
+        "{% endif %}"
         "{% endfor %}"
     )
 
     processor = InternVL2_5Processor(
-        image_processor=image_processor,
-        tokenizer=internvl_tokenizer,
-        chat_template=internvl_tokenizer.chat_template
+        image_processor=image_processor, tokenizer=internvl_tokenizer, chat_template=internvl_tokenizer.chat_template
     )
 
     # Compare models before saving
-    messages = [
-        {
-            "role": "user",
-            "content": "<image>\nWhat kind of dog is this?"
-        }
-    ]
+    messages = [{"role": "user", "content": "<image>\nWhat kind of dog is this?"}]
     image_url = "https://qianwen-res.oss-accelerate-overseas.aliyuncs.com/Qwen2-VL/demo_small.jpg"
 
     print("\nComparing model outputs before saving...")
@@ -229,7 +206,7 @@ if __name__ == "__main__":
         "InternVL2_5-8B",
         "InternVL2_5-4B",
         "InternVL2_5-2B",
-        "InternVL2_5-1B"
+        "InternVL2_5-1B",
     ]
 
     parser.add_argument(

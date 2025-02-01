@@ -13,6 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Testing suite for the PyTorch Llava-NeXT model."""
+
 import gc
 import unittest
 
@@ -88,7 +89,7 @@ class InternVL2_5VisionText2TextModelTester:
             "num_labels": 3,
             "num_choices": 4,
             "pad_token_id": 2,
-            "image_token_id": 3
+            "image_token_id": 3,
         },
         is_training=True,
         vision_config={
@@ -153,7 +154,7 @@ class InternVL2_5VisionText2TextModelTester:
 
         # input_ids[:, -1] = self.pad_token_id
         input_ids[input_ids == self.image_token_id] = self.pad_token_id
-        input_ids[:, 1:self.num_image_tokens + 1] = self.image_token_id
+        input_ids[:, 1 : self.num_image_tokens + 1] = self.image_token_id
         labels = torch.zeros(
             (self.batch_size, self.seq_length),
             dtype=torch.long,
@@ -207,6 +208,7 @@ class InternVL2_5ForConditionalGenerationModelTest(ModelTesterMixin, GenerationT
     """
     Model tester for `InternVL2_5ForConditionalGeneration`.
     """
+
     all_model_classes = (InternVL2_5ForConditionalGeneration,) if is_torch_available() else ()
     all_generative_model_classes = (InternVL2_5ForConditionalGeneration,) if is_torch_available() else ()
     test_pruning = False
@@ -295,14 +297,32 @@ class InternVL2_5ForConditionalGenerationIntegrationTest(unittest.TestCase):
         text = self.processor.apply_chat_template(self.messages, tokenize=False, add_generation_prompt=True)
         inputs = self.processor(text=[text], images=[self.image], return_tensors="pt")
 
-        expected_input_ids = [151644, 8948, 198, 2610, 525, 264, 10950, 17847, 13, 151645, 198, 151644, 872, 198, 151665, 151667, 151667]
+        expected_input_ids = [
+            151644,
+            8948,
+            198,
+            2610,
+            525,
+            264,
+            10950,
+            17847,
+            13,
+            151645,
+            198,
+            151644,
+            872,
+            198,
+            151665,
+            151667,
+            151667,
+        ]
         assert expected_input_ids == inputs.input_ids[0].tolist()[:17]
 
         # verify generation
         inputs = inputs.to(torch_device, torch.bfloat16)
 
         output = model.generate(**inputs, max_new_tokens=30)
-        EXPECTED_DECODED_TEXT = 'system\nYou are a helpful assistant.\nuser\n\nWhat kind of dog is this?\nassistant\nThis is a Labrador Retriever.'
+        EXPECTED_DECODED_TEXT = "system\nYou are a helpful assistant.\nuser\n\nWhat kind of dog is this?\nassistant\nThis is a Labrador Retriever."
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
@@ -350,8 +370,8 @@ class InternVL2_5ForConditionalGenerationIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30)
 
         EXPECTED_DECODED_TEXT = [
-            'system\nYou are a helpful assistant.\nuser\n\nWhat kind of dog is this?\nassistant\nThis is a Labrador Retriever.',
-            'system\nYou are a helpful assistant.\nuser\n\nWhat kind of dog is this?\nassistant\nThe dog in the image appears to be a Labrador Retriever. Labrador Retrievers are known for their friendly and outgoing personalities, making them popular pets',
+            "system\nYou are a helpful assistant.\nuser\n\nWhat kind of dog is this?\nassistant\nThis is a Labrador Retriever.",
+            "system\nYou are a helpful assistant.\nuser\n\nWhat kind of dog is this?\nassistant\nThe dog in the image appears to be a Labrador Retriever. Labrador Retrievers are known for their friendly and outgoing personalities, making them popular pets",
         ]
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
@@ -377,8 +397,8 @@ class InternVL2_5ForConditionalGenerationIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30)
 
         EXPECTED_DECODED_TEXT = [
-            'system\nYou are a helpful assistant.\nuser\n\nWhat kind of dog is this?\nassistant\nThis is a Labrador Retriever.',
-            'system\nYou are a helpful assistant.\nuser\n\nWhat kind of dog is this?\nassistant\nThis is a Labrador Retriever.',
+            "system\nYou are a helpful assistant.\nuser\n\nWhat kind of dog is this?\nassistant\nThis is a Labrador Retriever.",
+            "system\nYou are a helpful assistant.\nuser\n\nWhat kind of dog is this?\nassistant\nThis is a Labrador Retriever.",
         ]
 
         self.assertEqual(

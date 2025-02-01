@@ -82,7 +82,6 @@ class InternVL2_5ImageProcessingTester:
     def expected_output_image_shape(self, images):
         return self.num_channels, self.size["height"], self.size["width"]
 
-    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTester.prepare_image_inputs
     def prepare_image_inputs(self, equal_resolution=False, numpify=False, torchify=False):
         return prepare_image_inputs(
             batch_size=self.batch_size,
@@ -100,13 +99,11 @@ class InternVL2_5ImageProcessingTester:
 class InternVL2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = InternVL2_5ImageProcessor if is_vision_available() else None
 
-    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.setUp with CLIP->LlavaOnevision
     def setUp(self):
         super().setUp()
         self.image_processor_tester = InternVL2_5ImageProcessingTester(self)
 
     @property
-    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.image_processor_dict
     def image_processor_dict(self):
         return self.image_processor_tester.prepare_image_processor_dict()
 
@@ -209,14 +206,14 @@ class InternVL2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         image_processing = self.image_processing_class(**self.image_processor_dict)
 
         # Create a test image with known dimensions
-        test_image = Image.new('RGB', (100, 50))  # 2:1 aspect ratio
+        test_image = Image.new("RGB", (100, 50))  # 2:1 aspect ratio
 
         tiles = dynamic_preprocess(
             test_image,
             self.image_processor_tester.min_tiles,
             self.image_processor_tester.max_tiles,
             self.image_processor_tester.dynamic_size["height"],
-            self.image_processor_tester.use_thumbnail
+            self.image_processor_tester.use_thumbnail,
         )
 
         # Test tiling with default settings
@@ -230,8 +227,11 @@ class InternVL2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         min_num = self.image_processor_tester.min_tiles
         max_num = self.image_processor_tester.max_tiles
         target_ratios = set(
-            (i, j) for n in range(min_num, max_num + 1) for i in range(1, n + 1) for j in range(1, n + 1) if
-            i * j <= max_num and i * j >= min_num
+            (i, j)
+            for n in range(min_num, max_num + 1)
+            for i in range(1, n + 1)
+            for j in range(1, n + 1)
+            if i * j <= max_num and i * j >= min_num
         )
 
         # Test with various aspect ratios
@@ -242,9 +242,7 @@ class InternVL2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         ]
 
         for aspect_ratio, width, height, image_size in test_cases:
-            result = find_closest_aspect_ratio(
-                aspect_ratio, target_ratios, width, height, image_size
-            )
+            result = find_closest_aspect_ratio(aspect_ratio, target_ratios, width, height, image_size)
             self.assertIsInstance(result, tuple)
             self.assertEqual(len(result), 2)
             self.assertTrue(result[0] * result[1] <= max_num)
@@ -252,37 +250,29 @@ class InternVL2_5ImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
 
     def test_thumbnail_generation(self):
         # Test with thumbnail enabled
-        image_processing_with_thumbnail = self.image_processing_class(
-            **self.image_processor_dict,
-            use_thumbnail=True
-        )
+        image_processing_with_thumbnail = self.image_processing_class(**self.image_processor_dict, use_thumbnail=True)
 
         # Create test image that will generate multiple tiles
-        test_image = Image.new('RGB', (200, 100))  # 2:1 aspect ratio
+        test_image = Image.new("RGB", (200, 100))  # 2:1 aspect ratio
 
         tiles_with_thumb = image_processing_with_thumbnail(test_image, return_tensors="pt").pixel_values
 
         # Test with thumbnail disabled
         image_processing_without_thumbnail = self.image_processing_class(
-            **self.image_processor_dict,
-            use_thumbnail=False
+            **self.image_processor_dict, use_thumbnail=False
         )
         tiles_no_thumb = image_processing_without_thumbnail(test_image, return_tensors="pt").pixel_values
         self.assertEqual(tiles_with_thumb.shape[0], tiles_no_thumb.shape[0] + 1)
 
     def test_tile_count_limits(self):
         # Test with custom min/max tile settings
-        image_processing = self.image_processing_class(
-            **self.image_processor_dict,
-            min_tiles=2,
-            max_tiles=4
-        )
+        image_processing = self.image_processing_class(**self.image_processor_dict, min_tiles=2, max_tiles=4)
 
         # Test images with different dimensions
         test_cases = [
-            Image.new('RGB', (100, 100)),  # Square
-            Image.new('RGB', (200, 100)),  # Landscape
-            Image.new('RGB', (100, 200)),  # Portrait
+            Image.new("RGB", (100, 100)),  # Square
+            Image.new("RGB", (200, 100)),  # Landscape
+            Image.new("RGB", (100, 200)),  # Portrait
         ]
 
         for test_image in test_cases:

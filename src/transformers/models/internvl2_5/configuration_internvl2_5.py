@@ -12,7 +12,6 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-
 class InternVL2_5VisionConfig(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`InternVisionModel`]. It is used to
@@ -59,29 +58,29 @@ class InternVL2_5VisionConfig(PretrainedConfig):
             A factor for layer scale.
     """
 
-    model_type = 'internvl2_5'
+    model_type = "internvl2_5"
     base_config_key = "vision_config"
 
     def __init__(
-            self,
-            num_channels=3,
-            patch_size=14,
-            image_size=224,
-            qkv_bias=False,
-            hidden_size=3200,
-            num_attention_heads=25,
-            intermediate_size=12800,
-            qk_normalization=True,
-            num_hidden_layers=48,
-            hidden_act='gelu',
-            norm_type='rms_norm',
-            layer_norm_eps=1e-6,
-            dropout=0.0,
-            drop_path_rate=0.0,
-            attention_dropout=0.0,
-            initializer_range=0.02,
-            initializer_factor=0.1,
-            **kwargs,
+        self,
+        num_channels=3,
+        patch_size=14,
+        image_size=224,
+        qkv_bias=False,
+        hidden_size=3200,
+        num_attention_heads=25,
+        intermediate_size=12800,
+        qk_normalization=True,
+        num_hidden_layers=48,
+        hidden_act="gelu",
+        norm_type="rms_norm",
+        layer_norm_eps=1e-6,
+        dropout=0.0,
+        drop_path_rate=0.0,
+        attention_dropout=0.0,
+        initializer_range=0.02,
+        initializer_factor=0.1,
+        **kwargs,
     ):
         super().__init__(**kwargs)
 
@@ -109,26 +108,24 @@ class InternVL2_5Config(PretrainedConfig):
     sub_configs = {"vision_config": InternVL2_5VisionConfig, "text_config": AutoConfig}
 
     def __init__(
-            self,
-            vision_config=None,
-            text_config=None,
-            select_layer=-1,
-            hidden_size=None,
-            force_image_size=None,
-            downsample_ratio=0.5,
-            dynamic_image_size=False,
-            use_thumbnail=False,
-            pixel_shuffle_version='v1',  # pixel_shuffle_version
-            min_dynamic_patch=1,
-            max_dynamic_patch=6,
-            tie_word_embeddings=False,
-            image_token_id=151667,
-            image_start_token_id=151665,
-            image_end_token_id=151666,
-            **kwargs
-        ):
-
-
+        self,
+        vision_config=None,
+        text_config=None,
+        select_layer=-1,
+        hidden_size=None,
+        force_image_size=None,
+        downsample_ratio=0.5,
+        dynamic_image_size=False,
+        use_thumbnail=False,
+        pixel_shuffle_version="v1",  # pixel_shuffle_version
+        min_dynamic_patch=1,
+        max_dynamic_patch=6,
+        tie_word_embeddings=False,
+        image_token_id=151667,
+        image_start_token_id=151665,
+        image_end_token_id=151666,
+        **kwargs,
+    ):
         if isinstance(vision_config, dict):
             self.vision_config = InternVL2_5VisionConfig(**vision_config)
         else:

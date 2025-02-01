@@ -25,12 +25,10 @@ from ...utils import TensorType, logging
 logger = logging.get_logger(__name__)
 
 
-
 def find_closest_aspect_ratio(aspect_ratio, target_ratios, width, height, image_size):
-
     target_ratios = sorted(target_ratios, key=lambda x: x[0] * x[1])
 
-    best_ratio_diff = float('inf')
+    best_ratio_diff = float("inf")
     best_ratio = (1, 1)
     area = width * height
     for ratio in target_ratios:
@@ -52,13 +50,15 @@ def dynamic_preprocess(image, min_num=1, max_num=6, image_size=448, use_thumbnai
 
     # calculate the existing image aspect ratio
     target_ratios = set(
-        (i, j) for n in range(min_num, max_num + 1) for i in range(1, n + 1) for j in range(1, n + 1) if
-        i * j <= max_num and i * j >= min_num)
+        (i, j)
+        for n in range(min_num, max_num + 1)
+        for i in range(1, n + 1)
+        for j in range(1, n + 1)
+        if i * j <= max_num and i * j >= min_num
+    )
 
     # find the closest aspect ratio to the target
-    target_aspect_ratio = find_closest_aspect_ratio(
-        aspect_ratio, target_ratios, orig_width, orig_height, image_size
-    )
+    target_aspect_ratio = find_closest_aspect_ratio(aspect_ratio, target_ratios, orig_width, orig_height, image_size)
 
     # calculate the target width and height
     target_width = image_size * target_aspect_ratio[0]
@@ -73,7 +73,7 @@ def dynamic_preprocess(image, min_num=1, max_num=6, image_size=448, use_thumbnai
             (i % (target_width // image_size)) * image_size,
             (i // (target_width // image_size)) * image_size,
             ((i % (target_width // image_size)) + 1) * image_size,
-            ((i // (target_width // image_size)) + 1) * image_size
+            ((i // (target_width // image_size)) + 1) * image_size,
         )
         # split the image
         split_img = resized_img.crop(box)
@@ -125,7 +125,7 @@ class InternVL2_5ImageProcessor(BaseImageProcessor):
         dynamic_size: Dict[str, int] = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
-        rescale_factor: float = 1/255,
+        rescale_factor: float = 1 / 255,
         do_normalize: bool = True,
         image_mean: Optional[Union[float, List[float]]] = None,
         image_std: Optional[Union[float, List[float]]] = None,
@@ -134,7 +134,7 @@ class InternVL2_5ImageProcessor(BaseImageProcessor):
         max_tiles: int = 12,
         use_thumbnail: bool = True,
         num_image_token: int = 256,
-        **kwargs
+        **kwargs,
     ) -> None:
         super().__init__(**kwargs)
         self.do_resize = do_resize
@@ -207,15 +207,11 @@ class InternVL2_5ImageProcessor(BaseImageProcessor):
         if do_convert_rgb:
             images = [convert_to_rgb(image) for image in images]
 
-
         # Convert to PIL Image for tiling
         images = [
-            Image.fromarray(
-                to_channel_dimension_format(
-                    to_numpy_array(image),
-                    ChannelDimension.LAST
-                )
-            ) if not isinstance(image, Image.Image) else image
+            Image.fromarray(to_channel_dimension_format(to_numpy_array(image), ChannelDimension.LAST))
+            if not isinstance(image, Image.Image)
+            else image
             for image in images
         ]
 
@@ -228,7 +224,7 @@ class InternVL2_5ImageProcessor(BaseImageProcessor):
                 min_num=self.min_tiles,
                 max_num=self.max_tiles,
                 use_thumbnail=self.use_thumbnail,
-                image_size=dynamic_size["height"]  # Assuming square tiles
+                image_size=dynamic_size["height"],  # Assuming square tiles
             )
             tiled_images.extend(tiles)
             num_tiles.append(len(tiles))
@@ -247,7 +243,7 @@ class InternVL2_5ImageProcessor(BaseImageProcessor):
                 resize(
                     image=image,
                     size=(size["height"], size["width"]),
-                    resample=resample.value if hasattr(resample, 'value') else resample,
+                    resample=resample.value if hasattr(resample, "value") else resample,
                     data_format=ChannelDimension.FIRST,
                     input_data_format=ChannelDimension.FIRST,
                 )
@@ -260,7 +256,7 @@ class InternVL2_5ImageProcessor(BaseImageProcessor):
                     image=image,
                     scale=rescale_factor,
                     data_format=ChannelDimension.FIRST,
-                    input_data_format=ChannelDimension.FIRST
+                    input_data_format=ChannelDimension.FIRST,
                 )
                 for image in tiled_images
             ]
@@ -272,14 +268,15 @@ class InternVL2_5ImageProcessor(BaseImageProcessor):
                     mean=image_mean,
                     std=image_std,
                     data_format=ChannelDimension.FIRST,
-                    input_data_format=ChannelDimension.FIRST
+                    input_data_format=ChannelDimension.FIRST,
                 )
                 for image in tiled_images
             ]
 
         tiled_images = [
             to_channel_dimension_format(image, data_format, ChannelDimension.FIRST)
-            if data_format != ChannelDimension.FIRST else image
+            if data_format != ChannelDimension.FIRST
+            else image
             for image in tiled_images
         ]
 

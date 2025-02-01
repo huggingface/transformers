@@ -44,7 +44,8 @@ class InternVL2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         tokenizer = Qwen2TokenizerFast.from_pretrained("InternVL2_5-4B")
 
         processor = InternVL2_5Processor(
-            image_processor=image_processor, tokenizer=tokenizer,
+            image_processor=image_processor,
+            tokenizer=tokenizer,
         )
         processor.save_pretrained(self.tmpdirname)
 
@@ -79,10 +80,7 @@ class InternVL2_5ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         expected_prompt = "<|im_start|>user\n<image>\nWhat is shown in this image?<|im_end|>\n<|im_start|>assistant\n"
 
         messages = [
-            {
-                "role": "user",
-                "content": "<image>\nWhat is shown in this image?"
-            },
+            {"role": "user", "content": "<image>\nWhat is shown in this image?"},
         ]
 
         formatted_prompt = processor.apply_chat_template(messages, add_generation_prompt=True)
