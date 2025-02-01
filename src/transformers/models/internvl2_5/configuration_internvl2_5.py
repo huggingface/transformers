@@ -63,7 +63,6 @@ class InternVL2_5VisionConfig(PretrainedConfig):
 
     def __init__(
         self,
-        num_channels=3,
         patch_size=14,
         image_size=224,
         qkv_bias=False,
@@ -90,7 +89,6 @@ class InternVL2_5VisionConfig(PretrainedConfig):
         self.drop_path_rate = drop_path_rate
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.num_channels = num_channels
         self.patch_size = patch_size
         self.image_size = image_size
         self.initializer_range = initializer_range
@@ -104,6 +102,40 @@ class InternVL2_5VisionConfig(PretrainedConfig):
 
 
 class InternVL2_5Config(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`InternVL2_5ForConditionalGeneration`]. It is used to instantiate an
+    InternVL2.5 model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the [OpenGVLab/InternVL2_5-7B](https://huggingface.co/OpenGVLab/InternVL2_5-7B)
+    model.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        vision_config (`Union[AutoConfig, dict]`, *optional*):
+            The config object or dictionary of the vision backbone.
+        text_config (`Union[AutoConfig, dict]`, *optional*):
+            The config object or dictionary of the text backbone.
+        select_layer (`int`, *optional*, defaults to -1):
+            The index of the layer to select features from.
+        hidden_size (`int`, *optional*):
+            Size of the hidden states.
+        force_image_size (`int`, *optional*):
+            Force image size.
+        downsample_ratio (`float`, *optional*, defaults to 0.5):
+            Ratio to downsample image features.
+        pixel_shuffle_version (`str`, *optional*, defaults to `"v1"`):
+            Pixel shuffle version.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether the model's input and output word embeddings should be tied.
+        image_token_id (`int`, *optional*, defaults to 151667):
+            The image token id.
+        image_start_token_id (`int`, *optional*, defaults to 151665):
+            The image start token id.
+        image_end_token_id (`int`, *optional*, defaults to 151666):
+            The image end token id.
+    """
+
     model_type = "internvl2_5"
     sub_configs = {"vision_config": InternVL2_5VisionConfig, "text_config": AutoConfig}
 
@@ -115,11 +147,7 @@ class InternVL2_5Config(PretrainedConfig):
         hidden_size=None,
         force_image_size=None,
         downsample_ratio=0.5,
-        dynamic_image_size=False,
-        use_thumbnail=False,
         pixel_shuffle_version="v1",  # pixel_shuffle_version
-        min_dynamic_patch=1,
-        max_dynamic_patch=6,
         tie_word_embeddings=False,
         image_token_id=151667,
         image_start_token_id=151665,
@@ -145,11 +173,7 @@ class InternVL2_5Config(PretrainedConfig):
         self.select_layer = select_layer
         self.force_image_size = force_image_size
         self.downsample_ratio = downsample_ratio
-        self.dynamic_image_size = dynamic_image_size
-        self.use_thumbnail = use_thumbnail
         self.pixel_shuffle_version = pixel_shuffle_version  # pixel shuffle version
-        self.min_dynamic_patch = min_dynamic_patch
-        self.max_dynamic_patch = max_dynamic_patch
 
         self.hidden_size = hidden_size or self.text_config.hidden_size
 

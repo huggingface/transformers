@@ -514,7 +514,7 @@ class InternVL2_5VisionModel(InternVL2_5PreTrainedModel):
 class InternVL2_5ForConditionalGeneration(InternVL2_5PreTrainedModel, GenerationMixin):
     def __init__(self, config: InternVL2_5Config):
         super().__init__(config)
-
+        image_size = config.force_image_size or config.vision_config.image_size
         self.patch_size = config.vision_config.patch_size
         self.select_layer = config.select_layer
         self.downsample_ratio = config.downsample_ratio
@@ -549,6 +549,7 @@ class InternVL2_5ForConditionalGeneration(InternVL2_5PreTrainedModel, Generation
         )
         self.img_context_token_id = config.image_token_id
         self.num_samples = 0
+        self.num_image_token = int((image_size // self.patch_size) ** 2 * (self.downsample_ratio**2))
 
         self.post_init()
 

@@ -94,7 +94,8 @@ class InternVL2_5ImageProcessor(BaseImageProcessor):
             Whether to resize the image's (height, width) dimensions to the specified size.
         size (`Dict[str, int]` *optional*, defaults to `{"height": 448, "width": 448}`):
             Size of output image after resizing.
-        dynamic_size (`Dict`, *optional*): <fill_docstring>
+        dynamic_size (`Dict`, *optional*):
+            Size of output image after dynamic tiling.
         resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
             Resampling filter to use if resizing the image.
         do_rescale (`bool`, *optional*, defaults to `True`):
@@ -115,7 +116,10 @@ class InternVL2_5ImageProcessor(BaseImageProcessor):
             Maximum number of tiles to split image into.
         use_thumbnail (`bool`, *optional*, defaults to `True`):
             Whether to include a thumbnail of the full image in addition to tiles.
-        num_image_token (`int`, *optional*, defaults to 256): <fill_docstring>
+        patch_size (`int`, *optional*, defaults to 14):
+            The size (resolution) of each patch.
+        downsample_ratio (`float`, *optional*, defaults to 0.5):
+            The downsample ratio for dynamic tiling.
     """
 
     model_input_names = ["pixel_values"]
@@ -135,7 +139,8 @@ class InternVL2_5ImageProcessor(BaseImageProcessor):
         min_tiles: int = 1,
         max_tiles: int = 12,
         use_thumbnail: bool = True,
-        num_image_token: int = 256,
+        patch_size: int = 14,
+        downsample_ratio: float = 0.5,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -154,7 +159,9 @@ class InternVL2_5ImageProcessor(BaseImageProcessor):
         self.image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
         self.do_convert_rgb = do_convert_rgb
 
-        self.num_image_token = num_image_token
+        self.patch_size = patch_size
+        self.downsample_ratio = downsample_ratio
+        self.num_image_token = int((dynamic_size // self.patch_size) ** 2 * (self.downsample_ratio**2))
         self.min_tiles = min_tiles
         self.max_tiles = max_tiles
         self.use_thumbnail = use_thumbnail
