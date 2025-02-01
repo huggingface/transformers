@@ -343,7 +343,9 @@ class MiniMaxText01LightningAttention(nn.Module):
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
-        kv_cache = past_key_value.get_kv_cache(self.layer_idx)
+        kv_cache = None
+        if past_key_value is not None:
+            kv_cache = past_key_value.get_kv_cache(self.layer_idx)
 
         if kv_cache is None:
             kv_cache = torch.zeros(batch_size, self.num_heads, 1, self.head_dim, self.head_dim).to(value_states)
@@ -402,7 +404,8 @@ class MiniMaxText01LightningAttention(nn.Module):
         attn_output = self.out_proj(attn_output)
 
         # update cache
-        past_key_value.set_kv_cache(kv_cache, self.layer_idx)
+        if past_key_value is not None:
+            past_key_value.set_kv_cache(kv_cache, self.layer_idx)
 
         # TODO: remove these
         print()
@@ -653,13 +656,6 @@ class MiniMaxText01ForCausalLM(MixtralForCausalLM):
     def __init__(self, config):
         super().__init__(config)
         self.model = MiniMaxText01Model(config)
-
-    def _prepare_cache_for_generation(
-            self, generation_config, model_kwargs, assistant_model, batch_size, max_cache_length, device
-        ):
-        if model_kwargs.get("past_key_values") is None:
-            model_kwargs["past_key_values"] = MiniMaxText01Cache()
-        super()._prepare_cache_for_generation(generation_config, model_kwargs, assistant_model, batch_size, max_cache_length, device)
 
 
 class MiniMaxText01ForSequenceClassification(MixtralForSequenceClassification):
