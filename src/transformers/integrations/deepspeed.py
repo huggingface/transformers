@@ -581,7 +581,7 @@ class _VocabSequenceParallelCrossEntropy(torch.autograd.Function):
         ignore_mask = target.view(-1) == ctx.ignore_index
         grad_2d[arange_1d[~ignore_mask], target.view(-1)[~ignore_mask]] -= 1
         grad_input.mul_(grad_output_part)
-        grad_2d[ignore_mask.view(-1), :] = 0
+        grad_2d[arange_1d[ignore_mask], :] = 0
         return grad_input, None, None, None, None
 
 
