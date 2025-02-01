@@ -44,7 +44,7 @@ if is_vision_available():
     from PIL import Image
 
 
-CHECKPOINT = "jadechoghari/rtdetr_v2_r18vd"
+CHECKPOINT = "PekingU/rtdetr_v2_r18vd"
 
 
 class RtDetrV2ModelTester:
