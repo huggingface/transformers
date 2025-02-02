@@ -13,6 +13,9 @@
 # limitations under the License.
 
 import os
+import subprocess
+import tempfile
+import textwrap
 
 from transformers import is_torch_available
 from transformers.models.llama.configuration_llama import LlamaConfig
@@ -30,6 +33,22 @@ if is_torch_available():
 
 
 class TestTensorParallel(TestCasePlus):
+    def torchrun(self, script: str):
+        """Run the `script` using `torchrun` command for multi-processing in a subprocess. Captures errors as necesary."""
+        with tempfile.NamedTemporaryFile(mode="w+", suffix=".py") as tmp:
+            tmp.write(script)
+            tmp.flush()
+            tmp.seek(0)
+            cmd = (
+                f"torchrun --nproc_per_node {torch.cuda.device_count()} --master_port {get_torch_dist_unique_port()} {tmp.name}"
+            ).split()
+
+            # Note that the subprocess will be waited for here, and raise an error if not successful
+            try:
+                _ = subprocess.run(cmd, capture_output=True, env=self.get_env(), text=True, check=True)
+            except subprocess.CalledProcessError as e:
+                raise Exception(f"The following error was captured: {e.stderr}")
+
     @require_torch_multi_gpu
     def test_tp(self):
         distributed_args = f"""--nproc_per_node={torch.cuda.device_count()}
@@ -42,6 +61,42 @@ class TestTensorParallel(TestCasePlus):
         print(cmd)
         execute_subprocess_async(cmd, env=self.get_env())
         # successful return here == success - any errors would have caused an error in the sub-call
+
+    @require_torch_multi_gpu
+    def test_loading_memory_consumption(self):
+        script_to_run = textwrap.dedent(
+            """
+            import torch
+            import os
+            from transformers import AutoModelForCausalLM
+
+            model_id = "meta-llama/Meta-Llama-3-8B-Instruct"
+
+            rank = int(os.environ["RANK"])
+            world_size = int(os.environ["WORLD_SIZE"])
+            device = torch.device(f"cuda:{rank}")
+            torch.distributed.init_process_group("nccl", device_id=device)
+
+            model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float16, tp_plan="auto")
+            torch.distributed.barrier()
+
+            # The expected full model memory footprint
+            expected_model_memory = 16
+            overhead_factor = 1.2
+
+            # Assert we did not use more than the full model expected memory (with some overhead)
+            if not torch.cuda.max_memory_allocated(device) / 1024**3 < expected_model_memory * overhead_factor:
+                raise ValueError("Loading the model used more than the full model size")
+
+            # Assert we correctly handled the sharding between devices
+            if not torch.cuda.memory_allocated(device) / 1024**3 < (expected_model_memory / world_size) * overhead_factor:
+                raise ValueError("Each model shard is larger than what is expected.")
+
+            torch.distributed.barrier()
+            torch.distributed.destroy_process_group()
+            """
+        )
+        self.torchrun(script_to_run)
 
 
 if __name__ == "__main__":

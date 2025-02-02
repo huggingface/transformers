@@ -230,6 +230,9 @@ class Phi3RotaryEmbedding(MistralRotaryEmbedding):
                 )
             self.register_buffer("inv_freq", self.long_inv_freq, persistent=False)
         else:
+            # This .to() is needed if the model has been moved to a device after being initialized (because
+            # the buffer is automatically moved, but not the original copy)
+            self.original_inv_freq = self.original_inv_freq.to(device)
             self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
 
     @torch.no_grad()
@@ -272,7 +275,7 @@ class Phi3ForCausalLM(MistralForCausalLM, Phi3PreTrainedModel):
         cache_position=None,
         position_ids=None,
         use_cache=True,
-        num_logits_to_keep=None,
+        logits_to_keep=None,
         **kwargs,
     ):
         # Overwritten -- this model may need to switch between short and long rope, invalidating the cache in the
@@ -297,7 +300,7 @@ class Phi3ForCausalLM(MistralForCausalLM, Phi3PreTrainedModel):
             cache_position=cache_position,
             position_ids=position_ids,
             use_cache=use_cache,
-            num_logits_to_keep=num_logits_to_keep,
+            logits_to_keep=logits_to_keep,
             **kwargs,
         )
         return model_inputs

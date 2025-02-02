@@ -28,6 +28,7 @@ from ...image_utils import (
     PILImageResampling,
     get_image_size,
     infer_channel_dimension_format,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -45,6 +46,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ...utils.import_utils import is_torch_available
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel, AutoModelForCausalLM, AutoTokenizer
 from ..llama.configuration_llama import LlamaConfig
@@ -57,7 +59,7 @@ from ..llama.modeling_llama import (
     LlamaRMSNorm,
 )
 from ..llava.modeling_llava import LlavaCausalLMOutputWithPast
-from ..llava_next.image_processing_llava_next import divide_to_patches, make_batched_images
+from ..llava_next.image_processing_llava_next import divide_to_patches
 
 
 logger = logging.get_logger(__name__)
@@ -608,7 +610,7 @@ class AriaImageProcessor(BaseImageProcessor):
         if max_image_size not in [490, 980]:
             raise ValueError("max_image_size must be either 490 or 980")
 
-        images = make_batched_images(images)
+        images = make_flat_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(
@@ -1222,6 +1224,9 @@ class AriaTextPreTrainedModel(PreTrainedModel):
 
 
 class AriaPreTrainedModel(LlamaPreTrainedModel):
+    _supports_static_cache = False  # MoE models don't work with torch.compile (dynamic slicing)
+    _supports_attention_backend = False
+
     def _init_weights(self, module):
         std = self.config.initializer_range
         if isinstance(module, nn.Linear):
@@ -1301,8 +1306,9 @@ ARIA_INPUTS_DOCSTRING = r"""
             Whether to output hidden states.
         return_dict (`bool`, *optional*):
             Whether to return a `ModelOutput` object.
-        num_logits_to_keep (`int`, *optional*, defaults to 0):
-            Calculate logits for the last `num_logits_to_keep` tokens, or all `input_ids` if `0`.
+        logits_to_keep (`int` or `torch.Tensor`, *optional*, defaults to 0):
+            If an `int`, calculate logits for the last `logits_to_keep` tokens, or all `input_ids` if `0`.
+            Otherwise, slice according to the 1D tensor in the sequence length dimension
         cache_position (`torch.LongTensor`, *optional*):
             Cache positions.
         **loss_kwargs:
@@ -1337,6 +1343,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
     config_class = AriaConfig
     _supports_flash_attn_2 = False
     _supports_sdpa = False
+    _tied_weights_keys = ["language_model.lm_head.weight"]
 
     def __init__(self, config: AriaConfig):
         super().__init__(config)
@@ -1383,9 +1390,6 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.language_model.get_decoder()
 
-    def tie_weights(self):
-        return self.language_model.tie_weights()
-
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -1405,6 +1409,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         image_features = self.multi_modal_projector(selected_image_feature, attn_mask=image_attn_mask)
         return image_features
 
+    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(ARIA_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=AriaCausalLMOutputWithPast, config_class=AriaConfig)
     def forward(
@@ -1421,7 +1426,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        num_logits_to_keep: int = 0,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         cache_position: Optional[torch.LongTensor] = None,
         **loss_kwargs,
     ) -> Union[Tuple, AriaCausalLMOutputWithPast]:
@@ -1531,7 +1536,8 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            num_logits_to_keep=num_logits_to_keep,
+            logits_to_keep=logits_to_keep,
+            cache_position=cache_position,
         )
 
         logits = outputs[0]
@@ -1563,7 +1569,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
         pixel_mask=None,
         attention_mask=None,
         cache_position=None,
-        num_logits_to_keep=None,
+        logits_to_keep=None,
         **kwargs,
     ):
         model_inputs = self.language_model.prepare_inputs_for_generation(
@@ -1572,7 +1578,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             attention_mask=attention_mask,
             cache_position=cache_position,
-            num_logits_to_keep=num_logits_to_keep,
+            logits_to_keep=logits_to_keep,
             **kwargs,
         )
 

@@ -395,6 +395,9 @@ class MimiRotaryEmbedding(nn.Module):
             self.max_seq_len_cached = seq_len
 
         if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
+            # This .to() is needed if the model has been moved to a device after being initialized (because
+            # the buffer is automatically moved, but not the original copy)
+            self.original_inv_freq = self.original_inv_freq.to(device)
             self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
             self.max_seq_len_cached = self.original_max_seq_len
 
@@ -1251,7 +1254,7 @@ class MimiEuclideanCodebook(nn.Module):
 
         self.codebook_size = config.codebook_size
 
-        self.register_buffer("initialized", torch.Tensor([True]))
+        self.register_buffer("initialized", torch.tensor([True], dtype=torch.float32))
         self.register_buffer("cluster_usage", torch.ones(config.codebook_size))
         self.register_buffer("embed_sum", embed)
         self._embed = None
