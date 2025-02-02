@@ -105,18 +105,8 @@ class FASTConvLayer(nn.Module):
         )
 
     def forward(self, hidden_states):
-        # if self.training:
-        # if True:
-            # if hasattr(self, "fused_conv"):
-            #     delattr(self, "fused_conv")
         hidden_states = self.conv(hidden_states)
         return hidden_states
-        # else:
-        #     if not hasattr(self, "fused_conv"):
-        #         setattr(self, "fused_conv", self.conv)
-        #         #TODO: check the fused conv logic
-        #     hidden_states = self.fused_conv(hidden_states)
-        #     return hidden_states
 
     def fuse_conv_batch_norm(self, conv, batch_norm):
         """During inference, the functionary of batch norm layers is turned off but
@@ -172,7 +162,7 @@ class FASTRepConvLayer(nn.Module):
         else:
             self.vertical_conv, self.vertical_batch_norm = None, None
 
-        if kernel_size[0] != 1:  # 卷积核的高大于1 -> 有水平卷积
+        if kernel_size[0] != 1:  
             self.horizontal_conv = nn.Conv2d(
                 in_channels=in_channels,
                 out_channels=out_channels,
@@ -212,10 +202,6 @@ class FASTRepConvLayer(nn.Module):
             id_out = self.rbr_identity(hidden_states)
 
         return self.activation(main_outputs + vertical_outputs + horizontal_outputs + id_out)
-        # else:
-        #     if not hasattr(self, "fused_conv"):
-        #         self.prepare_for_eval()
-        #     return self.activation(self.fused_conv(hidden_states))
 
     def _identity_to_conv(self, identity):
         if identity is None:
@@ -270,24 +256,6 @@ class FASTRepConvLayer(nn.Module):
         pad_left_right = (kernel_width - width) // 2
         pad_top_down = (kernel_height - height) // 2
         return torch.nn.functional.pad(kernel, [pad_left_right, pad_left_right, pad_top_down, pad_top_down])
-
-    def prepare_for_eval(self):
-        kernel, bias = self.get_equivalent_kernel_bias()
-        self.fused_conv = nn.Conv2d(
-            in_channels=self.main_conv.in_channels,
-            out_channels=self.main_conv.out_channels,
-            kernel_size=self.main_conv.kernel_size,
-            stride=self.main_conv.stride,
-            padding=self.main_conv.padding,
-            bias=True,
-        )
-        # self.fused_conv.weight.data = kernel
-        # self.fused_conv.bias.data = bias
-        #TODO: check if valid fixup
-        self.fused_conv.weight.data = kernel.clone()
-        self.fused_conv.bias.data = bias.clone()
-        for para in self.fused_conv.parameters():
-            para.detach_()
 
 
 class FastPreTrainedModel(PreTrainedModel):
