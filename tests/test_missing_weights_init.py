@@ -127,6 +127,49 @@ class TestMissingWeightsInit(unittest.TestCase):
         self.assertTrue(torch.all(new_model.new_layer.weight.data == 1.0),
                        "New weights not properly initialized")
 
+    def test_tied_weights_initialization(self):
+        """Test that tied weights are handled correctly during initialization"""
+        class TiedTestConfig(self.TestConfig):
+            def __init__(self, **kwargs):
+                super().__init__(**kwargs)
+                self.tie_weights = True
+                # Add tied weights configuration
+                self._tied_weights_keys = ["base_layer.weight", "new_layer.weight"]
+
+        class TiedTestModel(self.TestModel):
+            def __init__(self, config):
+                super().__init__(config)
+                if config.tie_weights:
+                    # Tie the weights between base_layer and new_layer
+                    self.new_layer.weight = self.base_layer.weight
+                
+            def _get_tied_weights_keys(self):
+                # This is needed to properly handle weight tying during save/load
+                return self.config._tied_weights_keys
+
+        # 1. Create and save base model
+        base_config = TiedTestConfig(use_new=True)
+        base_model = TiedTestModel(base_config)
+        
+        # Save with safe_serialization=False since we have tied weights
+        base_model.save_pretrained(self.tmp_dir, safe_serialization=False)
+        
+        # 2. Load model and verify tied weights are preserved
+        loaded_model = TiedTestModel.from_pretrained(self.tmp_dir)
+        
+        # 3. Verify weights are still tied
+        self.assertTrue(
+            torch.equal(loaded_model.base_layer.weight, loaded_model.new_layer.weight),
+            "Weights should remain tied after loading"
+        )
+        
+        # 4. Verify modifying one weight affects both
+        loaded_model.base_layer.weight.data.fill_(2.0)
+        self.assertTrue(
+            torch.all(loaded_model.new_layer.weight.data == 2.0),
+            "Changes to tied weights should propagate"
+        )
+
     def tearDown(self):
         # Clean up
         for file in os.listdir(self.tmp_dir):
