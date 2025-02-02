@@ -644,6 +644,12 @@ class PegasusEncoder(PegasusPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_input_embeddings(self):
+        return self.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.embed_tokens = value
+
     def resize_position_embeddings(self, new_num_position_embeddings: int):
         """
         Resizes position embeddings matrix of the model if `new_num_position_embeddings !=
