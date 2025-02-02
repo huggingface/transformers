@@ -4942,13 +4942,33 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # After loading weights, initialize missing ones properly
         missing_keys = set(model.state_dict().keys()) - set(loaded_keys)
         if missing_keys:
+            # Get tied parameter groups
+            ptrs = collections.defaultdict(list)
+            for name, tensor in model.state_dict().items():
+                ptrs[id_tensor_storage(tensor)].append(name)
+            tied_params = [names for _, names in ptrs.items() if len(names) > 1]
+
+            # Only initialize parameters that aren't tied or where all tied params are missing
             for name, param in model.named_parameters():
                 if name in missing_keys:
-                    # Find the module containing this parameter
-                    module_name = '.'.join(name.split('.')[:-1])
-                    if module_name:
-                        module = getattr(model, module_name.split('.')[0])
-                        model._init_weights(module)
+                    # Check if this is a tied parameter
+                    is_tied = False
+                    for group in tied_params:
+                        if name in group:
+                            # Only initialize if all params in tied group are missing
+                            if not any(tied_name in loaded_keys for tied_name in group):
+                                is_tied = False
+                                break
+                            else:
+                                is_tied = True
+                                break
+                    
+                    if not is_tied:
+                        # Find the module containing this parameter
+                        module_name = '.'.join(name.split('.')[:-1])
+                        if module_name:
+                            module = getattr(model, module_name.split('.')[0])
+                            model._init_weights(module)
 
         return model, missing_keys, unexpected_keys, mismatched_keys, offload_index, error_msgs
 
