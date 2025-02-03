@@ -89,20 +89,10 @@ class SamHQMaskDecoderConfig(SamMaskDecoderConfig):
 
     def __init__(
         self,
-        hidden_size=256,
-        hidden_act="relu",
-        mlp_dim=2048,
-        num_hidden_layers=2,
-        num_attention_heads=8,
-        attention_downsample_rate=2,
-        num_multimask_outputs=3,
-        iou_head_depth=3,
-        iou_head_hidden_dim=256,
-        layer_norm_eps=1e-6,
         vit_dim=768,
-        **kwargs,
+        **super_kwargs,
     ):
-        super().__init__(**kwargs)
+        super().__init__(**super_kwargs)
         self.vit_dim = vit_dim
 
 
