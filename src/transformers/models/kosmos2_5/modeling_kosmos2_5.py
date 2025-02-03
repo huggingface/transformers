@@ -461,7 +461,7 @@ class Kosmos2_5VisionAttention(nn.Module):
         self.dropout = config.attention_dropout
         self.inner_dim = self.n_heads * self.key_value_proj_dim
         self.is_causal = False
-        self.scaling = self.key_value_proj_dim ** -0.5
+        self.scaling = self.key_value_proj_dim**-0.5
 
         # Mesh TensorFlow initialization to avoid scaling before softmax
         self.query = nn.Linear(self.hidden_size, self.inner_dim, bias=False)
@@ -1227,6 +1227,7 @@ class Kosmos2_5TextTransformer(nn.Module):
             attentions=all_self_attns,
         )
         return output if return_dict else output.to_tuple()
+
 
 # Copied from transformers.models.kosmos2.modeling_kosmos2.Kosmos2ImageToTextProjection with Kosmos2->Kosmos2_5
 class Kosmos2_5ImageToTextProjection(nn.Module):
