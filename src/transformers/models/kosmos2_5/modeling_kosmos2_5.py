@@ -519,17 +519,6 @@ class Kosmos2_5VisionAttention(nn.Module):
             **kwargs,
         )
 
-        # attn_weights = torch.matmul(query_states, key_states.transpose(2, 3)) / math.sqrt(self.key_value_proj_dim)
-        #
-        # if attention_mask is not None:
-        #     causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        #     attn_weights = attn_weights + causal_mask
-        #
-        # attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query_states.dtype)
-        # attn_weights = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-        # attn_output = torch.matmul(attn_weights, value_states)
-        # attn_output = attn_output.transpose(1, 2).contiguous()
-
         attn_output = attn_output.reshape(batch_size, seq_length, -1)
         attn_output = self.output(attn_output)
 
