@@ -9,13 +9,28 @@ on:
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.issue.number }}-${{ startsWith(github.event.comment.body, 'run-slow') || startsWith(github.event.comment.body, 'run slow') || startsWith(github.event.comment.body, 'run_slow') }}
   cancel-in-progress: true
+permissions: read-all
+
+env:
+  HF_HOME: /mnt/cache
+  TRANSFORMERS_IS_CI: yes
+  OMP_NUM_THREADS: 8
+  MKL_NUM_THREADS: 8
+  RUN_SLOW: yes
+  # For gated repositories, we still need to agree to share information on the Hub repo. page in order to get access.
+  # This token is created under the bot `hf-transformers-bot`.
+  HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+  SIGOPT_API_TOKEN: ${{ secrets.SIGOPT_API_TOKEN }}
+  TF_FORCE_GPU_ALLOW_GROWTH: true
+  RUN_PT_TF_CROSS_TESTS: 1
+  CUDA_VISIBLE_DEVICES: 0,1
 
 jobs:
   get-pr-number:
     runs-on: ubuntu-22.04
     name: Get PR number
     # For security: only allow team members to run
-    if: ${{ github.event.issue.state == 'open' && contains(fromJSON('["ydshieh", "ArthurZucker", "zucchini-nlp", "qubvel", "molbap", "gante", "LysandreJik", "Cyrilvallez"]'), github.actor) && (startsWith(github.event.comment.body, 'run-slow') || startsWith(github.event.comment.body, 'run slow') || startsWith(github.event.comment.body, 'run_slow')) }}
+    if: ${{ github.event.issue.state == 'open' && contains(fromJSON('["ydshieh", "ArthurZucker", "zucchini-nlp", "qubvel", "molbap", "gante", "LysandreJik", "Cyrilvallez", "Rocketknight1"]'), github.actor) && (startsWith(github.event.comment.body, 'run-slow') || startsWith(github.event.comment.body, 'run slow') || startsWith(github.event.comment.body, 'run_slow')) }}
     outputs:
       PR_NUMBER: ${{ steps.set_pr_number.outputs.PR_NUMBER }}
     steps:
@@ -43,30 +58,44 @@ jobs:
     if: ${{ needs.get-pr-number.outputs.PR_NUMBER != ''}}
     outputs:
       PR_HEAD_SHA: ${{ steps.get_sha.outputs.PR_HEAD_SHA }}
+      PR_MERGE_SHA: ${{ steps.get_sha.outputs.PR_MERGE_SHA }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: "0"
           ref: "refs/pull/${{needs.get-pr-number.outputs.PR_NUMBER}}/merge"
 
-      - name: Get SHA
+      - name: Get SHA (and verify timestamps against the issue comment date)
         id: get_sha
         env:
-          PR_NUMBER: ${{needs.get-pr-number.outputs.PR_NUMBER}}
+          PR_NUMBER: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+          COMMENT_DATE: ${{ github.event.comment.created_at }}
         run: |
             git fetch origin refs/pull/$PR_NUMBER/head:refs/remotes/pull/$PR_NUMBER/head
             git checkout refs/remotes/pull/$PR_NUMBER/head
             echo "PR_HEAD_SHA: $(git log -1 --format=%H)"
             echo "PR_HEAD_SHA=$(git log -1 --format=%H)" >> "$GITHUB_OUTPUT"
+            git fetch origin refs/pull/$PR_NUMBER/merge:refs/remotes/pull/$PR_NUMBER/merge
+            git checkout refs/remotes/pull/$PR_NUMBER/merge
+            echo "PR_MERGE_SHA: $(git log -1 --format=%H)"
+            echo "PR_MERGE_SHA=$(git log -1 --format=%H)" >> "$GITHUB_OUTPUT"
+            PR_MERGE_COMMIT_TIMESTAMP=$(git log -1 --date=unix --format=%cd)
+            echo "PR_MERGE_COMMIT_TIMESTAMP: $PR_MERGE_COMMIT_TIMESTAMP"
+            COMMENT_TIMESTAMP=$(date -d "${COMMENT_DATE}" +"%s")
+            echo "COMMENT_DATE: $COMMENT_DATE"
+            echo "COMMENT_TIMESTAMP: $COMMENT_TIMESTAMP"
+            if [ $COMMENT_TIMESTAMP -le $PR_MERGE_COMMIT_TIMESTAMP ]; then
+              echo "Last commit on the pull request is newer than the issue comment triggering this run! Abort!";
+              exit -1;
+            fi
 
   # use a python script to handle this complex logic
   # case 1: `run-slow` (auto. infer with limited number of models, but in particular, new model)
   # case 2: `run-slow model_1, model_2`
   get-tests:
     runs-on: ubuntu-22.04
-    needs: get-pr-number
+    needs: [get-pr-number, get-sha]
     if: ${{ needs.get-pr-number.outputs.PR_NUMBER != ''}}
-    permissions: write-all
     outputs:
       models: ${{ steps.models_to_run.outputs.models }}
     steps:
@@ -74,6 +103,16 @@ jobs:
         with:
           fetch-depth: "0"
           ref: "refs/pull/${{needs.get-pr-number.outputs.PR_NUMBER}}/merge"
+
+      - name: Verify merge commit SHA
+        env:
+          VERIFIED_PR_MERGE_SHA: ${{ needs.get-sha.outputs.PR_MERGE_SHA }}
+        run: |
+            PR_MERGE_SHA=$(git log -1 --format=%H)
+            if [ $PR_MERGE_SHA != $VERIFIED_PR_MERGE_SHA ]; then
+              echo "The merged commit SHA is not the same as the verified one! Security issue detected, abort the workflow!";
+              exit -1;
+            fi
 
       - name: Get models to test
         env:
@@ -90,23 +129,32 @@ jobs:
           echo "models=${{ env.models }}" >> $GITHUB_ENV
           echo "models=${{ env.models }}" >> $GITHUB_OUTPUT
 
+  reply_to_comment:
+    name: Reply to the comment
+    if: ${{ needs.get-tests.outputs.models != '[]' }}
+    needs: [get-pr-number, get-tests]
+    permissions:
+      pull-requests: write
+    runs-on: ubuntu-22.04
+    steps:
       - name: Reply to the comment
-        if: ${{ env.models != '[]' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          MODELS: ${{ needs.get-tests.outputs.models }}
         run: |
           gh api \
             --method POST \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
             repos/${{ github.repository }}/issues/${{ needs.get-pr-number.outputs.PR_NUMBER }}/comments \
-            -f "body=This comment contains run-slow, running the specified jobs: ${{ env.models }} ..."
+            -f "body=This comment contains run-slow, running the specified jobs: ${{ env.MODELS }} ..."
 
   create_run:
     name: Create run
     if: ${{ needs.get-tests.outputs.models != '[]' }}
-    needs: [get-sha, get-tests]
-    permissions: write-all
+    needs: [get-sha, get-tests, reply_to_comment]
+    permissions:
+      statuses: write
     runs-on: ubuntu-22.04
     steps:
       - name: Create Run
@@ -127,7 +175,7 @@ jobs:
   run_models_gpu:
       name: Run all tests for the model
       if: ${{ needs.get-tests.outputs.models != '[]' }}
-      needs: [get-pr-number, get-tests, create_run]
+      needs: [get-pr-number, get-sha, get-tests, create_run]
       strategy:
         fail-fast: false
         matrix:
@@ -161,6 +209,17 @@ jobs:
             git fetch origin refs/pull/${{ needs.get-pr-number.outputs.PR_NUMBER }}/merge:refs/remotes/pull/${{ needs.get-pr-number.outputs.PR_NUMBER }}/merge
             git checkout refs/remotes/pull/${{ needs.get-pr-number.outputs.PR_NUMBER }}/merge
             git log -1 --format=%H
+
+      - name: Verify merge commit SHA
+        env:
+          VERIFIED_PR_MERGE_SHA: ${{ needs.get-sha.outputs.PR_MERGE_SHA }}
+        working-directory: /transformers
+        run: |
+            PR_MERGE_SHA=$(git log -1 --format=%H)
+            if [ $PR_MERGE_SHA != $VERIFIED_PR_MERGE_SHA ]; then
+              echo "The merged commit SHA is not the same as the verified one! Security issue detected, abort the workflow!";
+              exit -1;
+            fi
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
@@ -223,7 +282,8 @@ jobs:
   update_run_status:
     name: Update Check Run Status
     needs: [get-sha, create_run, run_models_gpu]
-    permissions: write-all
+    permissions:
+      statuses: write
     if: ${{ always() && needs.create_run.result == 'success' }}
     runs-on: ubuntu-22.04
     env:

@@ -23,10 +23,18 @@ import warnings
 
 import numpy as np
 import requests
+from packaging import version
 
 from transformers import AutoImageProcessor, BatchFeature
 from transformers.image_utils import AnnotationFormat, AnnotionFormat
-from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_vision
+from transformers.testing_utils import (
+    check_json_file_has_correct_format,
+    require_torch,
+    require_torch_gpu,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import is_torch_available, is_vision_available
 
 
@@ -117,19 +125,19 @@ def prepare_video_inputs(
     assert not (numpify and torchify), "You cannot specify both numpy and PyTorch tensors at the same time"
 
     video_inputs = []
-    for i in range(batch_size):
+    for _ in range(batch_size):
         if equal_resolution:
             width = height = max_resolution
         else:
             width, height = np.random.choice(np.arange(min_resolution, max_resolution), 2)
-            video = prepare_video(
-                num_frames=num_frames,
-                num_channels=num_channels,
-                width=width,
-                height=height,
-                numpify=numpify,
-                torchify=torchify,
-            )
+        video = prepare_video(
+            num_frames=num_frames,
+            num_channels=num_channels,
+            width=width,
+            height=height,
+            numpify=numpify,
+            torchify=torchify,
+        )
         video_inputs.append(video)
 
     return video_inputs
@@ -173,7 +181,7 @@ class ImageProcessingTestMixin:
         encoding_slow = image_processor_slow(dummy_image, return_tensors="pt")
         encoding_fast = image_processor_fast(dummy_image, return_tensors="pt")
 
-        self.assertTrue(torch.allclose(encoding_slow.pixel_values, encoding_fast.pixel_values, atol=1e-2))
+        torch.testing.assert_close(encoding_slow.pixel_values, encoding_fast.pixel_values, rtol=1e-1, atol=1e-2)
 
     @require_vision
     @require_torch
@@ -185,6 +193,8 @@ class ImageProcessingTestMixin:
             self.skipTest(reason="Skipping speed test as one of the image processors is not defined")
 
         def measure_time(image_processor, image):
+            # Warmup
+            _ = image_processor(image, return_tensors="pt")
             start = time.time()
             _ = image_processor(image, return_tensors="pt")
             return time.time() - start
@@ -463,6 +473,25 @@ class ImageProcessingTestMixin:
         if not is_tested:
             self.skipTest(reason="No validation found for `preprocess` method")
 
+    @slow
+    @require_torch_gpu
+    @require_vision
+    def test_can_compile_fast_image_processor(self):
+        if self.fast_image_processing_class is None:
+            self.skipTest("Skipping compilation test as fast image processor is not defined")
+        if version.parse(torch.__version__) < version.parse("2.3"):
+            self.skipTest(reason="This test requires torch >= 2.3 to run.")
+
+        torch.compiler.reset()
+        input_image = torch.randint(0, 255, (3, 224, 224), dtype=torch.uint8)
+        image_processor = self.fast_image_processing_class(**self.image_processor_dict)
+        output_eager = image_processor(input_image, device=torch_device, return_tensors="pt")
+
+        image_processor = torch.compile(image_processor, mode="reduce-overhead")
+        output_compiled = image_processor(input_image, device=torch_device, return_tensors="pt")
+
+        torch.testing.assert_close(output_eager.pixel_values, output_compiled.pixel_values, rtol=1e-4, atol=1e-4)
+
 
 class AnnotationFormatTestMixin:
     # this mixin adds a test to assert that usages of the
@@ -517,7 +546,7 @@ class AnnotationFormatTestMixin:
                 for idx in range(len(a)):
                     _compare(a[idx], b[idx])
             elif isinstance(a, torch.Tensor):
-                self.assertTrue(torch.allclose(a, b, atol=1e-3))
+                torch.testing.assert_close(a, b, rtol=1e-3, atol=1e-3)
             elif isinstance(a, str):
                 self.assertEqual(a, b)
 

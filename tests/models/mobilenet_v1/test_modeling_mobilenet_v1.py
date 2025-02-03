@@ -17,7 +17,7 @@
 import unittest
 
 from transformers import MobileNetV1Config
-from transformers.testing_utils import is_flaky, require_torch, require_vision, slow, torch_device
+from transformers.testing_utils import require_torch, require_vision, slow, torch_device
 from transformers.utils import cached_property, is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -214,10 +214,6 @@ class MobileNetV1ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
         model = MobileNetV1Model.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    @is_flaky(description="is_flaky https://github.com/huggingface/transformers/pull/31258")
-    def test_batching_equivalence(self):
-        super().test_batching_equivalence()
-
 
 # We will verify our results on an image of cute cats
 def prepare_img():
@@ -252,4 +248,4 @@ class MobileNetV1ModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([-4.1739, -1.1233, 3.1205]).to(torch_device)
 
-        self.assertTrue(torch.allclose(outputs.logits[0, :3], expected_slice, atol=1e-4))
+        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)

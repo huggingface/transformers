@@ -79,12 +79,16 @@ from .utils import (
     is_fbgemm_gpu_available,
     is_flash_attn_2_available,
     is_flax_available,
+    is_flute_available,
     is_fsdp_available,
     is_ftfy_available,
     is_g2p_en_available,
     is_galore_torch_available,
     is_gguf_available,
+    is_gptqmodel_available,
     is_grokadamw_available,
+    is_hadamard_available,
+    is_hqq_available,
     is_ipex_available,
     is_jieba_available,
     is_jinja_available,
@@ -114,7 +118,7 @@ from .utils import (
     is_scipy_available,
     is_sentencepiece_available,
     is_seqio_available,
-    is_soundfile_availble,
+    is_soundfile_available,
     is_spacy_available,
     is_sudachi_available,
     is_sudachi_projection_available,
@@ -984,6 +988,17 @@ def require_torch_gpu(test_case):
     return unittest.skipUnless(torch_device == "cuda", "test requires CUDA")(test_case)
 
 
+def require_torch_large_gpu(test_case, memory: float = 20):
+    """Decorator marking a test that requires a CUDA GPU with more than `memory` GiB of memory."""
+    if torch_device != "cuda":
+        return unittest.skip(reason=f"test requires a CUDA GPU with more than {memory} GiB of memory")(test_case)
+
+    return unittest.skipUnless(
+        torch.cuda.get_device_properties(0).total_memory / 1024**3 > memory,
+        f"test requires a GPU with more than {memory} GiB of memory",
+    )(test_case)
+
+
 def require_torch_gpu_if_bnb_not_multi_backend_enabled(test_case):
     """
     Decorator marking a test that requires a GPU if bitsandbytes multi-backend feature is not enabled.
@@ -1120,7 +1135,7 @@ def require_soundfile(test_case):
     These tests are skipped when soundfile isn't installed.
 
     """
-    return unittest.skipUnless(is_soundfile_availble(), "test requires soundfile")(test_case)
+    return unittest.skipUnless(is_soundfile_available(), "test requires soundfile")(test_case)
 
 
 def require_deepspeed(test_case):
@@ -1204,11 +1219,20 @@ def require_tensorboard(test_case):
     return unittest.skipUnless(is_tensorboard_available(), "test requires tensorboard")
 
 
-def require_auto_gptq(test_case):
+def require_gptq(test_case):
     """
     Decorator for auto_gptq dependency
     """
-    return unittest.skipUnless(is_auto_gptq_available(), "test requires auto-gptq")(test_case)
+    return unittest.skipUnless(
+        is_gptqmodel_available() or is_auto_gptq_available(), "test requires gptqmodel or auto-gptq"
+    )(test_case)
+
+
+def require_hqq(test_case):
+    """
+    Decorator for hqq dependency
+    """
+    return unittest.skipUnless(is_hqq_available(), "test requires hqq")(test_case)
 
 
 def require_auto_awq(test_case):
@@ -1237,6 +1261,15 @@ def require_fbgemm_gpu(test_case):
     Decorator for fbgemm_gpu dependency
     """
     return unittest.skipUnless(is_fbgemm_gpu_available(), "test requires fbgemm-gpu")(test_case)
+
+
+def require_flute_hadamard(test_case):
+    """
+    Decorator marking a test that requires higgs and hadamard
+    """
+    return unittest.skipUnless(
+        is_flute_available() and is_hadamard_available(), "test requires flute and fast_hadamard_transform"
+    )(test_case)
 
 
 def require_phonemizer(test_case):
@@ -1398,17 +1431,49 @@ def assert_screenout(out, what):
 
 
 def set_model_tester_for_less_flaky_test(test_case):
-    if hasattr(test_case.model_tester, "num_hidden_layers"):
-        test_case.model_tester.num_hidden_layers = 1
+    target_num_hidden_layers = 1
+    # TODO (if possible): Avoid exceptional cases
+    exceptional_classes = [
+        "ZambaModelTester",
+        "Zamba2ModelTester",
+        "RwkvModelTester",
+        "AriaVisionText2TextModelTester",
+        "GPTNeoModelTester",
+        "DPTModelTester",
+    ]
+    if test_case.model_tester.__class__.__name__ in exceptional_classes:
+        target_num_hidden_layers = None
+    if hasattr(test_case.model_tester, "out_features") or hasattr(test_case.model_tester, "out_indices"):
+        target_num_hidden_layers = None
+
+    if hasattr(test_case.model_tester, "num_hidden_layers") and target_num_hidden_layers is not None:
+        test_case.model_tester.num_hidden_layers = target_num_hidden_layers
     if (
         hasattr(test_case.model_tester, "vision_config")
         and "num_hidden_layers" in test_case.model_tester.vision_config
+        and target_num_hidden_layers is not None
     ):
         test_case.model_tester.vision_config = copy.deepcopy(test_case.model_tester.vision_config)
-        test_case.model_tester.vision_config["num_hidden_layers"] = 1
-    if hasattr(test_case.model_tester, "text_config") and "num_hidden_layers" in test_case.model_tester.text_config:
+        if isinstance(test_case.model_tester.vision_config, dict):
+            test_case.model_tester.vision_config["num_hidden_layers"] = 1
+        else:
+            test_case.model_tester.vision_config.num_hidden_layers = 1
+    if (
+        hasattr(test_case.model_tester, "text_config")
+        and "num_hidden_layers" in test_case.model_tester.text_config
+        and target_num_hidden_layers is not None
+    ):
         test_case.model_tester.text_config = copy.deepcopy(test_case.model_tester.text_config)
-        test_case.model_tester.text_config["num_hidden_layers"] = 1
+        if isinstance(test_case.model_tester.text_config, dict):
+            test_case.model_tester.text_config["num_hidden_layers"] = 1
+        else:
+            test_case.model_tester.text_config.num_hidden_layers = 1
+
+    # A few model class specific handling
+
+    # For Albert
+    if hasattr(test_case.model_tester, "num_hidden_groups"):
+        test_case.model_tester.num_hidden_groups = test_case.model_tester.num_hidden_layers
 
 
 def set_config_for_less_flaky_test(config):
@@ -1434,7 +1499,16 @@ def set_config_for_less_flaky_test(config):
 
 def set_model_for_less_flaky_test(model):
     # Another way to make sure norm layers have desired epsilon. (Some models don't set it from its config.)
-    target_names = ("LayerNorm", "GroupNorm", "BatchNorm", "RMSNorm", "BatchNorm2d", "BatchNorm1d")
+    target_names = (
+        "LayerNorm",
+        "GroupNorm",
+        "BatchNorm",
+        "RMSNorm",
+        "BatchNorm2d",
+        "BatchNorm1d",
+        "BitGroupNormActivation",
+        "WeightStandardizedConv2d",
+    )
     target_attrs = ["eps", "epsilon", "variance_epsilon"]
     if is_torch_available() and isinstance(model, torch.nn.Module):
         for module in model.modules():

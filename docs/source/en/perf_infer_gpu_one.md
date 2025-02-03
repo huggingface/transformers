@@ -47,9 +47,12 @@ FlashAttention-2 is currently supported for the following architectures:
 * [Cohere2](https://huggingface.co/docs/transformers/model_doc/cohere2#transformers.Cohere2Model)
 * [GLM](https://huggingface.co/docs/transformers/model_doc/glm#transformers.GLMModel)
 * [Dbrx](https://huggingface.co/docs/transformers/model_doc/dbrx#transformers.DbrxModel)
+* [DiffLlama](https://huggingface.co/docs/transformers/model_doc/diffllama#transformers.DiffLlamaModel)
 * [DistilBert](https://huggingface.co/docs/transformers/model_doc/distilbert#transformers.DistilBertModel)
+* [Emu3](https://huggingface.co/docs/transformers/model_doc/emu3)
 * [Gemma](https://huggingface.co/docs/transformers/model_doc/gemma#transformers.GemmaModel)
 * [Gemma2](https://huggingface.co/docs/transformers/model_doc/gemma2#transformers.Gemma2Model)
+* [GotOcr2](https://huggingface.co/docs/transformers/model_doc/got_ocr2#transformers.GotOcr2ForConditionalGeneration)
 * [GPT2](https://huggingface.co/docs/transformers/model_doc/gpt2)
 * [GPTBigCode](https://huggingface.co/docs/transformers/model_doc/gpt_bigcode#transformers.GPTBigCodeModel)
 * [GPTNeo](https://huggingface.co/docs/transformers/model_doc/gpt_neo#transformers.GPTNeoModel)
@@ -67,6 +70,7 @@ FlashAttention-2 is currently supported for the following architectures:
 * [Llava-NeXT](https://huggingface.co/docs/transformers/model_doc/llava_next)
 * [Llava-NeXT-Video](https://huggingface.co/docs/transformers/model_doc/llava_next_video)
 * [LLaVA-Onevision](https://huggingface.co/docs/transformers/model_doc/llava_onevision)
+* [Moonshine](https://huggingface.co/docs/transformers/model_doc/moonshine#transformers.MoonshineModel)
 * [Mimi](https://huggingface.co/docs/transformers/model_doc/mimi)
 * [VipLlava](https://huggingface.co/docs/transformers/model_doc/vipllava)
 * [VideoLlava](https://huggingface.co/docs/transformers/model_doc/video_llava)
@@ -94,6 +98,7 @@ FlashAttention-2 is currently supported for the following architectures:
 * [Qwen2Audio](https://huggingface.co/docs/transformers/model_doc/qwen2_audio#transformers.Qwen2AudioEncoder)
 * [Qwen2MoE](https://huggingface.co/docs/transformers/model_doc/qwen2_moe#transformers.Qwen2MoeModel)
 * [Qwen2VL](https://huggingface.co/docs/transformers/model_doc/qwen2_vl#transformers.Qwen2VLModel)
+* [Qwen2.5VL](https://huggingface.co/docs/transformers/model_doc/qwen2_5_vl#transformers.Qwen2_5_VLModel)
 * [RAG](https://huggingface.co/docs/transformers/model_doc/rag#transformers.RagModel)
 * [SpeechEncoderDecoder](https://huggingface.co/docs/transformers/model_doc/speech_encoder_decoder#transformers.SpeechEncoderDecoderModel)
 * [VisionEncoderDecoder](https://huggingface.co/docs/transformers/model_doc/vision_encoder_decoder#transformers.VisionEncoderDecoderModel)
@@ -106,6 +111,8 @@ FlashAttention-2 is currently supported for the following architectures:
 * [SigLIP](https://huggingface.co/docs/transformers/model_doc/siglip)
 * [UniSpeech](https://huggingface.co/docs/transformers/v4.39.3/en/model_doc/unispeech#transformers.UniSpeechModel)
 * [unispeech_sat](https://huggingface.co/docs/transformers/v4.39.3/en/model_doc/unispeech-sat#transformers.UniSpeechSatModel)
+* [helium](https://huggingface.co/docs/transformers/main/en/model_doc/heliumtransformers.HeliumModel)
+* [Zamba2](https://huggingface.co/docs/transformers/model_doc/zamba2)
 
 You can request to add FlashAttention-2 support for another model by opening a GitHub Issue or Pull Request.
 
@@ -237,13 +244,17 @@ For now, Transformers supports SDPA inference and training for the following arc
 * [data2vec_vision](https://huggingface.co/docs/transformers/main/en/model_doc/data2vec#transformers.Data2VecVisionModel)
 * [Dbrx](https://huggingface.co/docs/transformers/model_doc/dbrx#transformers.DbrxModel)
 * [DeiT](https://huggingface.co/docs/transformers/model_doc/deit#transformers.DeiTModel)
+* [DiffLlama](https://huggingface.co/docs/transformers/model_doc/diffllama#transformers.DiffLlamaModel)
 * [Dinov2](https://huggingface.co/docs/transformers/en/model_doc/dinov2)
+* [Dinov2_with_registers](https://huggingface.co/docs/transformers/en/model_doc/dinov2)
 * [DistilBert](https://huggingface.co/docs/transformers/model_doc/distilbert#transformers.DistilBertModel)
 * [Dpr](https://huggingface.co/docs/transformers/model_doc/dpr#transformers.DprReader)
 * [EncoderDecoder](https://huggingface.co/docs/transformers/model_doc/encoder_decoder#transformers.EncoderDecoderModel)
+* [Emu3](https://huggingface.co/docs/transformers/model_doc/emu3)
 * [Falcon](https://huggingface.co/docs/transformers/model_doc/falcon#transformers.FalconModel)
 * [Gemma](https://huggingface.co/docs/transformers/model_doc/gemma#transformers.GemmaModel)
 * [Gemma2](https://huggingface.co/docs/transformers/model_doc/gemma2#transformers.Gemma2Model)
+* [GotOcr2](https://huggingface.co/docs/transformers/model_doc/got_ocr2#transformers.GotOcr2ForConditionalGeneration)
 * [Granite](https://huggingface.co/docs/transformers/model_doc/granite#transformers.GraniteModel)
 * [GPT2](https://huggingface.co/docs/transformers/model_doc/gpt2)
 * [GPTBigCode](https://huggingface.co/docs/transformers/model_doc/gpt_bigcode#transformers.GPTBigCodeModel)
@@ -262,6 +273,7 @@ For now, Transformers supports SDPA inference and training for the following arc
 * [Llava-NeXT-Video](https://huggingface.co/docs/transformers/model_doc/llava_next_video)
 * [LLaVA-Onevision](https://huggingface.co/docs/transformers/model_doc/llava_onevision)
 * [M2M100](https://huggingface.co/docs/transformers/model_doc/m2m_100#transformers.M2M100Model)
+* [Moonshine](https://huggingface.co/docs/transformers/model_doc/moonshine#transformers.MoonshineModel)
 * [Mimi](https://huggingface.co/docs/transformers/model_doc/mimi)
 * [Mistral](https://huggingface.co/docs/transformers/model_doc/mistral#transformers.MistralModel)
 * [Mllama](https://huggingface.co/docs/transformers/model_doc/mllama#transformers.MllamaForConditionalGeneration)
@@ -280,8 +292,8 @@ For now, Transformers supports SDPA inference and training for the following arc
 * [Phi3](https://huggingface.co/docs/transformers/model_doc/phi3#transformers.Phi3Model)
 * [PhiMoE](https://huggingface.co/docs/transformers/model_doc/phimoe#transformers.PhimoeModel)
 * [Idefics](https://huggingface.co/docs/transformers/model_doc/idefics#transformers.IdeficsModel)
-* [Whisper](https://huggingface.co/docs/transformers/model_doc/whisper#transformers.WhisperModel)
 * [mBart](https://huggingface.co/docs/transformers/model_doc/mbart#transformers.MBartModel)
+* [Moonshine](https://huggingface.co/docs/transformers/model_doc/moonshine#transformers.MoonshineModel)
 * [Mistral](https://huggingface.co/docs/transformers/model_doc/mistral#transformers.MistralModel)
 * [Mixtral](https://huggingface.co/docs/transformers/model_doc/mixtral#transformers.MixtralModel)
 * [StableLm](https://huggingface.co/docs/transformers/model_doc/stablelm#transformers.StableLmModel)
@@ -289,6 +301,7 @@ For now, Transformers supports SDPA inference and training for the following arc
 * [Qwen2](https://huggingface.co/docs/transformers/model_doc/qwen2#transformers.Qwen2Model)
 * [Qwen2Audio](https://huggingface.co/docs/transformers/model_doc/qwen2_audio#transformers.Qwen2AudioEncoder)
 * [Qwen2MoE](https://huggingface.co/docs/transformers/model_doc/qwen2_moe#transformers.Qwen2MoeModel)
+* [Qwen2.5VL](https://huggingface.co/docs/transformers/model_doc/qwen2_5_vl#transformers.Qwen2_5_VLModel)
 * [RoBERTa](https://huggingface.co/docs/transformers/model_doc/roberta#transformers.RobertaModel)
 * [Sew](https://huggingface.co/docs/transformers/main/en/model_doc/sew#transformers.SEWModel)
 * [SigLIP](https://huggingface.co/docs/transformers/model_doc/siglip)
@@ -317,6 +330,8 @@ For now, Transformers supports SDPA inference and training for the following arc
 * [XLM-RoBERTa](https://huggingface.co/docs/transformers/model_doc/xlm-roberta#transformers.XLMRobertaModel)
 * [XLM-RoBERTa-XL](https://huggingface.co/docs/transformers/model_doc/xlm-roberta-xl#transformers.XLMRobertaXLModel)
 * [YOLOS](https://huggingface.co/docs/transformers/model_doc/yolos#transformers.YolosModel)
+* [helium](https://huggingface.co/docs/transformers/main/en/model_doc/heliumtransformers.HeliumModel)
+* [Zamba2](https://huggingface.co/docs/transformers/model_doc/zamba2)
 
 <Tip>
 
@@ -331,10 +346,11 @@ In that case, you should see a warning message and we will fall back to the (slo
 
 </Tip>
 
-By default, SDPA selects the most performant kernel available but you can check whether a backend is available in a given setting (hardware, problem size) with [`torch.backends.cuda.sdp_kernel`](https://pytorch.org/docs/master/backends.html#torch.backends.cuda.sdp_kernel) as a context manager:
+By default, SDPA selects the most performant kernel available but you can check whether a backend is available in a given setting (hardware, problem size) with [`torch.nn.attention.sdpa_kernel`](https://pytorch.org/docs/stable/generated/torch.nn.attention.sdpa_kernel.html) as a context manager:
 
 ```diff
 import torch
++ from torch.nn.attention import SDPBackend, sdpa_kernel
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m")
@@ -343,7 +359,7 @@ model = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", torch_dtype=to
 input_text = "Hello my dog is cute and"
 inputs = tokenizer(input_text, return_tensors="pt").to("cuda")
 
-+ with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
++ with sdpa_kernel(SDPBackend.FLASH_ATTENTION):
     outputs = model.generate(**inputs)
 
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))
@@ -461,7 +477,7 @@ generated_ids = model.generate(**inputs)
 outputs = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
 ```
 
-To load a model in 4-bit for inference with multiple GPUs, you can control how much GPU RAM you want to allocate to each GPU. For example, to distribute 1GB of memory to the first GPU and 2GB of memory to the second GPU:
+To load a model in 8-bit for inference with multiple GPUs, you can control how much GPU RAM you want to allocate to each GPU. For example, to distribute 1GB of memory to the first GPU and 2GB of memory to the second GPU:
 
 ```py
 max_memory_mapping = {0: "1GB", 1: "2GB"}
@@ -517,6 +533,7 @@ It is often possible to combine several of the optimization techniques described
 
 ```py
 import torch
+from torch.nn.attention import SDPBackend, sdpa_kernel
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
 # load model in 4-bit
@@ -535,7 +552,7 @@ input_text = "Hello my dog is cute and"
 inputs = tokenizer(input_text, return_tensors="pt").to("cuda")
 
 # enable FlashAttention
-with torch.backends.cuda.sdp_kernel(enable_flash=True, enable_math=False, enable_mem_efficient=False):
+with sdpa_kernel(SDPBackend.FLASH_ATTENTION):
     outputs = model.generate(**inputs)
 
 print(tokenizer.decode(outputs[0], skip_special_tokens=True))

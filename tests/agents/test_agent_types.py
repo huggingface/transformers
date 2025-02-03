@@ -20,13 +20,13 @@ from pathlib import Path
 
 from transformers.agents.agent_types import AgentAudio, AgentImage, AgentText
 from transformers.testing_utils import get_tests_dir, require_soundfile, require_torch, require_vision
-from transformers.utils import is_soundfile_availble, is_torch_available, is_vision_available
+from transformers.utils import is_soundfile_available, is_torch_available, is_vision_available
 
 
 if is_torch_available():
     import torch
 
-if is_soundfile_availble():
+if is_soundfile_available():
     import soundfile as sf
 
 if is_vision_available():
@@ -47,7 +47,7 @@ class AgentAudioTests(unittest.TestCase):
         path = str(agent_type.to_string())
 
         # Ensure that the tensor and the agent_type's tensor are the same
-        self.assertTrue(torch.allclose(tensor, agent_type.to_raw(), atol=1e-4))
+        torch.testing.assert_close(tensor, agent_type.to_raw(), rtol=1e-4, atol=1e-4)
 
         del agent_type
 
@@ -56,7 +56,7 @@ class AgentAudioTests(unittest.TestCase):
 
         # Ensure that the file contains the same value as the original tensor
         new_tensor, _ = sf.read(path)
-        self.assertTrue(torch.allclose(tensor, torch.tensor(new_tensor), atol=1e-4))
+        torch.testing.assert_close(tensor, torch.tensor(new_tensor), rtol=1e-4, atol=1e-4)
 
     def test_from_string(self):
         tensor = torch.rand(12, dtype=torch.float64) - 0.5
@@ -65,7 +65,7 @@ class AgentAudioTests(unittest.TestCase):
 
         agent_type = AgentAudio(path)
 
-        self.assertTrue(torch.allclose(tensor, agent_type.to_raw(), atol=1e-4))
+        torch.testing.assert_close(tensor, agent_type.to_raw(), rtol=1e-4, atol=1e-4)
         self.assertEqual(agent_type.to_string(), path)
 
 
@@ -78,7 +78,7 @@ class AgentImageTests(unittest.TestCase):
         path = str(agent_type.to_string())
 
         # Ensure that the tensor and the agent_type's tensor are the same
-        self.assertTrue(torch.allclose(tensor, agent_type._tensor, atol=1e-4))
+        torch.testing.assert_close(tensor, agent_type._tensor, rtol=1e-4, atol=1e-4)
 
         self.assertIsInstance(agent_type.to_raw(), Image.Image)
 
