@@ -380,10 +380,11 @@ class DepthProImageEncoder(nn.Module):
     ) -> Union[tuple, DepthProOutput]:
         batch_size, num_channels, height, width = pixel_values.shape
 
-        # scale the image to patch size for image_encoder
+        # scale the image for image_encoder
+        size = self.config.image_model_config.image_size
         pixel_values = F.interpolate(
             pixel_values,
-            size=(self.config.patch_size, self.config.patch_size),
+            size=(size, size),
             mode="bilinear",
             align_corners=False,
         )
@@ -947,10 +948,11 @@ class DepthProFOVEncoder(nn.Module):
     ) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
 
-        # scale the image to patch size for image_encoder
+        # scale the image for fov_encoder
+        size = self.config.fov_model_config.image_size
         pixel_values = F.interpolate(
             pixel_values,
-            size=(self.config.patch_size, self.config.patch_size),
+            size=(size, size),
             mode="bilinear",
             align_corners=False,
         )
