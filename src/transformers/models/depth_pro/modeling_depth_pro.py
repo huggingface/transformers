@@ -1027,10 +1027,10 @@ class DepthProFOVModel(nn.Module):
         self.fusion_hidden_size = config.fusion_hidden_size
 
         self.fov_encoder = DepthProFOVEncoder(config)
-        self.global_neck = nn.Sequential(
+        self.global_neck = nn.ModuleList([
             nn.Conv2d(self.fusion_hidden_size, self.fusion_hidden_size // 2, kernel_size=3, stride=2, padding=1),
             nn.ReLU(True),
-        )
+        ])
         self.head = DepthProFOVHead(config)
 
     def forward(
@@ -1040,7 +1040,9 @@ class DepthProFOVModel(nn.Module):
         head_mask: Optional[torch.Tensor] = None,
     ) -> torch.Tensor:
         fov_features = self.fov_encoder(pixel_values, head_mask)
-        global_features = self.global_neck(global_features)
+
+        for layer in self.global_neck:
+            global_features = layer(global_features)
 
         fov_features = fov_features + global_features
         fov_output = self.head(fov_features)
@@ -1062,7 +1064,7 @@ class DepthProDepthEstimationHead(nn.Module):
         self.config = config
 
         features = config.fusion_hidden_size
-        self.head = nn.Sequential(
+        self.head = nn.ModuleList([
             nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1),
             nn.ConvTranspose2d(
                 in_channels=features // 2, out_channels=features // 2, kernel_size=2, stride=2, padding=0, bias=True
@@ -1071,11 +1073,13 @@ class DepthProDepthEstimationHead(nn.Module):
             nn.ReLU(True),
             nn.Conv2d(32, 1, kernel_size=1, stride=1, padding=0),
             nn.ReLU(),
-        )
+        ])
 
-    def forward(self, hidden_states: List[torch.Tensor]) -> torch.Tensor:
-        predicted_depth = self.head(hidden_states)
-        predicted_depth = predicted_depth.squeeze(dim=1)
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        for layer in self.head:
+            hidden_states = layer(hidden_states)
+
+        predicted_depth = hidden_states.squeeze(dim=1)
         return predicted_depth
 
 
