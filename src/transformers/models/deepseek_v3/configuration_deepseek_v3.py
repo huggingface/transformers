@@ -138,6 +138,9 @@ class DeepseekV3Config(PretrainedConfig):
         "layers.*.gate_proj": "colwise",
         "layers.*.up_proj": "colwise",
         "layers.*.down_proj": "rowwise",
+        "layers.*.self_attn.q_b_proj": "colwise",
+        "layers.*.self_attn.kv_b_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
     }
 
     def __init__(
@@ -194,7 +197,7 @@ class DeepseekV3Config(PretrainedConfig):
         self.qk_rope_head_dim = qk_rope_head_dim
         self.v_head_dim = v_head_dim
         self.qk_nope_head_dim = qk_nope_head_dim
-        self.q_head_dim = qk_nope_head_dim + qk_rope_head_dim
+        self.qk_head_dim = qk_nope_head_dim + qk_rope_head_dim
         self.head_dim = qk_rope_head_dim
         self.n_group = n_group
         self.topk_group = topk_group
