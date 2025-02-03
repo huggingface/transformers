@@ -1263,6 +1263,7 @@ class Kosmos2_5ImageToTextProjection(nn.Module):
             past_key_value=None,
             attention_mask=None,
             output_attentions=None,
+            is_causal=False,
         )
 
         return hidden_states, attn_weights
