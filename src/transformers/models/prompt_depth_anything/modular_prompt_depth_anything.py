@@ -369,7 +369,7 @@ class PromptDepthAnythingForDepthEstimation(DepthAnythingForDepthEstimation):
             else:
                 output = (predicted_depth,) + outputs[2:]
             return ((loss,) + output) if loss is not None else output
-        
+
         return DepthEstimatorOutput(
             loss=loss,
             predicted_depth=predicted_depth,
