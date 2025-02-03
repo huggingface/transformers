@@ -771,7 +771,7 @@ class GenerationMixin:
     ) -> Dict[str, Any]:
         # update past_key_values keeping its naming used in model code
         for possible_cache_name in ALL_CACHE_NAMES:
-            if possible_cache_name in model_kwargs:
+            if possible_cache_name in outputs:
                 cache_name = possible_cache_name
                 model_kwargs[cache_name] = getattr(outputs, cache_name)
                 break
@@ -2988,7 +2988,7 @@ class GenerationMixin:
             else:
                 next_past_key_values = None
                 for possible_cache_name in ALL_CACHE_NAMES:
-                    if possible_cache_name in model_kwargs:
+                    if possible_cache_name in outputs:
                         next_past_key_values = getattr(outputs, possible_cache_name)
                         break
                 # Do it in-place layer per layer to save memory

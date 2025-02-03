@@ -514,6 +514,8 @@ class GenerationTesterMixin:
     def test_greedy_generate_dict_outputs_use_cache(self):
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            if self.has_attentions:
+                config.attn_implementation = "eager"  # can't output attentions otherwise
 
             if not hasattr(config, "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
@@ -559,6 +561,8 @@ class GenerationTesterMixin:
     def test_sample_generate_dict_output(self):
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            if self.has_attentions:
+                config.attn_implementation = "eager"  # can't output attentions otherwise
 
             model = model_class(config).to(torch_device).eval()
             output_generate = self._sample_generate(
@@ -607,6 +611,8 @@ class GenerationTesterMixin:
     def test_beam_search_generate_dict_output(self):
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            if self.has_attentions:
+                config.attn_implementation = "eager"  # can't output attentions otherwise
 
             model = model_class(config).to(torch_device).eval()
             beam_kwargs = self._get_beam_kwargs()
@@ -651,6 +657,8 @@ class GenerationTesterMixin:
             if any(model_name in model_class.__name__.lower() for model_name in ["rwkv"]):
                 self.skipTest(reason="Won't fix: model with non-standard dictionary output shapes")
 
+            if self.has_attentions:
+                config.attn_implementation = "eager"  # can't output attentions otherwise
             model = model_class(config).to(torch_device).eval()
             beam_kwargs = self._get_beam_kwargs()
 
@@ -730,6 +738,8 @@ class GenerationTesterMixin:
     def test_beam_sample_generate_dict_output(self):
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            if self.has_attentions:
+                config.attn_implementation = "eager"  # can't output attentions otherwise
 
             model = model_class(config).to(torch_device).eval()
             beam_kwargs = self._get_beam_kwargs()
@@ -822,6 +832,8 @@ class GenerationTesterMixin:
     def test_group_beam_search_generate_dict_output(self):
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            if self.has_attentions:
+                config.attn_implementation = "eager"  # can't output attentions otherwise
 
             model = model_class(config).to(torch_device).eval()
             beam_kwargs = self._get_diverse_beam_kwargs()
@@ -918,6 +930,8 @@ class GenerationTesterMixin:
     def test_constrained_beam_search_generate_dict_output(self):
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            if self.has_attentions:
+                config.attn_implementation = "eager"  # can't output attentions otherwise
 
             model = model_class(config).to(torch_device).eval()
 
@@ -1008,6 +1022,8 @@ class GenerationTesterMixin:
             if not hasattr(config, "use_cache"):
                 self.skipTest(reason=f"{model_class.__name__} doesn't support caching")
             config.is_decoder = True
+            if self.has_attentions:
+                config.attn_implementation = "eager"  # can't output attentions otherwise
 
             model = model_class(config).to(torch_device).eval()
             output_generate = self._contrastive_generate(
@@ -1428,6 +1444,8 @@ class GenerationTesterMixin:
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
             text_config = config.get_text_config()
+            if self.has_attentions:
+                config.attn_implementation = "eager"  # can't output attentions otherwise
 
             # We want to test only encoder-decoder models
             if not text_config.is_encoder_decoder:
@@ -2081,6 +2099,8 @@ class GenerationTesterMixin:
                 self.skipTest("This model doesn't support static cache (= no expectations of compilation support)")
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            if self.has_attentions:
+                config.attn_implementation = "eager"  # can't output attentions otherwise
 
             model = model_class(config).to(torch_device).eval()
             has_defined_cache_implementation = model.generation_config.cache_implementation is not None
