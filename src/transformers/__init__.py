@@ -476,6 +476,11 @@ _import_structure = {
     ],
     "models.glm": ["GlmConfig"],
     "models.glpn": ["GLPNConfig"],
+    "models.got_ocr2": [
+        "GotOcr2Config",
+        "GotOcr2Processor",
+        "GotOcr2VisionConfig",
+    ],
     "models.gpt2": [
         "GPT2Config",
         "GPT2Tokenizer",
@@ -1242,6 +1247,7 @@ else:
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
     _import_structure["models.fuyu"].extend(["FuyuImageProcessor", "FuyuProcessor"])
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
+    _import_structure["models.got_ocr2"].extend(["GotOcr2ImageProcessor"])
     _import_structure["models.grounding_dino"].extend(["GroundingDinoImageProcessor"])
     _import_structure["models.idefics"].extend(["IdeficsImageProcessor"])
     _import_structure["models.idefics2"].extend(["Idefics2ImageProcessor"])
@@ -2429,6 +2435,12 @@ else:
             "GLPNForDepthEstimation",
             "GLPNModel",
             "GLPNPreTrainedModel",
+        ]
+    )
+    _import_structure["models.got_ocr2"].extend(
+        [
+            "GotOcr2ForConditionalGeneration",
+            "GotOcr2PreTrainedModel",
         ]
     )
     _import_structure["models.gpt2"].extend(
@@ -5552,6 +5564,7 @@ if TYPE_CHECKING:
     )
     from .models.glm import GlmConfig
     from .models.glpn import GLPNConfig
+    from .models.got_ocr2 import GotOcr2Config, GotOcr2Processor, GotOcr2VisionConfig
     from .models.gpt2 import (
         GPT2Config,
         GPT2Tokenizer,
@@ -6358,6 +6371,7 @@ if TYPE_CHECKING:
         )
         from .models.fuyu import FuyuImageProcessor, FuyuProcessor
         from .models.glpn import GLPNFeatureExtractor, GLPNImageProcessor
+        from .models.got_ocr2 import GotOcr2ImageProcessor
         from .models.grounding_dino import GroundingDinoImageProcessor
         from .models.idefics import IdeficsImageProcessor
         from .models.idefics2 import Idefics2ImageProcessor
@@ -7362,6 +7376,10 @@ if TYPE_CHECKING:
             GLPNForDepthEstimation,
             GLPNModel,
             GLPNPreTrainedModel,
+        )
+        from .models.got_ocr2 import (
+            GotOcr2ForConditionalGeneration,
+            GotOcr2PreTrainedModel,
         )
         from .models.gpt2 import (
             GPT2DoubleHeadsModel,
