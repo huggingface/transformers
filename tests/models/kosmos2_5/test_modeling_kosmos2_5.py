@@ -619,6 +619,7 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             # They should result in very similar logits
             self.assertTrue(torch.allclose(next_logits_wo_padding, next_logits_with_padding, atol=1e-3))
 
+
 @require_vision
 @require_torch
 @slow
