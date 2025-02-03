@@ -142,7 +142,7 @@ def replace_keys(state_dict):
     return model_state_dict
 
 
-def convert_sam_hq_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, push_to_hub):
+def convert_sam_hq_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, push_to_hub, hub_path):
     config = get_config(model_name)
 
     state_dict = torch.load(checkpoint_path, map_location="cpu", weights_only=True)
@@ -210,7 +210,7 @@ def convert_sam_hq_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, 
         hf_model.save_pretrained(pytorch_dump_folder)
 
     if push_to_hub:
-        repo_id = f"sushmanth/{model_name}"
+        repo_id = f"{hub_path}/{model_name}"
         processor.push_to_hub(repo_id)
         hf_model.push_to_hub(repo_id)
 
@@ -242,6 +242,12 @@ if __name__ == "__main__":
         action="store_true",
         help="Whether to push the converted model to the hub",
     )
+    parser.add_argument(
+        "--hub_path",
+        type=str,
+        default="sushmanth",
+        help="Hugging Face Hub path where the model will be uploaded",
+    )
 
     args = parser.parse_args()
 
@@ -254,4 +260,5 @@ if __name__ == "__main__":
         checkpoint_path,
         args.pytorch_dump_folder_path,
         args.push_to_hub,
+        args.hub_path,
     )
