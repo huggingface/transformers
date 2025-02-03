@@ -30,7 +30,7 @@ When you add a model to Transformers, you'll learn:
 
 It is a challenging but rewarding process.
 
-This guide will walk you through adding an example BrandNewBert PyTorch model to Transformers. Before you begin, it is a good idea to familiarize yourself with the library.
+This guide will walk you through adding an example BrandNewLlama PyTorch model to Transformers. Before you begin, it is a good idea to familiarize yourself with the library.
 
 ## Transformers overview
 
@@ -53,16 +53,16 @@ This section describes how the model and configuration classes interact and the 
 
 All Transformers' models inherit from a base [`PreTrainedModel`] and [`PretrainedConfig`] class. The configuration is the models blueprint.
 
-There is never more than two levels of abstraction for any model to keep the code readable. The example model here, BrandNewBert, inherits from `BrandNewBertPreTrainedModel` and [`PreTrainedModel`]. It is important that a new model only depends on [`PreTrainedModel`] so that it can use the [`~PreTrainedModel.from_pretrained`] and [`~PreTrainedModel.save_pretrained`] methods.
+There is never more than two levels of abstraction for any model to keep the code readable. The example model here, BrandNewBert, inherits from `BrandNewLlamaPreTrainedModel` and [`PreTrainedModel`]. It is important that a new model only depends on [`PreTrainedModel`] so that it can use the [`~PreTrainedModel.from_pretrained`] and [`~PreTrainedModel.save_pretrained`] methods.
 
 Other important functions like the forward method are defined in the `modeling.py` file.
 
 Specific model heads (for example, sequence classification or language modeling) should call the base model in the forward pass rather than inherting from it to keep abstraction low.
 
-New models require a configuration, for example `BrandNewBertConfig`, that is stored as an attribute of [`PreTrainedModel`].
+New models require a configuration, for example `BrandNewLlamaConfig`, that is stored as an attribute of [`PreTrainedModel`].
 
 ```py
-model = BrandNewBertModel.from_pretrained("username/brand_new_bert")
+model = BrandNewLlamaModel.from_pretrained("username/brand_new_llama")
 model.config
 ```
 
@@ -102,7 +102,7 @@ Now is a good time to get familiar with BrandNewBert. It is helpful to read a mo
 In addition to learning more about your model, use the tips below to help you add a model faster.
 
 > [!TIP]
-> Each contributor has a unique style and workflow for adding models to Transformers. Take a look at how [Gemma](https://github.com/huggingface/transformers/pull/29167) was added for an example.
+> Each contributor has a unique style and workflow for adding models to Transformers. For an example, take a look at how [Gemma](https://github.com/huggingface/transformers/pull/29167) was added.
 
 - Don't reinvent the wheel! Take your time to explore existing models and tokenizers to see what you can copy and reuse. [Grep](https://www.gnu.org/software/grep/) and [ripgrep](https://github.com/BurntSushi/ripgrep) are great tools for this.
 - This is more of an engineering than a science challenge. Focus on the more practical (setting up an efficient debugging environment for example) instead of the theorertical aspects of the model.
@@ -135,7 +135,7 @@ pip install -e ".[quality]"
 Return to the parent directory and clone and install the original BrandNewBert repository.
 
 ```bash
-git clone https://github.com/org_that_created_brand_new_bert_org/brand_new_bert.git
+git clone https://github.com/org_that_created_brand_new_llama_org/brand_new_llama.git
 cd brand_new_bert
 pip install -e .
 ```
@@ -166,7 +166,7 @@ transformers-cli add-new-model-like
 
 ## Create a pull request
 
-Before you start adapting the code, create a pull request to track your progress and get feedback from the Transformers team. Title your pull request **[WIP] Add BrandNewBert** so it's clear that this is a work in progress.
+Before you start adapting the code, create a pull request to track your progress and get feedback from the Transformers team. Title your pull request **[WIP] Add BrandNewLlama** so it's clear that this is a work in progress.
 
 Create a branch with a descriptive name from your main branch.
 
@@ -218,9 +218,9 @@ The last point is especially important because you'll need a thorough understand
 A good first step is to load a *small* pretrained checkpoint and try to reproduce a single forward pass with an example integer vector of inputs. For example, in pseudocode, this could look like the following.
 
 ```py
-model = BrandNewBertModel.load_pretrained_checkpoint("/path/to/checkpoint/")
+model = BrandNewLlamaModel.load_pretrained_checkpoint("/path/to/checkpoint/")
 input_ids = [0, 4, 5, 2, 3, 7, 9]  # vector of input ids
-original_output = model.predict(input_ids)
+original_output = model.generate(input_ids)
 ```
 
 ### Debugging
@@ -294,10 +294,10 @@ Once you're able to run the original checkpoint, you're ready to start adapting 
 
 The `transformers-cli add-new-model-like` command should have generated a model and configuration file.
 
-- `src/transformers/models/brand_new_bert/modeling_brand_new_bert.py`
-- `src/transformers/models/brand_new_bert/configuration_brand_new_bert.py`
+- `src/transformers/models/brand_new_llama/modeling_brand_new_llama.py`
+- `src/transformers/models/brand_new_llama/configuration_brand_new_llama.py`
 
-The automatically generated code in the `modeling.py` file has the same architecture as BERT if you answered it's an encoder-only model or it will have the same architecture as BART if you answered it's an encoder-decoder model. The generated code is just a starting point. Based on your research on the new model, you'll need to implement those specific changes by adapting the generated code. This may involve changes to the self-attention layer, the order of the normalization layer, and so on.
+The automatically generated code in the `modeling.py` file has the same architecture as Llama if you answered it's a decoder-only model or it will have the same architecture as BART if you answered it's an encoder-decoder model. The generated code is just a starting point. Based on your research on the new model, you'll need to implement those specific changes by adapting the generated code. This may involve changes to the self-attention layer, the order of the normalization layer, and so on.
 
 ### Model initialization
 
@@ -308,7 +308,7 @@ from transformers import BrandNewBert, BrandNewBertConfig
 model = BrandNewBert(BrandNewBertConfig())
 ```
 
-Random initialization occurs in the `_init_weights` method of `BrandNewBertPreTrainedModel`. All leaf modules are initialized depending on the configuration's variables.
+Random initialization occurs in the `_init_weights` method of `BrandNewLlamaPreTrainedModel`. All leaf modules are initialized depending on the configuration's variables.
 
 ```py
 def _init_weights(self, module):
@@ -356,7 +356,7 @@ The original checkpoint must be converted to a Transformers compatible checkpoin
 
 Make sure **all** required weights are initialized and print out all the checkpoint weights that weren't used for initialization to make sure the model has been converted correctly.
 
-You may encounter wrong shape statements or name assignments during the conversion. This is most likely because of incorrect parameters in `BrandNewBertConfig`, the wrong architecture, a bug in the `init` method of your implementation, or you need to transpose one of the checkpoint weights.
+You may encounter wrong shape statements or name assignments during the conversion. This is most likely because of incorrect parameters in `BrandNewLlamaConfig`, the wrong architecture, a bug in the `init` method of your implementation, or you need to transpose one of the checkpoint weights.
 
 Keep iterating on the [Adapt the model code](#adapt-the-model-code) section until all the checkpoint weights are correctly loaded. Once you can load a checkpoint in your model, save it to a folder. This should contain a `model.safetensors` file and a `config.json` file.
 
@@ -440,16 +440,16 @@ assert (
 logger.info(f"Initialize PyTorch weight {layer_name} from {pretrained_weight.name}")
 ```
 
-When the shape or name don't match, you may have assigned the incorrect checkpoint weight to a randomly initialized layer. An incorrect shape may be because the `BrandNewBert` parameters don't exactly match the original models parameters. But it could also be that the PyTorch layer implementation requires the weights to be transposed first.
+When the shape or name don't match, you may have assigned the incorrect checkpoint weight to a randomly initialized layer. An incorrect shape may be because the `BrandNewLlama` parameters don't exactly match the original models parameters. But it could also be that the PyTorch layer implementation requires the weights to be transposed first.
 
 ### Implement the forward pass
 
 The forward pass should be implemented next if the model loads correctly. It takes some inputs and returns the model output.
 
 ```py
-model = BrandNewBertModel.from_pretrained("/path/to/converted/checkpoint/folder")
+model = BrandNewLlamaModel.from_pretrained("/path/to/converted/checkpoint/folder")
 input_ids = [0, 4, 4, 3, 2, 4, 1, 7, 19]
-output = model(input_ids).last_hidden_states
+output = model.generate(input_ids).last_hidden_states
 ```
 
 Don't be discouraged if your forward pass isn't identical with the output from the original model or if it returns an error. Check that the forward pass doesn't throw any errors. This is often because the dimensions are wrong or because the wrong data type is used ([torch.long](https://pytorch.org/docs/stable/generated/torch.Tensor.long.html) instead of [torch.float32](https://pytorch.org/docs/stable/tensors.html)).
@@ -487,29 +487,29 @@ While the model works, you still need to add tests to ensure it is compatible wi
 [Cookiecutter](https://cookiecutter.readthedocs.io/en/stable/) should have added a test file for your model. Run the test file below to make sure all common tests pass.
 
 ```bash
-pytest tests/models/brand_new_bert/test_modeling_brand_new_bert.py
+pytest tests/models/brand_new_llama/test_modeling_brand_new_llama.py
 ```
 
-The integration tests should be added first because they serve the same purpose as the debugging scripts you used earlier to implement the new model in Transformers. A template of those model tests, `BrandNewBertModelIntegrationTests`, was added by Cookiecutter and should be filled out. To ensure it passes, run the following command.
+The integration tests should be added first because they serve the same purpose as the debugging scripts you used earlier to implement the new model in Transformers. A template of those model tests, `BrandNewLlamaModelIntegrationTests`, was added by Cookiecutter and should be filled out. To ensure it passes, run the following command.
 
 <hfoptions id="integration-test">
 <hfoption id="macOS">
 
 ```bash
-RUN_SLOW=1 pytest -sv tests/models/brand_new_bert/test_modeling_brand_new_bert.py::BrandNewBertModelIntegrationTests
+RUN_SLOW=1 pytest -sv tests/models/brand_new_llama/test_modeling_brand_new_llama.py::BrandNewLlamaModelIntegrationTests
 ```
 
 </hfoption>
 <hfoption id="Windows">
 
 ```bash
-SET RUN_SLOW=1 pytest -sv tests/models/brand_new_bert/test_modeling_brand_new_bert.py::BrandNewBertModelIntegrationTests
+SET RUN_SLOW=1 pytest -sv tests/models/brand_new_llama/test_modeling_brand_new_llama.py::BrandNewLlamaModelIntegrationTests
 ```
 
 </hfoption>
 </hfoptions>
 
-All features unique to BrandNewBert should be tested in a separate test under `BrandNewBertModelTester/BrandNewBertModelTest`. This test is often overlooked, but it is extremely important because:
+All features unique to BrandNewBert should be tested in a separate test under `BrandNewLlamaModelTester/BrandNewLlamaModelTest`. This test is often overlooked, but it is extremely important because:
 
 - it helps transfer knowledge you acquired during the process to the community by showing how the models novel features work
 - future contributors can quickly test changes to the model by running these special tests
@@ -525,17 +525,17 @@ Find and load the original tokenizer file into your implementation. Create a scr
 
 ```py
 input_str = "This is a long example input string containing special characters .$?-, numbers 2872 234 12 and words."
-model = BrandNewBertModel.load_pretrained_checkpoint("/path/to/checkpoint/")
+model = BrandNewLlamaModel.load_pretrained_checkpoint("/path/to/checkpoint/")
 input_ids = model.tokenize(input_str)
 ```
 
 You may need to search the original repository to find the correct tokenizer function or modify the existing tokenizer in your clone of the original repository to only return the `input_ids`. The script for your tokenizer should look similar to the following.
 
 ```py
-from transformers import BrandNewBertTokenizer
+from transformers import BrandNewLlamaTokenizer
 
 input_str = "This is a long example input string containing special characters .$?-, numbers 2872 234 12 and words."
-tokenizer = BrandNewBertTokenizer.from_pretrained("/path/to/tokenizer/folder/")
+tokenizer = BrandNewLlamaTokenizer.from_pretrained("/path/to/tokenizer/folder/")
 input_ids = tokenizer(input_str).input_ids
 ```
 
@@ -543,7 +543,7 @@ When both implementations have the same `input_ids`, add a tokenizer test file. 
 
 ## Integration tests
 
-Now that you have a model and tokenizer, add end-to-end integration tests for the model and tokenizer to `tests/models/brand_new_bert/test_modeling_brand-new_bert.py`.
+Now that you have a model and tokenizer, add end-to-end integration tests for the model and tokenizer to `tests/models/brand_new_llama/test_modeling_brand_new_llama.py`.
 
 The test should provide a meaningful text-to-text example to show the model works as expected. For example, you can include a source-to-target translation pair, an article-to-summary pair, or a question-to-answer pair.
 
@@ -553,11 +553,11 @@ Finally, try to make sure your tests can run on a GPU by adding `.to(self.device
 
 ## Add documentation
 
-Your model is only useful if users know how to use it. This is why it's important to add documentation and docstrings. Cookiecutter added a template file, `docs/source/model_doc/brand_new_bert.md`, that you can fill out with information about your model.
+Your model is only useful if users know how to use it. This is why it's important to add documentation and docstrings. Cookiecutter added a template file, `docs/source/model_doc/brand_new_llama.md`, that you can fill out with information about your model.
 
 This is generally a user's first interaction with a model, so the documentation should be clear and concise. It is often very useful to add examples of how the model should be used.
 
-Make sure docstrings are added to `src/transformers/models/brand_new_bert/modeling_brand_new_bert.py` and includes all necessary inputs and outputs. Review our [guide](https://github.com/huggingface/transformers/tree/main/docs#writing-documentation---specification) for writing documentation and docstrings.
+Make sure docstrings are added to `src/transformers/models/brand_new_llama/modeling_brand_new_llama.py` and includes all necessary inputs and outputs. Review our [guide](https://github.com/huggingface/transformers/tree/main/docs#writing-documentation---specification) for writing documentation and docstrings.
 
 ## Refactor
 
@@ -589,7 +589,7 @@ You should also consult with the Transformers team to decide on an appropriate n
 Use the [`~PreTrainedModel.push_to_hub`] method to upload the model.
 
 ```py
-brand_new_bert.push_to_hub("brand_new_bert")
+brand_new_bert.push_to_hub("brand_new_llama")
 ```
 
 Refer to the [Sharing](./model_sharing) guide for more information about uploading models to the Hub.
