@@ -378,6 +378,7 @@ class FastImageProcessor(BaseImageProcessor):
         scale = 2
         #TODO: fix resizing bug
         img_size = img_size if img_size is not None else self.img_size
+        print("image size", img_size)
         out = output["last_hidden_state"]
         batch_size = out.size(0)
         final_results = {}
