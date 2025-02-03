@@ -64,6 +64,8 @@ class Zamba2Config(PretrainedConfig):
             Whether or not to use bias in the convolution layer of the mixer block.
         chunk_size (`int`, *optional*, defaults to 256):
             Size of the chunks that will comprise the sequence.
+        use_mem_eff_path (`bool`, *optional*, defaults to `False`):
+            Whether or not to use the fused conv1d and scan in mamba2 layers.
         add_bias_linear (`bool`, *optional*, defaults to `False`):
             Flag indicating whether or not to use bias in various layers
         intermediate_size (`int`, *optional*, defaults to 4 * hidden_size):
@@ -143,6 +145,7 @@ class Zamba2Config(PretrainedConfig):
         n_mamba_heads=8,
         use_conv_bias=True,
         chunk_size=256,
+        use_mem_eff_path=False,
         add_bias_linear=False,
         intermediate_size=None,
         hidden_act="gelu",
@@ -162,7 +165,6 @@ class Zamba2Config(PretrainedConfig):
         bos_token_id=1,
         eos_token_id=2,
         use_long_context=False,
-        use_mem_eff_path=False,
         **kwargs,
     ):
         super().__init__(
