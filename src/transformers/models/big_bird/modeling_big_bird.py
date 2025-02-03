@@ -2590,12 +2590,9 @@ class BigBirdForCausalLM(BigBirdPreTrainedModel, GenerationMixin):
 
         lm_loss = None
         if labels is not None:
-            # we are doing next-token prediction; shift prediction scores and input ids by one
-            shifted_prediction_scores = prediction_scores[:, :-1, :].contiguous()
-            labels = labels[:, 1:].contiguous()
             lm_loss = self.loss_function(
-                shifted_prediction_scores.view(-1, self.config.vocab_size),
-                labels.view(-1),
+                prediction_scores,
+                labels,
                 vocab_size=self.config.vocab_size,
                 **kwargs,
             )
