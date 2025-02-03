@@ -308,7 +308,6 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     test_pruning = False
     test_resize_embeddings = False
     test_attention_outputs = False
-    test_torchscript = False
     _is_composite = True
 
     # TODO: `image-to-text` pipeline for this model needs Processor.
