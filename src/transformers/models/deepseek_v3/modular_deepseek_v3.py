@@ -388,7 +388,7 @@ class DeepseekV3Model(LlamaModel):
                     head_dim=self.config.kv_lora_rank + self.config.qk_rope_head_dim,
                     rope_dim=self.config.qk_rope_head_dim,
                 )
-    
+
     def load_hook(self, module, state_dict, prefix, *args):
         self.load_pre_hook(state_dict, prefix, *args)
 
