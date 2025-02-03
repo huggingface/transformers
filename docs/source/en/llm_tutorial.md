@@ -23,6 +23,12 @@ LLMs, or Large Language Models, are the key component behind text generation. In
 
 Autoregressive generation is the inference-time procedure of iteratively calling a model with its own generated outputs, given a few initial inputs. In 🤗 Transformers, this is handled by the [`~generation.GenerationMixin.generate`] method, which is available to all models with generative capabilities.
 
+<Tip>
+
+If you want to jump straight to chatting with a model, [try our chat CLI](quicktour#chat-with-text-generation-models).
+
+</Tip>
+
 This tutorial will show you how to:
 
 * Generate text with an LLM
