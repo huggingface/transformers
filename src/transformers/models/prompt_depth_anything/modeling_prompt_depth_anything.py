@@ -18,7 +18,6 @@ from ...utils.backbone_utils import load_backbone
 from .configuration_prompt_depth_anything import PromptDepthAnythingConfig
 
 
-# General docstring
 _CONFIG_FOR_DOC = "PromptDepthAnythingConfig"
 
 
@@ -522,16 +521,14 @@ class PromptDepthAnythingForDepthEstimation(PromptDepthAnythingPreTrainedModel):
                 output = (predicted_depth,) + outputs[1:]
             else:
                 output = (predicted_depth,) + outputs[2:]
-            ret = ((loss,) + output) if loss is not None else output
-        else:
-            ret = DepthEstimatorOutput(
-                loss=loss,
-                predicted_depth=predicted_depth,
-                hidden_states=outputs.hidden_states if output_hidden_states else None,
-                attentions=outputs.attentions,
-            )
+            return ((loss,) + output) if loss is not None else output
 
-        return ret
+        return DepthEstimatorOutput(
+            loss=loss,
+            predicted_depth=predicted_depth,
+            hidden_states=outputs.hidden_states if output_hidden_states else None,
+            attentions=outputs.attentions,
+        )
 
 
 __all__ = ["PromptDepthAnythingForDepthEstimation", "PromptDepthAnythingPreTrainedModel"]
