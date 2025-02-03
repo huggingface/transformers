@@ -480,6 +480,8 @@ class GenerationTesterMixin:
     def test_greedy_generate_dict_outputs(self):
         for model_class in self.all_generative_model_classes:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
+            if self.has_attentions:
+                config.attn_implementation = "eager"  # can't output attentions otherwise
 
             model = model_class(config).to(torch_device).eval()
             output_generate = self._greedy_generate(
