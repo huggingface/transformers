@@ -31,7 +31,7 @@ from transformers.image_utils import PILImageResampling
 # fmt: off
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 
-    # encoder and head
+    # encoder
     r"encoder.(patch|image)_encoder.cls_token":                                 r"depth_pro.encoder.\1_encoder.model.embeddings.cls_token",
     r"encoder.(patch|image)_encoder.pos_embed":                                 r"depth_pro.encoder.\1_encoder.model.embeddings.position_embeddings",
     r"encoder.(patch|image)_encoder.patch_embed.proj.(weight|bias)":            r"depth_pro.encoder.\1_encoder.model.embeddings.patch_embeddings.projection.\2",
@@ -42,7 +42,6 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"encoder.(patch|image)_encoder.blocks.(\d+).mlp.fc(\d+).(weight|bias)":    r"depth_pro.encoder.\1_encoder.model.encoder.layer.\2.mlp.fc\3.\4",
     r"encoder.(patch|image)_encoder.norm.(weight|bias)":                        r"depth_pro.encoder.\1_encoder.model.layernorm.\2",
     r"encoder.fuse_lowres.(weight|bias)":                                       r"depth_pro.neck.fuse_image_with_low_res.\1",
-    r"head.(\d+).(weight|bias)":                                                r"head.head.\1.\2",
 
     # fov
     r"fov.encoder.0.cls_token":                                                 r"fov_model.fov_encoder.model.embeddings.cls_token",
@@ -54,9 +53,12 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"fov.encoder.0.blocks.(\d+).ls(\d+).gamma":                                r"fov_model.fov_encoder.model.encoder.layer.\1.layer_scale\2.lambda1",
     r"fov.encoder.0.blocks.(\d+).mlp.fc(\d+).(weight|bias)":                    r"fov_model.fov_encoder.model.encoder.layer.\1.mlp.fc\2.\3",
     r"fov.encoder.0.norm.(weight|bias)":                                        r"fov_model.fov_encoder.model.layernorm.\1",
-    r"fov.downsample.(\d+).(weight|bias)":                                      r"fov_model.global_neck.\1.\2",
+    r"fov.downsample.0.(weight|bias)":                                          r"fov_model.conv.\1",
     r"fov.encoder.1.(weight|bias)":                                             r"fov_model.fov_encoder.neck.\1",
-    r"fov.head.head.(\d+).(weight|bias)":                                       r"fov_model.head.layers.\1.\2",
+    r"fov.head.(\d+).(weight|bias)":                                            r"fov_model.head.layers.\1.\2",
+
+    # head
+    r"head.(\d+).(weight|bias)":                                                r"head.layers.\1.\2",
 
     # upsamples
     r"encoder.upsample_lowres.(weight|bias)":                                   r"depth_pro.neck.feature_upsample.image_block.layers.0.\1",
