@@ -14,7 +14,7 @@ def flex_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
     scaling: Optional[float] = None,
     softcap: Optional[float] = None,
     head_mask: Optional[torch.Tensor] = None,
