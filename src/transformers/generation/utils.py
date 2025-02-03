@@ -3512,6 +3512,7 @@ class GenerationMixin:
                 continue
 
             logits = model_outputs.logits[:, -1, :].clone().float()  # Clone is needed to avoid keeping a hanging ref
+            logits = logits.to(input_ids.device)
 
             # b. Compute log probs -- get log probabilities from logits, process logits with processors (*e.g.*
             # `temperature`, ...), and add new logprobs to existing running logprobs scores.
