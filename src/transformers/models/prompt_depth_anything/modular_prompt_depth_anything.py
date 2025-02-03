@@ -359,7 +359,8 @@ class PromptDepthAnythingForDepthEstimation(DepthAnythingForDepthEstimation):
         predicted_depth = self.head(hidden_states, patch_height, patch_width)
         if prompt_depth is not None:
             # denormalize predicted depth
-            depth_min, depth_max = depth_min.squeeze(1), depth_max.squeeze(1)
+            depth_min = depth_min.squeeze(1).to(predicted_depth.device)
+            depth_max = depth_max.squeeze(1).to(predicted_depth.device)
             predicted_depth = predicted_depth * (depth_max - depth_min) + depth_min
             # denormalize done
 
