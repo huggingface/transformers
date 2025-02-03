@@ -1027,10 +1027,8 @@ class DepthProFOVModel(nn.Module):
         self.fusion_hidden_size = config.fusion_hidden_size
 
         self.fov_encoder = DepthProFOVEncoder(config)
-        self.global_neck = nn.ModuleList([
-            nn.Conv2d(self.fusion_hidden_size, self.fusion_hidden_size // 2, kernel_size=3, stride=2, padding=1),
-            nn.ReLU(True),
-        ])
+        self.conv = nn.Conv2d(self.fusion_hidden_size, self.fusion_hidden_size // 2, kernel_size=3, stride=2, padding=1)
+        self.activation = nn.ReLU(inplace=True)
         self.head = DepthProFOVHead(config)
 
     def forward(
@@ -1041,8 +1039,8 @@ class DepthProFOVModel(nn.Module):
     ) -> torch.Tensor:
         fov_features = self.fov_encoder(pixel_values, head_mask)
 
-        for layer in self.global_neck:
-            global_features = layer(global_features)
+        global_features = self.conv(global_features)
+        global_features = self.activation(global_features)
 
         fov_features = fov_features + global_features
         fov_output = self.head(fov_features)
@@ -1064,7 +1062,7 @@ class DepthProDepthEstimationHead(nn.Module):
         self.config = config
 
         features = config.fusion_hidden_size
-        self.head = nn.ModuleList([
+        self.layers = nn.ModuleList([
             nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1),
             nn.ConvTranspose2d(
                 in_channels=features // 2, out_channels=features // 2, kernel_size=2, stride=2, padding=0, bias=True
@@ -1076,7 +1074,7 @@ class DepthProDepthEstimationHead(nn.Module):
         ])
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        for layer in self.head:
+        for layer in self.layers:
             hidden_states = layer(hidden_states)
 
         predicted_depth = hidden_states.squeeze(dim=1)
