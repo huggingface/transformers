@@ -23,6 +23,13 @@ class ImageFeatureExtractionMixin(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class AriaImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class BeitFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -135,13 +142,6 @@ class DeformableDetrImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
-class DeformableDetrImageProcessorFast(metaclass=DummyObject):
-    _backends = ["vision"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["vision"])
-
-
 class DeiTFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -198,13 +198,6 @@ class DetrImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
-class DetrImageProcessorFast(metaclass=DummyObject):
-    _backends = ["vision"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["vision"])
-
-
 class DonutFeatureExtractor(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -234,6 +227,13 @@ class DPTImageProcessor(metaclass=DummyObject):
 
 
 class EfficientNetImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class Emu3ImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):
@@ -283,6 +283,13 @@ class GLPNFeatureExtractor(metaclass=DummyObject):
 
 
 class GLPNImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class GotOcr2ImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):
@@ -374,6 +381,13 @@ class LevitFeatureExtractor(metaclass=DummyObject):
 
 
 class LevitImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class LlavaImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):
@@ -562,6 +576,13 @@ class PvtImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class Qwen2_5_VLImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class Qwen2VLImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -570,13 +591,6 @@ class Qwen2VLImageProcessor(metaclass=DummyObject):
 
 
 class RTDetrImageProcessor(metaclass=DummyObject):
-    _backends = ["vision"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["vision"])
-
-
-class RTDetrImageProcessorFast(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):
@@ -618,6 +632,13 @@ class SiglipImageProcessor(metaclass=DummyObject):
         requires_backends(self, ["vision"])
 
 
+class SuperGlueImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
 class SuperPointImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
@@ -626,6 +647,13 @@ class SuperPointImageProcessor(metaclass=DummyObject):
 
 
 class Swin2SRImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class TextNetImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):
@@ -696,6 +724,13 @@ class ViTImageProcessor(metaclass=DummyObject):
 
 
 class VitMatteImageProcessor(metaclass=DummyObject):
+    _backends = ["vision"]
+
+    def __init__(self, *args, **kwargs):
+        requires_backends(self, ["vision"])
+
+
+class VitPoseImageProcessor(metaclass=DummyObject):
     _backends = ["vision"]
 
     def __init__(self, *args, **kwargs):

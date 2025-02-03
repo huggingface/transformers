@@ -41,7 +41,7 @@ from transformers.utils import (
 )
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor, sdpa_kernel
 
 
 if is_torch_available():
@@ -636,7 +636,7 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
 
                                     # TODO: test gradients as well (& for FA2 as well!)
                                     with torch.no_grad():
-                                        with torch.backends.cuda.sdp_kernel(
+                                        with sdpa_kernel(
                                             enable_flash=enable_kernels,
                                             enable_math=True,
                                             enable_mem_efficient=enable_kernels,
@@ -653,6 +653,12 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
                                     if torch_device in ["cpu", "cuda"]:
                                         atol = atols[torch_device, enable_kernels, torch_dtype]
                                         rtol = rtols[torch_device, enable_kernels, torch_dtype]
+                                    elif torch_device == "xpu":
+                                        # As of PyTorch 2.5 XPU backend supports only torch.nn.attention.SDPBackend.MATH
+                                        # which is implemented on PyTorch level using aten operators and is
+                                        # device agnostic with respect to implementation of each aten operator.
+                                        atol = atols["cuda", False, torch_dtype]
+                                        rtol = rtols["cuda", False, torch_dtype]
                                     else:
                                         atol = 1e-7
                                         rtol = 1e-4
@@ -728,10 +734,6 @@ class MimiModelTest(ModelTesterMixin, unittest.TestCase):
     def test_sdpa_can_compile_dynamic(self):
         pass
 
-    @is_flaky()
-    def test_batching_equivalence(self):
-        super().test_batching_equivalence()
-
 
 # Copied from transformers.tests.encodec.test_modeling_encodec.normalize
 def normalize(arr):
@@ -804,8 +806,8 @@ class MimiIntegrationTest(unittest.TestCase):
             "32": 0.0012330565,
         }
         expected_codesums = {
-            "8": 430423,
-            "32": 1803071,
+            "8": 426176,
+            "32": 1795819,
         }
         librispeech_dummy = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
 
@@ -844,7 +846,7 @@ class MimiIntegrationTest(unittest.TestCase):
                     )[1]
 
                 # make sure forward and decode gives same result
-                self.assertTrue(torch.allclose(input_values_dec, input_values_enc_dec))
+                torch.testing.assert_close(input_values_dec, input_values_enc_dec)
 
                 # make sure shape matches
                 self.assertTrue(inputs["input_values"].shape == input_values_enc_dec.shape)

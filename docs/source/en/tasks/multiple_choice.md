@@ -334,7 +334,7 @@ Get the class with the highest probability:
 ```py
 >>> predicted_class = logits.argmax().item()
 >>> predicted_class
-'0'
+0
 ```
 </pt>
 <tf>
@@ -363,7 +363,7 @@ Get the class with the highest probability:
 ```py
 >>> predicted_class = int(tf.math.argmax(logits, axis=-1)[0])
 >>> predicted_class
-'0'
+0
 ```
 </tf>
 </frameworkcontent>

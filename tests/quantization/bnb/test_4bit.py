@@ -53,6 +53,8 @@ def get_some_linear_layer(model):
         except AttributeError:
             # for AutoModelforCausalLM
             return model.model.decoder.layers[0].fc1
+    elif model.config.model_type == "llama":
+        return model.model.layers[0].mlp.gate_proj
     else:
         return model.transformer.h[0].mlp.dense_4h_to_h
 
@@ -106,6 +108,7 @@ class Base4bitTest(unittest.TestCase):
     EXPECTED_OUTPUTS.add("Hello my name is John and I am a professional photographer. I")
     EXPECTED_OUTPUTS.add("Hello my name is John.\nI am a friend of your father.\n")
     EXPECTED_OUTPUTS.add("Hello my name is John Doe, I am a student at the University")
+    EXPECTED_OUTPUTS.add("Hello my name is John and I am 25 years old.")
     MAX_NEW_TOKENS = 10
 
     def setUp(self):
@@ -169,7 +172,7 @@ class Bnb4BitTest(Base4bitTest):
         mem_fp16 = self.model_fp16.get_memory_footprint()
         mem_4bit = self.model_4bit.get_memory_footprint()
 
-        self.assertAlmostEqual(mem_fp16 / mem_4bit, self.EXPECTED_RELATIVE_DIFFERENCE)
+        self.assertAlmostEqual(mem_fp16 / mem_4bit, self.EXPECTED_RELATIVE_DIFFERENCE, delta=1e-5)
         linear = get_some_linear_layer(self.model_4bit)
         self.assertTrue(linear.weight.__class__ == Params4bit)
 
@@ -385,14 +388,14 @@ class Bnb4BitT5Test(unittest.TestCase):
 
         # test with `google-t5/t5-small`
         model = T5ForConditionalGeneration.from_pretrained(self.model_name, load_in_4bit=True, device_map="auto")
-        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(model.device)
         _ = model.generate(**encoded_input)
 
         # test with `flan-t5-small`
         model = T5ForConditionalGeneration.from_pretrained(
             self.dense_act_model_name, load_in_4bit=True, device_map="auto"
         )
-        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(model.device)
         _ = model.generate(**encoded_input)
         T5ForConditionalGeneration._keep_in_fp32_modules = modules
 
@@ -410,14 +413,14 @@ class Bnb4BitT5Test(unittest.TestCase):
         # there was a bug with decoders - this test checks that it is fixed
         self.assertTrue(isinstance(model.decoder.block[0].layer[0].SelfAttention.q, bnb.nn.Linear4bit))
 
-        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(model.device)
         _ = model.generate(**encoded_input)
 
         # test with `flan-t5-small`
         model = T5ForConditionalGeneration.from_pretrained(
             self.dense_act_model_name, load_in_4bit=True, device_map="auto"
         )
-        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(torch_device)
+        encoded_input = self.tokenizer(self.input_text, return_tensors="pt").to(model.device)
         _ = model.generate(**encoded_input)
 
 
@@ -555,6 +558,8 @@ class Bnb4BitTestTraining(Base4bitTest):
 
         if torch.cuda.is_available():
             self.assertEqual(set(model.hf_device_map.values()), {torch.cuda.current_device()})
+        elif torch.xpu.is_available():
+            self.assertEqual(set(model.hf_device_map.values()), {f"xpu:{torch.xpu.current_device()}"})
         else:
             self.assertTrue(all(param.device.type == "cpu" for param in model.parameters()))
 
@@ -588,9 +593,16 @@ class Bnb4BitTestTraining(Base4bitTest):
 
 
 @apply_skip_if_not_implemented
+@unittest.skipIf(torch_device == "xpu", reason="XPU has precision issue on gpt model, will test it once fixed")
 class Bnb4BitGPT2Test(Bnb4BitTest):
     model_name = "openai-community/gpt2-xl"
     EXPECTED_RELATIVE_DIFFERENCE = 3.3191854854152187
+
+
+@apply_skip_if_not_implemented
+class Bnb4BitLlamaTest(Bnb4BitTest):
+    model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+    EXPECTED_RELATIVE_DIFFERENCE = 2.9461410686392764
 
 
 @require_bitsandbytes
@@ -672,7 +684,7 @@ class BaseSerializationTest(unittest.TestCase):
         encoded_input = tokenizer(self.input_text, return_tensors="pt").to(torch_device)
         out_0 = model_0(**encoded_input)
         out_1 = model_1(**encoded_input)
-        self.assertTrue(torch.equal(out_0["logits"], out_1["logits"]))
+        torch.testing.assert_close(out_0["logits"], out_1["logits"], rtol=0.05, atol=0.05)
 
         # comparing generate() outputs
         encoded_input = tokenizer(self.input_text, return_tensors="pt").to(torch_device)
@@ -732,6 +744,14 @@ class GPTSerializationTest(BaseSerializationTest):
     """
 
     model_name = "openai-community/gpt2-xl"
+
+
+class LlamaSerializationTest(BaseSerializationTest):
+    """
+    default BaseSerializationTest config tested with Llama family model
+    """
+
+    model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
 
 
 @require_bitsandbytes

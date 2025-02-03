@@ -261,6 +261,9 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.decoder
 
+    def get_input_embeddings(self):
+        return self.decoder.get_input_embeddings()
+
     def get_output_embeddings(self):
         return self.decoder.get_output_embeddings()
 
@@ -491,6 +494,8 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         kwargs_decoder = {
             argument[len("decoder_") :]: value for argument, value in kwargs.items() if argument.startswith("decoder_")
         }
+        if "num_items_in_batch" in kwargs_encoder:
+            kwargs_decoder["num_items_in_batch"] = kwargs_encoder.pop("num_items_in_batch", None)
 
         if encoder_outputs is None:
             if inputs is None:
@@ -588,3 +593,6 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
     def _reorder_cache(self, past_key_values, beam_idx):
         # apply decoder cache reordering here
         return self.decoder._reorder_cache(past_key_values, beam_idx)
+
+
+__all__ = ["SpeechEncoderDecoderModel"]

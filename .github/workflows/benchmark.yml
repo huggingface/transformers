@@ -18,7 +18,8 @@ jobs:
     name: Benchmark
     strategy:
       matrix:
-        group: [aws-g5-4xlarge-cache, aws-p4d-24xlarge-plus]
+        # group: [aws-g5-4xlarge-cache, aws-p4d-24xlarge-plus] (A100 runner is not enabled)
+        group: [aws-g5-4xlarge-cache]
     runs-on:
       group: ${{ matrix.group }}
     if: |
@@ -63,7 +64,7 @@ jobs:
             commit_id=$GITHUB_SHA
           fi
           commit_msg=$(git show -s --format=%s | cut -c1-70)
-          python3 benchmark/llama.py "${{ github.head_ref || github.ref_name }}" "$commit_id" "$commit_msg"
+          python3 benchmark/benchmarks_entrypoint.py "${{ github.head_ref || github.ref_name }}" "$commit_id" "$commit_msg"
         env:
           HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
           # Enable this to see debug logs
