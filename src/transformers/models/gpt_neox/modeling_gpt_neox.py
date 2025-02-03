@@ -613,7 +613,7 @@ class GPTNeoXModel(GPTNeoXPreTrainedModel):
                     position_ids,
                     head_mask[i],
                     use_cache,
-                    None,
+                    past_key_values,
                     output_attentions,
                     cache_position,
                     position_embeddings,
