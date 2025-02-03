@@ -375,6 +375,7 @@ class GPTNeoXPreTrainedModel(PreTrainedModel):
     _supports_quantized_cache = True
     _supports_static_cache = True
     _supports_attention_backend = True
+    _keys_to_ignore_on_load_unexpected = [r"attention.bias", r"attention.masked_bias"]
 
     def _init_weights(self, module):
         """Initialize the weights"""
