@@ -178,7 +178,7 @@ def write_model(
     tokenizer = AutoTokenizer.from_pretrained(model_path)
     processor = InternVLProcessor(image_processor=image_processor, tokenizer=tokenizer)
     image = load_image("./000000039769.jpg")
-    prompt = "<|im_start|>user\n<image>\nPlease describe the image shortly.<|im_end|>\n<|im_start|>assistant"
+    prompt = "<|im_start|>user\n<image>\nPlease describe the image shortly.<|im_end|>\n<|im_start|>assistant\n"
     inputs = processor(images=[image], text=prompt, return_tensors="pt").to(model.device, torch.bfloat16)
 
     output = model.generate(**inputs, max_new_tokens=200, do_sample=False)
@@ -288,6 +288,7 @@ def write_image_processor(save_dir: str, push_to_hub: bool = False):
         do_center_crop=True,
         image_mean=[0.485, 0.456, 0.406],
         image_std=[0.229, 0.224, 0.225],
+        do_convert_rgb=True,
     )
 
     image_processor.save_pretrained(save_dir)
