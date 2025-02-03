@@ -441,6 +441,7 @@ class PromptDepthAnythingForDepthEstimation(PromptDepthAnythingPreTrainedModel):
             Ground truth depth estimation maps for computing the loss.
 
         Returns:
+            DepthEstimatorOutput: A DepthEstimatorOutput containing the depth prediction.
 
         Examples:
 
