@@ -316,7 +316,7 @@ class PromptDepthAnythingModelIntegrationTest(unittest.TestCase):
                 )
                 with torch.no_grad():
                     eager_outputs = model(**inputs)
-                    exported_outputs = exported_program.module().forward(inputs["pixel_values"])
+                    exported_outputs = exported_program.module().forward(inputs["pixel_values"], inputs["prompt_depth"])
                 self.assertEqual(eager_outputs.predicted_depth.shape, exported_outputs.predicted_depth.shape)
                 self.assertTrue(
                     torch.allclose(eager_outputs.predicted_depth, exported_outputs.predicted_depth, atol=1e-4)
