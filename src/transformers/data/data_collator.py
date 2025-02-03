@@ -558,6 +558,7 @@ class DataCollatorForMultipleChoice(DataCollatorMixin):
 
             This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability >=
             7.5 (Volta).
+        return_tensors (`str`, *optional*, defaults to `"pt"`): <fill_docstring>
     """
 
     tokenizer: PreTrainedTokenizerBase
