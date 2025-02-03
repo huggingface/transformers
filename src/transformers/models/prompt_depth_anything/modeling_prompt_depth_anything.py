@@ -18,7 +18,6 @@ from ...utils.backbone_utils import load_backbone
 from .configuration_prompt_depth_anything import PromptDepthAnythingConfig
 
 
-# General docstring
 _CONFIG_FOR_DOC = "PromptDepthAnythingConfig"
 
 
