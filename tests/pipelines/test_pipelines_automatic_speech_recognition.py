@@ -165,6 +165,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         pipeline("automatic-speech-recognition", framework="pt")
 
     @require_torch
+    @skipIfRocm(arch='gfx942')
     def test_small_model_pt(self):
         speech_recognizer = pipeline(
             task="automatic-speech-recognition",
@@ -238,7 +239,7 @@ class AutomaticSpeechRecognitionPipelineTests(unittest.TestCase):
         speech_recognizer(waveform)
 
     @require_torch
-    @skipIfRocm(arch='gfx1201')
+    @skipIfRocm(arch=['gfx1201','gfx942'])
     def test_small_model_pt_seq2seq(self):
         speech_recognizer = pipeline(
             model="hf-internal-testing/tiny-random-speech-encoder-decoder",

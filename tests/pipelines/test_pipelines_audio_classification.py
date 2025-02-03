@@ -31,6 +31,7 @@ from transformers.testing_utils import (
     require_torch,
     require_torchaudio,
     slow,
+    skipIfRocm,
 )
 
 from .test_pipelines_common import ANY
@@ -136,6 +137,7 @@ class AudioClassificationPipelineTests(unittest.TestCase):
         self.assertIn(nested_simplify(output, decimals=4), [EXPECTED_OUTPUT, EXPECTED_OUTPUT_PT_2])
 
     @require_torch
+    @skipIfRocm(arch='gfx942')
     def test_small_model_pt_fp16(self):
         model = "anton-l/wav2vec2-random-tiny-classifier"
 

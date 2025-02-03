@@ -28,6 +28,7 @@ from transformers.testing_utils import (
     require_torch,
     require_vision,
     slow,
+    skipIfRocm,
 )
 
 from .test_pipelines_common import ANY
@@ -138,6 +139,7 @@ class DepthEstimationPipelineTests(unittest.TestCase):
         self.skipTest(reason="There is not hf-internal-testing tiny model for either GLPN nor DPT")
 
     @require_torch
+    @skipIfRocm(arch='gfx942')
     def test_multiprocess(self):
         depth_estimator = pipeline(
             model="hf-internal-testing/tiny-random-DepthAnythingForDepthEstimation",

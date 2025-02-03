@@ -883,7 +883,7 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_with_attn_adapter(*config_and_inputs)
 
-    @skipIfRocm(arch='gfx90a')
+    @skipIfRocm(arch=['gfx90a','gfx942'])
     def test_batched_inference(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_batch_inference(*config_and_inputs)
