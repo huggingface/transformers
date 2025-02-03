@@ -131,6 +131,12 @@ class GPTNeoXConfig(PretrainedConfig):
 
     model_type = "gpt_neox"
     keys_to_ignore_at_inference = ["past_key_values"]
+    base_model_tp_plan = {
+        "layers.*.attention.query_key_value": "colwise_rep",  # we need to replicate here due to the slicing of qkv
+        "layers.*.attention.dense": "rowwise_rep",  # we need to replicate here due to the slicing of qkv
+        "layers.*.mlp.dense_h_to_4h": "colwise",
+        "layers.*.mlp.dense_4h_to_h": "rowwise",
+    }
 
     def __init__(
         self,

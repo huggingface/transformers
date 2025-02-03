@@ -157,21 +157,8 @@ class GPTNeoXAttention(nn.Module):
         self.is_causal = True
         self.layer_idx = layer_idx
 
-        self._init_bias(config.max_position_embeddings)
-        self.register_buffer("masked_bias", torch.tensor(-1e9), persistent=False)
         self.query_key_value = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=config.attention_bias)
         self.dense = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
-
-    def _init_bias(self, max_positions, device=None):
-        self.register_buffer(
-            "bias",
-            torch.tril(torch.ones((max_positions, max_positions), dtype=torch.bool)).view(
-                1, 1, max_positions, max_positions
-            ),
-            persistent=False,
-        )
-        if device is not None:
-            self.bias = self.bias.to(device)
 
     def forward(
         self,
@@ -490,6 +477,7 @@ class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 )
 class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["embed_out.weight"]
+    _tp_plan = {"embed_out": "colwise_rep"}
 
     def __init__(self, config):
         super().__init__(config)
