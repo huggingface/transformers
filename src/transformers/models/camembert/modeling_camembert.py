@@ -1656,12 +1656,9 @@ class CamembertForCausalLM(CamembertPreTrainedModel, GenerationMixin):
         if labels is not None:
             # move labels to correct device to enable model parallelism
             labels = labels.to(prediction_scores.device)
-            # we are doing next-token prediction; shift prediction scores and input ids by one
-            shifted_prediction_scores = prediction_scores[:, :-1, :].contiguous()
-            labels = labels[:, 1:].contiguous()
             lm_loss = self.loss_function(
-                shifted_prediction_scores.view(-1, self.config.vocab_size),
-                labels.view(-1),
+                prediction_scores,
+                labels,
                 vocab_size=self.config.vocab_size,
                 **kwargs,
             )
