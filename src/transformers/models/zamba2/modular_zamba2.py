@@ -313,6 +313,7 @@ class Zamba2MambaMixer(nn.Module):
         self.use_conv_bias = config.use_conv_bias
         self.activation = "silu"
         self.act = nn.SiLU()
+        self.use_mem_eff_path = config.use_mem_eff_path
 
         self.n_groups = config.mamba_ngroups
         self.head_dim = config.mamba_headdim
@@ -437,7 +438,7 @@ class Zamba2MambaMixer(nn.Module):
             else:
                 input_not_masked = True
 
-            if self.training and cache_params is None and input_not_masked:
+            if self.use_mem_eff_path and self.training and cache_params is None and input_not_masked:
                 out, ssm_state = mamba_split_conv1d_scan_combined(
                     projected_states,
                     self.conv1d.weight.squeeze(1),

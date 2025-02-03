@@ -162,6 +162,7 @@ class Zamba2Config(PretrainedConfig):
         bos_token_id=1,
         eos_token_id=2,
         use_long_context=False,
+        use_mem_eff_path=False,
         **kwargs,
     ):
         super().__init__(
@@ -231,6 +232,7 @@ class Zamba2Config(PretrainedConfig):
         self.use_cache = use_cache
         self.num_logits_to_keep = num_logits_to_keep
         self.hybrid_layer_ids = [index for index, type in enumerate(self.layers_block_type) if type == "hybrid"]
+        self.use_mem_eff_path = use_mem_eff_path
 
 
 __all__ = ["Zamba2Config"]
