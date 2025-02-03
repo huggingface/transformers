@@ -277,10 +277,10 @@ class PromptDepthAnythingForDepthEstimation(DepthAnythingForDepthEstimation):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
+        prompt_depth: Optional[torch.FloatTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        prompt_depth: Optional[torch.FloatTensor] = None,
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], DepthEstimatorOutput]:
         r"""
