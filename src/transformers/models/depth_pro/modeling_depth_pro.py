@@ -883,11 +883,11 @@ class DepthProFeatureFusionLayer(nn.Module):
             )
 
         self.projection = nn.Conv2d(config.fusion_hidden_size, config.fusion_hidden_size, kernel_size=1, bias=True)
-        self.skip_add = nn.quantized.FloatFunctional()
 
     def forward(self, hidden_state: torch.Tensor, residual: Optional[torch.Tensor] = None) -> torch.Tensor:
         if residual is not None:
-            hidden_state = self.skip_add.add(hidden_state, self.residual_layer1(residual))
+            residual = self.residual_layer1(residual)
+            hidden_state = hidden_state + residual
 
         hidden_state = self.residual_layer2(hidden_state)
         if self.use_deconv:
