@@ -873,13 +873,9 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel, GenerationMixin):
         if labels is not None:
             # Upcast to float if we need to compute the loss to avoid potential precision issues
             logits = logits.float()
-            # Shift so that tokens < n predict n
-            shift_logits = logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            # Flatten the tokens
             loss = self.loss_function(
-                shift_logits.view(-1, self.config.vocab_size),
-                shift_labels.view(-1),
+                logits,
+                labels,
                 vocab_size=self.config.vocab_size,
                 **kwargs,
             )
