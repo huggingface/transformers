@@ -1179,13 +1179,9 @@ class GPTBigCodeForCausalLM(GPTBigCodePreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            # Shift so that tokens < n predict n
-            shift_logits = lm_logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous().to(shift_logits.device)
-            # Flatten the tokens
             loss = self.loss_function(
-                shift_logits.view(-1, shift_logits.size(-1)),
-                shift_labels.view(-1),
+                lm_logits,
+                labels,
                 vocab_size=self.config.vocab_size,
                 **kwargs,
             )

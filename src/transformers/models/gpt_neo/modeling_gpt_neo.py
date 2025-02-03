@@ -987,13 +987,10 @@ class GPTNeoForCausalLM(GPTNeoPreTrainedModel, GenerationMixin):
             # https://github.com/EleutherAI/gpt-neo/blob/89ce74164da2fb16179106f54e2269b5da8db333/models/gpt2/gpt2.py#L179
             lm_logits = lm_logits.to(torch.float32)
 
-            # Shift so that tokens < n predict n
-            shift_logits = lm_logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
             loss = self.loss_function(
-                shift_logits.view(-1, shift_logits.size(-1)),
-                shift_labels.view(-1),
+                lm_logits,
+                labels,
                 vocab_size=self.config.vocab_size,
                 **kwargs,
             )
