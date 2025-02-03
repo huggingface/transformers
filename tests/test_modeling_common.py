@@ -768,7 +768,7 @@ class ModelTesterMixin:
             else:
                 check_determinism(first, second)
 
-    def test_batching_equivalence(self):
+    def test_batching_equivalence(self, atol=1e-5, rtol=1e-5):
         """
         Tests that the model supports batching and that the output is the nearly the same for the same input in
         different batch sizes.
@@ -812,7 +812,7 @@ class ModelTesterMixin:
                     torch.isinf(single_row_object).any(), f"Single row output has `inf` in {model_name} for key={key}"
                 )
                 try:
-                    torch.testing.assert_close(batched_row, single_row_object, atol=1e-5, rtol=1e-5)
+                    torch.testing.assert_close(batched_row, single_row_object, atol=atol, rtol=rtol)
                 except AssertionError as e:
                     msg = f"Batched and Single row outputs are not equal in {model_name} for key={key}.\n\n"
                     msg += str(e)
@@ -2990,6 +2990,10 @@ class ModelTesterMixin:
             model = model_class(config)
             model.to(torch_device)
             model.eval()
+
+            model_forward_args = inspect.signature(model.forward).parameters
+            if "inputs_embeds" not in model_forward_args:
+                self.skipTest(reason="This model doesn't use `inputs_embeds`")
 
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
 
