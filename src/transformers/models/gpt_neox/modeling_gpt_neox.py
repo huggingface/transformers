@@ -112,34 +112,13 @@ def eager_attention_forward(
     head_mask: Optional[torch.Tensor] = None,
     **kwargs,
 ):
-    # q, k, v: [bs, num_attention_heads, seq_len, attn_head_size]
-    batch_size, num_attention_heads, query_length, attn_head_size = query.size()
-    key_length = key.size(-2)
-
-    query = query.view(batch_size * num_attention_heads, query_length, attn_head_size)
-    key = key.view(batch_size * num_attention_heads, key_length, attn_head_size)
-    attn_scores = torch.zeros(
-        batch_size * num_attention_heads,
-        query_length,
-        key_length,
-        dtype=query.dtype,
-        device=key.device,
-    )
-    attn_scores = torch.baddbmm(
-        attn_scores,
-        query,
-        key.transpose(1, 2),
-        beta=1.0,
-        alpha=scaling,
-    )
-    attn_scores = attn_scores.view(batch_size, num_attention_heads, query_length, key_length)
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:  # no matter the length, we just slice it
         causal_mask = attention_mask[:, :, :, : key.shape[-2]]
-        attn_scores = attn_scores + causal_mask
+        attn_weights = attn_weights + causal_mask
 
-    attn_weights = nn.functional.softmax(attn_scores, dim=-1)
-    attn_weights = attn_weights.to(value.dtype)
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
 
     # Mask heads if we want to
     if head_mask is not None:
@@ -182,10 +161,8 @@ class GPTNeoXAttention(nn.Module):
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, 3 * self.head_size)
 
-        qkv = self.query_key_value(hidden_states).view(hidden_shape)
-        query_states = qkv[..., : self.head_size].transpose(1, 2)
-        key_states = qkv[..., self.head_size : 2 * self.head_size].transpose(1, 2)
-        value_states = qkv[..., 2 * self.head_size :].transpose(1, 2)
+        qkv = self.query_key_value(hidden_states).view(hidden_shape).transpose(1, 2)
+        query_states, key_states, value_states = qkv.chunk(3, dim=-1)
 
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
