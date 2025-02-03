@@ -142,14 +142,14 @@ On a local benchmark (A100-40GB, PyTorch 2.3.0, OS Ubuntu 22.04) with `float32` 
 
 ## Resources
 
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with DepthPro:
+
 - Research Paper: [Depth Pro: Sharp Monocular Metric Depth in Less Than a Second](https://arxiv.org/pdf/2410.02073)
 - Official Implementation: [apple/ml-depth-pro](https://github.com/apple/ml-depth-pro)
 - DepthPro Inference Notebook: [DepthPro Inference](https://github.com/qubvel/transformers-notebooks/blob/main/notebooks/DepthPro_inference.ipynb)
 - DepthPro for Super Resolution and Image Segmentation
     - Read blog on Medium: [Depth Pro: Beyond Depth](https://medium.com/@raoarmaghanshakir040/depth-pro-beyond-depth-9d822fc557ba)
     - Code on Github: [geetu040/depthpro-beyond-depth](https://github.com/geetu040/depthpro-beyond-depth)
-
-<!-- A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with DepthPro. -->
 
 If you're interested in submitting a resource to be included here, please feel free to open a Pull Request and we'll review it! The resource should ideally demonstrate something new instead of duplicating an existing resource.
 
