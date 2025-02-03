@@ -1241,10 +1241,8 @@ class DabDetrDecoder(DabDetrPreTrainedModel):
                 if encoder_hidden_states is not None:
                     all_cross_attentions += (layer_outputs[2],)
 
-        # Layer normalization on hidden states and add it to the intermediate list
+        # Layer normalization on hidden states
         hidden_states = self.layernorm(hidden_states)
-        intermediate.pop()
-        intermediate.append(hidden_states)
 
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
