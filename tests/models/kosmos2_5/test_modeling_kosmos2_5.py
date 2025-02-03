@@ -16,7 +16,6 @@
 
 import copy
 import inspect
-import os
 import tempfile
 import unittest
 
