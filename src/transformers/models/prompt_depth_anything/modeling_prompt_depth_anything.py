@@ -522,14 +522,16 @@ class PromptDepthAnythingForDepthEstimation(PromptDepthAnythingPreTrainedModel):
                 output = (predicted_depth,) + outputs[1:]
             else:
                 output = (predicted_depth,) + outputs[2:]
-            return ((loss,) + output) if loss is not None else output
+            ret = ((loss,) + output) if loss is not None else output
+        else:
+            ret = DepthEstimatorOutput(
+                loss=loss,
+                predicted_depth=predicted_depth,
+                hidden_states=outputs.hidden_states if output_hidden_states else None,
+                attentions=outputs.attentions,
+            )
 
-        return DepthEstimatorOutput(
-            loss=loss,
-            predicted_depth=predicted_depth,
-            hidden_states=outputs.hidden_states if output_hidden_states else None,
-            attentions=outputs.attentions,
-        )
+        return ret
 
 
 __all__ = ["PromptDepthAnythingForDepthEstimation", "PromptDepthAnythingPreTrainedModel"]
