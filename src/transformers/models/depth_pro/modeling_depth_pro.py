@@ -999,10 +999,10 @@ class DepthProFOVHead(nn.Module):
             self.layers.append(nn.ReLU(True))
         # calculate expected shapes to finally generate a scalar output from final head layer
         final_in_channels = math.ceil(self.fusion_hidden_size / 2 ** (config.num_fov_head_layers + 1))
-        final_kernal_size = torch_int((self.out_size - 1) / 2**config.num_fov_head_layers + 1)
+        final_kernel_size = torch_int((self.out_size - 1) / 2**config.num_fov_head_layers + 1)
         self.layers.append(
             nn.Conv2d(
-                in_channels=final_in_channels, out_channels=1, kernel_size=final_kernal_size, stride=1, padding=0
+                in_channels=final_in_channels, out_channels=1, kernel_size=final_kernel_size, stride=1, padding=0
             )
         )
 
