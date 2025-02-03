@@ -78,7 +78,7 @@ class DepthProDepthEstimatorOutput(ModelOutput):
             Classification (or regression if config.num_labels==1) loss.
         predicted_depth (`torch.FloatTensor` of shape `(batch_size, height, width)`):
             Predicted depth for each pixel.
-        fov (`torch.FloatTensor` of shape `(batch_size,)`, *optional*, returned when `use_fov_model` is provided):
+        field_of_view (`torch.FloatTensor` of shape `(batch_size,)`, *optional*, returned when `use_fov_model` is provided):
             Field of View Scaler.
         hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
             Tuple of `torch.FloatTensor` (one for the output of the embeddings, if the model has an embedding layer, +
@@ -95,7 +95,7 @@ class DepthProDepthEstimatorOutput(ModelOutput):
 
     loss: Optional[torch.FloatTensor] = None
     predicted_depth: torch.FloatTensor = None
-    fov: Optional[torch.FloatTensor] = None
+    field_of_view: Optional[torch.FloatTensor] = None
     hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
     attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
@@ -1153,6 +1153,10 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
         ...     outputs, target_sizes=[(image.height, image.width)],
         ... )
 
+        >>> # get the field of view (fov) predictions
+        >>> field_of_view = post_processed_output[0]["field_of_view"]
+        >>> focal_length = post_processed_output[0]["focal_length"]
+
         >>> # visualize the prediction
         >>> predicted_depth = post_processed_output[0]["predicted_depth"]
         >>> depth = predicted_depth * 255 / predicted_depth.max()
@@ -1198,7 +1202,7 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
         return DepthProDepthEstimatorOutput(
             loss=loss,
             predicted_depth=predicted_depth,
-            fov=fov,
+            field_of_view=fov,
             hidden_states=depth_pro_outputs.hidden_states,
             attentions=depth_pro_outputs.attentions,
         )

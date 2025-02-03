@@ -167,8 +167,8 @@ class DepthProModelTester:
         row_pixel_values = pixel_values[:1]
 
         with torch.no_grad():
-            model_batched_output_fov = model(batched_pixel_values).fov
-            model_row_output_fov = model(row_pixel_values).fov
+            model_batched_output_fov = model(batched_pixel_values).field_of_view
+            model_row_output_fov = model(row_pixel_values).field_of_view
 
         # check if fov is returned
         self.parent.assertIsNotNone(model_batched_output_fov)
@@ -372,10 +372,10 @@ class DepthProModelIntegrationTest(unittest.TestCase):
 
         # verify the predicted fov
         expected_shape = torch.Size((1,))
-        self.assertEqual(outputs.fov.shape, expected_shape)
+        self.assertEqual(outputs.field_of_view.shape, expected_shape)
 
         expected_slice = torch.tensor([47.2459]).to(torch_device)
-        torch.testing.assert_close(outputs.fov, expected_slice, atol=1e-4, rtol=1e-4)
+        torch.testing.assert_close(outputs.field_of_view, expected_slice, atol=1e-4, rtol=1e-4)
 
     def test_post_processing_depth_estimation(self):
         model_path = "geetu040/DepthPro"

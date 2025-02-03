@@ -337,9 +337,9 @@ class DepthProImageProcessor(BaseImageProcessor):
         target_sizes: Optional[Union[TensorType, List[Tuple[int, int]], None]] = None,
     ) -> Dict[str, List[TensorType]]:
         """
-        Post-processes the raw depth predictions from the model to generate final depth predictions and optionally
-        resizes them to specified target sizes. This function supports scaling based on the field of view (FoV)
-        and adjusts depth values accordingly.
+        Post-processes the raw depth predictions from the model to generate
+        final depth predictions which is caliberated using the field of view if provided
+        and resized to specified target sizes if provided.
 
         Args:
             outputs ([`DepthProDepthEstimatorOutput`]):
@@ -351,7 +351,7 @@ class DepthProImageProcessor(BaseImageProcessor):
 
         Returns:
             `List[Dict[str, TensorType]]`: A list of dictionaries of tensors representing the processed depth
-            predictions.
+            predictions, and field of view (degrees) and focal length (pixels) if `field_of_view` is given in `outputs`.
 
         Raises:
             `ValueError`:
@@ -360,7 +360,7 @@ class DepthProImageProcessor(BaseImageProcessor):
         requires_backends(self, "torch")
 
         predicted_depth = outputs.predicted_depth
-        fov = outputs.fov
+        fov = outputs.field_of_view
 
         batch_size = len(predicted_depth)
 
@@ -373,12 +373,13 @@ class DepthProImageProcessor(BaseImageProcessor):
         fov = [None] * batch_size if fov is None else fov
         target_sizes = [None] * batch_size if target_sizes is None else target_sizes
         for depth, fov_value, target_size in zip(predicted_depth, fov, target_sizes):
+            focal_length = None
             if target_size is not None:
                 # scale image w.r.t fov
                 if fov_value is not None:
                     width = target_size[1]
-                    fov_value = 0.5 * width / torch.tan(0.5 * torch.deg2rad(fov_value))
-                    depth = depth * width / fov_value
+                    focal_length = 0.5 * width / torch.tan(0.5 * torch.deg2rad(fov_value))
+                    depth = depth * width / focal_length
 
                 # interpolate
                 depth = torch.nn.functional.interpolate(
@@ -395,7 +396,8 @@ class DepthProImageProcessor(BaseImageProcessor):
             results.append(
                 {
                     "predicted_depth": depth,
-                    "fov": fov_value,
+                    "field_of_view": fov_value,
+                    "focal_length": focal_length,
                 }
             )
 

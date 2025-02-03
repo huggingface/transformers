@@ -58,7 +58,8 @@ The DepthPro model processes an input image by first downsampling it at multiple
 ...     outputs, target_sizes=[(image.height, image.width)],
 ... )
 
->>> fov = post_processed_output[0]["fov"]
+>>> field_of_view = post_processed_output[0]["field_of_view"]
+>>> focal_length = post_processed_output[0]["focal_length"]
 >>> depth = post_processed_output[0]["predicted_depth"]
 >>> depth = (depth - depth.min()) / depth.max()
 >>> depth = depth * 255.
