@@ -1229,7 +1229,6 @@ class Kosmos2_5TextTransformer(nn.Module):
         return output if return_dict else output.to_tuple()
 
 
-# Copied from transformers.models.kosmos2.modeling_kosmos2.Kosmos2ImageToTextProjection with Kosmos2->Kosmos2_5
 class Kosmos2_5ImageToTextProjection(nn.Module):
     """The layer that transforms the image model's output to part of the text model's input (namely, image features)"""
 
