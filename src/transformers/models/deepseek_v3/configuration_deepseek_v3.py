@@ -135,12 +135,12 @@ class DeepseekV3Config(PretrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
     # Default tensor parallel plan for base model `DeepseekV3Model`
     base_model_tp_plan = {
-        "layers.*.gate_proj": "colwise",
-        "layers.*.up_proj": "colwise",
-        "layers.*.down_proj": "rowwise",
         "layers.*.self_attn.q_b_proj": "colwise",
         "layers.*.self_attn.kv_b_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.gate_proj": "colwise",
+        "layers.*.up_proj": "colwise",
+        "layers.*.down_proj": "rowwise",
     }
 
     def __init__(
