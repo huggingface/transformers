@@ -3442,7 +3442,7 @@ class GenerationMixin:
 
         batch_size_unflattened, cur_len = input_ids.shape
         batch_size = batch_size_unflattened // num_beams
-        vocab_size = self.config.vocab_size
+        vocab_size = self.config.get_text_config().vocab_size
         decoder_prompt_len = cur_len
         this_peer_finished = False
 
