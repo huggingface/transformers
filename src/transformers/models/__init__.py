@@ -208,6 +208,7 @@ from . import (
     persimmon,
     phi,
     phi3,
+    phi3_5,
     phimoe,
     phobert,
     pix2struct,
