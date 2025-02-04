@@ -3871,12 +3871,10 @@ class ModelTesterMixin:
 
             for name, submodule in model.named_modules():
                 class_name = submodule.__class__.__name__
-                if (
-                    "SdpaAttention" in class_name
-                    or "SdpaSelfAttention" in class_name
-                    or "FlashAttention" in class_name
-                ):
-                    raise ValueError(f"The eager model should not have SDPA/FA2 attention layers but got {class_name}")
+                if class_name.endswith("Attention") and submodule.config._attn_implementation != "eager":
+                    raise ValueError(
+                        f"The eager model should not have SDPA/FA2 attention layers but got `{class_name}.config._attn_implementation={submodule.config._attn_implementation}`"
+                    )
 
     @require_torch_sdpa
     def test_sdpa_can_dispatch_non_composite_models(self):
@@ -3907,8 +3905,10 @@ class ModelTesterMixin:
 
                 for name, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                        raise ValueError(f"The eager model should not have SDPA attention layers but got {class_name}")
+                    if class_name.endswith("Attention") and submodule.config._attn_implementation == "sdpa":
+                        raise ValueError(
+                            f"The eager model should not have SDPA attention layers but got `{class_name}.config._attn_implementation={submodule.config._attn_implementation}`"
+                        )
 
     @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
@@ -3959,7 +3959,7 @@ class ModelTesterMixin:
 
                 for name, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                    if class_name.endswith("Attention") and submodule.config._attn_implementation == "sdpa":
                         raise ValueError("The eager model should not have SDPA attention layers")
 
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
