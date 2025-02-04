@@ -562,6 +562,10 @@ _import_structure = {
         "LlavaConfig",
         "LlavaProcessor",
     ],
+    "models.janus": [
+        "JanusConfig",
+       
+    ],
     "models.llava_next": [
         "LlavaNextConfig",
         "LlavaNextProcessor",
@@ -2758,6 +2762,12 @@ else:
         [
             "LlavaForConditionalGeneration",
             "LlavaPreTrainedModel",
+        ]
+    )
+    _import_structure["models.janus"].extend(
+        [
+            "JanusForConditionalGeneration",
+            "JanusPreTrainedModel",
         ]
     )
     _import_structure["models.llava_next"].extend(
@@ -5694,6 +5704,10 @@ if TYPE_CHECKING:
         LlavaConfig,
         LlavaProcessor,
     )
+    from .models.janus import (
+        JanusConfig,
+       
+    )
     from .models.llava_next import (
         LlavaNextConfig,
         LlavaNextProcessor,
@@ -7667,6 +7681,10 @@ if TYPE_CHECKING:
         from .models.llava import (
             LlavaForConditionalGeneration,
             LlavaPreTrainedModel,
+        )
+        from .models.janus import (
+            JanusForConditionalGeneration,
+            JanusPreTrainedModel,
         )
         from .models.llava_next import (
             LlavaNextForConditionalGeneration,

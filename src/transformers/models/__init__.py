@@ -146,6 +146,7 @@ from . import (
     lilt,
     llama,
     llava,
+    janus,
     llava_next,
     llava_next_video,
     llava_onevision,
