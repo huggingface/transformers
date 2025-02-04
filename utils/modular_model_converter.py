@@ -19,7 +19,7 @@ import os
 import re
 from abc import ABC, abstractmethod
 from collections import Counter, defaultdict, deque
-from typing import Dict, Set
+from typing import Dict, Optional, Set, Union
 
 import libcst as cst
 from check_copies import run_ruff
@@ -169,7 +169,7 @@ def is_call_to_super(node, func_name):
     )
 
 
-def get_full_attribute_name(node: cst.Attribute | cst.Name) -> str | None:
+def get_full_attribute_name(node: Union[cst.Attribute, cst.Name]) -> Optional[str]:
     """Get the full name of an Attribute or Name node (e.g. `"nn.Module"` for an Attribute representing it). If the
     successive value of an Attribute are not Name nodes, return `None`."""
     if m.matches(node, m.Name()):
@@ -430,11 +430,11 @@ class SuperTransformer(cst.CSTTransformer):
 
 def find_all_dependencies(
     dependency_mapping: Dict[str, set],
-    start_entity: str | None = None,
-    initial_dependencies: set | None = None,
-    initial_checked_dependencies: set | None = None,
+    start_entity: Optional[str] = None,
+    initial_dependencies: Optional[set] = None,
+    initial_checked_dependencies: Optional[set] = None,
     return_parent: bool = False,
-) -> list | set:
+) -> Union[list, set]:
     """Return all the dependencies of the given `start_entity` or `initial_dependencies`. This is basically some kind of
     BFS traversal algorithm. It can either start from `start_entity`, or `initial_dependencies`.
 
@@ -525,7 +525,7 @@ class ClassDependencyMapper(CSTVisitor):
     """
 
     def __init__(
-        self, class_name: str, global_names: set[str], objects_imported_from_modeling: set[str] | None = None
+        self, class_name: str, global_names: set[str], objects_imported_from_modeling: Optional[set[str]] = None
     ):
         super().__init__()
         self.class_name = class_name
@@ -553,7 +553,7 @@ def dependencies_for_class_node(node: cst.ClassDef, global_names: set[str]) -> s
 
 
 def augmented_dependencies_for_class_node(
-    node: cst.ClassDef, mapper: "ModuleMapper", objects_imported_from_modeling: set[str] | None = None
+    node: cst.ClassDef, mapper: "ModuleMapper", objects_imported_from_modeling: Optional[set[str]] = None
 ) -> set:
     """Create augmented dependencies for a class node based on a `mapper`.
     Augmented dependencies means immediate dependencies + recursive function and assignments dependencies.
