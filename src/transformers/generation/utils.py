@@ -3490,7 +3490,7 @@ class GenerationMixin:
 
         # per batch, beam-item holding current token in loop and completed sequences
         running_sequences = torch.full(
-            (batch_size, num_beams, max_length), fill_value=pad_token_id, dtype=torch.long, device=input_ids.device
+            (batch_size, num_beams, max_length), fill_value=pad_token_id, dtype=torch.int32, device=input_ids.device
         )
         running_sequences[:, :, :cur_len] = unflatten_beam_dim(input_ids, batch_size, num_beams)
         sequences = running_sequences.clone().detach()
@@ -3518,7 +3518,7 @@ class GenerationMixin:
 
         # placeholders to prevent torch.cat operations
         merged_sequences = torch.zeros(
-            (batch_size, num_beams + beams_to_keep, max_length), dtype=torch.long, device=input_ids.device
+            (batch_size, num_beams + beams_to_keep, max_length), dtype=torch.int32, device=input_ids.device
         )
         merged_scores = torch.zeros(
             (batch_size, num_beams + beams_to_keep), dtype=torch.float, device=input_ids.device
@@ -3672,14 +3672,14 @@ class GenerationMixin:
             # b. Compute log probs -- get log probabilities from logits, process logits with processors (*e.g.*
             # `temperature`, ...), and add new logprobs to existing running logprobs scores.
             log_probs = nn.functional.log_softmax(logits, dim=-1)
-            processed_log_probs = logits_processor(flat_running_sequences, log_probs)
+            log_probs = logits_processor(flat_running_sequences, log_probs)
 
-            # Store scores, attentions and hidden_states when required
+            # Store logits, attentions and hidden_states when required
             if return_dict_in_generate:
                 if output_logits:
                     raw_logits += (logits.clone(),)
-                if output_scores:
-                    all_scores += (processed_log_probs.clone(),)
+                if return_dict_in_generate and output_scores:
+                    all_scores += (log_probs.clone(),)
 
                 if output_attentions:
                     decoder_attentions += (
@@ -3701,19 +3701,17 @@ class GenerationMixin:
             # Otherwise a reference to outputs is kept which keeps the logits alive in the next iteration
             del model_outputs
 
-            processed_log_probs = unflatten_beam_dim(processed_log_probs, batch_size, num_beams)
-            accumulated_log_probs = processed_log_probs + running_beam_scores[:, :, None]
-            vocab_size = accumulated_log_probs.shape[2]
-            accumulated_log_probs = torch.reshape(accumulated_log_probs, (batch_size, num_beams * vocab_size))
+            log_probs = unflatten_beam_dim(log_probs, batch_size, num_beams)
+            log_probs = log_probs + running_beam_scores[:, :, None]
+            log_probs = torch.reshape(log_probs, (batch_size, num_beams * vocab_size))
 
             # c. Retrieve top-K continuations, i.e. select the next token (greedy or sampling) and then keep the best
             # continuations among all beams based on the accumulated scores.
             topk_log_probs, topk_running_sequences, topk_running_beam_indices = get_top_k_continuations(
-                accumulated_log_probs, running_sequences, running_beam_indices, cur_len
+                log_probs, running_sequences, running_beam_indices, cur_len
             )
 
             # d. Check which running sequences have finished
-
             next_token_hits_stopping_criteria = stopping_criteria(
                 flatten_beam_dim(topk_running_sequences[:, :, : cur_len + 1]),  # remove unfilled token indexes
                 all_scores,
