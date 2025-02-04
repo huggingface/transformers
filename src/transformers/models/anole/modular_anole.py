@@ -13,20 +13,29 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from dataclasses import dataclass
 from functools import cached_property
-from typing import Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
-import torch.utils.checkpoint
+import numpy as np
 
 from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...image_processing_utils import BatchFeature
+from ...image_transforms import (
+    to_channel_dimension_format,
+)
+from ...image_utils import (
+    ChannelDimension,
+    ImageInput,
+    make_flat_list_of_images,
+    to_numpy_array,
+)
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
+    ModelOutput,
 )
-from ...utils import is_torchdynamo_compiling, logging
+from ...utils import TensorType, is_torch_available, is_torchdynamo_compiling, is_vision_available, logging
 from ..chameleon.configuration_chameleon import (
     ChameleonConfig,
     ChameleonVQVAEConfig,
@@ -37,11 +46,21 @@ from ..chameleon.modeling_chameleon import (
     ChameleonImageVocabularyMapping,
     ChameleonModel,
     ChameleonVQVAE,
-    ChameleonVQVAEAttnBlock,
-    ChameleonVQVAEOutput,
-    ChameleonVQVAEResnetBlock,
+    ChameleonVQVAEEncoderAttnBlock,
+    ChameleonVQVAEEncoderResnetBlock,
+    ChameleonVQVAEVectorQuantizer,
 )
 from ..chameleon.processing_chameleon import ChameleonProcessor
+
+
+if is_torch_available():
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
+    import torch.utils.checkpoint
+
+if is_vision_available():
+    import PIL
 
 
 _CHECKPOINT_FOR_DOC = "leloy/Anole-7b-v0.1-hf"
@@ -50,22 +69,57 @@ logger = logging.get_logger(__name__)
 
 
 class AnoleVQVAEConfig(ChameleonVQVAEConfig):
-    pass
+    def __init__(
+        self,
+        out_channels: int = 3,
+        **super_kwargs,
+    ):
+        super().__init__(**super_kwargs)
+        self.out_channels = out_channels
 
 
 class AnoleConfig(ChameleonConfig):
     pass
 
 
-class AnoleVQVAEOutput(ChameleonVQVAEOutput):
+@dataclass
+class AnoleVQVAEOutput(ModelOutput):
+    """
+    Base class for Anole VQ-VAE mode model outputs.
+    Args:
+        decoded_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            Reconstructed pixel values after encoding and decoding the input.
+        emb_loss (`torch.FloatTensor`):
+            Embedding loss.
+    """
+
+    decoded_pixel_values: Optional[torch.FloatTensor] = None
+    emb_loss: torch.FloatTensor = None
+
+
+class AnoleVQVAEVectorQuantizer(ChameleonVQVAEVectorQuantizer):
+    def __init__(self, config):
+        super().__init__(config)
+        self.quant_state_dims = [config.resolution // 2 ** (len(config.channel_multiplier) - 1)] * 2
+
+    def get_codebook_entry(self, image_tokens: torch.LongTensor) -> torch.FloatTensor:
+        batch_size = image_tokens.shape[0]
+        emb_dim: int = self.embedding.weight.shape[-1]
+        # get quantized latent vectors
+        hidden_state_quant = self.embedding(image_tokens)
+
+        # reshape back to match original input shape
+        hidden_state_quant = hidden_state_quant.view((batch_size, *self.quant_state_dims, emb_dim))
+        hidden_state_quant = hidden_state_quant.permute(0, 3, 1, 2).contiguous()
+
+        return hidden_state_quant
+
+
+class AnoleVQVAEResnetBlock(ChameleonVQVAEEncoderResnetBlock):
     pass
 
 
-class AnoleVQVAEResnetBlock(ChameleonVQVAEResnetBlock):
-    pass
-
-
-class AnoleVQVAEAttnBlock(ChameleonVQVAEAttnBlock):
+class AnoleVQVAEAttnBlock(ChameleonVQVAEEncoderAttnBlock):
     pass
 
 
@@ -173,8 +227,7 @@ class AnoleVQVAE(ChameleonVQVAE):
     def __init__(self, config: AnoleVQVAEConfig):
         super().__init__(config)
         self.decoder = AnoleVQVAEDecoder(config)
-        self.quant_conv = torch.nn.Conv2d(config.latent_channels, config.embed_dim, 1)
-        self.post_quant_conv = torch.nn.Conv2d(config.embed_dim, config.latent_channels, 1)
+        self.post_init()
 
     def decode(self, image_tokens: torch.LongTensor) -> torch.FloatTensor:
         """
@@ -228,15 +281,6 @@ class AnoleVQVAE(ChameleonVQVAE):
 
 class AnoleImageVocabularyMapping(ChameleonImageVocabularyMapping):
     @cached_property
-    def bpe2img(self):
-        img_tkn_chr_mapping = {chr(ord("A") + i): str(i) for i in range(10)}
-
-        def remap(old_name: str) -> str:
-            return "".join(img_tkn_chr_mapping.get(c, c) for c in old_name[len("IMGIMG") : -1])
-
-        return {tok: int(remap(self.val2name[tok])) for tok in self.image_token_ids}
-
-    @cached_property
     def bpe2img_mapping_tensor(self):
         mapping = torch.zeros(max(self.bpe2img.keys()) + 1, dtype=torch.int)
         for k, v in self.bpe2img.items():
@@ -258,10 +302,33 @@ class AnoleModel(ChameleonModel):
             persistent=False,
         )
 
-    property
-
+    @property
     def image_seq_length(self) -> int:
         return self.vqmodel.quantize.quant_state_dims[0] * self.vqmodel.quantize.quant_state_dims[1]
+
+    def convert_img2bpe_tokens(self, img_batch: torch.LongTensor) -> torch.LongTensor:
+        """
+        Converts image tokens generated by the VQVAE model into BPE tokens compatible with the text tokenizer.
+
+        Notes:
+            - It is important to move the `img_batch` tensor to the same device as the `img2bpe_mapping_tensor` buffer
+            as Accelerate may move the buffer to a different device when loading the model with `device_map="auto"`.
+            - Accelerate up to version 0.33.0 (and also maybe later versions) has a bug where buffers in downstream modules
+            may be ignored when inferring the proper device map. See: https://github.com/huggingface/accelerate/blob/79ca85c27df292dbf64cfa2bcc12dbb62fbe9267/src/accelerate/utils/modeling.py#L1273
+            This causes the `img2bpe_mapping_tensor` buffer to be placed on the CPU by default, which may cause a performance
+            loss--especially with prompts that contain many images. No action needs to be done when this bug is fixed.
+
+        Args:
+            img_batch (`torch.Tensor` of shape `(batch_size, image_seq_length)`):
+                The image tokens generated by the VQVAE model.
+
+        Returns:
+            `torch.Tensor` of shape `(batch_size, image_seq_length)`:
+                The image tokens converted to be compatible with the text tokenizer's BPE tokens.
+        """
+        device = img_batch.device
+        img_tokens = self.img2bpe_mapping_tensor[img_batch.to(self.img2bpe_mapping_tensor.device)]
+        return img_tokens.to(device)
 
     def convert_bpe2img_tokens(self, bpe_batch: torch.LongTensor) -> torch.LongTensor:
         """
@@ -287,6 +354,25 @@ class AnoleModel(ChameleonModel):
         device = bpe_batch.device
         img_tokens = self.bpe2img_mapping_tensor[bpe_batch.to(self.bpe2img_mapping_tensor.device)]
         return img_tokens.to(device)
+
+    def get_image_tokens(self, pixel_values: torch.FloatTensor):
+        """
+        Tokenizes images into discrete tokens with VQGAN module. Converts
+        obtained image tokens into BPE tokens and wraps with "boi" and "eoi"
+        special tokens.
+
+        Args:
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
+                The tensors corresponding to the input images.
+
+        Returns:
+            `torch.Tensor` of shape `(batch_size, image_seq_length)`:
+                The BPE tokens generated by the model.
+        """
+        batch_size = pixel_values.shape[0]
+        _, _, image_toks = self.vqmodel.encode(pixel_values)
+        image_toks = image_toks.view(batch_size, -1)
+        return self.convert_img2bpe_tokens(image_toks)
 
     def decode_image_tokens(self, bpe_tokens: torch.LongTensor) -> torch.LongTensor:
         """
@@ -531,7 +617,7 @@ class AnoleForConditionalGeneration(ChameleonForConditionalGeneration):
         **kwargs,
     ):
         # Overwritten -- Anole can accept `negative_input_ids` and will expand inputs temporarily for CFG generation
-        if negative_input_ids is not None:
+        if negative_input_ids is not None and cache_position[0] == 0:
             if input_ids.shape[0] != negative_input_ids.shape[0]:
                 raise ValueError(
                     "`conditional` and `unconditional` inputs should have same batch size, i.e. one negative prompt per input. "
@@ -567,9 +653,8 @@ class AnoleForConditionalGeneration(ChameleonForConditionalGeneration):
         if inputs_embeds is not None and cache_position[0] == 0:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
-            model_inputs = {
-                "input_ids": input_ids.clone(memory_format=torch.contiguous_format)
-            }  # `contiguous()` needed for compilation use cases
+            # `contiguous()` needed for compilation use cases
+            model_inputs = {"input_ids": input_ids.clone(memory_format=torch.contiguous_format)}
 
         # Create 4D attention mask is we are using a `StaticCache` (important for performant compiled forward pass)
         if isinstance(past_key_values, StaticCache) and attention_mask.ndim == 2:
@@ -619,11 +704,100 @@ class AnoleForConditionalGeneration(ChameleonForConditionalGeneration):
 
 
 class AnoleImageProcessor(ChameleonImageProcessor):
-    pass
+    def postprocess(
+        self,
+        images: ImageInput,
+        do_rescale: Optional[bool] = None,
+        rescale_factor: Optional[float] = None,
+        do_unnormalize: Optional[bool] = None,
+        image_mean: Optional[Union[float, List[float]]] = None,
+        image_std: Optional[Union[float, List[float]]] = None,
+        return_tensors: Optional[Union[str, TensorType]] = None,
+        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ) -> "torch.Tensor":
+        """
+        Postprocess a batch of pixel values to images.
+
+        Args:
+            images (`ImageInput`):
+                Image to postprocess. Expects a single or batch of images with pixel values.
+            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
+                Whether to rescale the image.
+            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
+                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
+            do_unnormalize (`bool`, *optional*, defaults to `self.do_normalize`):
+                Whether to unnormalize the image.
+            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
+                Image mean to use for unnormalization. Only has an effect if `do_unnormalize` is set to `True`.
+            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
+                Image standard deviation to use for unnormalization. Only has an effect if `do_unnormalize` is set to
+                `True`.
+            return_tensors (`str` or `TensorType`, *optional*):
+                The type of tensors to return. Can be one of:
+                - Unset: Return a list of `np.ndarray`.
+                - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
+                - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
+                - `PIL.Image` or `'pil'`: Return a batch of type `PIL.Image`.
+            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
+                The channel dimension format for the output image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - Unset: Use the channel dimension format of the input image.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input image. If unset, the channel dimension format is inferred
+                from the input image. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
+                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+
+        """
+        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
+        rescale_factor = 1.0 / self.rescale_factor if rescale_factor is None else rescale_factor
+        do_unnormalize = do_unnormalize if do_unnormalize is not None else self.do_normalize
+        image_mean = image_mean if image_mean is not None else self.image_mean
+        image_std = image_std if image_std is not None else self.image_std
+
+        images = make_flat_list_of_images(images)
+
+        # All transformations expect numpy arrays.
+        images = [to_numpy_array(image) for image in images]
+
+        postprocessed_images = []
+        for image in images:
+            if do_unnormalize:
+                image = self.unnormalize(
+                    image, mean=image_mean, std=image_std, data_format=data_format, input_data_format=input_data_format
+                )
+
+            if do_rescale:
+                image = self.rescale(image, scale=rescale_factor, input_data_format=input_data_format)
+                image = image.clip(0, 255).astype(np.uint8)
+
+            if do_unnormalize and do_rescale and return_tensors == "pil":
+                image = to_channel_dimension_format(image, ChannelDimension.LAST, input_channel_dim=input_data_format)
+                image = PIL.Image.fromarray(image)
+            postprocessed_images.append(image)
+
+        return_tensors = return_tensors if return_tensors != "pil" else None
+        return BatchFeature(data={"pixel_values": postprocessed_images}, tensor_type=return_tensors)
 
 
 class AnoleProcessor(ChameleonProcessor):
-    pass
+    def postprocess(self, images, return_tensors=None, **kwargs):
+        """
+        Postprocess a batch of images.
+
+        Args:
+            images (`ImageInput`):
+                A batch of images or a single image to postprocess.
+
+        Returns:
+            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
+
+            - **pixel_values** -- Pixel values that are postprocessed in the requested return type.
+        """
+        return self.image_processor.postprocess(images, return_tensors=return_tensors, **kwargs)
 
 
 __all__ = [

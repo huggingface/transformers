@@ -20,42 +20,36 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
-import warnings
 from dataclasses import dataclass
 from functools import cached_property
-from typing import Dict, Literal, Optional, Tuple, Union
+from typing import Optional, Tuple, Union
 
-import torch
-import torch.nn as nn
-import torch.nn.functional as F
+from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
-from ...generation.configuration_utils import GenerationConfig
-from ...generation.logits_process import (
-    AllowOnlyTokensInRelativeWindowLogitsProcessor,
-    LogitsProcessorList,
-    SuppressTokensAtBeginLogitsProcessor,
-    SuppressTokensInIndexRangeLogitsProcessor,
-    SuppressTokensLogitsProcessor,
-)
-from ...generation.utils import GenerateOutput
 from ...modeling_attn_mask_utils import AttentionMaskConverter
 from ...modeling_flash_attention_utils import _flash_attention_forward
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
-    ModelOutput,
     add_code_sample_docstrings,
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     is_flash_attn_greater_or_equal_2_10,
+    is_torch_available,
     is_torchdynamo_compiling,
     logging,
     replace_return_docstrings,
 )
 from .configuration_anole import AnoleConfig, AnoleVQVAEConfig
+
+
+if is_torch_available():
+    import torch
+    import torch.nn as nn
+    import torch.nn.functional as F
 
 
 logger = logging.get_logger(__name__)
@@ -69,8 +63,7 @@ _CONFIG_FOR_DOC = "AnoleConfig"
 @dataclass
 class AnoleVQVAEOutput(ModelOutput):
     """
-    Base class for Anole Vq-VAE mode model outputs.
-
+    Base class for Anole VQ-VAE mode model outputs.
     Args:
         decoded_pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             Reconstructed pixel values after encoding and decoding the input.
@@ -80,6 +73,67 @@ class AnoleVQVAEOutput(ModelOutput):
 
     decoded_pixel_values: Optional[torch.FloatTensor] = None
     emb_loss: torch.FloatTensor = None
+
+
+class AnoleVQVAEVectorQuantizer(nn.Module):
+    """
+    A module for vector quantization using learned embedding vectors.
+
+    This module implements the quantization process similar to te one described in
+    the VQ-VAE (Vector Quantized Variational AutoEncoder) paper. It quantizes continuous
+    input vectors into discrete codebook vectors, which are learned during training.
+    Current implementation improves over previous ones by avoiding costly matrix multiplications
+    and allowing for post-hoc remapping of indices.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        self.num_embeddings = config.num_embeddings
+        self.embedding_dim = config.embed_dim
+        self.beta = getattr(config, "beta", 0.25)
+
+        self.embedding = nn.Embedding(self.num_embeddings, self.embedding_dim)
+        self.re_embed = self.num_embeddings
+        self.quant_state_dims = [config.resolution // 2 ** (len(config.channel_multiplier) - 1)] * 2
+
+    def forward(self, hidden_state: torch.Tensor):
+        hidden_state = hidden_state.permute(0, 2, 3, 1).contiguous()
+        hidden_state_flattened = hidden_state.view(-1, self.embedding_dim)
+
+        # distances from z to embeddings e_j (z - e)^2 = z^2 + e^2 - 2 e * z
+        distances = (
+            torch.sum(hidden_state_flattened**2, dim=1, keepdim=True)
+            + torch.sum(self.embedding.weight**2, dim=1)
+            - 2 * torch.einsum("bd,dn->bn", hidden_state_flattened, self.embedding.weight.transpose(0, 1))
+        )
+
+        min_encoding_indices = torch.argmin(distances, dim=1)
+        hidden_state_quant = self.embedding(min_encoding_indices).view(hidden_state.shape)
+
+        # compute loss for embedding
+        loss = torch.mean((hidden_state_quant.detach() - hidden_state) ** 2) + self.beta * torch.mean(
+            (hidden_state_quant - hidden_state.detach()) ** 2
+        )
+
+        # preserve gradients
+        hidden_state_quant = hidden_state + (hidden_state_quant - hidden_state).detach()
+
+        # reshape back to match original input shape
+        hidden_state_quant = hidden_state_quant.permute(0, 3, 1, 2).contiguous()
+
+        return hidden_state_quant, loss, min_encoding_indices
+
+    def get_codebook_entry(self, image_tokens: torch.LongTensor) -> torch.FloatTensor:
+        batch_size = image_tokens.shape[0]
+        emb_dim: int = self.embedding.weight.shape[-1]
+        # get quantized latent vectors
+        hidden_state_quant = self.embedding(image_tokens)
+
+        # reshape back to match original input shape
+        hidden_state_quant = hidden_state_quant.view((batch_size, *self.quant_state_dims, emb_dim))
+        hidden_state_quant = hidden_state_quant.permute(0, 3, 1, 2).contiguous()
+
+        return hidden_state_quant
 
 
 class AnoleVQVAEResnetBlock(nn.Module):
@@ -137,7 +191,7 @@ class AnoleVQVAEAttnBlock(nn.Module):
         self.v = torch.nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
         self.proj_out = torch.nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
 
-    def forward(self, hidden_states: torch.FloatTensor) -> torch.FloatTensor:
+    def forward(self, hidden_states):
         residual = hidden_states
         hidden_states = self.norm(hidden_states)
         query_states = self.q(hidden_states)
@@ -261,68 +315,6 @@ class AnoleVQVAEDecoder(nn.Module):
         return hidden_state
 
 
-class AnoleVQVAEVectorQuantizer(nn.Module):
-    """
-    A module for vector quantization using learned embedding vectors.
-
-    This module implements the quantization process similar to te one described in
-    the VQ-VAE (Vector Quantized Variational AutoEncoder) paper. It quantizes continuous
-    input vectors into discrete codebook vectors, which are learned during training.
-    Current implementation improves over previous ones by avoiding costly matrix multiplications
-    and allowing for post-hoc remapping of indices.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        self.num_embeddings = config.num_embeddings
-        self.embedding_dim = config.embed_dim
-        self.quant_state_dims = [config.resolution // 2 ** (len(config.channel_multiplier) - 1)] * 2
-        self.beta = getattr(config, "beta", 0.25)
-
-        self.embedding = nn.Embedding(self.num_embeddings, self.embedding_dim)
-        self.re_embed = self.num_embeddings
-
-    def forward(self, hidden_state: torch.FloatTensor):
-        batch_size = hidden_state.shape[0]
-        hidden_state = hidden_state.permute(0, 2, 3, 1).contiguous()
-        hidden_state_flattened = hidden_state.view(-1, self.embedding_dim)
-
-        # distances from z to embeddings e_j (z - e)^2 = z^2 + e^2 - 2 e * z
-        distances = (
-            torch.sum(hidden_state_flattened**2, dim=1, keepdim=True)
-            + torch.sum(self.embedding.weight**2, dim=1)
-            - 2 * torch.einsum("bd,dn->bn", hidden_state_flattened, self.embedding.weight.transpose(0, 1))
-        )
-
-        min_encoding_indices = torch.argmin(distances, dim=1)
-        hidden_state_quant = self.embedding(min_encoding_indices).view(hidden_state.shape)
-
-        # compute loss for embedding
-        loss = torch.mean((hidden_state_quant.detach() - hidden_state) ** 2) + self.beta * torch.mean(
-            (hidden_state_quant - hidden_state.detach()) ** 2
-        )
-
-        # preserve gradients
-        hidden_state_quant = hidden_state + (hidden_state_quant - hidden_state).detach()
-
-        # reshape back to match original input shape
-        hidden_state_quant = hidden_state_quant.permute(0, 3, 1, 2).contiguous()
-
-        return hidden_state_quant, loss, min_encoding_indices.view(batch_size, -1)
-
-    def get_codebook_entry(self, image_tokens: torch.LongTensor) -> torch.FloatTensor:
-        batch_size = image_tokens.shape[0]
-        emb_dim: int = self.embedding.weight.shape[-1]
-        # get quantized latent vectors
-        hidden_state_quant = self.embedding(image_tokens)
-
-        # reshape back to match original input shape
-        hidden_state_quant = hidden_state_quant.view((batch_size, *self.quant_state_dims, emb_dim))
-        hidden_state_quant = hidden_state_quant.permute(0, 3, 1, 2).contiguous()
-
-        return hidden_state_quant
-
-
 class AnoleVQVAEEncoderConvDownsample(nn.Module):
     def __init__(self, in_channels):
         super().__init__()
@@ -333,6 +325,85 @@ class AnoleVQVAEEncoderConvDownsample(nn.Module):
         hidden_states = F.pad(hidden_states, pad=(0, 1, 0, 1), mode="constant", value=0)
         hidden_states = self.conv(hidden_states)
         return hidden_states
+
+
+class AnoleVQVAEEncoderResnetBlock(nn.Module):
+    def __init__(
+        self,
+        config,
+        in_channels,
+        out_channels=None,
+        conv_shortcut=False,
+    ):
+        super().__init__()
+        self.in_channels = in_channels
+        self.out_channels = in_channels if out_channels is None else out_channels
+        self.use_conv_shortcut = conv_shortcut
+
+        self.norm1 = torch.nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
+        self.conv1 = torch.nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
+        self.norm2 = torch.nn.GroupNorm(num_groups=32, num_channels=out_channels, eps=1e-6, affine=True)
+        self.dropout = torch.nn.Dropout(config.dropout)
+        self.conv2 = torch.nn.Conv2d(out_channels, out_channels, kernel_size=3, stride=1, padding=1)
+        if self.in_channels != self.out_channels:
+            if self.use_conv_shortcut:
+                self.conv_shortcut = torch.nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=1, padding=1)
+            else:
+                self.nin_shortcut = torch.nn.Conv2d(in_channels, out_channels, kernel_size=1, stride=1, padding=0)
+
+    def forward(self, hidden_states):
+        residual = hidden_states
+        hidden_states = self.norm1(hidden_states)
+        hidden_states *= torch.sigmoid(hidden_states)
+        hidden_states = self.conv1(hidden_states)
+
+        hidden_states = self.norm2(hidden_states)
+        hidden_states *= torch.sigmoid(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.conv2(hidden_states)
+
+        if self.in_channels != self.out_channels:
+            if self.use_conv_shortcut:
+                residual = self.conv_shortcut(residual)
+            else:
+                residual = self.nin_shortcut(residual)
+
+        return residual + hidden_states
+
+
+class AnoleVQVAEEncoderAttnBlock(nn.Module):
+    def __init__(self, in_channels):
+        super().__init__()
+        self.in_channels = in_channels
+
+        self.norm = torch.nn.GroupNorm(num_groups=32, num_channels=in_channels, eps=1e-6, affine=True)
+        self.q = torch.nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
+        self.k = torch.nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
+        self.v = torch.nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
+        self.proj_out = torch.nn.Conv2d(in_channels, in_channels, kernel_size=1, stride=1, padding=0)
+
+    def forward(self, hidden_states):
+        residual = hidden_states
+        hidden_states = self.norm(hidden_states)
+        query_states = self.q(hidden_states)
+        key_states = self.k(hidden_states)
+        value_states = self.v(hidden_states)
+
+        # compute attention
+        batch_size, channels, height, width = query_states.shape
+        query_states = query_states.reshape(batch_size, channels, height * width).permute(0, 2, 1)
+        key_states = key_states.reshape(batch_size, channels, height * width)
+        attn_weights = torch.bmm(query_states, key_states)
+        attn_weights = attn_weights * (int(channels) ** (-0.5))
+        attn_weights = F.softmax(attn_weights, dim=2)
+
+        # attend to values
+        value_states = value_states.reshape(batch_size, channels, height * width)
+        attn_weights = attn_weights.permute(0, 2, 1)
+        attn_output = torch.bmm(value_states, attn_weights).reshape(batch_size, channels, height, width)
+
+        attn_output = self.proj_out(attn_output)
+        return residual + attn_output
 
 
 class AnoleVQVAEEncoder(nn.Module):
@@ -348,7 +419,7 @@ class AnoleVQVAEEncoder(nn.Module):
         latent_channels = config.latent_channels
         channel_multiplier = config.channel_multiplier
 
-        self.conv_in = nn.Conv2d(in_channels, base_channels, kernel_size=3, stride=1, padding=1)
+        self.conv_in = torch.nn.Conv2d(in_channels, base_channels, kernel_size=3, stride=1, padding=1)
 
         curr_res = resolution
         in_channel_multiplier = (1,) + tuple(channel_multiplier)
@@ -361,7 +432,7 @@ class AnoleVQVAEEncoder(nn.Module):
             block_out = base_channels * channel_multiplier[i_level]
             for i_block in range(self.num_res_blocks):
                 block.append(
-                    AnoleVQVAEResnetBlock(
+                    AnoleVQVAEEncoderResnetBlock(
                         config=config,
                         in_channels=block_in,
                         out_channels=block_out,
@@ -373,7 +444,7 @@ class AnoleVQVAEEncoder(nn.Module):
                     and curr_res in config.attn_resolutions
                     and config.attn_type == "vanilla"
                 ):
-                    attn.append(AnoleVQVAEAttnBlock(block_in))
+                    attn.append(AnoleVQVAEEncoderAttnBlock(block_in))
 
             down = nn.Module()
             down.block = block
@@ -384,13 +455,13 @@ class AnoleVQVAEEncoder(nn.Module):
             self.down.append(down)
 
         self.mid = nn.Module()
-        self.mid.block_1 = AnoleVQVAEResnetBlock(
+        self.mid.block_1 = AnoleVQVAEEncoderResnetBlock(
             config=config,
             in_channels=block_in,
             out_channels=block_in,
         )
-        self.mid.attn_1 = AnoleVQVAEAttnBlock(block_in) if config.attn_type == "vanilla" else nn.Identity()
-        self.mid.block_2 = AnoleVQVAEResnetBlock(
+        self.mid.attn_1 = AnoleVQVAEEncoderAttnBlock(block_in) if config.attn_type == "vanilla" else nn.Identity()
+        self.mid.block_2 = AnoleVQVAEEncoderResnetBlock(
             config=config,
             in_channels=block_in,
             out_channels=block_in,
@@ -405,7 +476,7 @@ class AnoleVQVAEEncoder(nn.Module):
             padding=1,
         )
 
-    def forward(self, pixel_values: torch.FloatTensor) -> torch.FloatTensor:
+    def forward(self, pixel_values: torch.LongTensor):
         # downsampling
         hidden_states = [self.conv_in(pixel_values)]
         for i_level in range(self.num_resolutions):
@@ -457,7 +528,7 @@ class AnolePreTrainedModel(PreTrainedModel):
     config_class = AnoleConfig
     base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["AnoleDecoderLayer", "AnoleSwinDecoderLayer", "AnoleVQVAE"]
+    _no_split_modules = ["AnoleDecoderLayer", "AnoleSwinDecoderLayer"]
     _skip_keys_device_placement = ["past_key_values", "causal_mask"]
     _supports_flash_attn_2 = True
     _supports_sdpa = True
@@ -524,14 +595,14 @@ class AnoleVQVAE(AnolePreTrainedModel):
         super().__init__(config)
 
         self.encoder = AnoleVQVAEEncoder(config)
-        self.decoder = AnoleVQVAEDecoder(config)
         self.quantize = AnoleVQVAEVectorQuantizer(config)
         self.quant_conv = torch.nn.Conv2d(config.latent_channels, config.embed_dim, 1)
         self.post_quant_conv = torch.nn.Conv2d(config.embed_dim, config.latent_channels, 1)
         self.eval()  # Anole's VQ model is frozen
+        self.decoder = AnoleVQVAEDecoder(config)
         self.post_init()
 
-    def encode(self, pixel_values: torch.FloatTensor) -> Tuple[torch.FloatTensor, torch.FloatTensor, torch.LongTensor]:
+    def encode(self, pixel_values: torch.FloatTensor):
         """
         Encodes pixel values into quantized tokens.
 
@@ -607,24 +678,16 @@ class AnoleImageVocabularyMapping:
     A class for mapping discrete image tokens from VQGAN to BPE tokens.
     """
 
-    def __init__(
-        self,
-        vocab_map: Dict[str, int],
-        image_token_index: int,
-        boi_token_id: int,
-        eoi_token_id: int,
-    ):
+    def __init__(self, vocab_map):
         self.vocab_map = vocab_map
-        self.image_token_index = image_token_index
-        self.boi_token_id = boi_token_id
-        self.eoi_token_id = eoi_token_id
+        self.image_token_id = vocab_map.get("<image>")
 
     @cached_property
     def val2name(self):
         return {v: k for k, v in self.vocab_map.items()}
 
     @cached_property
-    def image_token_ids(self):
+    def image_tokens(self):
         return sorted([val for name, val in self.vocab_map.items() if name.startswith("IMGIMG")])
 
     @cached_property
@@ -634,23 +697,32 @@ class AnoleImageVocabularyMapping:
         def remap(old_name: str) -> str:
             return "".join(img_tkn_chr_mapping.get(c, c) for c in old_name[len("IMGIMG") : -1])
 
-        return {tok: int(remap(self.val2name[tok])) for tok in self.image_token_ids}
+        return {tok: int(remap(self.val2name[tok])) for tok in self.image_tokens}
 
     @cached_property
     def img2bpe(self):
         return {v: k for k, v in self.bpe2img.items()}
 
     @cached_property
-    def bpe2img_mapping_tensor(self):
-        mapping = torch.zeros(max(self.bpe2img.keys()) + 1, dtype=torch.int)
-        for k, v in self.bpe2img.items():
-            mapping[k] = v
-        return mapping
+    def bpe2img_search_tensors(self):
+        return torch.tensor(sorted(self.bpe2img.keys())), torch.tensor(sorted(self.bpe2img.values()))
 
     @cached_property
     def img2bpe_mapping_tensor(self):
         mapping = torch.zeros(max(self.img2bpe.keys()) + 1, dtype=torch.int)
         for k, v in self.img2bpe.items():
+            mapping[k] = v
+        return mapping
+
+    def convert_img2bpe(self, img_batch: torch.Tensor) -> torch.Tensor:
+        device = img_batch.device
+        img_tokens = self.img2bpe_mapping_tensor[img_batch.to("cpu")]
+        return img_tokens.to(device)
+
+    @cached_property
+    def bpe2img_mapping_tensor(self):
+        mapping = torch.zeros(max(self.bpe2img.keys()) + 1, dtype=torch.int)
+        for k, v in self.bpe2img.items():
             mapping[k] = v
         return mapping
 
@@ -1408,12 +1480,14 @@ class AnoleModel(AnolePreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.vocabulary_mapping = AnoleImageVocabularyMapping(
-            config.vocabulary_map,
-            config.image_token_index,
-            config.boi_token_id,
-            config.eoi_token_id,
+        self.vocabulary_mapping = AnoleImageVocabularyMapping(config.vocabulary_map)
+        decoder_layer = AnoleDecoderLayer if not self.config.swin_norm else AnoleSwinDecoderLayer
+        self.layers = nn.ModuleList(
+            [decoder_layer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
+        self.norm = AnoleRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.vqmodel = AnoleVQVAE._from_config(config.vq_config)
+        self.gradient_checkpointing = False
         self.register_buffer(
             "img2bpe_mapping_tensor",
             self.vocabulary_mapping.img2bpe_mapping_tensor,
@@ -1424,75 +1498,15 @@ class AnoleModel(AnolePreTrainedModel):
             self.vocabulary_mapping.bpe2img_mapping_tensor,
             persistent=False,
         )
-        decoder_layer = AnoleDecoderLayer if not self.config.swin_norm else AnoleSwinDecoderLayer
-        self.layers = nn.ModuleList(
-            [decoder_layer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
-        self.norm = AnoleRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.vqmodel = AnoleVQVAE._from_config(config.vq_config)
-        self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    @property
-    def image_seq_length(self) -> int:
-        return self.vqmodel.quantize.quant_state_dims[0] * self.vqmodel.quantize.quant_state_dims[1]
 
     def get_input_embeddings(self):
         return self.embed_tokens
 
     def set_input_embeddings(self, value):
         self.embed_tokens = value
-
-    def convert_img2bpe_tokens(self, img_batch: torch.LongTensor) -> torch.LongTensor:
-        """
-        Converts image tokens generated by the VQVAE model into BPE tokens compatible with the text tokenizer.
-
-        Notes:
-            - It is important to move the `img_batch` tensor to the same device as the `img2bpe_mapping_tensor` buffer
-            as Accelerate may move the buffer to a different device when loading the model with `device_map="auto"`.
-            - Accelerate up to version 0.33.0 (and also maybe later versions) has a bug where buffers in downstream modules
-            may be ignored when inferring the proper device map. See: https://github.com/huggingface/accelerate/blob/79ca85c27df292dbf64cfa2bcc12dbb62fbe9267/src/accelerate/utils/modeling.py#L1273
-            This causes the `img2bpe_mapping_tensor` buffer to be placed on the CPU by default, which may cause a performance
-            loss--especially with prompts that contain many images. No action needs to be done when this bug is fixed.
-
-        Args:
-            img_batch (`torch.Tensor` of shape `(batch_size, image_seq_length)`):
-                The image tokens generated by the VQVAE model.
-
-        Returns:
-            `torch.Tensor` of shape `(batch_size, image_seq_length)`:
-                The image tokens converted to be compatible with the text tokenizer's BPE tokens.
-        """
-        device = img_batch.device
-        img_tokens = self.img2bpe_mapping_tensor[img_batch.to(self.img2bpe_mapping_tensor.device)]
-        return img_tokens.to(device)
-
-    def convert_bpe2img_tokens(self, bpe_batch: torch.LongTensor) -> torch.LongTensor:
-        """
-        Converts image tokens that are compatible with the text tokenizer into image tokens compatible with the VQVAE
-        model.
-
-        Notes:
-            - It is important to move the `img_batch` tensor to the same device as the `img2bpe_mapping_tensor` buffer
-            as Accelerate may move the buffer to a different device when loading the model with `device_map="auto"`.
-            - Accelerate up to version 0.33.0 (and also maybe later versions) has a bug where buffers in downstream modules
-            may be ignored when inferring the proper device map. See: https://github.com/huggingface/accelerate/blob/79ca85c27df292dbf64cfa2bcc12dbb62fbe9267/src/accelerate/utils/modeling.py#L1273
-            This causes the `img2bpe_mapping_tensor` buffer to be placed on the CPU by default, which may cause a performance
-            loss--especially when generating interleaved text & images. No action needs to be done when this bug is fixed.
-
-        Args:
-            bpe_batch (`torch.Tensor` of shape `(batch_size, image_seq_length)`):
-                The image tokens compatible with the text tokenizer.
-
-        Returns:
-            `torch.Tensor` of shape `(batch_size, image_seq_length)`:
-                The image tokens converted to be compatible with the VQVAE model.
-        """
-        device = bpe_batch.device
-        img_tokens = self.bpe2img_mapping_tensor[bpe_batch.to(self.bpe2img_mapping_tensor.device)]
-        return img_tokens.to(device)
 
     def get_image_tokens(self, pixel_values: torch.FloatTensor):
         """
@@ -1508,25 +1522,10 @@ class AnoleModel(AnolePreTrainedModel):
             `torch.Tensor` of shape `(batch_size, image_seq_length)`:
                 The BPE tokens generated by the model.
         """
+        batch_size = pixel_values.shape[0]
         _, _, image_toks = self.vqmodel.encode(pixel_values)
+        image_toks = image_toks.view(batch_size, -1)
         return self.convert_img2bpe_tokens(image_toks)
-
-    def decode_image_tokens(self, bpe_tokens: torch.LongTensor) -> torch.LongTensor:
-        """
-        Converts BPE tokens generated by the model into discrete image tokens
-        compatible with the VQGAN module, then decodes them into pixel values.
-
-        Args:
-            bpe_tokens (`torch.tensor` of shape `(batch, image_seq_length)`):
-                The BPE tokens generated by the model.
-
-        Returns:
-            `torch.Tensor` of shape `(batch, num_channels, 512, 512)`:
-        """
-        if bpe_tokens.shape[1] != self.image_seq_length:
-            raise ValueError(f"All batches must have {self.image_seq_length} tokens.")
-        image_tensor = self.convert_bpe2img_tokens(bpe_tokens)
-        return self.vqmodel.decode(image_tensor)
 
     @add_start_docstrings_to_model_forward(ANOLE_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
@@ -1761,6 +1760,76 @@ class AnoleModel(AnolePreTrainedModel):
 
         return causal_mask
 
+    @property
+    def image_seq_length(self) -> int:
+        return self.vqmodel.quantize.quant_state_dims[0] * self.vqmodel.quantize.quant_state_dims[1]
+
+    def convert_img2bpe_tokens(self, img_batch: torch.LongTensor) -> torch.LongTensor:
+        """
+        Converts image tokens generated by the VQVAE model into BPE tokens compatible with the text tokenizer.
+
+        Notes:
+            - It is important to move the `img_batch` tensor to the same device as the `img2bpe_mapping_tensor` buffer
+            as Accelerate may move the buffer to a different device when loading the model with `device_map="auto"`.
+            - Accelerate up to version 0.33.0 (and also maybe later versions) has a bug where buffers in downstream modules
+            may be ignored when inferring the proper device map. See: https://github.com/huggingface/accelerate/blob/79ca85c27df292dbf64cfa2bcc12dbb62fbe9267/src/accelerate/utils/modeling.py#L1273
+            This causes the `img2bpe_mapping_tensor` buffer to be placed on the CPU by default, which may cause a performance
+            loss--especially with prompts that contain many images. No action needs to be done when this bug is fixed.
+
+        Args:
+            img_batch (`torch.Tensor` of shape `(batch_size, image_seq_length)`):
+                The image tokens generated by the VQVAE model.
+
+        Returns:
+            `torch.Tensor` of shape `(batch_size, image_seq_length)`:
+                The image tokens converted to be compatible with the text tokenizer's BPE tokens.
+        """
+        device = img_batch.device
+        img_tokens = self.img2bpe_mapping_tensor[img_batch.to(self.img2bpe_mapping_tensor.device)]
+        return img_tokens.to(device)
+
+    def convert_bpe2img_tokens(self, bpe_batch: torch.LongTensor) -> torch.LongTensor:
+        """
+        Converts image tokens that are compatible with the text tokenizer into image tokens compatible with the VQVAE
+        model.
+
+        Notes:
+            - It is important to move the `img_batch` tensor to the same device as the `img2bpe_mapping_tensor` buffer
+            as Accelerate may move the buffer to a different device when loading the model with `device_map="auto"`.
+            - Accelerate up to version 0.33.0 (and also maybe later versions) has a bug where buffers in downstream modules
+            may be ignored when inferring the proper device map. See: https://github.com/huggingface/accelerate/blob/79ca85c27df292dbf64cfa2bcc12dbb62fbe9267/src/accelerate/utils/modeling.py#L1273
+            This causes the `img2bpe_mapping_tensor` buffer to be placed on the CPU by default, which may cause a performance
+            loss--especially when generating interleaved text & images. No action needs to be done when this bug is fixed.
+
+        Args:
+            bpe_batch (`torch.Tensor` of shape `(batch_size, image_seq_length)`):
+                The image tokens compatible with the text tokenizer.
+
+        Returns:
+            `torch.Tensor` of shape `(batch_size, image_seq_length)`:
+                The image tokens converted to be compatible with the VQVAE model.
+        """
+        device = bpe_batch.device
+        img_tokens = self.bpe2img_mapping_tensor[bpe_batch.to(self.bpe2img_mapping_tensor.device)]
+        return img_tokens.to(device)
+
+    def decode_image_tokens(self, bpe_tokens: torch.LongTensor) -> torch.LongTensor:
+        """
+        Converts BPE tokens generated by the model into discrete image tokens
+        compatible with the VQGAN module, then decodes them into pixel values.
+
+        Args:
+            bpe_tokens (`torch.tensor` of shape `(batch, image_seq_length)`):
+                The BPE tokens generated by the model.
+
+        Returns:
+            `torch.Tensor` of shape `(batch, num_channels, 512, 512)`:
+        """
+        if bpe_tokens.shape[1] != self.image_seq_length:
+            raise ValueError(f"All batches must have {self.image_seq_length} tokens.")
+        image_tensor = self.convert_bpe2img_tokens(bpe_tokens)
+        return self.vqmodel.decode(image_tensor)
+
 
 @add_start_docstrings(
     "Anole Model with a head on top used for outputting logits for next token prediction.",
@@ -1772,9 +1841,9 @@ class AnoleForConditionalGeneration(AnolePreTrainedModel, GenerationMixin):
     def __init__(self, config: AnoleConfig):
         super().__init__(config)
         self.model = AnoleModel(config)
-        self.vocabulary_mapping = self.model.vocabulary_mapping
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.vocabulary_mapping = self.model.vocabulary_mapping
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1796,149 +1865,6 @@ class AnoleForConditionalGeneration(AnolePreTrainedModel, GenerationMixin):
 
     def get_decoder(self):
         return self.model
-
-    def _prepare_generation_config(
-        self,
-        generation_config: Optional[GenerationConfig] = None,
-        multimodal_generation_mode: Optional[
-            Literal["text-only", "image-only", "interleaved-text-image", "unrestricted"]
-        ] = None,
-        **kwargs,
-    ):
-        if (
-            multimodal_generation_mode == "image-only"
-            and kwargs.get("max_length") is None
-            and kwargs.get("max_new_tokens") is None
-            and (
-                generation_config is None
-                or (generation_config.max_length is None and generation_config.max_new_tokens is None)
-            )
-        ):
-            kwargs["max_new_tokens"] = self.model.image_seq_length + 2
-        generation_config, model_kwargs = super()._prepare_generation_config(generation_config, **kwargs)
-        if multimodal_generation_mode is not None:
-            generation_config.multimodal_generation_mode = multimodal_generation_mode
-        if (
-            not hasattr(generation_config, "multimodal_generation_mode")
-            or generation_config.multimodal_generation_mode is None
-        ):
-            generation_config.multimodal_generation_mode = "text-only"
-        return generation_config, model_kwargs
-
-    @torch.no_grad()
-    def generate(
-        self,
-        inputs: Optional[torch.Tensor] = None,
-        generation_config: Optional[GenerationConfig] = None,
-        logits_processor: Optional[LogitsProcessorList] = None,
-        multimodal_generation_mode: Optional[
-            Literal["text-only", "image-only", "interleaved-text-image", "unrestricted"]
-        ] = None,
-        **kwargs,
-    ) -> Union[GenerateOutput, torch.LongTensor]:
-        generation_config, model_kwargs = self._prepare_generation_config(
-            generation_config, multimodal_generation_mode, **kwargs
-        )
-
-        inputs_tensor, model_input_name, model_kwargs = self._prepare_model_inputs(
-            inputs, generation_config.bos_token_id, model_kwargs
-        )
-        input_ids = inputs_tensor if model_input_name == "input_ids" else model_kwargs.pop("input_ids")
-
-        # Prepare `max_length` depending on other stopping criteria.
-        input_ids_length = input_ids.shape[-1]
-        has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
-        has_default_min_length = kwargs.get("min_length") is None and generation_config.min_length is not None
-        generation_config = self._prepare_generated_length(
-            generation_config=generation_config,
-            has_default_max_length=has_default_max_length,
-            has_default_min_length=has_default_min_length,
-            model_input_name=model_input_name,
-            inputs_tensor=inputs_tensor,
-            input_ids_length=input_ids_length,
-        )
-
-        if logits_processor is None:
-            logits_processor = LogitsProcessorList()
-        if generation_config.multimodal_generation_mode == "text-only":
-            # Suppress all image tokens
-            logits_processor.append(
-                SuppressTokensLogitsProcessor(
-                    suppress_tokens=self.vocabulary_mapping.image_token_ids
-                    + [
-                        self.vocabulary_mapping.boi_token_id,
-                        self.vocabulary_mapping.eoi_token_id,
-                    ],
-                    device=self.device,
-                )
-            )
-        elif generation_config.multimodal_generation_mode == "image-only":
-            inferred_max_new_tokens = generation_config.max_length - input_ids_length
-            if inferred_max_new_tokens < self.model.image_seq_length + 2:
-                warnings.warn(
-                    f"The VQVAE decoder expects to receive {self.model.image_seq_length} image tokens to generate an image."
-                    "And Anole wraps the image tokens with the `beginning-of-image` and `end-of-image` tokens when on image generation mode."
-                    f"Therefore, the `max_new_tokens` must be at least {self.model.image_seq_length + 2}."
-                    f"However, the inferred `max_new_tokens` from the generation config is only {inferred_max_new_tokens}."
-                    "You would need to pad the output tokens with dummy image tokens before passing them to the VQVAE decoder."
-                    f"To avoid this warning, set `max_new_tokens` to at least {self.model.image_seq_length + 2}."
-                )
-            allowed_tokens = self.vocabulary_mapping.image_token_ids + [
-                self.config.eos_token_id,
-                self.vocabulary_mapping.boi_token_id,
-                self.vocabulary_mapping.eoi_token_id,
-            ]
-            suppress_tokens = [token_id for token_id in range(self.vocab_size) if token_id not in allowed_tokens]
-            logits_processor.extend(
-                [
-                    # Don't start generating an image if there aren't enough space for the rest of the image tokens.
-                    SuppressTokensInIndexRangeLogitsProcessor(
-                        suppress_tokens=[self.vocabulary_mapping.boi_token_id],
-                        start_index=generation_config.max_length - self.model.image_seq_length - 1,
-                        device=self.device,
-                    ),
-                    # Allow only image tokens
-                    SuppressTokensLogitsProcessor(suppress_tokens=suppress_tokens, device=self.device),
-                    # Force image generation
-                    SuppressTokensAtBeginLogitsProcessor(
-                        begin_suppress_tokens=[self.config.eos_token_id],
-                        begin_index=input_ids_length,
-                        device=self.device,
-                    ),
-                ]
-            )
-        elif generation_config.multimodal_generation_mode == "interleaved-text-image":
-            logits_processor.extend(
-                [
-                    # Generate only image token ids for `image_seq_length` steps when the boi-token is already generated
-                    AllowOnlyTokensInRelativeWindowLogitsProcessor(
-                        trigger_token_id=self.vocabulary_mapping.boi_token_id,
-                        allowed_token_ids=self.vocabulary_mapping.image_token_ids,
-                        window_width=self.model.image_seq_length,
-                        exclusive=True,
-                        device=self.device,
-                    ),
-                    # Don't start generating an image if there aren't enough space for the rest of the image tokens.
-                    SuppressTokensInIndexRangeLogitsProcessor(
-                        suppress_tokens=[self.vocabulary_mapping.boi_token_id],
-                        start_index=generation_config.max_length - self.model.image_seq_length - 1,
-                        device=self.device,
-                    ),
-                ]
-            )
-        elif generation_config.multimodal_generation_mode == "unrestricted":
-            pass
-        else:
-            raise ValueError(
-                f"Unknown multimodal generation mode: {generation_config.multimodal_generation_mode}. "
-                f"Please choose one of 'unrestricted', 'text-only', 'image-only', or 'interleaved-text-image'."
-            )
-        return super().generate(
-            inputs=inputs,
-            generation_config=generation_config,
-            logits_processor=logits_processor,
-            **kwargs,
-        )
 
     @add_start_docstrings_to_model_forward(ANOLE_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
@@ -2055,6 +1981,13 @@ class AnoleForConditionalGeneration(AnolePreTrainedModel, GenerationMixin):
                     "`conditional` and `unconditional` inputs should have same batch size, i.e. one negative prompt per input. "
                     f"Found `input_ids.batch_size={input_ids.shape[0]}` and `negative_input_ids.batch_size={negative_input_ids.shape[0]}`"
                 )
+
+            # In decoding phase the `input_ids` will grow every step, so we concat `negative_input_ids`
+            if negative_input_ids.shape[1] < input_ids.shape[1]:
+                diff = input_ids.shape[1] - negative_input_ids.shape[1]
+                negative_input_ids = torch.cat([negative_input_ids, input_ids[:, -1:].repeat(1, diff)], dim=-1)
+                negative_attention_mask = torch.cat([negative_attention_mask, torch.ones_like(negative_input_ids)[:, :diff]], dim=-1)
+
             input_ids = torch.cat([input_ids, negative_input_ids], dim=0)
             if attention_mask is not None:
                 attention_mask = torch.cat([attention_mask, negative_attention_mask], dim=0)
@@ -2085,9 +2018,8 @@ class AnoleForConditionalGeneration(AnolePreTrainedModel, GenerationMixin):
         if inputs_embeds is not None and cache_position[0] == 0:
             model_inputs = {"inputs_embeds": inputs_embeds}
         else:
-            model_inputs = {
-                "input_ids": input_ids.clone(memory_format=torch.contiguous_format)
-            }  # `contiguous()` needed for compilation use cases
+            # `contiguous()` needed for compilation use cases
+            model_inputs = {"input_ids": input_ids.clone(memory_format=torch.contiguous_format)}
 
         # Create 4D attention mask is we are using a `StaticCache` (important for performant compiled forward pass)
         if isinstance(past_key_values, StaticCache) and attention_mask.ndim == 2:

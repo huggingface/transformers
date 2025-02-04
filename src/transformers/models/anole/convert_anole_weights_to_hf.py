@@ -81,7 +81,7 @@ def write_json(text, path):
         json.dump(text, f)
 
 
-def write_model(model_path, input_base_path, model_size, anole_version=1, vqvae_path=None):
+def write_model(model_path, input_base_path, model_size, anole_version=1):
     os.makedirs(model_path, exist_ok=True)
     input_model_path = os.path.join(input_base_path, "models", model_size.lower())
     params_path = os.path.join(input_model_path, "params.json")
@@ -377,9 +377,6 @@ def write_model(model_path, input_base_path, model_size, anole_version=1, vqvae_
     model.load_state_dict(state_dict, assign=True, strict=False)
     model.save_pretrained(model_path, safe_serialization=True)
 
-    if vqvae_path is not None:
-        model.model.vqmodel.save_pretrained(vqvae_path, safe_serialization=True)
-
     # Load and save the processor
     extra_special_tokens = {
         "image_token": "<image>",
@@ -473,18 +470,13 @@ def main():
         type=int,
         help="Version of the Anole model to convert",
     )
-    parser.add_argument(
-        "--vqvae_path",
-        default=None,
-        help="Location to write VQ-VAE model",
-    )
+
     args = parser.parse_args()
     write_model(
         model_path=args.output_dir,
         input_base_path=args.input_dir,
         model_size=args.model_size,
         anole_version=args.anole_version,
-        vqvae_path=args.vqvae_path,
     )
 
 

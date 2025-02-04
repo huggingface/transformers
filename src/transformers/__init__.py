@@ -269,6 +269,7 @@ _import_structure = {
     ],
     "models.anole": [
         "AnoleConfig",
+        "AnoleProcessor",
         "AnoleVQVAEConfig",
     ],
     "models.chinese_clip": [
@@ -1219,6 +1220,7 @@ else:
     _import_structure["image_processing_base"] = ["ImageProcessingMixin"]
     _import_structure["image_processing_utils"] = ["BaseImageProcessor"]
     _import_structure["image_utils"] = ["ImageFeatureExtractionMixin"]
+    _import_structure["models.anole"].append("AnoleImageProcessor")
     _import_structure["models.aria"].extend(["AriaImageProcessor"])
     _import_structure["models.beit"].extend(["BeitFeatureExtractor", "BeitImageProcessor"])
     _import_structure["models.bit"].extend(["BitImageProcessor"])
@@ -5237,6 +5239,7 @@ if TYPE_CHECKING:
     )
     from .models.anole import (
         AnoleConfig,
+        AnoleProcessor,
         AnoleVQVAEConfig,
     )
     from .models.aria import (
@@ -6337,6 +6340,7 @@ if TYPE_CHECKING:
         from .image_processing_base import ImageProcessingMixin
         from .image_processing_utils import BaseImageProcessor
         from .image_utils import ImageFeatureExtractionMixin
+        from .models.anole import AnoleImageProcessor
         from .models.aria import AriaImageProcessor
         from .models.beit import BeitFeatureExtractor, BeitImageProcessor
         from .models.bit import BitImageProcessor

@@ -22,7 +22,6 @@
 from typing import Dict, List, Optional, Union
 
 import numpy as np
-import torch
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
 from ...image_transforms import get_resize_output_image_size, resize, to_channel_dimension_format
@@ -32,8 +31,7 @@ from ...image_utils import (
     PILImageResampling,
     infer_channel_dimension_format,
     is_scaled_image,
-    is_valid_image,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -41,40 +39,20 @@ from ...image_utils import (
 from ...utils import (
     TensorType,
     filter_out_non_signature_kwargs,
+    is_torch_available,
     is_vision_available,
     logging,
 )
 
 
+if is_torch_available():
+    import torch
+
 if is_vision_available():
     import PIL
-    from PIL import Image
 
 
 logger = logging.get_logger(__name__)
-
-
-def make_batched_images(images) -> List[List[ImageInput]]:
-    """
-    Accepts images in list or nested list format, and makes a list of images for preprocessing.
-
-    Args:
-        images (`Union[List[List[ImageInput]], List[ImageInput], ImageInput]`):
-            The input image.
-
-    Returns:
-        list: A list of images.
-    """
-    if isinstance(images, (list, tuple)) and isinstance(images[0], (list, tuple)) and is_valid_image(images[0][0]):
-        return [img for img_list in images for img in img_list]
-
-    elif isinstance(images, (list, tuple)) and is_valid_image(images[0]):
-        return images
-
-    elif is_valid_image(images):
-        return [images]
-
-    raise ValueError(f"Could not make batched video from {images}")
 
 
 class AnoleImageProcessor(BaseImageProcessor):
@@ -218,7 +196,6 @@ class AnoleImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
     ) -> BatchFeature:
         """
         Preprocess an image or batch of images.
@@ -285,7 +262,7 @@ class AnoleImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
-        images = make_batched_images(images)
+        images = make_flat_list_of_images(images)
 
         if not valid_images(images):
             raise ValueError(
@@ -427,7 +404,7 @@ class AnoleImageProcessor(BaseImageProcessor):
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
 
-        images = make_list_of_images(images)
+        images = make_flat_list_of_images(images)
 
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
@@ -445,7 +422,7 @@ class AnoleImageProcessor(BaseImageProcessor):
 
             if do_unnormalize and do_rescale and return_tensors == "pil":
                 image = to_channel_dimension_format(image, ChannelDimension.LAST, input_channel_dim=input_data_format)
-                image = Image.fromarray(image)
+                image = PIL.Image.fromarray(image)
             postprocessed_images.append(image)
 
         return_tensors = return_tensors if return_tensors != "pil" else None

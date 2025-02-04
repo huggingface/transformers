@@ -1111,7 +1111,22 @@ class ChameleonVQVAE(ChameleonPreTrainedModel):
         self.post_quant_conv = torch.nn.Conv2d(config.embed_dim, config.latent_channels, 1)
         self.eval()  # Chameleon's VQ model is frozen
 
-    def encode(self, pixel_values: torch.LongTensor):
+    def encode(self, pixel_values: torch.FloatTensor):
+        """
+        Encodes pixel values into quantized tokens.
+
+        Args:
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
+                The tensors corresponding to the input images.
+
+        Returns:
+            quant (`torch.FloatTensor` of shape `(batch_size, embed_dim, quantize.quant_state_dims[0], quantize.quant_state_dims[1])`):
+                Embeddings of quantized tokens.
+            emb_loss (`torch.FloatTensor`):
+                Embedding loss.
+            indices (`torch.LongTensor` of shape `(batch_size, quantize.quant_state_dims[0] * quantize.quant_state_dims[1])`):
+                Token IDs
+        """
         hidden_states = self.encoder(pixel_values)
         hidden_states = self.quant_conv(hidden_states)
         quant, emb_loss, indices = self.quantize(hidden_states)

@@ -22,7 +22,11 @@
 from typing import List
 
 from ...configuration_utils import PretrainedConfig
-from ...utils import logging
+from ...utils import is_torch_available, logging
+
+
+if is_torch_available():
+    pass
 
 
 logger = logging.get_logger(__name__)
@@ -50,8 +54,6 @@ class AnoleVQVAEConfig(PretrainedConfig):
             Resolution of the input images.
         in_channels (`int`, *optional*, defaults to 3):
             Number of input channels.
-        out_channels (`int`, *optional*, defaults to 3):
-            Number of output channels.
         base_channels (`int`, *optional*, defaults to 128):
             Base channel count.
         channel_multiplier (`List[int]`, *optional*, defaults to `[1, 1, 2, 2, 4]`):
@@ -79,7 +81,6 @@ class AnoleVQVAEConfig(PretrainedConfig):
         latent_channels: int = 256,
         resolution: int = 512,
         in_channels: int = 3,
-        out_channels: int = 3,
         base_channels: int = 128,
         channel_multiplier: List[int] = [1, 1, 2, 2, 4],
         num_res_blocks: int = 2,
@@ -87,6 +88,7 @@ class AnoleVQVAEConfig(PretrainedConfig):
         dropout: float = 0.0,
         attn_type: str = "vanilla",
         initializer_range=0.02,
+        out_channels: int = 3,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -96,7 +98,6 @@ class AnoleVQVAEConfig(PretrainedConfig):
         self.latent_channels = latent_channels
         self.resolution = resolution
         self.in_channels = in_channels
-        self.out_channels = out_channels
         self.base_channels = base_channels
         self.channel_multiplier = channel_multiplier
         self.num_res_blocks = num_res_blocks
@@ -104,6 +105,7 @@ class AnoleVQVAEConfig(PretrainedConfig):
         self.dropout = dropout
         self.attn_type = attn_type
         self.initializer_range = initializer_range
+        self.out_channels = out_channels
 
 
 class AnoleConfig(PretrainedConfig):
@@ -179,12 +181,6 @@ class AnoleConfig(PretrainedConfig):
             AnoleVQConfig instance containing the configuration for the VQ-VAE model.
         vocabulary_map (`dict`, *optional*):
             A dictionary containing the vocabulary map from the tokenizer. Used to obtain tokens from the image inputs.
-        image_token_index (`int`, *optional*, defaults to 8711):
-            The ID for the token used to represent the image in the input sequence.
-        boi_token_id (`int`, *optional*, defaults to 8197):
-            Beginning of image token stream id.
-        eoi_token_id (`int`, *optional*, defaults to 8196):
-            End of image token stream id.
         mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
 
@@ -231,9 +227,6 @@ class AnoleConfig(PretrainedConfig):
         swin_norm=False,
         vq_config=None,
         vocabulary_map=None,
-        image_token_index=8711,
-        boi_token_id=8197,
-        eoi_token_id=8196,
         mlp_bias=False,
         **kwargs,
     ):
@@ -265,9 +258,6 @@ class AnoleConfig(PretrainedConfig):
         self.vq_config = AnoleVQVAEConfig(**vq_config)
 
         self.vocabulary_map = vocabulary_map
-        self.image_token_index = image_token_index
-        self.boi_token_id = boi_token_id
-        self.eoi_token_id = eoi_token_id
 
         super().__init__(
             pad_token_id=pad_token_id,

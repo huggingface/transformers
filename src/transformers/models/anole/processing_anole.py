@@ -25,6 +25,11 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack, _validate_images_text_input_order
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import is_torch_available
+
+
+if is_torch_available():
+    pass
 
 
 class AnoleTextKwargs(TextKwargs, total=False):
