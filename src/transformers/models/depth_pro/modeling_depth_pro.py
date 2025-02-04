@@ -898,11 +898,12 @@ class DepthProFeatureFusionStage(nn.Module):
         self.config = config
 
         self.num_layers = len(config.intermediate_hook_ids) + len(config.scaled_images_ratios)
-        self.layers = nn.ModuleList()
+        self.intermediate = nn.ModuleList()
         for _ in range(self.num_layers - 1):
-            self.layers.append(DepthProFeatureFusionLayer(config))
+            self.intermediate.append(DepthProFeatureFusionLayer(config))
+
         # final layer doesnot require deconvolution
-        self.layers.append(DepthProFeatureFusionLayer(config, use_deconv=False))
+        self.final = DepthProFeatureFusionLayer(config, use_deconv=False)
 
     def forward(self, hidden_states: List[torch.Tensor]) -> List[torch.Tensor]:
         if self.num_layers != len(hidden_states):
@@ -913,13 +914,17 @@ class DepthProFeatureFusionStage(nn.Module):
 
         fused_hidden_states = []
         fused_hidden_state = None
-        for hidden_state, layer in zip(hidden_states, self.layers):
+        for hidden_state, layer in zip(hidden_states[:-1], self.intermediate):
             if fused_hidden_state is None:
                 # first layer only uses the last hidden_state
                 fused_hidden_state = layer(hidden_state)
             else:
                 fused_hidden_state = layer(fused_hidden_state, hidden_state)
             fused_hidden_states.append(fused_hidden_state)
+
+        hidden_state = hidden_states[-1]
+        fused_hidden_state = self.final(fused_hidden_state, hidden_state)
+        fused_hidden_states.append(fused_hidden_state)
 
         return fused_hidden_states
 

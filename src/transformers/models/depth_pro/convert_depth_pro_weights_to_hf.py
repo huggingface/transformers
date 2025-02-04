@@ -75,14 +75,20 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     ),
 
     # fusion stage
-    r"decoder.fusions.(\d+).resnet(\d+).residual.(\d+).(weight|bias)": lambda match: (
-        f"fusion_stage.layers.{4-int(match.group(1))}.residual_layer{match.group(2)}.convolution{(int(match.group(3))+1)//2}.{match.group(4)}"
+    r"decoder.fusions.([1234]).resnet(\d+).residual.(\d+).(weight|bias)": lambda match: (
+        f"fusion_stage.intermediate.{4-int(match.group(1))}.residual_layer{match.group(2)}.convolution{(int(match.group(3))+1)//2}.{match.group(4)}"
     ),
-    r"decoder.fusions.(\d+).out_conv.(weight|bias)": lambda match: (
-        f"fusion_stage.layers.{4-int(match.group(1))}.projection.{match.group(2)}"
+    r"decoder.fusions.0.resnet(\d+).residual.(\d+).(weight|bias)": lambda match: (
+        f"fusion_stage.final.residual_layer{match.group(1)}.convolution{(int(match.group(2))+1)//2}.{match.group(3)}"
+    ),
+    r"decoder.fusions.([1234]).out_conv.(weight|bias)": lambda match: (
+        f"fusion_stage.intermediate.{4-int(match.group(1))}.projection.{match.group(2)}"
+    ),
+    r"decoder.fusions.0.out_conv.(weight|bias)": lambda match: (
+        f"fusion_stage.final.projection.{match.group(1)}"
     ),
     r"decoder.fusions.(\d+).deconv.(weight|bias)": lambda match: (
-        f"fusion_stage.layers.{4-int(match.group(1))}.deconv.{match.group(2)}"
+        f"fusion_stage.intermediate.{4-int(match.group(1))}.deconv.{match.group(2)}"
     ),
 }
 # fmt: on
