@@ -838,6 +838,8 @@
         title: ALIGN
       - local: model_doc/altclip
         title: AltCLIP
+      - local: model_doc/anole
+        title: Anole
       - local: model_doc/aria
         title: Aria
       - local: model_doc/blip

@@ -62,6 +62,7 @@ Flax), PyTorch, and/or TensorFlow.
 |                        [ALBERT](model_doc/albert)                        |       ✅        |         ✅         |      ✅      |
 |                         [ALIGN](model_doc/align)                         |       ✅        |         ❌         |      ❌      |
 |                       [AltCLIP](model_doc/altclip)                       |       ✅        |         ❌         |      ❌      |
+|                         [Anole](model_doc/anole)                         |       ✅        |         ❌         |      ❌      |
 |                          [Aria](model_doc/aria)                          |       ✅        |         ❌         |      ❌      |
 |                     [AriaText](model_doc/aria_text)                      |       ✅        |         ❌         |      ❌      |
 | [Audio Spectrogram Transformer](model_doc/audio-spectrogram-transformer) |       ✅        |         ❌         |      ❌      |

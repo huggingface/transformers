@@ -1764,6 +1764,61 @@ class LogitNormalization(LogitsProcessor):
         return scores_processed
 
 
+class SuppressTokensInIndexRangeLogitsProcessor(LogitsProcessor):
+    r"""
+    [`SuppressTokensInIndexRangeLogitsProcessor`] supresses a list of tokens from `start_index` to `end_index` (exclusive)
+
+    Args:
+        suppress_tokens (`List[int]`):
+            List of token ids to suppress during generation.
+        start_index (`int`):
+            The index at which to start suppressing tokens.
+        end_index (`int`, *optional*):
+            The index at which to end suppressing tokens. If `None`, it will suppress tokens indefinitely.
+        device (`str`, *optional*, defaults to `"cpu"`):
+            The device to allocate the tensors.
+
+    Examples:
+
+    ```python
+    >>> from transformers import AutoProcessir, ChameleonForConditionalGenerartion, LogitsProcessorList
+    >>> from transformers.generation.logits_process import SuppressTokensInIndexRangeLogitsProcessor
+    >>> import torch
+
+    >>> model = ChameleonForConditionalGenerartion.from_pretrained("leloy/Anole-7b-v0.1-hf")
+    >>> processor = AutoProcessir.from_pretrained("leloy/Anole-7b-v0.1-hf")
+
+    >>> inputs = processor("Can you draw a snowman?", return_tensors="pt")
+    >>> max_length = 1200
+    >>> # Don't start generating an image if there aren't enough space for the rest of the image tokens.
+    >>> logits_processor = SuppressTokensInIndexRangeLogitsProcessor(
+    ...     suppress_tokens=[model.vocabulary_mapping.boi_token_id],
+    ...     start_index=max_length - model.model.image_seq_length - 1,
+    ...     device=model.device,
+    ... )
+
+    >>> outputs = model.generate(**inputs, max_length=max_length, logits_processors=LogitsProcessorList([logits_processor]))
+    >>> print(torch.isin(outputs[input.input_ids.shape[1] + 1 : ], model.vocabulary_mapping.image_token_ids).all())
+    True
+    ```
+    """
+
+    def __init__(
+        self, suppress_tokens: List[int], start_index: int, end_index: Optional[int] = None, device: str = "cpu"
+    ):
+        self.suppress_tokens = torch.tensor(suppress_tokens, device=device)
+        self.start_index = start_index
+        self.end_index = end_index if end_index is not None else math.inf
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        current_index = input_ids.shape[1]
+        if self.start_index > current_index or current_index > self.end_index:
+            return scores
+        suppress_tokens_mask = torch.zeros_like(scores, dtype=torch.bool)
+        suppress_tokens_mask[:, self.suppress_tokens] = True
+        return scores.masked_fill(suppress_tokens_mask, -float("inf"))
+
+
 class SuppressTokensAtBeginLogitsProcessor(LogitsProcessor):
     r"""
     [`SuppressTokensAtBeginLogitsProcessor`] supresses a list of tokens as soon as the `generate` function starts
@@ -2939,3 +2994,83 @@ class SynthIDTextWatermarkLogitsProcessor(LogitsProcessor):
             The expected mean g-value for watermarked text.
         """
         return coinflip_prob + coinflip_prob * (1 - coinflip_prob) * (1 - (1 / vocab_size))
+
+
+class AllowOnlyTokensInRelativeWindowLogitsProcessor(LogitsProcessor):
+    r"""
+    [`AllowOnlyTokensInRelativeWindowLogitsProcessor`] suppresses the logits of tokens aside from a specific set of tokens
+    that can be generated at a relative window from a trigger token (e.g. begin image token). If `exclusive` is set to
+    `True`, the set of tokens allowed at this window will not be allowed anywhere else. This is useful for enforcing
+    multimodal generation constraints.
+
+    Originally created for [Chameleon](https://huggingface.co/docs/transformers/model_doc/chameleon).
+
+    Args:
+        trigger_token_id (`int`):
+            The token id that triggers the window check.
+        allowed_token_ids (`List[int]`):
+            The list of token ids that are allowed at the specified relative window.
+        window_width (`int`):
+            The window_width of the window from the trigger token.
+        exclusive (`bool`, *optional*, defaults to `False`):
+            If `True`, the set of tokens allowed at this window will not be allowed anywhere else.
+        device (`str`, *optional*, defaults to `cpu`):
+            The device to allocate the util tensor on.
+
+    Examples:
+
+    ```python
+    >>> from transformers import AutoProcessir, ChameleonForConditionalGenerartion, LogitsProcessorList
+    >>> from transformers.generation.logits_process import AllowOnlyTokensInRelativeWindowLogitsProcessor
+    >>> import torch
+
+    >>> model = ChameleonForConditionalGenerartion.from_pretrained("leloy/Anole-7b-v0.1-hf")
+    >>> processor = AutoProcessir.from_pretrained("leloy/Anole-7b-v0.1-hf")
+
+    >>> inputs = processor("Can you draw a snowman?", return_tensors="pt")
+    >>> max_length = 1200
+    >>> # Generate only image token ids for `image_seq_length` steps when the boi-token is already generated
+    >>> logits_processor = AllowOnlyTokensInRelativeWindowLogitsProcessor(
+    ...     trigger_token_id=model.vocabulary_mapping.boi_token_id,
+    ...     allowed_token_ids=model.vocabulary_mapping.image_token_ids,
+    ...     window_width=model.model.image_seq_length,
+    ...     exclusive=True,
+    ...     device=model.device,
+    ... )
+
+    >>> outputs = model.generate(**inputs, max_length=max_length, logits_processors=LogitsProcessorList([logits_processor]))
+    ```
+    """
+
+    def __init__(
+        self,
+        trigger_token_id: int,
+        allowed_token_ids: List[int],
+        window_width: int,
+        exclusive: bool = False,
+        device: str = "cpu",
+    ):
+        self.trigger_token_id = trigger_token_id
+        self.allowed_token_ids = torch.tensor(allowed_token_ids, device=device).unsqueeze(0)
+        self.window_width = window_width
+        self.exclusive = exclusive
+
+    def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
+        if input_ids.shape[1] < self.window_width and not self.exclusive:
+            return scores
+
+        window_width = min(self.window_width, input_ids.shape[1])
+        trigger_positions = (input_ids[:, -window_width:] == self.trigger_token_id).any(dim=1).unsqueeze(-1)
+
+        disallowed_tokens_mask = torch.ones_like(scores, dtype=torch.bool)
+        disallowed_tokens_mask[:, self.allowed_token_ids] = False
+
+        if self.exclusive:
+            return scores.masked_fill(
+                ~(disallowed_tokens_mask ^ trigger_positions),
+                -float("inf"),
+            )
+        return scores.masked_fill(
+            disallowed_tokens_mask & trigger_positions,
+            -float("inf"),
+        )

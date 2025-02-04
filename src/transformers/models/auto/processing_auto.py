@@ -47,6 +47,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
     [
         ("align", "AlignProcessor"),
         ("altclip", "AltCLIPProcessor"),
+        ("anole", "AnoleProcessor"),
         ("aria", "AriaProcessor"),
         ("bark", "BarkProcessor"),
         ("blip", "BlipProcessor"),
