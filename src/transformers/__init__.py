@@ -695,6 +695,10 @@ _import_structure = {
     "models.persimmon": ["PersimmonConfig"],
     "models.phi": ["PhiConfig"],
     "models.phi3": ["Phi3Config"],
+    "models.phi3_5": [
+        "Phi3VConfig",
+        "Phi3VProcessor",
+    ],
     "models.phimoe": ["PhimoeConfig"],
     "models.phobert": ["PhobertTokenizer"],
     "models.pix2struct": [
@@ -3267,6 +3271,15 @@ else:
             "Phi3ForTokenClassification",
             "Phi3Model",
             "Phi3PreTrainedModel",
+        ]
+    )
+    _import_structure["models.phi3_5"].extend(
+        [
+            "Phi3VForCausalLM",
+            "Phi3VForSequenceClassification",
+            "Phi3VForTokenClassification",
+            "Phi3VModel",
+            "Phi3VPreTrainedModel",
         ]
     )
     _import_structure["models.phimoe"].extend(
@@ -5868,6 +5881,10 @@ if TYPE_CHECKING:
     )
     from .models.phi import PhiConfig
     from .models.phi3 import Phi3Config
+    from .models.phi3_5 import (
+        Phi3VConfig,
+        Phi3VProcessor,
+    )
     from .models.phimoe import PhimoeConfig
     from .models.phobert import PhobertTokenizer
     from .models.pix2struct import (
@@ -8080,6 +8097,13 @@ if TYPE_CHECKING:
             Phi3ForTokenClassification,
             Phi3Model,
             Phi3PreTrainedModel,
+        )
+        from .models.phi3_5 import (
+            Phi3VForCausalLM,
+            Phi3VForSequenceClassification,
+            Phi3VForTokenClassification,
+            Phi3VModel,
+            Phi3VPreTrainedModel,
         )
         from .models.phimoe import (
             PhimoeForCausalLM,
