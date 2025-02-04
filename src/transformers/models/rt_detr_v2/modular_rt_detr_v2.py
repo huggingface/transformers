@@ -26,7 +26,6 @@ from ...utils.backbone_utils import (
 )
 from ..auto import CONFIG_MAPPING
 from ..rt_detr.modeling_rt_detr import (
-    MultiScaleDeformableAttentionFunction,
     RTDetrDecoder,
     RTDetrDecoderLayer,
     RTDetrForObjectDetection,
@@ -44,8 +43,9 @@ class RtDetrV2Config(PretrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`RtDetrV2Model`]. It is used to instantiate a
     RT-DETR model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the RT-DETR
-    [checkpoing/todo](https://huggingface.co/checkpoing/todo) architecture.
+    with the defaults will yield a similar configuration to that of the RT-DETR architecture.
+
+    e.g. [PekingU/rtdetr_r18vd](https://huggingface.co/PekingU/rtdetr_r18vd)
 
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
@@ -465,10 +465,6 @@ def multi_scale_deformable_attention_v2(
     return output.transpose(1, 2).contiguous()
 
 
-class MultiScaleDeformableAttentionFunctionV2(MultiScaleDeformableAttentionFunction):
-    pass
-
-
 # the main change
 class RtDetrV2MultiscaleDeformableAttention(RTDetrMultiscaleDeformableAttention):
     """
@@ -546,24 +542,9 @@ class RtDetrV2MultiscaleDeformableAttention(RTDetrMultiscaleDeformableAttention)
             raise ValueError(f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
 
         # V2-specific attention implementation choice
-        if self.disable_custom_kernels:
-            output = multi_scale_deformable_attention_v2(
-                value, spatial_shapes, sampling_locations, attention_weights, self.n_points_list, self.method
-            )
-        else:
-            try:
-                output = MultiScaleDeformableAttentionFunctionV2.apply(
-                    value,
-                    spatial_shapes,
-                    level_start_index,
-                    sampling_locations,
-                    attention_weights,
-                    self.im2col_step,
-                )
-            except Exception:
-                output = multi_scale_deformable_attention_v2(
-                    value, spatial_shapes, sampling_locations, attention_weights, self.n_points_list, self.method
-                )
+        output = multi_scale_deformable_attention_v2(
+            value, spatial_shapes, sampling_locations, attention_weights, self.n_points_list, self.method
+        )
 
         output = self.output_proj(output)
         return output, attention_weights

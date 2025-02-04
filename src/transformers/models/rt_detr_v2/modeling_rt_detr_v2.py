@@ -29,8 +29,6 @@ from typing import Dict, List, Optional, Tuple, Union
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
-from torch.autograd import Function
-from torch.autograd.function import once_differentiable
 
 from ...activations import ACT2CLS, ACT2FN
 from ...image_transforms import center_to_corners_format, corners_to_center_format
@@ -54,54 +52,6 @@ logger = logging.get_logger(__name__)
 _CONFIG_FOR_DOC = "RtDetrV2Config"
 
 MultiScaleDeformableAttention = None
-
-
-class MultiScaleDeformableAttentionFunctionV2(Function):
-    @staticmethod
-    def forward(
-        context,
-        value,
-        value_spatial_shapes,
-        value_level_start_index,
-        sampling_locations,
-        attention_weights,
-        im2col_step,
-    ):
-        context.im2col_step = im2col_step
-        output = MultiScaleDeformableAttention.ms_deform_attn_forward(
-            value,
-            value_spatial_shapes,
-            value_level_start_index,
-            sampling_locations,
-            attention_weights,
-            context.im2col_step,
-        )
-        context.save_for_backward(
-            value, value_spatial_shapes, value_level_start_index, sampling_locations, attention_weights
-        )
-        return output
-
-    @staticmethod
-    @once_differentiable
-    def backward(context, grad_output):
-        (
-            value,
-            value_spatial_shapes,
-            value_level_start_index,
-            sampling_locations,
-            attention_weights,
-        ) = context.saved_tensors
-        grad_value, grad_sampling_loc, grad_attn_weight = MultiScaleDeformableAttention.ms_deform_attn_backward(
-            value,
-            value_spatial_shapes,
-            value_level_start_index,
-            sampling_locations,
-            attention_weights,
-            grad_output,
-            context.im2col_step,
-        )
-
-        return grad_value, None, None, grad_sampling_loc, grad_attn_weight, None
 
 
 def load_cuda_kernels():
@@ -321,24 +271,9 @@ class RtDetrV2MultiscaleDeformableAttention(nn.Module):
             raise ValueError(f"Last dim of reference_points must be 2 or 4, but got {reference_points.shape[-1]}")
 
         # V2-specific attention implementation choice
-        if self.disable_custom_kernels:
-            output = multi_scale_deformable_attention_v2(
-                value, spatial_shapes, sampling_locations, attention_weights, self.n_points_list, self.method
-            )
-        else:
-            try:
-                output = MultiScaleDeformableAttentionFunctionV2.apply(
-                    value,
-                    spatial_shapes,
-                    level_start_index,
-                    sampling_locations,
-                    attention_weights,
-                    self.im2col_step,
-                )
-            except Exception:
-                output = multi_scale_deformable_attention_v2(
-                    value, spatial_shapes, sampling_locations, attention_weights, self.n_points_list, self.method
-                )
+        output = multi_scale_deformable_attention_v2(
+            value, spatial_shapes, sampling_locations, attention_weights, self.n_points_list, self.method
+        )
 
         output = self.output_proj(output)
         return output, attention_weights

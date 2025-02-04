@@ -43,6 +43,8 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
+    from transformers import RTDetrImageProcessor
+
 
 CHECKPOINT = "PekingU/rtdetr_v2_r18vd"
 
@@ -710,6 +712,9 @@ def prepare_img():
 @require_vision
 class RtDetrV2ModelIntegrationTest(unittest.TestCase):
     @cached_property
+    def default_image_processor(self):
+        return RTDetrImageProcessor.from_pretrained(CHECKPOINT) if is_vision_available() else None
+
     def test_inference_object_detection_head(self):
         model = RtDetrV2ForObjectDetection.from_pretrained(CHECKPOINT).to(torch_device)
 
@@ -725,43 +730,40 @@ class RtDetrV2ModelIntegrationTest(unittest.TestCase):
 
         expected_logits = torch.tensor(
             [
-                [-4.64763879776001, -5.001153945922852, -4.978509902954102],
-                [-4.159348487854004, -4.703853607177734, -5.946484565734863],
-                [-4.437461853027344, -4.65836238861084, -6.235235691070557],
+                [-3.7047, -5.1914, -6.1787],
+                [-4.0108, -9.3449, -5.2047],
+                [-4.1287, -4.7461, -5.8633],
             ]
         ).to(torch_device)
         expected_boxes = torch.tensor(
             [
-                [0.1688060760498047, 0.19992263615131378, 0.21225441992282867],
-                [0.768376350402832, 0.41226309537887573, 0.4636859893798828],
-                [0.25953856110572815, 0.5483334064483643, 0.4777486026287079],
+                [0.2582, 0.5497, 0.4764],
+                [0.1684, 0.1985, 0.2120],
+                [0.7665, 0.4146, 0.4669],
             ]
         ).to(torch_device)
 
-        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, atol=1e-4)
+        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, atol=1e-4, rtol=1e-4)
 
         expected_shape_boxes = torch.Size((1, 300, 4))
         self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
-        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4)
+        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4, rtol=1e-4)
 
         # verify postprocessing
         results = image_processor.post_process_object_detection(
             outputs, threshold=0.0, target_sizes=[image.size[::-1]]
         )[0]
-        expected_scores = torch.tensor(
-            [0.9703017473220825, 0.9599503874778748, 0.9575679302215576, 0.9506784677505493], device=torch_device
-        )
-        expected_labels = [57, 15, 15, 65]
+        expected_scores = torch.tensor([0.9652, 0.9599, 0.9462, 0.8613], device=torch_device)
+        expected_labels = [15, 15, 65, 57]
         expected_slice_boxes = torch.tensor(
             [
-                [0.13774872, 0.37821293, 640.13074, 476.21088],
-                [343.38132, 24.276838, 640.1404, 371.49573],
-                [13.225126, 54.179348, 318.98422, 472.2207],
-                [40.114475, 73.44104, 175.9573, 118.48469],
+                [3.4114e02, 2.5111e01, 6.3998e02, 3.7289e02],
+                [1.2780e01, 5.6346e01, 3.1767e02, 4.7134e02],
+                [3.9959e01, 7.3117e01, 1.7565e02, 1.1744e02],
+                [-1.0521e-01, 2.9717e00, 6.3989e02, 4.7362e02],
             ],
             device=torch_device,
         )
-
-        self.assertTrue(torch.allclose(results["scores"][:4], expected_scores, atol=1e-4))
+        self.assertTrue(torch.allclose(results["scores"][:4], expected_scores, atol=1e-3, rtol=1e-4))
         self.assertSequenceEqual(results["labels"][:4].tolist(), expected_labels)
-        torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, atol=1e-4)
+        torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, atol=1e-3, rtol=1e-4)
