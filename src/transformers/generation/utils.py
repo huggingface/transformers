@@ -3442,7 +3442,8 @@ class GenerationMixin:
 
         batch_size_unflattened, cur_len = input_ids.shape
         batch_size = batch_size_unflattened // num_beams
-        vocab_size = self.config.get_text_config().vocab_size
+        # TODO (joao): change to `self.config.get_text_config().vocab_size` when imagegpt gets deprecated
+        vocab_size = self.get_output_embeddings().out_features
         decoder_prompt_len = cur_len
         this_peer_finished = False
 
@@ -3490,7 +3491,10 @@ class GenerationMixin:
 
         # per batch, beam-item holding current token in loop and completed sequences
         running_sequences = torch.full(
-            (batch_size, num_beams, max_length), fill_value=pad_token_id, dtype=torch.int64, device=input_ids.device
+            (batch_size, num_beams, max_length),
+            fill_value=pad_token_id or -1,  # -1 to handle the edge case where there are no pad nor eos tokens
+            dtype=torch.int64,
+            device=input_ids.device,
         )
         running_sequences[:, :, :cur_len] = unflatten_beam_dim(input_ids, batch_size, num_beams)
         sequences = running_sequences.clone().detach()
