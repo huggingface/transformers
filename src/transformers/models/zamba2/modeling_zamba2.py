@@ -62,20 +62,23 @@ _CONFIG_FOR_DOC = "Zyphra/Zamba2-2.7B"
 
 
 class Zamba2RMSNormGated(torch.nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size, group_size, eps=1e-6):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
+        self.group_size = group_size
 
     def forward(self, hidden_states, gate=None):
         input_dtype = hidden_states.dtype
         hidden_states = hidden_states.to(torch.float32)
-
         if gate is not None:
             hidden_states = hidden_states * nn.functional.silu(gate.to(torch.float32))
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-
+        *prefix_dims, last_dim = hidden_states.shape
+        group_count = last_dim // self.group_size
+        hidden_states_group = hidden_states.view(*prefix_dims, group_count, self.group_size)
+        variance = hidden_states_group.pow(2).mean(-1, keepdim=True)
+        hidden_states_group = hidden_states_group * torch.rsqrt(variance + self.variance_epsilon)
+        hidden_states = hidden_states_group.view(*prefix_dims, group_count * self.group_size)
         return self.weight * hidden_states.to(input_dtype)
 
 
@@ -563,6 +566,7 @@ class Zamba2MambaMixer(nn.Module):
         self.use_conv_bias = config.use_conv_bias
         self.activation = "silu"
         self.act = nn.SiLU()
+        self.use_mem_eff_path = config.use_mem_eff_path
 
         self.n_groups = config.mamba_ngroups
         self.head_dim = config.mamba_headdim
@@ -601,7 +605,9 @@ class Zamba2MambaMixer(nn.Module):
         A = torch.arange(1, self.num_heads + 1)
         self.A_log = nn.Parameter(torch.log(A))
         self.A_log._no_weight_decay = True
-        self.norm = Zamba2RMSNormGated(self.intermediate_size, eps=1e-5)
+        self.norm = Zamba2RMSNormGated(
+            self.intermediate_size, group_size=self.intermediate_size // self.n_groups, eps=1e-5
+        )
         self.D = nn.Parameter(torch.ones(self.num_heads))
         self.D._no_weight_decay = True
 
@@ -685,7 +691,7 @@ class Zamba2MambaMixer(nn.Module):
             else:
                 input_not_masked = True
 
-            if self.training and cache_params is None and input_not_masked:
+            if self.use_mem_eff_path and self.training and cache_params is None and input_not_masked:
                 out, ssm_state = mamba_split_conv1d_scan_combined(
                     projected_states,
                     self.conv1d.weight.squeeze(1),
@@ -1227,7 +1233,7 @@ class Zamba2PreTrainedModel(PreTrainedModel):
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn_2 = True
     _supports_flex_attn = True
-    _supports_sdpa = False
+    _supports_sdpa = True
     _supports_cache_class = True  # Note: only supports Zamba2HybridDynamicCache
     _is_stateful = True
 
