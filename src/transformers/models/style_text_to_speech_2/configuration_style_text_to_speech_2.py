@@ -41,6 +41,13 @@ class StyleTextToSpeech2Config(PretrainedConfig):
         duration_encoder_hidden_size=512,
         duration_encoder_num_layers=3,
         duration_encoder_dropout=0.2,
+        decoder_resblock_kernel_sizes=[3,7,11],
+        decoder_upsample_rates=[10, 6],
+        decoder_upsample_initial_channel=512,
+        decoder_resblock_dilation_sizes=[[1,3,5], [1,3,5], [1,3,5]],
+        decoder_upsample_kernel_sizes=[20, 12],
+        decoder_gen_istft_n_fft=20,
+        decoder_gen_istft_hop_size=5,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -63,6 +70,14 @@ class StyleTextToSpeech2Config(PretrainedConfig):
         self.duration_encoder_hidden_size = duration_encoder_hidden_size
         self.duration_encoder_num_layers = duration_encoder_num_layers
         self.duration_encoder_dropout = duration_encoder_dropout
+
+        self.decoder_resblock_kernel_sizes = decoder_resblock_kernel_sizes
+        self.decoder_upsample_rates = decoder_upsample_rates
+        self.decoder_upsample_initial_channel = decoder_upsample_initial_channel
+        self.decoder_resblock_dilation_sizes = decoder_resblock_dilation_sizes
+        self.decoder_upsample_kernel_sizes = decoder_upsample_kernel_sizes
+        self.decoder_gen_istft_n_fft = decoder_gen_istft_n_fft
+        self.decoder_gen_istft_hop_size = decoder_gen_istft_hop_size
 
         super().__init__(**kwargs)
 

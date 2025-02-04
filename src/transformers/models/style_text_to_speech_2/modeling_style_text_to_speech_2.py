@@ -200,6 +200,22 @@ class StyleTextToSpeech2AdaLayerNorm(nn.Module):
         hidden_states = F.layer_norm(hidden_states, (self.hidden_size,))
         hidden_states = (1 + gamma) * hidden_states + beta
         return hidden_states
+    
+
+class StyleTextToSpeech2AdaLayerNorm1d(nn.Module):
+    def __init__(self, hidden_size, style_size):
+        super().__init__()
+        self.hidden_size = hidden_size
+        self.style_size = style_size
+        self.proj = nn.Linear(style_size, hidden_size*2)
+        self.norm = nn.InstanceNorm1d(hidden_size, affine=False)
+
+    def forward(self, hidden_states, style):
+        hidden_style = self.proj(style)
+        gamma, beta = torch.chunk(hidden_style, chunks=2, dim=-1)
+        hidden_states = self.norm(hidden_states.transpose(1, -1)).transpose(1, -1)
+        hidden_states = (1 + gamma) * hidden_states + beta
+        return hidden_states
  
 
 class StyleTextToSpeech2DurationEncoderLayer(nn.Module):
@@ -258,7 +274,7 @@ class StyleTextToSpeech2DurationPredictor(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.lstm = nn.LSTM(config.acoustic_text_encoder_hidden_size + config.style_hidden_size, config.acoustic_text_encoder_hidden_size // 2, 1, batch_first=True, bidirectional=True)
-        self.duration_proj = nn.Linear(config.acoustic_text_encoder_hidden_size, 1)
+        self.duration_proj = nn.Linear(config.acoustic_text_encoder_hidden_size, config.max_duration)
 
     def forward(self, hidden_states):
         hidden_states, _ = self.lstm(hidden_states)
@@ -270,10 +286,18 @@ class StyleTextToSpeech2AdainResBlockLayer(nn.Module):
         super().__init__()
         self.conv1 = nn.Conv1d(channels, channels, kernel_size, 1, dilation=dilation, padding=self._get_padding(kernel_size, dilation))
         self.conv2 = nn.Conv1d(channels, channels, kernel_size, 1, dilation=1, padding=self._get_padding(kernel_size, 1))
-        self.norm1 = StyleTextToSpeech2AdaLayerNorm(channels, style_size)
-        self.norm2 = StyleTextToSpeech2AdaLayerNorm(channels, style_size)
-        self.alpha1 = nn.Parameter(torch.ones(1, channels, 1))
-        self.alpha2 = nn.Parameter(torch.ones(1, channels, 1))
+        self.norm1 = StyleTextToSpeech2AdaLayerNorm1d(channels, style_size)
+        self.norm2 = StyleTextToSpeech2AdaLayerNorm1d(channels, style_size)
+        self.alpha1 = nn.Parameter(torch.ones(channels))
+        self.alpha2 = nn.Parameter(torch.ones(channels))
+
+        # apply weight norm
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
+        weight_norm(self.conv1)
+        weight_norm(self.conv2)
 
     def _get_padding(self, kernel_size, dilation):
         return int((kernel_size * dilation - dilation) / 2)
@@ -281,10 +305,10 @@ class StyleTextToSpeech2AdainResBlockLayer(nn.Module):
     def forward(self, hidden_states, style):
         x = self.norm1(hidden_states, style)
         x = x + (1 / self.alpha1) * (torch.sin(self.alpha1 * x) ** 2)
-        x = self.conv1(x)
+        x = self.conv1(x.transpose(1, -1)).transpose(1, -1)
         x = self.norm2(x, style)
         x = x + (1 / self.alpha2) * (torch.sin(self.alpha2 * x) ** 2)
-        x = self.conv2(x)
+        x = self.conv2(x.transpose(1, -1)).transpose(1, -1)
         return x + hidden_states
 
 
@@ -299,27 +323,37 @@ class StyleTextToSpeech2AdainResBlock(nn.Module):
         for layer in self.layers:
             hidden_states = layer(hidden_states, style)
         return hidden_states
-
+        
 
 class StyleTextToSpeech2AdainResBlock1d(nn.Module):
     def __init__(self, hidden_size_in, hidden_size_out, style_size, upsample=False, learned_shortcut=False, dropout_p=0.0):
         super().__init__()
-        self.upsample = upsample
+        self.do_upsample = upsample
 
         self.conv1 = nn.Conv1d(hidden_size_in, hidden_size_out, kernel_size=3, stride=1, padding=1)
         self.conv2 = nn.Conv1d(hidden_size_out, hidden_size_out, kernel_size=3, stride=1, padding=1)
-        self.norm1 = StyleTextToSpeech2AdaLayerNorm(hidden_size_in, style_size)
-        self.norm2 = StyleTextToSpeech2AdaLayerNorm(hidden_size_out, style_size)
+        self.norm1 = StyleTextToSpeech2AdaLayerNorm1d(hidden_size_in, style_size)
+        self.norm2 = StyleTextToSpeech2AdaLayerNorm1d(hidden_size_out, style_size)
+        
+        # apply weight norm
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
+        weight_norm(self.conv1)
+        weight_norm(self.conv2)
 
         if upsample:
             self.upsample = lambda x: F.interpolate(x, scale_factor=2, mode='nearest')
             self.pool = nn.ConvTranspose1d(hidden_size_in, hidden_size_in, kernel_size=3, stride=2, groups=hidden_size_in, padding=1, output_padding=1)
+            weight_norm(self.pool)
         else:
             self.upsample = lambda x: x
             self.pool = nn.Identity()
         
         if learned_shortcut:
             self.conv1_shortcut = nn.Conv1d(hidden_size_in, hidden_size_out, kernel_size=1, stride=1, padding=0, bias=False)
+            weight_norm(self.conv1_shortcut)
         else:
             self.conv1_shortcut = nn.Identity()
 
@@ -468,11 +502,11 @@ class StyleTextToSpeech2HarmonicNoiseSourceFilter(nn.Module):
         fn = torch.multiply(f0, torch.FloatTensor([[range(1, self.harmonic_num + 2)]]).to(f0.device))
 
         # generate sine waveforms
-        sine_waves = self._f02sine(fn) * self.sine_amp
+        sine_waves = self._f02sine(fn) * self.sine_amplitude
 
         # generate uv signal
         uv = self._f02uv(f0)
-        noise_amp = uv * self.noise_std + (1 - uv) * self.sine_amp / 3
+        noise_amp = uv * self.add_noise_std + (1 - uv) * self.sine_amplitude / 3
         noise = noise_amp * torch.randn_like(sine_waves)
         sine_waves = sine_waves * uv + noise
 
@@ -481,14 +515,15 @@ class StyleTextToSpeech2HarmonicNoiseSourceFilter(nn.Module):
     def forward(self, hidden_states):
         sine_waves, uv = self._sine_gen(hidden_states)
         sine_merge = self.l_tanh(self.l_linear(sine_waves))
-        noise = torch.randn_like(uv) * self.sine_amp / 3
+        noise = torch.randn_like(uv) * self.sine_amplitude / 3
 
         return sine_merge, noise, uv
     
 
 class StyleTextToSpeech2GeneratorLayer(nn.Module):
-    def __init__(self, layer_idx, style_size, upsample_rates, resblock_kernel_sizes, upsample_initial_channel, resblock_dilation_sizes, upsample_kernel_sizes, gen_istft_n_fft, reflection_pad=True):
+    def __init__(self, layer_idx, style_size, upsample_rates, resblock_kernel_sizes, upsample_initial_channel, resblock_dilation_sizes, upsample_kernel_sizes, gen_istft_n_fft, reflection_pad=False):
         super().__init__()
+        self.layer_idx = layer_idx
 
         c_cur = upsample_initial_channel // (2 ** (layer_idx + 1))
         if layer_idx + 1 < len(upsample_rates):
@@ -537,13 +572,20 @@ class StyleTextToSpeech2GeneratorLayer(nn.Module):
 
         self.reflection_pad = nn.ReflectionPad1d((1, 0)) if reflection_pad else nn.Identity()
 
+        # apply weight norm
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
+        weight_norm(self.up)
+
     def forward(self, hidden_states, hidden_states_source, style):
         hidden_states = F.leaky_relu(hidden_states, 0.1)
-        hidden_states_source = self.noise_conv(hidden_states_source)
+        hidden_states_source = self.noise_conv(hidden_states_source.transpose(1, -1)).transpose(1, -1)
         hidden_states_source = self.noise_res(hidden_states_source, style)
 
-        hidden_states = self.up(hidden_states)
-        hidden_states = self.reflection_pad(hidden_states)
+        hidden_states = self.up(hidden_states.transpose(1, -1))
+        hidden_states = self.reflection_pad(hidden_states).transpose(1, -1)
         hidden_states = hidden_states + hidden_states_source
         
         hidden_states = self.resblocks[0](hidden_states, style)
@@ -565,7 +607,7 @@ class StyleTextToSpeech2Generator(nn.Module):
             sampling_rate=24000,
             upsample_scale=np.prod(upsample_rates) * gen_istft_hop_size,
             harmonic_num=8, 
-            voiced_threshod=10
+            voiced_threshold=10
         )
 
         self.f0_upsamp = torch.nn.Upsample(scale_factor=np.prod(upsample_rates) * gen_istft_hop_size)
@@ -595,6 +637,13 @@ class StyleTextToSpeech2Generator(nn.Module):
             padding=3
         )
         self.stft = TorchSTFT(filter_length=gen_istft_n_fft, hop_length=gen_istft_hop_size, win_length=gen_istft_n_fft)
+
+        # apply weight norm
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
+        weight_norm(self.conv_post)
         
     def forward(self, hidden_states, style, f0):
         with torch.no_grad():
@@ -605,10 +654,10 @@ class StyleTextToSpeech2Generator(nn.Module):
             har = torch.cat([har_spec, har_phase], dim=1)
 
         for layer in self.layers:
-            hidden_states = layer(hidden_states, har, style)
+            hidden_states = layer(hidden_states, har.transpose(1, -1), style)
 
         hidden_states = F.leaky_relu(hidden_states)
-        hidden_states = self.conv_post(hidden_states)
+        hidden_states = self.conv_post(hidden_states.transpose(1, -1))
         spec = torch.exp(hidden_states[:,:self.post_n_fft // 2 + 1, :])
         phase = torch.sin(hidden_states[:, self.post_n_fft // 2 + 1:, :])
         return self.stft.inverse(spec, phase)
@@ -619,33 +668,42 @@ class StyleTextToSpeech2Decoder(nn.Module):
         super().__init__()
         self.pitch_conv = nn.Conv1d(1, 1, kernel_size=3, stride=2, groups=1, padding=1)
         self.energy_conv = nn.Conv1d(1, 1, kernel_size=3, stride=2, groups=1, padding=1)
-        self.encode = StyleTextToSpeech2AdainResBlock1d(config.acoustic_text_encoder_hidden_size + 2, 1024, config.style_hidden_size)
+        self.encode = StyleTextToSpeech2AdainResBlock1d(config.acoustic_text_encoder_hidden_size + 2, 1024, config.style_hidden_size, learned_shortcut=True)
         self.asr_res = nn.Conv1d(512, 64, kernel_size=1)
         self.decode = nn.ModuleList([
-            StyleTextToSpeech2AdainResBlock1d(1024 + 2 + 64, 1024, config.style_hidden_size),
-            StyleTextToSpeech2AdainResBlock1d(1024 + 2 + 64, 1024, config.style_hidden_size),
-            StyleTextToSpeech2AdainResBlock1d(1024 + 2 + 64, 1024, config.style_hidden_size),
-            StyleTextToSpeech2AdainResBlock1d(1024 + 2 + 64, 512, config.style_hidden_size, upsample=True)
+            StyleTextToSpeech2AdainResBlock1d(1024 + 2 + 64, 1024, config.style_hidden_size, learned_shortcut=True),
+            StyleTextToSpeech2AdainResBlock1d(1024 + 2 + 64, 1024, config.style_hidden_size, learned_shortcut=True),
+            StyleTextToSpeech2AdainResBlock1d(1024 + 2 + 64, 1024, config.style_hidden_size, learned_shortcut=True),
+            StyleTextToSpeech2AdainResBlock1d(1024 + 2 + 64, 512, config.style_hidden_size, learned_shortcut=True, upsample=True)
         ])
-        self.generator = StyleTextToSpeech2Generator(config.style_hidden_size, config.resblock_kernel_sizes, config.upsample_rates, config.upsample_initial_channel, config.resblock_dilation_sizes, config.upsample_kernel_sizes, config.gen_istft_n_fft, config.gen_istft_hop_size)
+        self.generator = StyleTextToSpeech2Generator(config.style_hidden_size, config.decoder_resblock_kernel_sizes, config.decoder_upsample_rates, config.decoder_upsample_initial_channel, config.decoder_resblock_dilation_sizes, config.decoder_upsample_kernel_sizes, config.decoder_gen_istft_n_fft, config.decoder_gen_istft_hop_size)
+
+        # apply weight norm
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm"):
+            weight_norm = nn.utils.parametrizations.weight_norm
+
+        weight_norm(self.pitch_conv)
+        weight_norm(self.energy_conv)
+        weight_norm(self.asr_res)
 
     def forward(self, hidden_states, pitch, energy, style):
-        pitch = self.pitch_conv(pitch)
-        energy = self.energy_conv(energy)
+        pitch_conv = self.pitch_conv(pitch).transpose(1, -1)
+        energy_conv = self.energy_conv(energy).transpose(1, -1)
+        asr_res = self.asr_res(hidden_states.transpose(1, -1)).transpose(1, -1)
 
-        hidden_states = torch.cat([hidden_states, pitch, energy], dim=-1)
+        hidden_states = torch.cat([hidden_states, pitch_conv, energy_conv], dim=-1)
         hidden_states = self.encode(hidden_states, style)
-        asr_res = self.asr_res(hidden_states)
 
         residual = True
         for block in self.decode:
             if residual:
-                hidden_states = torch.cat([hidden_states, asr_res, pitch, energy], axis=1)
+                hidden_states = torch.cat([hidden_states, asr_res, pitch_conv, energy_conv], dim=-1)
             hidden_states = block(hidden_states, style)
-            if block.upsample:
+            if block.do_upsample:
                 residual = False
 
-        return self.generator(hidden_states, style, pitch)
+        return self.generator(hidden_states, style, pitch.squeeze(0))
 
 
 class StyleTextToSpeech2ForConditionalGeneration(nn.Module):
@@ -674,6 +732,8 @@ class StyleTextToSpeech2ForConditionalGeneration(nn.Module):
 
         pitch, energy = self.prosody_predictor(hidden_states_duration, style)
 
-        return hidden_states_text, pitch, energy, style
+        out = self.decoder(hidden_states_text, pitch, energy, style)
+
+        return out
 
 __all__ = ["StyleTextToSpeech2AcousticTextEncoder", "StyleTextToSpeech2ProsodicEncoder", "StyleTextToSpeech2DurationEncoder", "StyleTextToSpeech2ForConditionalGeneration"]

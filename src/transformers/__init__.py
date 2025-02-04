@@ -205,6 +205,9 @@ _import_structure = {
     "models.style_text_to_speech_2": [
         "StyleTextToSpeech2Config",
         "StyleTextToSpeech2AcousticTextEncoder",
+        "StyleTextToSpeech2ProsodicEncoder",
+        "StyleTextToSpeech2DurationEncoder",
+        "StyleTextToSpeech2ForConditionalGeneration",
     ],
     "models.bart": ["BartConfig", "BartTokenizer"],
     "models.barthez": [],
