@@ -1540,7 +1540,7 @@ class MllamaVisionModel(MllamaPreTrainedModel):
         # Patch embedding
         target_dtype = self.patch_embedding.weight.dtype
         target_device = self.patch_embedding.weight.device
-        patch_embeds = self.patch_embedding(pixel_values.to(target_dtype).to(target_device))
+        patch_embeds = self.patch_embedding(pixel_values.to(target_device, target_dtype))
         hidden_state = patch_embeds.flatten(2).transpose(1, 2)
 
         # Tile embeddings
