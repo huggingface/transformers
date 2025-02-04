@@ -25,13 +25,10 @@ from transformers import (
     InternVLForConditionalGeneration,
     InternVLImageProcessor,
     InternVLProcessor,
-    is_vision_available,
 )
 from transformers.tokenization_utils import AddedToken
 
 
-if is_vision_available():
-    from transformers.image_utils import load_image
 # fmt: off
 ORIGINAL_TO_CONVERTED_KEY_MAPPING_VISION = {
     # Vision encoder mapping
@@ -48,6 +45,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING_VISION = {
     r"norm2":                                       r"layernorm_after",
 
 }
+
 ORIGINAL_TO_CONVERTED_KEY_MAPPING_TEXT = {
     # Vision encoder mapping
     # r"language_model":                                 r"vision_tower",
@@ -59,6 +57,27 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING_MULTI = {
     r"mlp1.1":                                 r"multi_modal_projector.linear_1",
     r"mlp1.3":                                 r"multi_modal_projector.linear_2",
 }
+
+chat_template = (
+    "{% for message in messages %}"
+        "{{'\n<|im_start|>' + message['role'] + '\n'}}"
+        "{% if message['content'] is string %}"
+            "{{ message['content'] }}"
+        "{% else %}"
+            "{% for content in message['content'] %}"
+                "{% if content['type'] == 'image' %}"
+                    "{{ '<image>\n' }}"
+                "{% elif content['type'] == 'text' %}"
+                    "{{ content['text'] }}"
+                "{% endif %}"
+            "{% endfor %}"
+        "{% endif %}"
+        "{{'<|im_end|>'}}"
+    "{% endfor %}"
+    "{% if add_generation_prompt %}"
+        "{{'\n<|im_start|>assistant\n' }}"
+    "{% endif %}"
+)
 # fmt: on
 
 CONTEXT_LENGTH = 8192
@@ -156,7 +175,7 @@ def write_model(
     del state_dict_old
     gc.collect()
 
-    print("Loading the checkpoint in a GotOcr2ForConditionalGeneration model.")
+    print("Loading the checkpoint in a InternVLForConditionalGeneration model.")
     model = InternVLForConditionalGeneration(config)
     missing_keys, unexpected_keys = model.load_state_dict(state_dict, strict=False)
     model = model.to(torch.bfloat16)
@@ -176,18 +195,28 @@ def write_model(
     model = InternVLForConditionalGeneration.from_pretrained(model_path, device_map="auto", torch_dtype=torch.bfloat16)
     image_processor = InternVLImageProcessor.from_pretrained(model_path)
     tokenizer = AutoTokenizer.from_pretrained(model_path)
-    processor = InternVLProcessor(image_processor=image_processor, tokenizer=tokenizer)
-    image = load_image("./000000039769.jpg")
-    prompt = "<|im_start|>user\n<image>\nPlease describe the image shortly.<|im_end|>\n<|im_start|>assistant\n"
-    inputs = processor(images=[image], text=prompt, return_tensors="pt").to(model.device, torch.bfloat16)
+    processor = InternVLProcessor(image_processor=image_processor, tokenizer=tokenizer, chat_template=chat_template)
+    messages = [
+        {
+            "role": "user",
+            "content": [
+                {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
+                {"type": "text", "text": "Please describe the image shortly."},
+            ],
+        }
+    ]
+    inputs = processor.apply_chat_template(
+        messages, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
+    ).to(model.device, torch.bfloat16)
 
     output = model.generate(**inputs, max_new_tokens=200, do_sample=False)
-    print(processor.decode(output[0][2:], skip_special_tokens=True))
-    # expected_output = "\\title{\nR"
-    # print("Decoded output:", decoded_output)
-    # assert decoded_output == expected_output
-    # print("Model reloaded successfully.")
-    # del model
+    decoded_output = processor.decode(output[0][len(inputs["input_ids"][0]) :], skip_special_tokens=True)
+
+    expected_output = "The image shows two cats lying on a pink couch. One cat is curled up with its head resting on the couch, while the other is lying on its side with its head on the pink surface. There are two remote controls placed on the couch next to the cats."
+    print("Decoded output:", decoded_output)
+    assert decoded_output == expected_output
+    print("Model reloaded successfully.")
+    del model
 
 
 def write_tokenizer(save_dir: str, push_to_hub: bool = False):
