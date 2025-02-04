@@ -84,7 +84,7 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
     valid_init_kwargs = ConvNextFastImageProcessorInitKwargs
     valid_preprocess_kwargs = ConvNextFastImageProcessorPreprocessKwargs
 
-    def __init__(self, **kwargs: Unpack[valid_init_kwargs]):
+    def __init__(self, **kwargs: Unpack[ConvNextFastImageProcessorInitKwargs]):
         super().__init__(**kwargs)
 
     @add_start_docstrings(
@@ -95,7 +95,9 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
             overridden by `crop_pct` in the`preprocess` method.
         """,
     )
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[valid_preprocess_kwargs]) -> BatchFeature:
+    def preprocess(
+        self, images: ImageInput, **kwargs: Unpack[ConvNextFastImageProcessorPreprocessKwargs]
+    ) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def resize(

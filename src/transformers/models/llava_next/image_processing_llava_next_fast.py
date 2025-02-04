@@ -99,7 +99,7 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
     valid_init_kwargs = LlavaNextFastImageProcessorInitKwargs
     valid_preprocess_kwargs = LlavaNextFastImageProcessorPreprocessKwargs
 
-    def __init__(self, **kwargs: Unpack[valid_init_kwargs]):
+    def __init__(self, **kwargs: Unpack[LlavaNextFastImageProcessorInitKwargs]):
         super().__init__(**kwargs)
 
     @add_start_docstrings(
@@ -113,7 +113,9 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
                     number of patches in the batch. Padding will be applied to the bottom and right with zeros.
         """,
     )
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[valid_preprocess_kwargs]) -> BatchFeature:
+    def preprocess(
+        self, images: ImageInput, **kwargs: Unpack[LlavaNextFastImageProcessorPreprocessKwargs]
+    ) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def _prepare_images_structure(

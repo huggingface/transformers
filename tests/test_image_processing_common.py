@@ -221,7 +221,8 @@ class ImageProcessingTestMixin:
 
         def measure_time(image_processor, image):
             # Warmup
-            _ = image_processor(image, return_tensors="pt")
+            for _ in range(5):
+                _ = image_processor(image, return_tensors="pt")
             start = time.time()
             _ = image_processor(image, return_tensors="pt")
             return time.time() - start

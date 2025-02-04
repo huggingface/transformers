@@ -110,7 +110,7 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
     valid_init_kwargs = Qwen2VLFastImageProcessorInitKwargs
     model_input_names = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw"]
 
-    def __init__(self, **kwargs: Unpack[valid_init_kwargs]):
+    def __init__(self, **kwargs: Unpack[Qwen2VLFastImageProcessorInitKwargs]):
         super().__init__(**kwargs)
 
     def _preprocess(
@@ -306,7 +306,7 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
-        image_mean, image_std, size, _, interpolation = self._prepare_process_arguments(
+        image_mean, image_std, interpolation = self._prepare_process_arguments(
             do_resize=do_resize,
             size=size,
             resample=resample,

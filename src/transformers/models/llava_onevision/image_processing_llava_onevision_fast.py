@@ -81,7 +81,7 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
     valid_preprocess_kwargs = LlavaOnevisionFastImageProcessorPreprocessKwargs
     model_input_names = ["pixel_values_videos"]
 
-    def __init__(self, **kwargs: Unpack[valid_init_kwargs]):
+    def __init__(self, **kwargs: Unpack[LlavaOnevisionFastImageProcessorInitKwargs]):
         super().__init__(**kwargs)
 
     @add_start_docstrings(
@@ -95,7 +95,9 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
                     number of patches in the batch. Padding will be applied to the bottom and right with zeros.
         """,
     )
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[valid_preprocess_kwargs]) -> BatchFeature:
+    def preprocess(
+        self, images: ImageInput, **kwargs: Unpack[LlavaOnevisionFastImageProcessorPreprocessKwargs]
+    ) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def _prepare_images_structure(

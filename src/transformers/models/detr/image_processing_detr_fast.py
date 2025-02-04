@@ -336,7 +336,7 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
     valid_init_kwargs = DetrFastImageProcessorInitKwargs
     valid_preprocess_kwargs = DetrFastImageProcessorPreprocessKwargs
 
-    def __init__(self, **kwargs: Unpack[valid_init_kwargs]) -> None:
+    def __init__(self, **kwargs: Unpack[DetrFastImageProcessorInitKwargs]) -> None:
         if "pad_and_return_pixel_mask" in kwargs:
             kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
 
@@ -629,7 +629,7 @@ class DetrImageProcessorFast(BaseImageProcessorFast):
             Path to the directory containing the segmentation masks.
         """,
     )
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[valid_preprocess_kwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[DetrFastImageProcessorPreprocessKwargs]) -> BatchFeature:
         if "pad_and_return_pixel_mask" in kwargs:
             kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
             logger.warning_once(

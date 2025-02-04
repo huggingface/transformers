@@ -91,7 +91,7 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
     valid_init_kwargs = PixtralFastImageProcessorInitKwargs
     valid_preprocess_kwargs = PixtralFastImageProcessorPreprocessKwargs
 
-    def __init__(self, **kwargs: Unpack[valid_init_kwargs]):
+    def __init__(self, **kwargs: Unpack[PixtralFastImageProcessorInitKwargs]):
         super().__init__(**kwargs)
 
     @add_start_docstrings(
@@ -101,7 +101,9 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
             Size of the patches in the model, used to calculate the output image size. Can be overridden by `patch_size` in the `preprocess` method.
         """,
     )
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[valid_preprocess_kwargs]) -> BatchFeature:
+    def preprocess(
+        self, images: ImageInput, **kwargs: Unpack[PixtralFastImageProcessorPreprocessKwargs]
+    ) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def resize(

@@ -93,7 +93,7 @@ class LlavaImageProcessorFast(BaseImageProcessorFast):
     valid_init_kwargs = LlavaFastImageProcessorInitKwargs
     valid_preprocess_kwargs = LlavaFastImageProcessorPreprocessKwargs
 
-    def __init__(self, **kwargs: Unpack[valid_init_kwargs]) -> None:
+    def __init__(self, **kwargs: Unpack[LlavaFastImageProcessorInitKwargs]) -> None:
         super().__init__(**kwargs)
 
     @add_start_docstrings(
@@ -103,7 +103,9 @@ class LlavaImageProcessorFast(BaseImageProcessorFast):
                 Whether to pad the image to a square based on the longest edge. Can be overridden by the `do_pad` parameter
         """,
     )
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[valid_preprocess_kwargs]) -> BatchFeature:
+    def preprocess(
+        self, images: ImageInput, **kwargs: Unpack[LlavaFastImageProcessorPreprocessKwargs]
+    ) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def pad_to_square(

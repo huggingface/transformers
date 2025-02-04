@@ -136,7 +136,7 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
     valid_init_kwargs = RTDetrFastImageProcessorInitKwargs
     valid_preprocess_kwargs = RTDetrFastImageProcessorPreprocessKwargs
 
-    def __init__(self, **kwargs: Unpack[valid_init_kwargs]) -> None:
+    def __init__(self, **kwargs: Unpack[RTDetrFastImageProcessorInitKwargs]) -> None:
         # Backwards compatibility
         do_convert_annotations = kwargs.get("do_convert_annotations", None)
         do_normalize = kwargs.get("do_normalize", None)
@@ -180,7 +180,9 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
             Path to the directory containing the segmentation masks.
         """,
     )
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[valid_preprocess_kwargs]) -> BatchFeature:
+    def preprocess(
+        self, images: ImageInput, **kwargs: Unpack[RTDetrFastImageProcessorPreprocessKwargs]
+    ) -> BatchFeature:
         return BaseImageProcessorFast().preprocess(images, **kwargs)
 
     def prepare_annotation(
