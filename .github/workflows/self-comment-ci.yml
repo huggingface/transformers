@@ -225,6 +225,7 @@ jobs:
           if [ $PR_MERGE_SHA != $VERIFIED_PR_MERGE_SHA ]; then
             echo "The merged commit SHA is not the same as the verified one! Security issue detected, abort the workflow!";
             exit -1;
+          fi
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
@@ -324,6 +325,7 @@ jobs:
           if [ $PR_MERGE_SHA != $VERIFIED_PR_MERGE_SHA ]; then
             echo "The merged commit SHA is not the same as the verified one! Security issue detected, abort the workflow!";
             exit -1;
+          fi
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
