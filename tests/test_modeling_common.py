@@ -4446,7 +4446,11 @@ class ModelTesterMixin:
                     has_fa2 = False
                     for name, submodule in model_fa2.named_modules():
                         class_name = submodule.__class__.__name__
-                        if "FlashAttention" in class_name or (class_name.endswith("Attention") and getattr(submodule, "config", None) and submodule.config._attn_implementation == "flash_attention_2"):
+                        if "FlashAttention" in class_name or (
+                            class_name.endswith("Attention")
+                            and getattr(submodule, "config", None)
+                            and submodule.config._attn_implementation == "flash_attention_2"
+                        ):
                             has_fa2 = True
                             break
                     if not has_fa2:
