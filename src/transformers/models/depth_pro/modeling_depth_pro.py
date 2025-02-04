@@ -1146,8 +1146,11 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
         >>> processor = AutoImageProcessor.from_pretrained(checkpoint)
         >>> model = DepthProForDepthEstimation.from_pretrained(checkpoint)
 
+        >>> device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        >>> model.to(device)
+
         >>> # prepare image for the model
-        >>> inputs = processor(images=image, return_tensors="pt")
+        >>> inputs = processor(images=image, return_tensors="pt").to(device)
 
         >>> with torch.no_grad():
         ...     outputs = model(**inputs)

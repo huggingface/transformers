@@ -43,13 +43,15 @@ The DepthPro model processes an input image by first downsampling it at multiple
 >>> import torch
 >>> from transformers import DepthProImageProcessorFast, DepthProForDepthEstimation
 
+>>> device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
 >>> image = Image.open(requests.get(url, stream=True).raw)
 
 >>> image_processor = DepthProImageProcessorFast.from_pretrained("geetu040/DepthPro")
->>> model = DepthProForDepthEstimation.from_pretrained("geetu040/DepthPro")
+>>> model = DepthProForDepthEstimation.from_pretrained("geetu040/DepthPro").to(device)
 
->>> inputs = image_processor(images=image, return_tensors="pt")
+>>> inputs = image_processor(images=image, return_tensors="pt").to(device)
 
 >>> with torch.no_grad():
 ...     outputs = model(**inputs)
