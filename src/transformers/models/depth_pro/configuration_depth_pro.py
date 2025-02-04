@@ -58,9 +58,9 @@ class DepthProConfig(PretrainedConfig):
         use_bias_in_fusion_residual (`bool`, *optional*, defaults to `True`):
             Whether to use bias in the pre-activate residual units of the fusion blocks.
         use_fov_model (`bool`, *optional*, defaults to `False`):
-            Whether to use `DepthProFOVModel` to generate the field of view.
+            Whether to use `DepthProFovModel` to generate the field of view.
         num_fov_head_layers (`int`, *optional*, defaults to 2):
-            Number of convolution layers in the head of `DepthProFOVModel`.
+            Number of convolution layers in the head of `DepthProFovModel`.
         image_model_config (`Union[Dict[str, Any], PretrainedConfig]`, *optional*):
             The configuration of the image encoder model, which is loaded using the [`AutoModel`] API.
             By default, Dinov2 model is used as backbone.
