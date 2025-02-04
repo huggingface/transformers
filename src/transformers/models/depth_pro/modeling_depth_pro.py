@@ -677,7 +677,7 @@ DEPTH_PRO_FOR_DEPTH_ESTIMATION_START_DOCSTRING = r"""
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
         use_fov_model (`bool`, *optional*, defaults to `True`):
-            Whether to use `DepthProFOVModel` to generate the field of view.
+            Whether to use `DepthProFovModel` to generate the field of view.
 """
 
 
@@ -932,7 +932,7 @@ class DepthProFeatureFusionStage(nn.Module):
         return fused_hidden_states
 
 
-class DepthProFOVEncoder(nn.Module):
+class DepthProFovEncoder(nn.Module):
     def __init__(self, config: DepthProConfig):
         super().__init__()
         self.config = config
@@ -979,7 +979,7 @@ class DepthProFOVEncoder(nn.Module):
         return features
 
 
-class DepthProFOVHead(nn.Module):
+class DepthProFovHead(nn.Module):
     def __init__(self, config: DepthProConfig):
         super().__init__()
         self.config = config
@@ -1020,18 +1020,18 @@ class DepthProFOVHead(nn.Module):
         return features
 
 
-class DepthProFOVModel(nn.Module):
+class DepthProFovModel(nn.Module):
     def __init__(self, config: DepthProConfig):
         super().__init__()
         self.config = config
         self.fusion_hidden_size = config.fusion_hidden_size
 
-        self.fov_encoder = DepthProFOVEncoder(config)
+        self.fov_encoder = DepthProFovEncoder(config)
         self.conv = nn.Conv2d(
             self.fusion_hidden_size, self.fusion_hidden_size // 2, kernel_size=3, stride=2, padding=1
         )
         self.activation = nn.ReLU(inplace=True)
-        self.head = DepthProFOVHead(config)
+        self.head = DepthProFovHead(config)
 
     def forward(
         self,
@@ -1112,7 +1112,7 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
         self.head = DepthProDepthEstimationHead(config)
 
         # dinov2 (vit) like encoder
-        self.fov_model = DepthProFOVModel(config) if self.use_fov_model else None
+        self.fov_model = DepthProFovModel(config) if self.use_fov_model else None
 
         # Initialize weights and apply final processing
         self.post_init()
