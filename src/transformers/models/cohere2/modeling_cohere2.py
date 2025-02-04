@@ -39,6 +39,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.deprecation import deprecate_kwarg
 from .configuration_cohere2 import Cohere2Config
 
 
@@ -259,6 +260,11 @@ class Cohere2Attention(nn.Module):
             }
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
+            # Here we need to slice as we use a static cache by default, but FA2 does not support it
+            if attention_mask is not None and self.config._attn_implementation == "flash_attention_2":
+                seq_len = attention_mask.shape[-1]
+                key_states, value_states = key_states[:, :, :seq_len, :], value_states[:, :, :seq_len, :]
+
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             if self.config._attn_implementation == "sdpa" and kwargs.get("output_attentions", False):
@@ -322,6 +328,7 @@ class Cohere2DecoderLayer(nn.Module):
         output_attentions: Optional[bool] = False,
         use_cache: Optional[bool] = False,
         cache_position: Optional[torch.LongTensor] = None,
+        last_cache_position: int = 0,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
         """
@@ -342,21 +349,30 @@ class Cohere2DecoderLayer(nn.Module):
                 (see `past_key_values`).
             cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
                 Indices depicting the position of the input sequence tokens in the sequence
+            last_cache_position (`int`): equivalent to `cache_position[-1]` but allow indexing without breaking dynamo tracing
         """
 
         if self.is_sliding and attention_mask is not None:  # efficient SDPA and no padding
-            # Flash-attn is a 2D tensor
+            # In prefill, we may be larger than sliding window
+            effective_seq_len = max(cache_position.shape[0], self.sliding_window)
+            # For FA2, the mask is 2D and is of shape [bs, processed_tokens] (not [bs, max_cache_len]),
+            # thus we must slice from the right (at most `effective_seq_len` elements)
             if self.config._attn_implementation == "flash_attention_2":
-                if past_key_value is not None:  # when decoding
-                    attention_mask = attention_mask[:, -self.sliding_window :]
+                attention_mask = attention_mask[:, -effective_seq_len:]
+            # Otherwise, the mask is 4D of shape [bs, 1, query_len, max_cache_len] thus we must slice
+            # from the left, with an offset if we are beyond the sliding window
             else:
                 min_dtype = torch.finfo(hidden_states.dtype).min
                 sliding_window_mask = torch.tril(
                     torch.ones_like(attention_mask, dtype=torch.bool), diagonal=-self.sliding_window
                 )
                 attention_mask = torch.where(sliding_window_mask, min_dtype, attention_mask)
-                if attention_mask.shape[-1] <= 1:  # when decoding
-                    attention_mask = attention_mask[:, :, :, -self.sliding_window :]
+                # In case we are beyond the sliding window, we need to correctly offset the mask slicing
+                # `last_cache_position` is equivalent to `cache_position[-1]` but without breaking dynamo
+                offset = last_cache_position - effective_seq_len
+                # Should only be used when beyond the sliding window (i.e. offset > 0)
+                offset = max(0, offset)
+                attention_mask = attention_mask[:, :, :, offset : offset + effective_seq_len]
 
         residual = hidden_states
 
@@ -421,6 +437,7 @@ class Cohere2PreTrainedModel(PreTrainedModel):
     _supports_cache_class = True
     _supports_quantized_cache = True
     _supports_static_cache = True
+    _supports_attention_backend = True
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -555,6 +572,7 @@ class Cohere2Model(Cohere2PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
+        last_cache_position: Optional[int] = None,
         **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -593,9 +611,20 @@ class Cohere2Model(Cohere2PreTrainedModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
+        # This is needed to correctly slice the mask without data-dependent slicing later on if using dynamo tracing
+        # (retrieving the same value from `cache_position` later on would crash dynamo)
+        if last_cache_position is None:
+            last_cache_position = 0
+            if attention_mask is not None:
+                # In case a 4d mask is passed directly without using `generate`, we have to rely on cache_position
+                # It will break dynamo tracing but there are no way around it (and it should never happen in practice)
+                last_cache_position = (
+                    attention_mask.shape[-1] if attention_mask.dim() == 2 else cache_position[-1].item()
+                )
         causal_mask = self._update_causal_mask(
             attention_mask, inputs_embeds, cache_position, past_key_values, output_attentions
         )
+
         hidden_states = inputs_embeds
 
         # create position embeddings to be shared across the decoder layers
@@ -619,6 +648,7 @@ class Cohere2Model(Cohere2PreTrainedModel):
                     output_attentions,
                     use_cache,
                     cache_position,
+                    last_cache_position,
                 )
             else:
                 layer_outputs = decoder_layer(
@@ -629,6 +659,7 @@ class Cohere2Model(Cohere2PreTrainedModel):
                     output_attentions=output_attentions,
                     use_cache=use_cache,
                     cache_position=cache_position,
+                    last_cache_position=last_cache_position,
                     **flash_attn_kwargs,
                 )
 
@@ -779,6 +810,7 @@ class Cohere2ForCausalLM(Cohere2PreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
+    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(COHERE2_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -794,7 +826,7 @@ class Cohere2ForCausalLM(Cohere2PreTrainedModel, GenerationMixin):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        num_logits_to_keep: int = 0,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
         **kwargs: Unpack[KwargsForCausalLM],
     ) -> Union[Tuple, CausalLMOutputWithPast]:
         r"""
@@ -804,10 +836,12 @@ class Cohere2ForCausalLM(Cohere2PreTrainedModel, GenerationMixin):
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
-            num_logits_to_keep (`int`, *optional*):
-                Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
+            logits_to_keep (`int` or `torch.Tensor`, *optional*):
+                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
                 `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
                 token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
+                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
+                This is useful when using packed tensor format (single dimension for batch and sequence length).
 
         Returns:
 
@@ -850,7 +884,8 @@ class Cohere2ForCausalLM(Cohere2PreTrainedModel, GenerationMixin):
 
         hidden_states = outputs[0]
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :])
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
         logits = logits * self.logit_scale  # main diff from Llama
 
         loss = None
@@ -878,7 +913,7 @@ class Cohere2ForCausalLM(Cohere2PreTrainedModel, GenerationMixin):
         cache_position=None,
         position_ids=None,
         use_cache=True,
-        num_logits_to_keep=None,
+        logits_to_keep=None,
         **kwargs,
     ):
         # Overwritten: has a special cache type, `HybridCache`
@@ -911,6 +946,10 @@ class Cohere2ForCausalLM(Cohere2PreTrainedModel, GenerationMixin):
             # The clone here is for the same reason as for `position_ids`.
             model_inputs = {"input_ids": input_ids.clone(memory_format=torch.contiguous_format), "inputs_embeds": None}
 
+        # This is needed to correctly slice the mask without data-dependent slicing later on if using dynamo tracing
+        # (retrieving the same value from `cache_position` later on would crash dynamo)
+        model_inputs["last_cache_position"] = attention_mask.shape[-1] if attention_mask is not None else 0
+
         if (
             isinstance(past_key_values, HybridCache)
             and attention_mask.ndim == 2
@@ -933,8 +972,8 @@ class Cohere2ForCausalLM(Cohere2PreTrainedModel, GenerationMixin):
                 batch_size=batch_size,
             )
 
-        if num_logits_to_keep is not None:
-            model_inputs["num_logits_to_keep"] = num_logits_to_keep
+        if logits_to_keep is not None:
+            model_inputs["logits_to_keep"] = logits_to_keep
 
         model_inputs.update(
             {

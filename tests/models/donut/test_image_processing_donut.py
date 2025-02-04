@@ -33,7 +33,7 @@ if is_vision_available():
     from transformers import DonutImageProcessor
 
 
-class DonutImageProcessingTester(unittest.TestCase):
+class DonutImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -51,7 +51,6 @@ class DonutImageProcessingTester(unittest.TestCase):
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
     ):
-        super().__init__()
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
