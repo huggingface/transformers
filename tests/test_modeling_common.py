@@ -3873,7 +3873,7 @@ class ModelTesterMixin:
                 class_name = submodule.__class__.__name__
                 if (
                     class_name.endswith("Attention")
-                    and hasattr(submodule, "config")
+                    and getattr(submodule, "config", None)
                     and submodule.config._attn_implementation != "eager"
                 ):
                     raise ValueError(
@@ -3911,7 +3911,7 @@ class ModelTesterMixin:
                     class_name = submodule.__class__.__name__
                     if (
                         class_name.endswith("Attention")
-                        and hasattr(submodule, "config")
+                        and getattr(submodule, "config", None)
                         and submodule.config._attn_implementation == "sdpa"
                     ):
                         raise ValueError(
@@ -3969,7 +3969,7 @@ class ModelTesterMixin:
                     class_name = submodule.__class__.__name__
                     if (
                         class_name.endswith("Attention")
-                        and hasattr(submodule, "config")
+                        and getattr(submodule, "config", None)
                         and submodule.config._attn_implementation == "sdpa"
                     ):
                         raise ValueError("The eager model should not have SDPA attention layers")
