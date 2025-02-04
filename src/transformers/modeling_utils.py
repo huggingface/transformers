@@ -1345,10 +1345,8 @@ def get_torch_dtype(
 def get_device_map(model, device_map, max_memory, hf_quantizer, torch_dtype, keep_in_fp32_modules):
     if isinstance(device_map, str):
         special_dtypes = {}
-
         if hf_quantizer is not None:
             special_dtypes.update(hf_quantizer.get_special_dtypes_update(model, torch_dtype))
-
         special_dtypes.update(
             {
                 name: torch.float32
@@ -1363,13 +1361,8 @@ def get_device_map(model, device_map, max_memory, hf_quantizer, torch_dtype, kee
             target_dtype = hf_quantizer.adjust_target_dtype(target_dtype)
 
         no_split_modules = model._get_no_split_modules(device_map)
-        if device_map not in ["auto", "balanced", "balanced_low_0", "sequential"]:
-            raise ValueError(
-                "If passing a string for `device_map`, please choose 'auto', 'balanced', 'balanced_low_0' or "
-                "'sequential'."
-            )
-
         device_map_kwargs = {"no_split_module_classes": no_split_modules}
+
         if "special_dtypes" in inspect.signature(infer_auto_device_map).parameters:
             device_map_kwargs["special_dtypes"] = special_dtypes
         elif len(special_dtypes) > 0:
@@ -1377,6 +1370,7 @@ def get_device_map(model, device_map, max_memory, hf_quantizer, torch_dtype, kee
                 "This model has some weights that should be kept in higher precision, you need to upgrade "
                 "`accelerate` to properly deal with them (`pip install --upgrade accelerate`)."
             )
+
         if device_map != "sequential":
             max_memory = get_balanced_memory(
                 model,
@@ -4141,10 +4135,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         adapter_name = kwargs.pop("adapter_name", "default")
         use_flash_attention_2 = kwargs.pop("use_flash_attention_2", False)
         generation_config = kwargs.pop("generation_config", None)
-
         gguf_file = kwargs.pop("gguf_file", None)
-
         tp_plan = kwargs.pop("tp_plan", None)
+
+        if state_dict is not None and (pretrained_model_name_or_path is not None or gguf_file is not None):
+            raise ValueError(
+                "`state_dict` cannot be passed together with a model name or a `gguf_file`. Use one of the two loading strategies."
+            )
+
         if tp_plan is not None and tp_plan != "auto":
             # TODO: we can relax this check when we support taking tp_plan from a json file, for example.
             raise ValueError(f"tp_plan supports 'auto' only for now but got {tp_plan}.")
@@ -4170,16 +4168,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             tp_device = torch.device(device_type, torch.distributed.get_rank() % device_module.device_count())
             # This is the easiest way to dispatch to the current process device
             device_map = tp_device
-
-            # Assuming sharding the model onto the world
-            world_size = torch.distributed.get_world_size()
-            device_mesh = torch.distributed.init_device_mesh(tp_device.type, (world_size,))
-
-        # TODO: FIND THIS A PLACE
-        if not is_accelerate_available():
-            raise ImportError(
-                f"Using `low_cpu_mem_usage=True` or a `device_map` requires Accelerate: `pip install 'accelerate>={ACCELERATE_MIN_VERSION}'`"
-            )
 
         if is_fsdp_enabled():
             low_cpu_mem_usage = True
@@ -4386,16 +4374,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if low_cpu_mem_usage is None:
                 low_cpu_mem_usage = True
                 logger.warning("`low_cpu_mem_usage` was None, now default to True since model is quantized.")
-        is_quantized = hf_quantizer is not None
-
-        # This variable will flag if we're loading a sharded checkpoint. In this case the archive file is just the
-        # index of the files.
-        # Load model
-        loading_info = None
-
-        # Keep in fp32 modules
-        keep_in_fp32_modules = None
-        use_keep_in_fp32_modules = False
 
         if gguf_file is not None and hf_quantizer is not None:
             raise ValueError(
@@ -4419,9 +4397,17 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             revision=revision,
             commit_hash=commit_hash,
         )
-        is_sharded = sharded_metadata is not None
 
-        if is_safetensors_available() and not is_sharded and checkpoint_files[0].endswith(".safetensors"):
+        is_sharded = sharded_metadata is not None
+        is_quantized = hf_quantizer is not None
+        is_from_file = pretrained_model_name_or_path is not None or gguf_file is not None
+
+        if (
+            is_safetensors_available()
+            and is_from_file
+            and not is_sharded
+            and checkpoint_files[0].endswith(".safetensors")
+        ):
             with safe_open(checkpoint_files[0], framework="pt") as f:
                 metadata = f.metadata()
 
@@ -4444,15 +4430,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     f"Incompatible safetensors file. File metadata is not ['pt', 'tf', 'flax', 'mlx'] but {metadata.get('format')}"
                 )
 
+        use_keep_in_fp32_modules = False
         from_pt = not (from_tf | from_flax)
-
-        # load pt weights early so that we know which dtype to init the model under
 
         if from_pt:
             if gguf_file:
                 from .modeling_gguf_pytorch_utils import load_gguf_checkpoint
 
-                # we need a dummy model to get the state_dict
+                # we need a dummy model to get the state_dict - for this reason, we keep the state_dict as if it was
+                # passed directly as a kwarg from now on
                 with torch.device("meta"):
                     dummy_model = cls(config)
                 state_dict = load_gguf_checkpoint(checkpoint_files[0], return_tensors=True, model_to_load=dummy_model)[
@@ -4473,23 +4459,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 (torch_dtype == torch.float16) or hasattr(hf_quantizer, "use_keep_in_fp32_modules")
             )
 
-            if is_sharded:
-                loaded_state_dict_keys = sharded_metadata["all_checkpoint_keys"]
-            elif state_dict is not None:
-                loaded_state_dict_keys = list(state_dict.keys())
-            else:
-                loaded_state_dict_keys = list(load_state_dict(checkpoint_files[0], weights_only=weights_only).keys())
-
-            if (
-                gguf_file is not None
-                and (low_cpu_mem_usage or (use_keep_in_fp32_modules and is_accelerate_available()))
-                and pretrained_model_name_or_path is not None
-            ):
-                # In case some weights need to be kept in float32 and accelerate is not installed,
-                # we later on want to take the path where state_dict is not None, that is the one
-                # that do not require accelerate.
-                state_dict = None
-
         config.name_or_path = pretrained_model_name_or_path
         # We do not want to modify the config inplace in from_pretrained
         config = copy.deepcopy(config)
@@ -4498,7 +4467,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 config, use_flash_attention_2=use_flash_attention_2, torch_dtype=torch_dtype, device_map=device_map
             )
 
-        # Instantiate model.
+        # Instantiate contexts under which to load the model
         init_contexts = [no_init_weights(_enable=_fast_init)]
 
         if is_deepspeed_zero3_enabled() and not is_quantized and not _is_ds_init_called:
@@ -4526,13 +4495,12 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # make sure we use the model's config since the __init__ call might have copied it
         config = model.config
 
-        # Check first if we are `from_pt`
+        # Find fp32 modules if needed
+        keep_in_fp32_modules = []
         if use_keep_in_fp32_modules:
             if is_accelerate_available() and not is_deepspeed_zero3_enabled():
                 low_cpu_mem_usage = True
             keep_in_fp32_modules = model._keep_in_fp32_modules
-        else:
-            keep_in_fp32_modules = []
 
         if hf_quantizer is not None:
             hf_quantizer.preprocess_model(
@@ -4545,7 +4513,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # remain a single source of truth
             config._pre_quantization_dtype = torch_dtype
 
-        # Prepare the device map
+        # Prepare the full device map
         if device_map is not None:
             model, device_map = get_device_map(
                 model, device_map, max_memory, hf_quantizer, torch_dtype, keep_in_fp32_modules
@@ -4571,7 +4539,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             ) = cls._load_pretrained_model(
                 model,
                 state_dict,
-                loaded_state_dict_keys,
                 checkpoint_files,
                 pretrained_model_name_or_path,
                 ignore_mismatched_sizes=ignore_mismatched_sizes,
@@ -4668,14 +4635,23 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 adapter_kwargs=adapter_kwargs,
             )
 
+        if tp_plan is not None:
+            assert tp_device is not None, "tp_device not set!"
+            if not model.supports_tp_plan:
+                raise NotImplementedError("This model does not have a tensor parallel plan.")
+            # Assuming sharding the model onto the world
+            world_size = torch.distributed.get_world_size()
+            device_mesh = torch.distributed.init_device_mesh(tp_device.type, (world_size,))
+            # Apply Tensor Parallelism
+            model.tensor_parallel(device_mesh)
+
         if output_loading_info:
-            if loading_info is None:
-                loading_info = {
-                    "missing_keys": missing_keys,
-                    "unexpected_keys": unexpected_keys,
-                    "mismatched_keys": mismatched_keys,
-                    "error_msgs": error_msgs,
-                }
+            loading_info = {
+                "missing_keys": missing_keys,
+                "unexpected_keys": unexpected_keys,
+                "mismatched_keys": mismatched_keys,
+                "error_msgs": error_msgs,
+            }
             return model, loading_info
 
         return model
@@ -4756,7 +4732,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         cls,
         model,
         state_dict,
-        loaded_state_dict_keys,
         checkpoint_files,
         pretrained_model_name_or_path,
         ignore_mismatched_sizes=False,
@@ -4773,14 +4748,22 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         weights_only=True,
         device_mesh=None,
     ):
-        is_safetensors = False
-        is_quantized = hf_quantizer is not None
-        state_dict_folder = None
-        state_dict_index = None
+        # Get all the keys of the state dicts that we have to initialize the model
+        if sharded_metadata is not None:
+            loaded_state_dict_keys = sharded_metadata["all_checkpoint_keys"]
+        elif state_dict is not None:
+            loaded_state_dict_keys = list(state_dict.keys())
+        else:
+            loaded_state_dict_keys = list(load_state_dict(checkpoint_files[0], weights_only=weights_only).keys())
 
-        if device_map is not None and "disk" in device_map.values():
-            is_safetensors = checkpoint_files[0].endswith(".safetensors")
-            if offload_folder is None and not is_safetensors:
+        # Some useful flags
+        is_quantized = hf_quantizer is not None
+        is_from_file = pretrained_model_name_or_path is not None or gguf_file is not None
+        is_offloaded_safetensors = False
+
+        if is_from_file and device_map is not None and "disk" in device_map.values():
+            is_offloaded_safetensors = checkpoint_files[0].endswith(".safetensors")
+            if offload_folder is None and not is_offloaded_safetensors:
                 raise ValueError(
                     "The current `device_map` had weights offloaded to the disk. Please provide an `offload_folder`"
                     " for them. Alternatively, make sure you have `safetensors` installed if the model you are using"
@@ -4791,7 +4774,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if offload_state_dict is None:
                 offload_state_dict = True
 
-        is_sharded_safetensors = is_safetensors and sharded_metadata is not None
+        is_sharded_offloaded_safetensors = is_offloaded_safetensors and sharded_metadata is not None
 
         # tie the model weights before retrieving the state_dict
         model.tie_weights()
@@ -4819,6 +4802,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         elif add_prefix_to_model:
             expected_keys = [".".join([prefix, s]) for s in expected_keys]
 
+        # Find missing and unexpected keys from the state dict, to later log them
         model, missing_keys, unexpected_keys = find_missing_and_unexpected_keys(
             cls,
             model,
@@ -4830,20 +4814,20 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             device_map,
         )
 
-        # Move keys that are missing from the loaded state dict from meto to cpu (because they won't be moved when loading
-        # the weights as they are not in the loaded state dict)
+        # Move missing keys back to cpu from meta device (because they won't be moved when loading the weights as
+        # they are not in the loaded state dict)
         if low_cpu_mem_usage:
             model = move_missing_keys_back_to_cpu(
                 model, missing_keys, unexpected_keys, dtype, keep_in_fp32_modules, is_quantized, hf_quantizer
             )
 
-        # retrieve uninitialized modules and initialize before maybe overriding that with the pretrained weights
+        # correctly initialize the missing keys
         if _fast_init:
             model = initialize_missing_keys(
                 model, loaded_keys, ignore_mismatched_sizes, has_prefix_module, expects_prefix_module, is_quantized
             )
 
-        # Set some modules to fp32 if any
+        # Set some modules to fp32 if needed
         if keep_in_fp32_modules is not None:
             for name, param in model.named_parameters():
                 if any(module_to_keep_in_fp32 in name.split(".") for module_to_keep_in_fp32 in keep_in_fp32_modules):
@@ -4866,12 +4850,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if device_map is not None:
                 device_map = {k.replace(f"{cls.base_model_prefix}.", ""): v for k, v in device_map.items()}
 
+        # Find the folder where the checkpoints reside
         if checkpoint_files is not None:
             folder = os.path.sep.join(checkpoint_files[0].split(os.path.sep)[:-1])
         else:
             folder = None
 
-        if device_map is not None and is_safetensors:
+        # In case we need to offload to disk, compute the index
+        offload_index = None
+        if is_offloaded_safetensors:
             param_device_map = expand_device_map(device_map, loaded_state_dict_keys, start_prefix)
             str_dtype = str(dtype).replace("torch.", "") if dtype is not None else "float32"
             if sharded_metadata is None:
@@ -4883,48 +4870,51 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 for p, f in weight_map.items()
                 if p.startswith(start_prefix) and param_device_map[p[len(start_prefix) :]] == "disk"
             }
-        else:
-            offload_index = None
+        elif device_map is not None and "disk" in device_map.values():
+            offload_index = {}
 
-        error_msgs = []
-        mismatched_keys = []
-        if not is_safetensors:
-            offload_index = {} if device_map is not None and "disk" in device_map.values() else None
+        state_dict_folder = None
+        state_dict_index = None
         if offload_state_dict:
             state_dict_folder = tempfile.mkdtemp()
             state_dict_index = {}
-        else:
-            state_dict_folder = None
-            state_dict_index = None
 
-        if is_sharded_safetensors:
+        # Find checkpoint files containing only weights offloaded to disk if any
+        disk_only_shard_files = []
+        if is_sharded_offloaded_safetensors:
             disk_only_shard_files = get_disk_only_shard_files(
                 device_map, sharded_metadata=sharded_metadata, start_prefix=start_prefix
             )
             disk_only_shard_files = [os.path.join(folder, f) for f in disk_only_shard_files]
-        else:
-            disk_only_shard_files = []
 
+        map_location = None
+        if (
+            device_map is not None
+            and hf_quantizer is not None
+            and hf_quantizer.quantization_config.quant_method == QuantizationMethod.TORCHAO
+            and hf_quantizer.quantization_config.quant_type == "int4_weight_only"
+        ):
+            map_location = torch.device([d for d in device_map.values() if d not in ["cpu", "disk"]][0])
+
+        # For nice tqdm bars
         if len(checkpoint_files) > 1:
             checkpoint_files = logging.tqdm(checkpoint_files, desc="Loading checkpoint shards")
 
+        # To be able to iterate, even if we don't use it
+        checkpoint_files = checkpoint_files if state_dict is None else [""]
+
         assign_to_params_buffers = None
-        # If we have an existing state_dict, use a dummy value of length 1
-        checkpoint_files = [""] if state_dict is not None and checkpoint_files is None else checkpoint_files
+
+        error_msgs = []
+        mismatched_keys = []
+        # Iterate on all the shards to load the weights
         for shard_file in checkpoint_files:
             # Skip the load for shards that only contain disk-offloaded weights when using safetensors for the offload.
             if shard_file in disk_only_shard_files:
                 continue
-            map_location = None
-            if (
-                device_map is not None
-                and hf_quantizer is not None
-                and hf_quantizer.quantization_config.quant_method == QuantizationMethod.TORCHAO
-                and hf_quantizer.quantization_config.quant_type == "int4_weight_only"
-            ):
-                map_location = torch.device([d for d in device_map.values() if d not in ["cpu", "disk"]][0])
 
-            if state_dict is None:
+            # If shard_file == "", we use the existing state_dict
+            if shard_file != "":
                 state_dict = load_state_dict(
                     shard_file, is_quantized=is_quantized, map_location=map_location, weights_only=weights_only
                 )
@@ -4962,7 +4952,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         state_dict_index=state_dict_index,
                         dtype=dtype,
                         hf_quantizer=hf_quantizer,
-                        is_safetensors=is_safetensors,
+                        is_safetensors=is_offloaded_safetensors,
                         keep_in_fp32_modules=keep_in_fp32_modules,
                         unexpected_keys=unexpected_keys,
                     )
@@ -4986,14 +4976,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if model != model_to_load:
                 # We need to add the prefix of the base model
                 prefix = cls.base_model_prefix
-                if not is_safetensors:
+                if not is_offloaded_safetensors:
                     for weight_name in offload_index:
                         shutil.move(
                             os.path.join(offload_folder, f"{weight_name}.dat"),
                             os.path.join(offload_folder, f"{prefix}.{weight_name}.dat"),
                         )
                 offload_index = {f"{prefix}.{key}": value for key, value in offload_index.items()}
-            if not is_safetensors:
+            if not is_offloaded_safetensors:
                 save_offload_index(offload_index, offload_folder)
                 offload_index = None
 
