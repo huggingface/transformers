@@ -17,6 +17,7 @@ def flex_attention_forward(
     attention_mask: Optional[torch.Tensor],
     scaling: Optional[float] = None,
     softcap: Optional[float] = None,
+    head_mask: Optional[torch.Tensor] = None,
     **kwargs,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     causal_mask = attention_mask
@@ -28,6 +29,8 @@ def flex_attention_forward(
             score = softcap * torch.tanh(score / softcap)
         if causal_mask is not None:
             score = score + causal_mask[b][0][q_idx][kv_idx]
+        if head_mask is not None:
+            score = score + head_mask[b][h][0][0]
         return score
 
     attn_output, attention_weights = flex_attention(
