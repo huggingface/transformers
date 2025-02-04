@@ -284,13 +284,6 @@ class PromptDepthAnythingForDepthEstimation(DepthAnythingForDepthEstimation):
         return_dict: Optional[bool] = None,
     ) -> Union[Tuple[torch.Tensor], DepthEstimatorOutput]:
         r"""
-        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth depth estimation maps for computing the loss.
-
-        Returns:
-            DepthEstimatorOutput: A DepthEstimatorOutput containing the depth prediction.
-
-        Examples:
         ```python
         >>> from transformers import AutoImageProcessor, AutoModelForDepthEstimation
         >>> import torch

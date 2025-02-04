@@ -436,13 +436,6 @@ class PromptDepthAnythingForDepthEstimation(PromptDepthAnythingPreTrainedModel):
         Returns:
 
         Examples:
-        labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
-            Ground truth depth estimation maps for computing the loss.
-
-        Returns:
-            DepthEstimatorOutput: A DepthEstimatorOutput containing the depth prediction.
-
-        Examples:
 
         ```python
         >>> from transformers import AutoImageProcessor, AutoModelForDepthEstimation
