@@ -274,7 +274,9 @@ class DFineResNetStage(nn.Module):
     ):
         super().__init__()
         if downsample:
-            self.downsample = DFineResNetConvLayer(in_chs, in_chs, kernel_size=3, stride=2, groups=in_chs)
+            self.downsample = DFineResNetConvLayer(
+                in_chs, in_chs, kernel_size=3, stride=2, groups=in_chs, activation=None
+            )
         else:
             self.downsample = nn.Identity()
 
@@ -318,11 +320,11 @@ class DFineResNetEncoder(nn.Module):
     ) -> BaseModelOutputWithNoAttention:
         hidden_states = () if output_hidden_states else None
 
-        for stage_module in self.stages:
+        for stage in self.stages:
             if output_hidden_states:
                 hidden_states = hidden_states + (hidden_state,)
 
-            hidden_state = stage_module(hidden_state)
+            hidden_state = stage(hidden_state)
 
         if output_hidden_states:
             hidden_states = hidden_states + (hidden_state,)
