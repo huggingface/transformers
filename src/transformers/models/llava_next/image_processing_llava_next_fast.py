@@ -14,13 +14,15 @@
 # limitations under the License.
 """Fast Image processor class for LLaVa-NeXT."""
 
-from typing import Dict, List, Optional, Union
+from typing import List, Optional, Union, Unpack
 
 from ...image_processing_utils import BatchFeature, get_patch_output_size, select_best_resolution
 from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
+    DefaultFastImageProcessorInitKwargs,
+    DefaultFastImageProcessorPreprocessKwargs,
     divide_to_patches,
     group_images_by_shape,
     reorder_images,
@@ -54,6 +56,16 @@ if is_torchvision_available():
         from torchvision.transforms import functional as F
 
 
+class LlavaNextFastImageProcessorInitKwargs(DefaultFastImageProcessorInitKwargs):
+    image_grid_pinpoints: Optional[List[List[int]]]
+    do_pad: Optional[bool]
+
+
+class LlavaNextFastImageProcessorPreprocessKwargs(DefaultFastImageProcessorPreprocessKwargs):
+    image_grid_pinpoints: Optional[List[List[int]]]
+    do_pad: Optional[bool]
+
+
 @add_start_docstrings(
     "Constructs a fast ConvNeXT image processor.",
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
@@ -83,44 +95,11 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
     do_convert_rgb = True
     do_pad = True
     image_grid_pinpoints = [[336, 672], [672, 336], [672, 672], [1008, 336], [336, 1008]]
-    valid_extra_kwargs = ["image_grid_pinpoints", "do_pad"]
+    valid_init_kwargs = LlavaNextFastImageProcessorInitKwargs
+    valid_preprocess_kwargs = LlavaNextFastImageProcessorPreprocessKwargs
 
-    def __init__(
-        self,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
-        default_to_square: bool = None,
-        resample: Union[PILImageResampling, "F.InterpolationMode"] = None,
-        do_center_crop: bool = None,
-        crop_size: Dict[str, int] = None,
-        do_rescale: bool = None,
-        rescale_factor: Union[int, float] = 1 / 255,
-        do_normalize: bool = None,
-        image_mean: Union[float, List[float]] = None,
-        image_std: Union[float, List[float]] = None,
-        do_convert_rgb: bool = None,
-        # Additional arguments
-        image_grid_pinpoints: List[List[int]] = None,
-        do_pad: bool = None,
-        **kwargs,
-    ) -> None:
-        super().__init__(
-            do_resize=do_resize,
-            size=size,
-            default_to_square=default_to_square,
-            resample=resample,
-            do_center_crop=do_center_crop,
-            crop_size=crop_size,
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_convert_rgb=do_convert_rgb,
-            image_grid_pinpoints=image_grid_pinpoints,
-            do_pad=do_pad,
-            **kwargs,
-        )
+    def __init__(self, **kwargs: Unpack[valid_init_kwargs]):
+        super().__init__(**kwargs)
 
     @add_start_docstrings(
         BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
@@ -133,8 +112,8 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
                     number of patches in the batch. Padding will be applied to the bottom and right with zeros.
         """,
     )
-    def preprocess(self, *args, **kwargs) -> BatchFeature:
-        return super().preprocess(*args, **kwargs)
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[valid_preprocess_kwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
 
     def _prepare_images_structure(
         self,

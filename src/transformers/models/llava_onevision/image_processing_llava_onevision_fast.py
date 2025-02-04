@@ -5,13 +5,15 @@
 #                          modular_llava_onevision.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 
-from typing import Dict, List, Optional, Union
+from typing import List, Optional, Union, Unpack
 
 from ...image_processing_utils import BatchFeature, get_patch_output_size, select_best_resolution
 from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
+    DefaultFastImageProcessorInitKwargs,
+    DefaultFastImageProcessorPreprocessKwargs,
     divide_to_patches,
     group_images_by_shape,
     reorder_images,
@@ -35,6 +37,16 @@ if is_torchvision_v2_available():
     from torchvision.transforms.v2 import functional as F
 else:
     from torchvision.transforms import functional as F
+
+
+class LlavaOnevisionFastImageProcessorInitKwargs(DefaultFastImageProcessorInitKwargs):
+    image_grid_pinpoints: Optional[List[List[int]]]
+    do_pad: Optional[bool]
+
+
+class LlavaOnevisionFastImageProcessorPreprocessKwargs(DefaultFastImageProcessorPreprocessKwargs):
+    image_grid_pinpoints: Optional[List[List[int]]]
+    do_pad: Optional[bool]
 
 
 @add_start_docstrings(
@@ -64,45 +76,12 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
     do_convert_rgb = True
     do_pad = True
     image_grid_pinpoints = [[384, 384], [384, 768], [384, 1152], [384, 1536], [384, 1920], [384, 2304], [768, 384], [768, 768], [768, 1152], [768, 1536], [768, 1920], [768, 2304], [1152, 384], [1152, 768], [1152, 1152], [1152, 1536], [1152, 1920], [1152, 2304], [1536, 384], [1536, 768], [1536, 1152], [1536, 1536], [1536, 1920], [1536, 2304], [1920, 384], [1920, 768], [1920, 1152], [1920, 1536], [1920, 1920], [1920, 2304], [2304, 384], [2304, 768], [2304, 1152], [2304, 1536], [2304, 1920], [2304, 2304]]  # fmt: skip
-    valid_extra_kwargs = ["image_grid_pinpoints", "do_pad"]
+    valid_init_kwargs = LlavaOnevisionFastImageProcessorInitKwargs
+    valid_preprocess_kwargs = LlavaOnevisionFastImageProcessorPreprocessKwargs
     model_input_names = ["pixel_values_videos"]
 
-    def __init__(
-        self,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
-        default_to_square: bool = None,
-        resample: Union[PILImageResampling, "F.InterpolationMode"] = None,
-        do_center_crop: bool = None,
-        crop_size: Dict[str, int] = None,
-        do_rescale: bool = None,
-        rescale_factor: Union[int, float] = 1 / 255,
-        do_normalize: bool = None,
-        image_mean: Union[float, List[float]] = None,
-        image_std: Union[float, List[float]] = None,
-        do_convert_rgb: bool = None,
-        # Additional arguments
-        image_grid_pinpoints: List[List[int]] = None,
-        do_pad: bool = None,
-        **kwargs,
-    ) -> None:
-        super().__init__(
-            do_resize=do_resize,
-            size=size,
-            default_to_square=default_to_square,
-            resample=resample,
-            do_center_crop=do_center_crop,
-            crop_size=crop_size,
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_convert_rgb=do_convert_rgb,
-            image_grid_pinpoints=image_grid_pinpoints,
-            do_pad=do_pad,
-            **kwargs,
-        )
+    def __init__(self, **kwargs: Unpack[valid_init_kwargs]):
+        super().__init__(**kwargs)
 
     @add_start_docstrings(
         BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
@@ -115,8 +94,8 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
                     number of patches in the batch. Padding will be applied to the bottom and right with zeros.
         """,
     )
-    def preprocess(self, *args, **kwargs) -> BatchFeature:
-        return super().preprocess(*args, **kwargs)
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[valid_preprocess_kwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
 
     def _prepare_images_structure(
         self,
@@ -263,50 +242,6 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
         do_pad: bool,
         return_tensors: Optional[Union[str, TensorType]],
     ) -> BatchFeature:
-        """
-        Preprocess an image or batch of images.
-
-        Args:
-            images (`ImageInput`):
-                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
-                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            do_resize (`bool`, *optional*, defaults to `True`):
-                Whether to resize the image's (height, width) dimensions to the specified `size`. Can be overridden by
-                `do_resize` in the `preprocess` method.
-            size (`Dict[str, int]` *optional*, defaults to `{"shortest_edge": 224}`):
-                Size of the image after resizing. The shortest edge of the image is resized to size["shortest_edge"], with
-                the longest edge resized to keep the input aspect ratio. Can be overridden by `size` in the `preprocess`
-                method.
-            image_grid_pinpoints (`List`, *optional*):
-                A list of possible resolutions to use for processing high resolution images. Each item in the list should be a tuple or list
-                of the form `(height, width)`.
-            default_to_square (`bool`, *optional*):
-                Whether to default to a square image when resizing, if size is an int.
-            interpolation (`InterpolationMode`, *optional*):
-                Resampling filter to use if resizing the image.
-            do_center_crop (`bool`, *optional*, defaults to `True`):
-                Whether to center crop the image to the specified `crop_size`. Can be overridden by `do_center_crop` in the
-                `preprocess` method.
-            crop_size (`Dict[str, int]` *optional*, defaults to 224):
-                Size of the output image after applying `center_crop`. Can be overridden by `crop_size` in the `preprocess`
-                method.
-            do_rescale (`bool`, *optional*, defaults to `True`):
-                Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by `do_rescale` in
-                the `preprocess` method.
-            rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-                Scale factor to use if rescaling the image. Can be overridden by `rescale_factor` in the `preprocess`
-                method.
-            do_normalize (`bool`, *optional*, defaults to `True`):
-                Whether to normalize the image. Can be overridden by `do_normalize` in the `preprocess` method.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `[0.48145466, 0.4578275, 0.40821073]`):
-                Mean to use if normalizing the image. This is a float or list of floats the length of the number of
-                channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-            image_std (`float` or `List[float]`, *optional*, defaults to `[0.26862954, 0.26130258, 0.27577711]`):
-                Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
-                number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
-                Can be overridden by the `image_std` parameter in the `preprocess` method.
-        """
-
         processed_images = []
         image_sizes = []
         # Determine the size tuple

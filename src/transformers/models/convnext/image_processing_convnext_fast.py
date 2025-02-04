@@ -14,13 +14,15 @@
 # limitations under the License.
 """Fast Image processor class for ConvNeXT."""
 
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Unpack
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
+    DefaultFastImageProcessorInitKwargs,
+    DefaultFastImageProcessorPreprocessKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -29,6 +31,7 @@ from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
     ChannelDimension,
+    ImageInput,
     PILImageResampling,
 )
 from ...utils import (
@@ -50,6 +53,14 @@ if is_torchvision_available():
         from torchvision.transforms import functional as F
 
 
+class ConvNextFastImageProcessorInitKwargs(DefaultFastImageProcessorInitKwargs):
+    crop_pct: Optional[float]
+
+
+class ConvNextFastImageProcessorPreprocessKwargs(DefaultFastImageProcessorPreprocessKwargs):
+    crop_pct: Optional[float]
+
+
 @add_start_docstrings(
     r"Constructs a fast ConvNeXT image processor.",
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
@@ -69,42 +80,11 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     crop_pct = 224 / 256
-    valid_extra_kwargs = ["crop_pct"]
+    valid_init_kwargs = ConvNextFastImageProcessorInitKwargs
+    valid_preprocess_kwargs = ConvNextFastImageProcessorPreprocessKwargs
 
-    def __init__(
-        self,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
-        default_to_square: bool = None,
-        resample: Union[PILImageResampling, "F.InterpolationMode"] = None,
-        do_center_crop: bool = None,
-        crop_size: Dict[str, int] = None,
-        do_rescale: bool = None,
-        rescale_factor: Union[int, float] = 1 / 255,
-        do_normalize: bool = None,
-        image_mean: Union[float, List[float]] = None,
-        image_std: Union[float, List[float]] = None,
-        do_convert_rgb: bool = None,
-        # Additional arguments
-        crop_pct=None,
-        **kwargs,
-    ):
-        super().__init__(
-            do_resize=do_resize,
-            size=size,
-            default_to_square=default_to_square,
-            resample=resample,
-            do_center_crop=do_center_crop,
-            crop_size=crop_size,
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_convert_rgb=do_convert_rgb,
-            crop_pct=crop_pct,
-            **kwargs,
-        )
+    def __init__(self, **kwargs: Unpack[valid_init_kwargs]):
+        super().__init__(**kwargs)
 
     @add_start_docstrings(
         BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
@@ -114,8 +94,8 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
             overridden by `crop_pct` in the`preprocess` method.
         """,
     )
-    def preprocess(self, *args, **kwargs) -> BatchFeature:
-        return super().preprocess(*args, **kwargs)
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[valid_preprocess_kwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
 
     def resize(
         self,

@@ -14,7 +14,7 @@
 # limitations under the License.
 """Fast Image processor class for LLaVa."""
 
-from typing import Dict, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union, Unpack
 
 from ...image_processing_utils import (
     BatchFeature,
@@ -23,6 +23,8 @@ from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
+    DefaultFastImageProcessorInitKwargs,
+    DefaultFastImageProcessorPreprocessKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -30,6 +32,7 @@ from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
     ChannelDimension,
+    ImageInput,
     PILImageResampling,
     SizeDict,
     get_image_size,
@@ -57,6 +60,14 @@ if is_torchvision_available():
         from torchvision.transforms import functional as F
 
 
+class LlavaFastImageProcessorInitKwargs(DefaultFastImageProcessorInitKwargs):
+    do_pad: Optional[bool]
+
+
+class LlavaFastImageProcessorPreprocessKwargs(DefaultFastImageProcessorPreprocessKwargs):
+    do_pad: Optional[bool]
+
+
 @add_start_docstrings(
     "Constructs a fast Llava image processor.",
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
@@ -78,42 +89,11 @@ class LlavaImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
-    valid_extra_kwargs = ["do_pad"]
+    valid_init_kwargs = LlavaFastImageProcessorInitKwargs
+    valid_preprocess_kwargs = LlavaFastImageProcessorPreprocessKwargs
 
-    def __init__(
-        self,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
-        default_to_square: bool = None,
-        resample: Union[PILImageResampling, "F.InterpolationMode"] = None,
-        do_center_crop: bool = None,
-        crop_size: Dict[str, int] = None,
-        do_rescale: bool = None,
-        rescale_factor: Union[int, float] = 1 / 255,
-        do_normalize: bool = None,
-        image_mean: Union[float, List[float]] = None,
-        image_std: Union[float, List[float]] = None,
-        do_convert_rgb: bool = None,
-        # Additional arguments
-        do_pad: bool = None,
-        **kwargs,
-    ) -> None:
-        super().__init__(
-            do_resize=do_resize,
-            size=size,
-            default_to_square=default_to_square,
-            resample=resample,
-            do_center_crop=do_center_crop,
-            crop_size=crop_size,
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_convert_rgb=do_convert_rgb,
-            do_pad=do_pad,
-            **kwargs,
-        )
+    def __init__(self, **kwargs: Unpack[valid_init_kwargs]) -> None:
+        super().__init__(**kwargs)
 
     @add_start_docstrings(
         BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
@@ -122,8 +102,8 @@ class LlavaImageProcessorFast(BaseImageProcessorFast):
                 Whether to pad the image to a square based on the longest edge. Can be overridden by the `do_pad` parameter
         """,
     )
-    def preprocess(self, *args, **kwargs) -> BatchFeature:
-        return super().preprocess(*args, **kwargs)
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[valid_preprocess_kwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
 
     def pad_to_square(
         self,

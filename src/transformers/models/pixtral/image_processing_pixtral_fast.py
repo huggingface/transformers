@@ -14,16 +14,21 @@
 # limitations under the License.
 """Image processor class for Pixtral."""
 
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Unpack
 
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
+    DefaultFastImageProcessorInitKwargs,
+    DefaultFastImageProcessorPreprocessKwargs,
     group_images_by_shape,
     reorder_images,
 )
+from ...image_transforms import get_resize_output_image_size
 from ...image_utils import (
+    ImageInput,
     PILImageResampling,
     SizeDict,
 )
@@ -56,13 +61,20 @@ if is_torchvision_available():
         from torchvision.transforms import functional as F
 
 
+class PixtralFastImageProcessorInitKwargs(DefaultFastImageProcessorInitKwargs):
+    patch_size: Optional[Dict[str, int]]
+
+
+class PixtralFastImageProcessorPreprocessKwargs(DefaultFastImageProcessorPreprocessKwargs):
+    patch_size: Optional[Dict[str, int]]
+
+
 @add_start_docstrings(
     r"Constructs a fast ConvNeXT image processor.",
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     """
         patch_size (`Dict[str, int]` *optional*, defaults to `{"height": 16, "width": 16}`):
             Size of the patches in the model, used to calculate the output image size. Can be overridden by `patch_size` in the `preprocess` method.
-
     """,
 )
 class PixtralImageProcessorFast(BaseImageProcessorFast):
@@ -76,7 +88,21 @@ class PixtralImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
-    valid_extra_kwargs = ["patch_size"]
+    valid_init_kwargs = PixtralFastImageProcessorInitKwargs
+    valid_preprocess_kwargs = PixtralFastImageProcessorPreprocessKwargs
+
+    def __init__(self, **kwargs: Unpack[valid_init_kwargs]):
+        super().__init__(**kwargs)
+
+    @add_start_docstrings(
+        BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
+        """
+        patch_size (`Dict[str, int]` *optional*, defaults to `{"height": 16, "width": 16}`):
+            Size of the patches in the model, used to calculate the output image size. Can be overridden by `patch_size` in the `preprocess` method.
+        """,
+    )
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[valid_preprocess_kwargs]) -> BatchFeature:
+        return super().preprocess(images, **kwargs)
 
     def resize(
         self,

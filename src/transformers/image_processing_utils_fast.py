@@ -15,7 +15,7 @@
 
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
-from typing import Any, Dict, Iterable, List, Optional, Tuple, Union
+from typing import Any, Dict, Iterable, List, Optional, Tuple, TypedDict, Union, Unpack
 
 import numpy as np
 
@@ -126,6 +126,28 @@ def divide_to_patches(
     return patches
 
 
+class DefaultFastImageProcessorInitKwargs(TypedDict, total=False):
+    do_resize: Optional[bool]
+    size: Optional[Dict[str, int]]
+    default_to_square: Optional[bool]
+    resample: Optional[Union["PILImageResampling", "F.InterpolationMode"]]
+    do_center_crop: Optional[bool]
+    crop_size: Optional[Dict[str, int]]
+    do_rescale: Optional[bool]
+    rescale_factor: Optional[Union[int, float]]
+    do_normalize: Optional[bool]
+    image_mean: Optional[Union[float, List[float]]]
+    image_std: Optional[Union[float, List[float]]]
+    do_convert_rgb: Optional[bool]
+
+
+class DefaultFastImageProcessorPreprocessKwargs(DefaultFastImageProcessorInitKwargs):
+    return_tensors: Optional[Union[str, TensorType]]
+    data_format: Optional[ChannelDimension]
+    input_data_format: Optional[Union[str, ChannelDimension]]
+    device: Optional["torch.device"]
+
+
 BASE_IMAGE_PROCESSOR_FAST_DOCSTRING = r"""
 
     Args:
@@ -228,59 +250,35 @@ class BaseImageProcessorFast(BaseImageProcessor):
     do_resize = None
     do_center_crop = None
     do_rescale = None
+    rescale_factor = 1 / 255
     do_normalize = None
     do_convert_rgb = None
     model_input_names = ["pixel_values"]
-    valid_extra_kwargs = []
+    valid_init_kwargs = DefaultFastImageProcessorInitKwargs
+    valid_preprocess_kwargs = DefaultFastImageProcessorPreprocessKwargs
 
     def __init__(
         self,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
-        default_to_square: bool = None,
-        resample: Union["PILImageResampling", "F.InterpolationMode"] = None,
-        do_center_crop: bool = None,
-        crop_size: Dict[str, int] = None,
-        do_rescale: bool = None,
-        rescale_factor: Union[int, float] = 1 / 255,
-        do_normalize: bool = None,
-        image_mean: Union[float, List[float]] = None,
-        image_std: Union[float, List[float]] = None,
-        do_convert_rgb: bool = None,
-        **kwargs,
+        **kwargs: Unpack[valid_init_kwargs],
     ) -> None:
-        size = size if size is not None else self.size
-        default_to_square = (
-            default_to_square
-            if default_to_square is not None
-            else self.default_to_square
-            if self.default_to_square is not None
-            else True
+        super().__init__(**kwargs)
+        size = kwargs.pop("size", self.size)
+        self.default_to_square = (
+            self.default_to_square if self.default_to_square is not None else True
+        )  # compatibility with slow processors
+        self.size = (
+            get_size_dict(size=size, default_to_square=kwargs.pop("default_to_square", self.default_to_square))
+            if size is not None
+            else None
         )
-        size = get_size_dict(size, default_to_square=default_to_square) if size is not None else None
-        crop_size = crop_size if crop_size is not None else self.crop_size
-        crop_size = get_size_dict(crop_size, param_name="crop_size") if crop_size is not None else None
-        for key in self.valid_extra_kwargs:
+        crop_size = kwargs.pop("crop_size", self.crop_size)
+        self.crop_size = get_size_dict(crop_size, param_name="crop_size") if crop_size is not None else None
+        for key in self.valid_init_kwargs.__annotations__.keys():
             kwarg = kwargs.pop(key, None)
             if kwarg is not None:
                 setattr(self, key, kwarg)
             else:
                 setattr(self, key, getattr(self, key, None))
-        if kwargs:
-            logger.warning_once(f"Found kwargs that are not in valid_extra_kwargs: {kwargs.keys()}")
-
-        super().__init__(**kwargs)
-        self.do_resize = do_resize if do_resize is not None else self.do_resize
-        self.size = size if size is not None else self.size
-        self.resample = resample if resample is not None else self.resample
-        self.do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
-        self.crop_size = crop_size if crop_size is not None else self.crop_size
-        self.do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize if do_normalize is not None else self.do_normalize
-        self.image_mean = image_mean if image_mean is not None else self.image_mean
-        self.image_std = image_std if image_std is not None else self.image_std
-        self.do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
     def resize(
         self,
@@ -557,81 +555,61 @@ class BaseImageProcessorFast(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
-        resample: Optional[Union["PILImageResampling", "F.InterpolationMode"]] = None,
-        do_center_crop: Optional[bool] = None,
-        crop_size: Optional[int] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        do_convert_rgb: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        device: Optional["torch.device"] = None,
-        **kwargs,
+        **kwargs: Unpack[valid_preprocess_kwargs],
     ) -> BatchFeature:
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_extra_kwargs)
-
-        do_resize = do_resize if do_resize is not None else self.do_resize
-        size = size if size is not None else self.size
-        default_to_square = kwargs.pop(
-            "default_to_square", self.default_to_square if self.default_to_square is not None else True
+        validate_kwargs(
+            captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_preprocess_kwargs.__annotations__.keys()
         )
-        size = get_size_dict(size=size, default_to_square=default_to_square) if size is not None else None
-        resample = resample if resample is not None else self.resample
-        do_center_crop = do_center_crop if do_center_crop is not None else self.do_center_crop
-        crop_size = crop_size if crop_size is not None else self.crop_size
+        for kwarg in self.valid_preprocess_kwargs.__annotations__.keys():
+            kwargs.setdefault(kwarg, getattr(self, kwarg, None))
+
+        size = kwargs.pop("size", self.size)
+        size = (
+            get_size_dict(size=size, default_to_square=kwargs.pop("default_to_square", self.default_to_square))
+            if size is not None
+            else None
+        )
+        crop_size = kwargs.pop("crop_size", self.crop_size)
         crop_size = get_size_dict(crop_size, param_name="crop_size") if crop_size is not None else None
-        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
-        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
-        image_mean = image_mean if image_mean is not None else self.image_mean
-        image_std = image_std if image_std is not None else self.image_std
-        do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
-        kwargs_dict = {
-            kwarg: kwargs.pop(kwarg) if kwargs.get(kwarg) is not None else getattr(self, kwarg, None)
-            for kwarg in self.valid_extra_kwargs
-        }
+        data_format = kwargs.pop("data_format", None)
+        data_format = data_format if data_format is not None else ChannelDimension.FIRST
+
         images = self._prepare_input_images(
             images=images,
-            do_convert_rgb=do_convert_rgb,
-            input_data_format=input_data_format,
-            device=device,
+            do_convert_rgb=kwargs.pop("do_convert_rgb", self.do_convert_rgb),
+            input_data_format=kwargs.pop("input_data_format", None),
+            device=kwargs.pop("device", None),
         )
 
         image_mean, image_std, size, crop_size, interpolation = self._prepare_process_arguments(
-            do_resize=do_resize,
+            do_resize=kwargs.get("do_resize", self.do_resize),
             size=size,
-            resample=resample,
+            resample=kwargs.pop("resample", self.resample),
             crop_size=crop_size,
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            return_tensors=return_tensors,
-            data_format=data_format,
+            do_rescale=kwargs.get("do_rescale", self.do_rescale),
+            rescale_factor=kwargs.get("rescale_factor", self.rescale_factor),
+            do_normalize=kwargs.get("do_normalize", self.do_normalize),
+            image_mean=kwargs.pop("image_mean", self.image_mean),
+            image_std=kwargs.pop("image_std", self.image_std),
+            return_tensors=kwargs.get("return_tensors", None),
+            data_format=kwargs.pop("data_format", ChannelDimension.FIRST),
             device=images[0].device,
         )
 
         return self._preprocess(
             images=images,
-            do_resize=do_resize,
+            do_resize=kwargs.pop("do_resize", self.do_resize),
             size=size,
             interpolation=interpolation,
-            do_center_crop=do_center_crop,
+            do_center_crop=kwargs.pop("do_center_crop", self.do_center_crop),
             crop_size=crop_size,
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
+            do_rescale=kwargs.pop("do_rescale", self.do_rescale),
+            rescale_factor=kwargs.pop("rescale_factor", self.rescale_factor),
+            do_normalize=kwargs.pop("do_normalize", self.do_normalize),
             image_mean=image_mean,
             image_std=image_std,
-            return_tensors=return_tensors,
-            **kwargs_dict,
+            return_tensors=kwargs.pop("return_tensors", None),
+            **kwargs,
         )
 
     def _preprocess(

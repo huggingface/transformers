@@ -1,7 +1,11 @@
 import pathlib
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union, Unpack
 
-from transformers.models.detr.image_processing_detr_fast import DetrImageProcessorFast
+from transformers.models.detr.image_processing_detr_fast import (
+    DetrFastImageProcessorInitKwargs,
+    DetrFastImageProcessorPreprocessKwargs,
+    DetrImageProcessorFast,
+)
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -18,6 +22,7 @@ from ...image_utils import (
     AnnotationFormat,
     AnnotationType,
     ChannelDimension,
+    ImageInput,
     PILImageResampling,
     get_image_size,
     validate_annotations,
@@ -106,6 +111,14 @@ def prepare_coco_detection_annotation(
     return new_target
 
 
+class RTDetrFastImageProcessorInitKwargs(DetrFastImageProcessorInitKwargs):
+    pass
+
+
+class RTDetrFastImageProcessorPreprocessKwargs(DetrFastImageProcessorPreprocessKwargs):
+    pass
+
+
 class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
@@ -119,59 +132,17 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
     size = {"height": 640, "width": 640}
     default_to_square = False
     model_input_names = ["pixel_values", "pixel_mask"]
-    valid_extra_kwargs = [
-        "format",
-        "annotations",
-        "do_convert_annotations",
-        "do_pad",
-        "pad_size",
-        "return_segmentation_masks",
-        "masks_path",
-    ]
+    valid_init_kwargs = RTDetrFastImageProcessorInitKwargs
+    valid_preprocess_kwargs = RTDetrFastImageProcessorPreprocessKwargs
 
-    def __init__(
-        self,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
-        default_to_square: bool = None,
-        resample: Union[PILImageResampling, "F.InterpolationMode"] = None,
-        do_center_crop: bool = None,
-        crop_size: Dict[str, int] = None,
-        do_rescale: bool = None,
-        rescale_factor: Union[int, float] = 1 / 255,
-        do_normalize: bool = None,
-        image_mean: Union[float, List[float]] = None,
-        image_std: Union[float, List[float]] = None,
-        do_convert_rgb: bool = None,
-        # Additional arguments
-        format: Union[str, AnnotationFormat] = None,
-        do_convert_annotations: Optional[bool] = None,
-        do_pad: bool = None,
-        pad_size: Optional[Dict[str, int]] = None,
-        **kwargs,
-    ) -> None:
+    def __init__(self, **kwargs: Unpack[valid_init_kwargs]) -> None:
+        # Backwards compatibility
+        do_convert_annotations = kwargs.get("do_convert_annotations", None)
+        do_normalize = kwargs.get("do_normalize", None)
         if do_convert_annotations is None and getattr(self, "do_convert_annotations", None) is None:
-            do_convert_annotations = do_normalize if do_normalize is not None else self.do_normalize
+            self.do_convert_annotations = do_normalize if do_normalize is not None else self.do_normalize
 
-        BaseImageProcessorFast.__init__(
-            do_resize=do_resize,
-            size=size,
-            default_to_square=default_to_square,
-            resample=resample,
-            do_center_crop=do_center_crop,
-            crop_size=crop_size,
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_convert_rgb=do_convert_rgb,
-            format=format,
-            do_convert_annotations=do_convert_annotations,
-            do_pad=do_pad,
-            pad_size=pad_size,
-            **kwargs,
-        )
+        BaseImageProcessorFast.__init__(**kwargs)
 
     @add_start_docstrings(
         BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
@@ -208,8 +179,8 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
             Path to the directory containing the segmentation masks.
         """,
     )
-    def preprocess(self, *args, **kwargs) -> BatchFeature:
-        return BaseImageProcessorFast().preprocess(*args, **kwargs)
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[valid_preprocess_kwargs]) -> BatchFeature:
+        return BaseImageProcessorFast().preprocess(images, **kwargs)
 
     def prepare_annotation(
         self,

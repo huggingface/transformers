@@ -19,12 +19,13 @@
 # limitations under the License.
 """Fast Image processor class for Qwen2-VL."""
 
-from typing import Dict, List, Optional, Union
+from typing import Dict, List, Optional, Union, Unpack
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BaseImageProcessorFast,
+    DefaultFastImageProcessorInitKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -40,7 +41,6 @@ from ...image_utils import (
     make_batched_videos,
     make_flat_list_of_images,
     valid_images,
-    validate_kwargs,
 )
 from ...utils import (
     TensorType,
@@ -60,13 +60,20 @@ if is_torch_available():
 if is_vision_available():
     pass
 
-
 if is_torchvision_v2_available():
     from torchvision.transforms.v2 import functional as F
 elif is_torchvision_available():
     from torchvision.transforms import functional as F
 
 logger = logging.get_logger(__name__)
+
+
+class Qwen2VLFastImageProcessorInitKwargs(DefaultFastImageProcessorInitKwargs):
+    min_pixels: Optional[int]
+    max_pixels: Optional[int]
+    patch_size: Optional[int]
+    temporal_patch_size: Optional[int]
+    merge_size: Optional[int]
 
 
 @add_start_docstrings(
@@ -99,52 +106,11 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
     merge_size = 2
     min_pixels = 56 * 56
     max_pixels = 28 * 28 * 1280
-    valid_extra_kwargs = ["min_pixels", "max_pixels", "patch_size", "temporal_patch_size", "merge_size"]
-
+    valid_init_kwargs = Qwen2VLFastImageProcessorInitKwargs
     model_input_names = ["pixel_values", "image_grid_thw", "pixel_values_videos", "video_grid_thw"]
 
-    def __init__(
-        self,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
-        default_to_square: bool = None,
-        resample: Union[PILImageResampling, "F.InterpolationMode"] = None,
-        do_center_crop: bool = None,
-        crop_size: Dict[str, int] = None,
-        do_rescale: bool = None,
-        rescale_factor: Union[int, float] = 1 / 255,
-        do_normalize: bool = None,
-        image_mean: Union[float, List[float]] = None,
-        image_std: Union[float, List[float]] = None,
-        do_convert_rgb: bool = None,
-        # Additional arguments
-        min_pixels: int = None,
-        max_pixels: int = None,
-        patch_size: int = None,
-        temporal_patch_size: int = None,
-        merge_size: int = None,
-        **kwargs,
-    ) -> None:
-        super().__init__(
-            do_resize=do_resize,
-            size=size,
-            default_to_square=default_to_square,
-            resample=resample,
-            do_center_crop=do_center_crop,
-            crop_size=crop_size,
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_convert_rgb=do_convert_rgb,
-            min_pixels=min_pixels,
-            max_pixels=max_pixels,
-            patch_size=patch_size,
-            temporal_patch_size=temporal_patch_size,
-            merge_size=merge_size,
-            **kwargs,
-        )
+    def __init__(self, **kwargs: Unpack[valid_init_kwargs]):
+        super().__init__(**kwargs)
 
     def _preprocess(
         self,
@@ -329,7 +295,6 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
             device (`torch.device`, *optional*):
                 The device to process the images on. If unset, the device is inferred from the input images.
         """
-        validate_kwargs(captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_extra_kwargs)
         do_resize = do_resize if do_resize is not None else self.do_resize
         size = size if size is not None else self.size
         resample = resample if resample is not None else self.resample

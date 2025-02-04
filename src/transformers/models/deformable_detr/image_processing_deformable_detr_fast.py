@@ -5,13 +5,15 @@
 #                          modular_deformable_detr.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 import pathlib
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Union, Unpack
 
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS,
     BaseImageProcessorFast,
+    DefaultFastImageProcessorInitKwargs,
+    DefaultFastImageProcessorPreprocessKwargs,
     SizeDict,
     get_image_size_for_max_height_width,
     get_max_height_width,
@@ -53,6 +55,24 @@ elif is_torchvision_available():
 
 
 logger = logging.get_logger(__name__)
+
+
+class DeformableDetrFastImageProcessorInitKwargs(DefaultFastImageProcessorInitKwargs):
+    format: Optional[Union[str, AnnotationFormat]]
+    do_convert_annotations: Optional[bool]
+    do_pad: Optional[bool]
+    pad_size: Optional[Dict[str, int]]
+
+
+class DeformableDetrFastImageProcessorPreprocessKwargs(DefaultFastImageProcessorPreprocessKwargs):
+    format: Optional[AnnotationFormat]
+    annotations: Optional[Dict]
+    do_convert_annotations: Optional[bool]
+    do_pad: Optional[bool]
+    pad_size: Optional[Dict[str, int]]
+    return_segmentation_masks: Optional[bool]
+    masks_path: Optional[Union[str, pathlib.Path]]
+
 
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 
@@ -287,40 +307,14 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
     size = {"shortest_edge": 800, "longest_edge": 1333}
     default_to_square = False
     model_input_names = ["pixel_values", "pixel_mask"]
-    valid_extra_kwargs = [
-        "format",
-        "annotations",
-        "do_convert_annotations",
-        "do_pad",
-        "pad_size",
-        "return_segmentation_masks",
-        "masks_path",
-    ]
+    valid_init_kwargs = DeformableDetrFastImageProcessorInitKwargs
+    valid_preprocess_kwargs = DeformableDetrFastImageProcessorPreprocessKwargs
 
-    def __init__(
-        self,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
-        default_to_square: bool = None,
-        resample: Union[PILImageResampling, "F.InterpolationMode"] = None,
-        do_center_crop: bool = None,
-        crop_size: Dict[str, int] = None,
-        do_rescale: bool = None,
-        rescale_factor: Union[int, float] = 1 / 255,
-        do_normalize: bool = None,
-        image_mean: Union[float, List[float]] = None,
-        image_std: Union[float, List[float]] = None,
-        do_convert_rgb: bool = None,
-        # Additional arguments
-        format: Union[str, AnnotationFormat] = None,
-        do_convert_annotations: Optional[bool] = None,
-        do_pad: bool = None,
-        pad_size: Optional[Dict[str, int]] = None,
-        **kwargs,
-    ) -> None:
+    def __init__(self, **kwargs: Unpack[valid_init_kwargs]) -> None:
         if "pad_and_return_pixel_mask" in kwargs:
-            do_pad = kwargs.pop("pad_and_return_pixel_mask")
+            kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
 
+        size = kwargs.pop("size", None)
         if "max_size" in kwargs:
             logger.warning_once(
                 "The `max_size` parameter is deprecated and will be removed in v4.26. "
@@ -331,31 +325,15 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
             max_size = None if size is None else 1333
 
         size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
-        size = get_size_dict(size, max_size=max_size, default_to_square=False)
+        self.size = get_size_dict(size, max_size=max_size, default_to_square=False)
 
         # Backwards compatibility
+        do_convert_annotations = kwargs.get("do_convert_annotations", None)
+        do_normalize = kwargs.get("do_normalize", None)
         if do_convert_annotations is None and getattr(self, "do_convert_annotations", None) is None:
-            do_convert_annotations = do_normalize if do_normalize is not None else self.do_normalize
+            self.do_convert_annotations = do_normalize if do_normalize is not None else self.do_normalize
 
-        super().__init__(
-            do_resize=do_resize,
-            size=size,
-            default_to_square=default_to_square,
-            resample=resample,
-            do_center_crop=do_center_crop,
-            crop_size=crop_size,
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_convert_rgb=do_convert_rgb,
-            format=format,
-            do_convert_annotations=do_convert_annotations,
-            do_pad=do_pad,
-            pad_size=pad_size,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
     @classmethod
     def from_dict(cls, image_processor_dict: Dict[str, Any], **kwargs):
@@ -625,65 +603,22 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
             Path to the directory containing the segmentation masks.
         """,
     )
-    def preprocess(
-        self,
-        images: ImageInput,
-        annotations: Optional[Union[AnnotationType, List[AnnotationType]]] = None,
-        return_segmentation_masks: bool = None,
-        masks_path: Optional[Union[str, pathlib.Path]] = None,
-        do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
-        resample: Optional[Union[PILImageResampling, "F.InterpolationMode"]] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[Union[int, float]] = None,
-        do_normalize: Optional[bool] = None,
-        do_convert_annotations: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        do_pad: Optional[bool] = None,
-        format: Optional[Union[str, AnnotationFormat]] = None,
-        return_tensors: Optional[Union[TensorType, str]] = None,
-        data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        pad_size: Optional[Dict[str, int]] = None,
-        device: Optional["torch.device"] = None,
-        **kwargs,
-    ) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[valid_preprocess_kwargs]) -> BatchFeature:
         if "pad_and_return_pixel_mask" in kwargs:
+            kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
             logger.warning_once(
                 "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in a future version, "
                 "use `do_pad` instead."
             )
-            do_pad = kwargs.pop("pad_and_return_pixel_mask")
 
         if "max_size" in kwargs:
             logger.warning_once(
                 "The `max_size` argument is deprecated and will be removed in a future version, use"
                 " `size['longest_edge']` instead."
             )
-            size = kwargs.pop("max_size")
+            kwargs["size"] = kwargs.pop("max_size")
 
-        return super().preprocess(
-            images=images,
-            annotations=annotations,
-            return_segmentation_masks=return_segmentation_masks,
-            masks_path=masks_path,
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            do_convert_annotations=do_convert_annotations,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_pad=do_pad,
-            pad_size=pad_size,
-            format=format,
-            return_tensors=return_tensors,
-            input_data_format=input_data_format,
-            device=device,
-        )
+        return super().preprocess(images, **kwargs)
 
     def _preprocess(
         self,

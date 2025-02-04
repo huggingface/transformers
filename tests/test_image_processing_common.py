@@ -305,8 +305,8 @@ class ImageProcessingTestMixin:
         }
         dict_slow_0 = {key: dict_slow_0[key] for key in set(dict_slow_0) & set(dict_slow_1)}
         dict_slow_1 = {key: dict_slow_1[key] for key in set(dict_slow_0) & set(dict_slow_1)}
-        # check that all additional keys are None
-        self.assertTrue(all(value is None for value in difference.values()))
+        # check that all additional keys are None, except for `default_to_square` which is only set in fast processors
+        self.assertTrue(all(value is None for key, value in difference.items() if key not in ["default_to_square"]))
         # check that the remaining keys are the same
         self.assertEqual(dict_slow_0, dict_slow_1)
 
@@ -318,8 +318,8 @@ class ImageProcessingTestMixin:
         }
         dict_fast_0 = {key: dict_fast_0[key] for key in set(dict_fast_0) & set(dict_fast_1)}
         dict_fast_1 = {key: dict_fast_1[key] for key in set(dict_fast_0) & set(dict_fast_1)}
-        # check that all additional keys are None
-        self.assertTrue(all(value is None for value in difference.values()))
+        # check that all additional keys are None, except for `default_to_square` which is only set in fast processors
+        self.assertTrue(all(value is None for key, value in difference.items() if key not in ["default_to_square"]))
         # check that the remaining keys are the same
         self.assertEqual(dict_fast_0, dict_fast_1)
 
@@ -351,8 +351,8 @@ class ImageProcessingTestMixin:
         }
         dict_slow_0 = {key: dict_slow_0[key] for key in set(dict_slow_0) & set(dict_slow_1)}
         dict_slow_1 = {key: dict_slow_1[key] for key in set(dict_slow_0) & set(dict_slow_1)}
-        # check that all additional keys are None
-        self.assertTrue(all(value is None for value in difference.values()))
+        # check that all additional keys are None, except for `default_to_square` which is only set in fast processors
+        self.assertTrue(all(value is None for key, value in difference.items() if key not in ["default_to_square"]))
         # check that the remaining keys are the same
         self.assertEqual(dict_slow_0, dict_slow_1)
 
@@ -364,8 +364,8 @@ class ImageProcessingTestMixin:
         }
         dict_fast_0 = {key: dict_fast_0[key] for key in set(dict_fast_0) & set(dict_fast_1)}
         dict_fast_1 = {key: dict_fast_1[key] for key in set(dict_fast_0) & set(dict_fast_1)}
-        # check that all additional keys are None
-        self.assertTrue(all(value is None for value in difference.values()))
+        # check that all additional keys are None, except for `default_to_square` which is only set in fast processors
+        self.assertTrue(all(value is None for key, value in difference.items() if key not in ["default_to_square"]))
         # check that the remaining keys are the same
         self.assertEqual(dict_fast_0, dict_fast_1)
 
