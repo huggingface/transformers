@@ -69,16 +69,15 @@ class FP8HfQuantizer(HfQuantizer):
         - Per-tensor quantization when weight_block_size is None
         """
         module, tensor_name = get_module_from_name(model, param_name)
-        
+        print("######################### in quantizer_fp8.py #########################")
         # Get FP8 min/max values
         fp8_min = torch.finfo(torch.float8_e4m3fn).min
         fp8_max = torch.finfo(torch.float8_e4m3fn).max
         
         if self.quantization_config.weight_block_size is not None:
-            # Block-wise quantization
+
             block_size_m, block_size_n = self.quantization_config.weight_block_size
             
-            # Get matrix dimensions
             rows, cols = param_value.shape[-2:]
             
             # Check if dimensions are divisible by block sizes
@@ -86,6 +85,7 @@ class FP8HfQuantizer(HfQuantizer):
                 raise ValueError(
                     f"Matrix dimensions ({rows}, {cols}) must be divisible by block sizes ({block_size_m}, {block_size_n})"
                 )
+            
             
             # Create blocks using unfold
             param_value = param_value.unfold(-2, block_size_m, block_size_m)
@@ -99,24 +99,24 @@ class FP8HfQuantizer(HfQuantizer):
             scale = scale.unsqueeze(-1).unsqueeze(-1)
             
             # Quantize the weights
-            quantized_param = torch.clamp(param_value * scale, min=fp8_min, max=fp8_max)
+            quantized_param = torch.clamp(param_value * scale, min=fp8_min, max=fp8_max).to(torch.float8_e4m3fn)
             
             # Reshape back to matrix shape
             quantized_param = quantized_param.reshape(param_value.shape[:-4] + (rows, cols))
             
             # Reshape scale to match the number of blocks
-            scale = scale.reshape(scale.shape[:-2] + (-1,))
+            scale = scale.reshape(scale.shape[:-2] + (-1,)).reciprocal()
             
         else:
             # Per-tensor quantization
             max_abs = torch.max(torch.abs(param_value))
+            print("###################max_abs#################", max_abs)
             scale = fp8_max / max_abs
-            
+            print("###################scale#################", scale)
             # Quantize the weights
-            quantized_param = torch.clamp(param_value * scale, min=fp8_min, max=fp8_max)
-            
+            quantized_param = torch.clamp(param_value * scale, min=fp8_min, max=fp8_max).to(torch.float8_e4m3fn)
             # For per-tensor quantization, we just need a single scale value
-            scale = torch.tensor([scale])
+            scale = torch.tensor([[scale]]).reciprocal()
         # Store the quantized weights and scales in the module
         print(f"tensor_name in create_quantized_param: {tensor_name} {target_device}")
         module._buffers[tensor_name] = quantized_param.to(target_device)
@@ -134,13 +134,15 @@ class FP8HfQuantizer(HfQuantizer):
         
         module, tensor_name = get_module_from_name(model, param_name)
         
-        if isinstance(module, (FP8Linear, FP8MoELinear)):
-            if tensor_name == "bias":
+        if isinstance(module, FP8Linear):
+            if self.pre_quantized or tensor_name == "bias":
+                if tensor_name == "weight" and param_value.dtype != torch.int8:
+                    raise ValueError("Expect quantized weights but got an unquantized weight")
                 return False
-            if tensor_name == "weight":
+            else:
+                if tensor_name == "weight_scale":
+                    raise ValueError("Expect unquantized weights but got a quantized weight_scale")
                 return True
-            if tensor_name in ["weight_scale", "input_scale"]:
-                return False
         return False
 
     def _process_model_before_weight_loading(
