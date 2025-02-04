@@ -161,6 +161,16 @@ SPECIAL_CASES_TO_ALLOW = {
         "giou_loss_coefficient",
         "mask_loss_coefficient",
     ],
+    "DabDetrConfig": [
+        "dilation",
+        "bbox_cost",
+        "bbox_loss_coefficient",
+        "class_cost",
+        "cls_loss_coefficient",
+        "focal_alpha",
+        "giou_cost",
+        "giou_loss_coefficient",
+    ],
     "DetrConfig": [
         "bbox_cost",
         "bbox_loss_coefficient",
@@ -201,6 +211,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "giou_cost",
         "giou_loss_coefficient",
     ],
+    "GPTNeoXConfig": ["rotary_emb_base"],
 }
 
 
