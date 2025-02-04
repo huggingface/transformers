@@ -3634,7 +3634,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             model_kwargs = kwargs
 
-        pre_quantized = getattr(config, "quantization_config", None) is not None
+        pre_quantized = hasattr(config, "quantization_config")
+        if pre_quantized and not AutoHfQuantizer.supports_quant_method(config.quantization_config):
+            pre_quantized = False
+
         if pre_quantized or quantization_config is not None:
             if pre_quantized:
                 config.quantization_config = AutoHfQuantizer.merge_quantization_configs(
@@ -3647,7 +3650,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 config.quantization_config,
                 pre_quantized=pre_quantized,
             )
-
         else:
             hf_quantizer = None
 
