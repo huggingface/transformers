@@ -3426,6 +3426,7 @@ class GenerationMixin:
             return gathered_tensor
 
         # 2. init beam_search values
+        pad_token_id = generation_config._pad_token_tensor
         eos_token_id = generation_config._eos_token_tensor
         output_attentions = generation_config.output_attentions
         output_hidden_states = generation_config.output_hidden_states
@@ -3486,29 +3487,35 @@ class GenerationMixin:
             )
 
         # 4. init running tensors and static-shaped placeholders
+
         # per batch, beam-item holding current token in loop and completed sequences
         running_sequences = torch.full(
-            (batch_size, num_beams, max_length), fill_value=-1, dtype=torch.long, device=input_ids.device
+            (batch_size, num_beams, max_length), fill_value=pad_token_id, dtype=torch.long, device=input_ids.device
         )
-        running_sequences[:, :, cur_len] = unflatten_beam_dim(input_ids, batch_size, num_beams)
+        running_sequences[:, :, :cur_len] = unflatten_beam_dim(input_ids, batch_size, num_beams)
         sequences = running_sequences.clone().detach()
+
         # per batch, beam-item score, logprobs
         # initialise score of first beam with 0 and the rest with -1e9. This makes sure that only tokens
         # of the first beam are considered to avoid sampling the exact same tokens across all beams.
         running_beam_scores = torch.zeros((batch_size, num_beams), dtype=torch.float, device=input_ids.device)
         running_beam_scores[:, 1:] = -1e9
         beam_scores = torch.full((batch_size, num_beams), fill_value=-1e9, dtype=torch.float, device=input_ids.device)
+
         # per batch, beam-item state bit indicating if sentence has finished.
         is_sent_finished = torch.zeros((batch_size, num_beams), dtype=torch.bool, device=input_ids.device)
+
         # per batch, beam-item state bit indicating if there are valid continuations.
         next_token_hits_stopping_criteria = torch.zeros(
             (batch_size, num_beams), dtype=torch.bool, device=input_ids.device
         )
-        # per batch beam indices
+
+        # per batch selected beam indices
         running_beam_indices = torch.full(
-            (batch_size, num_beams, max_length - cur_len), full_value=-1, dtype=torch.int32, device=input_ids.device
+            (batch_size, num_beams, max_length - cur_len), fill_value=-1, dtype=torch.int32, device=input_ids.device
         )
         beam_indices = running_beam_indices.clone().detach()
+
         # placeholders to prevent torch.cat operations
         merged_sequences = torch.zeros(
             (batch_size, num_beams + beams_to_keep, max_length), dtype=torch.long, device=input_ids.device
@@ -3636,6 +3643,7 @@ class GenerationMixin:
             beam_scores = gather_beams(merged_scores, topk_merged_indices)
             beam_indices = gather_beams(merged_beam_indices, topk_merged_indices)
             is_sent_finished = gather_beams(merged_is_sent_finished, topk_merged_indices)
+            return sequences, beam_scores, beam_indices, is_sent_finished
 
         # 6. run the generation loop
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
@@ -3705,7 +3713,11 @@ class GenerationMixin:
             )
 
             # d. Check which running sequences have finished
-            next_token_hits_stopping_criteria = stopping_criteria(flatten_beam_dim(topk_running_sequences), all_scores)
+
+            next_token_hits_stopping_criteria = stopping_criteria(
+                flatten_beam_dim(topk_running_sequences[:, :, : cur_len + 1]),  # remove unfilled token indexes
+                all_scores,
+            )
             next_token_hits_stopping_criteria = unflatten_beam_dim(
                 next_token_hits_stopping_criteria, batch_size, beams_to_keep
             )
@@ -3729,14 +3741,15 @@ class GenerationMixin:
 
             # g. Prepare remaining data for the next iteration, including computing the stopping condition for
             # beam search as a whole (as opposed to individual beams, i.e. `stopping_criteria`)
-            cur_len = cur_len + 1
 
             # pluck the cache from the beam indices that will be used in the next iteration
             if model_kwargs.get("past_key_values", None) is not None:
                 model_kwargs["past_key_values"] = self._temporary_reorder_cache(
-                    model_kwargs["past_key_values"], flatten_beam_dim(running_beam_indices[..., -1])
+                    past_key_values=model_kwargs["past_key_values"],
+                    beam_idx=flatten_beam_dim(running_beam_indices[..., cur_len - decoder_prompt_len]),
                 )
 
+            cur_len = cur_len + 1
             this_peer_finished = not self._beam_search_has_unfinished_sequences(
                 running_beam_scores,
                 beam_scores,
