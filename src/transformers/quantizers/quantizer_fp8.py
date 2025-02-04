@@ -1,5 +1,6 @@
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 import torch
+import torch.nn as nn
 from torch.nn.parameter import Parameter as Parameter
 from .base import HfQuantizer
 from ..utils import is_accelerate_available, logging
@@ -16,14 +17,13 @@ class FP8HfQuantizer(HfQuantizer):
     Supports both e4m3fn and e4m3fnuz formats based on platform.
     """
     
-    requires_parameters_quantization = False
+    requires_parameters_quantization = True
     requires_calibration = False
     required_packages = ["accelerate"]
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
         self.quantization_config = quantization_config
-        self.is_moe_model = kwargs.get("is_moe_model", False)
 
     def validate_environment(self, *args, **kwargs):
         if not is_accelerate_available():
@@ -69,11 +69,10 @@ class FP8HfQuantizer(HfQuantizer):
         - Per-tensor quantization when weight_block_size is None
         """
         module, tensor_name = get_module_from_name(model, param_name)
-        print("######################### in quantizer_fp8.py #########################")
         # Get FP8 min/max values
         fp8_min = torch.finfo(torch.float8_e4m3fn).min
         fp8_max = torch.finfo(torch.float8_e4m3fn).max
-        
+    
         if self.quantization_config.weight_block_size is not None:
 
             block_size_m, block_size_n = self.quantization_config.weight_block_size
@@ -105,22 +104,22 @@ class FP8HfQuantizer(HfQuantizer):
             quantized_param = quantized_param.reshape(param_value.shape[:-4] + (rows, cols))
             
             # Reshape scale to match the number of blocks
-            scale = scale.reshape(scale.shape[:-2] + (-1,)).reciprocal()
+            scale = scale.reshape(scale.shape[:-2] + (-1,)).squeeze(-1).reciprocal()
             
         else:
             # Per-tensor quantization
             max_abs = torch.max(torch.abs(param_value))
-            print("###################max_abs#################", max_abs)
+            # print("###################max_abs#################", max_abs)
             scale = fp8_max / max_abs
-            print("###################scale#################", scale)
+            # print("###################scale#################", scale)
             # Quantize the weights
             quantized_param = torch.clamp(param_value * scale, min=fp8_min, max=fp8_max).to(torch.float8_e4m3fn)
             # For per-tensor quantization, we just need a single scale value
             scale = torch.tensor([[scale]]).reciprocal()
+            # print("###################after reciprocal scale#################", scale)
         # Store the quantized weights and scales in the module
-        print(f"tensor_name in create_quantized_param: {tensor_name} {target_device}")
-        module._buffers[tensor_name] = quantized_param.to(target_device)
-        module._buffers["weight_scale"] = scale.to(target_device)
+        module._parameters[tensor_name] = quantized_param.to(target_device)
+        module.register_parameter("weight_scale_inv", nn.Parameter(scale.to(target_device)))
 
     def check_quantized_param(
         self,
@@ -136,7 +135,7 @@ class FP8HfQuantizer(HfQuantizer):
         
         if isinstance(module, FP8Linear):
             if self.pre_quantized or tensor_name == "bias":
-                if tensor_name == "weight" and param_value.dtype != torch.int8:
+                if tensor_name == "weight" and param_value.dtype != torch.float8_e4m3fn:
                     raise ValueError("Expect quantized weights but got an unquantized weight")
                 return False
             else:
@@ -149,12 +148,12 @@ class FP8HfQuantizer(HfQuantizer):
         self,
         model: "PreTrainedModel",
         device_map,
-        keep_in_fp32_modules: List[str] = [],
+        modules_to_not_convert: List[str] = [],
         **kwargs,
     ):
         from ..integrations.fp8 import replace_with_fp8_linear
         
-        self.modules_to_not_convert = ["lm_head"] + keep_in_fp32_modules
+        self.modules_to_not_convert = ["lm_head"] + modules_to_not_convert
         
         if self.quantization_config.modules_to_not_convert:
             self.modules_to_not_convert.extend(self.quantization_config.modules_to_not_convert)
