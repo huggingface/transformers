@@ -32,6 +32,7 @@ from ..utils.quantization_config import (
     QuantoConfig,
     TorchAoConfig,
     VptqConfig,
+    FP8Config,
 )
 from .quantizer_aqlm import AqlmHfQuantizer
 from .quantizer_awq import AwqQuantizer
@@ -47,7 +48,7 @@ from .quantizer_hqq import HqqHfQuantizer
 from .quantizer_quanto import QuantoHfQuantizer
 from .quantizer_torchao import TorchAoHfQuantizer
 from .quantizer_vptq import VptqHfQuantizer
-
+from .quantizer_fp8 import FP8HfQuantizer
 
 AUTO_QUANTIZER_MAPPING = {
     "awq": AwqQuantizer,
@@ -64,6 +65,7 @@ AUTO_QUANTIZER_MAPPING = {
     "torchao": TorchAoHfQuantizer,
     "bitnet": BitNetHfQuantizer,
     "vptq": VptqHfQuantizer,
+    "fp8": FP8HfQuantizer,
 }
 
 AUTO_QUANTIZATION_CONFIG_MAPPING = {
@@ -81,6 +83,7 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "torchao": TorchAoConfig,
     "bitnet": BitNetConfig,
     "vptq": VptqConfig,
+    "fp8": FP8Config,
 }
 
 logger = logging.get_logger(__name__)

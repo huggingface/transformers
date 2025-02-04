@@ -21,7 +21,7 @@ import os
 from dataclasses import dataclass
 from enum import Enum
 from inspect import Parameter, signature
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, Tuple
 
 from packaging import version
 
@@ -56,6 +56,7 @@ class QuantizationMethod(str, Enum):
     FBGEMM_FP8 = "fbgemm_fp8"
     TORCHAO = "torchao"
     BITNET = "bitnet"
+    FP8 = "fp8"
 
 
 class AWQLinearVersion(str, Enum):
@@ -1541,6 +1542,27 @@ class BitNetConfig(QuantizationConfigMixin):
     ):
         self.quant_method = QuantizationMethod.BITNET
         self.modules_to_not_convert = modules_to_not_convert
+        self.post_init()
+
+    def post_init(self):
+        r"""
+        Safety checker that arguments are correct
+        """
+        pass
+
+@dataclass
+class FP8Config(QuantizationConfigMixin):
+    def __init__(
+        self,
+        modules_to_not_convert: Optional[List] = None,
+        activation_scheme: Optional[str] = "dynamic",
+        weight_block_size: Optional[Tuple[int, int]] = None,
+        **kwargs,
+    ):
+        self.quant_method = QuantizationMethod.FP8
+        self.modules_to_not_convert = modules_to_not_convert
+        self.activation_scheme = activation_scheme
+        self.weight_block_size = weight_block_size
         self.post_init()
 
     def post_init(self):
