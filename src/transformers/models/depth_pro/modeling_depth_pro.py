@@ -728,14 +728,6 @@ class DepthProModel(DepthProPreTrainedModel):
     def get_input_embeddings(self):
         return self.encoder.image_encoder.model.get_input_embeddings()
 
-    def _prune_heads(self, heads_to_prune):
-        """
-        Prunes heads of the model. heads_to_prune: dict of {layer_num: list of heads to prune in this layer} See base
-        class PreTrainedModel
-        """
-        self.encoder.patch_encoder.model._prune_heads(heads_to_prune)
-        self.encoder.image_encoder.model._prune_heads(heads_to_prune)
-
     @add_start_docstrings_to_model_forward(DEPTH_PRO_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
