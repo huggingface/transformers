@@ -2280,6 +2280,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         config._attn_implementation_autoset = True
         return config
 
+    @classmethod
     def _set_default_torch_dtype(cls, dtype: torch.dtype) -> torch.dtype:
         """
         Change the default dtype and return the previous one. This is needed when wanting to instantiate the model
