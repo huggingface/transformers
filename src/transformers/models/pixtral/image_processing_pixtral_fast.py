@@ -14,7 +14,7 @@
 # limitations under the License.
 """Image processor class for Pixtral."""
 
-from typing import Dict, List, Optional, Union, Unpack
+from typing import Dict, List, Optional, Union
 
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
@@ -26,12 +26,12 @@ from ...image_processing_utils_fast import (
     group_images_by_shape,
     reorder_images,
 )
-from ...image_transforms import get_resize_output_image_size
 from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
 )
+from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     add_start_docstrings,

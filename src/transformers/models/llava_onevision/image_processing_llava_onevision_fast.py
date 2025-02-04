@@ -5,7 +5,7 @@
 #                          modular_llava_onevision.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 
-from typing import List, Optional, Union, Unpack
+from typing import List, Optional, Union
 
 from ...image_processing_utils import BatchFeature, get_patch_output_size, select_best_resolution
 from ...image_processing_utils_fast import (
@@ -28,6 +28,7 @@ from ...image_utils import (
     get_image_size,
     make_flat_list_of_images,
 )
+from ...processing_utils import Unpack
 from ...utils import TensorType, add_start_docstrings, is_torch_available, is_torchvision_v2_available
 
 

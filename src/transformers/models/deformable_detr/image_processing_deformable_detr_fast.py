@@ -5,7 +5,7 @@
 #                          modular_deformable_detr.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 import pathlib
-from typing import Any, Dict, List, Optional, Tuple, Union, Unpack
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
@@ -31,6 +31,7 @@ from ...image_utils import (
     get_image_size,
     validate_annotations,
 )
+from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     add_start_docstrings,

@@ -14,7 +14,7 @@
 # limitations under the License.
 """Fast Image processor class for ConvNeXT."""
 
-from typing import Dict, List, Optional, Union, Unpack
+from typing import Dict, List, Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -34,6 +34,7 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
 )
+from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     add_start_docstrings,

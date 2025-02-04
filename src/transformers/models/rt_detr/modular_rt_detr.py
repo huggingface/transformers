@@ -1,5 +1,5 @@
 import pathlib
-from typing import Dict, List, Optional, Tuple, Union, Unpack
+from typing import Dict, List, Optional, Tuple, Union
 
 from transformers.models.detr.image_processing_detr_fast import (
     DetrFastImageProcessorInitKwargs,
@@ -27,6 +27,7 @@ from ...image_utils import (
     get_image_size,
     validate_annotations,
 )
+from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     is_torch_available,

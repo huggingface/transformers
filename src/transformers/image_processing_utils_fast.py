@@ -15,7 +15,7 @@
 
 from concurrent.futures import ThreadPoolExecutor
 from functools import partial
-from typing import Any, Dict, Iterable, List, Optional, Tuple, TypedDict, Union, Unpack
+from typing import Any, Dict, Iterable, List, Optional, Tuple, TypedDict, Union
 
 import numpy as np
 
@@ -44,6 +44,7 @@ from .image_utils import (
     validate_fast_preprocess_arguments,
     validate_kwargs,
 )
+from .processing_utils import Unpack
 from .utils import (
     TensorType,
     add_start_docstrings,

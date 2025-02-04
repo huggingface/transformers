@@ -14,7 +14,7 @@
 # limitations under the License.
 """Fast Image processor class for LLaVa."""
 
-from typing import List, Optional, Tuple, Union, Unpack
+from typing import List, Optional, Tuple, Union
 
 from ...image_processing_utils import (
     BatchFeature,
@@ -37,6 +37,7 @@ from ...image_utils import (
     SizeDict,
     get_image_size,
 )
+from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     add_start_docstrings,

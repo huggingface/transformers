@@ -19,7 +19,7 @@
 # limitations under the License.
 """Fast Image processor class for Qwen2-VL."""
 
-from typing import Dict, List, Optional, Union, Unpack
+from typing import Dict, List, Optional, Union
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -42,6 +42,7 @@ from ...image_utils import (
     make_flat_list_of_images,
     valid_images,
 )
+from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     add_start_docstrings,

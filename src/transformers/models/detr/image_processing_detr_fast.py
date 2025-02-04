@@ -17,7 +17,7 @@
 import io
 import pathlib
 from collections import defaultdict
-from typing import Any, Dict, List, Optional, Set, Tuple, Union, Unpack
+from typing import Any, Dict, List, Optional, Set, Tuple, Union
 
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
@@ -47,6 +47,7 @@ from ...image_utils import (
     get_image_size,
     validate_annotations,
 )
+from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     add_start_docstrings,
