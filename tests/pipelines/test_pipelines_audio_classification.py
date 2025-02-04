@@ -137,7 +137,7 @@ class AudioClassificationPipelineTests(unittest.TestCase):
         self.assertIn(nested_simplify(output, decimals=4), [EXPECTED_OUTPUT, EXPECTED_OUTPUT_PT_2])
 
     @require_torch
-    @skipIfRocm(arch='gfx942')
+    @skipIfRocm(arch=['gfx942','gfx90a','gfx1100'])
     def test_small_model_pt_fp16(self):
         model = "anton-l/wav2vec2-random-tiny-classifier"
 

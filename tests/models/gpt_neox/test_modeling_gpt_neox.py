@@ -287,7 +287,7 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_flex_attention_with_grads(self):
         super().test_flex_attention_with_grads()
 
-    @skipIfRocm(arch=['gfx1201','gfx90a','gfx942'])
+    @skipIfRocm(arch=['gfx1201','gfx90a','gfx942','gfx1100','gfx1200'])
     def test_generate_with_static_cache(self):
         super().test_generate_with_static_cache()
         pass

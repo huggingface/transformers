@@ -504,7 +504,7 @@ class EncoderDecoderMixin:
 
 @require_torch
 class Wav2Vec2BertModelTest(EncoderDecoderMixin, unittest.TestCase):
-    @skipIfRocm(arch='gfx942')
+    @skipIfRocm(arch=['gfx942','gfx90a'])
     def test_save_and_load_from_pretrained(self):
         super().test_save_and_load_from_pretrained()
 

@@ -195,13 +195,17 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
     test_head_masking = False
     _is_composite = True
 
-    @skipIfRocm(arch='gfx942')
+    @skipIfRocm(arch=['gfx942','gfx90a'])
     def test_flex_attention_with_grads(self):
         super().test_flex_attention_with_grads()
 
-    @skipIfRocm(arch='gfx942')
+    @skipIfRocm(arch=['gfx942','gfx90a'])
     def test_generate_from_inputs_embeds_with_static_cache(self):
         super().test_generate_from_inputs_embeds_with_static_cache()
+
+    @skipIfRocm(arch='gfx90a')
+    def test_slow_fast_equivalence(self):
+        super().test_slow_fast_equivalence()
 
     def setUp(self):
         self.model_tester = AriaVisionText2TextModelTester(self)

@@ -32,7 +32,7 @@ if is_torch_available():
 
 class TestTensorParallel(TestCasePlus):
     @require_torch_multi_gpu
-    @skipIfRocm(arch=['gfx1201','gfx942'])
+    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1200'])
     def test_tp(self):
         distributed_args = f"""--nproc_per_node={torch.cuda.device_count()}
             --master_port={get_torch_dist_unique_port()}

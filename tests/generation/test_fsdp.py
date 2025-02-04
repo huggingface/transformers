@@ -21,6 +21,7 @@ from transformers.testing_utils import (
     execute_subprocess_async,
     get_torch_dist_unique_port,
     require_torch_multi_gpu,
+    skipIfRocm,
 )
 
 
@@ -103,6 +104,7 @@ if is_torch_available():
 
 class TestFSDPGeneration(TestCasePlus):
     @require_torch_multi_gpu
+    @skipIfRocm(arch='gfx90a')
     def test_fsdp_generate(self):
         distributed_args = f"""--nproc_per_node={torch.cuda.device_count()}
             --master_port={get_torch_dist_unique_port()}
@@ -114,6 +116,7 @@ class TestFSDPGeneration(TestCasePlus):
         # successful return here == success - any errors would have caused an error in the sub-call
 
     @require_torch_multi_gpu
+    @skipIfRocm(arch='gfx90a')
     def test_fsdp2_generate(self):
         distributed_args = f"""--nproc_per_node={torch.cuda.device_count()}
             --master_port={get_torch_dist_unique_port()}

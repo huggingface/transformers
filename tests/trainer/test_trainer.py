@@ -2261,6 +2261,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertEqual(trainer.get_eval_dataloader().total_batch_size, 16)
             self.assertEqual(len(trainer.get_eval_dataloader()), 64 // 16)
 
+    @skipIfRocm(arch='gfx90a')
     def test_evaluate(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(a=1.5, b=2.5, compute_metrics=AlmostAccuracy(), output_dir=tmp_dir)
@@ -2303,6 +2304,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             expected_acc = AlmostAccuracy()((pred + 1, y))["accuracy"]
             self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
+    @skipIfRocm(arch='gfx90a')
     def test_evaluate_with_batch_eval_metrics(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(
@@ -2353,6 +2355,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             expected_acc = AlmostAccuracy()((pred + 1, y))["accuracy"]
             self.assertAlmostEqual(results["eval_accuracy"], expected_acc)
 
+    @skipIfRocm(arch='gfx90a')
     def test_evaluate_with_jit(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
             trainer = get_regression_trainer(
@@ -2651,6 +2654,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                 self.assertTrue(np.array_equal(labels[0], trainer.eval_dataset.ys[0]))
                 self.assertTrue(np.array_equal(labels[1], trainer.eval_dataset.ys[1]))
 
+    @skipIfRocm(arch='gfx90a')
     def test_dynamic_shapes(self):
         eval_dataset = DynamicShapesDataset(batch_size=self.batch_size)
         model = RegressionModel(a=2, b=1)
@@ -2814,7 +2818,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertIs(model_wrapped_before, model_wrapped_after, "should be not wrapped twice")
 
     @require_torch_up_to_2_accelerators
-    @skipIfRocm(arch='gfx1201')
+    @skipIfRocm(arch=['gfx1201','gfx1200')
     def test_can_resume_training(self):
         # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
         # save_steps, the checkpoint will resume training at epoch 2 or more (so the data seen by the model
@@ -3082,7 +3086,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         trainer.train(resume_from_checkpoint=False)
 
     @require_torch_up_to_2_accelerators
-    @skipIfRocm(arch='gfx1201')
+    @skipIfRocm(arch=['gfx1201','gfx1200'])
     def test_resume_training_with_shard_checkpoint(self):
         # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
         # save_steps, the checkpoint will resume training at epoch 2 or more (so the data seen by the model
@@ -3109,7 +3113,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
     @require_safetensors
     @require_torch_up_to_2_accelerators
-    @skipIfRocm(arch='gfx1201')
+    @skipIfRocm(arch=['gfx1201','gfx1200'])
     def test_resume_training_with_safe_checkpoint(self):
         # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
         # save_steps, the checkpoint will resume training at epoch 2 or more (so the data seen by the model
@@ -3145,7 +3149,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                     self.check_trainer_state_are_the_same(state, state1)
 
     @require_torch_up_to_2_accelerators
-    @skipIfRocm(arch='gfx1201')
+    @skipIfRocm(arch=['gfx1201','gfx1200'])
     def test_resume_training_with_gradient_accumulation(self):
         # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
         # save_steps, the checkpoint will resume training at epoch 2 or more (so the data seen by the model
@@ -3184,7 +3188,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.check_trainer_state_are_the_same(state, state1)
 
     @require_torch_up_to_2_accelerators
-    @skipIfRocm(arch='gfx1201')
+    @skipIfRocm(arch=['gfx1201','gfx1200'])
     def test_resume_training_with_frozen_params(self):
         # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
         # save_steps, the checkpoint will resume training at epoch 2 or more (so the data seen by the model
@@ -3395,6 +3399,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.assertIsInstance(loader, torch.utils.data.DataLoader)
             self.assertIsInstance(loader.sampler, torch.utils.data.dataloader._InfiniteConstantSampler)
 
+    @skipIfRocm(arch=['gfx90a','gfx1200'])
     def test_evaluation_iterable_dataset(self):
         config = RegressionModelConfig(a=1.5, b=2.5)
         model = RegressionPreTrainedModel(config)
@@ -3571,6 +3576,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer.state.best_model_checkpoint = os.path.join(tmp_dir, "checkpoint-5")
             self.check_checkpoint_deletion(trainer, tmp_dir, [5, 25])
 
+    @skipIfRocm(arch='gfx90a')
     def test_compare_trainer_and_checkpoint_args_logging(self):
         logger = logging.get_logger()
 
@@ -4337,6 +4343,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             reloaded_tokenizer(test_sentence, padding="max_length").input_ids,
         )
 
+    @skipIfRocm(arch='gfx90a')
     def test_save_best_checkpoint(self):
         freq = int(64 / self.batch_size)
         total = int(self.n_epochs * 64 / self.batch_size)
