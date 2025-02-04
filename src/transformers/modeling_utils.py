@@ -1467,7 +1467,7 @@ def find_missing_and_unexpected_keys(
     return model, missing_keys, unexpected_keys
 
 
-def move_missing_keys_to_cpu(
+def move_missing_keys_back_to_cpu(
     model,
     missing_keys,
     unexpected_keys,
@@ -4390,8 +4390,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # This variable will flag if we're loading a sharded checkpoint. In this case the archive file is just the
         # index of the files.
-        is_sharded = False
-        sharded_metadata = None
         # Load model
         loading_info = None
 
@@ -4421,7 +4419,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             revision=revision,
             commit_hash=commit_hash,
         )
-        is_sharded = len(checkpoint_files) > 1
+        is_sharded = sharded_metadata is not None
 
         if is_safetensors_available() and not is_sharded and checkpoint_files[0].endswith(".safetensors"):
             with safe_open(checkpoint_files[0], framework="pt") as f:
@@ -4832,14 +4830,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             device_map,
         )
 
-        # Move keys that are missing from the loaded state dict from meto to cpu (because they won't be move when loading
+        # Move keys that are missing from the loaded state dict from meto to cpu (because they won't be moved when loading
         # the weights as they are not in the loaded state dict)
         if low_cpu_mem_usage:
-            model = move_missing_keys_to_cpu(
+            model = move_missing_keys_back_to_cpu(
                 model, missing_keys, unexpected_keys, dtype, keep_in_fp32_modules, is_quantized, hf_quantizer
             )
 
-        # retrieve uninitialized modules and initialize before maybe overriding that with the pretrained weights.
+        # retrieve uninitialized modules and initialize before maybe overriding that with the pretrained weights
         if _fast_init:
             model = initialize_missing_keys(
                 model, loaded_keys, ignore_mismatched_sizes, has_prefix_module, expects_prefix_module, is_quantized
