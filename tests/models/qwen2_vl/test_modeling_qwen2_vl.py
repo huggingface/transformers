@@ -296,12 +296,16 @@ class Qwen2VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
 
             # Generate and make sure rope_deltas are not `None`
             self.assertTrue(model.rope_deltas is None)
-            generation_output = model.generate(**input_dict, max_new_tokens=4, return_dict_in_generate=True, output_logits=True)
+            generation_output = model.generate(
+                **input_dict, max_new_tokens=4, return_dict_in_generate=True, output_logits=True
+            )
             self.assertTrue(model.rope_deltas is not None)
 
             # Now if we try to do forward pass, we should get new rope logits, because cache is not passed
             forward_output = model(**input_dict)
-            torch.testing.assert_close(generation_output.logits[0], forward_output.logits[:, -1, :], rtol=1e-4, atol=1e-4)
+            torch.testing.assert_close(
+                generation_output.logits[0], forward_output.logits[:, -1, :], rtol=1e-4, atol=1e-4
+            )
 
     @unittest.skip(reason="Feedforward chunking is not yet supported")
     def test_feed_forward_chunking(self):
