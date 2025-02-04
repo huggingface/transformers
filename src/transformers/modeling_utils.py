@@ -1278,12 +1278,12 @@ def get_torch_dtype(
     torch_dtype: Optional[Union[str, torch.dtype, Dict]],
     checkpoint_files: List[str],
     config: PretrainedConfig,
-    sharded_metadata: Dict,
+    sharded_metadata: Optional[Dict],
     state_dict: Optional[Dict],
     weights_only: bool,
 ):
     dtype_orig = None
-    is_sharded = len(checkpoint_files) > 1
+    is_sharded = sharded_metadata is not None
 
     if torch_dtype is not None:
         if isinstance(torch_dtype, str):
