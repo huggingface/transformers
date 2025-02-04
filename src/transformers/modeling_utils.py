@@ -4808,7 +4808,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         loaded_keys = [cls._fix_state_dict_key_on_load(key)[0] for key in loaded_state_dict_keys]
 
         has_prefix_module = any(s.startswith(prefix) for s in loaded_keys) if len(prefix) > 0 else False
-        expects_prefix_module = any(s.startswith(prefix) for s in expected_keys) if len(len(prefix) > 0) else False
+        expects_prefix_module = any(s.startswith(prefix) for s in expected_keys) if len(prefix) > 0 else False
 
         remove_prefix_from_model = not has_prefix_module and expects_prefix_module
         add_prefix_to_model = has_prefix_module and not expects_prefix_module
