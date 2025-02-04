@@ -1818,6 +1818,19 @@ class ModelUtilsTest(TestCasePlus):
         self.assertIsNone(model_outputs.past_key_values)
         self.assertTrue(model.training)
 
+    def test_unknown_quantization_config(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = BertConfig(
+                vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+            )
+            model = BertModel(config)
+            config.quantization_config = {"quant_method": "unknown"}
+            model.save_pretrained(tmpdir)
+            with self.assertLogs("transformers", level="WARNING") as cm:
+                BertModel.from_pretrained(tmpdir)
+            self.assertEqual(len(cm.records), 1)
+            self.assertTrue(cm.records[0].message.startswith("Unknown quantization type, got"))
+
 
 @slow
 @require_torch
