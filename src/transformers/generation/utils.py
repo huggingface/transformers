@@ -3310,6 +3310,48 @@ class GenerationMixin:
             past_key_values.reorder_cache(beam_idx)
         return past_key_values
 
+    @staticmethod
+    def _beam_search_has_unfinished_sequences(
+        running_beam_scores: torch.Tensor,
+        beam_scores: torch.Tensor,
+        is_sent_finished: torch.Tensor,
+        next_token_hits_stopping_criteria: torch.Tensor,
+        cur_len: int,
+        max_length: int,
+        decoder_prompt_len: int,
+        early_stopping: Union[bool, str],
+        length_penalty: float,
+    ):
+        """
+        Beam Search stopping condition -- halts the generation loop if any of these conditions becomes False
+        """
+        # a. Can the open beams improve the top completed scores?
+        # early_stopping == False -> apply heuristic = always get the best score from
+        #   `cur_len - decoder_prompt_len`. See the discussion below for more details.
+        #   https://github.com/huggingface/transformers/pull/20901#issuecomment-1369845565
+        # early_stopping == "never" -> compute the best score from `max_length` or `cur_len`, depending on the
+        #   sign of `length_penalty`. Positive `length_penalty` favors longer sequences, thus we use
+        #   `max_length` there.
+        if early_stopping == "never" and length_penalty > 0.0:
+            best_hypothetical_length = max_length - decoder_prompt_len
+        else:
+            best_hypothetical_length = cur_len - decoder_prompt_len
+        best_possible_running_score = running_beam_scores[:, :1] / (best_hypothetical_length**length_penalty)
+        worst_finished_score = torch.where(
+            is_sent_finished, torch.min(beam_scores, dim=1, keepdim=True)[0], -1.0e9
+        )
+        improvement_possible = torch.any(best_possible_running_score > worst_finished_score)
+
+        # b. Is there still a beam without fully completed sequences? This is only relevant if early_stopping is
+        # enabled, where we want to finish as soon as all beams have a completed sequence.
+        exists_open_beam = ~(torch.all(is_sent_finished) & (early_stopping is True))
+
+        # c. Have we hit a stopping criteria with all running sequences and have no way to continue? e.g. we have
+        # reached `max_length``
+        valid_continuations = ~torch.all(next_token_hits_stopping_criteria)
+
+        return improvement_possible & exists_open_beam & valid_continuations
+
     def _beam_search(
         self,
         input_ids: torch.LongTensor,
@@ -3401,9 +3443,22 @@ class GenerationMixin:
 
         batch_size_unflattened, cur_len = input_ids.shape
         batch_size = batch_size_unflattened // num_beams
-        n_eos_tokens = eos_token_id.shape[0] if eos_token_id is not None else 0
         decoder_prompt_len = cur_len
         this_peer_finished = False
+
+        # At each beam search step, we want to keep top K [K = (number of EOS tokens + 1) * `num_beams`] candidates
+        # with the highest log-probabilities, or sample K continuations without replacement. We gather the top K
+        # (as opposed to `num_beams`, or any number lower than K) so that we have at least `num_beams` sequences
+        # non-finished to continue the live beam search, in case the top `num_beams` all select an EOS token.
+        n_eos_tokens = eos_token_id.shape[0] if eos_token_id is not None else 0
+        beams_to_keep = max(2, 1 + n_eos_tokens) * num_beams
+        top_num_beam_mask = torch.cat(
+            (
+                torch.ones((num_beams), dtype=torch.bool),
+                torch.zeros((beams_to_keep - num_beams), dtype=torch.bool),
+            ),
+            dim=0,
+        ).to(input_ids.device)
 
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
@@ -3451,43 +3506,7 @@ class GenerationMixin:
         running_beam_indices = torch.ones((batch_size, num_beams, 0), dtype=torch.int32, device=input_ids.device)
         beam_indices = running_beam_indices.clone().detach()
 
-        # 4. define custom stopping criteria (depends on the state of the beams and their scores)
-        def beam_search_has_unfinished_sequences(
-            cur_len: int,
-            running_beam_scores: torch.Tensor,
-            beam_scores: torch.Tensor,
-            is_sent_finished: torch.Tensor,
-            next_token_hits_stopping_criteria: torch.Tensor,
-        ):
-            """Beam Search stopping condition -- halts the generation loop if any of these conditions becomes False"""
-            # a. Can the open beams improve the top completed scores?
-            # early_stopping == False -> apply heuristic = always get the best score from
-            #   `cur_len - decoder_prompt_len`. See the discussion below for more details.
-            #   https://github.com/huggingface/transformers/pull/20901#issuecomment-1369845565
-            # early_stopping == "never" -> compute the best score from `max_length` or `cur_len`, depending on the
-            #   sign of `length_penalty`. Positive `length_penalty` favors longer sequences, thus we use
-            #   `max_length` there.
-            if early_stopping == "never" and length_penalty > 0.0:
-                best_hypothetical_length = max_length - decoder_prompt_len
-            else:
-                best_hypothetical_length = cur_len - decoder_prompt_len
-            best_possible_running_score = running_beam_scores[:, :1] / (best_hypothetical_length**length_penalty)
-            worst_finished_score = torch.where(
-                is_sent_finished, torch.min(beam_scores, dim=1, keepdim=True)[0], -1.0e9
-            )
-            improvement_possible = torch.any(best_possible_running_score > worst_finished_score)
-
-            # b. Is there still a beam without fully completed sequences? This is only relevant if early_stopping is
-            # enabled, where we want to finish as soon as all beams have a completed sequence.
-            exists_open_beam = ~(torch.all(is_sent_finished) & (early_stopping is True))
-
-            # c. Have we hit a stopping criteria with all running sequences and have no way to continue? e.g. we have
-            # reached `max_length``
-            valid_continuations = ~torch.all(next_token_hits_stopping_criteria)
-
-            return improvement_possible & exists_open_beam & valid_continuations
-
-        # 5. run generation
+        # 4. run generation
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # a. Forward current tokens, obtain the logits
             flat_running_sequences = flatten_beam_dim(running_sequences)
@@ -3557,7 +3576,6 @@ class GenerationMixin:
             # selected in this step hit the stopping criteria.
 
             # Gather the top K scores from _all_ beams.
-            beams_to_keep = max(2, 1 + n_eos_tokens) * num_beams
             if do_sample:
                 topk_indices = torch.multinomial(nn.functional.softmax(log_probs, dim=-1), num_samples=beams_to_keep)
                 topk_log_probs = torch.gather(input=log_probs, dim=1, index=topk_indices)
@@ -3587,13 +3605,6 @@ class GenerationMixin:
             )
 
             # Only the top `num_beam` sequences can be considered for the final returned sequences
-            top_num_beam_mask = torch.cat(
-                (
-                    torch.ones((num_beams), dtype=torch.bool),
-                    torch.zeros((beams_to_keep - num_beams), dtype=torch.bool),
-                ),
-                dim=0,
-            ).to(next_token_hits_stopping_criteria.device)
             did_top_num_beams_just_finished = next_token_hits_stopping_criteria & top_num_beam_mask[None, :]
             # To prevent these just finished sequences from being used in subsequent iterations, set their log probs
             # to a very large negative value
@@ -3642,15 +3653,19 @@ class GenerationMixin:
                 )
 
             # Check if generation is finished
-            this_peer_finished = not beam_search_has_unfinished_sequences(
-                cur_len,
+            this_peer_finished = not self._beam_search_has_unfinished_sequences(
                 running_beam_scores,
                 beam_scores,
                 is_sent_finished,
                 next_token_hits_stopping_criteria,
+                cur_len,
+                max_length,
+                decoder_prompt_len,
+                early_stopping,
+                length_penalty,
             )
 
-        # 6. prepare outputs
+        # 5. prepare outputs
         # Take best beams for each batch (the score is sorted in descending order)
         sequences = flatten_beam_dim(sequences[:, :num_return_sequences, :])
         beam_scores = flatten_beam_dim(beam_scores[:, :num_return_sequences])
