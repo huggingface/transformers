@@ -3490,7 +3490,7 @@ class GenerationMixin:
 
         # per batch, beam-item holding current token in loop and completed sequences
         running_sequences = torch.full(
-            (batch_size, num_beams, max_length), fill_value=pad_token_id, dtype=torch.int32, device=input_ids.device
+            (batch_size, num_beams, max_length), fill_value=pad_token_id, dtype=torch.int64, device=input_ids.device
         )
         running_sequences[:, :, :cur_len] = unflatten_beam_dim(input_ids, batch_size, num_beams)
         sequences = running_sequences.clone().detach()
@@ -3518,7 +3518,7 @@ class GenerationMixin:
 
         # placeholders to prevent torch.cat operations
         merged_sequences = torch.zeros(
-            (batch_size, num_beams + beams_to_keep, max_length), dtype=torch.int32, device=input_ids.device
+            (batch_size, num_beams + beams_to_keep, max_length), dtype=torch.int64, device=input_ids.device
         )
         merged_scores = torch.zeros(
             (batch_size, num_beams + beams_to_keep), dtype=torch.float, device=input_ids.device
