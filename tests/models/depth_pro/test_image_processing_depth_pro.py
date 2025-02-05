@@ -116,9 +116,3 @@ class DepthProImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42)
         self.assertEqual(image_processor.size, {"height": 42, "width": 42})
-
-    @unittest.skip(
-        reason="both processors (fast and slow) use torch for resizing, check: https://github.com/huggingface/transformers/issues/34920",
-    )
-    def test_fast_is_faster_than_slow(self):
-        pass
