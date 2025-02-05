@@ -475,8 +475,7 @@ class Kosmos2_5VisionAttention(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        position_bias=None,
-        **kwargs,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ):
         """
         Self-attention block
@@ -541,7 +540,7 @@ class Kosmos2_5VisionLayer(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        # Do we need **kwargs here,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Union[Tuple[torch.Tensor, torch.Tensor], Tuple[torch.Tensor]]:
         residual = hidden_states
 
@@ -552,6 +551,7 @@ class Kosmos2_5VisionLayer(nn.Module):
             hidden_states,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
+            **kwargs,
         )
 
         # first residual connection
@@ -830,7 +830,7 @@ class Kosmos2_5TextAttention(nn.Module):
         use_cache: bool = False,
         cache_position: Optional[torch.LongTensor] = None,
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # will become mandatory in v4.45
-        **kwargs,
+        **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         batch_size, seq_length, _ = hidden_states.size()
 
