@@ -19,6 +19,7 @@ import unittest
 
 import pytest
 from packaging import version
+from parameterized import parameterized
 
 from transformers import AutoTokenizer, TeleChat2Config, is_torch_available, set_seed
 from transformers.generation.configuration_utils import GenerationConfig
@@ -35,6 +36,7 @@ from transformers.testing_utils import (
 
 from ...models.llama.test_modeling_llama import LlamaModelTest, LlamaModelTester
 from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import ModelTesterMixin, ids_tensor
 
 
 if is_torch_available():
@@ -132,6 +134,108 @@ class TeleChat2ModelTester(LlamaModelTester):
             bos_token_id=self.bos_token_id,
         )
 
+    def create_and_check_model(
+        self, config, input_ids, token_type_ids, input_mask, sequence_labels, token_labels, choice_labels
+    ):
+        model = TeleChat2Model(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=input_mask)
+        result = model(input_ids)
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+
+    def create_and_check_model_as_decoder(
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        encoder_hidden_states,
+        encoder_attention_mask,
+    ):
+        config.add_cross_attention = True
+        model = TeleChat2Model(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+        )
+        result = model(
+            input_ids,
+            attention_mask=input_mask,
+            encoder_hidden_states=encoder_hidden_states,
+        )
+        result = model(input_ids, attention_mask=input_mask)
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
+
+    def create_and_check_decoder_model_past_large_inputs(
+        self,
+        config,
+        input_ids,
+        token_type_ids,
+        input_mask,
+        sequence_labels,
+        token_labels,
+        choice_labels,
+        encoder_hidden_states,
+        encoder_attention_mask,
+    ):
+        config.is_decoder = True
+        config.add_cross_attention = True
+        model = TeleChat2ForCausalLM(config=config)
+        model.to(torch_device)
+        model.eval()
+
+        # first forward pass
+        outputs = model(
+            input_ids,
+            attention_mask=input_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            use_cache=True,
+        )
+        past_key_values = outputs.past_key_values
+
+        # create hypothetical multiple next token and extent to next_input_ids
+        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
+        next_mask = ids_tensor((self.batch_size, 3), vocab_size=2)
+
+        # append to next input_ids and
+        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
+        next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
+
+        output_from_no_past = model(
+            next_input_ids,
+            attention_mask=next_attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            output_hidden_states=True,
+        )["hidden_states"][0]
+        output_from_past = model(
+            next_tokens,
+            attention_mask=next_attention_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            past_key_values=past_key_values,
+            output_hidden_states=True,
+        )["hidden_states"][0]
+
+        # select random slice
+        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
+        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
+        output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
+
+        self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
+
+        # test that outputs are equal for slice
+        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
+
 
 @require_torch
 class TeleChat2ModelTest(LlamaModelTest, unittest.TestCase):
@@ -159,21 +263,152 @@ class TeleChat2ModelTest(LlamaModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
+    # used in `test_torch_compile_for_training`
+    _torch_compile_train_cls = TeleChat2ForCausalLM if is_torch_available() else None
 
     def setUp(self):
         self.model_tester = TeleChat2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=TeleChat2Config, hidden_size=37)
 
-    @unittest.skip(reason="TeleChat2 buffers include complex numbers, which breaks this test")
-    def test_save_load_fast_init_from_base(self):
-        pass
+    def test_llama_sequence_classification_model(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
+        model = TeleChat2ForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
+        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
 
-    @require_flash_attn
-    @require_torch_gpu
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest(reason="TeleChat2 flash attention does not support right padding")
+    def test_llama_sequence_classification_model_for_single_label(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        config.problem_type = "single_label_classification"
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        sequence_labels = ids_tensor([self.model_tester.batch_size], self.model_tester.type_sequence_label_size)
+        model = TeleChat2ForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
+        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+
+    def test_llama_sequence_classification_model_for_multi_label(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        config.problem_type = "multi_label_classification"
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        sequence_labels = ids_tensor(
+            [self.model_tester.batch_size, config.num_labels], self.model_tester.type_sequence_label_size
+        ).to(torch.float)
+        model = TeleChat2ForSequenceClassification(config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=sequence_labels)
+        self.assertEqual(result.logits.shape, (self.model_tester.batch_size, self.model_tester.num_labels))
+
+    def test_llama_token_classification_model(self):
+        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.num_labels = 3
+        input_ids = input_dict["input_ids"]
+        attention_mask = input_ids.ne(1).to(torch_device)
+        token_labels = ids_tensor([self.model_tester.batch_size, self.model_tester.seq_length], config.num_labels)
+        model = TeleChat2ForTokenClassification(config=config)
+        model.to(torch_device)
+        model.eval()
+        result = model(input_ids, attention_mask=attention_mask, labels=token_labels)
+        self.assertEqual(
+            result.logits.shape,
+            (self.model_tester.batch_size, self.model_tester.seq_length, self.model_tester.num_labels),
+        )
+
+    @parameterized.expand([("linear",), ("dynamic",), ("yarn",)])
+    def test_model_rope_scaling_from_config(self, scaling_type):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        short_input = ids_tensor([1, 10], config.vocab_size)
+        long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
+
+        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
+        original_model = TeleChat2Model(config)
+        original_model.to(torch_device)
+        original_model.eval()
+        original_short_output = original_model(short_input).last_hidden_state
+        original_long_output = original_model(long_input).last_hidden_state
+
+        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
+        config.rope_scaling = {"type": scaling_type, "factor": 10.0}
+        scaled_model = TeleChat2Model(config)
+        scaled_model.to(torch_device)
+        scaled_model.eval()
+        scaled_short_output = scaled_model(short_input).last_hidden_state
+        scaled_long_output = scaled_model(long_input).last_hidden_state
+
+        # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
+        # maximum sequence length, so the outputs for the short input should match.
+        if scaling_type == "dynamic":
+            torch.testing.assert_close(original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5)
+        else:
+            self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
+
+        # The output should be different for long inputs
+        self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
+
+    def test_model_loading_old_rope_configs(self):
+        def _reinitialize_config(base_config, new_kwargs):
+            # Reinitialize the config with the new kwargs, forcing the config to go through its __init__ validation
+            # steps.
+            base_config_dict = base_config.to_dict()
+            new_config = TeleChat2Config.from_dict(config_dict={**base_config_dict, **new_kwargs})
+            return new_config
+
+        # from untouched config -> ✅
+        base_config, model_inputs = self.model_tester.prepare_config_and_inputs_for_common()
+        original_model = TeleChat2ForCausalLM(base_config).to(torch_device)
+        original_model(**model_inputs)
+
+        # from a config with the expected rope configuration -> ✅
+        config = _reinitialize_config(base_config, {"rope_scaling": {"rope_type": "linear", "factor": 10.0}})
+        original_model = TeleChat2ForCausalLM(config).to(torch_device)
+        original_model(**model_inputs)
+
+        # from a config with the old rope configuration ('type' instead of 'rope_type')  -> ✅ we gracefully handle BC
+        config = _reinitialize_config(base_config, {"rope_scaling": {"type": "linear", "factor": 10.0}})
+        original_model = TeleChat2ForCausalLM(config).to(torch_device)
+        original_model(**model_inputs)
+
+        # from a config with both 'type' and 'rope_type'  -> ✅ they can coexist (and both are present in the config)
+        config = _reinitialize_config(
+            base_config, {"rope_scaling": {"type": "linear", "rope_type": "linear", "factor": 10.0}}
+        )
+        self.assertTrue(config.rope_scaling["type"] == "linear")
+        self.assertTrue(config.rope_scaling["rope_type"] == "linear")
+        original_model = TeleChat2ForCausalLM(config).to(torch_device)
+        original_model(**model_inputs)
+
+        # from a config with parameters in a bad range ('factor' should be >= 1.0) -> ⚠️ throws a warning
+        with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
+            config = _reinitialize_config(base_config, {"rope_scaling": {"rope_type": "linear", "factor": -999.0}})
+            original_model = TeleChat2ForCausalLM(config).to(torch_device)
+            original_model(**model_inputs)
+            self.assertEqual(len(logs.output), 1)
+            self.assertIn("factor field", logs.output[0])
+
+        # from a config with unknown parameters ('foo' isn't a rope option) -> ⚠️ throws a warning
+        with self.assertLogs("transformers.modeling_rope_utils", level="WARNING") as logs:
+            config = _reinitialize_config(
+                base_config, {"rope_scaling": {"rope_type": "linear", "factor": 10.0, "foo": "bar"}}
+            )
+            original_model = TeleChat2ForCausalLM(config).to(torch_device)
+            original_model(**model_inputs)
+            self.assertEqual(len(logs.output), 1)
+            self.assertIn("Unrecognized keys", logs.output[0])
+
+        # from a config with specific rope type but missing one of its mandatory parameters -> ❌ throws exception
+        with self.assertRaises(KeyError):
+            config = _reinitialize_config(base_config, {"rope_scaling": {"rope_type": "linear"}})  # missing "factor"
 
 
 @require_torch
