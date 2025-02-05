@@ -15,6 +15,7 @@
 """Video processor class for LLaVa-Onevision."""
 
 from typing import Dict, List, Optional, Union
+import numpy as np
 
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_transforms import (
@@ -31,7 +32,7 @@ from ...image_utils import (
     VideoInput,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_list_of_videos,
+    make_batched_videos,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -123,7 +124,7 @@ class LlavaOnevisionVideoProcessor(BaseVideoProcessor):
         do_convert_rgb: bool = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> Image.Image:
+    ) -> list[np.ndarray]:
         """
         Args:
             images (`ImageInput`):
@@ -269,7 +270,7 @@ class LlavaOnevisionVideoProcessor(BaseVideoProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
-        videos = make_list_of_videos(videos)
+        videos = make_batched_videos(videos)
 
         if not valid_images(videos[0]):
             raise ValueError(

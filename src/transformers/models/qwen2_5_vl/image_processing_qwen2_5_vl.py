@@ -41,7 +41,8 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
-    is_valid_image,
+    make_batched_videos,
+    make_flat_list_of_images,
     make_list_of_images,
     make_list_of_videos,
     to_numpy_array,
@@ -52,29 +53,6 @@ from ...utils import TensorType, logging
 
 
 logger = logging.get_logger(__name__)
-
-
-def make_batched_images(images) -> List[List[ImageInput]]:
-    """
-    Accepts images in list or nested list format, and makes a list of images for preprocessing.
-
-    Args:
-        images (`Union[List[List[ImageInput]], List[ImageInput], ImageInput]`):
-            The input image.
-
-    Returns:
-        list: A list of images.
-    """
-    if isinstance(images, (list, tuple)) and isinstance(images[0], (list, tuple)) and is_valid_image(images[0][0]):
-        return [img for img_list in images for img in img_list]
-
-    elif isinstance(images, (list, tuple)) and is_valid_image(images[0]):
-        return images
-
-    elif is_valid_image(images):
-        return [images]
-
-    raise ValueError(f"Could not make batched images from {images}")
 
 
 def smart_resize(
@@ -179,7 +157,7 @@ class Qwen2_5_VLImageProcessor(BaseImageProcessor):
         self.patch_size = patch_size
         self.temporal_patch_size = temporal_patch_size
         self.merge_size = merge_size
-        self.size = {"min_pixels": min_pixels, "max_pixels": max_pixels}
+        self.size = {"shortest_edge": min_pixels, "longest_edge": max_pixels}
         self.do_convert_rgb = do_convert_rgb
 
     def _preprocess(
@@ -379,7 +357,7 @@ class Qwen2_5_VLImageProcessor(BaseImageProcessor):
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
         if images is not None:
-            images = make_batched_images(images)
+            images = make_flat_list_of_images(images)
 
         if images is not None and not valid_images(images):
             raise ValueError(
@@ -427,7 +405,7 @@ class Qwen2_5_VLImageProcessor(BaseImageProcessor):
                 "This is a deprecated behavior and will be removed in v5.0. "
                 "Your videos should be forwarded to `Qwen2_5_VLVideoProcessor`. "
             )
-            videos = make_list_of_videos(videos)
+            videos = make_batched_videos(videos)
             pixel_values_videos, vision_grid_thws_videos = [], []
             for images in videos:
                 patches, video_grid_thw = self._preprocess(

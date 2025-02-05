@@ -34,13 +34,13 @@ from ...image_utils import (
     VideoInput,
     infer_channel_dimension_format,
     is_scaled_image,
+    make_batched_videos,
     make_list_of_images,
-    make_list_of_videos,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
+from ...utils import TensorType, filter_out_non_signature_kwargs, logging
 
 
 logger = logging.get_logger(__name__)
@@ -192,7 +192,7 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> PIL.Image.Image:
+    ) -> BatchFeature:
         """
         Preprocess an image or batch of images.
 
@@ -277,7 +277,7 @@ class VideoLlavaImageProcessor(BaseImageProcessor):
                 "This is a deprecated behavior and will be removed in v5.0. "
                 "Your videos should be forwarded to `VideoLlavaVideoProcessor`. "
             )
-            videos = make_list_of_videos(videos)
+            videos = make_batched_videos(videos)
             pixel_values_videos = [
                 [
                     self._preprocess_image(

@@ -32,16 +32,12 @@ from ...image_utils import (
     VideoInput,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_list_of_videos,
+    make_batched_videos,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
-
-
-if is_vision_available():
-    import PIL
+from ...utils import TensorType, filter_out_non_signature_kwargs, logging
 
 
 logger = logging.get_logger(__name__)
@@ -180,7 +176,7 @@ class InstructBlipVideoImageProcessor(BaseImageProcessor):
         do_convert_rgb: bool = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> PIL.Image.Image:
+    ) -> BatchFeature:
         """
         Preprocess a video or batch of images/videos.
 
@@ -240,7 +236,7 @@ class InstructBlipVideoImageProcessor(BaseImageProcessor):
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
 
-        videos = make_list_of_videos(images)
+        videos = make_batched_videos(images)
         logger.warning(
             "`InstructBlipVideoImageProcessor` is deprecated and will be removed in v5.0. "
             "We recommend to load an instance of `InstructBlipVideoVideoProcessor` to process videos for the model. "

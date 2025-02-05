@@ -34,8 +34,8 @@ from ...image_utils import (
     VideoInput,
     infer_channel_dimension_format,
     is_scaled_image,
+    make_batched_videos,
     make_list_of_images,
-    make_list_of_videos,
     to_numpy_array,
     validate_preprocess_arguments,
 )
@@ -197,7 +197,7 @@ class LlavaNextVideoVideoProcessor(BaseVideoProcessor):
         do_convert_rgb: bool = None,
         data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> Image.Image:
+    ) -> list[np.ndarray]:
         """
         Preprocess an image or batch of images. Copy of the `preprocess` method from `CLIPImageProcessor`.
 
@@ -360,7 +360,7 @@ class LlavaNextVideoVideoProcessor(BaseVideoProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
-        videos = make_list_of_videos(videos)
+        videos = make_batched_videos(videos)
 
         validate_preprocess_arguments(
             do_rescale=do_rescale,
