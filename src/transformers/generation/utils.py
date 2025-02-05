@@ -407,9 +407,9 @@ class GenerationMixin:
 
         # 3. Prepare base model inputs
         input_ids_key = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step for every prompt.
+        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if not self.config.is_encoder_decoder:
-            if inputs_embeds is not None and len(cache_position) == inputs_embeds.shape[1]:
+            if inputs_embeds is not None and cache_position[0] == 0:
                 model_inputs[input_ids_key] = None
                 model_inputs["inputs_embeds"] = inputs_embeds
             else:
