@@ -1794,7 +1794,7 @@ class GenerationTesterMixin:
             num_hidden_layers = text_config.num_hidden_layers
 
             inputs_embeds = model.get_input_embeddings()(input_ids)
-            max_cache_len += inputs_embeds.shape[1]
+            max_cache_len += inputs_embeds.shape[1] - 1  # the last generated token has no cache
             outputs = model.generate(inputs_embeds=inputs_embeds, **generation_kwargs, **inputs_dict)
 
             # we should get `max_length` in shape, not `max_length - embeds_length`
@@ -1955,7 +1955,7 @@ class GenerationTesterMixin:
                 )
 
                 # Check 1: The cache shapes must match the expected shapes
-                max_cache_len = seq_length + max_new_tokens
+                max_cache_len = seq_length + max_new_tokens - 1  # cache len = gen len - 1, the last token has no cache
                 text_config = config.text_config if hasattr(config, "text_config") else config
                 head_dim = (
                     text_config.head_dim
@@ -2126,7 +2126,7 @@ class GenerationTesterMixin:
                 **inputs_dict,
             )
 
-            # Sanity check: compilation happened
+            # Sanity check: compilation has happened
             self.assertTrue(hasattr(model, "_compiled_call"))
 
             if model.config.is_encoder_decoder:
