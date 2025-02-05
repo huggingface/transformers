@@ -119,7 +119,7 @@ if is_accelerate_available():
 # Variable names used to hold the cache at generation time
 ALL_CACHE_NAMES = [
     "past_key_values",  # default
-    "cache_params"  # mamba-based models
+    "cache_params",  # mamba-based models
     "state",  # rwkv
     "mems",  # xlnet
     "past_buckets_states",  # reformer
@@ -772,8 +772,12 @@ class GenerationMixin:
         # update past_key_values keeping its naming used in model code
         for possible_cache_name in ALL_CACHE_NAMES:
             if possible_cache_name in outputs:
-                cache_name = possible_cache_name
-                model_kwargs[cache_name] = getattr(outputs, cache_name)
+                # TODO (joao): remove output/input mismatch when these old models (xlnet, reformer) are deprecated
+                if possible_cache_name in ("past_buckets_states", "mems"):
+                    cache_name = "past_key_values"
+                else:
+                    cache_name = possible_cache_name
+                model_kwargs[cache_name] = getattr(outputs, possible_cache_name)
                 break
 
         # update token_type_ids with last value
