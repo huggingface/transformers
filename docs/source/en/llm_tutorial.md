@@ -40,7 +40,7 @@ Before you begin, make sure you have all the necessary libraries installed:
 ```bash
 pip install transformers bitsandbytes>=0.39.0 -q
 ```
-Bitsandbytes also support non-CUDA-based GPUs. You can refer to the bitsandbytes multi-backend installation guide [here](https://huggingface.co/docs/bitsandbytes/main/en/installation#multi-backend).
+Bitsandbytes supports multiple backends in addition to CUDA-based GPUs. Refer to the multi-backend installation [guide](https://huggingface.co/docs/bitsandbytes/main/en/installation#multi-backend) to learn more.
 
 
 ## Generate text
