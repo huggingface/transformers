@@ -424,13 +424,14 @@ class FastImageProcessor(BaseImageProcessor):
 
         return results
 
+    #TODO: debug this function giving different scores
     def generate_bbox(self, keys, label, score, scales, threshold, bbox_type):
         label_num = len(keys)
         bboxes = []
         scores = []
         for index in range(1, label_num):
             i = keys[index]
-            ind = label == i
+            ind = (label == i)
             ind_np = ind.data.cpu().numpy()
             points = np.array(np.where(ind_np)).transpose((1, 0))
             if points.shape[0] < self.min_area:
@@ -455,4 +456,5 @@ class FastImageProcessor(BaseImageProcessor):
             bbox = bbox.astype("int32")
             bboxes.append(bbox.reshape(-1).tolist())
             scores.append(score_i)
+        
         return bboxes, scores
