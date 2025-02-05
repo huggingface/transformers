@@ -932,6 +932,7 @@ class ModelTesterMixin:
             "MusicgenMelodyForCausalLM",
             "MllamaForCausalLM",
             "CpmAntForCausalLM",
+            "GotOcr2ForConditionalGeneration",
         )
         for model_class in self.all_model_classes:
             if (
