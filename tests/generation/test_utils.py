@@ -56,6 +56,8 @@ if is_torch_available():
     import torch
     import torch.nn.functional as F
 
+    torch._dynamo.config.cache_size_limit = 512  # So we can compile all models with no cache limit exception
+
     from transformers import (
         AutoModelForCausalLM,
         AutoModelForSeq2SeqLM,
@@ -2304,7 +2306,9 @@ class GenerationTesterMixin:
         gen_len = (
             output.sequences.shape[-1] - 1 if config.is_encoder_decoder else output.sequences.shape[-1] - seq_length
         )
-        past_key_values = getattr(output, "past_key_values", None)
+        decoder_past_key_values = getattr(output, "past_key_values", None)
+        if config.is_encoder_decoder and isinstance(decoder_past_key_values, EncoderDecoderCache):
+            decoder_past_key_values = decoder_past_key_values.self_attention_cache
 
         # in some models we subsample the sequence length in inner layers
         if hasattr(self.model_tester, "get_subsampled_output_lengths"):
@@ -2330,7 +2334,7 @@ class GenerationTesterMixin:
                     min_length=1,
                     max_length=output.sequences.shape[-1],
                     config=config,
-                    past_key_values=past_key_values,
+                    past_key_values=decoder_past_key_values,
                 )
             else:
                 # if use_cache first input is equal to no use_cache, so skip here
@@ -2342,7 +2346,7 @@ class GenerationTesterMixin:
                     min_length=min_length,
                     max_length=output.sequences.shape[-1],
                     config=config,
-                    past_key_values=past_key_values,
+                    past_key_values=decoder_past_key_values,
                 )
 
         # Hidden States
@@ -2399,12 +2403,12 @@ class GenerationTesterMixin:
                 past_sequence_length = output.sequences.shape[-1] - 1
                 self._check_past_key_values_for_generate(
                     internal_batch_size,
-                    past_key_values,
+                    decoder_past_key_values,
                     seq_length=past_sequence_length,
                     config=config,
                 )
             elif use_cache is False:
-                self.assertTrue(past_key_values is None)
+                self.assertTrue(decoder_past_key_values is None)
 
     def _check_scores(self, batch_size, scores, length, config):
         vocab_size = config.get_text_config(decoder=True).vocab_size
@@ -2482,12 +2486,8 @@ class GenerationTesterMixin:
             [encoder_expected_shape] * len(hidden_states),
         )
 
-    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        self.assertIsInstance(past_key_values, (tuple, Cache))
-
-        # Encoder-decoder models: pull and verify the decoder cache
-        if isinstance(past_key_values, EncoderDecoderCache):
-            past_key_values = past_key_values.self_attention_cache
+    def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, seq_length, config):
+        self.assertIsInstance(decoder_past_key_values, (tuple, Cache))
 
         # (batch, head, seq_length, head_features)
         expected_shape = (
@@ -2497,30 +2497,30 @@ class GenerationTesterMixin:
             config.hidden_size // config.num_attention_heads,
         )
 
-        if isinstance(past_key_values, Cache):
+        if isinstance(decoder_past_key_values, Cache):
             self.assertListEqual(
-                [key_tensor.shape for key_tensor in past_key_values.key_cache],
-                [expected_shape] * len(past_key_values.key_cache),
+                [key_tensor.shape for key_tensor in decoder_past_key_values.key_cache],
+                [expected_shape] * len(decoder_past_key_values.key_cache),
             )
             self.assertListEqual(
-                [value_tensor.shape for value_tensor in past_key_values.value_cache],
-                [expected_shape] * len(past_key_values.value_cache),
+                [value_tensor.shape for value_tensor in decoder_past_key_values.value_cache],
+                [expected_shape] * len(decoder_past_key_values.value_cache),
             )
 
         # Legacy cache format checks. This branch should be removed when all models use `Cache` by default
         else:
             self.assertListEqual(
-                [isinstance(iter_past_key_values, tuple) for iter_past_key_values in past_key_values],
-                [True] * len(past_key_values),
+                [isinstance(iter_past_key_values, tuple) for iter_past_key_values in decoder_past_key_values],
+                [True] * len(decoder_past_key_values),
             )
             # check shape key, value
             self.assertListEqual(
-                [layer_past_key_values[0].shape for layer_past_key_values in past_key_values],
-                [expected_shape] * len(past_key_values),
+                [layer_past_key_values[0].shape for layer_past_key_values in decoder_past_key_values],
+                [expected_shape] * len(decoder_past_key_values),
             )
             self.assertListEqual(
-                [layer_past_key_values[1].shape for layer_past_key_values in past_key_values],
-                [expected_shape] * len(past_key_values),
+                [layer_past_key_values[1].shape for layer_past_key_values in decoder_past_key_values],
+                [expected_shape] * len(decoder_past_key_values),
             )
 
     def _check_sequence_inside_sequence(self, tensor_1, tensor_2):
