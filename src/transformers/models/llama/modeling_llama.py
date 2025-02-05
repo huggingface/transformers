@@ -1155,10 +1155,17 @@ class LlamaForTokenClassification(LlamaPreTrainedModel):
 
 
 def get_position_ids_from_cu_seq_lens(cu_seq_lens: torch.Tensor) -> torch.Tensor:
-    pos_ids = torch.cat(
-        [torch.arange(s, dtype=torch.int32, device=cu_seq_lens.device) for s in cu_seq_lens.diff(dim=-1)], dim=-1
-    )[None]
-    return pos_ids
+    if cu_seq_lens.ndim != 1:
+        raise ValueError(f"cu_seq_lens must be a 1D tensor, received {cu_seq_lens.ndim=}.")
+    pos_ids = torch.empty(cu_seq_lens[-1], device=cu_seq_lens.device, dtype=torch.int32)
+    seq_lens = cu_seq_lens.diff(dim=-1)
+    max_arange = torch.arange(seq_lens.max(), dtype=torch.int32, device=cu_seq_lens.device)
+    start = torch.tensor(0, device=cu_seq_lens.device, dtype=torch.int32)
+    for s in seq_lens:
+        pos_ids[start : start + s] = max_arange[:s]
+        start += s
+
+    return pos_ids[None]
 
 
 __all__ = [
