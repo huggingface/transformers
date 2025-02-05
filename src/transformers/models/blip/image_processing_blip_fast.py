@@ -12,34 +12,28 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Fast Image processor class for ViT."""
+"""Fast Image processor class for BLIP."""
 
-from ...image_processing_utils_fast import (
-    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
-    BaseImageProcessorFast,
-)
-from ...image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
-    PILImageResampling,
-)
-from ...utils import (
-    add_start_docstrings,
-)
+from ...image_processing_utils_fast import BASE_IMAGE_PROCESSOR_FAST_DOCSTRING, BaseImageProcessorFast
+from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
+from ...utils import add_start_docstrings
 
 
 @add_start_docstrings(
-    "Constructs a fast ViT image processor.",
+    "Constructs a fast BLIP image processor.",
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
 )
-class ViTImageProcessorFast(BaseImageProcessorFast):
-    resample = PILImageResampling.BILINEAR
-    image_mean = IMAGENET_STANDARD_MEAN
-    image_std = IMAGENET_STANDARD_STD
-    size = {"height": 224, "width": 224}
+class BlipImageProcessorFast(BaseImageProcessorFast):
+    # To be checked against the slow image processor
+    # None values left after checking can be removed
+    resample = PILImageResampling.BICUBIC
+    image_mean = OPENAI_CLIP_MEAN
+    image_std = OPENAI_CLIP_STD
+    size = {"height": 384, "width": 384}
     do_resize = True
     do_rescale = True
     do_normalize = True
+    do_convert_rgb = True
 
 
-__all__ = ["ViTImageProcessorFast"]
+__all__ = ["BlipImageProcessorFast"]
