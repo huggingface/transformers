@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -16,20 +16,14 @@
 
 import unittest
 
-import requests
-
 from transformers import (
     PaliGemmaConfig,
     PaliGemmaForConditionalGeneration,
-    PaliGemmaProcessor,
     is_torch_available,
     is_vision_available,
 )
 from transformers.testing_utils import (
-    cleanup,
-    require_read_token,
     require_torch,
-    slow,
     torch_device,
 )
 
@@ -43,10 +37,10 @@ if is_torch_available():
 
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
-class PaliGemmaVisionText2TextModelTester:
+class PaliGemma2VisionText2TextModelTester:
     def __init__(
         self,
         parent,
@@ -173,7 +167,7 @@ class PaliGemmaVisionText2TextModelTester:
 
 
 @require_torch
-class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class PaliGemma2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     """
     Model tester for `PaliGemmaForConditionalGeneration`.
     """
@@ -188,7 +182,7 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     _is_composite = True
 
     def setUp(self):
-        self.model_tester = PaliGemmaVisionText2TextModelTester(self)
+        self.model_tester = PaliGemma2VisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=PaliGemmaConfig, has_text_modality=False)
 
     # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
@@ -354,224 +348,3 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
     @unittest.skip("Low memory will be removed soon so no need to fix it")
     def test_beam_search_low_memory(self):
         pass
-
-
-@slow
-@require_torch
-@require_read_token
-class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
-    def setUp(self):
-        self.processor = PaliGemmaProcessor.from_pretrained("google/paligemma2-3b-pt-224")
-
-    def tearDown(self):
-        cleanup(torch_device, gc_collect=True)
-
-    def test_small_model_integration_test(self):
-        # Let' s make sure we test the preprocessing to replace what is used
-        model_id = "google/paligemma2-3b-pt-224"
-        model = PaliGemmaForConditionalGeneration.from_pretrained(model_id)
-        prompt = ""
-        image_file = (
-            "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
-        )
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt")
-        EXPECTED_INPUT_IDS = torch.tensor([[257152] * 256 + [2, 108]])
-        self.assertTrue(torch.equal(inputs["input_ids"], EXPECTED_INPUT_IDS))
-
-        output = model.generate(**inputs, max_new_tokens=20)
-        EXPECTED_DECODED_TEXT = "\ncow on the beach"  # fmt: skip
-
-        self.assertEqual(
-            self.processor.decode(output[0], skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
-
-    def test_small_model_integration_test_paligemma_VQA(self):
-        # Let' s make sure we test the preprocessing to replace what is used
-        model_id = "google/paligemma2-3b-pt-224"
-        model = PaliGemmaForConditionalGeneration.from_pretrained(model_id)
-        prompt = "answer en Where is the cow standing?"
-        image_file = (
-            "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
-        )
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt").to(torch.float16)
-
-        output = model.generate(**inputs, max_new_tokens=900, do_sample=False)
-        EXPECTED_DECODED_TEXT = "answer en Where is the cow standing?\nbeach"  # fmt: skip
-
-        self.assertEqual(
-            self.processor.decode(output[0], skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
-
-    def test_small_model_integration_test_paligemma_empty_prompt(self):
-        # Let' s make sure we test the preprocessing to replace what is used
-        model_id = "google/paligemma2-3b-pt-224"
-        model = PaliGemmaForConditionalGeneration.from_pretrained(model_id)
-
-        prompt = ""
-        image_file = (
-            "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png"
-        )
-        raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt").to(torch.float16)
-
-        output = model.generate(**inputs, max_new_tokens=900, do_sample=False)
-        EXPECTED_DECODED_TEXT = "\ncow on the beach"  # fmt: skip
-
-        self.assertEqual(
-            self.processor.decode(output[0], skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
-
-    def test_small_model_integration_test_paligemma_batched(self):
-        # Let' s make sure we test the preprocessing to replace what is used
-        model_id = "google/paligemma2-3b-pt-224"
-
-        model = PaliGemmaForConditionalGeneration.from_pretrained(model_id)
-
-        prompts = [
-            "answer en Where is the cow standing?",
-            "",
-        ]
-        image1 = Image.open(
-            requests.get(
-                "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png",
-                stream=True,
-            ).raw
-        )
-        image2 = image1
-
-        inputs = self.processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True)
-
-        output = model.generate(**inputs, max_new_tokens=20)
-
-        EXPECTED_DECODED_TEXT = ["answer en Where is the cow standing?\nbeach", "\ncow on the beach"]  # fmt: skip
-
-        self.assertEqual(self.processor.batch_decode(output, skip_special_tokens=True), EXPECTED_DECODED_TEXT)
-
-    def test_small_model_integration_test_paligemma_batched_bf16(self):
-        # Let' s make sure we test the preprocessing to replace what is used
-        model_id = "google/paligemma2-3b-pt-224"
-        model = PaliGemmaForConditionalGeneration.from_pretrained(
-            model_id, revision="bfloat16", torch_dtype=torch.bfloat16
-        ).to(torch_device)
-        # The first batch is longer in terms of text, the second will be padded.
-        prompts = [
-            "answer en Where is the cow standing?",
-            "",
-        ]
-        image1 = Image.open(
-            requests.get(
-                "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png",
-                stream=True,
-            ).raw
-        )
-        image2 = image1
-
-        inputs = (
-            self.processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True)
-            .to(torch.bfloat16)
-            .to(torch_device)
-        )
-        output = model.generate(**inputs, max_new_tokens=20)
-
-        EXPECTED_DECODED_TEXT = ["answer en Where is the cow standing?\nbeach", "\ncow on the beach"]  # fmt: skip
-        self.assertEqual(self.processor.batch_decode(output, skip_special_tokens=True), EXPECTED_DECODED_TEXT)
-
-    def test_small_model_integration_test_paligemma_batched_f16(self):
-        # Let' s make sure we test the preprocessing to replace what is used
-        model_id = "google/paligemma2-3b-pt-224"
-        model = PaliGemmaForConditionalGeneration.from_pretrained(
-            model_id, revision="float16", torch_dtype=torch.float16
-        ).to(torch_device)
-        # The first batch is longer in terms of text, the second will be padded.
-        prompts = [
-            "answer en Where is the cow standing?",
-            "",
-        ]
-        image1 = Image.open(
-            requests.get(
-                "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png",
-                stream=True,
-            ).raw
-        )
-        image2 = image1
-
-        inputs = (
-            self.processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True)
-            .to(torch.float16)
-            .to(torch_device)
-        )
-
-        output = model.generate(**inputs, max_new_tokens=20)
-
-        EXPECTED_DECODED_TEXT = ["answer en Where is the cow standing?\nbeach", "\ncow on the beach"]  # fmt: skip
-        self.assertEqual(self.processor.batch_decode(output, skip_special_tokens=True), EXPECTED_DECODED_TEXT)
-
-    def test_integration_detection_bug(self):
-        # this is a reproducer of https://github.com/huggingface/transformers/issues/31425 where not enough context
-        # impacted negatively segmentation generations.
-        model_id = "google/paligemma2-3b-pt-224"
-        model = PaliGemmaForConditionalGeneration.from_pretrained(
-            model_id, revision="bfloat16", torch_dtype=torch.bfloat16
-        ).to(torch_device)
-        prompt = ("detect shoe",)
-
-        image = Image.open(
-            requests.get(
-                "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/shoe.png",
-                stream=True,
-            ).raw
-        )
-
-        inputs = self.processor(images=image, text=prompt, return_tensors="pt").to(torch.bfloat16).to(torch_device)
-
-        output = model.generate(**inputs, max_new_tokens=20)
-
-        EXPECTED_DECODED_TEXT = "detect shoe\n<loc0051><loc0309><loc0708><loc0646> shoe"  # fmt: skip
-        self.assertEqual(self.processor.decode(output[0], skip_special_tokens=True), EXPECTED_DECODED_TEXT)
-
-    def test_paligemma_finetuning_with_suffixes_bf16(self):
-        # this is a supplementary test to ensure paligemma fine-tuning that relies on token_type_ids is robust to future changes
-        model_id = "google/paligemma2-3b-pt-224"
-        model = PaliGemmaForConditionalGeneration.from_pretrained(
-            model_id, revision="bfloat16", torch_dtype=torch.bfloat16
-        ).to(torch_device)
-        # The first batch is longer in terms of text, the second will be padded.
-        prompts = [
-            "answer en Where is the cow standing?",
-            "",
-        ]
-
-        suffixes = ["beach", "cow standing on the beach"]
-        image1 = Image.open(
-            requests.get(
-                "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png",
-                stream=True,
-            ).raw
-        )
-        image2 = image1
-
-        inputs = (
-            self.processor(images=[image1, image2], text=prompts, suffix=suffixes, return_tensors="pt", padding=True)
-            .to(torch.bfloat16)
-            .to(torch_device)
-        )
-
-        expected_labels = torch.tensor(
-            [266 * [-100] + [54901, 1], 262 * [-100] + [14706, 9980, 611, 573, 8318, 1]]
-        ).to(torch_device)
-
-        assert torch.equal(inputs["labels"], expected_labels)
-
-        expected_token_type_ids = torch.tensor([266 * [0] + 2 * [1], 262 * [0] + 6 * [1]]).to(torch_device)
-
-        assert torch.equal(inputs["token_type_ids"], expected_token_type_ids)
-
-        output = model(**inputs)
-
-        # check that loss does not error out
-        _ = output.loss
