@@ -1969,4 +1969,4 @@ class AnoleForConditionalGeneration(AnolePreTrainedModel, GenerationMixin):
         return self.model.decode_image_tokens(bpe_tokens)
 
 
-__all__ = ["AnoleVQVAE", "AnoleModel", "AnoleForConditionalGeneration"]
+__all__ = ["AnolePreTrainedModel", "AnoleVQVAE", "AnoleModel", "AnoleForConditionalGeneration"]

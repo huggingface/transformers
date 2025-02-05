@@ -746,6 +746,7 @@ class AnoleProcessor(ChameleonProcessor):
 __all__ = [
     "AnoleConfig",
     "AnoleVQVAEConfig",
+    "AnolePreTrainedModel",
     "AnoleVQVAE",
     "AnoleModel",
     "AnoleForConditionalGeneration",

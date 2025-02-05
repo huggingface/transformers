@@ -68,6 +68,8 @@ class AnoleVQVAEConfig(PretrainedConfig):
             Attention type used in VQ-GAN encoder. Can be "vanilla" or None.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        out_channels (`int`, *optional*, defaults to 3):
+            Number of output channels.
     """
 
     model_type = "anole_vqgan"
