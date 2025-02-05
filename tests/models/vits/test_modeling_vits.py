@@ -351,6 +351,7 @@ class VitsModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 )
 
     # override since the model is not deterministic, so we need to set the seed for each forward pass
+    @skipIfRocm(arch='gfx942')
     def test_save_load(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 

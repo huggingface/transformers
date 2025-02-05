@@ -376,6 +376,7 @@ class Olmo2IntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
     @require_tokenizers
+    @skipIfRocm(arch='gfx90a')
     def test_simple_encode_decode(self):
         rust_tokenizer = AutoTokenizer.from_pretrained("shanearora/OLMo2-7B-1124-hf")
 

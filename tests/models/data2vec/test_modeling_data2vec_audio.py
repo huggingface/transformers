@@ -540,6 +540,7 @@ class Data2VecAudioModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         if hasattr(module, "masked_spec_embed") and module.masked_spec_embed is not None:
             module.masked_spec_embed.data.fill_(3)
 
+    @skipIfRocm(arch=['gfx942','gfx90a'])
     def test_mask_feature_prob_ctc(self):
         model = Data2VecAudioForCTC.from_pretrained(
             "hf-internal-testing/tiny-random-data2vec-seq-class", mask_feature_prob=0.2, mask_feature_length=2

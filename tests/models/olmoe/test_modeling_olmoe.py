@@ -402,6 +402,7 @@ class OlmoeIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
 
     @require_tokenizers
+    @skipIfRocm(arch='gfx942')
     def test_fast_special_tokens(self):
         fast_tokenizer = GPTNeoXTokenizerFast.from_pretrained("allenai/OLMoE-1B-7B-0924")
 
