@@ -780,20 +780,16 @@ class BambaDecoderLayer(JambaAttentionDecoderLayer):
         if self.layer_type == "mamba":
             # Padding-free processing for efficient training. position_ids and FlashAttentionKwargs
             # are ignored by mamba layers if not training.
-            if not self.training:
-                seq_idx = None
-            elif "cu_seq_lens_k" in kwargs:
-                seq_idx = get_seq_idx_from_cu_seq_lens(kwargs["cu_seq_lens_k"])
-            elif position_ids is not None:
-                cu_seq_lens = get_cu_seq_lens_from_position_ids(position_ids)
-                if len(cu_seq_lens) == 2:
+            seq_idx = None
+            if self.training:
+                if "cu_seq_lens_k" in kwargs:
+                    seq_idx = get_seq_idx_from_cu_seq_lens(kwargs["cu_seq_lens_k"])
+                elif position_ids is not None:
+                    cu_seq_lens = get_cu_seq_lens_from_position_ids(position_ids)
                     # If cu_seq_lens only has two elements, then it is semantically equivalent to
                     # `seq_idx=None`, which is more efficient.
-                    seq_idx = None
-                else:
-                    seq_idx = get_seq_idx_from_cu_seq_lens(cu_seq_lens)
-            else:
-                seq_idx = None
+                    if len(cu_seq_lens) != 2:
+                        seq_idx = get_seq_idx_from_cu_seq_lens(cu_seq_lens)
             hidden_states = self.mamba(
                 hidden_states=hidden_states,
                 cache_params=past_key_value,
