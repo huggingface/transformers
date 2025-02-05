@@ -709,7 +709,7 @@ class XGLMForCausalLM(XGLMPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-        self.loss_function = fixed_cross_entropy
+        self._set_loss_function(fixed_cross_entropy)
 
     def get_input_embeddings(self):
         return self.model.embed_tokens
@@ -780,23 +780,19 @@ class XGLMForCausalLM(XGLMPreTrainedModel, GenerationMixin):
         logits = self.lm_head(outputs[0])
 
         loss = None
-        # Ground Truth: 43.4046
         if labels is not None:
-            # GROUND TRUTH CODE:
-            """
-            # shift labels and add a pad token to the end
             shift_labels = labels.new_zeros(labels.shape)
             shift_labels[:, :-1] = labels[:, 1:].clone()
             shift_labels[:, -1] = self.config.pad_token_id
 
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(logits.view(-1, self.config.vocab_size), shift_labels.view(-1))
-            """
-            # shift labels and add a pad token to the end
-            shift_labels = labels.new_zeros(labels.shape)
-            shift_labels[:, :-1] = labels[:, 1:].clone()
-            shift_labels[:, -1] = self.config.pad_token_id
-            loss = self.loss_function(logits.view(-1, self.config.vocab_size).float(), shift_labels.view(-1), **kwargs)
+            # move labels to correct device to enable model parallelism
+            labels = labels.float().to(logits.device)
+            loss = self.loss_function(
+                logits.view(-1, self.config.vocab_size).float(),
+                shift_labels.view(-1),
+                vocab_size=self.config.vocab_size,
+                **kwargs,
+            )
 
         if not return_dict:
             output = (logits,) + outputs[1:]
