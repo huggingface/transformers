@@ -4436,8 +4436,14 @@ class ModelTesterMixin:
                 model.save_pretrained(tmpdirname)
                 model = model_class.from_pretrained(tmpdirname, torch_dtype=torch_dtype)
 
-                sub_models_supporting_fa2 = [module._supports_flash_attn_2 for name, module in model.named_modules() if isinstance(module, PreTrainedModel) and name != ""]
-                supports_fa2_all_modules = all(sub_models_supporting_fa2) if len(sub_models_supporting_fa2) > 0 else False
+                sub_models_supporting_fa2 = [
+                    module._supports_flash_attn_2
+                    for name, module in model.named_modules()
+                    if isinstance(module, PreTrainedModel) and name != ""
+                ]
+                supports_fa2_all_modules = (
+                    all(sub_models_supporting_fa2) if len(sub_models_supporting_fa2) > 0 else False
+                )
                 if not supports_fa2_all_modules:
                     with self.assertRaises(ValueError):
                         model_fa2 = model_class.from_pretrained(
