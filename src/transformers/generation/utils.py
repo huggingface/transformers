@@ -383,9 +383,7 @@ class GenerationMixin:
         #              (we can't check exception 3 while compiling)
         if past_key_values is not None:
             model_inputs["past_key_values"] = past_key_values
-            if inputs_embeds is not None and input_ids.shape[1]==0:
-                inputs_embeds = inputs_embeds[:, -cache_position.shape[0] :]
-            elif (
+            if (
                 inputs_embeds is not None  # Exception 1
                 or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
             ):
@@ -395,9 +393,9 @@ class GenerationMixin:
 
         # 3. Prepare base model inputs
         input_ids_key = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step for every prompt.
+        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
         if not self.config.is_encoder_decoder:
-            if inputs_embeds is not None and len(cache_position) == inputs_embeds.shape[1]:
+            if inputs_embeds is not None and cache_position[0] == 0:
                 model_inputs[input_ids_key] = None
                 model_inputs["inputs_embeds"] = inputs_embeds
             else:
