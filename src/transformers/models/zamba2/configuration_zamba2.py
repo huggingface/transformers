@@ -64,6 +64,8 @@ class Zamba2Config(PretrainedConfig):
             Whether or not to use bias in the convolution layer of the mixer block.
         chunk_size (`int`, *optional*, defaults to 256):
             Size of the chunks that will comprise the sequence.
+        use_mem_eff_path (`bool`, *optional*, defaults to `False`):
+            Whether or not to use the fused conv1d and scan in mamba2 layers.
         add_bias_linear (`bool`, *optional*, defaults to `False`):
             Flag indicating whether or not to use bias in various layers
         intermediate_size (`int`, *optional*, defaults to 4 * hidden_size):
@@ -120,7 +122,7 @@ class Zamba2Config(PretrainedConfig):
     >>> model = Zamba2Model(configuration)
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    """
+    ```"""
 
     model_type = "zamba2"
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -143,6 +145,7 @@ class Zamba2Config(PretrainedConfig):
         n_mamba_heads=8,
         use_conv_bias=True,
         chunk_size=256,
+        use_mem_eff_path=False,
         add_bias_linear=False,
         intermediate_size=None,
         hidden_act="gelu",
@@ -231,6 +234,7 @@ class Zamba2Config(PretrainedConfig):
         self.use_cache = use_cache
         self.num_logits_to_keep = num_logits_to_keep
         self.hybrid_layer_ids = [index for index, type in enumerate(self.layers_block_type) if type == "hybrid"]
+        self.use_mem_eff_path = use_mem_eff_path
 
 
 __all__ = ["Zamba2Config"]

@@ -34,7 +34,7 @@ if is_vision_available():
     from transformers import VideoLlavaImageProcessor
 
 
-class VideoLlavaImageProcessingTester(unittest.TestCase):
+class VideoLlavaImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -52,7 +52,6 @@ class VideoLlavaImageProcessingTester(unittest.TestCase):
         image_std=OPENAI_CLIP_STD,
         do_convert_rgb=True,
     ):
-        super().__init__()
         size = size if size is not None else {"shortest_edge": 20}
         crop_size = crop_size if crop_size is not None else {"height": 18, "width": 18}
         self.parent = parent
@@ -153,13 +152,14 @@ class VideoLlavaImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase)
 
     # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.test_image_processor_from_dict_with_kwargs
     def test_image_processor_from_dict_with_kwargs(self):
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict)
-        self.assertEqual(image_processor.size, {"shortest_edge": 20})
-        self.assertEqual(image_processor.crop_size, {"height": 18, "width": 18})
+        for image_processing_class in self.image_processor_list:
+            image_processor = image_processing_class.from_dict(self.image_processor_dict)
+            self.assertEqual(image_processor.size, {"shortest_edge": 20})
+            self.assertEqual(image_processor.crop_size, {"height": 18, "width": 18})
 
-        image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42, crop_size=84)
-        self.assertEqual(image_processor.size, {"shortest_edge": 42})
-        self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
+            image_processor = image_processing_class.from_dict(self.image_processor_dict, size=42, crop_size=84)
+            self.assertEqual(image_processor.size, {"shortest_edge": 42})
+            self.assertEqual(image_processor.crop_size, {"height": 84, "width": 84})
 
     def test_call_pil(self):
         # Initialize image_processing

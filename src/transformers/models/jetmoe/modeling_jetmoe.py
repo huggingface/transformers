@@ -216,6 +216,8 @@ class JetMoeTopKGating(nn.Module):
         )  # [num_tokens, num_experts]
         gates = zeros.scatter(1, top_k_indices, 1)  # [num_tokens, num_experts]
         expert_size = gates.long().sum(0)  # [num_experts,]
+        # (This cause torch.compile to fail with `torch._dynamo.exc.Unsupported: Backend compiler failed with a fake tensor exception at`)
+        # (and `DataDependentOutputException`)
         expert_size = expert_size.tolist()
 
         # sort and group input tokens according to expert assignment
@@ -1168,7 +1170,7 @@ class JetMoeModel(JetMoePreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type == "cuda"
+            and attention_mask.device.type in ["cuda", "xpu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when

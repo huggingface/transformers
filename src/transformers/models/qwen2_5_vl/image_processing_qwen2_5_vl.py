@@ -41,59 +41,17 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
-    is_valid_image,
+    make_batched_videos,
+    make_flat_list_of_images,
     make_list_of_images,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_vision_available, logging
-
-
-if is_vision_available():
-    from PIL import Image
+from ...utils import TensorType, logging
 
 
 logger = logging.get_logger(__name__)
-
-
-def make_batched_images(images) -> List[List[ImageInput]]:
-    """
-    Accepts images in list or nested list format, and makes a list of images for preprocessing.
-
-    Args:
-        images (`Union[List[List[ImageInput]], List[ImageInput], ImageInput]`):
-            The input image.
-
-    Returns:
-        list: A list of images.
-    """
-    if isinstance(images, (list, tuple)) and isinstance(images[0], (list, tuple)) and is_valid_image(images[0][0]):
-        return [img for img_list in images for img in img_list]
-
-    elif isinstance(images, (list, tuple)) and is_valid_image(images[0]):
-        return images
-
-    elif is_valid_image(images):
-        return [images]
-
-    raise ValueError(f"Could not make batched images from {images}")
-
-
-def make_batched_videos(videos) -> List[VideoInput]:
-    if isinstance(videos, (list, tuple)) and isinstance(videos[0], (list, tuple)) and is_valid_image(videos[0][0]):
-        return videos
-
-    elif isinstance(videos, (list, tuple)) and is_valid_image(videos[0]):
-        if isinstance(videos[0], Image.Image):
-            return [videos]
-        elif len(videos[0].shape) == 4:
-            return [list(video) for video in videos]
-
-    elif is_valid_image(videos) and len(videos.shape) == 4:
-        return [list(videos)]
-
-    raise ValueError(f"Could not make batched video from {videos}")
 
 
 def smart_resize(
@@ -198,7 +156,7 @@ class Qwen2_5_VLImageProcessor(BaseImageProcessor):
         self.patch_size = patch_size
         self.temporal_patch_size = temporal_patch_size
         self.merge_size = merge_size
-        self.size = {"min_pixels": min_pixels, "max_pixels": max_pixels}
+        self.size = {"shortest_edge": min_pixels, "longest_edge": max_pixels}
         self.do_convert_rgb = do_convert_rgb
 
     def _preprocess(
@@ -398,7 +356,7 @@ class Qwen2_5_VLImageProcessor(BaseImageProcessor):
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
         if images is not None:
-            images = make_batched_images(images)
+            images = make_flat_list_of_images(images)
         if videos is not None:
             videos = make_batched_videos(videos)
 
