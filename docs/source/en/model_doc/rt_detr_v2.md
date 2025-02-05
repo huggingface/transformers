@@ -14,7 +14,7 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# RtDetrV2
+# RT-DETRv2
 
 ## Overview
 
@@ -31,7 +31,7 @@ The original code can be found [here](https://github.com/lyuwenyu/RT-DETR).
 
 ## Usage tips 
 
-This second version of RtDetr improves how the decoder finds objects in an image. 
+This second version of RT-DETR improves how the decoder finds objects in an image. 
 
 - **better sampling** – adjusts offsets so the model looks at the right areas
 - **flexible attention** – can use smooth (bilinear) or fixed (discrete) sampling
@@ -42,13 +42,13 @@ This second version of RtDetr improves how the decoder finds objects in an image
 >>> import requests
 
 >>> from PIL import Image
->>> from transformers import RtDetrV2ForObjectDetection, RTDetrImageProcessor
+>>> from transformers import RTDetrV2ForObjectDetection, RTDetrImageProcessor
 
 >>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
 >>> image = Image.open(requests.get(url, stream=True).raw)
 
 >>> image_processor = RTDetrImageProcessor.from_pretrained("jadechoghari/rtdetr_v2_r18vd")
->>> model = RtDetrV2ForObjectDetection.from_pretrained("jadechoghari/rtdetr_v2_r18vd")
+>>> model = RTDetrV2ForObjectDetection.from_pretrained("jadechoghari/rtdetr_v2_r18vd")
 
 >>> inputs = image_processor(images=image, return_tensors="pt")
 
@@ -70,17 +70,17 @@ sofa: 0.82 [-0.12, 1.78, 639.87, 473.52]
 remote: 0.79 [333.65, 76.38, 370.69, 187.48]
 ```
 
-## RtDetrV2Config
+## RTDetrV2Config
 
-[[autodoc]] RtDetrV2Config
+[[autodoc]] RTDetrV2Config
 
 
-## RtDetrV2Model
+## RTDetrV2Model
 
-[[autodoc]] RtDetrV2Model
+[[autodoc]] RTDetrV2Model
     - forward
  
-## RtDetrV2ForObjectDetection
+## RTDetrV2ForObjectDetection
 
-[[autodoc]] RtDetrV2ForObjectDetection
+[[autodoc]] RTDetrV2ForObjectDetection
     - forward

@@ -28,9 +28,9 @@ from ..auto import CONFIG_MAPPING
 logger = logging.get_logger(__name__)
 
 
-class RtDetrV2Config(PretrainedConfig):
+class RTDetrV2Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`RtDetrV2Model`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`RTDetrV2Model`]. It is used to instantiate a
     RT-DETR model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the RT-DETR architecture.
 
@@ -49,7 +49,7 @@ class RtDetrV2Config(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         batch_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the batch normalization layers.
-        backbone_config (`Dict`, *optional*, defaults to `RtDetrV2ResNetConfig()`):
+        backbone_config (`Dict`, *optional*, defaults to `RTDetrV2ResNetConfig()`):
             The configuration of the backbone model.
         backbone (`str`, *optional*):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
@@ -173,13 +173,13 @@ class RtDetrV2Config(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import RtDetrV2Config, RtDetrV2Model
+    >>> from transformers import RTDetrV2Config, RTDetrV2Model
 
     >>> # Initializing a RT-DETR configuration
-    >>> configuration = RtDetrV2Config()
+    >>> configuration = RTDetrV2Config()
 
     >>> # Initializing a model (with random weights) from the configuration
-    >>> model = RtDetrV2Model(configuration)
+    >>> model = RTDetrV2Model(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -222,7 +222,7 @@ class RtDetrV2Config(PretrainedConfig):
         eval_size=None,
         normalize_before=False,
         hidden_expansion=1.0,
-        # decoder RtDetrV2Transformer
+        # decoder RTDetrV2Transformer
         d_model=256,
         num_queries=300,
         decoder_in_channels=[256, 256, 256],
@@ -268,13 +268,13 @@ class RtDetrV2Config(PretrainedConfig):
         # backbone
         if backbone_config is None and backbone is None:
             logger.info(
-                "`backbone_config` and `backbone` are `None`. Initializing the config with the default `RtDetrV2-ResNet` backbone."
+                "`backbone_config` and `backbone` are `None`. Initializing the config with the default `RTDetrV2-ResNet` backbone."
             )
             backbone_model_type = "rt_detr_resnet"
             config_class = CONFIG_MAPPING[backbone_model_type]
             # this will map it to RTDetrResNetConfig
-            # note: we can instead create RtDetrV2ResNetConfig but it will be exactly the same as V1
-            # and we would need to create RtDetrV2ResNetModel
+            # note: we can instead create RTDetrV2ResNetConfig but it will be exactly the same as V1
+            # and we would need to create RTDetrV2ResNetModel
             backbone_config = config_class(
                 num_channels=3,
                 embedding_size=64,
@@ -364,7 +364,7 @@ class RtDetrV2Config(PretrainedConfig):
 
     @classmethod
     def from_backbone_configs(cls, backbone_config: PretrainedConfig, **kwargs):
-        """Instantiate a [`RtDetrV2Config`] (or a derived class) from a pre-trained backbone model configuration and DETR model
+        """Instantiate a [`RTDetrV2Config`] (or a derived class) from a pre-trained backbone model configuration and DETR model
         configuration.
 
             Args:
@@ -372,7 +372,7 @@ class RtDetrV2Config(PretrainedConfig):
                     The backbone configuration.
 
             Returns:
-                [`RtDetrV2Config`]: An instance of a configuration object
+                [`RTDetrV2Config`]: An instance of a configuration object
         """
         return cls(
             backbone_config=backbone_config,
@@ -380,4 +380,4 @@ class RtDetrV2Config(PretrainedConfig):
         )
 
 
-__all__ = ["RtDetrV2Config"]
+__all__ = ["RTDetrV2Config"]

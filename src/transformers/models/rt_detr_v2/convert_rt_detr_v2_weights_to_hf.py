@@ -25,7 +25,7 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision import transforms
 
-from transformers import RTDetrImageProcessor, RtDetrV2Config, RtDetrV2ForObjectDetection
+from transformers import RTDetrImageProcessor, RTDetrV2Config, RTDetrV2ForObjectDetection
 from transformers.utils import logging
 
 
@@ -33,8 +33,8 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
-def get_rt_detr_v2_config(model_name: str) -> RtDetrV2Config:
-    config = RtDetrV2Config()
+def get_rt_detr_v2_config(model_name: str) -> RTDetrV2Config:
+    config = RTDetrV2Config()
 
     config.num_labels = 80
     repo_id = "huggingface/label-files"
@@ -229,7 +229,6 @@ def write_model_and_image_processor(model_name, output_dir, push_to_hub, repo_id
     model_name_to_checkpoint_url = {
         "rtdetr_v2_r18vd": "https://github.com/lyuwenyu/storage/releases/download/v0.2/rtdetrv2_r18vd_120e_coco_rerun_48.1.pth",
         "rtdetr_v2_r34vd": "https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetrv2_r34vd_120e_coco_ema.pth",
-        "rtdetr_v2_r50vd_m": "https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetrv2_r50vd_m_7x_coco_ema.pth",
         "rtdetr_v2_r50vd": "https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetrv2_r50vd_6x_coco_ema.pth",
         "rtdetr_v2_r101vd": "https://github.com/lyuwenyu/storage/releases/download/v0.1/rtdetrv2_r101vd_6x_coco_from_paddle.pth",
     }
@@ -256,7 +255,7 @@ def write_model_and_image_processor(model_name, output_dir, push_to_hub, repo_id
     del state_dict["decoder.anchors"]
     del state_dict["decoder.valid_mask"]
     # finally, create HuggingFace model and load state dict
-    model = RtDetrV2ForObjectDetection(config)
+    model = RTDetrV2ForObjectDetection(config)
     model.load_state_dict(state_dict)
     model.eval()
 
@@ -285,7 +284,8 @@ def write_model_and_image_processor(model_name, output_dir, push_to_hub, repo_id
     pixel_values = pixel_values.to(device)
 
     # Pass image by the model
-    outputs = model(pixel_values)
+    with torch.no_grad():
+        outputs = model(pixel_values)
 
     if model_name == "rtdetr_v2_r18vd":
         expected_slice_logits = torch.tensor(
@@ -300,13 +300,6 @@ def write_model_and_image_processor(model_name, output_dir, push_to_hub, repo_id
         )
         expected_slice_boxes = torch.tensor(
             [[0.1691, 0.1984, 0.2118], [0.2594, 0.5506, 0.4736], [0.7669, 0.4136, 0.4654]]
-        )
-    elif model_name == "rtdetr_v2_r50vd_m":
-        expected_slice_logits = torch.tensor(
-            [[-2.7453, -5.4595, -7.3702], [-3.1858, -5.3803, -7.9838], [-5.0293, -7.0083, -4.2888]]
-        )
-        expected_slice_boxes = torch.tensor(
-            [[0.7711, 0.4135, 0.4577], [0.2570, 0.5480, 0.4755], [0.1694, 0.1992, 0.2127]]
         )
     elif model_name == "rtdetr_v2_r50vd":
         expected_slice_logits = torch.tensor(

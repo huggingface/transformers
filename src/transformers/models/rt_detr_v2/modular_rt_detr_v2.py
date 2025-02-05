@@ -39,9 +39,9 @@ from ..rt_detr.modeling_rt_detr import (
 logger = logging.get_logger(__name__)
 
 
-class RtDetrV2Config(PretrainedConfig):
+class RTDetrV2Config(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`RtDetrV2Model`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`RTDetrV2Model`]. It is used to instantiate a
     RT-DETR model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the RT-DETR architecture.
 
@@ -60,7 +60,7 @@ class RtDetrV2Config(PretrainedConfig):
             The epsilon used by the layer normalization layers.
         batch_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the batch normalization layers.
-        backbone_config (`Dict`, *optional*, defaults to `RtDetrV2ResNetConfig()`):
+        backbone_config (`Dict`, *optional*, defaults to `RTDetrV2ResNetConfig()`):
             The configuration of the backbone model.
         backbone (`str`, *optional*):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
@@ -184,13 +184,13 @@ class RtDetrV2Config(PretrainedConfig):
     Examples:
 
     ```python
-    >>> from transformers import RtDetrV2Config, RtDetrV2Model
+    >>> from transformers import RTDetrV2Config, RTDetrV2Model
 
     >>> # Initializing a RT-DETR configuration
-    >>> configuration = RtDetrV2Config()
+    >>> configuration = RTDetrV2Config()
 
     >>> # Initializing a model (with random weights) from the configuration
-    >>> model = RtDetrV2Model(configuration)
+    >>> model = RTDetrV2Model(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -233,7 +233,7 @@ class RtDetrV2Config(PretrainedConfig):
         eval_size=None,
         normalize_before=False,
         hidden_expansion=1.0,
-        # decoder RtDetrV2Transformer
+        # decoder RTDetrV2Transformer
         d_model=256,
         num_queries=300,
         decoder_in_channels=[256, 256, 256],
@@ -279,13 +279,13 @@ class RtDetrV2Config(PretrainedConfig):
         # backbone
         if backbone_config is None and backbone is None:
             logger.info(
-                "`backbone_config` and `backbone` are `None`. Initializing the config with the default `RtDetrV2-ResNet` backbone."
+                "`backbone_config` and `backbone` are `None`. Initializing the config with the default `RTDetrV2-ResNet` backbone."
             )
             backbone_model_type = "rt_detr_resnet"
             config_class = CONFIG_MAPPING[backbone_model_type]
             # this will map it to RTDetrResNetConfig
-            # note: we can instead create RtDetrV2ResNetConfig but it will be exactly the same as V1
-            # and we would need to create RtDetrV2ResNetModel
+            # note: we can instead create RTDetrV2ResNetConfig but it will be exactly the same as V1
+            # and we would need to create RTDetrV2ResNetModel
             backbone_config = config_class(
                 num_channels=3,
                 embedding_size=64,
@@ -375,7 +375,7 @@ class RtDetrV2Config(PretrainedConfig):
 
     @classmethod
     def from_backbone_configs(cls, backbone_config: PretrainedConfig, **kwargs):
-        """Instantiate a [`RtDetrV2Config`] (or a derived class) from a pre-trained backbone model configuration and DETR model
+        """Instantiate a [`RTDetrV2Config`] (or a derived class) from a pre-trained backbone model configuration and DETR model
         configuration.
 
             Args:
@@ -383,7 +383,7 @@ class RtDetrV2Config(PretrainedConfig):
                     The backbone configuration.
 
             Returns:
-                [`RtDetrV2Config`]: An instance of a configuration object
+                [`RTDetrV2Config`]: An instance of a configuration object
         """
         return cls(
             backbone_config=backbone_config,
@@ -466,13 +466,13 @@ def multi_scale_deformable_attention_v2(
 
 
 # the main change
-class RtDetrV2MultiscaleDeformableAttention(RTDetrMultiscaleDeformableAttention):
+class RTDetrV2MultiscaleDeformableAttention(RTDetrMultiscaleDeformableAttention):
     """
-    RTDETRV2 version of multiscale deformable attention, extending the base implementation
+    RTDetrV2 version of multiscale deformable attention, extending the base implementation
     with improved offset handling and initialization.
     """
 
-    def __init__(self, config: RtDetrV2Config):
+    def __init__(self, config: RTDetrV2Config):
         num_heads = config.decoder_attention_heads
         n_points = config.decoder_n_points
         # Initialize parent class with config parameters
@@ -550,44 +550,44 @@ class RtDetrV2MultiscaleDeformableAttention(RTDetrMultiscaleDeformableAttention)
         return output, attention_weights
 
 
-class RtDetrV2DecoderLayer(RTDetrDecoderLayer):
-    def __init__(self, config: RtDetrV2Config):
+class RTDetrV2DecoderLayer(RTDetrDecoderLayer):
+    def __init__(self, config: RTDetrV2Config):
         # initialize parent class
         super().__init__(config)
         # override only the encoder attention module with v2 version
-        self.encoder_attn = RtDetrV2MultiscaleDeformableAttention(config)
+        self.encoder_attn = RTDetrV2MultiscaleDeformableAttention(config)
 
 
-class RtDetrV2PreTrainedModel(RTDetrPreTrainedModel):
+class RTDetrV2PreTrainedModel(RTDetrPreTrainedModel):
     pass
 
 
-class RtDetrV2Decoder(RTDetrDecoder):
-    def __init__(self, config: RtDetrV2Config):
+class RTDetrV2Decoder(RTDetrDecoder):
+    def __init__(self, config: RTDetrV2Config):
         super().__init__(config)
-        self.layers = nn.ModuleList([RtDetrV2DecoderLayer(config) for _ in range(config.decoder_layers)])
+        self.layers = nn.ModuleList([RTDetrV2DecoderLayer(config) for _ in range(config.decoder_layers)])
 
 
-class RtDetrV2Model(RTDetrModel):
-    def __init__(self, config: RtDetrV2Config):
+class RTDetrV2Model(RTDetrModel):
+    def __init__(self, config: RTDetrV2Config):
         super().__init__(config)
         # decoder
-        self.decoder = RtDetrV2Decoder(config)
+        self.decoder = RTDetrV2Decoder(config)
 
 
-class RtDetrV2MLPPredictionHead(RTDetrMLPPredictionHead):
+class RTDetrV2MLPPredictionHead(RTDetrMLPPredictionHead):
     pass
 
 
-class RtDetrV2ForObjectDetection(RTDetrForObjectDetection, RtDetrV2PreTrainedModel):
-    def __init__(self, config: RtDetrV2Config):
-        RtDetrV2PreTrainedModel.__init__(config)
+class RTDetrV2ForObjectDetection(RTDetrForObjectDetection, RTDetrV2PreTrainedModel):
+    def __init__(self, config: RTDetrV2Config):
+        RTDetrV2PreTrainedModel.__init__(config)
         # RTDETR encoder-decoder model
-        self.model = RtDetrV2Model(config)
+        self.model = RTDetrV2Model(config)
 
         # Detection heads on top
         class_embed = partial(nn.Linear, config.d_model, config.num_labels)
-        bbox_embed = partial(RtDetrV2MLPPredictionHead, config, config.d_model, config.d_model, 4, num_layers=3)
+        bbox_embed = partial(RTDetrV2MLPPredictionHead, config, config.d_model, config.d_model, 4, num_layers=3)
 
         self.class_embed = nn.ModuleList([class_embed() for _ in range(config.decoder_layers)])
         self.bbox_embed = nn.ModuleList([bbox_embed() for _ in range(config.decoder_layers)])
@@ -600,8 +600,8 @@ class RtDetrV2ForObjectDetection(RTDetrForObjectDetection, RtDetrV2PreTrainedMod
 
 
 __all__ = [
-    "RtDetrV2Config",
-    "RtDetrV2Model",
-    "RtDetrV2PreTrainedModel",
-    "RtDetrV2ForObjectDetection",
+    "RTDetrV2Config",
+    "RTDetrV2Model",
+    "RTDetrV2PreTrainedModel",
+    "RTDetrV2ForObjectDetection",
 ]

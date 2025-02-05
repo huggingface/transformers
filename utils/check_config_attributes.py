@@ -193,7 +193,7 @@ SPECIAL_CASES_TO_ALLOW = {
         "weight_loss_giou",
         "weight_loss_vfl",
     ],
-    "RtDetrV2Config": [
+    "RTDetrV2Config": [
         "eos_coefficient",
         "focal_loss_alpha",
         "focal_loss_gamma",

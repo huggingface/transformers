@@ -8471,21 +8471,21 @@ class RTDetrResNetPreTrainedModel(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class RtDetrV2ForObjectDetection(metaclass=DummyObject):
+class RTDetrV2ForObjectDetection(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class RtDetrV2Model(metaclass=DummyObject):
+class RTDetrV2Model(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
         requires_backends(self, ["torch"])
 
 
-class RtDetrV2PreTrainedModel(metaclass=DummyObject):
+class RTDetrV2PreTrainedModel(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
