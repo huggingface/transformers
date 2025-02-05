@@ -5211,7 +5211,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             loss_type = "ForCausalLM"
         return LOSS_MAPPING[loss_type]
 
-    @loss_function.setter 
+    @loss_function.setter
     def loss_function(self, value):
         self._loss_function = value
 

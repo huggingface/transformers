@@ -21,10 +21,9 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
-from ...loss.loss_utils import fixed_cross_entropy
-
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
+from ...loss.loss_utils import fixed_cross_entropy
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
@@ -712,7 +711,6 @@ class XGLMForCausalLM(XGLMPreTrainedModel, GenerationMixin):
 
         self.loss_function = fixed_cross_entropy
 
-
     def get_input_embeddings(self):
         return self.model.embed_tokens
 
@@ -798,11 +796,7 @@ class XGLMForCausalLM(XGLMPreTrainedModel, GenerationMixin):
             shift_labels = labels.new_zeros(labels.shape)
             shift_labels[:, :-1] = labels[:, 1:].clone()
             shift_labels[:, -1] = self.config.pad_token_id
-            loss = self.loss_function(
-                logits.view(-1, self.config.vocab_size).float(),
-                shift_labels.view(-1),
-                **kwargs
-            )
+            loss = self.loss_function(logits.view(-1, self.config.vocab_size).float(), shift_labels.view(-1), **kwargs)
 
         if not return_dict:
             output = (logits,) + outputs[1:]
