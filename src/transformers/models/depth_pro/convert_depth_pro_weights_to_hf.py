@@ -203,17 +203,7 @@ def write_model(
 
 
 def write_image_processor(output_dir: str):
-    image_processor = DepthProImageProcessorFast(
-        do_resize=True,
-        size={"height": 1536, "width": 1536},
-        resample=PILImageResampling.BILINEAR,
-        antialias=False,
-        do_rescale=True,
-        rescale_factor=1 / 255,
-        do_normalize=True,
-        image_mean=0.5,
-        image_std=0.5,
-    )
+    image_processor = DepthProImageProcessorFast()
     image_processor.save_pretrained(output_dir)
     return image_processor
 

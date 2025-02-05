@@ -16,14 +16,17 @@
 
 import unittest
 
-from transformers.file_utils import is_vision_available
 from transformers.testing_utils import is_flaky, require_torch, require_vision
+from transformers.utils import is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
 
 
 if is_vision_available():
-    from transformers import DepthProImageProcessor, DepthProImageProcessorFast
+    from transformers import DepthProImageProcessor
+
+    if is_torchvision_available():
+        from transformers import DepthProImageProcessorFast
 
 
 class DepthProImageProcessingTester(unittest.TestCase):
@@ -83,7 +86,7 @@ class DepthProImageProcessingTester(unittest.TestCase):
 @require_vision
 class DepthProImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
     image_processing_class = DepthProImageProcessor if is_vision_available() else None
-    fast_image_processing_class = DepthProImageProcessorFast if is_vision_available() else None
+    fast_image_processing_class = DepthProImageProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
@@ -103,7 +106,6 @@ class DepthProImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
         self.assertTrue(hasattr(image_processing, "do_rescale"))
         self.assertTrue(hasattr(image_processing, "rescale_factor"))
         self.assertTrue(hasattr(image_processing, "resample"))
-        self.assertTrue(hasattr(image_processing, "antialias"))
 
     def test_image_processor_from_dict_with_kwargs(self):
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict)

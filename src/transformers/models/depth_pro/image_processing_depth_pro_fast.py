@@ -14,26 +14,34 @@
 # limitations under the License.
 """Fast Image processor class for DepthPro."""
 
-import functools
 from typing import TYPE_CHECKING, Dict, List, Optional, Tuple, Union
 
 from ...image_processing_base import BatchFeature
-from ...image_processing_utils import get_size_dict
-from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict
-from ...image_transforms import FusedRescaleNormalize, NumpyToTensor, Rescale
+from ...image_processing_utils_fast import (
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
+    BaseImageProcessorFast,
+    ChannelDimension,
+    get_image_size_for_max_height_width,
+    get_resize_output_image_size,
+    get_size_with_aspect_ratio,
+    group_images_by_shape,
+    reorder_images,
+)
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
-    ChannelDimension,
-    ImageInput,
-    ImageType,
     PILImageResampling,
-    get_image_type,
-    make_list_of_images,
-    pil_torch_interpolation_mapping,
+    SizeDict,
 )
-from ...utils import TensorType, logging, requires_backends
-from ...utils.import_utils import is_torch_available, is_torchvision_available
+from ...utils import (
+    TensorType,
+    add_start_docstrings,
+    is_torch_available,
+    is_torchvision_available,
+    is_torchvision_v2_available,
+    logging,
+    requires_backends,
+)
 
 
 if TYPE_CHECKING:
@@ -47,268 +55,118 @@ if is_torch_available():
 
 
 if is_torchvision_available():
-    from torchvision.transforms import Compose, Normalize, PILToTensor, Resize
+    from ...image_utils import pil_torch_interpolation_mapping
+
+    if is_torchvision_v2_available():
+        from torchvision.transforms.v2 import functional as F
+    else:
+        from torchvision.transforms import functional as F
 
 
+@add_start_docstrings(
+    "Constructs a fast DepthPro image processor.",
+    BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
+)
 class DepthProImageProcessorFast(BaseImageProcessorFast):
-    r"""
-    Constructs a DepthPro image processor.
+    resample = PILImageResampling.BILINEAR
+    image_mean = IMAGENET_STANDARD_MEAN
+    image_std = IMAGENET_STANDARD_STD
+    size = {"height": 1536, "width": 1536}
+    do_resize = True
+    do_rescale = True
+    do_normalize = True
 
-    Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Whether to resize the image's (height, width) dimensions to the specified `(size["height"],
-            size["width"])`. Can be overridden by the `do_resize` parameter in the `preprocess` method.
-        size (`dict`, *optional*, defaults to `{"height": 1536, "width": 1536}`):
-            Size of the output image after resizing. Can be overridden by the `size` parameter in the `preprocess`
-            method.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
-            Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
-            `preprocess` method.
-        antialias (`bool`, *optional*, defaults to `False`):
-            Whether to apply an anti-aliasing filter when resizing the image. It only affects tensors with
-            bilinear or bicubic modes and it is ignored otherwise.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
-            parameter in the `preprocess` method.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
-            `preprocess` method.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the image. Can be overridden by the `do_normalize` parameter in the `preprocess`
-            method.
-        image_mean (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_MEAN`):
-            Mean to use if normalizing the image. This is a float or list of floats the length of the number of
-            channels in the image. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `List[float]`, *optional*, defaults to `IMAGENET_STANDARD_STD`):
-            Standard deviation to use if normalizing the image. This is a float or list of floats the length of the
-            number of channels in the image. Can be overridden by the `image_std` parameter in the `preprocess` method.
-    """
-
-    model_input_names = ["pixel_values"]
-    _transform_params = [
-        "do_resize",
-        "do_rescale",
-        "do_normalize",
-        "size",
-        "resample",
-        "antialias",
-        "rescale_factor",
-        "image_mean",
-        "image_std",
-        "image_type",
-    ]
-
-    def __init__(
+    # Only difference with BaseImageProcessorFast.resize is that `antialias=False` in F.resize
+    def resize(
         self,
-        do_resize: bool = True,
-        size: Optional[Dict[str, int]] = None,
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
-        antialias: bool = False,
-        do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
-        do_normalize: bool = True,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
+        image: "torch.Tensor",
+        size: SizeDict,
+        interpolation: "F.InterpolationMode" = None,
         **kwargs,
-    ):
-        super().__init__(**kwargs)
-        size = size if size is not None else {"height": 1536, "width": 1536}
-        size = get_size_dict(size)
-        self.do_resize = do_resize
-        self.do_rescale = do_rescale
-        self.do_normalize = do_normalize
-        self.size = size
-        self.resample = resample
-        self.antialias = antialias
-        self.rescale_factor = rescale_factor
-        self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
-        self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
-
-    def _build_transforms(
-        self,
-        do_resize: bool,
-        size: Dict[str, int],
-        resample: PILImageResampling,
-        antialias: bool,
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: Union[float, List[float]],
-        image_std: Union[float, List[float]],
-        image_type: ImageType,
-    ) -> "Compose":
+    ) -> "torch.Tensor":
         """
-        Given the input settings build the image transforms using `torchvision.transforms.Compose`.
-        """
-        transforms = []
-
-        # All PIL and numpy values need to be converted to a torch tensor
-        # to keep cross compatibility with slow image processors
-        if image_type == ImageType.PIL:
-            transforms.append(PILToTensor())
-
-        elif image_type == ImageType.NUMPY:
-            transforms.append(NumpyToTensor())
-
-        # We can combine rescale and normalize into a single operation for speed
-        if do_rescale and do_normalize:
-            transforms.append(FusedRescaleNormalize(image_mean, image_std, rescale_factor=rescale_factor))
-        elif do_rescale:
-            transforms.append(Rescale(rescale_factor=rescale_factor))
-        elif do_normalize:
-            transforms.append(Normalize(image_mean, image_std))
-
-        # depth-pro scales the image before resizing it
-        if do_resize:
-            transforms.append(
-                Resize(
-                    (size["height"], size["width"]),
-                    interpolation=pil_torch_interpolation_mapping[resample],
-                    antialias=antialias,
-                )
-            )
-
-        return Compose(transforms)
-
-    @functools.lru_cache(maxsize=1)
-    def _validate_input_arguments(
-        self,
-        return_tensors: Union[str, TensorType],
-        do_resize: bool,
-        size: Dict[str, int],
-        resample: PILImageResampling,
-        antialias: bool,
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: Union[float, List[float]],
-        image_std: Union[float, List[float]],
-        data_format: Union[str, ChannelDimension],
-        image_type: ImageType,
-    ):
-        if return_tensors != "pt":
-            raise ValueError("Only returning PyTorch tensors is currently supported.")
-
-        if data_format != ChannelDimension.FIRST:
-            raise ValueError("Only channel first data format is currently supported.")
-
-        if do_resize and None in (size, resample, antialias):
-            raise ValueError("Size, resample and antialias must be specified if do_resize is True.")
-
-        if do_rescale and rescale_factor is None:
-            raise ValueError("Rescale factor must be specified if do_rescale is True.")
-
-        if do_normalize and None in (image_mean, image_std):
-            raise ValueError("Image mean and standard deviation must be specified if do_normalize is True.")
-
-    def preprocess(
-        self,
-        images: ImageInput,
-        do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = None,
-        antialias: Optional[bool] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        return_tensors: Optional[Union[str, TensorType]] = "pt",
-        data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        **kwargs,
-    ):
-        """
-        Preprocess an image or batch of images.
+        Resize an image to `(size["height"], size["width"])`.
 
         Args:
-            images (`ImageInput`):
-                Image to preprocess. Expects a single or batch of images with pixel values ranging from 0 to 255. If
-                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-                Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
-                Dictionary in the format `{"height": h, "width": w}` specifying the size of the output image after
-                resizing.
-            resample (`PILImageResampling` filter, *optional*, defaults to `self.resample`):
-                `PILImageResampling` filter to use if resizing the image e.g. `PILImageResampling.BILINEAR`. Only has
-                an effect if `do_resize` is set to `True`.
-            antialias (`bool`, *optional*, defaults to `False`):
-                Whether to apply an anti-aliasing filter when resizing the image. It only affects tensors with
-                bilinear or bicubic modes and it is ignored otherwise.
-            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image values between [0 - 1].
-            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
-            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-                Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
-                Image mean to use if `do_normalize` is set to `True`.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
-                Image standard deviation to use if `do_normalize` is set to `True`.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return. Only "pt" is supported
-            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. The following formats are currently supported:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
+            image (`torch.Tensor`):
+                Image to resize.
+            size (`SizeDict`):
+                Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
+            resample (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
+                `InterpolationMode` filter to use when resizing the image e.g. `InterpolationMode.BICUBIC`.
+
+        Returns:
+            `torch.Tensor`: The resized image.
         """
-        do_resize = do_resize if do_resize is not None else self.do_resize
-        do_rescale = do_rescale if do_rescale is not None else self.do_rescale
-        do_normalize = do_normalize if do_normalize is not None else self.do_normalize
-        resample = resample if resample is not None else self.resample
-        antialias = antialias if antialias is not None else self.antialias
-        rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
-        image_mean = image_mean if image_mean is not None else self.image_mean
-        image_std = image_std if image_std is not None else self.image_std
-        size = size if size is not None else self.size
-        # Make hashable for cache
-        size = SizeDict(**size)
-        image_mean = tuple(image_mean) if isinstance(image_mean, list) else image_mean
-        image_std = tuple(image_std) if isinstance(image_std, list) else image_std
+        interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
+        if size.shortest_edge and size.longest_edge:
+            # Resize the image so that the shortest edge or the longest edge is of the given size
+            # while maintaining the aspect ratio of the original image.
+            new_size = get_size_with_aspect_ratio(
+                image.size()[-2:],
+                size.shortest_edge,
+                size.longest_edge,
+            )
+        elif size.shortest_edge:
+            new_size = get_resize_output_image_size(
+                image,
+                size=size.shortest_edge,
+                default_to_square=False,
+                input_data_format=ChannelDimension.FIRST,
+            )
+        elif size.max_height and size.max_width:
+            new_size = get_image_size_for_max_height_width(image.size()[-2:], size.max_height, size.max_width)
+        elif size.height and size.width:
+            new_size = (size.height, size.width)
+        else:
+            raise ValueError(
+                "Size must contain 'height' and 'width' keys, or 'max_height' and 'max_width', or 'shortest_edge' key. Got"
+                f" {size}."
+            )
+        return F.resize(image, new_size, interpolation=interpolation, antialias=False)
 
-        images = make_list_of_images(images)
-        image_type = get_image_type(images[0])
+    # DepthPro resizes image after rescaling and normalizing,
+    # which makes it different from BaseImageProcessorFast._preprocess
+    def _preprocess(
+        self,
+        images: List["torch.Tensor"],
+        do_resize: bool,
+        size: SizeDict,
+        interpolation: Optional["F.InterpolationMode"],
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: Optional[Union[float, List[float]]],
+        image_std: Optional[Union[float, List[float]]],
+        return_tensors: Optional[Union[str, TensorType]],
+    ) -> BatchFeature:
+        # Group images by size for batched scaling
+        grouped_images, grouped_images_index = group_images_by_shape(images)
+        scaled_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_center_crop:
+                stacked_images = self.center_crop(stacked_images, crop_size)
+            # Fused rescale and normalize
+            stacked_images = self.rescale_and_normalize(
+                stacked_images, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            scaled_images_grouped[shape] = stacked_images
+        scaled_images = reorder_images(scaled_images_grouped, grouped_images_index)
 
-        if image_type not in [ImageType.PIL, ImageType.TORCH, ImageType.NUMPY]:
-            raise ValueError(f"Unsupported input image type {image_type}")
+        # Group images by size for batched resizing
+        grouped_images, grouped_images_index = group_images_by_shape(scaled_images)
+        resized_images_grouped = {}
+        for shape, stacked_images in grouped_images.items():
+            if do_resize:
+                stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation)
+            resized_images_grouped[shape] = stacked_images
+        resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
-        self._validate_input_arguments(
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
-            antialias=antialias,
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            return_tensors=return_tensors,
-            data_format=data_format,
-            image_type=image_type,
-        )
+        processed_images = torch.stack(resized_images, dim=0) if return_tensors else resized_images
 
-        transforms = self.get_transforms(
-            do_resize=do_resize,
-            do_rescale=do_rescale,
-            do_normalize=do_normalize,
-            size=size,
-            resample=resample,
-            antialias=antialias,
-            rescale_factor=rescale_factor,
-            image_mean=image_mean,
-            image_std=image_std,
-            image_type=image_type,
-        )
-        transformed_images = [transforms(image) for image in images]
-
-        data = {"pixel_values": torch.stack(transformed_images, dim=0)}
-        return BatchFeature(data, tensor_type=return_tensors)
+        return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
     # Copied from transformers.models.depth_pro.image_processing_depth_pro.DepthProImageProcessor.post_process_depth_estimation
     def post_process_depth_estimation(
@@ -367,7 +225,6 @@ class DepthProImageProcessorFast(BaseImageProcessorFast):
                     input=depth.unsqueeze(0).unsqueeze(1),
                     size=target_size,
                     mode=pil_torch_interpolation_mapping[self.resample].value,
-                    antialias=self.antialias,
                 ).squeeze()
 
             # inverse the depth
