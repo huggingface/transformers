@@ -358,7 +358,7 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     def test_disk_offload_safetensors(self):
         pass
 
-    @unittest.skip(reason="Test becomes too complex with Moshi requiring multiple modalities input.")
+    @unittest.skip(reason="Test becomes too complex with Moshi requiring multiple input modalities.")
     def test_generate_continue_from_inputs_embeds(self):
         pass
 
@@ -828,6 +828,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             output_ids_generate = model.generate(
                 do_sample=False, max_new_tokens=self.max_new_tokens, remove_invalid_values=True
             )
+            print(output_ids_generate)
             self.assertIsNotNone(output_ids_generate)
 
     @unittest.skip(reason="The audio encoder has no gradients.")
