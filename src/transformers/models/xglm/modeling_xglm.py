@@ -21,6 +21,8 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
+from ...loss.loss_utils import fixed_cross_entropy
+
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
@@ -708,6 +710,9 @@ class XGLMForCausalLM(XGLMPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
+        self.loss_function = fixed_cross_entropy
+
+
     def get_input_embeddings(self):
         return self.model.embed_tokens
 
@@ -777,17 +782,26 @@ class XGLMForCausalLM(XGLMPreTrainedModel, GenerationMixin):
         logits = self.lm_head(outputs[0])
 
         loss = None
+        # Ground Truth: 43.4046
         if labels is not None:
+            # GROUND TRUTH CODE:
+            """
             # shift labels and add a pad token to the end
             shift_labels = labels.new_zeros(labels.shape)
             shift_labels[:, :-1] = labels[:, 1:].clone()
             shift_labels[:, -1] = self.config.pad_token_id
 
+            loss_fct = CrossEntropyLoss()
+            loss = loss_fct(logits.view(-1, self.config.vocab_size), shift_labels.view(-1))
+            """
+            # shift labels and add a pad token to the end
+            shift_labels = labels.new_zeros(labels.shape)
+            shift_labels[:, :-1] = labels[:, 1:].clone()
+            shift_labels[:, -1] = self.config.pad_token_id
             loss = self.loss_function(
-                logits.view(-1, self.config.vocab_size),
+                logits.view(-1, self.config.vocab_size).float(),
                 shift_labels.view(-1),
-                vocab_size=self.config.vocab_size,
-                **kwargs,
+                **kwargs
             )
 
         if not return_dict:
