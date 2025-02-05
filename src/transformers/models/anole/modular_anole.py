@@ -36,7 +36,15 @@ from ...modeling_outputs import (
     CausalLMOutputWithPast,
     ModelOutput,
 )
-from ...utils import TensorType, add_start_docstrings, is_torch_available, is_vision_available, logging
+from ...utils import (
+    TensorType,
+    add_start_docstrings,
+    add_start_docstrings_to_model_forward,
+    is_torch_available,
+    is_vision_available,
+    logging,
+    replace_return_docstrings,
+)
 from ..chameleon.configuration_chameleon import (
     ChameleonConfig,
     ChameleonVQVAEConfig,
@@ -65,6 +73,7 @@ if is_vision_available():
 
 
 _CHECKPOINT_FOR_DOC = "leloy/Anole-7b-v0.1-hf"
+_CONFIG_FOR_DOC = "AnoleConfig"
 
 logger = logging.get_logger(__name__)
 
@@ -512,6 +521,7 @@ class AnoleModel(ChameleonModel):
 
 
 ANOLE_START_DOCSTRING = None
+ANOLE_INPUTS_DOCSTRING = None
 
 
 @add_start_docstrings(
@@ -543,6 +553,8 @@ class AnoleForConditionalGeneration(AnolePreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
+    @add_start_docstrings_to_model_forward(ANOLE_INPUTS_DOCSTRING)
+    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,

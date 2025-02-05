@@ -309,6 +309,14 @@ text = processor.batch_decode(response_ids, skip_special_token=True)
 print(text)
 ```
 
+## AnoleProcessor
+
+[[autodoc]] AnoleProcessor
+
+## AnoleImageProcessor
+
+[[autodoc]] AnoleImageProcessor
+
 ## AnoleConfig
 
 [[autodoc]] AnoleConfig

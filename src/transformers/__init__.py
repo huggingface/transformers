@@ -170,6 +170,11 @@ _import_structure = {
         "AltCLIPTextConfig",
         "AltCLIPVisionConfig",
     ],
+    "models.anole": [
+        "AnoleConfig",
+        "AnoleProcessor",
+        "AnoleVQVAEConfig",
+    ],
     "models.aria": [
         "AriaConfig",
         "AriaProcessor",
@@ -266,11 +271,6 @@ _import_structure = {
         "ChameleonConfig",
         "ChameleonProcessor",
         "ChameleonVQVAEConfig",
-    ],
-    "models.anole": [
-        "AnoleConfig",
-        "AnoleProcessor",
-        "AnoleVQVAEConfig",
     ],
     "models.chinese_clip": [
         "ChineseCLIPConfig",
@@ -1478,6 +1478,14 @@ else:
             "AltCLIPVisionModel",
         ]
     )
+    _import_structure["models.anole"].extend(
+        [
+            "AnoleForConditionalGeneration",
+            "AnoleModel",
+            "AnolePreTrainedModel",
+            "AnoleVQVAE",
+        ]
+    )
     _import_structure["models.aria"].extend(
         [
             "AriaForConditionalGeneration",
@@ -1789,14 +1797,6 @@ else:
             "ChameleonPreTrainedModel",
             "ChameleonProcessor",
             "ChameleonVQVAE",
-        ]
-    )
-    _import_structure["models.anole"].extend(
-        [
-            "AnoleForConditionalGeneration",
-            "AnoleModel",
-            "AnolePreTrainedModel",
-            "AnoleVQVAE",
         ]
     )
     _import_structure["models.chinese_clip"].extend(
