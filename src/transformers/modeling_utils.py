@@ -786,6 +786,8 @@ def _load_state_dict_into_meta_model(
     is_safetensors: bool = False,
     keep_in_fp32_modules: Optional[List[str]] = None,
     unexpected_keys: Optional[Dict] = None,  # passing `unexpected` for cleanup from quantization items
+    device_mesh: Optional[torch.distributed.device_mesh.DeviceMesh] = None,
+    tp_key_registry: Optional[Dict] = None,
 ) -> Tuple[List[str], Optional[Dict], Optional[Dict]]:
     """
     This is somewhat similar to `_load_state_dict_into_model`, but deals with a model that has some or all of its
@@ -795,8 +797,7 @@ def _load_state_dict_into_meta_model(
     `start_prefix` is used for models which insert their name into model keys, e.g. `bert` in
     `bert.pooler.dense.weight`
 
-    It also initialize tensor parallelism for each module if needed.
-
+    It also initialize tensor parallelism according to `tp_key_registry` if needed.
     """
 
     # XXX: remaining features to implement to be fully compatible with _load_state_dict_into_model
@@ -918,6 +919,31 @@ def _load_state_dict_into_meta_model(
                 value = type(value)(value.data.to(param_to), **val_kwargs, **value.__dict__)
                 setattr(module, tensor_name, value)
             # TODO: consider removing used param_parts from state_dict before return
+
+
+        # In this case, let's parallelize the modules!
+        if tp_key_registry is not None:
+            plan = None
+            prefix = None
+            for module_prefix in tp_key_registry.keys():
+                if f"{module_prefix}." in param_name:
+                    tp_key_registry[module_prefix]["children"].remove(param_name)
+                    if len(tp_key_registry[module_prefix]["children"]) == 0:
+                        plan = tp_key_registry[module_prefix]["plan"]
+                        prefix = module_prefix
+                    break
+            
+            if plan is not None:
+                del tp_key_registry[prefix]
+                parent_module = model
+                for name in prefix.split("."):
+                    parent_module = getattr(parent_module, name)
+
+                torch.distributed.tensor.parallel.parallelize_module(
+                    parent_module,
+                    device_mesh=device_mesh,
+                    parallelize_plan=plan,
+                )
 
     return error_msgs, disk_offload_index, cpu_offload_index
 
@@ -4165,6 +4191,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # This is the easiest way to dispatch to the current process device
             device_map = tp_device
 
+            # Assuming sharding the model onto the world
+            world_size = torch.distributed.get_world_size()
+            device_mesh = torch.distributed.init_device_mesh(tp_device.type, (world_size,))
+
         if is_fsdp_enabled():
             low_cpu_mem_usage = True
 
@@ -4481,6 +4511,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # Let's make sure we don't run the init function of buffer modules
             model = cls(config, *model_args, **model_kwargs)
 
+        # Last check for tp
         if device_mesh is not None and not model.supports_tp_plan:
             raise NotImplementedError("This model does not have a tensor parallel plan.")
 
@@ -4543,6 +4574,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 hf_quantizer=hf_quantizer,
                 keep_in_fp32_modules=keep_in_fp32_modules,
                 gguf_file=gguf_file,
+                device_mesh=device_mesh,
                 weights_only=weights_only,
                 _fast_init=_fast_init,
             )
@@ -4625,16 +4657,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 token=token,
                 adapter_kwargs=adapter_kwargs,
             )
-
-        if tp_plan is not None:
-            assert tp_device is not None, "tp_device not set!"
-            if not model.supports_tp_plan:
-                raise NotImplementedError("This model does not have a tensor parallel plan.")
-            # Assuming sharding the model onto the world
-            world_size = torch.distributed.get_world_size()
-            device_mesh = torch.distributed.init_device_mesh(tp_device.type, (world_size,))
-            # Apply Tensor Parallelism
-            model.tensor_parallel(device_mesh)
 
         if output_loading_info:
             loading_info = {
@@ -4735,6 +4757,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         hf_quantizer: Optional[HfQuantizer] = None,
         keep_in_fp32_modules: Optional[List[str]] = None,
         gguf_file: Optional[str] = None,
+        device_mesh: Optional[torch.distributed.device_mesh.DeviceMesh] = None,
         weights_only: bool = True,
         _fast_init: bool = True,
     ):
@@ -4867,6 +4890,31 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             else:
                 disk_offload_index = {}
 
+        # Prepare inputs if using tensor parallel
+        tp_key_registry = None
+        if device_mesh is not None:
+            tp_key_registry = {}
+            layer_tp_plan = {".".join(k.split(".")[2:]): v for k, v in model.config.base_model_tp_plan.items()}
+            layer_tp_plan = torch.utils._pytree.tree_map(
+                translate_to_torch_parallel_style,
+                layer_tp_plan,
+            )
+            for key in model_to_load.state_dict().keys():
+                pattern = r"^(.*layers\.[0-9]+)"
+                match = re.match(pattern, key)
+                if match is not None:
+                    layer = match.group(1)
+                    if layer not in tp_key_registry:
+                        tp_key_registry[layer] = {"children": {key}, "plan": layer_tp_plan}
+                    else:
+                        tp_key_registry[layer]["children"].add(key)
+                elif "lm_head." in key:
+                    if "lm_head" not in tp_key_registry:
+                        plan = translate_to_torch_parallel_style(model._tp_plan["lm_head"])
+                        tp_key_registry["lm_head"] = {"children": {key}, "plan": plan}
+                    else:
+                        tp_key_registry["lm_head"]["children"].add(key)
+
         # This offload index if for params that are supposed to be on the "cpu", either with or without a device_map
         # It allows to load parameters one-by-one from the state dict, avoiding a memory peak of 2 x state_dict_size,
         # i.e. 1x to load it, and 1x to copy it to model
@@ -4938,6 +4986,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                         is_safetensors=is_offloaded_safetensors,
                         keep_in_fp32_modules=keep_in_fp32_modules,
                         unexpected_keys=unexpected_keys,
+                        device_mesh=device_mesh,
+                        tp_key_registry=tp_key_registry,
                     )
                     error_msgs += new_error_msgs
             else:
@@ -5255,7 +5305,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         Tensor parallelize the model across the given device mesh. This function is a helper to be called after the model
         was already loaded in memory, note however that this means that each process will first initialize the whole model,
         then parallelize it accross devices. Thus there is a huge waste of GPU memory, and this can lead to OOM at loading time.
+<<<<<<< HEAD
 
+=======
+>>>>>>> 4e8f332085 (new first tp loading version)
         Calling `from_pretrained(..., tp_plan="auto")` is prefered, and will parallelize module-by-module during initialization,
         so that the expected per-device memory spike at loading time is not larger than the final model size on each device.
 
