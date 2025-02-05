@@ -1066,6 +1066,8 @@ TYPE_TO_FILE_TYPE = {
     "Processor": "processing",
     "ImageProcessor": "image_processing",
     "ImageProcessorFast": "image_processing*_fast",  # "*" indicates where to insert the model name before the "_fast" suffix
+    "FastImageProcessorInitKwargs": "image_processing*_fast",
+    "FastImageProcessorPreprocessKwargs": "image_processing*_fast",
     "FeatureExtractor": "feature_extractor",
     "ProcessorKwargs": "processing",
     "ImagesKwargs": "processing",
