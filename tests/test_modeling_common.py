@@ -4442,7 +4442,9 @@ class ModelTesterMixin:
                     if isinstance(module, PreTrainedModel) and name != ""
                 ]
                 supports_fa2_all_modules = (
-                    all(sub_models_supporting_fa2) if len(sub_models_supporting_fa2) > 0 else False
+                    all(sub_models_supporting_fa2)
+                    if len(sub_models_supporting_fa2) > 0
+                    else model._supports_flash_attn_2
                 )
                 if not supports_fa2_all_modules:
                     with self.assertRaises(ValueError):
