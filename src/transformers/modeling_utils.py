@@ -4957,7 +4957,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 state_dict = load_state_dict(
                     shard_file, is_quantized=is_quantized, map_location=map_location, weights_only=weights_only
                 )
-            fixed_state_dict = cls._fix_state_dict_keys_on_load(state_dict)
 
             # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
             # matching the weights in the model.
@@ -4971,13 +4970,15 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 ignore_mismatched_sizes,
                 prefix,
             )
+
             if low_cpu_mem_usage or gguf_file is not None:
+                state_dict = cls._fix_state_dict_keys_on_load(state_dict)
                 if is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized:
                     pass
                 else:
                     new_error_msgs, disk_offload_index, cpu_offload_index = _load_state_dict_into_meta_model(
                         model_to_load,
-                        fixed_state_dict,
+                        state_dict,
                         start_prefix,
                         expected_keys,
                         device_map=device_map,
@@ -4999,8 +5000,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 assign_to_params_buffers = check_support_param_buffer_assignment(
                     model_to_load, state_dict, start_prefix
                 )
+                state_dict = cls._fix_state_dict_keys_on_load(state_dict)
                 error_msgs += _load_state_dict_into_model(
-                    model_to_load, fixed_state_dict, start_prefix, assign_to_params_buffers
+                    model_to_load, state_dict, start_prefix, assign_to_params_buffers
                 )
 
             # force memory release
