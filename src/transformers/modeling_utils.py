@@ -4818,7 +4818,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # they are not in the loaded state dict)
         if low_cpu_mem_usage:
             model = move_missing_keys_back_to_cpu(
-                model, missing_keys, unexpected_keys, dtype, keep_in_fp32_modules, is_quantized, hf_quantizer
+                model, missing_keys, unexpected_keys, dtype, keep_in_fp32_modules, hf_quantizer
             )
 
         # correctly initialize the missing keys
