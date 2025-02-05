@@ -214,31 +214,35 @@ def get_cu_seq_lens_from_position_ids(position_ids: torch.LongTensor) -> torch.L
     device = position_ids.device
     idxs = torch.arange(1, position_ids.shape[1], device=device)
     non_increasing_pos_id = position_ids[0, 1:] <= position_ids[0, :-1]
-    cu_seq_lens = torch.cat(
-        (
-            torch.tensor([0], device=device),
-            idxs[non_increasing_pos_id],
-            torch.tensor(position_ids[0].shape, device=device),
-        ),
-    )
+    cu_seq_lens = torch.empty(non_increasing_pos_id.sum() + 2, device=device, dtype=torch.int64)
+    cu_seq_lens[0], cu_seq_lens[1:-1], cu_seq_lens[-1] = 0, idxs[non_increasing_pos_id], position_ids.shape[-1]
     return cu_seq_lens
 
 
 def get_seq_idx_from_cu_seq_lens(cu_seq_lens: torch.Tensor) -> torch.Tensor:
-    seq_idx = torch.cat(
-        [
-            torch.full((n,), idx, dtype=torch.int32, device=cu_seq_lens.device)
-            for idx, n in enumerate(torch.diff(cu_seq_lens, dim=-1))
-        ]
-    )
+    if cu_seq_lens.ndim != 1:
+        raise ValueError(f"cu_seq_lens must be a 1D tensor, received {cu_seq_lens.ndim=}.")
+    seq_idx = torch.empty(cu_seq_lens[-1], device=cu_seq_lens.device, dtype=torch.int32)
+    start = torch.tensor(0, device=cu_seq_lens.device, dtype=torch.int32)
+    for idx, seq_len in enumerate(torch.diff(cu_seq_lens, dim=-1)):
+        seq_idx[start : start + seq_len] = idx
+        start += seq_len
+
     return seq_idx[None]
 
 
 def get_position_ids_from_cu_seq_lens(cu_seq_lens: torch.Tensor) -> torch.Tensor:
-    pos_ids = torch.cat(
-        [torch.arange(s, dtype=torch.int32, device=cu_seq_lens.device) for s in cu_seq_lens.diff(dim=-1)], dim=-1
-    )[None]
-    return pos_ids
+    if cu_seq_lens.ndim != 1:
+        raise ValueError(f"cu_seq_lens must be a 1D tensor, received {cu_seq_lens.ndim=}.")
+    pos_ids = torch.empty(cu_seq_lens[-1], device=cu_seq_lens.device, dtype=torch.int32)
+    seq_lens = cu_seq_lens.diff(dim=-1)
+    max_arange = torch.arange(seq_lens.max(), dtype=torch.int32, device=cu_seq_lens.device)
+    start = torch.tensor(0, device=cu_seq_lens.device, dtype=torch.int32)
+    for s in seq_lens:
+        pos_ids[start : start + s] = max_arange[:s]
+        start += s
+
+    return pos_ids[None]
 
 
 # Adapted from transformers.models.mamba2.modeling_mamba2.Mamba2Mixer
