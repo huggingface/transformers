@@ -19,7 +19,8 @@ from typing import List, Optional, Tuple, Union
 
 import numpy as np
 
-from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...cache_utils import Cache, DynamicCache
+from ...generation import GenerationMixin
 from ...image_processing_utils import BatchFeature
 from ...image_transforms import (
     to_channel_dimension_format,
@@ -35,16 +36,16 @@ from ...modeling_outputs import (
     CausalLMOutputWithPast,
     ModelOutput,
 )
-from ...utils import TensorType, is_torch_available, is_torchdynamo_compiling, is_vision_available, logging
+from ...utils import TensorType, add_start_docstrings, is_torch_available, is_vision_available, logging
 from ..chameleon.configuration_chameleon import (
     ChameleonConfig,
     ChameleonVQVAEConfig,
 )
 from ..chameleon.image_processing_chameleon import ChameleonImageProcessor
 from ..chameleon.modeling_chameleon import (
-    ChameleonForConditionalGeneration,
     ChameleonImageVocabularyMapping,
     ChameleonModel,
+    ChameleonPreTrainedModel,
     ChameleonVQVAE,
     ChameleonVQVAEEncoderAttnBlock,
     ChameleonVQVAEEncoderResnetBlock,
@@ -223,10 +224,17 @@ class AnoleVQVAEDecoder(nn.Module):
         return hidden_state
 
 
+class AnolePreTrainedModel(ChameleonPreTrainedModel):
+    pass
+
+
 class AnoleVQVAE(ChameleonVQVAE):
+    main_input_name = "pixel_values"
+
     def __init__(self, config: AnoleVQVAEConfig):
         super().__init__(config)
         self.decoder = AnoleVQVAEDecoder(config)
+        self.gradient_checkpointing = False
         self.post_init()
 
     def decode(self, image_tokens: torch.LongTensor) -> torch.FloatTensor:
@@ -272,8 +280,9 @@ class AnoleVQVAE(ChameleonVQVAE):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        batch_size = pixel_values.shape[0]
         quant, emb_loss, indices = self.encode(pixel_values)
-        decoded_pixel_values = self.decode(indices)
+        decoded_pixel_values = self.decode(indices.view(batch_size, -1))
         if not return_dict:
             return (decoded_pixel_values, emb_loss)
         return AnoleVQVAEOutput(decoded_pixel_values, emb_loss)
@@ -497,8 +506,15 @@ class AnoleModel(ChameleonModel):
         )
 
 
-class AnoleForConditionalGeneration(ChameleonForConditionalGeneration):
-    _tied_weights_keys = ["model.lm_head.weight"]
+ANOLE_START_DOCSTRING = None
+
+
+@add_start_docstrings(
+    "Anole Model with a head on top used for outputting logits for next token prediction.",
+    ANOLE_START_DOCSTRING,
+)
+class AnoleForConditionalGeneration(AnolePreTrainedModel, GenerationMixin):
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: AnoleConfig):
         super().__init__(config)
@@ -509,6 +525,18 @@ class AnoleForConditionalGeneration(ChameleonForConditionalGeneration):
 
         # Initialize weights and apply final processing
         self.post_init()
+
+    def get_input_embeddings(self):
+        return self.model.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.model.embed_tokens = value
+
+    def get_output_embeddings(self):
+        return self.lm_head
+
+    def set_output_embeddings(self, new_embeddings):
+        self.lm_head = new_embeddings
 
     def forward(
         self,
@@ -602,91 +630,6 @@ class AnoleForConditionalGeneration(ChameleonForConditionalGeneration):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        negative_input_ids=None,
-        past_key_values=None,
-        attention_mask=None,
-        negative_attention_mask=None,
-        inputs_embeds=None,
-        cache_position=None,
-        position_ids=None,
-        use_cache=True,
-        **kwargs,
-    ):
-        # Overwritten -- Anole can accept `negative_input_ids` and will expand inputs temporarily for CFG generation
-        if negative_input_ids is not None and cache_position[0] == 0:
-            if input_ids.shape[0] != negative_input_ids.shape[0]:
-                raise ValueError(
-                    "`conditional` and `unconditional` inputs should have same batch size, i.e. one negative prompt per input. "
-                    f"Found `input_ids.batch_size={input_ids.shape[0]}` and `negative_input_ids.batch_size={negative_input_ids.shape[0]}`"
-                )
-            input_ids = torch.cat([input_ids, negative_input_ids], dim=0)
-            if attention_mask is not None:
-                attention_mask = torch.cat([attention_mask, negative_attention_mask], dim=0)
-
-        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
-        # Exception 1: when passing input_embeds, input_ids may be missing entries
-        # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
-        # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
-        #              (we can't check exception 3 while compiling)
-        if past_key_values is not None:
-            if (
-                inputs_embeds is not None  # Exception 1
-                or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
-            ):
-                input_ids = input_ids[:, -cache_position.shape[0] :]
-            elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
-                input_ids = input_ids[:, cache_position]
-
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
-                position_ids = position_ids[:, -input_ids.shape[1] :]
-            position_ids = position_ids.clone(memory_format=torch.contiguous_format)
-
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and cache_position[0] == 0:
-            model_inputs = {"inputs_embeds": inputs_embeds}
-        else:
-            # `contiguous()` needed for compilation use cases
-            model_inputs = {"input_ids": input_ids.clone(memory_format=torch.contiguous_format)}
-
-        # Create 4D attention mask is we are using a `StaticCache` (important for performant compiled forward pass)
-        if isinstance(past_key_values, StaticCache) and attention_mask.ndim == 2:
-            if model_inputs["inputs_embeds"] is not None:
-                batch_size, sequence_length, _ = model_inputs["inputs_embeds"].shape
-                device = model_inputs["inputs_embeds"].device
-            else:
-                batch_size, sequence_length = model_inputs["input_ids"].shape
-                device = model_inputs["input_ids"].device
-
-            attention_mask = self.model._prepare_4d_causal_attention_mask_with_cache_position(
-                attention_mask,
-                sequence_length=sequence_length,
-                target_length=past_key_values.get_max_cache_shape(),
-                dtype=self.dtype,
-                device=device,
-                cache_position=cache_position,
-                batch_size=batch_size,
-                config=self.config,
-                past_key_values=past_key_values,
-            )
-
-        model_inputs.update(
-            {
-                "position_ids": position_ids,
-                "cache_position": cache_position,
-                "past_key_values": past_key_values,
-                "use_cache": use_cache,
-                "attention_mask": attention_mask,
-            }
-        )
-        return model_inputs
 
     def decode_image_tokens(self, bpe_tokens: torch.Tensor):
         """

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 HuggingFace Inc.
+# Copyright 2025 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -29,10 +29,10 @@ if is_torch_available():
 if is_vision_available():
     from PIL import Image
 
-    from transformers import ChameleonImageProcessor
+    from transformers import AnoleImageProcessor
 
 
-class ChameleonImageProcessingTester:
+class AnoleImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -98,13 +98,13 @@ class ChameleonImageProcessingTester:
 
 @require_torch
 @require_vision
-class ChameleonImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
-    image_processing_class = ChameleonImageProcessor if is_vision_available() else None
+class AnoleImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
+    image_processing_class = AnoleImageProcessor if is_vision_available() else None
 
-    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.setUp with CLIP->Chameleon
+    # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.setUp with CLIP->Anole
     def setUp(self):
         super().setUp()
-        self.image_processor_tester = ChameleonImageProcessingTester(self)
+        self.image_processor_tester = AnoleImageProcessingTester(self)
 
     @property
     # Copied from tests.models.clip.test_image_processing_clip.CLIPImageProcessingTest.image_processor_dict
@@ -203,3 +203,28 @@ class ChameleonImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         # Image processor should return same pixel values, independently of input format
         self.assertTrue((encoded_images_nested == encoded_images).all())
+
+    def test_postprocessing(self):
+        """Tests image postprocessing, in other words converting a normalized image back to `PIL` image"""
+        image_processing = self.image_processing_class(**self.image_processor_dict)
+        # Pixel values for an image with 3 channels and 32x32 resolution
+        pixel_values_single = torch.zeros((1, 3, 32, 32))
+        # Pixel values for a batch of 2 images with 3 channels and 32x32 resolution
+        pixel_values_batch = torch.zeros((2, 3, 32, 32))
+
+        for pixel_values in [pixel_values_single, pixel_values_batch]:
+            unnormalized_pixel_values = image_processing.postprocess(pixel_values, return_tensors="pt").pixel_values
+            self.assertEqual(unnormalized_pixel_values.shape, pixel_values.shape)
+            expected_pixel_values = torch.full_like(pixel_values, 128)
+            self.assertTrue(torch.equal(unnormalized_pixel_values, expected_pixel_values))
+
+        # Test normalize -> unnormalize back if the arrays match
+        image_inputs = self.image_processor_tester.prepare_image_inputs(equal_resolution=True, torchify=True)
+
+        # Test not batched input
+        encoded_images = image_processing(image_inputs[0], do_resize=False, do_center_crop=False, return_tensors="pt")
+        unnormalized_image = image_processing.postprocess(
+            encoded_images.pixel_values, return_tensors="pt"
+        ).pixel_values
+        # the diff of 1 because the images are in range 0-255 in `uint8` and some precision errors might apply
+        self.assertTrue((image_inputs[0] - unnormalized_image).abs().max() <= 1)

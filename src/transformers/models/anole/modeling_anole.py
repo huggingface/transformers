@@ -39,9 +39,7 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
     is_flash_attn_greater_or_equal_2_10,
     is_torch_available,
-    is_torchdynamo_compiling,
     logging,
-    replace_return_docstrings,
 )
 from .configuration_anole import AnoleConfig, AnoleVQVAEConfig
 
@@ -520,6 +518,23 @@ ANOLE_START_DOCSTRING = r"""
 """
 
 
+ANOLE_VQ_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`AnoleVQVAEConfig`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+
 @add_start_docstrings(
     "The bare anole Model outputting raw hidden-states without any specific head on top.",
     ANOLE_START_DOCSTRING,
@@ -551,23 +566,6 @@ class AnolePreTrainedModel(PreTrainedModel):
                 module.weight.data[module.padding_idx].zero_()
 
 
-ANOLE_VQ_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`AnoleVQVAEConfig`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
 @add_start_docstrings(
     """The VQ-VAE model used in Anole for encoding/decoding images into discrete tokens.
     This model follows the "Make-a-scene: Scene-based text-to-image generation with human priors" paper from
@@ -578,6 +576,7 @@ ANOLE_VQ_START_DOCSTRING = r"""
 class AnoleVQVAE(AnolePreTrainedModel):
     config_class = AnoleVQVAEConfig
     _no_split_modules = ["AnoleVQVAEVectorQuantizer"]
+    main_input_name = "pixel_values"
 
     def _init_weights(self, module):
         std = self.config.initializer_range
@@ -600,6 +599,7 @@ class AnoleVQVAE(AnolePreTrainedModel):
         self.post_quant_conv = torch.nn.Conv2d(config.embed_dim, config.latent_channels, 1)
         self.eval()  # Anole's VQ model is frozen
         self.decoder = AnoleVQVAEDecoder(config)
+        self.gradient_checkpointing = False
         self.post_init()
 
     def encode(self, pixel_values: torch.FloatTensor):
@@ -666,8 +666,9 @@ class AnoleVQVAE(AnolePreTrainedModel):
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        batch_size = pixel_values.shape[0]
         quant, emb_loss, indices = self.encode(pixel_values)
-        decoded_pixel_values = self.decode(indices)
+        decoded_pixel_values = self.decode(indices.view(batch_size, -1))
         if not return_dict:
             return (decoded_pixel_values, emb_loss)
         return AnoleVQVAEOutput(decoded_pixel_values, emb_loss)
@@ -1836,14 +1837,14 @@ class AnoleModel(AnolePreTrainedModel):
     ANOLE_START_DOCSTRING,
 )
 class AnoleForConditionalGeneration(AnolePreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["model.lm_head.weight"]
+    _tied_weights_keys = ["lm_head.weight"]
 
     def __init__(self, config: AnoleConfig):
         super().__init__(config)
         self.model = AnoleModel(config)
+        self.vocabulary_mapping = self.model.vocabulary_mapping
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-        self.vocabulary_mapping = self.model.vocabulary_mapping
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1860,14 +1861,6 @@ class AnoleForConditionalGeneration(AnolePreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.lm_head = new_embeddings
 
-    def set_decoder(self, decoder):
-        self.model = decoder
-
-    def get_decoder(self):
-        return self.model
-
-    @add_start_docstrings_to_model_forward(ANOLE_INPUTS_DOCSTRING)
-    @replace_return_docstrings(output_type=CausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: torch.LongTensor = None,
@@ -1960,98 +1953,6 @@ class AnoleForConditionalGeneration(AnolePreTrainedModel, GenerationMixin):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        negative_input_ids=None,
-        past_key_values=None,
-        attention_mask=None,
-        negative_attention_mask=None,
-        inputs_embeds=None,
-        cache_position=None,
-        position_ids=None,
-        use_cache=True,
-        **kwargs,
-    ):
-        # Overwritten -- Anole can accept `negative_input_ids` and will expand inputs temporarily for CFG generation
-        if negative_input_ids is not None:
-            if input_ids.shape[0] != negative_input_ids.shape[0]:
-                raise ValueError(
-                    "`conditional` and `unconditional` inputs should have same batch size, i.e. one negative prompt per input. "
-                    f"Found `input_ids.batch_size={input_ids.shape[0]}` and `negative_input_ids.batch_size={negative_input_ids.shape[0]}`"
-                )
-
-            # In decoding phase the `input_ids` will grow every step, so we concat `negative_input_ids`
-            if negative_input_ids.shape[1] < input_ids.shape[1]:
-                diff = input_ids.shape[1] - negative_input_ids.shape[1]
-                negative_input_ids = torch.cat([negative_input_ids, input_ids[:, -1:].repeat(1, diff)], dim=-1)
-                negative_attention_mask = torch.cat([negative_attention_mask, torch.ones_like(negative_input_ids)[:, :diff]], dim=-1)
-
-            input_ids = torch.cat([input_ids, negative_input_ids], dim=0)
-            if attention_mask is not None:
-                attention_mask = torch.cat([attention_mask, negative_attention_mask], dim=0)
-
-        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
-        # Exception 1: when passing input_embeds, input_ids may be missing entries
-        # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
-        # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
-        #              (we can't check exception 3 while compiling)
-        if past_key_values is not None:
-            if (
-                inputs_embeds is not None  # Exception 1
-                or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
-            ):
-                input_ids = input_ids[:, -cache_position.shape[0] :]
-            elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
-                input_ids = input_ids[:, cache_position]
-
-        if attention_mask is not None and position_ids is None:
-            # create position_ids on the fly for batch generation
-            position_ids = attention_mask.long().cumsum(-1) - 1
-            position_ids.masked_fill_(attention_mask == 0, 1)
-            if past_key_values:
-                position_ids = position_ids[:, -input_ids.shape[1] :]
-            position_ids = position_ids.clone(memory_format=torch.contiguous_format)
-
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and cache_position[0] == 0:
-            model_inputs = {"inputs_embeds": inputs_embeds}
-        else:
-            # `contiguous()` needed for compilation use cases
-            model_inputs = {"input_ids": input_ids.clone(memory_format=torch.contiguous_format)}
-
-        # Create 4D attention mask is we are using a `StaticCache` (important for performant compiled forward pass)
-        if isinstance(past_key_values, StaticCache) and attention_mask.ndim == 2:
-            if model_inputs["inputs_embeds"] is not None:
-                batch_size, sequence_length, _ = model_inputs["inputs_embeds"].shape
-                device = model_inputs["inputs_embeds"].device
-            else:
-                batch_size, sequence_length = model_inputs["input_ids"].shape
-                device = model_inputs["input_ids"].device
-
-            attention_mask = self.model._prepare_4d_causal_attention_mask_with_cache_position(
-                attention_mask,
-                sequence_length=sequence_length,
-                target_length=past_key_values.get_max_cache_shape(),
-                dtype=self.dtype,
-                device=device,
-                cache_position=cache_position,
-                batch_size=batch_size,
-                config=self.config,
-                past_key_values=past_key_values,
-            )
-
-        model_inputs.update(
-            {
-                "position_ids": position_ids,
-                "cache_position": cache_position,
-                "past_key_values": past_key_values,
-                "use_cache": use_cache,
-                "attention_mask": attention_mask,
-            }
-        )
-        return model_inputs
 
     def decode_image_tokens(self, bpe_tokens: torch.Tensor):
         """

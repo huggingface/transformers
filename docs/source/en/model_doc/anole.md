@@ -28,7 +28,7 @@ native integration, requiring adapters to align visual representations with pre-
 (LLMs); (2) many are restricted to single-modal generation; (3) while some support multimodal generation,
 they rely on separate diffusion models for visual modeling and generation. To mitigate these limitations,
 we present ANOLE, an open, autoregressive, native large multimodal model for interleaved image-text
-generation. We build ANOLE from Meta AI’s Chameleon, adopting an innovative fine-tuning strategy that
+generation. We build ANOLE from Meta AI’s Anole, adopting an innovative fine-tuning strategy that
 is both data-efficient and parameter-efficient. ANOLE demonstrates high-quality, coherent multimodal
 generation capabilities. We have open-sourced our model, training framework, and instruction tuning data.*
 
@@ -51,53 +51,54 @@ The original code can be found [here](https://github.com/GAIR-NLP/anole/tree/mai
 
 ### Single image inference
 
-Chameleon is a gated model so make sure to have access and login to Hugging Face Hub using a token.
+Anole is a gated model so make sure to have access and login to Hugging Face Hub using a token.
 Here's how to load the model and perform inference in half-precision (`torch.bfloat16`):
 
 ```python
-from transformers import ChameleonProcessor, ChameleonForConditionalGeneration
+from transformers import AnoleProcessor, AnoleForConditionalGeneration
 import torch
 from PIL import Image
 import requests
 
-processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
-model = ChameleonForConditionalGeneration.from_pretrained("facebook/chameleon-7b", torch_dtype=torch.bfloat16, device_map="cuda")
+processor = AnoleProcessor.from_pretrained("leloy/Anole-7b-v0.1-hf")
+model = AnoleForConditionalGeneration.from_pretrained(
+    "leloy/Anole-7b-v0.1-hf",
+    torch_dtype=torch.bfloat16,
+    device_map="cuda:0"
+)
 
 # prepare image and text prompt
-url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
-image = Image.open(requests.get(url, stream=True).raw)
+image = Image.open(requests.get('http://images.cocodataset.org/val2017/000000039769.jpg', stream=True).raw)
 prompt = "What do you see in this image?<image>"
 
 inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device, dtype=torch.bfloat16)
 
 # autoregressively complete prompt
-output = model.generate(**inputs, max_new_tokens=50)
+output = model.generate(**inputs, suppress_tokens=model.vocabulary_mapping.image_tokens, max_new_tokens=50)
 print(processor.decode(output[0], skip_special_tokens=True))
 ```
 
 ### Multi image inference
 
-Chameleon can perform inference with multiple images as input, where images either belong to the same prompt or different prompts (in batched inference). Here is how you can do it:
+Anole can perform inference with multiple images as input, where images either belong to the same prompt or different prompts (in batched inference). Here is how you can do it:
 
 ```python
-from transformers import ChameleonProcessor, ChameleonForConditionalGeneration
+from transformers import AnoleProcessor, AnoleForConditionalGeneration
 import torch
 from PIL import Image
 import requests
 
-processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
-
-model = ChameleonForConditionalGeneration.from_pretrained("facebook/chameleon-7b", torch_dtype=torch.bfloat16, device_map="cuda")
+processor = AnoleProcessor.from_pretrained("leloy/Anole-7b-v0.1-hf")
+model = AnoleForConditionalGeneration.from_pretrained(
+    "leloy/Anole-7b-v0.1-hf",
+    device_map="auto",
+    torch_dtype=torch.bfloat16,
+)
 
 # Get three different images
-url = "https://www.ilankelman.org/stopsigns/australia.jpg"
-image_stop = Image.open(requests.get(url, stream=True).raw)
-
-url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-image_cats = Image.open(requests.get(url, stream=True).raw)
-
-url = "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg"
-image_snowman = Image.open(requests.get(url, stream=True).raw)
+image_stop = Image.open(requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw)
+image_cats = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+image_snowman = Image.open(requests.get("https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg", stream=True).raw)
 
 # Prepare a batched prompt, where the first one is a multi-image prompt and the second is not
 prompts = [
@@ -107,53 +108,90 @@ prompts = [
 
 # We can simply feed images in the order they have to be used in the text prompt
 # Each "<image>" token uses one image leaving the next for the subsequent "<image>" tokens
-inputs = processor(images=[image_stop, image_cats, image_snowman], text=prompts, padding=True, return_tensors="pt").to(device="cuda", dtype=torch.bfloat16)
+inputs = processor(
+    images=[image_stop, image_cats, image_snowman], text=prompts, padding=True, return_tensors="pt"
+).to(device="cuda:0", dtype=torch.bfloat16)
 
 # Generate
-generate_ids = model.generate(**inputs, max_new_tokens=50)
+generate_ids = model.generate(**inputs, suppress_tokens=model.vocabulary_mapping.image_tokens, max_new_tokens=50)
 processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
 ```
 
 ### Text to image generation
 
-Chameleon can also generate images. However, the official model checkpoint currently only supports text generation. We need to use finetuned versions such as [Anole](https://arxiv.org/abs/2407.06135) to do image generation. Here is how you can do it:
+Anole can also generate images. Here is how you can do it:
 
 ```python
 import torch
-from transformers import ChameleonProcessor, ChameleonForConditionalGeneration
+from transformers import AnoleProcessor, AnoleForConditionalGeneration
 
-processor = ChameleonProcessor.from_pretrained("leloy/Anole-7b-v0.1-hf")
-model = ChameleonForConditionalGeneration.from_pretrained(
+processor = AnoleProcessor.from_pretrained("leloy/Anole-7b-v0.1-hf")
+model = AnoleForConditionalGeneration.from_pretrained(
     "leloy/Anole-7b-v0.1-hf",
     device_map="auto",
     torch_dtype=torch.bfloat16,
 )
 
-# Prepare a prompt
-prompt = "Generate an image of a snowman."
+inputs = processor("Generate an image of a snowman.", return_tensors="pt").to(model.device)
 
-# Preprocess the prompt
-inputs = processor(prompt, padding=True, return_tensors="pt").to(model.device, dtype=model.dtype)
+
+# NOTE: We need to set `max_new_tokens` to at least 1026 since the model generates the `image_start_token` marker
+# then 1024 image tokens, and finally the `image_end_token` marker.
+generation_max_length = 1500
+input_sequence_length = inputs.input_ids.shape[1]
+visual_tokens = model.vocabulary_mapping.image_tokens
+
+
+# prepare a constraint to suppress all tokens expcet for image tokens
+def prefix_allowed_tokens_fn_image_only(batch_id, input_ids):
+    boi_token_id = torch.tensor([processor.tokenizer.boi_token_id], device=model.device)
+    eoi_token_id = torch.tensor([processor.tokenizer.eoi_token_id], device=model.device)
+    eos_token_id = torch.tensor([processor.tokenizer.eos_token_id], device=model.device)
+    max_length = generation_max_length
+    image_seq_length = 1024
+    begin_index = input_sequence_length
+
+    # If one image generation is completed, force end-of-image token
+    if boi_token_id in input_ids:
+        position = torch.nonzero(input_ids == boi_token_id, as_tuple=True)[0][-1]
+        offset = input_ids.shape[0] - position
+        if offset == image_seq_length + 1:
+            return eoi_token_id
+
+    # If we just started generating an new image, then force begin-of-image token
+    if (input_ids.shape[0] - begin_index) % 1026 == 0:
+        # Check if we can start generating image (i.e. enough space to fit one image of 1024 tokens)
+        # otherwise generate EOS and stop 
+        if max_length - input_ids.shape[0] < image_seq_length + 1:
+            return eos_token_id
+        return boi_token_id
+
+    # Otherwise just generate any image token id
+    return visual_tokens
+
 
 # Generate discrete image tokens
 generate_ids = model.generate(
     **inputs,
-    multimodal_generation_mode="image-only",
-    # Note: We need to set `max_new_tokens` to 1026 since the model generates the `image_start_token` marker token first, then 1024 image tokens, and finally the `image_end_token` marker token.
-    max_new_tokens=1026,
-    # This is important because most of the image tokens during training were for "empty" patches, so greedy decoding of image tokens will likely result in a blank image.
+    prefix_allowed_tokens_fn=prefix_allowed_tokens_fn_image_only,
+    max_new_tokens=generation_max_length,
     do_sample=True,
+    temperature=0.7,
+    top_p=0.9,
 )
 
 # Only keep the tokens from the response
 response_ids = generate_ids[:, inputs["input_ids"].shape[-1]:]
 
-# Decode the generated image tokens
-pixel_values = model.decode_image_tokens(response_ids[:, 1:-1])
-images = processor.postprocess_pixel_values(pixel_values)
+# Decode the generated image token. First crop boi/eos/eos tokens because decoder accepts only image tokens
+# of shape `(bs, 1024)`
+image_token_ids = response_ids[:, 1:-2]
+
+pixel_values = model.decode_image_tokens(image_token_ids)
+pixel_values = processor.postprocess(pixel_values.float(), return_tensors="pil")["pixel_values"]
 
 # Save the image
-images[0].save("snowman.png")
+pixel_values[0].save("snowman.png")
 ```
 
 ### Text-image to image generation
@@ -161,31 +199,14 @@ images[0].save("snowman.png")
 We can also interleave text and images in the prompt to generate images. Here is how you can do it:
 
 ```python
-import requests
-
-import torch
-from PIL import Image
-from transformers import ChameleonProcessor, ChameleonForConditionalGeneration
-from transformers.image_transforms import to_pil_image
-
-processor = ChameleonProcessor.from_pretrained("leloy/Anole-7b-v0.1-hf")
-model = ChameleonForConditionalGeneration.from_pretrained(
-    "leloy/Anole-7b-v0.1-hf",
-    device_map="auto",
-    torch_dtype=torch.bfloat16,
-)
 
 # Get image of a snowman
-url = "https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg"
-image_snowman = Image.open(requests.get(url, stream=True).raw)
-
-# Prepare a prompt
-prompt = "Generate a variation of this image.<image>"
+image_snowman = Image.open(requests.get("https://huggingface.co/microsoft/kosmos-2-patch14-224/resolve/main/snowman.jpg", stream=True).raw)
 
 # Preprocess the prompt
 inputs = processor(
     images=[image_snowman],
-    text=prompt,
+    text="Generate a variation of this image.<image>",
     padding=True,
     return_tensors="pt",
 ).to(model.device, dtype=model.dtype)
@@ -193,24 +214,25 @@ inputs = processor(
 # Generate discrete image tokens
 generate_ids = model.generate(
     **inputs,
-    multimodal_generation_mode="image-only",
-    # This is important because most of the image tokens during training were for "empty" patches, so greedy decoding of image tokens will likely result in a blank image.
+    prefix_allowed_tokens_fn=prefix_allowed_tokens_fn_image_only_,
+    max_new_tokens=generation_max_length,
     do_sample=True,
+    temperature=0.7,
+    top_p=0.9,
 )
 
 # Only keep the tokens from the response
 response_ids = generate_ids[:, inputs["input_ids"].shape[-1]:]
 
-# The generated image tokens are wrapped by the `image_start_token` and `image_end_token` tokens. We need to remove them before decoding the image tokens.
-image_token_ids = response_ids[:, 1:-1]
+# Decode the generated image token. First crop boi/eos/eos tokens because decoder accepts only image tokens
+# of shape `(bs, 1024)`
+image_token_ids = response_ids[:, 1:-2]
 
-# Decode the generated image tokens
 pixel_values = model.decode_image_tokens(image_token_ids)
-pixel_values = processor.postprocess_pixel_values(pixel_values)
+pixel_values = processor.postprocess(pixel_values.float(), return_tensors="pil")["pixel_values"]
 
 # Save the image
-image = to_pil_image(pixel_values[0].detach().cpu())
-image.save("snowman.png")
+pixel_values[0].save("snowman.png")
 ```
 
 ### Interleaved text-image generation
@@ -219,33 +241,72 @@ We can also generate interleaved text and images in the output. Here is how you 
 
 ```python
 import torch
-from transformers import ChameleonProcessor, ChameleonForConditionalGeneration
+from transformers import AnoleProcessor, AnoleForConditionalGeneration
 
-processor = ChameleonProcessor.from_pretrained("leloy/Anole-7b-v0.1-hf")
-model = ChameleonForConditionalGeneration.from_pretrained(
+processor = AnoleProcessor.from_pretrained("leloy/Anole-7b-v0.1-hf")
+model = AnoleForConditionalGeneration.from_pretrained(
     "leloy/Anole-7b-v0.1-hf",
     device_map="auto",
     torch_dtype=torch.bfloat16,
 )
 
-# Prepare a prompt
-prompt = "Can you draw a snowman and explain how to build one?"
-
 # Preprocess the prompt
-inputs = processor(prompt, padding=True, return_tensors="pt").to(model.device, dtype=model.dtype)
+inputs = processor("Can you draw a snowman and explain how to build one?", return_tensors="pt").to(model.device)
+
+
+# NOTE: We need to set `max_new_tokens` to at least 1026 since the model generates the `image_start_token` marker
+# then 1024 image tokens, and finally the `image_end_token` marker.
+generation_max_length = 1500
+input_sequence_length = inputs.input_ids.shape[1]
+visual_tokens = model.vocabulary_mapping.image_tokens
+text_tokens = [token_id for token_id in range(model.vocab_size) if token_id not in visual_tokens + image_special_tokens]
+
+# Prepare a constraint to suppress all tokens expcet for image tokens
+def prefix_allowed_tokens_fn_interleaved(batch_id, input_ids):
+    boi_token_id = torch.tensor([processor.tokenizer.boi_token_id], device=model.device)
+    eoi_token_id = torch.tensor([processor.tokenizer.eoi_token_id], device=model.device)
+    max_length = generation_max_length
+    image_seq_length = 1024
+
+    # Check if we are in image generation mode
+    if boi_token_id in input_ids: 
+        position = torch.nonzero(input_ids == boi_token_id, as_tuple=True)[0][-1]
+        offset = input_ids.shape[0] - position
+        if offset < image_seq_length + 1:
+            return visual_tokens
+        elif offset == image_seq_length + 1:
+            return eoi_token_id
+
+    # Check if we can start generating image (i.e. have enough space to fit one image of 1024 tokens)
+    if max_length - input_ids.shape[0] < image_seq_length + 1:
+        return text_tokens
+    
+    # Else allow text tokens and possible to start generating an image
+    return text_tokens + [boi_token_id]
+
 
 # Generate interleaved text and discrete image tokens
 generate_ids = model.generate(
     **inputs,
-    multimodal_generation_mode="interleaved-text-image",
-    # Note: We will need a larger `max_new_tokens` value since we are generating both text and image tokens.
-    max_new_tokens=4096,
-    # This is important because most of the image tokens during training were for "empty" patches, so greedy decoding of image tokens will likely result in a blank image.
+    prefix_allowed_tokens_fn=prefix_allowed_tokens_fn_interleaved,
+    max_new_tokens=generation_max_length,
     do_sample=True,
+    top_p=0.9,
+    temperature=0.7,  
 )
 
 # Only keep the tokens from the response
 response_ids = generate_ids[:, inputs["input_ids"].shape[-1]:]
+batch_indices, token_indices = torch.where(response_ids == processor.tokenizer.boi_token_id)
+batch_image_token_ids = []
+for i, (batch_id, token_id) in enumerate(zip(batch_indices, token_indices)):
+    image_token_ids = response_ids[batch_id + 1, token_id: token_id + 1025]
+    pixel_values = model.decode_image_tokens(image_token_ids)
+    pixel_values = processor.postprocess(pixel_values.float(), return_tensors="pil")["pixel_values"]
+    pixel_values[0].save(f"fig_{i}.png")
+
+text = processor.batch_decode(response_ids, skip_special_token=True)
+print(text)
 ```
 
 ## AnoleConfig

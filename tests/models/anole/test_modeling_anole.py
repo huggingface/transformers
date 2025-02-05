@@ -17,14 +17,12 @@
 import unittest
 
 import requests
-from parameterized import parameterized
 
-from transformers import AnoleConfig, AnoleVQVAEConfig, is_torch_available, is_vision_available, set_seed
+from transformers import AnoleConfig, AnoleVQVAEConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
     require_bitsandbytes,
     require_read_token,
     require_torch,
-    require_torch_multi_gpu,
     slow,
     torch_device,
 )
@@ -32,7 +30,6 @@ from transformers.testing_utils import (
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
-from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_vision_available():
@@ -44,8 +41,8 @@ if is_torch_available():
     from transformers import (
         AnoleForConditionalGeneration,
         AnoleModel,
+        AnoleProcessor,
         AnoleVQVAE,
-        ChameleonProcessor,
     )
 
 
@@ -56,8 +53,6 @@ class AnoleModelTester:
         batch_size=13,
         seq_length=7,
         is_training=False,
-        use_input_mask=True,
-        use_labels=True,
         vocab_size=99,
         image_token_index=1,
         boi_token_id=97,
@@ -87,8 +82,6 @@ class AnoleModelTester:
         self.parent = parent
         self.batch_size = batch_size
         self.is_training = is_training
-        self.use_input_mask = use_input_mask
-        self.use_labels = use_labels
         self.vocab_size = vocab_size
         self.image_token_index = image_token_index
         self.boi_token_id = boi_token_id
@@ -121,23 +114,11 @@ class AnoleModelTester:
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         input_ids[input_ids == self.image_token_index] = self.pad_token_id
         input_ids[:, : self.image_seq_length] = self.image_token_index
-        pixel_values = floats_tensor([self.batch_size, 3, self.image_size, self.image_size])
-
-        input_mask = None
-        if self.use_input_mask:
-            input_mask = torch.tril(torch.ones_like(input_ids).to(torch_device))
-
-        sequence_labels = None
-        token_labels = None
-        choice_labels = None
-        if self.use_labels:
-            sequence_labels = ids_tensor([self.batch_size], self.type_sequence_label_size)
-            token_labels = ids_tensor([self.batch_size, self.seq_length], self.num_labels)
-            choice_labels = ids_tensor([self.batch_size], self.num_choices)
+        attention_mask = torch.tril(torch.ones_like(input_ids).to(torch_device))
 
         config = self.get_config()
 
-        return config, input_ids, input_mask, pixel_values, sequence_labels, token_labels, choice_labels
+        return config, input_ids, attention_mask
 
     def get_config(self):
         # create dummy vocab map for image2bpe mapping if it needs remapping
@@ -172,8 +153,6 @@ class AnoleModelTester:
             vocabulary_map={v: k for k, v in vocab_map.items()},
             vq_config=self.get_vq_config(),
             image_token_index=self.image_token_index,
-            boi_token_id=self.boi_token_id,
-            eoi_token_id=self.eoi_token_id,
         )
 
     def get_vq_config(self):
@@ -197,100 +176,15 @@ class AnoleModelTester:
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
 
-    def create_and_check_for_causal_lm(
-        self,
-        config,
-        input_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        model = AnoleForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, labels=token_labels)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
-
-    def create_and_check_decoder_model_past_large_inputs(
-        self,
-        config,
-        input_ids,
-        input_mask,
-        sequence_labels,
-        token_labels,
-        choice_labels,
-        encoder_hidden_states,
-        encoder_attention_mask,
-    ):
-        config.is_decoder = True
-        model = AnoleForConditionalGeneration(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        # first forward pass
-        outputs = model(
-            input_ids,
-            attention_mask=input_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            use_cache=True,
-        )
-        past_key_values = outputs.past_key_values
-
-        # create hypothetical multiple next token and extent to next_input_ids
-        next_tokens = ids_tensor((self.batch_size, 3), config.vocab_size)
-        next_mask = ids_tensor((self.batch_size, 3), vocab_size=2)
-
-        # append to next input_ids and
-        next_input_ids = torch.cat([input_ids, next_tokens], dim=-1)
-        next_attention_mask = torch.cat([input_mask, next_mask], dim=-1)
-
-        output_from_no_past = model(
-            next_input_ids,
-            attention_mask=next_attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            output_hidden_states=True,
-        )["hidden_states"][0]
-        output_from_past = model(
-            next_tokens,
-            attention_mask=next_attention_mask,
-            encoder_hidden_states=encoder_hidden_states,
-            encoder_attention_mask=encoder_attention_mask,
-            past_key_values=past_key_values,
-            output_hidden_states=True,
-        )["hidden_states"][0]
-
-        # select random slice
-        random_slice_idx = ids_tensor((1,), output_from_past.shape[-1]).item()
-        output_from_no_past_slice = output_from_no_past[:, -3:, random_slice_idx].detach()
-        output_from_past_slice = output_from_past[:, :, random_slice_idx].detach()
-
-        self.parent.assertTrue(output_from_past_slice.shape[1] == next_tokens.shape[1])
-
-        # test that outputs are equal for slice
-        self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        (
-            config,
-            input_ids,
-            input_mask,
-            pixel_values,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = config_and_inputs
-        inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask, "pixel_values": pixel_values}
+        config, input_ids, attention_mask = config_and_inputs
+        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask}
         return config, inputs_dict
 
 
 @require_torch
-class AnoleModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class AnoleModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (AnoleModel, AnoleForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (AnoleForConditionalGeneration,) if is_torch_available() else ()
     test_head_masking = False
@@ -303,88 +197,6 @@ class AnoleModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
     def test_config(self):
         self.config_tester.run_common_tests()
-
-    def test_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_model(*config_and_inputs)
-
-    @parameterized.expand([("linear",), ("dynamic",)])
-    def test_model_rope_scaling(self, scaling_type):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        short_input = ids_tensor([1, 10], config.vocab_size)
-        long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
-
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        original_model = AnoleModel(config)
-        original_model.to(torch_device)
-        original_model.eval()
-        original_short_output = original_model(short_input).last_hidden_state
-        original_long_output = original_model(long_input).last_hidden_state
-
-        set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        config.rope_scaling = {"type": scaling_type, "factor": 10.0}
-        scaled_model = AnoleModel(config)
-        scaled_model.to(torch_device)
-        scaled_model.eval()
-        scaled_short_output = scaled_model(short_input).last_hidden_state
-        scaled_long_output = scaled_model(long_input).last_hidden_state
-
-        # Dynamic scaling does not change the RoPE embeddings until it receives an input longer than the original
-        # maximum sequence length, so the outputs for the short input should match.
-        if scaling_type == "dynamic":
-            torch.testing.assert_close(original_short_output, scaled_short_output, rtol=1e-5, atol=1e-5)
-        else:
-            self.assertFalse(torch.allclose(original_short_output, scaled_short_output, atol=1e-5))
-
-        # The output should be different for long inputs
-        self.assertFalse(torch.allclose(original_long_output, scaled_long_output, atol=1e-5))
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    def test_inputs_embeds(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            wte = model.get_input_embeddings()
-            inputs["inputs_embeds"] = wte(input_ids)
-
-            with torch.no_grad():
-                model(**inputs)
-
-    # overwrite inputs_embeds tests because we need to delete "pixel values" for LVLMs
-    # while some other models require pixel_values to be present
-    def test_inputs_embeds_matches_input_ids(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-
-            inputs = self._prepare_for_class(inputs_dict, model_class)
-            input_ids = inputs["input_ids"]
-            del inputs["input_ids"]
-            del inputs["pixel_values"]
-
-            inputs_embeds = model.get_input_embeddings()(input_ids)
-
-            with torch.no_grad():
-                out_ids = model(input_ids=input_ids, **inputs)[0]
-                out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
-            self.assertTrue(torch.allclose(out_embeds, out_ids))
-
-    @unittest.skip("Anole forces some token ids to be -inf!")
-    def test_batching_equivalence(self):
-        pass
 
 
 class AnoleVQModelTester:
@@ -492,9 +304,9 @@ class AnoleIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_model_7b(self):
         model = AnoleForConditionalGeneration.from_pretrained(
-            "facebook/anole-7b", load_in_4bit=True, device_map="auto"
+            "leloy/Anole-7b-v0.1-hf", load_in_4bit=True, device_map="auto"
         )
-        processor = ChameleonProcessor.from_pretrained("facebook/anole-7b")
+        processor = AnoleProcessor.from_pretrained("leloy/Anole-7b-v0.1-hf")
 
         image = Image.open(
             requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
@@ -514,9 +326,9 @@ class AnoleIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_model_7b_batched(self):
         model = AnoleForConditionalGeneration.from_pretrained(
-            "facebook/anole-7b", load_in_4bit=True, device_map="auto"
+            "leloy/Anole-7b-v0.1-hf", load_in_4bit=True, device_map="auto"
         )
-        processor = ChameleonProcessor.from_pretrained("facebook/anole-7b")
+        processor = AnoleProcessor.from_pretrained("leloy/Anole-7b-v0.1-hf")
 
         image = Image.open(
             requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
@@ -547,9 +359,9 @@ class AnoleIntegrationTest(unittest.TestCase):
     @require_read_token
     def test_model_7b_multi_image(self):
         model = AnoleForConditionalGeneration.from_pretrained(
-            "facebook/anole-7b", load_in_4bit=True, device_map="auto"
+            "leloy/Anole-7b-v0.1-hf", load_in_4bit=True, device_map="auto"
         )
-        processor = ChameleonProcessor.from_pretrained("facebook/anole-7b")
+        processor = AnoleProcessor.from_pretrained("leloy/Anole-7b-v0.1-hf")
 
         image = Image.open(
             requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
@@ -563,32 +375,6 @@ class AnoleIntegrationTest(unittest.TestCase):
 
         # greedy generation outputs
         EXPECTED_TEXT_COMPLETION = ['What do these two images have in common?The two images show a connection between the night sky and the internet. The first image shows a starry night sky, with the stars arranged in a pattern that resembles the structure of the internet. The']  # fmt: skip
-        generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
-        text = processor.batch_decode(generated_ids, skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
-
-    @slow
-    @require_bitsandbytes
-    @require_read_token
-    @require_torch_multi_gpu
-    def test_model_7b_multi_gpu(self):
-        model = AnoleForConditionalGeneration.from_pretrained(
-            "facebook/anole-7b",
-            load_in_4bit=True,
-            device_map="auto",
-            max_memory={0: "1GB"},
-        )
-        processor = ChameleonProcessor.from_pretrained("facebook/anole-7b")
-
-        image = Image.open(
-            requests.get("https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg", stream=True).raw
-        )
-        prompt = "<image>Describe what do you see here and tell me about the history behind it?"
-
-        inputs = processor(prompt, images=image, return_tensors="pt").to(model.device, torch.float16)
-
-        # greedy generation outputs
-        EXPECTED_TEXT_COMPLETION = ['Describe what do you see here and tell me about the history behind it?The image depicts a star map, with a bright blue line extending across the center of the image. The line is labeled "390 light years" and is accompanied by a small black and']  # fmt: skip
         generated_ids = model.generate(**inputs, max_new_tokens=40, do_sample=False)
         text = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, text)
