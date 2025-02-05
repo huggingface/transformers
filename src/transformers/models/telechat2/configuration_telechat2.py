@@ -87,7 +87,7 @@ class TeleChat2Config(LlamaConfig):
             attention_dropout=attention_dropout,
             head_dim=head_dim,
             **kwargs,
-            )
+        )
 
         del self.attention_bias
         del self.mlp_bias
