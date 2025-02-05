@@ -39,7 +39,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -56,10 +56,6 @@ if is_torch_available():
     from torch import nn
 
     from transformers import InstructBlipVideoForConditionalGeneration, InstructBlipVideoVisionModel
-
-
-if is_vision_available():
-    pass
 
 
 class InstructBlipVideoVisionModelTester:
@@ -768,7 +764,7 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
             ).logits[:, -1, :]
 
             # They should result in very similar logits
-            self.assertTrue(torch.allclose(next_logits_wo_padding, next_logits_with_padding, atol=1e-5))
+            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5)
 
     @unittest.skip(
         "InstructBLIPVideo cannot generate only from input ids, and requires pixel values in all cases to be present"

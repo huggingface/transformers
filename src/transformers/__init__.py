@@ -328,6 +328,7 @@ _import_structure = {
         "CTRLTokenizer",
     ],
     "models.cvt": ["CvtConfig"],
+    "models.dab_detr": ["DabDetrConfig"],
     "models.dac": ["DacConfig", "DacFeatureExtractor"],
     "models.data2vec": [
         "Data2VecAudioConfig",
@@ -476,6 +477,11 @@ _import_structure = {
     ],
     "models.glm": ["GlmConfig"],
     "models.glpn": ["GLPNConfig"],
+    "models.got_ocr2": [
+        "GotOcr2Config",
+        "GotOcr2Processor",
+        "GotOcr2VisionConfig",
+    ],
     "models.gpt2": [
         "GPT2Config",
         "GPT2Tokenizer",
@@ -708,6 +714,10 @@ _import_structure = {
         "Qwen2Config",
         "Qwen2Tokenizer",
     ],
+    "models.qwen2_5_vl": [
+        "Qwen2_5_VLConfig",
+        "Qwen2_5_VLProcessor",
+    ],
     "models.qwen2_audio": [
         "Qwen2AudioConfig",
         "Qwen2AudioEncoderConfig",
@@ -886,6 +896,7 @@ _import_structure = {
     "models.yolos": ["YolosConfig"],
     "models.yoso": ["YosoConfig"],
     "models.zamba": ["ZambaConfig"],
+    "models.zamba2": ["Zamba2Config"],
     "models.zoedepth": ["ZoeDepthConfig"],
     "onnx": [],
     "pipelines": [
@@ -1234,6 +1245,7 @@ else:
     _import_structure["models.flava"].extend(["FlavaFeatureExtractor", "FlavaImageProcessor", "FlavaProcessor"])
     _import_structure["models.fuyu"].extend(["FuyuImageProcessor", "FuyuProcessor"])
     _import_structure["models.glpn"].extend(["GLPNFeatureExtractor", "GLPNImageProcessor"])
+    _import_structure["models.got_ocr2"].extend(["GotOcr2ImageProcessor"])
     _import_structure["models.grounding_dino"].extend(["GroundingDinoImageProcessor"])
     _import_structure["models.idefics"].extend(["IdeficsImageProcessor"])
     _import_structure["models.idefics2"].extend(["Idefics2ImageProcessor"])
@@ -1264,6 +1276,7 @@ else:
     _import_structure["models.pixtral"].append("PixtralImageProcessor")
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
+    _import_structure["models.qwen2_5_vl"].extend(["Qwen2_5_VLImageProcessor"])
     _import_structure["models.qwen2_vl"].extend(["Qwen2VLImageProcessor"])
     _import_structure["models.rt_detr"].extend(["RTDetrImageProcessor"])
     _import_structure["models.sam"].extend(["SamImageProcessor"])
@@ -1296,11 +1309,19 @@ except OptionalDependencyNotAvailable:
     ]
 else:
     _import_structure["image_processing_utils_fast"] = ["BaseImageProcessorFast"]
+    _import_structure["models.blip"].append("BlipImageProcessorFast")
+    _import_structure["models.clip"].append("CLIPImageProcessorFast")
+    _import_structure["models.convnext"].append("ConvNextImageProcessorFast")
     _import_structure["models.deformable_detr"].append("DeformableDetrImageProcessorFast")
+    _import_structure["models.deit"].append("DeiTImageProcessorFast")
     _import_structure["models.detr"].append("DetrImageProcessorFast")
+    _import_structure["models.llava"].append("LlavaImageProcessorFast")
+    _import_structure["models.llava_next"].append("LlavaNextImageProcessorFast")
+    _import_structure["models.llava_onevision"].append("LlavaOnevisionImageProcessorFast")
     _import_structure["models.pixtral"].append("PixtralImageProcessorFast")
     _import_structure["models.qwen2_vl"].append("Qwen2VLImageProcessorFast")
     _import_structure["models.rt_detr"].append("RTDetrImageProcessorFast")
+    _import_structure["models.siglip"].append("SiglipImageProcessorFast")
     _import_structure["models.vit"].append("ViTImageProcessorFast")
 
 try:
@@ -1887,6 +1908,13 @@ else:
             "CvtPreTrainedModel",
         ]
     )
+    _import_structure["models.dab_detr"].extend(
+        [
+            "DabDetrForObjectDetection",
+            "DabDetrModel",
+            "DabDetrPreTrainedModel",
+        ]
+    )
     _import_structure["models.dac"].extend(
         [
             "DacModel",
@@ -2419,6 +2447,12 @@ else:
             "GLPNForDepthEstimation",
             "GLPNModel",
             "GLPNPreTrainedModel",
+        ]
+    )
+    _import_structure["models.got_ocr2"].extend(
+        [
+            "GotOcr2ForConditionalGeneration",
+            "GotOcr2PreTrainedModel",
         ]
     )
     _import_structure["models.gpt2"].extend(
@@ -3277,6 +3311,13 @@ else:
             "Qwen2PreTrainedModel",
         ]
     )
+    _import_structure["models.qwen2_5_vl"].extend(
+        [
+            "Qwen2_5_VLForConditionalGeneration",
+            "Qwen2_5_VLModel",
+            "Qwen2_5_VLPreTrainedModel",
+        ]
+    )
     _import_structure["models.qwen2_audio"].extend(
         [
             "Qwen2AudioEncoder",
@@ -3986,6 +4027,14 @@ else:
             "ZambaForSequenceClassification",
             "ZambaModel",
             "ZambaPreTrainedModel",
+        ]
+    )
+    _import_structure["models.zamba2"].extend(
+        [
+            "Zamba2ForCausalLM",
+            "Zamba2ForSequenceClassification",
+            "Zamba2Model",
+            "Zamba2PreTrainedModel",
         ]
     )
     _import_structure["models.zoedepth"].extend(
@@ -5365,6 +5414,9 @@ if TYPE_CHECKING:
         CTRLTokenizer,
     )
     from .models.cvt import CvtConfig
+    from .models.dab_detr import (
+        DabDetrConfig,
+    )
     from .models.dac import (
         DacConfig,
         DacFeatureExtractor,
@@ -5530,6 +5582,7 @@ if TYPE_CHECKING:
     )
     from .models.glm import GlmConfig
     from .models.glpn import GLPNConfig
+    from .models.got_ocr2 import GotOcr2Config, GotOcr2Processor, GotOcr2VisionConfig
     from .models.gpt2 import (
         GPT2Config,
         GPT2Tokenizer,
@@ -5794,6 +5847,10 @@ if TYPE_CHECKING:
     from .models.pvt import PvtConfig
     from .models.pvt_v2 import PvtV2Config
     from .models.qwen2 import Qwen2Config, Qwen2Tokenizer
+    from .models.qwen2_5_vl import (
+        Qwen2_5_VLConfig,
+        Qwen2_5_VLProcessor,
+    )
     from .models.qwen2_audio import (
         Qwen2AudioConfig,
         Qwen2AudioEncoderConfig,
@@ -6000,6 +6057,7 @@ if TYPE_CHECKING:
     from .models.yolos import YolosConfig
     from .models.yoso import YosoConfig
     from .models.zamba import ZambaConfig
+    from .models.zamba2 import Zamba2Config
     from .models.zoedepth import ZoeDepthConfig
 
     # Pipelines
@@ -6328,6 +6386,7 @@ if TYPE_CHECKING:
         )
         from .models.fuyu import FuyuImageProcessor, FuyuProcessor
         from .models.glpn import GLPNFeatureExtractor, GLPNImageProcessor
+        from .models.got_ocr2 import GotOcr2ImageProcessor
         from .models.grounding_dino import GroundingDinoImageProcessor
         from .models.idefics import IdeficsImageProcessor
         from .models.idefics2 import Idefics2ImageProcessor
@@ -6374,6 +6433,7 @@ if TYPE_CHECKING:
             PoolFormerImageProcessor,
         )
         from .models.pvt import PvtImageProcessor
+        from .models.qwen2_5_vl import Qwen2_5_VLImageProcessor
         from .models.qwen2_vl import Qwen2VLImageProcessor
         from .models.rt_detr import RTDetrImageProcessor
         from .models.sam import SamImageProcessor
@@ -6402,11 +6462,19 @@ if TYPE_CHECKING:
         from .utils.dummy_torchvision_objects import *
     else:
         from .image_processing_utils_fast import BaseImageProcessorFast
+        from .models.blip import BlipImageProcessorFast
+        from .models.clip import CLIPImageProcessorFast
+        from .models.convnext import ConvNextImageProcessorFast
         from .models.deformable_detr import DeformableDetrImageProcessorFast
+        from .models.deit import DeiTImageProcessorFast
         from .models.detr import DetrImageProcessorFast
+        from .models.llava import LlavaImageProcessorFast
+        from .models.llava_next import LlavaNextImageProcessorFast
+        from .models.llava_onevision import LlavaOnevisionImageProcessorFast
         from .models.pixtral import PixtralImageProcessorFast
         from .models.qwen2_vl import Qwen2VLImageProcessorFast
         from .models.rt_detr import RTDetrImageProcessorFast
+        from .models.siglip import SiglipImageProcessorFast
         from .models.vit import ViTImageProcessorFast
 
     try:
@@ -6897,6 +6965,11 @@ if TYPE_CHECKING:
             CvtModel,
             CvtPreTrainedModel,
         )
+        from .models.dab_detr import (
+            DabDetrForObjectDetection,
+            DabDetrModel,
+            DabDetrPreTrainedModel,
+        )
         from .models.dac import (
             DacModel,
             DacPreTrainedModel,
@@ -7330,6 +7403,10 @@ if TYPE_CHECKING:
             GLPNForDepthEstimation,
             GLPNModel,
             GLPNPreTrainedModel,
+        )
+        from .models.got_ocr2 import (
+            GotOcr2ForConditionalGeneration,
+            GotOcr2PreTrainedModel,
         )
         from .models.gpt2 import (
             GPT2DoubleHeadsModel,
@@ -7992,6 +8069,11 @@ if TYPE_CHECKING:
             Qwen2Model,
             Qwen2PreTrainedModel,
         )
+        from .models.qwen2_5_vl import (
+            Qwen2_5_VLForConditionalGeneration,
+            Qwen2_5_VLModel,
+            Qwen2_5_VLPreTrainedModel,
+        )
         from .models.qwen2_audio import (
             Qwen2AudioEncoder,
             Qwen2AudioForConditionalGeneration,
@@ -8539,6 +8621,12 @@ if TYPE_CHECKING:
             ZambaForSequenceClassification,
             ZambaModel,
             ZambaPreTrainedModel,
+        )
+        from .models.zamba2 import (
+            Zamba2ForCausalLM,
+            Zamba2ForSequenceClassification,
+            Zamba2Model,
+            Zamba2PreTrainedModel,
         )
         from .models.zoedepth import (
             ZoeDepthForDepthEstimation,
