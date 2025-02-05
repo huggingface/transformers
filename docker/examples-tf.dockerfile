@@ -1,4 +1,4 @@
-FROM python:3.10-slim
+FROM python:3.9-slim
 ENV PYTHONDONTWRITEBYTECODE=1
 USER root
 RUN apt-get update && apt-get install -y libsndfile1-dev espeak-ng time git
