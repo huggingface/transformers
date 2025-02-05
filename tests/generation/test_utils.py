@@ -2103,8 +2103,8 @@ class GenerationTesterMixin:
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
             if self.has_attentions:
                 config._attn_implementation = "eager"  # can't output attentions otherwise
-
             model = model_class(config).to(torch_device).eval()
+
             has_defined_cache_implementation = model.generation_config.cache_implementation is not None
             model.generation_config.compile_config._compile_all_devices = True  # force compilation (e.g. fast CI, CPU)
             if not has_defined_cache_implementation:
