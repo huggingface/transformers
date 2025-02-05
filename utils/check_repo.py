@@ -339,6 +339,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "MoshiForConditionalGeneration",  # no auto class for speech-to-speech
     "Emu3VQVAE",  # no autoclass for VQ-VAE models
     "Emu3TextModel",  # Building part of bigger (tested) model
+    "AnoleVQVAE",  # no autoclass for VQ-VAE models
 ]
 
 # DO NOT edit this list!
