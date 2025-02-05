@@ -20,10 +20,6 @@ from ...image_processing_base import BatchFeature
 from ...image_processing_utils_fast import (
     BASE_IMAGE_PROCESSOR_FAST_DOCSTRING,
     BaseImageProcessorFast,
-    ChannelDimension,
-    get_image_size_for_max_height_width,
-    get_resize_output_image_size,
-    get_size_with_aspect_ratio,
     group_images_by_shape,
     reorder_images,
 )
@@ -69,61 +65,13 @@ if is_torchvision_available():
 )
 class DepthProImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BILINEAR
+    antialias = False
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
     size = {"height": 1536, "width": 1536}
     do_resize = True
     do_rescale = True
     do_normalize = True
-
-    # Only difference with BaseImageProcessorFast.resize is that `antialias=False` in F.resize
-    def resize(
-        self,
-        image: "torch.Tensor",
-        size: SizeDict,
-        interpolation: "F.InterpolationMode" = None,
-        **kwargs,
-    ) -> "torch.Tensor":
-        """
-        Resize an image to `(size["height"], size["width"])`.
-
-        Args:
-            image (`torch.Tensor`):
-                Image to resize.
-            size (`SizeDict`):
-                Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
-            resample (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
-                `InterpolationMode` filter to use when resizing the image e.g. `InterpolationMode.BICUBIC`.
-
-        Returns:
-            `torch.Tensor`: The resized image.
-        """
-        interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
-        if size.shortest_edge and size.longest_edge:
-            # Resize the image so that the shortest edge or the longest edge is of the given size
-            # while maintaining the aspect ratio of the original image.
-            new_size = get_size_with_aspect_ratio(
-                image.size()[-2:],
-                size.shortest_edge,
-                size.longest_edge,
-            )
-        elif size.shortest_edge:
-            new_size = get_resize_output_image_size(
-                image,
-                size=size.shortest_edge,
-                default_to_square=False,
-                input_data_format=ChannelDimension.FIRST,
-            )
-        elif size.max_height and size.max_width:
-            new_size = get_image_size_for_max_height_width(image.size()[-2:], size.max_height, size.max_width)
-        elif size.height and size.width:
-            new_size = (size.height, size.width)
-        else:
-            raise ValueError(
-                "Size must contain 'height' and 'width' keys, or 'max_height' and 'max_width', or 'shortest_edge' key. Got"
-                f" {size}."
-            )
-        return F.resize(image, new_size, interpolation=interpolation, antialias=False)
 
     # DepthPro resizes image after rescaling and normalizing,
     # which makes it different from BaseImageProcessorFast._preprocess
@@ -133,6 +81,7 @@ class DepthProImageProcessorFast(BaseImageProcessorFast):
         do_resize: bool,
         size: SizeDict,
         interpolation: Optional["F.InterpolationMode"],
+        antialias: bool,
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -160,7 +109,12 @@ class DepthProImageProcessorFast(BaseImageProcessorFast):
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
-                stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation)
+                stacked_images = self.resize(
+                    image=stacked_images,
+                    size=size,
+                    interpolation=interpolation,
+                    antialias=antialias,
+                )
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 

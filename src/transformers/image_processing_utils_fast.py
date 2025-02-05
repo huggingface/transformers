@@ -132,6 +132,7 @@ class DefaultFastImageProcessorInitKwargs(TypedDict, total=False):
     size: Optional[Dict[str, int]]
     default_to_square: Optional[bool]
     resample: Optional[Union["PILImageResampling", "F.InterpolationMode"]]
+    antialias: Optional[bool]
     do_center_crop: Optional[bool]
     crop_size: Optional[Dict[str, int]]
     do_rescale: Optional[bool]
@@ -163,6 +164,9 @@ BASE_IMAGE_PROCESSOR_FAST_DOCSTRING = r"""
         resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
             Resampling filter to use if resizing the image. Only has an effect if `do_resize` is set to `True`. Can be
             overridden by the `resample` parameter in the `preprocess` method.
+        antialias (`bool`, *optional*, defaults to `True`):
+            Whether to apply an anti-aliasing filter when resizing the image. It only affects tensors with
+            bilinear or bicubic modes and it is ignored otherwise.
         do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
             Whether to center crop the image to the specified `crop_size`. Can be overridden by `do_center_crop` in the
             `preprocess` method.
@@ -203,6 +207,9 @@ BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS = r"""
         resample (`PILImageResampling` or `InterpolationMode`, *optional*, defaults to `self.resample`):
             Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`. Only
             has an effect if `do_resize` is set to `True`.
+        antialias (`bool`, *optional*, defaults to `True`):
+            Whether to apply an anti-aliasing filter when resizing the image. It only affects tensors with
+            bilinear or bicubic modes and it is ignored otherwise.
         do_center_crop (`bool`, *optional*, defaults to `self.do_center_crop`):
             Whether to center crop the image.
         crop_size (`Dict[str, int]`, *optional*, defaults to `self.crop_size`):
@@ -243,6 +250,7 @@ BASE_IMAGE_PROCESSOR_FAST_DOCSTRING_PREPROCESS = r"""
 )
 class BaseImageProcessorFast(BaseImageProcessor):
     resample = None
+    antialias = None
     image_mean = None
     image_std = None
     size = None
@@ -283,6 +291,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         image: "torch.Tensor",
         size: SizeDict,
         interpolation: "F.InterpolationMode" = None,
+        antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":
         """
@@ -295,11 +304,15 @@ class BaseImageProcessorFast(BaseImageProcessor):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
             resample (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
                 `InterpolationMode` filter to use when resizing the image e.g. `InterpolationMode.BICUBIC`.
+            antialias (`bool`, *optional*, defaults to `True`):
+                Whether to apply an anti-aliasing filter when resizing the image. It only affects tensors with
+                bilinear or bicubic modes and it is ignored otherwise.
 
         Returns:
             `torch.Tensor`: The resized image.
         """
         interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
+        antialias = antialias if antialias is not None else True
         if size.shortest_edge and size.longest_edge:
             # Resize the image so that the shortest edge or the longest edge is of the given size
             # while maintaining the aspect ratio of the original image.
@@ -324,7 +337,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
                 "Size must contain 'height' and 'width' keys, or 'max_height' and 'max_width', or 'shortest_edge' key. Got"
                 f" {size}."
             )
-        return F.resize(image, new_size, interpolation=interpolation)
+        return F.resize(image, new_size, interpolation=interpolation, antialias=antialias)
 
     def rescale(
         self,
@@ -578,6 +591,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         image_std = kwargs.pop("image_std")
         data_format = kwargs.pop("data_format")
         resample = kwargs.pop("resample")
+        antialias = kwargs.pop("antialias")
 
         # Make hashable for cache
         size = SizeDict(**get_size_dict(size=size, default_to_square=default_to_square)) if size is not None else None
@@ -606,6 +620,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
             size=size,
             crop_size=crop_size,
             interpolation=interpolation,
+            antialias=antialias,
             image_mean=image_mean,
             image_std=image_std,
             **kwargs,
@@ -617,6 +632,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         do_resize: bool,
         size: SizeDict,
         interpolation: Optional["F.InterpolationMode"],
+        antialias: Optional[bool],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -631,7 +647,12 @@ class BaseImageProcessorFast(BaseImageProcessor):
         resized_images_grouped = {}
         for shape, stacked_images in grouped_images.items():
             if do_resize:
-                stacked_images = self.resize(image=stacked_images, size=size, interpolation=interpolation)
+                stacked_images = self.resize(
+                    image=stacked_images,
+                    size=size,
+                    interpolation=interpolation,
+                    antialias=antialias,
+                )
             resized_images_grouped[shape] = stacked_images
         resized_images = reorder_images(resized_images_grouped, grouped_images_index)
 
