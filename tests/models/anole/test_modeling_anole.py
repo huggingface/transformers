@@ -166,16 +166,6 @@ class AnoleModelTester:
             "initializer_range": self.initializer_range,
         }
 
-    def create_and_check_model(
-        self, config, input_ids, input_mask, pixel_values, sequence_labels, token_labels, choice_labels
-    ):
-        model = AnoleModel(config=config)
-        model.to(torch_device)
-        model.eval()
-        result = model(input_ids, attention_mask=input_mask, pixel_values=pixel_values)
-        result = model(input_ids)
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
         config, input_ids, attention_mask = config_and_inputs
@@ -185,6 +175,41 @@ class AnoleModelTester:
 
 @require_torch
 class AnoleModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+    all_model_classes = (AnoleModel, AnoleForConditionalGeneration) if is_torch_available() else ()
+    all_generative_model_classes = (AnoleForConditionalGeneration,) if is_torch_available() else ()
+    test_head_masking = False
+    test_pruning = False
+    fx_compatible = False
+
+    def setUp(self):
+        self.model_tester = AnoleModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=AnoleConfig, hidden_size=37)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+
+class AnoleVision2SeqModelTester(AnoleModelTester):
+    def prepare_config_and_inputs(self):
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        input_ids[input_ids == self.image_token_index] = self.pad_token_id
+        input_ids[:, : self.image_seq_length] = self.image_token_index
+        attention_mask = torch.tril(torch.ones_like(input_ids).to(torch_device))
+        pixel_values = floats_tensor([self.batch_size, 3, self.image_size, self.image_size])
+
+        config = self.get_config()
+
+        return config, input_ids, attention_mask, pixel_values
+
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, input_ids, attention_mask, pixel_values = config_and_inputs
+        inputs_dict = {"input_ids": input_ids, "attention_mask": attention_mask, "pixel_values": pixel_values}
+        return config, inputs_dict
+
+
+@require_torch
+class AnoleVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (AnoleModel, AnoleForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (AnoleForConditionalGeneration,) if is_torch_available() else ()
     test_head_masking = False
