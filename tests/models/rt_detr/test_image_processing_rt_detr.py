@@ -31,7 +31,7 @@ if is_torch_available():
     import torch
 
 
-class RTDetrImageProcessingTester(unittest.TestCase):
+class RTDetrImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -45,7 +45,6 @@ class RTDetrImageProcessingTester(unittest.TestCase):
         do_pad=False,
         return_tensors="pt",
     ):
-        super().__init__()
         self.parent = parent
         self.batch_size = batch_size
         self.num_channels = num_channels
