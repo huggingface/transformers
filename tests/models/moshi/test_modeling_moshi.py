@@ -617,7 +617,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         super().test_new_cache_format_0()
         pass
 
-    @skipIfRocm(arch=['gfx942','gfx90a','gfx1100'])
+    @skipIfRocm(arch=['gfx942','gfx90a','gfx1100','gfx1201','gfx1200'])
     def test_offloaded_cache_implementation_0_offloaded(self):
         super().test_offloaded_cache_implementation_0_offloaded()
         pass

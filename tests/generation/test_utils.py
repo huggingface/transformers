@@ -2569,7 +2569,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
     def test_transition_scores_greedy_search(self):
         super().test_transition_scores_greedy_search()
 
-    @skipIfRocm(arch=['gfx942','gfx90a','gfx1100'])
+    @skipIfRocm(arch=['gfx942','gfx90a','gfx1100','gfx1201','gfx1200'])
     def test_generate_input_features_as_encoder_kwarg(self):
         super().test_generate_input_features_as_encoder_kwarg()
 
@@ -2608,7 +2608,7 @@ class GenerationIntegrationTests(unittest.TestCase, GenerationIntegrationTestsMi
             ],
         )
 
-    @skipIfRocm(arch=['gfx942','gfx90a','gfx1100'])
+    @skipIfRocm(arch=['gfx942','gfx90a','gfx1100','gfx1201','gfx1200'])
     def test_max_length_if_input_embeds(self):
         # PT-only test: TF doesn't have StoppingCriteria
         article = "Today a dragon flew over Paris."

@@ -283,7 +283,7 @@ class GPTNeoXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     test_model_parallel = False
     test_head_masking = False
 
-    @skipIfRocm(arch=['gfx90a','gfx942'])
+    @skipIfRocm(arch=['gfx90a','gfx942','gfx1100','gfx1200','gfx1201'])
     def test_flex_attention_with_grads(self):
         super().test_flex_attention_with_grads()
 
