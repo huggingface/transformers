@@ -162,8 +162,8 @@ class Qwen2_5_VLPatchMerger(nn.Module):
 
 def apply_rotary_pos_emb_flashatt(tensor: torch.Tensor, freqs: torch.Tensor) -> torch.Tensor:
     tensor_ = tensor.float()
-    cos = freqs.cos().float()
-    sin = freqs.sin().float()
+    cos = freqs.cos()
+    sin = freqs.sin()
     output = apply_rotary_emb(tensor_, cos, sin).type_as(tensor)
     return output
 
