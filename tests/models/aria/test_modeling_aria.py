@@ -203,10 +203,6 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
     def test_generate_from_inputs_embeds_with_static_cache(self):
         super().test_generate_from_inputs_embeds_with_static_cache()
 
-    @skipIfRocm(arch='gfx90a')
-    def test_slow_fast_equivalence(self):
-        super().test_slow_fast_equivalence()
-
     def setUp(self):
         self.model_tester = AriaVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=AriaConfig, has_text_modality=False)

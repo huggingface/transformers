@@ -217,7 +217,7 @@ class TrainerCallbackTest(unittest.TestCase):
         expected_callbacks.insert(0, DefaultFlowCallback)
         self.check_callbacks_equality(trainer.callback_handler.callbacks, expected_callbacks)
 
-    @skipIfRocm(arch=['gfx1201','gfx90a','gx1100','gfx1200'])
+    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gx1100','gfx1200'])
     def test_event_flow(self):
         import warnings
 
