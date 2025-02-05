@@ -2106,6 +2106,7 @@ class GenerationTesterMixin:
 
             model = model_class(config).to(torch_device).eval()
             has_defined_cache_implementation = model.generation_config.cache_implementation is not None
+            model.generation_config.compile_config._compile_all_devices = True  # force compilation (e.g. fast CI, CPU)
             if not has_defined_cache_implementation:
                 model.generation_config.cache_implementation = "static"
 
