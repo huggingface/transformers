@@ -214,8 +214,10 @@ def get_cu_seq_lens_from_position_ids(position_ids: torch.LongTensor) -> torch.L
     device = position_ids.device
     idxs = torch.arange(1, position_ids.shape[1], device=device)
     non_increasing_pos_id = position_ids[0, 1:] <= position_ids[0, :-1]
-    cu_seq_lens = torch.empty(non_increasing_pos_id.sum() + 2, device=device, dtype=torch.int64)
-    cu_seq_lens[0], cu_seq_lens[1:-1], cu_seq_lens[-1] = 0, idxs[non_increasing_pos_id], position_ids.shape[-1]
+    next_pos_is_is_zero = position_ids[0, 1:] == 0
+    new_seq_idxs = non_increasing_pos_id | next_pos_is_is_zero
+    cu_seq_lens = torch.empty(new_seq_idxs.sum() + 2, device=device, dtype=torch.int64)
+    cu_seq_lens[0], cu_seq_lens[1:-1], cu_seq_lens[-1] = 0, idxs[new_seq_idxs], position_ids.shape[-1]
     return cu_seq_lens
 
 
