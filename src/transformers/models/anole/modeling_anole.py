@@ -1911,7 +1911,8 @@ class AnoleForConditionalGeneration(AnolePreTrainedModel, GenerationMixin):
 
         >>> generated_ids = model.generate(**inputs, max_new_tokens=100, do_sample=False)
         >>> processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
-        ```"""
+        ```
+        """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
