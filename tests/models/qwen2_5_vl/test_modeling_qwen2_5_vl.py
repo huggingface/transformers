@@ -342,12 +342,6 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
-    @unittest.skip(
-        reason="VLMs can't generate from inputs embeds and pixels. This can be tested as part of bacbone LM, no need to run the tes for VLMs"
-    )
-    def test_generate_continue_from_inputs_embeds(self):
-        pass
-
     @unittest.skip(reason="Can't compile fullgraph due to dynamic control flow in `prepare_inputs_for_generate`")
     def test_generate_compile_fullgraph(self):
         pass
