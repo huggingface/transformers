@@ -46,10 +46,14 @@ class LlavaConfig(PretrainedConfig):
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             The feature selection strategy used to select the vision feature from the vision backbone.
             Can be one of `"default"` or `"full"`.
-        vision_feature_layer (`int`, *optional*, defaults to -2):
-            The index of the layer to select the vision feature.
+        vision_feature_layer (`Union[int, List[int]]`, *optional*, defaults to -2):
+            The index of the layer to select the vision feature. If multiple indices are provided,
+            the vision feature of the corresponding indices will be concatenated to form the
+            vision features.
         image_seq_length (`int`, *optional*, defaults to 576):
             Sequence length of one image embedding.
+        multimodal_projector_bias (`bool`, *optional*, defaults to `True`):
+            Whether to use bias in the multimodal projector.
 
     Example:
 
@@ -85,6 +89,7 @@ class LlavaConfig(PretrainedConfig):
         vision_feature_select_strategy="default",
         vision_feature_layer=-2,
         image_seq_length=576,
+        multimodal_projector_bias=True,
         **kwargs,
     ):
         self.ignore_index = ignore_index
@@ -127,6 +132,7 @@ class LlavaConfig(PretrainedConfig):
             text_config = CONFIG_MAPPING["llama"]()
 
         self.text_config = text_config
+        self.multimodal_projector_bias = multimodal_projector_bias
 
         super().__init__(**kwargs)
 

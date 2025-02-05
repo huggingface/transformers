@@ -666,7 +666,7 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
             next_logits_with_padding = model(**model_kwargs, **inputs_dict).logits[:, -1, :]
 
             # They should result in very similar logits
-            self.assertTrue(torch.allclose(next_logits_wo_padding, next_logits_with_padding, atol=1e-5))
+            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5)
 
     @pytest.mark.generate
     def test_generate_continue_from_past_key_values(self):
@@ -778,10 +778,6 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
 
     @unittest.skip(reason="We only test the model that takes in multiple images")
     def test_custom_4d_attention_mask(self):
-        pass
-
-    @unittest.skip(reason="IDEFICS cannot compile due to dynamic control flow when checking inputs")
-    def test_generate_compile_fullgraph(self):
         pass
 
     @unittest.skip(reason="We only test the model that takes in multiple images")

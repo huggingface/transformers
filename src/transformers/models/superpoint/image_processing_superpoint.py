@@ -49,8 +49,12 @@ def is_grayscale(
     input_data_format: Optional[Union[str, ChannelDimension]] = None,
 ):
     if input_data_format == ChannelDimension.FIRST:
+        if image.shape[0] == 1:
+            return True
         return np.all(image[0, ...] == image[1, ...]) and np.all(image[1, ...] == image[2, ...])
     elif input_data_format == ChannelDimension.LAST:
+        if image.shape[-1] == 1:
+            return True
         return np.all(image[..., 0] == image[..., 1]) and np.all(image[..., 1] == image[..., 2])
 
 
@@ -75,6 +79,8 @@ def convert_to_grayscale(
     requires_backends(convert_to_grayscale, ["vision"])
 
     if isinstance(image, np.ndarray):
+        if is_grayscale(image, input_data_format=input_data_format):
+            return image
         if input_data_format == ChannelDimension.FIRST:
             gray_image = image[0, ...] * 0.2989 + image[1, ...] * 0.5870 + image[2, ...] * 0.1140
             gray_image = np.stack([gray_image] * 3, axis=0)
@@ -107,6 +113,8 @@ class SuperPointImageProcessor(BaseImageProcessor):
         rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
             Scale factor to use if rescaling the image. Can be overriden by `rescale_factor` in the `preprocess`
             method.
+        do_grayscale (`bool`, *optional*, defaults to `False`):
+            Whether to convert the image to grayscale. Can be overriden by `do_grayscale` in the `preprocess` method.
     """
 
     model_input_names = ["pixel_values"]
@@ -117,6 +125,7 @@ class SuperPointImageProcessor(BaseImageProcessor):
         size: Dict[str, int] = None,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255,
+        do_grayscale: bool = False,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -127,6 +136,7 @@ class SuperPointImageProcessor(BaseImageProcessor):
         self.size = size
         self.do_rescale = do_rescale
         self.rescale_factor = rescale_factor
+        self.do_grayscale = do_grayscale
 
     def resize(
         self,
@@ -174,6 +184,7 @@ class SuperPointImageProcessor(BaseImageProcessor):
         size: Dict[str, int] = None,
         do_rescale: bool = None,
         rescale_factor: float = None,
+        do_grayscale: bool = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -197,6 +208,8 @@ class SuperPointImageProcessor(BaseImageProcessor):
                 Whether to rescale the image values between [0 - 1].
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
                 Rescale factor to rescale the image by if `do_rescale` is set to `True`.
+            do_grayscale (`bool`, *optional*, defaults to `self.do_grayscale`):
+                Whether to convert the image to grayscale.
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
@@ -220,6 +233,7 @@ class SuperPointImageProcessor(BaseImageProcessor):
         do_resize = do_resize if do_resize is not None else self.do_resize
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
+        do_grayscale = do_grayscale if do_grayscale is not None else self.do_grayscale
 
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
@@ -241,7 +255,7 @@ class SuperPointImageProcessor(BaseImageProcessor):
         # All transformations expect numpy arrays.
         images = [to_numpy_array(image) for image in images]
 
-        if is_scaled_image(images[0]) and do_rescale:
+        if do_rescale and is_scaled_image(images[0]):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -264,10 +278,8 @@ class SuperPointImageProcessor(BaseImageProcessor):
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images[0])
 
-        # Checking if image is RGB or grayscale
-        for i in range(len(images)):
-            if not is_grayscale(images[i], input_data_format):
-                images[i] = convert_to_grayscale(images[i], input_data_format=input_data_format)
+        if do_grayscale:
+            images = [convert_to_grayscale(image, input_data_format=input_data_format) for image in images]
 
         images = [
             to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
@@ -299,7 +311,7 @@ class SuperPointImageProcessor(BaseImageProcessor):
             raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the mask")
 
         if isinstance(target_sizes, List):
-            image_sizes = torch.tensor(target_sizes)
+            image_sizes = torch.tensor(target_sizes, device=outputs.mask.device)
         else:
             if target_sizes.shape[1] != 2:
                 raise ValueError(

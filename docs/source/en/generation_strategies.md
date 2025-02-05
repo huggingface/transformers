@@ -41,6 +41,13 @@ This guide describes:
 * common decoding strategies and their main parameters
 * saving and sharing custom generation configurations with your fine-tuned model on 🤗 Hub
 
+<Tip>
+
+`generate()` is a critical component of our [chat CLI](quicktour#chat-with-text-generation-models).
+You can apply the learnings of this guide there as well.
+
+</Tip>
+
 ## Default text generation configuration
 
 A decoding strategy for a model is defined in its generation configuration. When using pre-trained models for inference
@@ -95,6 +102,12 @@ distribution over the entire vocabulary with various strategy-specific adjustmen
 - `num_return_sequences`: the number of sequence candidates to return for each input. This option is only available for
 the decoding strategies that support multiple sequence candidates, e.g. variations of beam search and sampling. Decoding
 strategies like greedy search and contrastive search return a single output sequence.
+
+It is also possible to extend `generate()` with external libraries or handcrafted code. The `logits_processor` argument
+allows you to pass custom [`LogitsProcessor`] instances, allowing you to manipulate the next token probability
+distributions. Likewise, the `stopping_criteria` argument lets you set custom [`StoppingCriteria`] to stop text generation.
+The [`logits-processor-zoo`](https://github.com/NVIDIA/logits-processor-zoo) library contains examples of external
+`generate()`-compatible extensions.
 
 ## Save a custom decoding strategy with your model
 
@@ -218,7 +231,7 @@ to check if the text is machine-generated (outputs `True` for machine-generated 
 >>> detector = WatermarkDetector(model_config=model.config, device="cpu", watermarking_config=watermarking_config)
 >>> detection_out = detector(out, return_dict=True)
 >>> detection_out.prediction
-array([True, True])
+array([ True,  True])
 ```
 
 
@@ -256,7 +269,7 @@ dimension you can act upon, in addition to selecting a decoding strategy. Popula
 >>> model = AutoModelForCausalLM.from_pretrained(checkpoint)
 >>> outputs = model.generate(**inputs)
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-['I look forward to seeing you all again!\n\n\n\n\n\n\n\n\n\n\n']
+['I look forward to seeing you all again!\n\n\n\n\n\n\n\n\n\n\n\n\n\n\n']
 ```
 
 ### Contrastive search
@@ -432,8 +445,30 @@ To enable assisted decoding, set the `assistant_model` argument with a model.
 >>> assistant_model = AutoModelForCausalLM.from_pretrained(assistant_checkpoint)
 >>> outputs = model.generate(**inputs, assistant_model=assistant_model)
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-['Alice and Bob are sitting in a bar. Alice is drinking a beer and Bob is drinking a']
+['Alice and Bob are sitting in a bar. Alice is drinking a beer and Bob is drinking a glass of wine.']
 ```
+
+<Tip>
+
+If you're using a `pipeline` object, all you need to do is to pass the assistant checkpoint under `assistant_model`
+
+```python
+>>> from transformers import pipeline
+>>> import torch
+
+>>> pipe = pipeline(
+...     "text-generation",
+...     model="meta-llama/Llama-3.1-8B",
+...     assistant_model="meta-llama/Llama-3.2-1B",  # This extra line is all that's needed, also works with UAD
+...     torch_dtype=torch.bfloat16
+... )
+>>> pipe_output = pipe("Once upon a time, ", max_new_tokens=50, do_sample=False)
+>>> pipe_output[0]["generated_text"]
+'Once upon a time, 3D printing was a niche technology that was only'
+```
+
+</Tip>
+
 
 When using assisted decoding with sampling methods, you can use the `temperature` argument to control the randomness,
 just like in multinomial sampling. However, in assisted decoding, reducing the temperature may help improve the latency.
@@ -453,7 +488,7 @@ just like in multinomial sampling. However, in assisted decoding, reducing the t
 >>> assistant_model = AutoModelForCausalLM.from_pretrained(assistant_checkpoint)
 >>> outputs = model.generate(**inputs, assistant_model=assistant_model, do_sample=True, temperature=0.5)
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-['Alice and Bob, a couple of friends of mine, who are both in the same office as']
+['Alice and Bob are two people who are very different, but they are both very good at what they do. Alice']
 ```
 
 We recommend to install `scikit-learn` library to enhance the candidate generation strategy and achieve additional speedup.
@@ -483,7 +518,7 @@ to ensure the new tokens include the correct prompt suffix.
 >>> assistant_model = AutoModelForCausalLM.from_pretrained(assistant_checkpoint)
 >>> outputs = model.generate(**inputs, assistant_model=assistant_model, tokenizer=tokenizer, assistant_tokenizer=assistant_tokenizer)
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-['Alice and Bob are sitting in a bar. Alice is drinking a beer and Bob is drinking a']
+['Alice and Bob are playing a game. Alice has a set of $n$ integers $a_1, a']
 ```
 
 #### Prompt Lookup
@@ -512,7 +547,7 @@ If the model you're using was trained to do early exit, you can pass
 >>> model = AutoModelForCausalLM.from_pretrained(checkpoint)
 >>> outputs = model.generate(**inputs, assistant_early_exit=4, do_sample=False, max_new_tokens=20)
 >>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-['Alice and Bob are sitting in a bar. Alice is drinking a beer and Bob is drinking a']
+['Alice and Bob are playing a game. Alice has a set of $n$ integers $a_1, a']
 ```
 
 ### DoLa Decoding
@@ -536,10 +571,9 @@ See the following examples for DoLa decoding with the 32-layer LLaMA-7B model.
 >>> import torch
 >>> from accelerate.test_utils.testing import get_backend
 
->>> tokenizer = AutoTokenizer.from_pretrained("huggyllama/llama-7b")
->>> model = AutoModelForCausalLM.from_pretrained("huggyllama/llama-7b", torch_dtype=torch.float16)
 >>> device, _, _ = get_backend() # automatically detects the underlying device type (CUDA, CPU, XPU, MPS, etc.)
->>> model.to(device)
+>>> tokenizer = AutoTokenizer.from_pretrained("huggyllama/llama-7b")
+>>> model = AutoModelForCausalLM.from_pretrained("huggyllama/llama-7b", torch_dtype=torch.float16).to(device)
 >>> set_seed(42)
 
 >>> text = "On what date was the Declaration of Independence officially signed?"
@@ -558,7 +592,7 @@ See the following examples for DoLa decoding with the 32-layer LLaMA-7B model.
 # DoLa decoding with contrasting specific layers (layers 28 and 30)
 >>> dola_custom_output = model.generate(**inputs, do_sample=False, max_new_tokens=50, dola_layers=[28,30], repetition_penalty=1.2)
 >>> tokenizer.batch_decode(dola_custom_output[:, inputs.input_ids.shape[-1]:], skip_special_tokens=True)
-['\nIt was officially signed on 2 August 1776, when 56 members of the Second Continental Congress, representing the original 13 American colonies, voted unanimously for the resolution for independence. The 2']
+['\nIn 1891, when he was 54 years old, John Jacob Astor founded his empire. He opened a one-man business and spent the next 27 years working 10-hour days. When']
 ```
 
 #### Understanding the `dola_layers` argument

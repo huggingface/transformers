@@ -4,7 +4,7 @@
 deps = {
     "Pillow": "Pillow>=10.0.1,<=15.0",
     "accelerate": "accelerate>=0.26.0",
-    "av": "av==9.2.0",
+    "av": "av",
     "beautifulsoup4": "beautifulsoup4",
     "blobfile": "blobfile",
     "codecarbon": "codecarbon>=2.8.1",
@@ -87,7 +87,7 @@ deps = {
     "tiktoken": "tiktoken",
     "timm": "timm<=1.0.11",
     "tokenizers": "tokenizers>=0.21,<0.22",
-    "torch": "torch",
+    "torch": "torch>=2.0",
     "torchaudio": "torchaudio",
     "torchvision": "torchvision",
     "pyctcdecode": "pyctcdecode>=0.4.0",
