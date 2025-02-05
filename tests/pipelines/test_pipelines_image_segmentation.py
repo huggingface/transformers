@@ -196,6 +196,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
         pass
 
     @require_torch
+    @skipIfRocm(arch='gfx90a')
     def test_small_model_pt_no_panoptic(self):
         model_id = "hf-internal-testing/tiny-random-mobilevit"
         # The default task is `image-classification` we need to override
