@@ -25,7 +25,6 @@ from transformers import (
     DepthProForDepthEstimation,
     DepthProImageProcessorFast,
 )
-from transformers.image_utils import PILImageResampling
 
 
 # fmt: off
