@@ -80,3 +80,7 @@ Learn how to quantize models in the [Quantization](../quantization) guide.
 ## BitNetConfig
 
 [[autodoc]] BitNetConfig
+
+## FP8Config
+
+[[autodoc]] FP8Config
