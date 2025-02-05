@@ -4897,7 +4897,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             map_location = torch.device([d for d in device_map.values() if d not in ["cpu", "disk"]][0])
 
         # For nice tqdm bars
-        if len(checkpoint_files) > 1:
+        if checkpoint_files is not None and len(checkpoint_files) > 1:
             checkpoint_files = logging.tqdm(checkpoint_files, desc="Loading checkpoint shards")
 
         # To be able to iterate, even if we don't use it
@@ -5066,7 +5066,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return model
 
     @classmethod
-    def _load_from_flax(model, checkpoint_files):
+    def _load_from_flax(cls, model, checkpoint_files):
         try:
             from .modeling_flax_pytorch_utils import load_flax_checkpoint_in_pytorch_model
 
