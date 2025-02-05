@@ -40,6 +40,7 @@ class DepthProImageProcessingTester(unittest.TestCase):
         max_resolution=400,
         do_resize=True,
         size=None,
+        do_rescale=True,
         do_normalize=True,
         image_mean=[0.5, 0.5, 0.5],
         image_std=[0.5, 0.5, 0.5],
@@ -54,6 +55,7 @@ class DepthProImageProcessingTester(unittest.TestCase):
         self.max_resolution = max_resolution
         self.do_resize = do_resize
         self.size = size
+        self.do_rescale = do_rescale
         self.do_normalize = do_normalize
         self.image_mean = image_mean
         self.image_std = image_std
@@ -62,6 +64,7 @@ class DepthProImageProcessingTester(unittest.TestCase):
         return {
             "image_mean": self.image_mean,
             "image_std": self.image_std,
+            "do_rescale": self.do_rescale,
             "do_normalize": self.do_normalize,
             "do_resize": self.do_resize,
             "size": self.size,
