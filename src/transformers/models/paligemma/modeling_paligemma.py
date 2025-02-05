@@ -342,8 +342,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         token_type_ids,
         past_key_values,
         cache_position,
-        input_ids=None,
-        inputs_embeds=None,
+        input_tensor,
         is_training: bool = False,
     ):
         if self.config.text_config._attn_implementation == "flash_attention_2":
@@ -353,8 +352,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
 
         using_static_cache = isinstance(past_key_values, StaticCache)
         min_dtype = torch.finfo(self.dtype).min
-        inputs_lead_dim = input_ids.shape[0] if input_ids is not None else inputs_embeds.shape[0]
-        sequence_length = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+        inputs_lead_dim, sequence_length = input_tensor.shape[:2]
         if using_static_cache:
             target_length = past_key_values.get_max_cache_shape()
         elif isinstance(past_key_values, HybridCache):
@@ -432,6 +430,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
+        last_cache_position: Optional[int] = None,
     ) -> Union[Tuple, PaliGemmaCausalLMOutputWithPast]:
         r"""
         Args:
@@ -524,7 +523,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
             labels = torch.where(input_ids == self.pad_token_id, self.config.ignore_index, labels)
 
         causal_mask = self._update_causal_mask(
-            attention_mask, token_type_ids, past_key_values, cache_position, input_ids, inputs_embeds, is_training
+            attention_mask, token_type_ids, past_key_values, cache_position, inputs_embeds, is_training
         )
         outputs = self.language_model(
             attention_mask=causal_mask,
@@ -537,6 +536,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
             return_dict=return_dict,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
+            last_cache_position=last_cache_position,
         )
 
         logits = outputs.logits
@@ -612,10 +612,12 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
             model_inputs["pixel_values"] = pixel_values
         is_training = token_type_ids is not None and labels is not None
         if cache_position[0] == 0 and isinstance(past_key_values, HybridCache):
+            input_tensor = inputs_embeds if inputs_embeds is not None else input_ids
             causal_mask = self._update_causal_mask(
-                attention_mask, token_type_ids, past_key_values, cache_position, input_ids, inputs_embeds, is_training
+                attention_mask, token_type_ids, past_key_values, cache_position, input_tensor, is_training
             )
             model_inputs["attention_mask"] = causal_mask
+
         return model_inputs
 
 
