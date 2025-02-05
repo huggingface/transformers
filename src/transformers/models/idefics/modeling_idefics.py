@@ -1674,10 +1674,13 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
         else:
             model_inputs["pixel_values"] = pixel_values
 
-        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
+        # If we have cache: let's slice `input_ids` or `input embeds` through `cache_position`, to keep only the unprocessed tokens
         if past_key_values is not None:
             if inputs_embeds is not None:
-                input_ids = input_ids[:, -cache_position.shape[0] :]
+                if input_ids.shape[1] == 0:
+                    inputs_embeds = inputs_embeds[:, -cache_position.shape[0] :]
+                else:
+                    input_ids = input_ids[:, -cache_position.shape[0] :]
             elif input_ids.shape[1] != cache_position.shape[0]:
                 input_ids = input_ids[:, cache_position]
                 if image_attention_mask is not None:
@@ -1694,7 +1697,7 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
                 position_ids = position_ids.clone(memory_format=torch.contiguous_format)
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and cache_position[0] == 0:
+        if inputs_embeds is not None and len(cache_position) == inputs_embeds.shape[1]:
             model_inputs.update({"inputs_embeds": inputs_embeds, "input_ids": None})
         else:
             # The clone here is for the same reason as for `position_ids`.
