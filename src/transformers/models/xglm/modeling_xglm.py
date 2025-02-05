@@ -709,7 +709,7 @@ class XGLMForCausalLM(XGLMPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-        self._set_loss_function(fixed_cross_entropy)
+        self._loss_function = fixed_cross_entropy
 
     def get_input_embeddings(self):
         return self.model.embed_tokens
