@@ -588,7 +588,7 @@ class BioGptModel(BioGptPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **kwargs, # NOOP kwargs, for now
+        **kwargs,  # NOOP kwargs, for now
     ) -> Union[Tuple, BaseModelOutputWithPastAndCrossAttentions]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -791,7 +791,7 @@ class BioGptForCausalLM(BioGptPreTrainedModel, GenerationMixin):
             lm_loss = self.loss_function(
                 shifted_prediction_scores.view(-1, self.config.vocab_size),
                 labels.view(-1),
-                
+                vocab_size=self.config.vocab_size,
                 **kwargs,
             )
 
