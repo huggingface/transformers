@@ -67,9 +67,6 @@ class DepthProImageProcessor(BaseImageProcessor):
         resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
             Resampling filter to use if resizing the image. Can be overridden by the `resample` parameter in the
             `preprocess` method.
-        antialias (`bool`, *optional*, defaults to `False`):
-            Whether to apply an anti-aliasing filter when resizing the image. It only affects tensors with
-            bilinear or bicubic modes and it is ignored otherwise.
         do_rescale (`bool`, *optional*, defaults to `True`):
             Whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the `do_rescale`
             parameter in the `preprocess` method.
@@ -94,7 +91,6 @@ class DepthProImageProcessor(BaseImageProcessor):
         do_resize: bool = True,
         size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
-        antialias: bool = False,
         do_rescale: bool = True,
         rescale_factor: Union[int, float] = 1 / 255,
         do_normalize: bool = True,
@@ -110,7 +106,6 @@ class DepthProImageProcessor(BaseImageProcessor):
         self.do_normalize = do_normalize
         self.size = size
         self.resample = resample
-        self.antialias = antialias
         self.rescale_factor = rescale_factor
         self.image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
         self.image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
@@ -120,7 +115,6 @@ class DepthProImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
-        antialias: bool = False,
         data_format: Optional[Union[str, ChannelDimension]] = None,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         **kwargs,
@@ -135,9 +129,6 @@ class DepthProImageProcessor(BaseImageProcessor):
                 Dictionary in the format `{"height": int, "width": int}` specifying the size of the output image.
             resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
                 `PILImageResampling` filter to use when resizing the image e.g. `PILImageResampling.BILINEAR`.
-            antialias (`bool`, *optional*, defaults to `False`):
-                Whether to apply an anti-aliasing filter when resizing the image. It only affects tensors with
-                bilinear or bicubic modes and it is ignored otherwise.
             data_format (`ChannelDimension` or `str`, *optional*):
                 The channel dimension format for the output image. If unset, the channel dimension format of the input
                 image is used. Can be one of:
@@ -172,7 +163,6 @@ class DepthProImageProcessor(BaseImageProcessor):
             input=image_tensor,
             size=output_size,
             mode=pil_torch_interpolation_mapping[resample].value,
-            antialias=antialias,
         )
         resized_image = resized_image.squeeze(0).numpy()
         return resized_image
@@ -182,7 +172,6 @@ class DepthProImageProcessor(BaseImageProcessor):
         do_resize: bool,
         size: Dict[str, int],
         resample: PILImageResampling,
-        antialias: bool,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -190,8 +179,8 @@ class DepthProImageProcessor(BaseImageProcessor):
         image_std: Union[float, List[float]],
         data_format: Union[str, ChannelDimension],
     ):
-        if do_resize and None in (size, resample, antialias):
-            raise ValueError("Size, resample and antialias must be specified if do_resize is True.")
+        if do_resize and None in (size, resample):
+            raise ValueError("Size and resample must be specified if do_resize is True.")
 
         if do_rescale and rescale_factor is None:
             raise ValueError("Rescale factor must be specified if do_rescale is True.")
@@ -206,7 +195,6 @@ class DepthProImageProcessor(BaseImageProcessor):
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
         resample: Optional[PILImageResampling] = None,
-        antialias: Optional[bool] = None,
         do_rescale: Optional[bool] = None,
         rescale_factor: Optional[float] = None,
         do_normalize: Optional[bool] = None,
@@ -231,9 +219,6 @@ class DepthProImageProcessor(BaseImageProcessor):
             resample (`PILImageResampling` filter, *optional*, defaults to `self.resample`):
                 `PILImageResampling` filter to use if resizing the image e.g. `PILImageResampling.BILINEAR`. Only has
                 an effect if `do_resize` is set to `True`.
-            antialias (`bool`, *optional*, defaults to `False`):
-                Whether to apply an anti-aliasing filter when resizing the image. It only affects tensors with
-                bilinear or bicubic modes and it is ignored otherwise.
             do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
                 Whether to rescale the image values between [0 - 1].
             rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
@@ -267,7 +252,6 @@ class DepthProImageProcessor(BaseImageProcessor):
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
         do_normalize = do_normalize if do_normalize is not None else self.do_normalize
         resample = resample if resample is not None else self.resample
-        antialias = antialias if antialias is not None else self.antialias
         rescale_factor = rescale_factor if rescale_factor is not None else self.rescale_factor
         image_mean = image_mean if image_mean is not None else self.image_mean
         image_std = image_std if image_std is not None else self.image_std
@@ -285,7 +269,6 @@ class DepthProImageProcessor(BaseImageProcessor):
             do_resize=do_resize,
             size=size,
             resample=resample,
-            antialias=antialias,
             do_rescale=do_rescale,
             rescale_factor=rescale_factor,
             do_normalize=do_normalize,
@@ -321,7 +304,7 @@ class DepthProImageProcessor(BaseImageProcessor):
             # uses torch interpolation which requires ChannelDimension.FIRST
             if do_resize:
                 image = to_channel_dimension_format(image, ChannelDimension.FIRST, input_channel_dim=input_data_format)
-                image = self.resize(image=image, size=size, resample=resample, antialias=antialias)
+                image = self.resize(image=image, size=size, resample=resample)
                 image = to_channel_dimension_format(image, data_format, input_channel_dim=ChannelDimension.FIRST)
             else:
                 image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
@@ -387,7 +370,6 @@ class DepthProImageProcessor(BaseImageProcessor):
                     input=depth.unsqueeze(0).unsqueeze(1),
                     size=target_size,
                     mode=pil_torch_interpolation_mapping[self.resample].value,
-                    antialias=self.antialias,
                 ).squeeze()
 
             # inverse the depth
