@@ -66,9 +66,9 @@ def deformable_attention_core_func_v2(
     Returns:
         output (Tensor): [bs, Length_{query}, C]
     """
-    bs, _, n_head, hidden_dim = value.shape
+    bs, n_head, c, _ = value[0].shape
     _, Len_q, _, _, _ = sampling_locations.shape
-    value_list = value.split([height * width for height, width in value_spatial_shapes], dim=1)
+
     # sampling_offsets [8, 480, 8, 12, 2]
     if method == "default":
         sampling_grids = 2 * sampling_locations - 1
@@ -80,8 +80,8 @@ def deformable_attention_core_func_v2(
     sampling_locations_list = sampling_grids.split(num_points_list, dim=-2)
 
     sampling_value_list = []
-    for level, (height, width) in enumerate(value_spatial_shapes):
-        value_l = value_list[level].flatten(2).transpose(1, 2).reshape(bs * n_head, hidden_dim, height, width)
+    for level, (h, w) in enumerate(value_spatial_shapes):
+        value_l = value[level].reshape(bs * n_head, c, h, w)
         sampling_grid_l: torch.Tensor = sampling_locations_list[level]
 
         if method == "default":
@@ -91,12 +91,10 @@ def deformable_attention_core_func_v2(
 
         elif method == "discrete":
             # n * m, seq, n, 2
-            sampling_coord = (sampling_grid_l * torch.tensor([[width, height]], device=value_l.device) + 0.5).to(
-                torch.int64
-            )
+            sampling_coord = (sampling_grid_l * torch.tensor([[w, h]], device=value_l.device) + 0.5).to(torch.int64)
 
             # FIX ME? for rectangle input
-            sampling_coord = sampling_coord.clamp(0, height - 1)
+            sampling_coord = sampling_coord.clamp(0, h - 1)
             sampling_coord = sampling_coord.reshape(bs * n_head, Len_q * num_points_list[level], 2)
 
             s_idx = (
@@ -106,15 +104,13 @@ def deformable_attention_core_func_v2(
             )
             sampling_value_l: torch.Tensor = value_l[s_idx, :, sampling_coord[..., 1], sampling_coord[..., 0]]  # n l c
 
-            sampling_value_l = sampling_value_l.permute(0, 2, 1).reshape(
-                bs * n_head, hidden_dim, Len_q, num_points_list[level]
-            )
+            sampling_value_l = sampling_value_l.permute(0, 2, 1).reshape(bs * n_head, c, Len_q, num_points_list[level])
 
         sampling_value_list.append(sampling_value_l)
 
     attn_weights = attention_weights.permute(0, 2, 1, 3).reshape(bs * n_head, 1, Len_q, sum(num_points_list))
     weighted_sample_locs = torch.concat(sampling_value_list, dim=-1) * attn_weights
-    output = weighted_sample_locs.sum(-1).reshape(bs, n_head * hidden_dim, Len_q)
+    output = weighted_sample_locs.sum(-1).reshape(bs, n_head * c, Len_q)
 
     return output.permute(0, 2, 1)
 
@@ -185,25 +181,21 @@ class DFineMultiscaleDeformableAttention(nn.Module):
         encoder_hidden_states: torch.Tensor,
         spatial_shapes: List[int],
     ):
-        batch_size, num_queries, _ = hidden_states.shape
-        batch_size, sequence_length, _ = encoder_hidden_states.shape
+        bs, Len_q = hidden_states.shape[:2]
 
         sampling_offsets: torch.Tensor = self.sampling_offsets(hidden_states)
-        sampling_offsets = sampling_offsets.reshape(
-            batch_size, num_queries, self.n_heads, sum(self.num_points_list), 2
-        )
+        sampling_offsets = sampling_offsets.reshape(bs, Len_q, self.n_heads, sum(self.num_points_list), 2)
 
         attention_weights = self.attention_weights(hidden_states).reshape(
-            batch_size, num_queries, self.n_heads, sum(self.num_points_list)
+            bs, Len_q, self.n_heads, sum(self.num_points_list)
         )
         attention_weights = F.softmax(attention_weights, dim=-1)
-        value = encoder_hidden_states.view(batch_size, sequence_length, self.n_heads, self.d_model // self.n_heads)
+
         if reference_points.shape[-1] == 2:
             offset_normalizer = torch.tensor(spatial_shapes)
             offset_normalizer = offset_normalizer.flip([1]).reshape(1, 1, 1, self.n_levels, 1, 2)
             sampling_locations = (
-                reference_points.reshape(batch_size, num_queries, 1, self.n_levels, 1, 2)
-                + sampling_offsets / offset_normalizer
+                reference_points.reshape(bs, Len_q, 1, self.n_levels, 1, 2) + sampling_offsets / offset_normalizer
             )
         elif reference_points.shape[-1] == 4:
             # reference_points [8, 480, None, 1,  4]
@@ -217,7 +209,7 @@ class DFineMultiscaleDeformableAttention(nn.Module):
             )
 
         output = self.ms_deformable_attn_core(
-            value, spatial_shapes, sampling_locations, attention_weights, self.num_points_list
+            encoder_hidden_states, spatial_shapes, sampling_locations, attention_weights, self.num_points_list
         )
 
         return output, attention_weights
@@ -436,7 +428,7 @@ class DFineDecoderLayer(nn.Module):
         # Cross-Attention
         cross_attn_weights = None
         hidden_states, cross_attn_weights = self.encoder_attn(
-            hidden_states=hidden_states,
+            hidden_states=self.with_pos_embed(hidden_states, position_embeddings),
             encoder_hidden_states=encoder_hidden_states,
             reference_points=reference_points,
             spatial_shapes=spatial_shapes,
@@ -461,6 +453,9 @@ class DFineDecoderLayer(nn.Module):
             outputs += (self_attn_weights, cross_attn_weights)
 
         return outputs
+
+    def with_pos_embed(self, tensor, pos):
+        return tensor if pos is None else tensor + pos
 
     def _reset_parameters(self):
         init.xavier_uniform_(self.fc1.weight)
@@ -1049,15 +1044,13 @@ initialize linear layer bias value according to a given probability value."""
                 2.0 * math.pi / module.n_heads
             )
             grid_init = torch.stack([thetas.cos(), thetas.sin()], -1)
-            grid_init = (
-                (grid_init / grid_init.abs().max(-1, keepdim=True)[0])
-                .view(module.n_heads, 1, 1, 2)
-                .repeat(1, module.n_levels, module.n_points, 1)
-            )
-            for i in range(module.n_points):
-                grid_init[:, :, i, :] *= i + 1
+            grid_init = grid_init / grid_init.abs().max(-1, keepdim=True).values
+            grid_init = grid_init.reshape(module.n_heads, 1, 2).tile([1, sum(module.num_points_list), 1])
+            scaling = torch.concat([torch.arange(1, n + 1) for n in module.num_points_list]).reshape(1, -1, 1)
+            grid_init *= scaling
             with torch.no_grad():
-                module.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
+                module.sampling_offsets.bias.data[...] = grid_init.flatten()
+
             nn.init.constant_(module.attention_weights.weight.data, 0.0)
             nn.init.constant_(module.attention_weights.bias.data, 0.0)
 
@@ -1257,7 +1250,7 @@ class DFineDecoder(DFinePreTrainedModel):
         intermediate_logits = ()
 
         output_detach = pred_corners_undetach = 0
-        # value = self.value_op(inputs_embeds, None, None, memory_mask, spatial_shapes)
+        value = self.value_op(encoder_hidden_states, None, None, memory_mask, spatial_shapes_list)
 
         project = weighting_function(self.reg_max, self.up, self.reg_scale)
         ref_points_detach = F.sigmoid(reference_points)
@@ -1273,8 +1266,8 @@ class DFineDecoder(DFinePreTrainedModel):
                 hidden_states=hidden_states,
                 position_embeddings=query_pos_embed,
                 reference_points=ref_points_input,
-                spatial_shapes=spatial_shapes,
-                encoder_hidden_states=encoder_hidden_states,
+                spatial_shapes=spatial_shapes_list,
+                encoder_hidden_states=value,
                 encoder_attention_mask=encoder_attention_mask,
                 output_attentions=output_attentions,
             )
@@ -1292,21 +1285,21 @@ class DFineDecoder(DFinePreTrainedModel):
 
             pred_corners_undetach = pred_corners
             ref_points_detach = inter_ref_bbox.detach()
+            output_detach = hidden_states.detach()
 
             intermediate += (hidden_states,)
-            intermediate_reference_points += (
-                (new_reference_points,) if self.bbox_embed is not None else (reference_points,)
-            )
 
-            if self.class_embed is not None:
-                logits = self.class_embed[i](hidden_states)
-                intermediate_logits += (logits,)
+            if self.class_embed is not None and i == self.eval_idx:
+                scores = self.class_embed[i](hidden_states)
+                # Lqe does not affect the performance here.
+                scores = self.lqe_layers[i](scores, pred_corners)
+                intermediate_logits += (scores,)
+                intermediate_logits = torch.stack(intermediate_logits, dim=1)
+                intermediate_reference_points += (inter_ref_bbox,)
+                intermediate_reference_points = torch.stack(intermediate_reference_points, dim=1)
 
         # Keep batch_size as first dimension
         intermediate = torch.stack(intermediate, dim=1)
-        intermediate_reference_points = torch.stack(intermediate_reference_points, dim=1)
-        if self.class_embed is not None:
-            intermediate_logits = torch.stack(intermediate_logits, dim=1)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
@@ -1330,7 +1323,7 @@ class DFineDecoder(DFinePreTrainedModel):
         return DFineDecoderOutput(
             last_hidden_state=hidden_states,
             intermediate_logits=intermediate_logits,
-            intermediate_reference_points=ref_points_detach,
+            intermediate_reference_points=intermediate_reference_points,
             intermediate_hidden_states=intermediate,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
