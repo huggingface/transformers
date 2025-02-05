@@ -20,7 +20,6 @@ from typing import Dict, List, Optional, Tuple, Union
 import torch
 from torch import nn
 from torch.nn import functional as F
-from torch.nn.utils import weight_norm, remove_weight_norm
 import numpy as np
 
 from ...activations import ACT2FN
@@ -476,7 +475,7 @@ class StyleTextToSpeech2HarmonicNoiseSourceFilter(nn.Module):
             phase = torch.nn.functional.interpolate(phase.transpose(1, 2) * self.upsample_scale, scale_factor=self.upsample_scale, mode="linear").transpose(1, 2)
             sines = torch.sin(phase)
         else:
-            uv = self._f02uv(f0_values)
+            uv = (f0_values > self.voiced_threshold).to(torch.float32)
             uv_1 = torch.roll(uv, shifts=-1, dims=1)
             uv_1[:, -1, :] = 1
             u_loc = (uv < 1) * (uv_1 > 0)
@@ -510,14 +509,14 @@ class StyleTextToSpeech2HarmonicNoiseSourceFilter(nn.Module):
         noise = noise_amp * torch.randn_like(sine_waves)
         sine_waves = sine_waves * uv + noise
 
-        return sine_waves, uv
+        return sine_waves
         
     def forward(self, hidden_states):
-        sine_waves, uv = self._sine_gen(hidden_states)
-        sine_merge = self.l_tanh(self.l_linear(sine_waves))
-        noise = torch.randn_like(uv) * self.sine_amplitude / 3
+        with torch.no_grad():
+            sine_wavs = self._sine_gen(hidden_states)
+        sine_merge = self.l_tanh(self.l_linear(sine_wavs))
 
-        return sine_merge, noise, uv
+        return sine_merge
     
 
 class StyleTextToSpeech2GeneratorLayer(nn.Module):
@@ -587,11 +586,7 @@ class StyleTextToSpeech2GeneratorLayer(nn.Module):
         hidden_states = self.up(hidden_states.transpose(1, -1))
         hidden_states = self.reflection_pad(hidden_states).transpose(1, -1)
         hidden_states = hidden_states + hidden_states_source
-        
-        hidden_states = self.resblocks[0](hidden_states, style)
-        for resblock in self.resblocks[1:]:
-            hidden_states += resblock(hidden_states, style)
-        hidden_states /= len(self.resblocks)
+        hidden_states = sum(resblock(hidden_states, style) for resblock in self.resblocks) / len(self.resblocks)
 
         return hidden_states
 
@@ -648,7 +643,7 @@ class StyleTextToSpeech2Generator(nn.Module):
     def forward(self, hidden_states, style, f0):
         with torch.no_grad():
             f0 = self.f0_upsamp(f0[:, None]).transpose(1, 2)  # bs,n,t
-            har_source, noi_source, uv = self.m_source(f0)
+            har_source = self.m_source(f0)
             har_source = har_source.transpose(1, 2).squeeze(1)
             har_spec, har_phase = self.stft.transform(har_source)
             har = torch.cat([har_spec, har_phase], dim=1)
@@ -716,8 +711,8 @@ class StyleTextToSpeech2ForConditionalGeneration(nn.Module):
         self.prosody_predictor = StyleTextToSpeech2ProsodyPredictor(config)
         self.decoder = StyleTextToSpeech2Decoder(config)
 
-    def generate(self, input_ids, style, speed=1):
-        style = style[:, :128]
+    def generate(self, input_ids, style_ref, speed=1):
+        style = style_ref[:, 128:]
 
         hidden_states_text = self.acoustic_text_encoder(input_ids)
         hidden_states_prosodic = self.prosodic_text_encoder(input_ids)
@@ -732,8 +727,6 @@ class StyleTextToSpeech2ForConditionalGeneration(nn.Module):
 
         pitch, energy = self.prosody_predictor(hidden_states_duration, style)
 
-        out = self.decoder(hidden_states_text, pitch, energy, style)
-
-        return out
+        return self.decoder(hidden_states_text, pitch, energy, style_ref[:, :128])
 
 __all__ = ["StyleTextToSpeech2AcousticTextEncoder", "StyleTextToSpeech2ProsodicEncoder", "StyleTextToSpeech2DurationEncoder", "StyleTextToSpeech2ForConditionalGeneration"]
