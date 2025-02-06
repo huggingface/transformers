@@ -19,9 +19,9 @@ import torch
 import torch.utils.checkpoint
 from torch import nn
 
+from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...utils import add_start_docstrings, logging
-from ...activations import ACT2FN
 
 from ..granitemoe.modeling_granitemoe import (
     GraniteMoeDecoderLayer,
