@@ -47,7 +47,7 @@ logger = logging.get_logger(__name__)
 
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 class LlavaNextVideoVideoProcessor(BaseVideoProcessor):

@@ -319,16 +319,18 @@ def make_batched_videos(videos) -> VideoInput:
         return videos
 
     elif isinstance(videos, (list, tuple)) and is_valid_image(videos[0]):
-        if is_pil_image(videos[0]) or videos[0].ndim == 3:
+        if not isinstance(videos[0], PIL.Image.Image) and len(videos[0].shape) == 4:
+            return videos
+        else:
             return [videos]
-        elif videos[0].ndim == 4:
-            return [list(video) for video in videos]
 
     elif is_valid_image(videos):
-        if is_pil_image(videos) or videos.ndim == 3:
-            return [[videos]]
-        elif videos.ndim == 4:
-            return [list(videos)]
+        if isinstance(videos, PIL.Image.Image):
+            return [[videos]]  # one frame only passed
+        elif len(videos.shape) == 4:
+            return [videos]
+        elif len(videos.shape) == 5:
+            return list(videos)
 
     raise ValueError(f"Could not make batched video from {videos}")
 
@@ -735,7 +737,7 @@ def load_video(video: Union[str, "VideoInput"], num_frames: Optional[int] = None
         )
 
     video_decoder = VIDEO_DECODERS[backend]
-    video = video_decoder(file_obj)
+    video = video_decoder(file_obj, num_frames=num_frames)
     return video
 
 

@@ -46,10 +46,6 @@ from ...utils import TensorType, filter_out_non_signature_kwargs, logging
 logger = logging.get_logger(__name__)
 
 
-if is_vision_available():
-    import PIL
-
-
 class VideoLlavaImageProcessor(BaseImageProcessor):
     r"""
     Constructs a CLIP image processor.

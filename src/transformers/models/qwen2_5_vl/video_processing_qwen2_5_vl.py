@@ -120,7 +120,7 @@ class Qwen2_5_VLVideoProcessor(BaseVideoProcessor):
             The merge size of the vision encoder to llm encoder.
     """
 
-    model_input_names = ["pixel_values_videos", "video_grid_thw", "second_per_grid_ts"]
+    model_input_names = ["pixel_values_videos", "video_grid_thw"]
 
     def __init__(
         self,

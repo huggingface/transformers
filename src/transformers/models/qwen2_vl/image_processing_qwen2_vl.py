@@ -43,7 +43,6 @@ from ...image_utils import (
     make_batched_videos,
     make_flat_list_of_images,
     make_list_of_images,
-    make_list_of_videos,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,

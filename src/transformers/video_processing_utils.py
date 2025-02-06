@@ -24,9 +24,10 @@ import numpy as np
 from .dynamic_module_utils import custom_object_save
 from .image_processing_base import BatchFeature, ImageProcessingMixin
 from .image_processing_utils import get_size_dict
-from .image_transforms import center_crop, normalize, rescale
+from .image_transforms import center_crop, normalize, rescale, resize, to_channel_dimension_format
 from .image_utils import (
     ChannelDimension,
+    infer_channel_dimension_format,
     load_video,
 )
 from .utils import (
@@ -67,6 +68,76 @@ class BaseVideoProcessor(ImageProcessingMixin):
 
     def preprocess(self, videos, **kwargs) -> BatchFeature:
         raise NotImplementedError("Each video processor must implement its own preprocess method")
+
+    def resize(
+        self,
+        video,
+        size,
+        resample=None,
+        default_to_square=True,
+        max_size=None,
+        data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ):
+        """
+        Resizes `video`. Resizes by converting each input frame to PIL.Image and converts output video
+        back to `np.array`.
+
+        Args:
+            video `np.ndarray`:
+                Video or video frame to resize.
+            size (`int` or `Tuple[int, int]`):
+                The size to use for resizing the video. If `size` is a sequence like (h, w), output size will be
+                matched to this.
+
+                If `size` is an int and `default_to_square` is `True`, then video will be resized to (size, size). If
+                `size` is an int and `default_to_square` is `False`, then smaller edge of the video will be matched to
+                this number. i.e, if height > width, then video will be rescaled to (size * height / width, size).
+            resample (`int`, *optional*, defaults to `PILImageResampling.BILINEAR`):
+                The filter to user for resampling.
+            default_to_square (`bool`, *optional*, defaults to `True`):
+                How to convert `size` when it is a single int. If set to `True`, the `size` will be converted to a
+                square (`size`,`size`). If set to `False`, will replicate
+                [`torchvision.transforms.Resize`](https://pytorch.org/vision/stable/transforms.html#torchvision.transforms.Resize)
+                with support for resizing only the smallest edge and providing an optional `max_size`.
+            max_size (`int`, *optional*, defaults to `None`):
+                The maximum allowed for the longer edge of the resized video: if the longer edge of the video is
+                greater than `max_size` after being resized according to `size`, then the video is resized again so
+                that the longer edge is equal to `max_size`. As a result, `size` might be overruled, i.e the smaller
+                edge may be shorter than `size`. Only used if `default_to_square` is `False`.
+            data_format (`str` or `ChannelDimension`, *optional*):
+                The channel dimension format for the output video. If unset, the channel dimension format of the input
+                video is used. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: video in (num_frames, num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: video in (num_frames, height, width, num_channels) format.
+            input_data_format (`ChannelDimension` or `str`, *optional*):
+                The channel dimension format for the input video. If unset, the channel dimension format is inferred
+                from the input video. Can be one of:
+                - `"channels_first"` or `ChannelDimension.FIRST`: video in (num_frames, num_channels, height, width) format.
+                - `"channels_last"` or `ChannelDimension.LAST`: video in (num_frames, height, width, num_channels) format.
+
+
+        Returns:
+            video: The resized video.
+        """
+
+        if input_data_format is None:
+            input_data_format = infer_channel_dimension_format(video)
+
+        video = to_channel_dimension_format(video, ChannelDimension.LAST, input_data_format)
+        if video.ndim == 3:
+            video_resized = resize(video, size, resample=resample, input_data_format=ChannelDimension.LAST)
+        elif video.ndim == 4:
+            video_resized = [
+                resize(frame, size, resample=resample, input_data_format=ChannelDimension.LAST) for frame in video
+            ]
+            video_resized = np.stack(video_resized)
+        video_resized = (
+            to_channel_dimension_format(video, data_format, input_data_format)
+            if data_format is not None
+            else video_resized
+        )
+        return video_resized
 
     def rescale(
         self,
@@ -175,6 +246,47 @@ class BaseVideoProcessor(ImageProcessingMixin):
             input_data_format=input_data_format,
             **kwargs,
         )
+
+    def convert_to_rgb(
+        self,
+        video: np.array,
+        data_format: Optional[ChannelDimension] = None,
+        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    ) -> np.array:
+        """
+        Convert video to RGB by blending the transparency layer if it's in RGBA format, otherwise simply returns it.
+
+        Args:
+            video (`np.array`):
+                The video to convert.
+            data_format (`ChannelDimension`, *optional*):
+                The channel dimension format of the output video. If unset, will use the inferred format from the input.
+            input_data_format (`ChannelDimension`, *optional*):
+                The channel dimension format of the input video. If unset, will use the inferred format from the input.
+        """
+        if not isinstance(video, np.ndarray):
+            raise ValueError(f"Video has to be a numpy array to convert to RGB format, but found {type(video)}")
+
+        if video.ndim == 4:
+            return video
+
+        # np.array usually comes with ChannelDimension.LAST so leet's convert it
+        if input_data_format is None:
+            input_data_format = infer_channel_dimension_format(video)
+        video = to_channel_dimension_format(video, ChannelDimension.FIRST, input_channel_dim=input_data_format)
+
+        # grayscale video so we repeat it 3 times for each channel
+        if video.ndim == 3:
+            return video[:, None, ...].repeat(3, 1)
+
+        if not (video[:, 3, ...] < 255).any():
+            return video
+
+        # There is a transparency layer, blend it with a white background.
+        # Calculate the alpha proportion for blending.
+        alpha = video[:, 3, ...] / 255.0
+        video = (1 - alpha[:, :, np.newaxis]) * 255 + alpha[:, :, np.newaxis] * video[:, :3, ...]
+        return video
 
     @classmethod
     def from_pretrained(

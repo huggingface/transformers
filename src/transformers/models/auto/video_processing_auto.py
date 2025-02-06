@@ -52,12 +52,12 @@ if TYPE_CHECKING:
 else:
     VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
-            ("instructblipvideo", ("InstructBlipVideoVideoProcessor",)),
-            ("llava_next_video", ("LlavaNextVideoVideoProcessor",)),
-            ("llava_onevision", ("LlavaOnevisionVideoProcessor",)),
-            ("qwen2_5_vl", ("Qwen2_5_VLVideoProcessor",)),
-            ("qwen2_vl", ("Qwen2VLVideoProcessor",)),
-            ("video_llava", ("VideoLlavaVideoProcessor",)),
+            ("instructblipvideo", ("InstructBlipVideoVideoProcessor", "InstructBlipVideoVideoProcessorFast")),
+            ("llava_next_video", ("LlavaNextVideoVideoProcessor", "LlavaNextVideoVideoProcessorFast")),
+            ("llava_onevision", ("LlavaOnevisionVideoProcessor", "LlavaOnevisionVideoProcessorFast")),
+            ("qwen2_5_vl", ("Qwen2_5_VLVideoProcessor", "Qwen2_5_VLVideoProcessorFast")),
+            ("qwen2_vl", ("Qwen2VLVideoProcessor", "Qwen2VLVideoProcessorFast")),
+            ("video_llava", ("VideoLlavaVideoProcessor", "VideoLlavaVideoProcessorFast")),
         ]
     )
 

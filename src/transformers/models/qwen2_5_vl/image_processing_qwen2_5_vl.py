@@ -44,7 +44,6 @@ from ...image_utils import (
     make_batched_videos,
     make_flat_list_of_images,
     make_list_of_images,
-    make_list_of_videos,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
@@ -124,7 +123,6 @@ class Qwen2_5_VLImageProcessor(BaseImageProcessor):
         "image_grid_thw",
         "pixel_values_videos",
         "video_grid_thw",
-        "second_per_grid_ts",
     ]
 
     def __init__(

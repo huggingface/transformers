@@ -40,8 +40,8 @@ from ...image_utils import (
     get_image_size,
     infer_channel_dimension_format,
     is_scaled_image,
+    make_batched_videos,
     make_list_of_images,
-    make_list_of_videos,
     to_numpy_array,
     validate_preprocess_arguments,
 )
@@ -344,7 +344,7 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
-        videos = make_list_of_videos(videos)
+        videos = make_batched_videos(videos)
 
         validate_preprocess_arguments(
             rescale_factor=rescale_factor,

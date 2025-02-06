@@ -333,6 +333,7 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
                 "torch.Tensor, tf.Tensor or jax.ndarray."
             )
 
+        data = {}
         if images is not None:
             pixel_values, vision_grid_thws = [], []
             for image in images:
@@ -384,7 +385,7 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
                 vision_grid_thws_videos.append(video_grid_thw)
             pixel_values_videos = torch.stack(pixel_values_videos)
             vision_grid_thws_videos = torch.tensor(vision_grid_thws_videos)
-            data.update({"pixel_values_videos": pixel_values, "video_grid_thw": vision_grid_thws_videos})
+            data.update({"pixel_values_videos": pixel_values_videos, "video_grid_thw": vision_grid_thws_videos})
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 

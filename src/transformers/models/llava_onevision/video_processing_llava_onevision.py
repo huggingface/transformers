@@ -15,6 +15,7 @@
 """Video processor class for LLaVa-Onevision."""
 
 from typing import Dict, List, Optional, Union
+
 import numpy as np
 
 from ...image_processing_utils import BatchFeature, get_size_dict
@@ -45,7 +46,7 @@ logger = logging.get_logger(__name__)
 
 
 if is_vision_available():
-    from PIL import Image
+    pass
 
 
 class LlavaOnevisionVideoProcessor(BaseVideoProcessor):
@@ -294,6 +295,34 @@ class LlavaOnevisionVideoProcessor(BaseVideoProcessor):
             if "height" in size and "width" in size
             else (size["shortest_edge"], size["shortest_edge"])
         )
+
+        if input_data_format is None:
+            # We assume that all images have the same channel dimension format.
+            input_data_format = infer_channel_dimension_format(videos[0])
+
+        pixel_values = []
+        # for video in videos:
+        #     video = to_numpy_array(video)
+        #     # if do_convert_rgb:
+        #     #     video = self.convert_to_rgb(video)
+        #
+        #     if do_rescale and is_scaled_image(video):
+        #         logger.warning_once(
+        #             "It looks like you are trying to rescale already rescaled videos. If the input"
+        #             " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+        #         )
+        #
+        #     # if do_resize:
+        #     #     video = self.resize(video, size=size_tuple, resample=resample, input_data_format=input_data_format)
+        #
+        #     if do_rescale:
+        #         video = self.rescale(video, scale=rescale_factor, input_data_format=input_data_format)
+        #
+        #     if do_normalize:
+        #         video = self.normalize(video, mean=image_mean, std=image_std, input_data_format=input_data_format)
+        #
+        #     video = to_channel_dimension_format(video, data_format, input_channel_dim=input_data_format)
+        #     pixel_values.append(video)
 
         pixel_values = [
             self._preprocess(
