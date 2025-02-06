@@ -273,7 +273,7 @@ class DogeDynamicMaskAttention(nn.Module):
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         # calculate dynamic mask from value_states
-        dt_states = self.dt_proj(value_states.transpose(1, 2).reshape(input_shape, -1))
+        dt_states = self.dt_proj(value_states.transpose(1, 2).reshape(value_states.shape[0], value_states.shape[-2], -1))
         dynamic_mask = torch.exp(self.A * F.softplus(dt_states)).transpose(-1, -2)
         attn_mask = self.prepare_dynamic_mask(
             hidden_states=hidden_states,
@@ -408,9 +408,9 @@ class DogeCDMoE(DogeMLP):
         up_embed = self.up_embed(indices)
 
         # mix experts states with cross domain states
-        experts_weights = (hidden_states[:, :, None, None, :] * down_embed).sum(dim=-1)
+        experts_weights = torch.sum(hidden_states[:, :, None, None, :] * down_embed, dim=-1)
         experts_weights = self.act_fn(experts_weights) * scores.softmax(dim=-1)
-        experts_states = (experts_weights[:, :, :, None, :] * up_embed).sum(dim=-2).sum(dim=-2)
+        experts_states = torch.sum(experts_weights[:, :, :, :, None] * up_embed, dim=(2, 3))
         hidden_states = self.down_proj(self.act_fn(self.gate_proj(hidden_states)) * self.up_proj(hidden_states))
         hidden_states = hidden_states + experts_states
         return hidden_states
