@@ -2992,9 +2992,7 @@ class GenerationMixin:
             else:
                 next_past_key_values = None
                 for possible_cache_name in ALL_CACHE_NAMES:
-                    if possible_cache_name in outputs:
-                        next_past_key_values = getattr(outputs, possible_cache_name)
-                        break
+                    next_past_key_values = next_past_key_values or getattr(outputs, possible_cache_name, None)
                 # Do it in-place layer per layer to save memory
                 if isinstance(next_past_key_values, DynamicCache) or (
                     isinstance(next_past_key_values, EncoderDecoderCache)
