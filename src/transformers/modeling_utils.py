@@ -30,7 +30,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from functools import partial, wraps
 from threading import Thread
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, TypeVar, Union
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, TypedDict, TypeVar, Union
 from zipfile import is_zipfile
 
 import torch
@@ -48,8 +48,9 @@ from .generation import CompileConfig, GenerationConfig, GenerationMixin
 from .integrations import PeftAdapterMixin, deepspeed_config, is_deepspeed_zero3_enabled
 from .integrations.flash_attention import flash_attention_forward
 from .integrations.flex_attention import flex_attention_forward
-from .integrations.sdpa_attention import sdpa_attention_forward
+from .integrations.sdpa_attention import sdpa_attention_forward, SdpaAttentionKwargs
 from .loss.loss_utils import LOSS_MAPPING
+from .modeling_flash_attention_utils import FlashAttentionKwargs
 from .pytorch_utils import (  # noqa: F401
     Conv1D,
     apply_chunking_to_forward,
@@ -5702,3 +5703,6 @@ ALL_ATTENTION_FUNCTIONS.update(
         "sdpa": sdpa_attention_forward,
     }
 )
+
+
+AttentionKwargs = Union[FlashAttentionKwargs, SdpaAttentionKwargs]

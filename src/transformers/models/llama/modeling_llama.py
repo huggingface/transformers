@@ -27,7 +27,6 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     CausalLMOutputWithPast,
@@ -36,7 +35,7 @@ from ...modeling_outputs import (
     TokenClassifierOutput,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, AttentionKwargs, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
@@ -262,7 +261,7 @@ class LlamaAttention(nn.Module):
         attention_mask: Optional[torch.Tensor],
         past_key_value: Optional[Cache] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **kwargs,
+        **kwargs: Unpack[AttentionKwargs],
     ) -> Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Tuple[torch.Tensor]]]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
@@ -528,7 +527,7 @@ class LlamaModel(LlamaPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **flash_attn_kwargs: Unpack[FlashAttentionKwargs],
+        **flash_attn_kwargs: Unpack[AttentionKwargs],
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (

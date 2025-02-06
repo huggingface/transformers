@@ -1,4 +1,4 @@
-from typing import Optional, Tuple
+from typing import Optional, Tuple, TypedDict
 
 import torch
 
@@ -62,3 +62,17 @@ def sdpa_attention_forward(
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, None
+
+
+class SdpaAttentionKwargs(TypedDict, total=False):
+    """
+    Keyword arguments for sdpa Attention.
+
+    Attributes:
+        is_causal (`bool`, *optional*)
+            The value for the argument `is_causal` that is passed to `torch.nn.functional.scaled_dot_product_attention`.
+            An error is thrown if both attention_mask and is_causal are set. If `None`, it is inferred in
+            `sdpa_attention_forward`.
+    """
+
+    is_causal: Optional[bool]
