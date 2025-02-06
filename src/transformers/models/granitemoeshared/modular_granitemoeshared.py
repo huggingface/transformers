@@ -22,7 +22,6 @@ from torch import nn
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...utils import add_start_docstrings, logging
-
 from ..granitemoe.modeling_granitemoe import (
     GraniteMoeDecoderLayer,
     GraniteMoeForCausalLM,
