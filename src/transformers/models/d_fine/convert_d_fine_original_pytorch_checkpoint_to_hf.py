@@ -1150,7 +1150,6 @@ if __name__ == "__main__":
     parser.add_argument("--push_to_hub", action="store_true", help="Whether to push the model to the hub or not.")
     parser.add_argument(
         "--repo_id",
-        default="Peterande/D-FINE",
         type=str,
         help="repo_id where the model will be pushed to.",
     )
