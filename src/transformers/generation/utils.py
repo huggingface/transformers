@@ -381,9 +381,13 @@ class GenerationMixin:
         # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
         # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
         #              (we can't check exception 3 while compiling)
+        # Excpetion 4: If input_embeds are passed then slice it through `cache_position`, to keep only the unprocessed tokens and
+        # generate the first token for each sequence. Later use the generated Input ids for continuation.
         if past_key_values is not None:
             model_inputs["past_key_values"] = past_key_values
-            if (
+            if inputs_embeds is not None and input_ids.shape[1] == 0:  # Exception 4
+                inputs_embeds = inputs_embeds[:, -cache_position.shape[0] :]
+            elif (
                 inputs_embeds is not None  # Exception 1
                 or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
             ):
@@ -393,9 +397,9 @@ class GenerationMixin:
 
         # 3. Prepare base model inputs
         input_ids_key = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
-        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
+        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step for every prompt.
         if not self.config.is_encoder_decoder:
-            if inputs_embeds is not None and cache_position[0] == 0:
+            if inputs_embeds is not None and len(cache_position) == inputs_embeds.shape[1]:
                 model_inputs[input_ids_key] = None
                 model_inputs["inputs_embeds"] = inputs_embeds
             else:
@@ -406,23 +410,28 @@ class GenerationMixin:
             model_inputs[input_ids_key] = input_ids.clone(memory_format=torch.contiguous_format)
 
         # 4. Create missing `position_ids` on the fly
+        attention_mask = (
+            kwargs.pop("decoder_attention_mask", None) if self.config.is_encoder_decoder else attention_mask
+        )
+        attention_mask_key = "decoder_attention_mask" if self.config.is_encoder_decoder else "attention_mask"
+        position_ids_key = "decoder_position_ids" if self.config.is_encoder_decoder else "position_ids"
         if (
             attention_mask is not None
-            and kwargs.get("position_ids") is None
-            and "position_ids" in set(inspect.signature(self.forward).parameters.keys())
+            and kwargs.get(position_ids_key) is None
+            and position_ids_key in set(inspect.signature(self.forward).parameters.keys())
         ):
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
-            kwargs["position_ids"] = position_ids  # placed in kwargs for further processing (see below)
+            kwargs[position_ids_key] = position_ids  # placed in kwargs for further processing (see below)
 
         # 5. Slice model inputs if it's an input that should have the same length as `input_ids`
-        for model_input_name in ["position_ids", "token_type_ids"]:
+        for model_input_name in ["position_ids", "token_type_ids", "decoder_position_ids"]:
             model_input = kwargs.get(model_input_name)
             if model_input is not None:
                 if past_key_values is not None:
                     current_input_length = (
                         model_inputs["inputs_embeds"].shape[1]
-                        if model_inputs["inputs_embeds"] is not None
+                        if model_inputs.get("inputs_embeds") is not None
                         else model_inputs[input_ids_key].shape[1]
                     )
                     model_input = model_input[:, -current_input_length:]
@@ -469,7 +478,7 @@ class GenerationMixin:
                     past_key_values=past_key_values,
                 )
         if attention_mask is not None:
-            model_inputs["attention_mask"] = attention_mask
+            model_inputs[attention_mask_key] = attention_mask
 
         # 7. Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
         for key, value in kwargs.items():
@@ -3177,9 +3186,11 @@ class GenerationMixin:
         model_kwargs = self._get_initial_cache_position(input_ids, model_kwargs)
 
         model_forward = self.__call__
-        if isinstance(model_kwargs.get("past_key_values"), StaticCache):
-            if self.device.type == "cuda":
-                logger.warning_once("Using `torch.compile`.")
+        if isinstance(model_kwargs.get("past_key_values"), Cache):
+            is_compileable = model_kwargs["past_key_values"].is_compileable and self._supports_static_cache
+            if is_compileable and (
+                self.device.type == "cuda" or generation_config.compile_config._compile_all_devices
+            ):
                 os.environ["TOKENIZERS_PARALLELISM"] = "0"
                 model_forward = self.get_compiled_call(generation_config.compile_config)
 

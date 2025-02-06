@@ -331,6 +331,12 @@ class ModelTesterMixin:
                 with torch.no_grad():
                     second = model(**self._prepare_for_class(inputs_dict, model_class))[0]
 
+                # Save and load second time because `from_pretrained` adds a bunch of new config fields
+                # so we need to make sure those fields can be loaded back after saving
+                # Simply init as `model(config)` doesn't add those fields
+                model.save_pretrained(tmpdirname)
+                model = model_class.from_pretrained(tmpdirname)
+
             if isinstance(first, tuple) and isinstance(second, tuple):
                 for tensor1, tensor2 in zip(first, second):
                     check_save_load(tensor1, tensor2)
@@ -762,7 +768,7 @@ class ModelTesterMixin:
             else:
                 check_determinism(first, second)
 
-    def test_batching_equivalence(self):
+    def test_batching_equivalence(self, atol=1e-5, rtol=1e-5):
         """
         Tests that the model supports batching and that the output is the nearly the same for the same input in
         different batch sizes.
@@ -806,7 +812,7 @@ class ModelTesterMixin:
                     torch.isinf(single_row_object).any(), f"Single row output has `inf` in {model_name} for key={key}"
                 )
                 try:
-                    torch.testing.assert_close(batched_row, single_row_object, atol=1e-5, rtol=1e-5)
+                    torch.testing.assert_close(batched_row, single_row_object, atol=atol, rtol=rtol)
                 except AssertionError as e:
                     msg = f"Batched and Single row outputs are not equal in {model_name} for key={key}.\n\n"
                     msg += str(e)
@@ -2985,6 +2991,10 @@ class ModelTesterMixin:
             model.to(torch_device)
             model.eval()
 
+            model_forward_args = inspect.signature(model.forward).parameters
+            if "inputs_embeds" not in model_forward_args:
+                self.skipTest(reason="This model doesn't use `inputs_embeds`")
+
             inputs = copy.deepcopy(self._prepare_for_class(inputs_dict, model_class))
 
             if not self.is_encoder_decoder:
@@ -3862,11 +3872,13 @@ class ModelTesterMixin:
             for name, submodule in model.named_modules():
                 class_name = submodule.__class__.__name__
                 if (
-                    "SdpaAttention" in class_name
-                    or "SdpaSelfAttention" in class_name
-                    or "FlashAttention" in class_name
+                    class_name.endswith("Attention")
+                    and getattr(submodule, "config", None)
+                    and submodule.config._attn_implementation != "eager"
                 ):
-                    raise ValueError(f"The eager model should not have SDPA/FA2 attention layers but got {class_name}")
+                    raise ValueError(
+                        f"The eager model should not have SDPA/FA2 attention layers but got `{class_name}.config._attn_implementation={submodule.config._attn_implementation}`"
+                    )
 
     @require_torch_sdpa
     def test_sdpa_can_dispatch_non_composite_models(self):
@@ -3897,8 +3909,14 @@ class ModelTesterMixin:
 
                 for name, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                        raise ValueError(f"The eager model should not have SDPA attention layers but got {class_name}")
+                    if (
+                        class_name.endswith("Attention")
+                        and getattr(submodule, "config", None)
+                        and submodule.config._attn_implementation == "sdpa"
+                    ):
+                        raise ValueError(
+                            f"The eager model should not have SDPA attention layers but got `{class_name}.config._attn_implementation={submodule.config._attn_implementation}`"
+                        )
 
     @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
@@ -3949,7 +3967,11 @@ class ModelTesterMixin:
 
                 for name, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                    if (
+                        class_name.endswith("Attention")
+                        and getattr(submodule, "config", None)
+                        and submodule.config._attn_implementation == "sdpa"
+                    ):
                         raise ValueError("The eager model should not have SDPA attention layers")
 
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
@@ -4414,10 +4436,15 @@ class ModelTesterMixin:
                 model.save_pretrained(tmpdirname)
                 model = model_class.from_pretrained(tmpdirname, torch_dtype=torch_dtype)
 
-                supports_fa2_all_modules = all(
+                sub_models_supporting_fa2 = [
                     module._supports_flash_attn_2
                     for name, module in model.named_modules()
                     if isinstance(module, PreTrainedModel) and name != ""
+                ]
+                supports_fa2_all_modules = (
+                    all(sub_models_supporting_fa2)
+                    if len(sub_models_supporting_fa2) > 0
+                    else model._supports_flash_attn_2
                 )
                 if not supports_fa2_all_modules:
                     with self.assertRaises(ValueError):
@@ -4436,7 +4463,11 @@ class ModelTesterMixin:
                     has_fa2 = False
                     for name, submodule in model_fa2.named_modules():
                         class_name = submodule.__class__.__name__
-                        if "FlashAttention" in class_name:
+                        if (
+                            "Attention" in class_name
+                            and getattr(submodule, "config", None)
+                            and submodule.config._attn_implementation == "flash_attention_2"
+                        ):
                             has_fa2 = True
                             break
                     if not has_fa2:
@@ -4526,6 +4557,8 @@ class ModelTesterMixin:
                 config.max_position_embeddings = max_new_tokens + dummy_input.shape[1] + 1
 
             model = model_class(config)
+            if "position_ids" not in inspect.signature(model.forward).parameters:
+                self.skipTest("Model does not support position_ids")
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
