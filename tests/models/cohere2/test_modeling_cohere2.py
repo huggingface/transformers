@@ -131,6 +131,10 @@ class Cohere2ModelTest(CohereModelTest, unittest.TestCase):
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
+    @unittest.skip("Cohere2 has HybridCache and doesn't support progressive generation using input embeds.")
+    def test_generate_continue_from_inputs_embeds(self):
+        pass
+
     # overwrite because HybridCache has fixed length for key/values
     def _check_attentions_for_generate(
         self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
