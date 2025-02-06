@@ -1,11 +1,11 @@
-FROM rocm/dev-ubuntu-22.04:5.6
+FROM rocm/dev-ubuntu-22.04:6.2.4
 LABEL maintainer="Hugging Face"
 
 ARG DEBIAN_FRONTEND=noninteractive
-ARG PYTORCH='2.1.1'
-ARG TORCH_VISION='0.16.1'
-ARG TORCH_AUDIO='2.1.1'
-ARG ROCM='5.6'
+ARG PYTORCH='2.5.1'
+ARG TORCH_VISION='0.20.0'
+ARG TORCH_AUDIO='2.5.0'
+ARG ROCM='6.2'
 
 RUN apt update && \
     apt install -y --no-install-recommends \
@@ -45,4 +45,4 @@ RUN cd transformers && python3 setup.py develop
 RUN python3 -c "from deepspeed.launcher.runner import main"
 
 # Remove nvml as it is not compatible with ROCm
-RUN python3 -m pip uninstall py3nvml pynvml -y
+RUN python3 -m pip uninstall py3nvml pynvml nvidia-ml-py apex -y

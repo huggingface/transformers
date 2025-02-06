@@ -466,13 +466,14 @@ class ModelUtilsTest(TestCasePlus):
     def test_model_from_config_torch_dtype_composite(self):
         """
         Test that from_pretrained works with torch_dtype being as a dict per each sub-config in composite config
+        Tiny-Llava has saved auto dtype as `torch.float32` for all modules.
         """
         # should be able to set torch_dtype as a simple string and the model loads it correctly
         model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, torch_dtype="float32")
         self.assertEqual(model.language_model.dtype, torch.float32)
         self.assertEqual(model.vision_tower.dtype, torch.float32)
 
-        model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, torch_dtype="float16")
+        model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, torch_dtype=torch.float16)
         self.assertEqual(model.language_model.dtype, torch.float16)
         self.assertEqual(model.vision_tower.dtype, torch.float16)
 
@@ -1817,6 +1818,19 @@ class ModelUtilsTest(TestCasePlus):
         model_outputs = model(**model_inputs, use_cache=False)
         self.assertIsNone(model_outputs.past_key_values)
         self.assertTrue(model.training)
+
+    def test_unknown_quantization_config(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = BertConfig(
+                vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+            )
+            model = BertModel(config)
+            config.quantization_config = {"quant_method": "unknown"}
+            model.save_pretrained(tmpdir)
+            with self.assertLogs("transformers", level="WARNING") as cm:
+                BertModel.from_pretrained(tmpdir)
+            self.assertEqual(len(cm.records), 1)
+            self.assertTrue(cm.records[0].message.startswith("Unknown quantization type, got"))
 
 
 @slow

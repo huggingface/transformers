@@ -63,6 +63,7 @@ from . import (
     cpmant,
     ctrl,
     cvt,
+    dab_detr,
     dac,
     data2vec,
     dbrx,
@@ -106,6 +107,7 @@ from . import (
     git,
     glm,
     glpn,
+    got_ocr2,
     gpt2,
     gpt_bigcode,
     gpt_neo,
@@ -303,5 +305,6 @@ from . import (
     yolos,
     yoso,
     zamba,
+    zamba2,
     zoedepth,
 )
