@@ -1533,7 +1533,7 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
         add_generation_prompt: bool = False,
         continue_final_message: bool = False,
         tokenize: bool = True,
-        padding: bool = False,
+        padding: Union[bool, str, PaddingStrategy] = False,
         truncation: bool = False,
         max_length: Optional[int] = None,
         return_tensors: Optional[Union[str, TensorType]] = None,
@@ -1577,8 +1577,16 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                 the model's response for it. Cannot be used at the same time as `add_generation_prompt`.
             tokenize (`bool`, defaults to `True`):
                 Whether to tokenize the output. If `False`, the output will be a string.
-            padding (`bool`, defaults to `False`):
-                Whether to pad sequences to the maximum length. Has no effect if tokenize is `False`.
+            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `False`):
+                 Select a strategy to pad the returned sequences (according to the model's padding side and padding
+                 index) among:
+
+                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+                  sequence if provided).
+                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+                  acceptable input length for the model if that argument is not provided.
+                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+                  lengths).
             truncation (`bool`, defaults to `False`):
                 Whether to truncate sequences at the maximum length. Has no effect if tokenize is `False`.
             max_length (`int`, *optional*):
@@ -1734,7 +1742,15 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                             for token_id in range(start_token, end_token + 1 if end_token else len(input_ids[i])):
                                 current_mask[token_id] = 1
                         assistant_masks.append(current_mask)
-                    out["assistant_masks"] = assistant_masks if is_batched else assistant_masks[0]
+
+                    if not is_batched and not return_tensors:
+                        assistant_masks = assistant_masks[0]
+
+                    out["assistant_masks"] = assistant_masks
+
+                    if return_tensors:
+                        out.convert_to_tensors(tensor_type=return_tensors)
+
                 return out
             else:
                 return out["input_ids"]
@@ -3249,11 +3265,11 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                  Select a strategy to pad the returned sequences (according to the model's padding side and padding
                  index) among:
 
-                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+                - `True` or `'longest'` (default): Pad to the longest sequence in the batch (or no padding if only a single
                   sequence if provided).
                 - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
                   acceptable input length for the model if that argument is not provided.
-                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+                - `False` or `'do_not_pad'`: No padding (i.e., can output a batch with sequences of different
                   lengths).
             max_length (`int`, *optional*):
                 Maximum length of the returned list and optionally padding length (see above).
