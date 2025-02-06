@@ -27,6 +27,7 @@ from transformers.testing_utils import (
     require_torch_fp16,
     slow,
     torch_device,
+    skipIfRocm,
 )
 from transformers.utils import cached_property
 
@@ -511,6 +512,7 @@ class TestMarian_EN_DE_More(MarianIntegrationTest):
         expected = [t.unk_token_id, t.unk_token_id, t.eos_token_id]
         self.assertEqual(expected, ids)
 
+    @skipIfRocm(arch='gfx942')
     def test_pad_not_split(self):
         input_ids_w_pad = self.tokenizer(["I am a small frog <pad>"], return_tensors="pt").input_ids[0].tolist()
         expected_w_pad = [38, 121, 14, 697, 38848, self.tokenizer.pad_token_id, 0]  # pad

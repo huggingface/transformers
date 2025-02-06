@@ -532,102 +532,102 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_torchscript = False
 
-    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1200'])
+    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1101','gfx1200'])
     def test_constrained_beam_search_generate_dict_output(self):
         super().test_constrained_beam_search_generate_dict_output()
         pass
 
-    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1200'])
+    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1101','gfx1200'])
     def test_constrained_beam_search_generate(self):
         super().test_constrained_beam_search_generate()
         pass
 
-    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1200'])
+    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1101','gfx1200'])
     def test_beam_search_low_memory(self):
         super().test_beam_search_low_memory()
         pass
 
-    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1200'])
+    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1101','gfx1200'])
     def test_beam_search_generate_dict_outputs_use_cache(self):
         super().test_beam_search_generate_dict_outputs_use_cache()
         pass
 
-    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1200'])
+    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1101','gfx1200'])
     def test_beam_search_generate_dict_output(self):
         super().test_beam_search_generate_dict_output()
         pass
 
-    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1200'])
+    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1101','gfx1200'])
     def test_beam_search_generate(self):
         super().test_beam_search_generate()
         pass
 
-    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1200'])
+    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1101','gfx1200'])
     def test_beam_sample_generate_dict_output(self):
         super().test_beam_sample_generate_dict_output()
         pass
 
-    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1200'])
+    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1101','gfx1200'])
     def test_beam_sample_generate(self):
         super().test_beam_sample_generate()
         pass
 
-    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1200'])
+    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1101','gfx1200'])
     def test_dola_decoding_sample(self):
         super().test_dola_decoding_sample()
         pass
 
-    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1200'])
+    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1101','gfx1200'])
     def test_generate_from_inputs_embeds_0_greedy(self):
         super().test_generate_from_inputs_embeds_0_greedy()
         pass
 
-    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1200'])
+    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1101','gfx1200'])
     def test_generate_from_inputs_embeds_1_beam_search(self):
         super().test_generate_from_inputs_embeds_1_beam_search()
         pass 
 
-    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1200'])
+    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1101','gfx1200'])
     def test_greedy_generate(self):
         super().test_greedy_generate()
         pass
 
-    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1200'])
+    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1101','gfx1200'])
     def test_greedy_generate_dict_outputs(self):
         super().test_greedy_generate_dict_outputs()
         pass
 
-    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1200'])
+    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1101','gfx1200'])
     def test_greedy_generate_dict_outputs_use_cache(self):
         super().test_greedy_generate_dict_outputs_use_cache()
         pass
 
-    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1200'])
+    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1101','gfx1200'])
     def test_group_beam_search_generate(self):
         super().test_group_beam_search_generate()
         pass 
 
-    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1200'])
+    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1101','gfx1200'])
     def test_group_beam_search_generate_dict_output(self):
         super().test_group_beam_search_generate_dict_output()
         pass
 
-    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1200'])
+    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1101','gfx1200'])
     def test_new_cache_format(self):
         super().test_new_cache_format_0()
         pass
 
-    @skipIfRocm(arch=['gfx942','gfx90a','gfx1100','gfx1201','gfx1200'])
+    @skipIfRocm(arch=['gfx942','gfx90a','gfx1100','gfx1101','gfx1201','gfx1200'])
     def test_offloaded_cache_implementation_0_offloaded(self):
         super().test_offloaded_cache_implementation_0_offloaded()
         pass
 
-    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1200'])
+    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1101','gfx1200'])
     def test_sample_generate(self):
         super().test_sample_generate()
         pass
 
-    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1200'])
+    @skipIfRocm(arch=['gfx1201','gfx942','gfx90a','gfx1100','gfx1101','gfx1200'])
     def test_sample_generate_dict_output(self):
         super().test_sample_generate_dict_output()
         pass

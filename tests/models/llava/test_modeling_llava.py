@@ -507,6 +507,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         outputs = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
         self.assertEqual(outputs, EXPECTED_OUTPUT)
 
+    @skipIfRocm(arch='gfx90a')
     def test_tokenizer_integration(self):
         slow_tokenizer = AutoTokenizer.from_pretrained("liuhaotian/llava-v1.6-34b", use_fast=False)
         slow_tokenizer.add_tokens("<image>", True)

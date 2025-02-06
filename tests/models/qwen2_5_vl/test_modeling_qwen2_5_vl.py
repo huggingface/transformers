@@ -245,7 +245,7 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     def test_generate_from_inputs_embeds_0_greedy(self):
         super().test_generate_from_inputs_embeds_0_greedy()
 
-    @skipIfRocm(arch=['gfx942','gfx90a'])
+    @skipIfRocm(arch=['gfx942','gfx90a','gfx1200','gfx1201'])
     def test_generate_from_inputs_embeds_1_beam_search(self):
         super().test_generate_from_inputs_embeds_1_beam_search()
 

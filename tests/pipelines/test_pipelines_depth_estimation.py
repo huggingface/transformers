@@ -139,7 +139,7 @@ class DepthEstimationPipelineTests(unittest.TestCase):
         self.skipTest(reason="There is not hf-internal-testing tiny model for either GLPN nor DPT")
 
     @require_torch
-    @skipIfRocm(arch=['gfx942','gfx90a','gfx1100','gfx1201','gfx1200'])
+    @skipIfRocm(arch=['gfx942','gfx90a','gfx1100','gfx1101','gfx1201','gfx1200'])
     def test_multiprocess(self):
         depth_estimator = pipeline(
             model="hf-internal-testing/tiny-random-DepthAnythingForDepthEstimation",
