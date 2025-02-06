@@ -13,7 +13,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from .configuration_granitemoeshared import GraniteMoeSharedConfig
 from typing import Optional, Tuple
 
 import torch
@@ -26,10 +25,11 @@ from ...activations import ACT2FN
 
 from ..granitemoe.modeling_granitemoe import (
     GraniteMoeDecoderLayer,
+    GraniteMoeForCausalLM,
     GraniteMoeModel,
     GraniteMoePreTrainedModel,
-    GraniteMoeForCausalLM,
 )
+from .configuration_granitemoeshared import GraniteMoeSharedConfig
 
 
 logger = logging.get_logger(__name__)
