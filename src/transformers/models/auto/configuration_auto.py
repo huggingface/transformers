@@ -601,7 +601,7 @@ MODEL_NAMES_MAPPING = OrderedDict(
         ("roformer", "RoFormer"),
         ("rt_detr", "RT-DETR"),
         ("rt_detr_resnet", "RT-DETR-ResNet"),
-        ("rt_detr_v2", "RTDetrV2"),
+        ("rt_detr_v2", "RT-DETRv2"),
         ("rwkv", "RWKV"),
         ("sam", "SAM"),
         ("seamless_m4t", "SeamlessM4T"),
