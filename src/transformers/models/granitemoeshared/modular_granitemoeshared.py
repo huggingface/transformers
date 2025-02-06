@@ -13,39 +13,26 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import List, Optional, Tuple, Union
+from .configuration_granitemoeshared import GraniteMoeSharedConfig
+from typing import Optional, Tuple
 
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
 
-from ...cache_utils import Cache, DynamicCache
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_flash_attention_utils import _flash_attention_forward
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...processing_utils import Unpack
-from ...utils import LossKwargs, logging
-from ...utils import (
-    add_start_docstrings,
-    logging,
-)
+from ...cache_utils import Cache
+from ...utils import add_start_docstrings, logging
 from ...activations import ACT2FN
-from ...generation import GenerationMixin
 
 from ..granitemoe.modeling_granitemoe import (
     GraniteMoeDecoderLayer,
     GraniteMoeModel,
     GraniteMoePreTrainedModel,
-    GraniteMoeMoE,
     GraniteMoeForCausalLM,
-    GraniteMoeMoE
 )
 
 
-
 logger = logging.get_logger(__name__)
-from .configuration_granitemoeshared import GraniteMoeSharedConfig
 
 
 _CONFIG_FOR_DOC = "GraniteMoeSharedConfig"
@@ -288,7 +275,6 @@ class GraniteMoeSharedModel(GraniteMoeModel):
 
 class GraniteMoeSharedForCausalLM(GraniteMoeForCausalLM):
     _tied_weights_keys = ["lm_head.weight"]
-    
 
     def __init__(self, config: GraniteMoeSharedConfig):
         super().__init__(config)
