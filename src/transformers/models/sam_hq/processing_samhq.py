@@ -45,7 +45,7 @@ class SamHQProcessorKwargs(ProcessingKwargs,total=False):
     images_kwargs: SamHQImagesKwargs
     _defaults = {
         "images_kwargs": {
-            "point_pad_value": -10,
+            "point_pad_value": None,
             
         }
     }
