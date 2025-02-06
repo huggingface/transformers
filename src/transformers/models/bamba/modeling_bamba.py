@@ -881,7 +881,7 @@ class BambaMixer(nn.Module):
         **kwargs,
     ):
         """
-        The `seq_idx` arg is used by the mamba2 trion kernels to handle packed sequences, similarly to how
+        The `seq_idx` arg is used by the mamba2 triton kernels to handle packed sequences, similarly to how
         other kernels use `position_ids` or `cu_seq_lens`. The three are related as in:
 
         position_ids = [0, 1, 2, 0, 1, 0, 0, ...] # position of each token within their seq
