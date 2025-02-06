@@ -752,7 +752,7 @@ class DepthProModel(DepthProPreTrainedModel):
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> checkpoint = "geetu040/depth-pro-hf"
+        >>> checkpoint = "apple/depth-pro-hf"
         >>> processor = AutoProcessor.from_pretrained(checkpoint)
         >>> model = DepthProModel.from_pretrained(checkpoint)
 
@@ -1142,7 +1142,7 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> checkpoint = "geetu040/depth-pro-hf"
+        >>> checkpoint = "apple/depth-pro-hf"
         >>> processor = AutoImageProcessor.from_pretrained(checkpoint)
         >>> model = DepthProForDepthEstimation.from_pretrained(checkpoint)
 
