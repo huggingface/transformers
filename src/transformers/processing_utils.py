@@ -1246,6 +1246,7 @@ class ProcessorMixin(PushToHubMixin):
                 text=prompt,
                 images=images if images else None,
                 videos=videos if videos else None,
+                add_special_tokens=False,
                 **kwargs,
             )
             if return_dict:
