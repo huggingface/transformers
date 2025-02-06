@@ -56,8 +56,6 @@ if is_torch_available():
     import torch
     import torch.nn.functional as F
 
-    torch._dynamo.config.cache_size_limit = 512  # So we can compile all models with no cache limit exception
-
     from transformers import (
         AutoModelForCausalLM,
         AutoModelForSeq2SeqLM,
@@ -2182,6 +2180,8 @@ class GenerationTesterMixin:
                 config._attn_implementation = "eager"  # can't output attentions otherwise
             model = model_class(config).to(torch_device).eval()
 
+            # compilation-specific setup
+            torch.compiler.reset()  # prevent cached compilation from being used in the test
             has_defined_cache_implementation = model.generation_config.cache_implementation is not None
             model.generation_config.compile_config._compile_all_devices = True  # force compilation (e.g. fast CI, CPU)
             if not has_defined_cache_implementation:
@@ -2375,14 +2375,14 @@ class GenerationTesterMixin:
             input_batch_size * num_beams if num_beams > 1 else input_batch_size * num_return_sequences
         )
 
-        seq_length = getattr(self.model_tester, "seq_length", None)
-        seq_length = getattr(self.model_tester, "encoder_seq_length", seq_length)
-        seq_length = getattr(self.model_tester, "text_seq_length", seq_length)
+        prompt_length = getattr(self.model_tester, "seq_length", None)
+        prompt_length = getattr(self.model_tester, "encoder_seq_length", prompt_length)
+        prompt_length = getattr(self.model_tester, "text_seq_length", prompt_length)
 
         config = config.text_config if hasattr(config, "text_config") else config
 
-        gen_len = (
-            output.sequences.shape[-1] - 1 if config.is_encoder_decoder else output.sequences.shape[-1] - seq_length
+        generated_length = (
+            output.sequences.shape[-1] - 1 if config.is_encoder_decoder else output.sequences.shape[-1] - prompt_length
         )
         decoder_past_key_values = getattr(output, "past_key_values", None)
         if config.is_encoder_decoder and isinstance(decoder_past_key_values, EncoderDecoderCache):
@@ -2390,39 +2390,41 @@ class GenerationTesterMixin:
 
         # in some models we subsample the sequence length in inner layers
         if hasattr(self.model_tester, "get_subsampled_output_lengths"):
-            seq_length = self.model_tester.get_subsampled_output_lengths(seq_length)
+            prompt_length = self.model_tester.get_subsampled_output_lengths(prompt_length)
 
         # scores
-        self._check_scores(internal_batch_size, output.scores, length=gen_len, config=config)
+        self._check_scores(
+            batch_size=internal_batch_size, scores=output.scores, generated_length=generated_length, config=config
+        )
 
         # unprocessed logits
-        self._check_logits(internal_batch_size, output.logits, config=config)
+        self._check_logits(batch_size=internal_batch_size, logits=output.logits, config=config)
 
         # Attentions
         if self.has_attentions:
             if config.is_encoder_decoder:
                 # encoder
                 self._check_encoder_attention_for_generate(
-                    output.encoder_attentions, input_batch_size, config, seq_length
+                    attentions=output.encoder_attentions,
+                    batch_size=input_batch_size,
+                    config=config,
+                    prompt_length=prompt_length,
                 )
                 # decoder
                 self._check_attentions_for_generate(
-                    internal_batch_size,
-                    output.decoder_attentions,
-                    min_length=1,
-                    max_length=output.sequences.shape[-1],
+                    batch_size=internal_batch_size,
+                    attentions=output.decoder_attentions,
+                    prompt_length=1,  # the BOS token
+                    output_length=output.sequences.shape[-1],
                     config=config,
                     decoder_past_key_values=decoder_past_key_values,
                 )
             else:
-                # if use_cache first input is equal to no use_cache, so skip here
-                attentions = output.attentions if not use_cache else output.attentions[1:]
-                min_length = seq_length if not use_cache else seq_length + 1
                 self._check_attentions_for_generate(
-                    internal_batch_size,
-                    attentions=attentions,
-                    min_length=min_length,
-                    max_length=output.sequences.shape[-1],
+                    batch_size=internal_batch_size,
+                    attentions=output.attentions,
+                    prompt_length=prompt_length,
+                    output_length=output.sequences.shape[-1],
                     config=config,
                     decoder_past_key_values=decoder_past_key_values,
                 )
@@ -2431,27 +2433,26 @@ class GenerationTesterMixin:
         if config.is_encoder_decoder:
             # encoder
             self._check_encoder_hidden_states_for_generate(
-                output.encoder_hidden_states, input_batch_size, config, seq_length
+                hidden_states=output.encoder_hidden_states,
+                batch_size=input_batch_size,
+                config=config,
+                prompt_length=prompt_length,
             )
-
             # decoder
             self._check_hidden_states_for_generate(
-                internal_batch_size,
-                output.decoder_hidden_states,
-                min_length=1,
-                max_length=output.sequences.shape[-1],
+                batch_size=internal_batch_size,
+                hidden_states=output.decoder_hidden_states,
+                prompt_length=1,  # the BOS token
+                output_length=output.sequences.shape[-1],
                 config=config,
                 use_cache=use_cache,
             )
         else:
-            # if use_cache first input is equal to no use_cache, so skip here
-            hidden_states = output.hidden_states if not use_cache else output.hidden_states[1:]
-            min_length = seq_length if not use_cache else seq_length + 1
             self._check_hidden_states_for_generate(
-                internal_batch_size,
-                hidden_states,
-                min_length=min_length,
-                max_length=output.sequences.shape[-1],
+                batch_size=internal_batch_size,
+                hidden_states=output.hidden_states,
+                prompt_length=prompt_length,
+                output_length=output.sequences.shape[-1],
                 config=config,
                 use_cache=use_cache,
             )
@@ -2478,61 +2479,69 @@ class GenerationTesterMixin:
         )
         if has_standard_cache:
             if use_cache:
-                past_sequence_length = output.sequences.shape[-1] - 1
+                cache_length = output.sequences.shape[-1] - 1
                 self._check_past_key_values_for_generate(
-                    internal_batch_size,
-                    decoder_past_key_values,
-                    seq_length=past_sequence_length,
+                    batch_size=internal_batch_size,
+                    decoder_past_key_values=decoder_past_key_values,
+                    cache_length=cache_length,
                     config=config,
                 )
             elif use_cache is False:
                 self.assertTrue(decoder_past_key_values is None)
 
-    def _check_scores(self, batch_size, scores, length, config):
+    def _check_scores(self, batch_size, scores, generated_length, config):
         vocab_size = config.get_text_config(decoder=True).vocab_size
         expected_shape = (batch_size, vocab_size)
         self.assertIsInstance(scores, tuple)
-        self.assertEqual(len(scores), length)
+        self.assertEqual(len(scores), generated_length)
         self.assertListEqual([iter_scores.shape for iter_scores in scores], [expected_shape] * len(scores))
 
-    def _check_logits(self, batch_size, scores, config):
+    def _check_logits(self, batch_size, logits, config):
         vocab_size = config.get_text_config(decoder=True).vocab_size
-        self.assertIsInstance(scores, tuple)
-        self.assertListEqual([iter_scores.shape[0] for iter_scores in scores], [batch_size] * len(scores))
+        self.assertIsInstance(logits, tuple)
+        self.assertListEqual([iter_logits.shape[0] for iter_logits in logits], [batch_size] * len(logits))
         # vocabulary difference equal to one (imagegptmodel?) or zero (all other models)
-        vocab_diff = vocab_size - scores[0].shape[-1]
+        vocab_diff = vocab_size - logits[0].shape[-1]
         self.assertTrue(vocab_diff in [0, 1])
-        self.assertListEqual([vocab_size - score.shape[-1] for score in scores], [vocab_diff] * len(scores))
+        self.assertListEqual([vocab_size - score.shape[-1] for score in logits], [vocab_diff] * len(logits))
 
     def _check_attentions_for_generate(
-        self, batch_size, attentions, min_length, max_length, config, decoder_past_key_values
+        self, batch_size, attentions, prompt_length, output_length, config, decoder_past_key_values
     ):
         self.assertIsInstance(attentions, tuple)
         self.assertListEqual(
             [isinstance(iter_attentions, tuple) for iter_attentions in attentions], [True] * len(attentions)
         )
-        self.assertEqual(len(attentions), (max_length - min_length))
+        self.assertEqual(len(attentions), (output_length - prompt_length))
 
-        has_cache = decoder_past_key_values is not None
+        use_cache = decoder_past_key_values is not None
         has_static_cache = isinstance(decoder_past_key_values, (StaticCache, HybridCache))
 
-        for idx, iter_attentions in enumerate(attentions):
-            tgt_len = min_length + idx if not has_cache else 1
-            src_len = min_length + idx if not has_static_cache else decoder_past_key_values.get_max_cache_shape()
+        for generated_length, iter_attentions in enumerate(attentions):
+            # regardless of using cache, the first forward pass will have the full prompt as input
+            if use_cache and generated_length > 0:
+                model_input_length = 1
+            else:
+                model_input_length = prompt_length + generated_length
+            query_length = (
+                prompt_length + generated_length
+                if not has_static_cache
+                else decoder_past_key_values.get_max_cache_shape()
+            )
 
             expected_shape = (
                 batch_size,
                 config.num_attention_heads,
-                tgt_len,
-                src_len,
+                model_input_length,
+                query_length,
             )
             # check attn size
             self.assertListEqual(
                 [layer_attention.shape for layer_attention in iter_attentions], [expected_shape] * len(iter_attentions)
             )
 
-    def _check_encoder_attention_for_generate(self, attentions, batch_size, config, seq_length):
-        encoder_expected_shape = (batch_size, config.num_attention_heads, seq_length, seq_length)
+    def _check_encoder_attention_for_generate(self, attentions, batch_size, config, prompt_length):
+        encoder_expected_shape = (batch_size, config.num_attention_heads, prompt_length, prompt_length)
         self.assertIsInstance(attentions, tuple)
         self.assertListEqual(
             [layer_attentions.shape for layer_attentions in attentions],
@@ -2540,40 +2549,44 @@ class GenerationTesterMixin:
         )
 
     def _check_hidden_states_for_generate(
-        self, batch_size, hidden_states, min_length, max_length, config, use_cache=False
+        self, batch_size, hidden_states, prompt_length, output_length, config, use_cache=False
     ):
         self.assertIsInstance(hidden_states, tuple)
         self.assertListEqual(
             [isinstance(iter_hidden_states, tuple) for iter_hidden_states in hidden_states],
             [True] * len(hidden_states),
         )
-        self.assertEqual(len(hidden_states), (max_length - min_length))
+        self.assertEqual(len(hidden_states), (output_length - prompt_length))
 
-        for idx, iter_hidden_states in enumerate(hidden_states):
-            seq_len = min_length + idx if not use_cache else 1
-            expected_shape = (batch_size, seq_len, config.hidden_size)
+        for generated_length, iter_hidden_states in enumerate(hidden_states):
+            # regardless of using cache, the first forward pass will have the full prompt as input
+            if use_cache and generated_length > 0:
+                model_input_length = 1
+            else:
+                model_input_length = prompt_length + generated_length
+            expected_shape = (batch_size, model_input_length, config.hidden_size)
             # check hidden size
             self.assertListEqual(
                 [layer_hidden_states.shape for layer_hidden_states in iter_hidden_states],
                 [expected_shape] * len(iter_hidden_states),
             )
 
-    def _check_encoder_hidden_states_for_generate(self, hidden_states, batch_size, config, seq_length):
-        encoder_expected_shape = (batch_size, seq_length, config.hidden_size)
+    def _check_encoder_hidden_states_for_generate(self, hidden_states, batch_size, config, prompt_length):
+        encoder_expected_shape = (batch_size, prompt_length, config.hidden_size)
         self.assertIsInstance(hidden_states, tuple)
         self.assertListEqual(
             [layer_hidden_states.shape for layer_hidden_states in hidden_states],
             [encoder_expected_shape] * len(hidden_states),
         )
 
-    def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, seq_length, config):
+    def _check_past_key_values_for_generate(self, batch_size, decoder_past_key_values, cache_length, config):
         self.assertIsInstance(decoder_past_key_values, (tuple, Cache))
 
         # (batch, head, seq_length, head_features)
         expected_shape = (
             batch_size,
             config.num_key_value_heads if hasattr(config, "num_key_value_heads") else config.num_attention_heads,
-            seq_length,
+            cache_length,
             config.hidden_size // config.num_attention_heads,
         )
 
