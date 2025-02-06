@@ -56,11 +56,11 @@ def act_quant_kernel(x_ptr, y_ptr, s_ptr, BLOCK_SIZE: tl.constexpr):
 
 def act_quant(x: torch.Tensor, block_size: int = 128) -> Tuple[torch.Tensor, torch.Tensor]:
     assert x.is_contiguous()
-    assert x.shape[-1] % block_size[0] == 0
+    assert x.shape[-1] % block_size == 0
     y = torch.empty_like(x, dtype=torch.float8_e4m3fn)
-    s = x.new_empty(*x.size()[:-1], x.size(-1) // block_size[0], dtype=torch.float32)
+    s = x.new_empty(*x.size()[:-1], x.size(-1) // block_size, dtype=torch.float32)
     grid = lambda meta: (triton.cdiv(x.numel(), meta['BLOCK_SIZE']), )
-    act_quant_kernel[grid](x, y, s, BLOCK_SIZE=block_size[0])
+    act_quant_kernel[grid](x, y, s, BLOCK_SIZE=block_size)
     return y, s
 
 
@@ -130,6 +130,17 @@ def fp8_gemm_kernel(a_ptr, b_ptr, c_ptr,
     c_ptrs = c_ptr + offs_m[:, None] * N + offs_n[None, :]
     mask = (offs_m[:, None] < M) & (offs_n[None, :] < N)
     tl.store(c_ptrs, c, mask=mask)
+
+def fp8_gemm(a: torch.Tensor, a_s: torch.Tensor, b: torch.Tensor, b_s: torch.Tensor):
+    assert a.is_contiguous() and b.is_contiguous()
+    assert a_s.is_contiguous() and b_s.is_contiguous()
+    K = a.size(-1)
+    M = a.numel() // K
+    N = b.size(0)
+    c = a.new_empty(*a.size()[:-1], N, dtype=torch.get_default_dtype())
+    grid = lambda META: (triton.cdiv(M, META['BLOCK_SIZE_M']), triton.cdiv(N, META['BLOCK_SIZE_N']))
+    fp8_gemm_kernel[grid](a, b, c, a_s, b_s, M, N, K)
+    return c
 
 @triton.jit
 def _w8a8_block_fp8_matmul(
@@ -218,6 +229,7 @@ def _w8a8_block_fp8_matmul(
     c_ptrs = C + stride_cm * offs_cm[:, None] + stride_cn * offs_cn[None, :]
     c_mask = (offs_cm[:, None] < M) & (offs_cn[None, :] < N)
     tl.store(c_ptrs, c, mask=c_mask)
+
 def w8a8_block_fp8_matmul(
     A: torch.Tensor,
     B: torch.Tensor,
@@ -302,25 +314,94 @@ def w8a8_block_fp8_matmul(
 
     return C
 
+@torch.compile
+def w8a8_block_fp8_matmul_compile(
+    input_q: torch.Tensor,  # [batch, seq_len, hidden_dim]
+    weight_q: torch.Tensor,  # [out_features, hidden_dim]
+    input_scale: torch.Tensor,  # [batch * seq_len, num_input_groups]
+    weight_scale: torch.Tensor,  # [num_weight_blocks_m, num_weight_blocks_n]
+    block_size: Optional[Tuple[int, int]] = None,  # (M=128, N=128) for weights for example
+    output_dtype: torch.dtype = torch.float32
+) -> torch.Tensor:
+    """
+    Performs blocked matrix multiplication with FP8 quantized matrices.
+    
+    Args:
+        input_q: Quantized input tensor with 1x128 block quantization
+        weight_q: Quantized weight tensor with 128x128 block quantization
+        input_scale: Scaling factors for input blocks
+        weight_scale: Scaling factors for weight blocks
+        block_size: Tuple of (M, N) for weight block dimensions
+        output_dtype: Desired output dtype
+    """
+    batch_size, seq_len, hidden_dim = input_q.shape if input_q.ndim == 3 else (1, input_q.shape[0], input_q.shape[1])
+    out_features = weight_q.shape[0]
+    
+    # Reshape input for batched matmul
+    input_reshaped = input_q.view(-1, hidden_dim)  # [batch*seq_len, hidden_dim]
+    input_scale_reshaped = input_scale.view(input_scale.shape[0], -1)  # [batch*seq_len, 1]
+    # Calculate number of blocks
+    num_weight_blocks_m = out_features // block_size[0]
+    num_weight_blocks_n = hidden_dim // block_size[1]
+    
+    # Initialize output tensor
+    output = torch.zeros((batch_size * seq_len, out_features), 
+                        dtype=torch.float32, 
+                        device=input_q.device)
+    
+    # Process each block
+    for i in range(num_weight_blocks_m):
+        m_start = i * block_size[0]
+        m_end = m_start + block_size[0]
+        
+        for j in range(num_weight_blocks_n):
+            n_start = j * block_size[1]
+            n_end = n_start + block_size[1]
+            
+            # Extract current blocks
+            input_block = input_reshaped[:, n_start:n_end]
+            weight_block = weight_q[m_start:m_end, n_start:n_end]
+            
+            # Get corresponding scales
+            curr_input_scale = input_scale_reshaped[:, j:j+1]  # [batch*seq_len, 1]
+            curr_weight_scale = weight_scale[i, j]  # scalar
+            
+            # Dequantize and multiply
+            # print("input_block", input_block.shape, input_block.dtype)
+            # print("weight_block", weight_block.shape, weight_block.dtype)
+            # print("curr_input_scale", curr_input_scale.shape, curr_input_scale.dtype)
+            # print("curr_weight_scale", curr_weight_scale.shape, curr_weight_scale.dtype)
+            block_result = torch._scaled_mm(
+                input_block,
+                weight_block.t(),
+                scale_a=torch.tensor(1, dtype=torch.float32, device=input_q.device),
+                scale_b=curr_weight_scale,
+                out_dtype=output_dtype
+            ) * curr_input_scale
+            # block_result = torch.matmul(
+            #     input_block.to(torch.float32) * curr_input_scale,
+            #     weight_block.to(torch.float32).t() * curr_weight_scale
+            # )
+            
+            # Accumulate result
+            output[:, m_start:m_end] += block_result
+    
+    # Reshape output back to original dimensions
+    output = output.view(batch_size, seq_len, out_features)
 
-def fp8_gemm(a: torch.Tensor, a_s: torch.Tensor, b: torch.Tensor, b_s: torch.Tensor):
-    assert a.is_contiguous() and b.is_contiguous()
-    assert a_s.is_contiguous() and b_s.is_contiguous()
-    K = a.size(-1)
-    M = a.numel() // K
-    N = b.size(0)
-    c = a.new_empty(*a.size()[:-1], N, dtype=torch.get_default_dtype())
-    grid = lambda META: (triton.cdiv(M, META['BLOCK_SIZE_M']), triton.cdiv(N, META['BLOCK_SIZE_N']))
-    fp8_gemm_kernel[grid](a, b, c, a_s, b_s, M, N, K)
-    return c
+    return output.to(output_dtype)
 
 def linear(x: torch.Tensor, weight: torch.Tensor, weight_scale: torch.Tensor, bias: Optional[torch.Tensor] = None, block_size: Optional[Tuple[int, int]] = None, activation_scheme: str = "dynamic") -> torch.Tensor:
     if weight.element_size() > 1:
         return F.linear(x, weight, bias)
     else:
-        x, scale = act_quant(x, block_size)
-        y = fp8_gemm(x, scale, weight, weight_scale)
-        # y = w8a8_block_fp8_matmul(x, weight, scale, weight_scale, block_size)
+        x, scale = act_quant(x, block_size[0])
+        # if x.shape[1] > 1:
+            # print("x", x.shape, x.dtype)
+            # print("scale", scale.shape)
+        # y = fp8_gemm(x, scale, weight, weight_scale)
+        y = w8a8_block_fp8_matmul(x, weight, scale, weight_scale, block_size)
+        # y = w8a8_block_fp8_matmul_compile(x, weight, scale, weight_scale, block_size)
         if bias is not None:
             y += bias
         return y
@@ -356,6 +437,7 @@ class FP8Linear(nn.Linear):
             self.register_parameter("bias", None)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        # print("self.weight", self.weight.dtype)
         return linear(x, self.weight, self.weight_scale_inv, self.bias, self.block_size, self.activation_scheme)
 class FP8MoELinear(FP8Linear):
     """FP8 Linear layer for MoE implementation."""

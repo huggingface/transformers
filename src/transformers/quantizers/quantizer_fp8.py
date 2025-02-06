@@ -44,11 +44,11 @@ class FP8HfQuantizer(HfQuantizer):
                 "You have loaded an FP8 model on CPU and have a CUDA device available. "
                 "Make sure to set your model on a GPU device to run your model."
             )
-        elif isinstance(device_map, dict) and ("cpu" in device_map.values() or "disk" in device_map.values()):
-            raise ValueError(
-                "FP8 models do not support CPU or disk offloading in the device map. "
-                "Please remove CPU/disk devices from the device map."
-            )
+        # elif isinstance(device_map, dict) and ("cpu" in device_map.values() or "disk" in device_map.values()):
+        #     raise ValueError(
+        #         "FP8 models do not support CPU or disk offloading in the device map. "
+        #         "Please remove CPU/disk devices from the device map."
+        #     )
 
     def update_torch_dtype(self, torch_dtype):
         torch_dtype = torch.float32
@@ -168,6 +168,7 @@ class FP8HfQuantizer(HfQuantizer):
 
         not_missing_keys = []
         for name, module in model.named_modules():
+            # print(name, " ",module)
             if isinstance(module, FP8Linear):
                 for missing in missing_keys:
                     if (

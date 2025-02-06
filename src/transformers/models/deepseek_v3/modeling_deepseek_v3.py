@@ -451,7 +451,6 @@ class DeepseekV3DecoderLayer(nn.Module):
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
-
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
@@ -704,7 +703,7 @@ class DeepseekV3Model(DeepseekV3PreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
 
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+        for idx, decoder_layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
@@ -732,7 +731,8 @@ class DeepseekV3Model(DeepseekV3PreTrainedModel):
                     position_embeddings=position_embeddings,
                     **flash_attn_kwargs,
                 )
-
+                nan_count = torch.sum(torch.isnan(layer_outputs[0])).item()
+                print("nan_count", nan_count, "layer", idx)
             hidden_states = layer_outputs[0]
 
             if output_attentions:
@@ -899,16 +899,15 @@ class DeepseekV3Model(DeepseekV3PreTrainedModel):
             weight[:, -rope_dim:] = weight_rot
             weight = weight.view(-1, weight.shape[-1])
             state_dict[key] = weight
-
         for k in state_dict:
-            if "q_b_proj." in k:
+            if "q_b_proj." in k and not "weight_scale_inv" in k:
                 permute_layer_for_rope(
                     k,
                     num_heads=self.config.num_attention_heads,
                     head_dim=self.config.qk_head_dim,
                     rope_dim=self.config.qk_rope_head_dim,
                 )
-            if "kv_a_proj_with_mqa." in k:
+            if "kv_a_proj_with_mqa." in k and not "weight_scale_inv" in k:
                 permute_layer_for_rope(
                     k,
                     num_heads=1,
