@@ -927,11 +927,7 @@ class GPTNeoXForSequenceClassification(GPTNeoXPreTrainedModel):
         hidden_states = outputs[0]
         logits = self.score(hidden_states)
 
-        if input_ids is not None:
-            batch_size = input_ids.shape[0]
-        else:
-            batch_size = inputs_embeds.shape[0]
-
+        batch_size = logits.shape[0]
         if self.config.pad_token_id is None and batch_size != 1:
             raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
         if self.config.pad_token_id is None:
