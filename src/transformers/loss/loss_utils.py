@@ -132,4 +132,5 @@ LOSS_MAPPING = {
     "GroundingDinoForObjectDetection": DeformableDetrForObjectDetectionLoss,
     "ConditionalDetrForSegmentation": DeformableDetrForSegmentationLoss,
     "RTDetrForObjectDetection": RTDetrForObjectDetectionLoss,
+    "RTDetrV2ForObjectDetection": RTDetrForObjectDetectionLoss,
 }
