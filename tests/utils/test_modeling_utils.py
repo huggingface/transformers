@@ -39,6 +39,7 @@ from transformers import (
     AutoModelForSequenceClassification,
     DynamicCache,
     LlavaForConditionalGeneration,
+    MistralForCausalLM,
     OwlViTForObjectDetection,
     PretrainedConfig,
     is_torch_available,
@@ -318,6 +319,14 @@ def check_models_equal(model1, model2):
 
 @require_torch
 class ModelUtilsTest(TestCasePlus):
+    def setUp(self):
+        self.old_dtype = torch.get_default_dtype()
+        super().setUp()
+
+    def tearDown(self):
+        torch.set_default_dtype(self.old_dtype)
+        super().tearDown()
+
     @slow
     def test_model_from_pretrained(self):
         model_name = "google-bert/bert-base-uncased"
@@ -1818,6 +1827,80 @@ class ModelUtilsTest(TestCasePlus):
         model_outputs = model(**model_inputs, use_cache=False)
         self.assertIsNone(model_outputs.past_key_values)
         self.assertTrue(model.training)
+
+    def test_restore_default_torch_dtype_from_pretrained(self):
+        """
+        Tests that the default torch dtype is restored
+        when an error happens during the loading of a model.
+        """
+        old_dtype = torch.get_default_dtype()
+        # set default type to float32
+        torch.set_default_dtype(torch.float32)
+
+        # Mock injection point which is right after the call to `_set_default_torch_dtype`
+        original_set_default_torch_dtype = MistralForCausalLM._set_default_torch_dtype
+
+        def debug(*args, **kwargs):
+            # call the method as usual, than raise a RuntimeError
+            original_set_default_torch_dtype(*args, **kwargs)
+            raise RuntimeError
+
+        with mock.patch(
+            "transformers.models.mistral.modeling_mistral.MistralForCausalLM._set_default_torch_dtype",
+            side_effect=debug,
+        ):
+            with self.assertRaises(RuntimeError):
+                _ = AutoModelForCausalLM.from_pretrained(TINY_MISTRAL, device_map="auto", torch_dtype=torch.float16)
+        # default should still be float32
+        assert torch.get_default_dtype() == torch.float32
+        torch.set_default_dtype(old_dtype)
+
+    def test_restore_default_torch_dtype_from_config(self):
+        """
+        Tests that the default torch dtype is restored
+        when an error happens during the loading of a model.
+        """
+        old_dtype = torch.get_default_dtype()
+        # set default type to float32
+        torch.set_default_dtype(torch.float32)
+
+        config = AutoConfig.from_pretrained(
+            TINY_MISTRAL,
+        )
+
+        # Mock injection point which is right after the call to `_set_default_torch_dtype`
+        original_set_default_torch_dtype = MistralForCausalLM._set_default_torch_dtype
+
+        def debug(*args, **kwargs):
+            # call the method as usual, than raise a RuntimeError
+            original_set_default_torch_dtype(*args, **kwargs)
+            raise RuntimeError
+
+        with mock.patch(
+            "transformers.models.mistral.modeling_mistral.MistralForCausalLM._set_default_torch_dtype",
+            side_effect=debug,
+        ):
+            with self.assertRaises(RuntimeError):
+                config.torch_dtype = torch.float16
+                _ = AutoModelForCausalLM.from_config(
+                    config,
+                )
+        # default should still be float32
+        assert torch.get_default_dtype() == torch.float32
+        torch.set_default_dtype(old_dtype)
+
+    def test_unknown_quantization_config(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            config = BertConfig(
+                vocab_size=99, hidden_size=32, num_hidden_layers=5, num_attention_heads=4, intermediate_size=37
+            )
+            model = BertModel(config)
+            config.quantization_config = {"quant_method": "unknown"}
+            model.save_pretrained(tmpdir)
+            with self.assertLogs("transformers", level="WARNING") as cm:
+                BertModel.from_pretrained(tmpdir)
+            self.assertEqual(len(cm.records), 1)
+            self.assertTrue(cm.records[0].message.startswith("Unknown quantization type, got"))
 
 
 @slow
