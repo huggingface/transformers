@@ -25,7 +25,7 @@ from torchvision import transforms
 
 from transformers import DFineConfig, DFineForObjectDetection, RTDetrImageProcessor, DFineResNetStageConfig
 from transformers.utils import logging
-
+from PIL import Image
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -42,10 +42,13 @@ def get_d_fine_config(model_name: str) -> DFineConfig:
     config.id2label = id2label
     config.label2id = {v: k for k, v in id2label.items()}
 
-    if model_name == "dfine_x_coco":
-        config.backbone_config.hidden_sizes = [64, 128, 256, 512]
-        config.backbone_config.layer_type = "basic"
-        config.backbone_config.embedding_size = 32
+    config.backbone_config.hidden_sizes = [64, 128, 256, 512]
+    config.backbone_config.layer_type = "basic"
+    config.backbone_config.embedding_size = 32
+    config.hidden_expansion = 1.0
+    config.decoder_layers = 6
+
+    if model_name in ["dfine_x_coco", "dfine_x_obj2coco", "dfine_x_obj365"]:
         config.backbone_config.stage_config = DFineResNetStageConfig(
             stage1=[64, 64, 128, 1, False, False, 3, 6],
             stage2=[128, 128, 512, 2, True, False, 3, 6],
@@ -55,16 +58,52 @@ def get_d_fine_config(model_name: str) -> DFineConfig:
         config.backbone_config.stem_channels = [3, 32, 64]
         config.encoder_in_channels = [512, 1024, 2048]
         config.encoder_hidden_dim = 384
-        config.hidden_expansion = 1.0
-        config.decoder_layers = 6
         config.encoder_ffn_dim = 2048
-    else:
-        config.backbone_config.hidden_sizes = [64, 128, 256, 512]
-        config.backbone_config.layer_type = "basic"
-        config.backbone_config.embedding_size = 32
+        config.decoder_n_points = [3, 6, 3]
+        config.decoder_in_channels = [384, 384, 384]
+        if model_name == "dfine_x_obj365":
+            config.num_labels = 366
+    elif model_name in ["dfine_m_coco", "dfine_m_obj2coco", "dfine_m_obj365"]:
+        config.backbone_config.stem_channels = [3, 24, 32]
+        config.backbone_config.stage_config = DFineResNetStageConfig(
+            stage1=[32, 32, 96, 1, False, False, 3, 4],
+            stage2=[96, 64, 384, 1, True, False, 3, 4],
+            stage3=[384, 128, 768, 3, True, True, 5, 4],
+            stage4=[768, 256, 1536, 1, True, True, 5, 4],
+        )
+        config.decoder_layers = 4
+        config.encoder_in_channels=[384, 768, 1536]
+        config.backbone_config.use_lab = True
+        config.depth_mult = 0.67
+        if model_name == "dfine_m_obj365":
+            config.num_labels = 366
+    elif model_name in ["dfine_l_coco", "dfine_l_obj2coco_e25", "dfine_l_obj365"]:
+        config.backbone_config.stem_channels = [3, 32, 48]
+        config.backbone_config.stage_config = DFineResNetStageConfig(
+            stage1=[48, 48, 128, 1, False, False, 3, 6],
+            stage2=[128, 96, 512, 1, True, False, 3, 6],
+            stage3=[512, 192, 1024, 3, True, True, 5, 6],
+            stage4=[1024, 384, 2048, 1, True, True, 5, 6],
+        )
+        config.encoder_ffn_dim = 1024
         config.encoder_in_channels = [512, 1024, 2048]
-        config.hidden_expansion = 1.0
-        config.decoder_layers = 6
+        if model_name == "dfine_l_obj365":
+            config.num_labels = 366
+    else:
+        config.backbone_config.stem_channels = [3, 16, 16]
+        config.backbone_config.stage_config = DFineResNetStageConfig(
+            stage1=[16, 16, 64, 1, False, False, 3, 3],
+            stage2=[64, 32, 256, 1, True, False, 3, 3],
+            stage3=[256, 64, 512, 2, True, True, 5, 3],
+            stage4=[512, 128, 1024, 1, True, True, 5, 3],
+        )
+        config.decoder_layers = 3
+        config.hidden_expansion = 0.5
+        config.depth_mult = 0.34
+        config.encoder_in_channels = [256, 512, 1024]
+        config.backbone_config.use_lab = True
+        if model_name == "dfine_s_obj365":
+            config.num_labels = 366
 
     return config
 
@@ -92,6 +131,7 @@ def create_rename_keys(config):
     # stem
     # fmt: off
     last_key = ["weight", "bias", "running_mean", "running_var"]
+    lab_keys = ["lab.scale", "lab.bias"]
 
     rename_keys.append((f"backbone.stem.stem1.conv.weight", f"model.backbone.model.embedder.stem1.convolution.weight"))
     rename_keys.append((f"backbone.stem.stem2a.conv.weight", f"model.backbone.model.embedder.stem2a.convolution.weight"))
@@ -104,6 +144,13 @@ def create_rename_keys(config):
         rename_keys.append((f"backbone.stem.stem2b.bn.{last}", f"model.backbone.model.embedder.stem2b.normalization.{last}"))
         rename_keys.append((f"backbone.stem.stem3.bn.{last}", f"model.backbone.model.embedder.stem3.normalization.{last}"))
         rename_keys.append((f"backbone.stem.stem4.bn.{last}", f"model.backbone.model.embedder.stem4.normalization.{last}"))
+    if config.backbone_config.use_lab:
+        for lab in lab_keys:
+            rename_keys.append((f"backbone.stem.stem1.{lab}", f"model.backbone.model.embedder.stem1.{lab}"))
+            rename_keys.append((f"backbone.stem.stem2a.{lab}", f"model.backbone.model.embedder.stem2a.{lab}"))
+            rename_keys.append((f"backbone.stem.stem2b.{lab}", f"model.backbone.model.embedder.stem2b.{lab}"))
+            rename_keys.append((f"backbone.stem.stem3.{lab}", f"model.backbone.model.embedder.stem3.{lab}"))
+            rename_keys.append((f"backbone.stem.stem4.{lab}", f"model.backbone.model.embedder.stem4.{lab}"))
 
     for stage_idx, stage in enumerate(config.backbone_config.stage_config):
         _, _, _, block_num, downsample, _, _, layer_num = stage
@@ -121,6 +168,14 @@ def create_rename_keys(config):
                         (
                             f"backbone.stages.{stage_idx}.blocks.0.layers.{layer_idx}.bn.{last}",
                             f"model.backbone.model.encoder.stages.{stage_idx}.blocks.0.layers.{layer_idx}.normalization.{last}",
+                        )
+                    )
+                    if config.backbone_config.use_lab:
+                        for lab in lab_keys:
+                            rename_keys.append(
+                        (
+                            f"backbone.stages.{stage_idx}.blocks.0.layers.{layer_idx}.{lab}",
+                            f"model.backbone.model.encoder.stages.{stage_idx}.blocks.0.layers.{layer_idx}.{lab}",
                         )
                     )
                     #layers
@@ -147,6 +202,17 @@ def create_rename_keys(config):
                             f"backbone.stages.{stage_idx}.blocks.0.layers.{layer_idx}.conv2.bn.{last}",
                             f"model.backbone.model.encoder.stages.{stage_idx}.blocks.0.layers.{layer_idx}.conv2.normalization.{last}",
                             ))
+                    if config.backbone_config.use_lab:
+                        for lab in lab_keys:
+                            rename_keys.append((
+                            f"backbone.stages.{stage_idx}.blocks.0.layers.{layer_idx}.conv1.{lab}",
+                            f"model.backbone.model.encoder.stages.{stage_idx}.blocks.0.layers.{layer_idx}.conv1.{lab}",
+                            ))
+                            rename_keys.append((
+                            f"backbone.stages.{stage_idx}.blocks.0.layers.{layer_idx}.conv2.{lab}",
+                            f"model.backbone.model.encoder.stages.{stage_idx}.blocks.0.layers.{layer_idx}.conv2.{lab}",
+                            ))
+                        
                 
                 #aggregation
                 rename_keys.append(
@@ -174,6 +240,20 @@ def create_rename_keys(config):
                             f"model.backbone.model.encoder.stages.{stage_idx}.blocks.{b}.aggregation.1.normalization.{last}",
                         )
                     )
+                if config.backbone_config.use_lab:
+                    for lab in lab_keys:
+                        rename_keys.append(
+                        (
+                            f"backbone.stages.{stage_idx}.blocks.{b}.aggregation.0.{lab}",
+                            f"model.backbone.model.encoder.stages.{stage_idx}.blocks.{b}.aggregation.0.{lab}",
+                        )
+                    )
+                        rename_keys.append(
+                            (
+                                f"backbone.stages.{stage_idx}.blocks.{b}.aggregation.1.{lab}",
+                                f"model.backbone.model.encoder.stages.{stage_idx}.blocks.{b}.aggregation.1.{lab}",
+                            )
+                        )
 
                 #layers
                 rename_keys.append(
@@ -187,6 +267,15 @@ def create_rename_keys(config):
                     (
                         f"backbone.stages.{stage_idx}.blocks.{b}.layers.{layer_idx}.bn.{last}",
                         f"model.backbone.model.encoder.stages.{stage_idx}.blocks.{b}.layers.{layer_idx}.normalization.{last}",
+                    )
+                )
+                    
+                if config.backbone_config.use_lab:
+                    for lab in lab_keys:
+                        rename_keys.append(
+                    (
+                        f"backbone.stages.{stage_idx}.blocks.0.layers.{layer_idx}.{lab}",
+                        f"model.backbone.model.encoder.stages.{stage_idx}.blocks.0.layers.{layer_idx}.{lab}",
                     )
                 )
 
@@ -212,6 +301,12 @@ def create_rename_keys(config):
                     rename_keys.append((
                         f"backbone.stages.{stage_idx}.blocks.{b}.layers.{layer_idx}.conv2.bn.{last}",
                         f"model.backbone.model.encoder.stages.{stage_idx}.blocks.{b}.layers.{layer_idx}.conv2.normalization.{last}",
+                        ))
+                if config.backbone_config.use_lab:
+                    for lab in lab_keys:
+                        rename_keys.append((
+                        f"backbone.stages.{stage_idx}.blocks.{b}.layers.{layer_idx}.conv2.{lab}",
+                        f"model.backbone.model.encoder.stages.{stage_idx}.blocks.{b}.layers.{layer_idx}.conv2.{lab}",
                         ))
             
             #downsamle
@@ -750,8 +845,8 @@ def read_in_q_k_v(state_dict, config):
     # next: transformer decoder (which is a bit more complex because it also includes cross-attention)
     for i in range(config.decoder_layers):
         # read in weights + bias of input projection layer of self-attention
-        in_proj_weight = state_dict.pop(f"{prefix}decoder.decoder.layers.{i}.self_attn.in_proj_weight")
-        in_proj_bias = state_dict.pop(f"{prefix}decoder.decoder.layers.{i}.self_attn.in_proj_bias")
+        in_proj_weight = state_dict.pop(f"{prefix}decoder.decoder.layers.{i}.self_attn.in_proj_weight", None)
+        in_proj_bias = state_dict.pop(f"{prefix}decoder.decoder.layers.{i}.self_attn.in_proj_bias", None)
         # next, add query, keys and values (in that order) to the state dict
         state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.weight"] = in_proj_weight[:256, :]
         state_dict[f"model.decoder.layers.{i}.self_attn.q_proj.bias"] = in_proj_bias[:256]
@@ -770,9 +865,9 @@ def prepare_img():
 
 
 @torch.no_grad()
-def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, repo_id):
+def convert_d_fine_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, repo_id):
     """
-    Copy/paste/tweak model's weights to our RTDETR structure.
+    Copy/paste/tweak model's weights to our D-FINE structure.
     """
 
     # load default config
@@ -787,14 +882,11 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
         rename_key(state_dict, src, dest)
 
     if not config.anchor_image_size:
-        state_dict.pop("model.decoder.valid_mask")
-        state_dict.pop("model.decoder.anchors")
+        state_dict.pop("model.decoder.valid_mask", None)
+        state_dict.pop("model.decoder.anchors", None)
 
-    # those parameters are comming from config
-    # state_dict.pop("decoder.up")
-    # state_dict.pop("decoder.reg_scale")
-    state_dict.pop("decoder.decoder.up")
-    state_dict.pop("decoder.decoder.reg_scale")
+    state_dict.pop("decoder.decoder.up", None)
+    state_dict.pop("decoder.decoder.reg_scale", None)
 
     # query, key and value matrices need special treatment
     read_in_q_k_v(state_dict, config)
@@ -834,26 +926,190 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
     model.to(device)
     pixel_values = pixel_values.to(device)
 
-    # Pass image by the model
     outputs = model(pixel_values)
 
     if model_name == "dfine_x_coco":
         expected_slice_logits = torch.tensor(
             [
-                [-4.3364253, -6.465683, -3.6130402],
-                [-4.083815, -6.4039373, -6.97881],
-                [-4.192215, -7.3410473, -6.9027247],
+                [-4.84472, -4.72931, -4.59713],
+                [-4.55426, -4.61722, -4.62792],
+                [-4.39344, -4.60641, -4.13995],
             ]
         )
         expected_slice_boxes = torch.tensor(
             [
-                [0.16868353, 0.19833282, 0.21182671],
-                [0.25559652, 0.55121744, 0.47988364],
-                [0.7698693, 0.4124569, 0.46036878],
+                [0.256524, 0.54776, 0.476448],
+                [0.76900, 0.41423, 0.46148],
+                [0.16880, 0.19923, 0.21118],
+            ]
+        )
+    elif model_name == "dfine_x_obj2coco":
+        expected_slice_logits = torch.tensor(
+            [
+                [-4.059431, -6.19076, -4.66398],
+                [-3.865726, -5.84998, -4.42653],
+                [-3.874609, -6.228559, -4.60206],
+            ]
+        )
+        expected_slice_boxes = torch.tensor(
+            [
+                [0.25807, 0.54150, 0.47592],
+                [0.76958, 0.40960, 0.45886],
+                [0.169469, 0.198879, 0.21171],
+            ]
+        )
+    elif model_name == "dfine_x_obj365":
+        expected_slice_logits = torch.tensor(
+            [
+                [-6.3844957, -3.7549126, -4.687326],
+                [-5.8433194, -3.4490551, -3.322890],
+                [-6.5314736, -3.78566215, -4.895984],
+            ]
+        )
+        expected_slice_boxes = torch.tensor(
+            [
+                [0.770304, 0.413294, 0.459321],
+                [0.168981, 0.198763, 0.210507],
+                [0.251349, 0.551761, 0.486412],
+            ]
+        )
+    elif model_name == "dfine_m_coco":
+        expected_slice_logits = torch.tensor(
+            [
+                [-4.560220, -4.85852, -4.17702],
+                [-4.316123, -5.05847, -3.67138],
+                [-4.746527, -6.84849, -3.16082],
+            ]
+        )
+        expected_slice_boxes = torch.tensor(
+            [
+                [0.254904, 0.546769, 0.475268],
+                [0.765929, 0.412381, 0.465382],
+                [0.168203, 0.199216, 0.212074],
+            ]
+        )
+    elif model_name == "dfine_m_obj2coco":
+        expected_slice_logits = torch.tensor(
+            [
+                [-4.366883, -7.473241, -5.812667],
+                [-4.159411, -7.463147, -5.5588631],
+                [-4.689057, -5.662412, -4.8570761],
+            ]
+        )
+        expected_slice_boxes = torch.tensor(
+            [
+                [0.2582458, 0.546585, 0.474364],
+                [0.7702161, 0.410875, 0.458311],
+                [0.5499019, 0.275631, 0.059633],
+            ]
+        )
+    elif model_name == "dfine_m_obj365":
+        expected_slice_logits = torch.tensor(
+            [
+                [-5.869976, -2.919317, -5.000304],
+                [-6.024388, -3.356399, -4.868721],
+                [-6.174082, -3.646999, -3.296291],
+            ]
+        )
+        expected_slice_boxes = torch.tensor(
+            [
+                [0.255842, 0.551198, 0.476844],
+                [0.7716257, 0.41158, 0.456440],
+                [0.5497970, 0.27594, 0.058975],
+            ]
+        )
+    elif model_name == "dfine_l_coco":
+        expected_slice_logits = torch.tensor(
+            [
+                [-4.163772, -5.08069, -4.358980],
+                [-3.941459, -4.85244, -4.142285],
+                [-4.292777, -6.10656, -4.974356],
+            ]
+        )
+        expected_slice_boxes = torch.tensor(
+            [
+                [0.2549637, 0.549357, 0.478588],
+                [0.7679444, 0.415660, 0.460468],
+                [0.1684390, 0.198810, 0.213304],
+            ]
+        )
+    elif model_name == "dfine_l_obj365":
+        expected_slice_logits = torch.tensor(
+            [
+                [-5.794356, -3.31482, -5.403600],
+                [-5.581522, -3.68510, -5.791995],
+                [-6.050641, -3.18308, -4.332631],
+            ]
+        )
+        expected_slice_boxes = torch.tensor(
+            [
+                [0.768685, 0.413633, 0.460345],
+                [0.250496, 0.552994, 0.478527],
+                [0.168896, 0.198750, 0.211770],
+            ]
+        )
+    elif model_name == "dfine_l_obj2coco_e25":
+        expected_slice_logits = torch.tensor(
+            [
+                [-3.456711, -6.703585, -5.255528],
+                [-3.561902, -6.936790, -5.589331],
+                [-4.282646, -5.987232, -4.452727],
+            ]
+        )
+        expected_slice_boxes = torch.tensor(
+            [
+                [0.769001, 0.410186, 0.459154],
+                [0.255007, 0.549077, 0.479700],
+                [0.168469, 0.198881, 0.212796],
+            ]
+        )
+    elif model_name == "dfine_s_coco":
+        expected_slice_logits = torch.tensor(
+            [
+                [-3.319429, -4.463451, -5.628054],
+                [-4.910080, -9.160397, -5.950480],
+                [-4.046249, -4.022937, -6.300149],
+            ]
+        )
+        expected_slice_boxes = torch.tensor(
+            [
+                [0.765489, 0.415563, 0.46872],
+                [0.168150, 0.198066, 0.21442],
+                [0.258652, 0.547807, 0.47930],
+            ]
+        )
+    elif model_name == "dfine_s_obj2coco":
+        expected_slice_logits = torch.tensor(
+            [
+                [-4.881455, -6.95667, -4.667908],
+                [-3.432105, -8.56579, -6.258423],
+                [-4.239889, -8.90363, -5.805731],
+            ]
+        )
+        expected_slice_boxes = torch.tensor(
+            [
+                [0.168693, 0.198404, 0.212517],
+                [0.765760, 0.4120095, 0.464718],
+                [0.256592, 0.5509163, 0.476652],
+            ]
+        )
+    elif model_name == "dfine_s_obj365":
+        expected_slice_logits = torch.tensor(
+            [
+                [-6.464325, -3.859787, -6.328770],
+                [-6.630722, -3.216558, -5.556852],
+                [-5.627515, -3.938537, -3.713672],
+            ]
+        )
+        expected_slice_boxes = torch.tensor(
+            [
+                [0.2507714, 0.5541206, 0.480323],
+                [0.7640793, 0.4124037, 0.470100],
+                [0.1691108, 0.198352, 0.212930],
             ]
         )
     else:
-        raise ValueError(f"Unknown rt_detr_name: {model_name}")
+        raise ValueError(f"Unknown d_fine_name: {model_name}")
 
     assert torch.allclose(outputs.logits[0, :3, :3], expected_slice_logits.to(outputs.logits.device), atol=1e-4)
     assert torch.allclose(outputs.pred_boxes[0, :3, :3], expected_slice_boxes.to(outputs.pred_boxes.device), atol=1e-3)
@@ -869,14 +1125,14 @@ def convert_rt_detr_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
         # Upload model, image processor and config to the hub
         logger.info("Uploading PyTorch model and image processor to the hub...")
         config.push_to_hub(
-            repo_id=repo_id, commit_message="Add config from convert_rt_detr_original_pytorch_checkpoint_to_pytorch.py"
+            repo_id=repo_id, commit_message="Add config from convert_d_fine_original_pytorch_checkpoint_to_hf.py"
         )
         model.push_to_hub(
-            repo_id=repo_id, commit_message="Add model from convert_rt_detr_original_pytorch_checkpoint_to_pytorch.py"
+            repo_id=repo_id, commit_message="Add model from convert_d_fine_original_pytorch_checkpoint_to_hf.py"
         )
         image_processor.push_to_hub(
             repo_id=repo_id,
-            commit_message="Add image processor from convert_rt_detr_original_pytorch_checkpoint_to_pytorch.py",
+            commit_message="Add image processor from convert_d_fine_original_pytorch_checkpoint_to_hf.py",
         )
 
 
@@ -899,4 +1155,4 @@ if __name__ == "__main__":
         help="repo_id where the model will be pushed to.",
     )
     args = parser.parse_args()
-    convert_rt_detr_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub, args.repo_id)
+    convert_d_fine_checkpoint(args.model_name, args.pytorch_dump_folder_path, args.push_to_hub, args.repo_id)
