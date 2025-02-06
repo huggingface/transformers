@@ -487,7 +487,9 @@ class DogeDynamicMaskAttention(nn.Module):
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         # calculate dynamic mask from value_states
-        dt_states = self.dt_proj(value_states.transpose(1, 2).reshape(value_states.shape[0], value_states.shape[-2], -1))
+        dt_states = self.dt_proj(
+            value_states.transpose(1, 2).reshape(value_states.shape[0], value_states.shape[-2], -1)
+        )
         dynamic_mask = torch.exp(self.A * F.softplus(dt_states)).transpose(-1, -2)
         attn_mask = self.prepare_dynamic_mask(
             hidden_states=hidden_states,
