@@ -31,7 +31,7 @@ from dataclasses import dataclass
 from enum import Enum
 from functools import partial, wraps
 from threading import Thread
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Type, TypeVar, Union
+from typing import Any, Callable, Dict, Iterable, List, Optional, Set, Tuple, Type, TypeVar, Union
 from zipfile import is_zipfile
 
 import torch
@@ -1409,34 +1409,61 @@ def _get_device_map(
     return device_map
 
 
+def _adjust_loaded_keys_prefix(
+    keys: Union[str, Iterable[str]],
+    prefix: str,
+    loading_base_model_from_task_state_dict: bool,
+    loading_task_model_from_base_state_dict: bool,
+) -> List[str]:
+    """Adjust a set of loaded `keys` by adding or removing `prefix` to make them match the actual model state dict."""
+    _prefix = f"{prefix}."
+    if isinstance(keys, str):
+        keys = [keys]
+    # In this case, we need to add the prefix to the keys, to match them to the expected keys
+    if loading_task_model_from_base_state_dict:
+        keys = [".".join([prefix, key]) for key in keys]
+    # In this case we need to remove the prefix from the key to match them to the expected keys
+    elif loading_base_model_from_task_state_dict:
+        keys = [key[len(_prefix) :] if key.startswith(_prefix) else key for key in keys]
+    if len(keys) == 1:
+        keys = keys[0]
+    return keys
+
+
 def _find_missing_and_unexpected_keys(
     cls,
     model: "PreTrainedModel",
-    expected_keys: List[str],
-    loaded_keys: List[str],
-    remove_prefix_from_model: bool,
-    add_prefix_to_model: bool,
+    original_loaded_keys: List[str],
+    renamed_loaded_keys: List[str],
+    loading_base_model_from_task_state_dict: bool,
+    loading_task_model_from_base_state_dict: bool,
     hf_quantizer: Optional[HfQuantizer],
 ) -> Tuple[List[str], List[str]]:
     """Find missing keys (keys that are part of the model parameters but were NOT found in the loaded state dict keys) and unexpected keys
     (keys found in the loaded state dict keys, but that are NOT part of the model parameters)
     """
     prefix = model.base_model_prefix
-    _prefix = f"{prefix}."
 
+    # Compute expected keys, i.e. keys that the FULL model (not model_to_load) expects
+    expected_keys = list(model.state_dict().keys())
+    if hf_quantizer is not None:
+        expected_keys = hf_quantizer.update_expected_keys(model, expected_keys, original_loaded_keys)
+
+    loaded_keys = _adjust_loaded_keys_prefix(
+        renamed_loaded_keys, loading_base_model_from_task_state_dict, loading_task_model_from_base_state_dict
+    )
+
+    # Adjust prefix of the keys to make them match loaded keys before removing them
     missing_keys = sorted(set(expected_keys) - set(loaded_keys))
     unexpected_keys = set(loaded_keys) - set(expected_keys)
 
-    # Remove nonpersistent buffers from unexpected keys: they are not in the state dict but will be in the model
-    # buffers
+    # Remove nonpersistent buffers from unexpected keys: they are not in the expected keys (model state dict), but
+    # may be in the loaded keys
     model_buffers = {n for n, _ in model.named_buffers()}
-    if remove_prefix_from_model:
-        model_buffers = {key[len(_prefix) :] if key.startswith(_prefix) else key for key in model_buffers}
-    elif add_prefix_to_model:
-        model_buffers = {".".join([prefix, key]) for key in model_buffers}
     unexpected_keys = sorted(unexpected_keys - model_buffers)
 
-    # Clean up buffer for `inv-freq` because RoPE embedding moved under base model (https://github.com/huggingface/transformers/pull/34858)
+    # Old checkpoints may have keys for rotary_emb.inv_freq for each layer, however we moved this buffer to the main model
+    # (so the buffer name has changed). Remove them in such a case
     has_inv_freq_buffers = any(buffer.endswith("rotary_emb.inv_freq") for buffer in model_buffers)
     if has_inv_freq_buffers:
         unexpected_keys = [k for k in unexpected_keys if "rotary_emb.inv_freq" not in k]
@@ -1445,16 +1472,14 @@ def _find_missing_and_unexpected_keys(
     tied_params = find_tied_parameters(model)
 
     for group in tied_params:
-        if remove_prefix_from_model:
-            group = [key[len(_prefix) :] if key.startswith(_prefix) else key for key in group]
-        elif add_prefix_to_model:
-            group = [".".join([prefix, key]) for key in group]
         missing_in_group = [k for k in missing_keys if k in group]
         if len(missing_in_group) > 0 and len(missing_in_group) < len(group):
             missing_keys = [k for k in missing_keys if k not in missing_in_group]
 
-    # Some models may have keys that are not in the state by design, removing them before needlessly warning
-    # the user.
+    if hf_quantizer is not None:
+        missing_keys = hf_quantizer.update_missing_keys(model, missing_keys, prefix)
+
+    # Model-specific exceptions for missing and unexpected keys (e.g. if the modeling change over time, or any other reason...)
     if cls._keys_to_ignore_on_load_missing is not None:
         for pat in cls._keys_to_ignore_on_load_missing:
             missing_keys = [k for k in missing_keys if re.search(pat, k) is None]
@@ -1462,8 +1487,6 @@ def _find_missing_and_unexpected_keys(
     if cls._keys_to_ignore_on_load_unexpected is not None:
         for pat in cls._keys_to_ignore_on_load_unexpected:
             unexpected_keys = [k for k in unexpected_keys if re.search(pat, k) is None]
-    if hf_quantizer is not None:
-        missing_keys = hf_quantizer.update_missing_keys(model, missing_keys, prefix)
 
     return missing_keys, unexpected_keys
 
@@ -1480,17 +1503,9 @@ def _move_missing_keys_back_to_cpu(
     from meta device to cpu.
     """
     is_quantized = hf_quantizer is not None
-    prefix = model.base_model_prefix
 
     model_state_dict = model.state_dict()
     for key in missing_keys:
-        if key in list(model_state_dict.keys()):
-            key = key
-        elif f"{prefix}.{key}" in list(model_state_dict.keys()):
-            key = f"{prefix}.{key}"
-        elif key.startswith(prefix) and ".".join(key.split(".")[1:]) in list(model_state_dict.keys()):
-            key = ".".join(key.split(".")[1:])
-
         param = model_state_dict[key]
         if param.device == torch.device("meta"):
             # upcast in fp32 if any
@@ -1519,8 +1534,8 @@ def _initialize_missing_keys(
     model: "PreTrainedModel",
     loaded_keys: List[str],
     ignore_mismatched_sizes: bool,
-    has_prefix_module: bool,
-    expects_prefix_module: bool,
+    loading_base_model_from_task_state_dict: bool,
+    loading_task_model_from_base_state_dict: bool,
     is_quantized: bool,
 ) -> "PreTrainedModel":
     """Initialize the missing keys (keys that are part of the model parameters, but were NOT found in the loaded state dicts), according to
@@ -1530,17 +1545,11 @@ def _initialize_missing_keys(
     """
     prefix = model.base_model_prefix
 
-    remove_prefix_from_model = not has_prefix_module and expects_prefix_module
-    add_prefix_to_model = has_prefix_module and not expects_prefix_module
-
     if not ignore_mismatched_sizes:
-        if remove_prefix_from_model:
-            _loaded_keys = [f"{prefix}.{k}" for k in loaded_keys]
-        elif add_prefix_to_model:
-            _loaded_keys = [k[len(prefix) + 1 :] for k in loaded_keys]
-        else:
-            _loaded_keys = loaded_keys
-        not_initialized_submodules = set_initialized_submodules(model, _loaded_keys)
+        loaded_keys = _adjust_loaded_keys_prefix(
+            loaded_keys, prefix, loading_base_model_from_task_state_dict, loading_task_model_from_base_state_dict
+        )
+        not_initialized_submodules = set_initialized_submodules(model, loaded_keys)
         # If we're about to tie the output embeds to the input embeds we don't need to init them
         if (
             hasattr(model.config.get_text_config(decoder=True), "tie_word_embeddings")
@@ -1573,29 +1582,27 @@ def _initialize_missing_keys(
 
 
 def _find_mismatched_keys(
+    model: "PreTrainedModel",
     state_dict: Dict,
-    model_state_dict: Dict,
     renamed_loaded_keys: List[str],
     original_loaded_keys: List[str],
-    add_prefix_to_model: bool,
-    remove_prefix_from_model: bool,
+    loading_base_model_from_task_state_dict: bool,
+    loading_task_model_from_base_state_dict: bool,
     ignore_mismatched_sizes: bool,
-    prefix: str,
 ) -> List:
     """Find mismatch of shapes between the model parameters and the loaded state dict, and optionally remove the
     problematic keys from `state_dict` if `ignore_mismatched_sizes` is `True`."""
     mismatched_keys = []
     if ignore_mismatched_sizes:
+        prefix = model.base_model_prefix
+        model_state_dict = model.state_dict()
         for checkpoint_key, model_key in zip(original_loaded_keys, renamed_loaded_keys):
             # If the checkpoint is sharded, we may not have the key here.
             if checkpoint_key not in state_dict:
                 continue
-            if remove_prefix_from_model:
-                # The model key starts with `prefix` but `checkpoint_key` doesn't so we add it.
-                model_key = f"{prefix}.{model_key}"
-            elif add_prefix_to_model:
-                # The model key doesn't start with `prefix` but `checkpoint_key` does so we remove it.
-                model_key = ".".join(model_key.split(".")[1:])
+            model_key = _adjust_loaded_keys_prefix(
+                model_key, prefix, loading_base_model_from_task_state_dict, loading_task_model_from_base_state_dict
+            )
 
             if model_key in model_state_dict and state_dict[checkpoint_key].shape != model_state_dict[model_key].shape:
                 if (
@@ -4494,11 +4501,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             import deepspeed
 
             logger.info("Detected DeepSpeed ZeRO-3: activating zero.init() for this model")
-            init_contexts.extend([
-                deepspeed.zero.Init(config_dict_or_path=deepspeed_config()),
-                set_zero3_state(),
-                no_init_weights(_enable=_fast_init)
-            ])
+            init_contexts.extend(
+                [
+                    deepspeed.zero.Init(config_dict_or_path=deepspeed_config()),
+                    set_zero3_state(),
+                    no_init_weights(_enable=_fast_init),
+                ]
+            )
         # In this case, simply load on meta device
         elif low_cpu_mem_usage:
             init_contexts.append(init_empty_weights())
@@ -4764,6 +4773,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         weights_only: bool = True,
         _fast_init: bool = True,
     ):
+        # Some useful flags
+        is_quantized = hf_quantizer is not None
+        is_from_file = pretrained_model_name_or_path is not None or gguf_file is not None
+
         # Get all the keys of the state dicts that we have to initialize the model
         if sharded_metadata is not None:
             loaded_state_dict_keys = sharded_metadata["all_checkpoint_keys"]
@@ -4772,42 +4785,52 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             loaded_state_dict_keys = list(load_state_dict(checkpoint_files[0], weights_only=weights_only).keys())
 
-        # Some useful flags
-        is_quantized = hf_quantizer is not None
-        is_from_file = pretrained_model_name_or_path is not None or gguf_file is not None
+        renamed_loaded_keys = [cls._fix_state_dict_key_on_load(key)[0] for key in loaded_state_dict_keys]
 
         # tie the model weights before retrieving the state_dict
         model.tie_weights()
 
-        # Update model keys (expected keys) and loaded keys based on prefix, quantization, etc...
+        # Check if we are in a special state, i.e. loading from a state dict coming from a different architecture
         prefix = model.base_model_prefix
-        model_state_dict = model.state_dict()
-        expected_keys = list(model_state_dict.keys())
-        if hf_quantizer is not None:
-            expected_keys = hf_quantizer.update_expected_keys(model, expected_keys, loaded_state_dict_keys)
-        renamed_loaded_keys = [cls._fix_state_dict_key_on_load(key)[0] for key in loaded_state_dict_keys]
-
-        # Check if we need to modify prefix
+        _prefix = f"{prefix}."
         has_prefix_module = any(s.startswith(prefix) for s in renamed_loaded_keys) if len(prefix) > 0 else False
-        expects_prefix_module = any(s.startswith(prefix) for s in expected_keys) if len(prefix) > 0 else False
-        remove_prefix_from_model = not has_prefix_module and expects_prefix_module
-        add_prefix_to_model = has_prefix_module and not expects_prefix_module
+        expects_prefix_module = hasattr(model, prefix) if len(prefix) > 0 else False
+        loading_task_model_from_base_state_dict = not has_prefix_module and expects_prefix_module
+        loading_base_model_from_task_state_dict = has_prefix_module and not expects_prefix_module
 
-        if remove_prefix_from_model:
-            _prefix = f"{prefix}."
-            expected_keys_not_prefixed = [s for s in expected_keys if not s.startswith(_prefix)]
-            expected_keys = [s[len(_prefix) :] if s.startswith(_prefix) else s for s in expected_keys]
-        elif add_prefix_to_model:
-            expected_keys = [".".join([prefix, s]) for s in expected_keys]
+        # Make sure we are able to load base models as well as derived models (with heads)
+        model_to_load = model
+        start_prefix_to_remove = ""
+        # In this case, we load a BaseModel from a ForTaskModel state dict
+        if loading_base_model_from_task_state_dict:
+            start_prefix_to_remove = _prefix
+        # In this case, we load a ForTaskModel with keys from a BaseModel -> only load keys to the BaseModel
+        elif loading_task_model_from_base_state_dict:
+            model_to_load = getattr(model, prefix)
+            # We need tp update the device map as well
+            if device_map is not None:
+                device_map = {k.replace(start_prefix_to_remove, ""): v for k, v in device_map.items()}
+
+            # small check
+            task_specific_expected_keys = [s for s in model.state_dict().keys() if not s.startswith(_prefix)]
+            base_model_expected_keys = list(model_to_load.state_dict().keys())
+            if any(
+                key in task_specific_expected_keys and key not in base_model_expected_keys
+                for key in renamed_loaded_keys
+            ):
+                raise ValueError(
+                    "The state dictionary of the model you are trying to load is corrupted. Are you sure it was "
+                    "properly saved?"
+                )
 
         # Find missing and unexpected keys from the state dict
         missing_keys, unexpected_keys = _find_missing_and_unexpected_keys(
             cls,
             model,
-            expected_keys,
+            loaded_state_dict_keys,
             renamed_loaded_keys,
-            remove_prefix_from_model,
-            add_prefix_to_model,
+            loading_base_model_from_task_state_dict,
+            loading_task_model_from_base_state_dict,
             hf_quantizer,
         )
 
@@ -4841,25 +4864,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     # param = param.to(torch.float32) does not work here as only in the local scope.
                     param.data = param.data.to(torch.float32)
 
-        # Make sure we are able to load base models as well as derived models (with heads)
-        start_prefix = ""
-        model_to_load = model
-        if len(cls.base_model_prefix) > 0 and not hasattr(model, cls.base_model_prefix) and has_prefix_module:
-            start_prefix = cls.base_model_prefix + "."
-        if len(cls.base_model_prefix) > 0 and hasattr(model, cls.base_model_prefix) and not has_prefix_module:
-            model_to_load = getattr(model, cls.base_model_prefix)
-            base_model_expected_keys = list(model_to_load.state_dict().keys())
-            if any(
-                key in expected_keys_not_prefixed and key not in base_model_expected_keys
-                for key in renamed_loaded_keys
-            ):
-                raise ValueError(
-                    "The state dictionary of the model you are trying to load is corrupted. Are you sure it was "
-                    "properly saved?"
-                )
-            if device_map is not None:
-                device_map = {k.replace(f"{cls.base_model_prefix}.", ""): v for k, v in device_map.items()}
-
         is_offloaded_safetensors = False
         # This offload index if for params explicitly on the "disk" in the device_map
         disk_offload_index = None
@@ -4878,7 +4882,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if offload_state_dict is None:
                 offload_state_dict = True
             if is_offloaded_safetensors:
-                param_device_map = expand_device_map(device_map, loaded_state_dict_keys, start_prefix)
+                param_device_map = expand_device_map(device_map, loaded_state_dict_keys, start_prefix_to_remove)
                 str_dtype = str(dtype).replace("torch.", "") if dtype is not None else "float32"
                 if sharded_metadata is None:
                     weight_map = {p: checkpoint_files[0] for p in loaded_state_dict_keys}
@@ -4887,13 +4891,14 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     weight_map = {p: os.path.join(folder, f) for p, f in sharded_metadata["weight_map"].items()}
                     # Find potential checkpoints containing only offloaded weights
                     disk_only_shard_files = get_disk_only_shard_files(
-                        device_map, sharded_metadata=sharded_metadata, start_prefix=start_prefix
+                        device_map, sharded_metadata=sharded_metadata, start_prefix=start_prefix_to_remove
                     )
                     disk_only_shard_files = [os.path.join(folder, f) for f in disk_only_shard_files]
                 disk_offload_index = {
-                    p[len(start_prefix) :]: {"safetensors_file": f, "weight_name": p, "dtype": str_dtype}
+                    p[len(start_prefix_to_remove) :]: {"safetensors_file": f, "weight_name": p, "dtype": str_dtype}
                     for p, f in weight_map.items()
-                    if p.startswith(start_prefix) and param_device_map[p[len(start_prefix) :]] == "disk"
+                    if p.startswith(start_prefix_to_remove)
+                    and param_device_map[p[len(start_prefix_to_remove) :]] == "disk"
                 }
             else:
                 disk_offload_index = {}
@@ -4948,6 +4953,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # To be able to iterate, even if we don't use it if the state_dict is already provided
         checkpoint_files = checkpoint_files if state_dict is None else [""]
 
+        # TODO: CHECK THAT
+        expected_keys = list(model_to_load.state_dict().keys())
+        if hf_quantizer is not None:
+            expected_keys = hf_quantizer.update_expected_keys(model_to_load, expected_keys, loaded_state_dict_keys)
+
         error_msgs = []
         mismatched_keys = []
         # Iterate on all the shards to load the weights
@@ -4965,14 +4975,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
             # matching the weights in the model.
             mismatched_keys += _find_mismatched_keys(
+                model,
                 state_dict,
-                model_state_dict,
                 renamed_loaded_keys,
                 loaded_state_dict_keys,
-                add_prefix_to_model,
-                remove_prefix_from_model,
+                loading_base_model_from_task_state_dict,
+                loading_task_model_from_base_state_dict,
                 ignore_mismatched_sizes,
-                prefix,
             )
 
             if low_cpu_mem_usage or gguf_file is not None:
@@ -4983,7 +4992,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     new_error_msgs, disk_offload_index, cpu_offload_index = _load_state_dict_into_meta_model(
                         model_to_load,
                         state_dict,
-                        start_prefix,
+                        start_prefix_to_remove,
                         expected_keys,
                         device_map=device_map,
                         disk_offload_folder=disk_offload_folder,
@@ -5002,11 +5011,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             else:
                 # Sharded checkpoint or whole but low_cpu_mem_usage==True
                 assign_to_params_buffers = check_support_param_buffer_assignment(
-                    model_to_load, state_dict, start_prefix
+                    model_to_load, state_dict, start_prefix_to_remove
                 )
                 state_dict = cls._fix_state_dict_keys_on_load(state_dict)
                 error_msgs += _load_state_dict_into_model(
-                    model_to_load, state_dict, start_prefix, assign_to_params_buffers
+                    model_to_load, state_dict, start_prefix_to_remove, assign_to_params_buffers
                 )
 
             # force memory release
