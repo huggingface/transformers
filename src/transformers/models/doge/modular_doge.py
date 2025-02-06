@@ -26,8 +26,8 @@ import torch.utils.checkpoint
 from torch import nn
 
 from transformers.models.llama.modeling_llama import (
-    LlamaModel,
     LlamaForSequenceClassification,
+    LlamaModel,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
     apply_rotary_pos_emb,
@@ -35,7 +35,7 @@ from transformers.models.llama.modeling_llama import (
 )
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PretrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_outputs import (
@@ -43,8 +43,7 @@ from ...modeling_outputs import (
     CausalLMOutputWithPast,
 )
 from ...modeling_rope_utils import rope_config_validation
-from ...modeling_utils import PreTrainedModel
-from modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
 from ...utils import (
@@ -55,7 +54,6 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from ...utils.deprecation import deprecate_kwarg
 
 
 if is_torch_flex_attn_available():
@@ -64,7 +62,6 @@ if is_torch_flex_attn_available():
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "SmallDoge/Doge-20M"
 _CONFIG_FOR_DOC = "DogeConfig"
 
 
@@ -269,7 +266,7 @@ class DogeConfig(PretrainedConfig):
 
 
 class DogeRMSNorm(LlamaRMSNorm):
-   pass
+    pass
 
 
 ALL_LAYERNORM_LAYERS.append(DogeRMSNorm)
@@ -323,8 +320,9 @@ def sdpa_attention_forward(
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
-    scaling: float,
     dropout: float = 0.0,
+    scaling: Optional[float] = None,
+    is_causal: Optional[bool] = None,
     **kwargs,
 ) -> Tuple[torch.Tensor, None]:
     key = repeat_kv(key, module.num_key_value_groups)
@@ -372,8 +370,10 @@ def flex_attention_forward(
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
-    scaling: float,
-    dropout: float = 0.0,
+    scaling: Optional[float] = None,
+    is_causal: Optional[bool] = None,
+    softcap: Optional[float] = None,
+    head_mask: Optional[torch.Tensor] = None,
     **kwargs,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
     causal_mask = attention_mask
@@ -384,11 +384,21 @@ def flex_attention_forward(
         is_causal = causal_mask is None and query.shape[2] > 1
 
     def causal_mod(score, batch, head, q_idx, kv_idx):
-        score = score + causal_mask[batch][0][q_idx][kv_idx]
+        if softcap is not None:
+            score = softcap * torch.tanh(score / softcap)
+        if causal_mask is not None:
+            score = score + causal_mask[batch][0][q_idx][kv_idx]
+        if head_mask is not None:
+            score = score + head_mask[batch][head][0][0]
         return score
 
     def dynamic_mod(score, batch, head, q_idx, kv_idx):
-        score = score + causal_mask[batch][head][q_idx][kv_idx]
+        if softcap is not None:
+            score = softcap * torch.tanh(score / softcap)
+        if causal_mask is not None:
+            score = score + causal_mask[batch][head][q_idx][kv_idx]
+        if head_mask is not None:
+            score = score + head_mask[batch][head][0][0]
         return score
 
     # TODO: flex_attention: As of pytorch 2.5.1, captured buffers that require grad are not yet supported.
@@ -477,9 +487,7 @@ class DogeDynamicMaskAttention(nn.Module):
             key_states, value_states = past_key_value.update(key_states, value_states, self.layer_idx, cache_kwargs)
 
         # calculate dynamic mask from value_states
-        dt_states = self.dt_proj(
-            value_states.transpose(1, 2).reshape(input_shape, -1)
-        )
+        dt_states = self.dt_proj(value_states.transpose(1, 2).reshape(input_shape, -1))
         dynamic_mask = torch.exp(self.A * F.softplus(dt_states)).transpose(-1, -2)
         attn_mask = self.prepare_dynamic_mask(
             hidden_states=hidden_states,
