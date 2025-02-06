@@ -114,6 +114,9 @@ class InternLM3Config(PretrainedConfig):
             Whether to use a bias in o_proj, up_proj, down_proj and gate_proj layers.
         head_dim (`int`, *optional*):
             The attention head dimension. If None, it will default to hidden_size // num_heads
+        hidden_factor (`float`, *optional*, defaults to 1.0):
+            hidden_factor used for scaling hidden states after ffn.
+
 
     ```python
     >>> from transformers import InternLM3Model, InternLM3Config
@@ -162,6 +165,8 @@ class InternLM3Config(PretrainedConfig):
         attention_dropout=0.0,
         bias=False,
         head_dim=None,
+        hidden_factor=1.0,
+        init_scale_factor=1.0,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -191,6 +196,9 @@ class InternLM3Config(PretrainedConfig):
         if self.rope_scaling is not None and "type" in self.rope_scaling:
             self.rope_scaling["rope_type"] = self.rope_scaling["type"]
         rope_config_validation(self)
+
+        self.hidden_factor = hidden_factor
+        self.init_scale_factor = init_scale_factor
 
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,

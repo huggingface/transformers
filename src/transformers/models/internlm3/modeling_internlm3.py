@@ -9,13 +9,14 @@ from typing import Callable, List, Optional, Tuple, Union
 import torch
 from torch import nn
 
+from transformers.cache_utils import Cache
+from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
 from transformers.utils import logging
 
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache, StaticCache
+from ...cache_utils import DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -211,6 +212,7 @@ class InternLM3DecoderLayer(nn.Module):
         self.mlp = InternLM3MLP(config)
         self.input_layernorm = InternLM3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.post_attention_layernorm = InternLM3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.register_buffer("hidden_factor", torch.tensor(config.hidden_factor), persistent=True)
 
     def forward(
         self,
@@ -224,6 +226,11 @@ class InternLM3DecoderLayer(nn.Module):
         position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        assert self.hidden_factor == self.config.hidden_factor, (
+            f"The `hidden_factor` in the loaded checkpoint is {self.hidden_factor.item()}, "
+            f"but the `hidden_factor` in the config is {self.config.hidden_factor}."
+        )
+
         residual = hidden_states
 
         hidden_states = self.input_layernorm(hidden_states)
@@ -246,13 +253,64 @@ class InternLM3DecoderLayer(nn.Module):
         residual = hidden_states
         hidden_states = self.post_attention_layernorm(hidden_states)
         hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
+        # scaling hidden states after ffn
+        hidden_states = residual + hidden_states * self.hidden_factor
 
         outputs = (hidden_states,)
         if output_attentions:
             outputs += (self_attn_weights,)
 
         return outputs
+
+
+INTERNLM3_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`InternLM3Config`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
+
+
+@add_start_docstrings(
+    "The bare InternLM3 Model outputting raw hidden-states without any specific head on top.",
+    INTERNLM3_START_DOCSTRING,
+)
+class InternLM3PreTrainedModel(PreTrainedModel):
+    config_class = InternLM3Config
+    base_model_prefix = "model"
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["InternLM3DecoderLayer"]
+    _skip_keys_device_placement = ["past_key_values"]
+    _supports_flash_attn_2 = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _supports_cache_class = True
+    _supports_quantized_cache = True
+    _supports_static_cache = True
+
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        init_scale_factor = self.config.init_scale_factor
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if any(x in module.name for x in ("v_proj", "o_proj", "gate_proj", "up_proj", "down_proj")):
+                module.weight.data.div_(init_scale_factor)
+            if module.bias is not None:
+                module.bias.data.zero_()
+                # 0 / init_scale_factor = 0
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
 
 
 class InternLM3RotaryEmbedding(nn.Module):
@@ -314,52 +372,6 @@ class InternLM3RotaryEmbedding(nn.Module):
         sin = sin * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
-
-
-INTERNLM3_START_DOCSTRING = r"""
-    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
-    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
-    etc.)
-
-    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
-    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
-    and behavior.
-
-    Parameters:
-        config ([`InternLM3Config`]):
-            Model configuration class with all the parameters of the model. Initializing with a config file does not
-            load the weights associated with the model, only the configuration. Check out the
-            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
-"""
-
-
-@add_start_docstrings(
-    "The bare InternLM3 Model outputting raw hidden-states without any specific head on top.",
-    INTERNLM3_START_DOCSTRING,
-)
-class InternLM3PreTrainedModel(PreTrainedModel):
-    config_class = InternLM3Config
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["InternLM3DecoderLayer"]
-    _skip_keys_device_placement = ["past_key_values"]
-    _supports_flash_attn_2 = True
-    _supports_sdpa = True
-    _supports_flex_attn = True
-    _supports_cache_class = True
-    _supports_quantized_cache = True
-    _supports_static_cache = True
-
-    def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
 
 
 INTERNLM3_INPUTS_DOCSTRING = r"""
@@ -461,6 +473,11 @@ class InternLM3Model(InternLM3PreTrainedModel):
         self.norm = InternLM3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = InternLM3RotaryEmbedding(config=config)
         self.gradient_checkpointing = False
+        # Initialize weights and apply final processing
+        # we scale the weight in v_proj, o_proj, gate_proj, up_proj, down_proj,
+        # module name is necessary during init weights
+        for name, module in self.named_modules():
+            module.name = name
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -712,6 +729,11 @@ class InternLM3ForCausalLM(InternLM3PreTrainedModel, GenerationMixin):
         self.model = InternLM3Model(config)
         self.vocab_size = config.vocab_size
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        # Initialize weights and apply final processing
+        # we scale the weight in v_proj, o_proj, gate_proj, up_proj, down_proj,
+        # module name is necessary during init weights
+        for name, module in self.named_modules():
+            module.name = name
 
         # Initialize weights and apply final processing
         self.post_init()

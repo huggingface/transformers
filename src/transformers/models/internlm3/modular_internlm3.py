@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple
 
 import sentencepiece as spm
 from torch import nn
@@ -8,11 +8,14 @@ from transformers.models.llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaForCausalLM,
     LlamaMLP,
+    LlamaPreTrainedModel,
     LlamaModel,
 )
 from transformers.models.llama.tokenization_llama import LlamaTokenizer
 from transformers.tokenization_utils import AddedToken, PreTrainedTokenizer
 from transformers.utils import logging
+from transformers.cache_utils import Cache
+from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
 
 
 if TYPE_CHECKING:
@@ -219,11 +222,89 @@ class InternLM3DecoderLayer(LlamaDecoderLayer):
         super().__init__()
         self.self_attn = InternLM3Attention(config=config, layer_idx=layer_idx)
         self.mlp = InternLM3MLP(config)
+        self.register_buffer("hidden_factor", torch.tensor(config.hidden_factor), persistent=True)
+    
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        past_key_value: Optional[Cache] = None,
+        output_attentions: Optional[bool] = False,
+        use_cache: Optional[bool] = False,
+        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: Optional[Tuple[torch.Tensor, torch.Tensor]] = None,  # necessary, but kept here for BC
+        **kwargs: Unpack[FlashAttentionKwargs],
+    ) -> Tuple[torch.FloatTensor, Optional[Tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        assert self.hidden_factor == self.config.hidden_factor, (
+            f"The `hidden_factor` in the loaded checkpoint is {self.hidden_factor.item()}, "
+            f"but the `hidden_factor` in the config is {self.config.hidden_factor}."
+        )
+
+        residual = hidden_states
+
+        hidden_states = self.input_layernorm(hidden_states)
+
+        # Self Attention
+        hidden_states, self_attn_weights = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            position_ids=position_ids,
+            past_key_value=past_key_value,
+            output_attentions=output_attentions,
+            use_cache=use_cache,
+            cache_position=cache_position,
+            position_embeddings=position_embeddings,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states
+
+        # Fully Connected
+        residual = hidden_states
+        hidden_states = self.post_attention_layernorm(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        # scaling hidden states after ffn
+        hidden_states = residual + hidden_states * self.hidden_factor
+
+        outputs = (hidden_states,)
+        if output_attentions:
+            outputs += (self_attn_weights,)
+
+        return outputs
+
+
+class InternLM3PreTrainedModel(LlamaPreTrainedModel):
+    def _init_weights(self, module):
+        std = self.config.initializer_range
+        init_scale_factor = self.config.init_scale_factor
+        if isinstance(module, nn.Linear):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if any(x in module.name for x in ("v_proj", "o_proj", "gate_proj", "up_proj", "down_proj")):
+                module.weight.data.div_(init_scale_factor)
+            if module.bias is not None:
+                module.bias.data.zero_()
+                # 0 / init_scale_factor = 0
+        elif isinstance(module, nn.Embedding):
+            module.weight.data.normal_(mean=0.0, std=std)
+            if module.padding_idx is not None:
+                module.weight.data[module.padding_idx].zero_()
 
 
 class InternLM3Model(LlamaModel):
-    pass
+    def __init__(self, config: InternLM3Config):
+        super().__init__()
+        # Initialize weights and apply final processing
+        # we scale the weight in v_proj, o_proj, gate_proj, up_proj, down_proj,
+        # module name is necessary during init weights
+        for name, module in self.named_modules():
+            module.name = name
 
 
 class InternLM3ForCausalLM(LlamaForCausalLM):
-    pass
+    def __init__(self, config):
+        super().__init__()
+        # Initialize weights and apply final processing
+        # we scale the weight in v_proj, o_proj, gate_proj, up_proj, down_proj,
+        # module name is necessary during init weights
+        for name, module in self.named_modules():
+            module.name = name
