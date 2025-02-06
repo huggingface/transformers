@@ -1,6 +1,7 @@
 import argparse
 import os
 import shutil
+import re
 
 import numpy as np
 import timesfm
@@ -17,6 +18,19 @@ python src/transformers/models/timesfm/convert_timesfm_orignal_to_hf.py \
     --output_dir /output/path
 ```
 """
+
+
+def get_nested_attr(obj, key):
+    """Recursively retrieves an attribute from an object, handling list/tuple indexing if present."""
+    parts = key.split('.')
+    for part in parts:
+        match = re.match(r"(.*)\[(\d+)\]", part)  # Handle list indexing like `layers[0]`
+        if match:
+            attr_name, index = match.groups()
+            obj = getattr(obj, attr_name)[int(index)]  # Access list/tuple element
+        else:
+            obj = getattr(obj, part)  # Regular attribute access
+    return obj
 
 
 def write_model(model_path, safe_serialization=True, huggingface_repo_id="google/timesfm-2.0-500m-pytorch"):
@@ -54,85 +68,64 @@ def write_model(model_path, safe_serialization=True, huggingface_repo_id="google
 
     # copy the weights from the original model to the new model making
     original_model = tfm._model
+    
+    # mapping of the layers from the original model to the transformer model
+    MODEL_LAYER_MAPPING = {
+        "input_ff_layer.hidden_layer[0].weight":    "decoder.input_ff_layer.hidden_layer[0].weight",
+        "input_ff_layer.hidden_layer[0].bias":      "decoder.input_ff_layer.hidden_layer[0].bias",
+        "input_ff_layer.output_layer.weight":       "decoder.input_ff_layer.output_layer.weight",
+        "input_ff_layer.output_layer.bias":         "decoder.input_ff_layer.output_layer.bias",
+        "input_ff_layer.residual_layer.weight":     "decoder.input_ff_layer.residual_layer.weight",
+        "input_ff_layer.residual_layer.bias":       "decoder.input_ff_layer.residual_layer.bias",
 
-    # Map decoder input_ff_layer
-    timesfm_model.decoder.input_ff_layer.hidden_layer[0].weight.data = original_model.input_ff_layer.hidden_layer[
-        0
-    ].weight.data
-    timesfm_model.decoder.input_ff_layer.hidden_layer[0].bias.data = original_model.input_ff_layer.hidden_layer[
-        0
-    ].bias.data
-    timesfm_model.decoder.input_ff_layer.output_layer.weight.data = (
-        original_model.input_ff_layer.output_layer.weight.data
-    )
-    timesfm_model.decoder.input_ff_layer.output_layer.bias.data = original_model.input_ff_layer.output_layer.bias.data
-    timesfm_model.decoder.input_ff_layer.residual_layer.weight.data = (
-        original_model.input_ff_layer.residual_layer.weight.data
-    )
-    timesfm_model.decoder.input_ff_layer.residual_layer.bias.data = (
-        original_model.input_ff_layer.residual_layer.bias.data
-    )
+        "freq_emb.weight":                          "decoder.freq_emb.weight",
 
-    # Map freq embedding
-    timesfm_model.decoder.freq_emb.weight.data = original_model.freq_emb.weight.data
+        "horizon_ff_layer.hidden_layer[0].weight":  "horizon_ff_layer.hidden_layer[0].weight",
+        "horizon_ff_layer.hidden_layer[0].bias":    "horizon_ff_layer.hidden_layer[0].bias",
+        "horizon_ff_layer.output_layer.weight":     "horizon_ff_layer.output_layer.weight",
+        "horizon_ff_layer.output_layer.bias":       "horizon_ff_layer.output_layer.bias",
+        "horizon_ff_layer.residual_layer.weight":   "horizon_ff_layer.residual_layer.weight",
+        "horizon_ff_layer.residual_layer.bias":     "horizon_ff_layer.residual_layer.bias",
+    }
 
-    # Map horizon_ff_layer
-    timesfm_model.horizon_ff_layer.hidden_layer[0].weight.data = original_model.horizon_ff_layer.hidden_layer[
-        0
-    ].weight.data
-    timesfm_model.horizon_ff_layer.hidden_layer[0].bias.data = original_model.horizon_ff_layer.hidden_layer[
-        0
-    ].bias.data
-    timesfm_model.horizon_ff_layer.output_layer.weight.data = original_model.horizon_ff_layer.output_layer.weight.data
-    timesfm_model.horizon_ff_layer.output_layer.bias.data = original_model.horizon_ff_layer.output_layer.bias.data
-    timesfm_model.horizon_ff_layer.residual_layer.weight.data = (
-        original_model.horizon_ff_layer.residual_layer.weight.data
-    )
-    timesfm_model.horizon_ff_layer.residual_layer.bias.data = original_model.horizon_ff_layer.residual_layer.bias.data
+    
+    TRANSFORMER_LAYER_MAPPING = {
+        "stacked_transformer.layers[{i}].self_attn.qkv_proj.weight":    "decoder.stacked_transformer.layers[{i}].self_attn.qkv_proj.weight",
+        "stacked_transformer.layers[{i}].self_attn.qkv_proj.bias":      "decoder.stacked_transformer.layers[{i}].self_attn.qkv_proj.bias",
+        "stacked_transformer.layers[{i}].self_attn.o_proj.weight":      "decoder.stacked_transformer.layers[{i}].self_attn.o_proj.weight",
+        "stacked_transformer.layers[{i}].self_attn.o_proj.bias":        "decoder.stacked_transformer.layers[{i}].self_attn.o_proj.bias",
+        "stacked_transformer.layers[{i}].self_attn.scaling":            "decoder.stacked_transformer.layers[{i}].self_attn.scaling",
 
-    # Map transformer layers
-    for i in range(len(timesfm_model.decoder.stacked_transformer.layers)):
-        # Map attention layers
-        timesfm_model.decoder.stacked_transformer.layers[
-            i
-        ].self_attn.qkv_proj.weight.data = original_model.stacked_transformer.layers[i].self_attn.qkv_proj.weight.data
-        timesfm_model.decoder.stacked_transformer.layers[
-            i
-        ].self_attn.qkv_proj.bias.data = original_model.stacked_transformer.layers[i].self_attn.qkv_proj.bias.data
-        timesfm_model.decoder.stacked_transformer.layers[
-            i
-        ].self_attn.o_proj.weight.data = original_model.stacked_transformer.layers[i].self_attn.o_proj.weight.data
-        timesfm_model.decoder.stacked_transformer.layers[
-            i
-        ].self_attn.o_proj.bias.data = original_model.stacked_transformer.layers[i].self_attn.o_proj.bias.data
-        timesfm_model.decoder.stacked_transformer.layers[
-            i
-        ].self_attn.scaling.data = original_model.stacked_transformer.layers[i].self_attn.scaling.data
+        "stacked_transformer.layers[{i}].mlp.gate_proj.weight":         "decoder.stacked_transformer.layers[{i}].mlp.gate_proj.weight",
+        "stacked_transformer.layers[{i}].mlp.gate_proj.bias":           "decoder.stacked_transformer.layers[{i}].mlp.gate_proj.bias",
+        "stacked_transformer.layers[{i}].mlp.down_proj.weight":         "decoder.stacked_transformer.layers[{i}].mlp.down_proj.weight",
+        "stacked_transformer.layers[{i}].mlp.down_proj.bias":           "decoder.stacked_transformer.layers[{i}].mlp.down_proj.bias",
+        "stacked_transformer.layers[{i}].mlp.layer_norm.weight":        "decoder.stacked_transformer.layers[{i}].mlp.layer_norm.weight",
+        "stacked_transformer.layers[{i}].mlp.layer_norm.bias":          "decoder.stacked_transformer.layers[{i}].mlp.layer_norm.bias",
 
-        # Map MLP layers
-        timesfm_model.decoder.stacked_transformer.layers[
-            i
-        ].mlp.gate_proj.weight.data = original_model.stacked_transformer.layers[i].mlp.gate_proj.weight.data
-        timesfm_model.decoder.stacked_transformer.layers[
-            i
-        ].mlp.gate_proj.bias.data = original_model.stacked_transformer.layers[i].mlp.gate_proj.bias.data
-        timesfm_model.decoder.stacked_transformer.layers[
-            i
-        ].mlp.down_proj.weight.data = original_model.stacked_transformer.layers[i].mlp.down_proj.weight.data
-        timesfm_model.decoder.stacked_transformer.layers[
-            i
-        ].mlp.down_proj.bias.data = original_model.stacked_transformer.layers[i].mlp.down_proj.bias.data
-        timesfm_model.decoder.stacked_transformer.layers[
-            i
-        ].mlp.layer_norm.weight.data = original_model.stacked_transformer.layers[i].mlp.layer_norm.weight.data
-        timesfm_model.decoder.stacked_transformer.layers[
-            i
-        ].mlp.layer_norm.bias.data = original_model.stacked_transformer.layers[i].mlp.layer_norm.bias.data
+        "stacked_transformer.layers[{i}].input_layernorm.weight":       "decoder.stacked_transformer.layers[{i}].input_layernorm.weight",
+    }
 
-        # Map layer norms
-        timesfm_model.decoder.stacked_transformer.layers[
-            i
-        ].input_layernorm.weight.data = original_model.stacked_transformer.layers[i].input_layernorm.weight.data
+    for old_key, new_key in MODEL_LAYER_MAPPING.items():
+        try:
+            old_attr = get_nested_attr(original_model, old_key)  # Get tensor from original model
+            new_attr = get_nested_attr(timesfm_model, new_key)  # Get corresponding attribute in new model
+            new_attr.data.copy_(old_attr.data)  # Copy data
+        except AttributeError:
+            print(f"Skipping {old_key} (not found in original model).")
+
+    num_layers = len(timesfm_model.decoder.stacked_transformer.layers)
+    for i in range(num_layers):
+        for old_template, new_template in TRANSFORMER_LAYER_MAPPING.items():
+            old_key = old_template.format(i=i)
+            new_key = new_template.format(i=i)
+
+            try:
+                old_attr = get_nested_attr(original_model, old_key)  # Get tensor from original model
+                new_attr = get_nested_attr(timesfm_model, new_key)  # Get corresponding attribute in new model
+                new_attr.data.copy_(old_attr.data)  # Copy data
+            except AttributeError:
+                print(f"Skipping {old_key} (not found in original model).")
 
     timesfm_model.save_pretrained(model_path, safe_serialization=safe_serialization)
     shutil.rmtree(tmp_model_path)

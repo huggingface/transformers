@@ -43,6 +43,3 @@ The original code can be found [here](https://github.com/google-research/timesfm
 
 [[autodoc]] TimesFmModelForPrediction
     - forward
-
-</pt>
-<tf>
