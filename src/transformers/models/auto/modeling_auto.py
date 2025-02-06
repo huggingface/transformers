@@ -264,7 +264,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("tapas", "TapasModel"),
         ("textnet", "TextNetModel"),
         ("time_series_transformer", "TimeSeriesTransformerModel"),
-        ("timesfm", "TimesFmModelForPrediction"),
+        ("timesfm", "TimesFmModel"),
         ("timesformer", "TimesformerModel"),
         ("timm_backbone", "TimmBackbone"),
         ("timm_wrapper", "TimmWrapperModel"),
