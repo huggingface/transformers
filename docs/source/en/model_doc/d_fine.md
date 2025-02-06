@@ -29,6 +29,41 @@ FDR transforms the regression process from predicting fixed coordinates to itera
 This model was contributed by [VladOS95-cyber](https://github.com/VladOS95-cyber). 
 The original code can be found [here](https://github.com/Peterande/D-FINE).
 
+## Usage tips 
+
+This D-FINE version of RT-DETR improves how the decoder finds objects in an image. 
+
+```py
+>>> import torch
+>>> import requests
+
+>>> from PIL import Image
+>>> from transformers import DFineForObjectDetection, RTDetrImageProcessor
+
+>>> url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
+>>> image = Image.open(requests.get(url, stream=True).raw)
+
+>>> image_processor = RTDetrImageProcessor.from_pretrained("vladislavbro/dfine_x_coco")
+>>> model = DFineForObjectDetection.from_pretrained("vladislavbro/dfine_x_coco")
+
+>>> inputs = image_processor(images=image, return_tensors="pt")
+
+>>> with torch.no_grad():
+...     outputs = model(**inputs)
+
+>>> results = image_processor.post_process_object_detection(outputs, target_sizes=torch.tensor([(image.height, image.width)]), threshold=0.5)
+
+>>> for result in results:
+...     for score, label_id, box in zip(result["scores"], result["labels"], result["boxes"]):
+...         score, label = score.item(), label_id.item()
+...         box = [round(i, 2) for i in box.tolist()]
+...         print(f"{model.config.id2label[label]}: {score:.2f} {box}")
+cat: 0.96 [344.4865,  23.4047, 639.8372, 374.2650]
+cat: 0.96 [11.7123,  53.5185, 316.6395, 472.3320]
+remote: 0.95 [40.4605,  73.6995, 175.6157, 117.5686]
+sofa: 0.92 [0.58968, 1.88410, 640.25000, 474.74000]
+remote: 0.89 [333.4805,  77.0410, 370.7715, 187.2985]
+
 ## DFineConfig
 
 [[autodoc]] DFineConfig
@@ -45,4 +80,9 @@ The original code can be found [here](https://github.com/Peterande/D-FINE).
 ## DFineModelForObjectDetection
 
 [[autodoc]] DFineModelForObjectDetection
+    - forward
+
+## DFineResNetBackbone
+
+[[autodoc]] DFineResNetBackbone
     - forward
