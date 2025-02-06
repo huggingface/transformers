@@ -186,16 +186,20 @@ class StyleTextToSpeech2ProsodicTextEncoder(StyleTextToSpeech2PretrainedModel):
 
 
 class StyleTextToSpeech2AdaLayerNorm(nn.Module):
-    def __init__(self, hidden_size, style_size):
+    def __init__(self, hidden_size, style_size, instance_norm=False):
         super().__init__()
         self.hidden_size = hidden_size
         self.style_size = style_size
         self.proj = nn.Linear(style_size, hidden_size*2)
+        self.instance_norm = instance_norm
 
     def forward(self, hidden_states, style):     
         hidden_style = self.proj(style)
         gamma, beta = torch.chunk(hidden_style, chunks=2, dim=-1)
-        hidden_states = F.layer_norm(hidden_states, (self.hidden_size,))
+        if self.instance_norm:
+            hidden_states = F.instance_norm(hidden_states.transpose(1, -1)).transpose(1, -1)
+        else:
+            hidden_states = F.layer_norm(hidden_states, (self.hidden_size,))
         hidden_states = (1 + gamma) * hidden_states + beta
         return hidden_states
      
@@ -272,29 +276,14 @@ class StyleTextToSpeech2DurationPredictor(StyleTextToSpeech2PretrainedModel):
         return self.duration_proj(hidden_states)
 
 
-class StyleTextToSpeech2AdaLayerNorm1d(nn.Module):
-    def __init__(self, hidden_size, style_size):
-        super().__init__()
-        self.hidden_size = hidden_size
-        self.style_size = style_size
-        self.proj = nn.Linear(style_size, hidden_size*2)
-        self.norm = nn.InstanceNorm1d(hidden_size, affine=False)
-
-    def forward(self, hidden_states, style):
-        hidden_style = self.proj(style)
-        gamma, beta = torch.chunk(hidden_style, chunks=2, dim=-1)
-        hidden_states = self.norm(hidden_states.transpose(1, -1)).transpose(1, -1)
-        hidden_states = (1 + gamma) * hidden_states + beta
-        return hidden_states
-
 
 class StyleTextToSpeech2AdainResBlockLayer(nn.Module):
     def __init__(self, channels, style_size, kernel_size, dilation):
         super().__init__()
         self.conv1 = nn.Conv1d(channels, channels, kernel_size, 1, dilation=dilation, padding=self._get_padding(kernel_size, dilation))
         self.conv2 = nn.Conv1d(channels, channels, kernel_size, 1, dilation=1, padding=self._get_padding(kernel_size, 1))
-        self.norm1 = StyleTextToSpeech2AdaLayerNorm1d(channels, style_size)
-        self.norm2 = StyleTextToSpeech2AdaLayerNorm1d(channels, style_size)
+        self.norm1 = StyleTextToSpeech2AdaLayerNorm(channels, style_size, instance_norm=True)
+        self.norm2 = StyleTextToSpeech2AdaLayerNorm(channels, style_size, instance_norm=True)
         self.alpha1 = nn.Parameter(torch.ones(channels))
         self.alpha2 = nn.Parameter(torch.ones(channels))
 
@@ -339,8 +328,8 @@ class StyleTextToSpeech2AdainResBlock1d(nn.Module):
 
         self.conv1 = nn.Conv1d(hidden_size_in, hidden_size_out, kernel_size=3, stride=1, padding=1)
         self.conv2 = nn.Conv1d(hidden_size_out, hidden_size_out, kernel_size=3, stride=1, padding=1)
-        self.norm1 = StyleTextToSpeech2AdaLayerNorm1d(hidden_size_in, style_size)
-        self.norm2 = StyleTextToSpeech2AdaLayerNorm1d(hidden_size_out, style_size)
+        self.norm1 = StyleTextToSpeech2AdaLayerNorm(hidden_size_in, style_size, instance_norm=True)
+        self.norm2 = StyleTextToSpeech2AdaLayerNorm(hidden_size_out, style_size, instance_norm=True)
         
         # apply weight norm
         weight_norm = nn.utils.weight_norm
