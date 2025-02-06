@@ -665,7 +665,9 @@ class XLNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 expected_shape = (batch_size, seq_len, config.hidden_size)
                 self.assertEqual(layer_hidden_states.shape, expected_shape)
 
-    def _check_attentions_for_generate(self, batch_size, attentions, min_length, max_length, config, past_key_values):
+    def _check_attentions_for_generate(
+        self, batch_size, attentions, min_length, max_length, config, decoder_past_key_values
+    ):
         self.assertIsInstance(attentions, tuple)
         self.assertListEqual(
             [isinstance(iter_attentions, tuple) for iter_attentions in attentions], [True] * len(attentions)

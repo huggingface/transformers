@@ -472,7 +472,9 @@ class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_xlm_for_multiple_choice(*config_and_inputs)
 
-    def _check_attentions_for_generate(self, batch_size, attentions, min_length, max_length, config, past_key_values):
+    def _check_attentions_for_generate(
+        self, batch_size, attentions, min_length, max_length, config, decoder_past_key_values
+    ):
         self.assertIsInstance(attentions, tuple)
         self.assertListEqual(
             [isinstance(iter_attentions, tuple) for iter_attentions in attentions], [True] * len(attentions)

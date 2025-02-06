@@ -463,7 +463,7 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         min_length,
         max_length,
         config,
-        past_key_values,
+        decoder_past_key_values,
     ):
         # GIT attention shape depends on image inputs, overwrite
         self.assertIsInstance(attentions, tuple)
@@ -473,13 +473,15 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         self.assertEqual(len(attentions), (max_length - min_length))
         image_length = int((config.vision_config.image_size / config.vision_config.patch_size) ** 2 + 1)
 
-        has_cache = past_key_values is not None
-        has_static_cache = isinstance(past_key_values, (StaticCache, HybridCache))
+        has_cache = decoder_past_key_values is not None
+        has_static_cache = isinstance(decoder_past_key_values, (StaticCache, HybridCache))
 
         for idx, iter_attentions in enumerate(attentions):
             tgt_len = min_length + idx + image_length if not has_cache else 1
             src_len = (
-                min_length + idx + image_length if not has_static_cache else past_key_values.get_max_cache_shape()
+                min_length + idx + image_length
+                if not has_static_cache
+                else decoder_past_key_values.get_max_cache_shape()
             )
 
             expected_shape = (

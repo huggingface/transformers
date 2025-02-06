@@ -329,7 +329,7 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
         min_length,
         max_length,
         config,
-        past_key_values,
+        decoder_past_key_values,
     ):
         # Mllama has cross attention layers and those have a different shape than normal attention layers
         self.assertIsInstance(attentions, tuple)
@@ -339,7 +339,7 @@ class MllamaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTester
         self.assertEqual(len(attentions), (max_length - min_length))
 
         cross_attention_layers = self.model_tester.text_config["cross_attention_layers"]
-        has_cache = past_key_values is not None
+        has_cache = decoder_past_key_values is not None
 
         for idx, iter_attentions in enumerate(attentions):
             tgt_len = min_length + idx if not has_cache else 1

@@ -2412,7 +2412,7 @@ class GenerationTesterMixin:
                     min_length=1,
                     max_length=output.sequences.shape[-1],
                     config=config,
-                    past_key_values=decoder_past_key_values,
+                    decoder_past_key_values=decoder_past_key_values,
                 )
             else:
                 # if use_cache first input is equal to no use_cache, so skip here
@@ -2424,7 +2424,7 @@ class GenerationTesterMixin:
                     min_length=min_length,
                     max_length=output.sequences.shape[-1],
                     config=config,
-                    past_key_values=decoder_past_key_values,
+                    decoder_past_key_values=decoder_past_key_values,
                 )
 
         # Hidden States
@@ -2504,19 +2504,21 @@ class GenerationTesterMixin:
         self.assertTrue(vocab_diff in [0, 1])
         self.assertListEqual([vocab_size - score.shape[-1] for score in scores], [vocab_diff] * len(scores))
 
-    def _check_attentions_for_generate(self, batch_size, attentions, min_length, max_length, config, past_key_values):
+    def _check_attentions_for_generate(
+        self, batch_size, attentions, min_length, max_length, config, decoder_past_key_values
+    ):
         self.assertIsInstance(attentions, tuple)
         self.assertListEqual(
             [isinstance(iter_attentions, tuple) for iter_attentions in attentions], [True] * len(attentions)
         )
         self.assertEqual(len(attentions), (max_length - min_length))
 
-        has_cache = past_key_values is not None
-        has_static_cache = isinstance(past_key_values, (StaticCache, HybridCache))
+        has_cache = decoder_past_key_values is not None
+        has_static_cache = isinstance(decoder_past_key_values, (StaticCache, HybridCache))
 
         for idx, iter_attentions in enumerate(attentions):
             tgt_len = min_length + idx if not has_cache else 1
-            src_len = min_length + idx if not has_static_cache else past_key_values.get_max_cache_shape()
+            src_len = min_length + idx if not has_static_cache else decoder_past_key_values.get_max_cache_shape()
 
             expected_shape = (
                 batch_size,

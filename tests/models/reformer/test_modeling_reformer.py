@@ -626,7 +626,7 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
         min_length,
         max_length,
         config,
-        past_key_values,
+        decoder_past_key_values,
     ):
         self.assertIsInstance(attentions, tuple)
         self.assertListEqual(
@@ -634,7 +634,7 @@ class ReformerLocalAttnModelTest(ReformerTesterMixin, GenerationTesterMixin, Mod
         )
         self.assertEqual(len(attentions), (max_length - min_length))
 
-        has_cache = past_key_values is not None
+        has_cache = decoder_past_key_values is not None
 
         for idx, iter_attentions in enumerate(attentions):
             tgt_len = min_length + idx if not has_cache else 1
@@ -802,14 +802,16 @@ class ReformerLSHAttnModelTest(
         )
         self.config_tester = ConfigTester(self, config_class=ReformerConfig, hidden_size=37)
 
-    def _check_attentions_for_generate(self, batch_size, attentions, min_length, max_length, config, past_key_values):
+    def _check_attentions_for_generate(
+        self, batch_size, attentions, min_length, max_length, config, decoder_past_key_values
+    ):
         self.assertIsInstance(attentions, tuple)
         self.assertListEqual(
             [isinstance(iter_attentions, list) for iter_attentions in attentions], [True] * len(attentions)
         )
         self.assertEqual(len(attentions), (max_length - min_length))
 
-        has_cache = past_key_values is not None
+        has_cache = decoder_past_key_values is not None
 
         for idx, iter_attentions in enumerate(attentions):
             tgt_len = min_length + idx if not has_cache else 1

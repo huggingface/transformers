@@ -640,7 +640,7 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
         min_length,
         max_length,
         config,
-        past_key_values,
+        decoder_past_key_values,
     ):
         # Overwrite because the generate method actually alway uses `inputs_embeds` so `use_cache` is always `True`
         self.assertIsInstance(attentions, tuple)
