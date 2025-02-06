@@ -23,7 +23,6 @@ from torch import nn
 
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
-from ...loss.loss_utils import fixed_cross_entropy
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_causal_attention_mask
 from ...modeling_outputs import BaseModelOutputWithPastAndCrossAttentions, CausalLMOutputWithCrossAttentions
 from ...modeling_utils import PreTrainedModel
@@ -690,6 +689,33 @@ class XGLMModel(XGLMPreTrainedModel):
         )
 
 
+def XGLMCrossEntropyLoss(
+    logits,
+    labels,
+    num_items_in_batch: int = None,
+    ignore_index: int = -100,
+    pad_token_id: int = -100,
+    vocab_size: int = None,
+):
+    """
+    Loss function for XGLM that takes into account `num_items_in_batch`
+    """
+    shift_labels = labels.new_zeros(labels.shape)
+    shift_labels[:, :-1] = labels[:, 1:].clone()
+    shift_labels[:, -1] = pad_token_id
+
+    logits = logits.view(-1, vocab_size).float()
+    shift_labels = shift_labels.view(-1)
+
+    # move labels to correct device to enable model parallelism
+    labels = labels.float().to(logits.device)
+    reduction = "sum" if num_items_in_batch is not None else "mean"
+    loss = nn.functional.cross_entropy(logits, shift_labels, ignore_index=ignore_index, reduction=reduction)
+    if reduction == "sum":
+        loss = loss / num_items_in_batch
+    return loss
+
+
 @add_start_docstrings(
     """
     The XGLM Model transformer with a language modeling head on top (linear layer with weights tied to the input
@@ -709,7 +735,7 @@ class XGLMForCausalLM(XGLMPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-        self._loss_function = fixed_cross_entropy
+        self._loss_function = XGLMCrossEntropyLoss
 
     def get_input_embeddings(self):
         return self.model.embed_tokens
@@ -781,15 +807,9 @@ class XGLMForCausalLM(XGLMPreTrainedModel, GenerationMixin):
 
         loss = None
         if labels is not None:
-            shift_labels = labels.new_zeros(labels.shape)
-            shift_labels[:, :-1] = labels[:, 1:].clone()
-            shift_labels[:, -1] = self.config.pad_token_id
-
-            # move labels to correct device to enable model parallelism
-            labels = labels.float().to(logits.device)
             loss = self.loss_function(
-                logits.view(-1, self.config.vocab_size).float(),
-                shift_labels.view(-1),
+                logits,
+                labels,
                 vocab_size=self.config.vocab_size,
                 **kwargs,
             )
