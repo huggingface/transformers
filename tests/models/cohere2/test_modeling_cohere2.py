@@ -131,6 +131,10 @@ class Cohere2ModelTest(CohereModelTest, unittest.TestCase):
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
+    @unittest.skip("Cohere2 has HybridCache and doesn't support progressive generation using input embeds.")
+    def test_generate_continue_from_inputs_embeds(self):
+        pass
+
     @unittest.skip("Cohere2's eager attn/sdpa attn outputs are expected to be different")
     def test_sdpa_equivalence(self):
         pass

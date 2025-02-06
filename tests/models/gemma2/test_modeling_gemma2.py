@@ -146,6 +146,10 @@ class Gemma2ModelTest(GemmaModelTest, unittest.TestCase):
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
 
+    @unittest.skip("Gemma2 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
+    def test_generate_continue_from_inputs_embeds(self):
+        pass
+
     @unittest.skip("Gemma2's eager attn/sdpa attn outputs are expected to be different")
     def test_sdpa_equivalence(self):
         pass
