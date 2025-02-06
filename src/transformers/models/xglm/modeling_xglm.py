@@ -703,12 +703,12 @@ def XGLMCrossEntropyLoss(
     shift_labels = labels.new_zeros(labels.shape)
     shift_labels[:, :-1] = labels[:, 1:].clone()
     shift_labels[:, -1] = pad_token_id
+    # move labels to correct device to enable model parallelism
+    labels = labels.float().to(logits.device)
 
     logits = logits.view(-1, vocab_size).float()
     shift_labels = shift_labels.view(-1)
 
-    # move labels to correct device to enable model parallelism
-    labels = labels.float().to(logits.device)
     reduction = "sum" if num_items_in_batch is not None else "mean"
     loss = nn.functional.cross_entropy(logits, shift_labels, ignore_index=ignore_index, reduction=reduction)
     if reduction == "sum":
