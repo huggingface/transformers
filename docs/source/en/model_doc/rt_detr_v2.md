@@ -70,6 +70,17 @@ sofa: 0.82 [-0.12, 1.78, 639.87, 473.52]
 remote: 0.79 [333.65, 76.38, 370.69, 187.48]
 ```
 
+## Resources
+
+A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with RT-DETRv2.
+
+<PipelineTag pipeline="object-detection"/>
+
+- Scripts for finetuning [`RTDetrV2ForObjectDetection`] with [`Trainer`] or [Accelerate](https://huggingface.co/docs/accelerate/index) can be found [here](https://github.com/huggingface/transformers/tree/main/examples/pytorch/object-detection).
+- See also: [Object detection task guide](../tasks/object_detection).
+- Notebooks for [inference](https://github.com/qubvel/transformers-notebooks/blob/main/notebooks/RT_DETR_v2_inference.ipynb) and [fine-tuning](https://github.com/qubvel/transformers-notebooks/blob/main/notebooks/RT_DETR_v2_finetune_on_a_custom_dataset.ipynb) RT-DETRv2 on a custom dataset (🌎).
+
+
 ## RTDetrV2Config
 
 [[autodoc]] RTDetrV2Config
