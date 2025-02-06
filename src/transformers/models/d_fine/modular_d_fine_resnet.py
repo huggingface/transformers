@@ -14,15 +14,17 @@
 # limitations under the License.
 
 
-from ..rt_detr.configuration_rt_detr_resnet import RTDetrResNetConfig
-from ..rt_detr.modeling_rt_detr_resnet import RTDetrResNetBackbone, RTDetrResNetPreTrainedModel, RTDetrResNetConvLayer
-from torch import nn, Tensor
+from typing import Any, Iterator, List, NamedTuple
+
 import torch
 import torch.nn.functional as F
-from typing import List, Any, Iterator, NamedTuple
+from torch import Tensor, nn
+
 from ...modeling_outputs import (
     BaseModelOutputWithNoAttention,
 )
+from ..rt_detr.configuration_rt_detr_resnet import RTDetrResNetConfig
+from ..rt_detr.modeling_rt_detr_resnet import RTDetrResNetBackbone, RTDetrResNetConvLayer, RTDetrResNetPreTrainedModel
 
 
 class DFineResNetStageConfig(NamedTuple):
@@ -53,17 +55,12 @@ class DFineResNetConfig(RTDetrResNetConfig):
         self.use_lab = use_lab
 
 
-
 class DFineResNetPreTrainedModel(RTDetrResNetPreTrainedModel):
     pass
 
 
 class LearnableAffineBlock(nn.Module):
-    def __init__(
-            self,
-            scale_value=1.0,
-            bias_value=0.0
-    ):
+    def __init__(self, scale_value=1.0, bias_value=0.0):
         super().__init__()
         self.scale = nn.Parameter(torch.tensor([scale_value]), requires_grad=True)
         self.bias = nn.Parameter(torch.tensor([bias_value]), requires_grad=True)
@@ -81,7 +78,7 @@ class DFineResNetConvLayer(RTDetrResNetConvLayer):
         stride: int = 1,
         groups: int = 1,
         activation: str = "relu",
-        use_lab: bool = False
+        use_lab: bool = False,
     ):
         super().__init__(in_channels, out_channels, kernel_size, stride, activation)
         self.convolution = nn.Conv2d(
@@ -107,13 +104,7 @@ class DFineResNetConvLayer(RTDetrResNetConvLayer):
 
 
 class DFineResNetConvLayerLight(nn.Module):
-    def __init__(
-        self,
-        in_chs,
-        out_chs,
-        kernel_size,
-        use_lab=False
-    ):
+    def __init__(self, in_chs, out_chs, kernel_size, use_lab=False):
         super().__init__()
         self.conv1 = DFineResNetConvLayer(in_chs, out_chs, kernel_size=1, activation=None, use_lab=use_lab)
         self.conv2 = DFineResNetConvLayer(out_chs, out_chs, kernel_size=kernel_size, groups=out_chs, use_lab=use_lab)
@@ -154,7 +145,7 @@ class DFineResNetEmbeddings(nn.Module):
             kernel_size=3,
             stride=2,
             activation=config.hidden_act,
-            use_lab=config.use_lab
+            use_lab=config.use_lab,
         )
         self.stem2a = DFineResNetConvLayer(
             config.stem_channels[1],
@@ -162,7 +153,7 @@ class DFineResNetEmbeddings(nn.Module):
             kernel_size=2,
             stride=1,
             activation=config.hidden_act,
-            use_lab=config.use_lab
+            use_lab=config.use_lab,
         )
         self.stem2b = DFineResNetConvLayer(
             config.stem_channels[1] // 2,
@@ -170,7 +161,7 @@ class DFineResNetEmbeddings(nn.Module):
             kernel_size=2,
             stride=1,
             activation=config.hidden_act,
-            use_lab=config.use_lab
+            use_lab=config.use_lab,
         )
         self.stem3 = DFineResNetConvLayer(
             config.stem_channels[1] * 2,
@@ -178,7 +169,7 @@ class DFineResNetEmbeddings(nn.Module):
             kernel_size=3,
             stride=2,
             activation=config.hidden_act,
-            use_lab=config.use_lab
+            use_lab=config.use_lab,
         )
         self.stem4 = DFineResNetConvLayer(
             config.stem_channels[1],
@@ -186,7 +177,7 @@ class DFineResNetEmbeddings(nn.Module):
             kernel_size=1,
             stride=1,
             activation=config.hidden_act,
-            use_lab=config.use_lab
+            use_lab=config.use_lab,
         )
 
         self.pool = nn.MaxPool2d(kernel_size=2, stride=1, ceil_mode=True)
@@ -222,7 +213,7 @@ class DFineResNetBasicLayer(nn.Module):
         light_block=False,
         agg="ese",
         drop_path=0.0,
-        use_lab=False
+        use_lab=False,
     ):
         super().__init__()
         self.residual = residual
@@ -231,24 +222,26 @@ class DFineResNetBasicLayer(nn.Module):
         for i in range(layer_num):
             if light_block:
                 self.layers.append(
-                    DFineResNetConvLayerLight(in_chs if i == 0 else mid_chs, mid_chs, kernel_size=kernel_size, use_lab=use_lab)
+                    DFineResNetConvLayerLight(
+                        in_chs if i == 0 else mid_chs, mid_chs, kernel_size=kernel_size, use_lab=use_lab
+                    )
                 )
             else:
                 self.layers.append(
                     DFineResNetConvLayer(
-                        in_chs if i == 0 else mid_chs,
-                        mid_chs,
-                        kernel_size=kernel_size,
-                        stride=1,
-                        use_lab=use_lab
+                        in_chs if i == 0 else mid_chs, mid_chs, kernel_size=kernel_size, stride=1, use_lab=use_lab
                     )
                 )
 
         # feature aggregation
         total_chs = in_chs + layer_num * mid_chs
         if agg == "se":
-            aggregation_squeeze_conv = DFineResNetConvLayer(total_chs, out_chs // 2, kernel_size=1, stride=1, use_lab=use_lab)
-            aggregation_excitation_conv = DFineResNetConvLayer(out_chs // 2, out_chs, kernel_size=1, stride=1, use_lab=use_lab)
+            aggregation_squeeze_conv = DFineResNetConvLayer(
+                total_chs, out_chs // 2, kernel_size=1, stride=1, use_lab=use_lab
+            )
+            aggregation_excitation_conv = DFineResNetConvLayer(
+                out_chs // 2, out_chs, kernel_size=1, stride=1, use_lab=use_lab
+            )
             self.aggregation = nn.Sequential(
                 aggregation_squeeze_conv,
                 aggregation_excitation_conv,
@@ -288,12 +281,13 @@ class DFineResNetStage(nn.Module):
         kernel_size=3,
         agg="se",
         drop_path=0.0,
-        use_lab=False
+        use_lab=False,
     ):
         super().__init__()
         if downsample:
             self.downsample = DFineResNetConvLayer(
-                in_chs, in_chs, kernel_size=3, stride=2, groups=in_chs, activation=None)
+                in_chs, in_chs, kernel_size=3, stride=2, groups=in_chs, activation=None
+            )
         else:
             self.downsample = nn.Identity()
 
@@ -310,7 +304,7 @@ class DFineResNetStage(nn.Module):
                     light_block=light_block,
                     agg=agg,
                     drop_path=drop_path[i] if isinstance(drop_path, (list, tuple)) else drop_path,
-                    use_lab=use_lab
+                    use_lab=use_lab,
                 )
             )
         self.blocks = nn.Sequential(*blocks_list)
@@ -329,7 +323,15 @@ class DFineResNetEncoder(nn.Module):
             in_channels, mid_channels, out_channels, block_num, downsample, light_block, kernel_size, layer_num = stage
             self.stages.append(
                 DFineResNetStage(
-                    in_channels, mid_channels, out_channels, block_num, layer_num, downsample, light_block, kernel_size, use_lab=config.use_lab
+                    in_channels,
+                    mid_channels,
+                    out_channels,
+                    block_num,
+                    layer_num,
+                    downsample,
+                    light_block,
+                    kernel_size,
+                    use_lab=config.use_lab,
                 )
             )
 
@@ -339,12 +341,11 @@ class DFineResNetEncoder(nn.Module):
         hidden_states = () if output_hidden_states else None
 
         for stage in self.stages:
-
             if output_hidden_states:
                 hidden_states = hidden_states + (hidden_state,)
 
             hidden_state = stage(hidden_state)
-        
+
         if output_hidden_states:
             hidden_states = hidden_states + (hidden_state,)
 
@@ -355,6 +356,7 @@ class DFineResNetEncoder(nn.Module):
             last_hidden_state=hidden_state,
             hidden_states=hidden_states,
         )
+
 
 class DFineResNetBackbone(RTDetrResNetBackbone):
     def __init__(self, config: DFineResNetConfig):
