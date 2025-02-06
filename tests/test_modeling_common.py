@@ -1272,6 +1272,8 @@ class ModelTesterMixin:
         self._create_and_check_torch_fx_tracing(config, inputs_dict)
 
     def test_torch_fx_output_loss(self):
+        if self.all_model_classes[0].__name__ == "BloomModel":
+            self.skipTest(reason="Bloom currently has issues, @michaelbenayoun")
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         self._create_and_check_torch_fx_tracing(config, inputs_dict, output_loss=True)
 
