@@ -1450,7 +1450,7 @@ def _find_missing_and_unexpected_keys(
         expected_keys = hf_quantizer.update_expected_keys(model, expected_keys, original_loaded_keys)
 
     loaded_keys = _adjust_loaded_keys_prefix(
-        renamed_loaded_keys, loading_base_model_from_task_state_dict, loading_task_model_from_base_state_dict
+        renamed_loaded_keys, prefix, loading_base_model_from_task_state_dict, loading_task_model_from_base_state_dict
     )
 
     # Adjust prefix of the keys to make them match loaded keys before removing them
