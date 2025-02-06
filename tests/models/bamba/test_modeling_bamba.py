@@ -18,10 +18,19 @@ import inspect
 import unittest
 
 import pytest
+from pytest import mark
 
 from transformers import AutoTokenizer, BambaConfig, is_torch_available
+from transformers.modeling_flash_attention_utils import FlashAttentionKwargs
+from transformers.models.bamba.modular_bamba import (
+    get_cu_seq_lens_from_position_ids,
+    get_position_ids_from_cu_seq_lens,
+    get_seq_idx_from_cu_seq_lens,
+)
 from transformers.testing_utils import (
+    require_flash_attn,
     require_torch,
+    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -35,10 +44,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import (
-        BambaForCausalLM,
-        BambaModel,
-    )
+    from transformers import BambaForCausalLM, BambaModel
     from transformers.models.bamba.modeling_bamba import (
         HybridMambaAttentionDynamicCache,
     )
@@ -484,6 +490,87 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             # They should result in very similar logits
             torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5)
 
+    @require_flash_attn
+    @require_torch_gpu
+    @mark.flash_attn_test
+    def test_attn_mask_position_ids_flash_attn_equality(self):
+        r"""
+        Verify that the logits agree when using an attention mask, position_ids, or
+        FlashAttentionKwargs.
+        """
+        torch.manual_seed(42)
+        decoder_only_classes = []
+        for model_class in self.all_generative_model_classes:
+            config, _, _, _ = self.model_tester.prepare_config_and_inputs()
+            if config.is_encoder_decoder:
+                continue
+            else:
+                decoder_only_classes.append(model_class)
+        if len(decoder_only_classes) == 0:
+            self.skipTest(reason="No decoder-only architecture available for this model.")
+
+        # - Decoder-only architectures derived from encoder-decoder models could support it in theory, but we haven't
+        #   added support for it yet. We skip these models for now.
+        has_encoder_attributes = any(
+            attr_name
+            for attr_name in config.to_dict().keys()
+            if attr_name.startswith("encoder") and attr_name != "encoder_no_repeat_ngram_size"
+        )
+        if has_encoder_attributes:
+            self.skipTest(
+                reason="The decoder-only derived from encoder-decoder models are not expected to support left-padding."
+            )
+
+        for model_class in decoder_only_classes:
+            config, input_ids, input_mask, _ = self.model_tester.prepare_config_and_inputs()
+            # Padding-free requires training = True and attn_implementation="flash_attention_2"
+            model = (
+                model_class._from_config(config, attn_implementation="flash_attention_2", torch_dtype=torch.bfloat16)
+                .to(torch_device)
+                .train()
+            )
+
+            non_padding_free_inputs = {"input_ids": input_ids, "attention_mask": input_mask}
+            attn_mask_logits = model(**non_padding_free_inputs).logits
+
+            # Build up padding-free tensors
+            padding_free_input_ids = torch.cat(
+                [batch[mask.bool()] for batch, mask in zip(input_ids, input_mask)], dim=-1
+            )[None]
+            position_ids_list = [
+                torch.arange(mask.sum(), device=mask.device, dtype=torch.int32) for mask in input_mask
+            ]
+            position_ids = torch.cat(position_ids_list, dim=-1)[None]
+            seq_lens = torch.cat(
+                [torch.tensor([t.numel()], device=input_mask.device, dtype=torch.int32) for t in position_ids_list],
+                dim=-1,
+            )
+            cu_seq_lens = torch.cat(
+                [
+                    torch.tensor([0], device=input_mask.device, dtype=torch.int32),
+                    seq_lens.cumsum(dim=-1, dtype=torch.int32),
+                ],
+                dim=-1,
+            )
+
+            position_ids_inputs = {"input_ids": padding_free_input_ids, "position_ids": position_ids}
+            position_ids_logits = model(**position_ids_inputs).logits
+
+            flash_attn_kwargs = FlashAttentionKwargs(
+                cu_seq_lens_q=cu_seq_lens,
+                cu_seq_lens_k=cu_seq_lens,
+                max_length_q=seq_lens.max(),
+                max_length_k=seq_lens.max(),
+            )
+            flash_attn_kwargs_logits = model(input_ids=padding_free_input_ids, **flash_attn_kwargs).logits
+
+            attn_mask_logits_reshaped = torch.cat(
+                [batch[mask.bool()] for batch, mask in zip(attn_mask_logits, input_mask)], dim=0
+            )[None]
+
+            torch.testing.assert_close(position_ids_logits, attn_mask_logits_reshaped)
+            torch.testing.assert_close(position_ids_logits, flash_attn_kwargs_logits)
+
 
 @slow
 @require_torch
@@ -595,3 +682,67 @@ class BambaModelIntegrationTest(unittest.TestCase):
 
             torch.testing.assert_close(logits[0, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_0, rtol=1e-3, atol=1)
             torch.testing.assert_close(logits[1, -1, :40].cpu(), EXPECTED_LOGITS_NO_GRAD_1, rtol=1e-3, atol=1)
+
+
+def test_cu_seq_lens_from_position_ids() -> None:
+    seq_length = 256
+    chunks_per_batch = 4
+
+    # Split each batch into `chunks_per_batch` sequences.
+    eos_idxs = torch.randperm(seq_length)[: chunks_per_batch - 1].sort(dim=-1).values
+    seq_lens = torch.cat((torch.full((1,), -1), eos_idxs, torch.full((1,), seq_length - 1)), dim=-1).diff(dim=-1)
+
+    # Create the corresponding position_ids and seq_idx
+    position_ids = torch.cat(
+        [torch.arange(s, dtype=torch.int32) for s in seq_lens],
+        dim=0,
+    )[None]
+
+    cu_seq_lens_pred = get_cu_seq_lens_from_position_ids(position_ids)
+    assert torch.allclose(
+        cu_seq_lens_pred,
+        torch.cat([torch.tensor([0], dtype=seq_lens.dtype, device=seq_lens.device), seq_lens.cumsum(dim=-1)], dim=-1),
+    )
+
+
+def test_seq_idx_from_cu_seq_lens() -> None:
+    n_chunks = 5
+    max_chunk_len = 64
+
+    seq_lens = torch.randint(1, max_chunk_len, size=(n_chunks,))
+    cu_seq_lens = torch.cat([torch.tensor([0]), seq_lens.cumsum(dim=-1)], dim=-1)
+    seq_idx = torch.cat(
+        [
+            torch.full(
+                (n,),
+                idx,
+                dtype=torch.int32,
+                device=cu_seq_lens.device,
+            )
+            for idx, n in enumerate(seq_lens)
+        ],
+        dim=-1,
+    )[None]
+    seq_idx_pred = get_seq_idx_from_cu_seq_lens(cu_seq_lens)
+    assert torch.allclose(seq_idx_pred, seq_idx)
+
+
+def test_pos_ids_from_cu_seq_lens() -> None:
+    n_chunks = 5
+    max_chunk_len = 64
+
+    seq_lens = torch.randint(1, max_chunk_len, size=(n_chunks,))
+    cu_seq_lens = torch.cat([torch.tensor([0]), seq_lens.cumsum(dim=-1)], dim=-1)
+    pos_ids = torch.cat(
+        [
+            torch.arange(
+                s,
+                dtype=torch.int32,
+                device=cu_seq_lens.device,
+            )
+            for s in cu_seq_lens.diff(dim=-1)
+        ],
+        dim=-1,
+    )[None]
+    pos_ids_pred = get_position_ids_from_cu_seq_lens(cu_seq_lens)
+    assert torch.allclose(pos_ids_pred, pos_ids)
