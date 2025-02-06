@@ -35,6 +35,7 @@ from ...pytorch_utils import (
 from ...utils import add_start_docstrings, logging
 from .configuration_style_text_to_speech_2 import StyleTextToSpeech2Config, StyleTextToSpeech2AcousticTextEncoderConfig, StyleTextToSpeech2ProsodicTextEncoderConfig, StyleTextToSpeech2DurationEncoderConfig, StyleTextToSpeech2DurationPredictorConfig, StyleTextToSpeech2ProsodyPredictorConfig, StyleTextToSpeech2DecoderConfig
 from ..albert.modeling_albert import AlbertModel, AlbertConfig
+from ..auto import AutoModel
 
 
 logger = logging.get_logger(__name__)
@@ -176,15 +177,7 @@ class StyleTextToSpeech2ProsodicTextEncoder(StyleTextToSpeech2PretrainedModel):
 
     def __init__(self, config):
         super().__init__(config)
-        bert_config = AlbertConfig(
-            vocab_size=config.vocab_size,
-            hidden_size=config.bert_hidden_size,
-            num_attention_heads=config.num_attention_heads,
-            intermediate_size=config.intermediate_size,
-            max_position_embeddings=config.max_position_embeddings,
-            dropout=config.dropout,
-        )
-        self.bert_model = AlbertModel(bert_config)
+        self.bert_model = AutoModel.from_config(config.bert_config)
         self.proj_out = nn.Linear(config.bert_hidden_size, config.hidden_size)
 
     def forward(self, input_ids, attention_mask=None):
@@ -205,23 +198,7 @@ class StyleTextToSpeech2AdaLayerNorm(nn.Module):
         hidden_states = F.layer_norm(hidden_states, (self.hidden_size,))
         hidden_states = (1 + gamma) * hidden_states + beta
         return hidden_states
-    
-
-class StyleTextToSpeech2AdaLayerNorm1d(nn.Module):
-    def __init__(self, hidden_size, style_size):
-        super().__init__()
-        self.hidden_size = hidden_size
-        self.style_size = style_size
-        self.proj = nn.Linear(style_size, hidden_size*2)
-        self.norm = nn.InstanceNorm1d(hidden_size, affine=False)
-
-    def forward(self, hidden_states, style):
-        hidden_style = self.proj(style)
-        gamma, beta = torch.chunk(hidden_style, chunks=2, dim=-1)
-        hidden_states = self.norm(hidden_states.transpose(1, -1)).transpose(1, -1)
-        hidden_states = (1 + gamma) * hidden_states + beta
-        return hidden_states
- 
+     
 
 class StyleTextToSpeech2DurationEncoderLayer(nn.Module):
     def __init__(self, config):
@@ -293,7 +270,23 @@ class StyleTextToSpeech2DurationPredictor(StyleTextToSpeech2PretrainedModel):
     def forward(self, hidden_states):
         hidden_states, _ = self.lstm(hidden_states)
         return self.duration_proj(hidden_states)
-    
+
+
+class StyleTextToSpeech2AdaLayerNorm1d(nn.Module):
+    def __init__(self, hidden_size, style_size):
+        super().__init__()
+        self.hidden_size = hidden_size
+        self.style_size = style_size
+        self.proj = nn.Linear(style_size, hidden_size*2)
+        self.norm = nn.InstanceNorm1d(hidden_size, affine=False)
+
+    def forward(self, hidden_states, style):
+        hidden_style = self.proj(style)
+        gamma, beta = torch.chunk(hidden_style, chunks=2, dim=-1)
+        hidden_states = self.norm(hidden_states.transpose(1, -1)).transpose(1, -1)
+        hidden_states = (1 + gamma) * hidden_states + beta
+        return hidden_states
+
 
 class StyleTextToSpeech2AdainResBlockLayer(nn.Module):
     def __init__(self, channels, style_size, kernel_size, dilation):
@@ -337,7 +330,7 @@ class StyleTextToSpeech2AdainResBlock(nn.Module):
         for layer in self.layers:
             hidden_states = layer(hidden_states, style)
         return hidden_states
-        
+
 
 class StyleTextToSpeech2AdainResBlock1d(nn.Module):
     def __init__(self, hidden_size_in, hidden_size_out, style_size, upsample=False, learned_shortcut=False, dropout_p=0.0):
