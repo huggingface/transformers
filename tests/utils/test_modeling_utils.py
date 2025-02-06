@@ -319,6 +319,12 @@ def check_models_equal(model1, model2):
 
 @require_torch
 class ModelUtilsTest(TestCasePlus):
+    def setUp(self):
+        self.old_dtype = torch.get_default_dtype()
+
+    def tearDown(self):
+        torch.set_default_dtype(self.old_dtype)
+
     @slow
     def test_model_from_pretrained(self):
         model_name = "google-bert/bert-base-uncased"
@@ -1836,8 +1842,6 @@ class ModelUtilsTest(TestCasePlus):
             original_set_default_torch_dtype(*args, **kwargs)
             raise RuntimeError
 
-        AutoModelForCausalLM._set_default_torch_dtype = debug
-
         with mock.patch(
             "transformers.models.mistral.modeling_mistral.MistralForCausalLM._set_default_torch_dtype",
             side_effect=debug,
@@ -1868,8 +1872,6 @@ class ModelUtilsTest(TestCasePlus):
             # call the method as usual, than raise a RuntimeError
             original_set_default_torch_dtype(*args, **kwargs)
             raise RuntimeError
-
-        AutoModelForCausalLM._set_default_torch_dtype = debug
 
         with mock.patch(
             "transformers.models.mistral.modeling_mistral.MistralForCausalLM._set_default_torch_dtype",
