@@ -110,6 +110,7 @@ class DFineResNetConfig(BackboneConfigMixin, PretrainedConfig):
         out_indices=None,
         stem_channels=[3, 32, 48],
         stage_config=DFineResNetStageConfig(),
+        use_lab=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -129,6 +130,7 @@ class DFineResNetConfig(BackboneConfigMixin, PretrainedConfig):
         )
         self.stem_channels = stem_channels
         self.stage_config = stage_config
+        self.use_lab = use_lab
 
 
 __all__ = ["DFineResNetConfig", "DFineResNetStageConfig"]

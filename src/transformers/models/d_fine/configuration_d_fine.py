@@ -253,6 +253,7 @@ class DFineConfig(PretrainedConfig):
         layer_scale=1,
         reg_max=32,
         reg_scale=4.0,
+        depth_mult=1.0,
         **kwargs,
     ):
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
@@ -350,6 +351,7 @@ class DFineConfig(PretrainedConfig):
         self.layer_scale = layer_scale
         self.reg_max = reg_max
         self.reg_scale = reg_scale
+        self.depth_mult = depth_mult
 
     @property
     def num_attention_heads(self) -> int:
