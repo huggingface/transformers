@@ -494,6 +494,7 @@ _import_structure = {
     "models.gptj": ["GPTJConfig"],
     "models.granite": ["GraniteConfig"],
     "models.granitemoe": ["GraniteMoeConfig"],
+    "models.granitemoeshared": ["GraniteMoeSharedConfig"],
     "models.grounding_dino": [
         "GroundingDinoConfig",
         "GroundingDinoProcessor",
@@ -2527,6 +2528,14 @@ else:
             "GraniteMoePreTrainedModel",
         ]
     )
+    _import_structure["models.granitemoeshared"].extend(
+        [
+            "GraniteMoeSharedForCausalLM",
+            "GraniteMoeSharedModel",
+            "GraniteMoeSharedPreTrainedModel",
+        ]
+    )
+
     _import_structure["models.grounding_dino"].extend(
         [
             "GroundingDinoForObjectDetection",
