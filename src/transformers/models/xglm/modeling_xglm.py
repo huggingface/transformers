@@ -811,6 +811,7 @@ class XGLMForCausalLM(XGLMPreTrainedModel, GenerationMixin):
                 logits,
                 labels,
                 vocab_size=self.config.vocab_size,
+                pad_token_id=self.config.pad_token_id,
                 **kwargs,
             )
 
