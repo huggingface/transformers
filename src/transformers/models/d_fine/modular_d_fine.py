@@ -43,7 +43,14 @@ class DFineConfig(RTDetrConfig):
     model_type = "d-fine"
 
     def __init__(
-        self, decoder_offset_scale=0.5, eval_idx=-1, layer_scale=1, reg_max=32, reg_scale=4., **super_kwargs
+        self, 
+        decoder_offset_scale=0.5, 
+        eval_idx=-1, 
+        layer_scale=1, 
+        reg_max=32, 
+        reg_scale=4.,
+        depth_mult=1.,
+         **super_kwargs
     ):
         super().__init__(**super_kwargs)
 
@@ -52,6 +59,7 @@ class DFineConfig(RTDetrConfig):
         self.layer_scale = layer_scale
         self.reg_max = reg_max
         self.reg_scale = reg_scale
+        self.depth_mult = depth_mult
 
 
 def deformable_attention_core_func_v2(
@@ -554,22 +562,27 @@ class DFineModel(RTDetrModel):
         self.encoder = DFineHybridEncoder(config=config)
         num_backbone_outs = len(config.decoder_in_channels)
         decoder_input_proj = []
+        in_channels = config.decoder_in_channels[-1]
         for _ in range(num_backbone_outs):
-            in_channels = config.decoder_in_channels[_]
-            decoder_input_proj.append(
-                nn.Sequential(
-                    nn.Conv2d(config.encoder_hidden_dim, in_channels, kernel_size=1, bias=False),
-                    nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
+            if config.hidden_size == config.decoder_in_channels[-1]:
+                decoder_input_proj.append(nn.Identity())
+            else:
+                decoder_input_proj.append(
+                    nn.Sequential(
+                        nn.Conv2d(in_channels, config.d_model, kernel_size=1, bias=False),
+                        nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
+                    )
                 )
-            )
         for _ in range(config.num_feature_levels - num_backbone_outs):
-            decoder_input_proj.append(
-                nn.Sequential(
-                    nn.Conv2d(config.encoder_hidden_dim, in_channels, kernel_size=3, stride=2, padding=1, bias=False),
-                    nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
+            if config.hidden_size == config.decoder_in_channels[-1]:
+                decoder_input_proj.append(nn.Identity())
+            else:
+                decoder_input_proj.append(
+                    nn.Sequential(
+                        nn.Conv2d(in_channels, config.d_model, kernel_size=3, stride=2, padding=1, bias=False),
+                        nn.BatchNorm2d(config.d_model, config.batch_norm_eps),
+                    )
                 )
-            )
-            in_channels = config.d_model
         self.decoder_input_proj = nn.ModuleList(decoder_input_proj)
         self.decoder = DFineDecoder(config)
 
@@ -737,11 +750,10 @@ class DFineCSPRepLayer(nn.Module):
     Cross Stage Partial (CSP) network layer with RepVGG blocks.
     """
 
-    def __init__(self, config: DFineConfig, in_channels: int, out_channels: int):
+    def __init__(self, config: DFineConfig, in_channels: int, out_channels: int, num_blocks: int):
         super().__init__()
         in_channels = in_channels
         out_channels = out_channels
-        num_blocks = 3
         activation = config.activation_function
 
         hidden_channels = int(out_channels * config.hidden_expansion)
@@ -765,7 +777,7 @@ class DFineCSPRepLayer(nn.Module):
 
 class RepNCSPELAN4(nn.Module):
     # csp-elan
-    def __init__(self, config: DFineConfig, act="silu"):
+    def __init__(self, config: DFineConfig, act="silu", numb_blocks=3):
         super().__init__()
         c1 = config.encoder_hidden_dim * 2
         c2 = config.encoder_hidden_dim
@@ -774,10 +786,10 @@ class RepNCSPELAN4(nn.Module):
         self.c = c3 // 2
         self.cv1 = DFineConvNormLayer(config, c1, c3, 1, 1, activation=act)
         self.cv2 = nn.Sequential(
-            DFineCSPRepLayer(config, c3 // 2, c4), DFineConvNormLayer(config, c4, c4, 3, 1, activation=act)
+            DFineCSPRepLayer(config, c3 // 2, c4, num_blocks=numb_blocks), DFineConvNormLayer(config, c4, c4, 3, 1, activation=act)
         )
         self.cv3 = nn.Sequential(
-            DFineCSPRepLayer(config, c4, c4), DFineConvNormLayer(config, c4, c4, 3, 1, activation=act)
+            DFineCSPRepLayer(config, c4, c4, num_blocks=numb_blocks), DFineConvNormLayer(config, c4, c4, 3, 1, activation=act)
         )
         self.cv4 = DFineConvNormLayer(config, c3 + (2 * c4), c2, 1, 1, activation=act)
 
@@ -828,7 +840,7 @@ class DFineHybridEncoder(RTDetrHybridEncoder):
             self.lateral_convs.append(
                 DFineConvNormLayer(config, self.encoder_hidden_dim, self.encoder_hidden_dim, 1, 1)
             )
-            self.fpn_blocks.append(RepNCSPELAN4(config))
+            self.fpn_blocks.append(RepNCSPELAN4(config, numb_blocks=round(3 * config.depth_mult)))
 
         # bottom-up pan
         self.downsample_convs = nn.ModuleList()
@@ -839,7 +851,7 @@ class DFineHybridEncoder(RTDetrHybridEncoder):
                     SCDown(config, self.encoder_hidden_dim, self.encoder_hidden_dim, 3, 2),
                 )
             )
-            self.pan_blocks.append(RepNCSPELAN4(config))
+            self.pan_blocks.append(RepNCSPELAN4(config, numb_blocks=round(3 * config.depth_mult)))
 
 
 __all__ = [
