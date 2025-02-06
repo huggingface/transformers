@@ -14,9 +14,10 @@
 # limitations under the License.
 
 from typing import Dict
-
+import copy
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
+from ..auto import CONFIG_MAPPING
 
 
 logger = logging.get_logger(__name__)
@@ -62,19 +63,29 @@ class StyleTextToSpeech2ProsodicTextEncoderConfig(StyleTextToSpeech2SubModelConf
 
     def __init__(
         self,
+        sub_model_type="albert",
+        bert_vocab_size=178,
         bert_hidden_size=768,
-        num_hidden_layers=12,
         num_attention_heads=12,
         intermediate_size=2048,
         max_position_embeddings=512,
         dropout=0.1,
+        bert_config=None,
         **kwargs
     ):
+        if bert_config is None:
+            self.bert_config = CONFIG_MAPPING[sub_model_type](
+                vocab_size = bert_vocab_size,
+                hidden_size = bert_hidden_size,
+                num_attention_heads = num_attention_heads,
+                intermediate_size = intermediate_size,
+                max_position_embeddings = max_position_embeddings,
+                dropout = dropout,
+            )
+        else:
+            self.bert_config = CONFIG_MAPPING[sub_model_type](**bert_config)
+    
         self.bert_hidden_size = bert_hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.intermediate_size = intermediate_size
-        self.max_position_embeddings = max_position_embeddings
         self.dropout = dropout
 
         super().__init__(**kwargs)
