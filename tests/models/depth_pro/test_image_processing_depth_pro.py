@@ -16,7 +16,7 @@
 
 import unittest
 
-from transformers.testing_utils import require_torch, require_vision
+from transformers.testing_utils import is_flaky, require_torch, require_vision
 from transformers.utils import is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
@@ -116,3 +116,9 @@ class DepthProImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase):
 
         image_processor = self.image_processing_class.from_dict(self.image_processor_dict, size=42)
         self.assertEqual(image_processor.size, {"height": 42, "width": 42})
+
+    @is_flaky(
+        description="fast and slow, both processors use torch implementation, see: https://github.com/huggingface/transformers/issues/34920",
+    )
+    def test_fast_is_faster_than_slow(self):
+        super().test_fast_is_faster_than_slow()
