@@ -689,7 +689,7 @@ class XGLMModel(XGLMPreTrainedModel):
         )
 
 
-def XGLMCrossEntropyLoss(
+def xglm_cross_entropy_loss(
     logits,
     labels,
     num_items_in_batch: int = None,
@@ -735,7 +735,7 @@ class XGLMForCausalLM(XGLMPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-        self._loss_function = XGLMCrossEntropyLoss
+        self._loss_function = xglm_cross_entropy_loss
 
     def get_input_embeddings(self):
         return self.model.embed_tokens
