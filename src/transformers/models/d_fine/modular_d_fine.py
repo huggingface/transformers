@@ -719,7 +719,7 @@ class DFineConvNormLayer(RTDetrConvNormLayer):
     def __init__(
         self, config, in_channels, out_channels, kernel_size, stride, groups=1, padding=None, activation=None
     ):
-        super().__init__(config, in_channels, out_channels, kernel_size, stride, padding=None, activation=None)
+        super().__init__(config, in_channels, out_channels, kernel_size, stride, padding=None, activation=activation)
         self.conv = nn.Conv2d(
             in_channels,
             out_channels,
@@ -750,13 +750,13 @@ class DFineCSPRepLayer(nn.Module):
     Cross Stage Partial (CSP) network layer with RepVGG blocks.
     """
 
-    def __init__(self, config: DFineConfig, in_channels: int, out_channels: int, num_blocks: int):
+    def __init__(self, config: DFineConfig, in_channels: int, out_channels: int, num_blocks: int, expansion = 1.0):
         super().__init__()
         in_channels = in_channels
         out_channels = out_channels
         activation = config.activation_function
 
-        hidden_channels = int(out_channels * config.hidden_expansion)
+        hidden_channels = int(out_channels * expansion)
         self.conv1 = DFineConvNormLayer(config, in_channels, hidden_channels, 1, 1, activation=activation)
         self.conv2 = DFineConvNormLayer(config, in_channels, hidden_channels, 1, 1, activation=activation)
         self.bottlenecks = nn.Sequential(
