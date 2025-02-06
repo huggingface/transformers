@@ -184,6 +184,8 @@ class OptimizerNames(ExplicitEnum):
     GROKADAMW = "grokadamw"
     SCHEDULE_FREE_ADAMW = "schedule_free_adamw"
     SCHEDULE_FREE_SGD = "schedule_free_sgd"
+    APOLLO_ADAMW = "apollo_adamw"
+    APOLLO_ADAMW_LAYERWISE = "apollo_adamw_layerwise"
 
 
 # Sometimes users will pass in a `str` repr of a dict in the CLI
