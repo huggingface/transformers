@@ -1120,19 +1120,25 @@ def get_model_param_count(model, trainable_only=False):
     return sum(numel(p) for p in model.parameters() if not trainable_only or p.requires_grad)
 
 
-def get_parameter_names(model, forbidden_layer_types):
+def get_parameter_names(model, forbidden_layer_types, forbidden_layer_names=None):
     """
     Returns the names of the model parameters that are not inside a forbidden layer.
     """
+    if forbidden_layer_names is None:
+        forbidden_layer_names = []
     result = []
     for name, child in model.named_children():
+        child_params = get_parameter_names(child, forbidden_layer_types, forbidden_layer_names)
         result += [
             f"{name}.{n}"
-            for n in get_parameter_names(child, forbidden_layer_types)
+            for n in child_params
             if not isinstance(child, tuple(forbidden_layer_types))
+            and not any(forbidden in f"{name}.{n}".lower() for forbidden in forbidden_layer_names)
         ]
-    # Add model specific parameters (defined with nn.Parameter) since they are not in any child.
-    result += list(model._parameters.keys())
+    # Add model specific parameters that are not in any child
+    result += [
+        k for k in model._parameters.keys() if not any(forbidden in k.lower() for forbidden in forbidden_layer_names)
+    ]
     return result
 
 
@@ -1390,3 +1396,17 @@ class LayerWiseDummyScheduler(LRScheduler):
 
     def _get_closed_form_lr(self):
         return self.base_lrs
+
+
+def set_rng_state_for_device(device_name, device_module, checkpoint_rng_state, is_distributed):
+    """Helper to set RNG state for a specific device type (CUDA, NPU, MLU, MUSA)"""
+    device_state_key = device_name.lower()
+    err_template = "Didn't manage to set back the RNG states of the {backend} because of the following error:\n {exception}\nThis won't yield the same results as if the training had not been interrupted."
+    try:
+        if is_distributed:
+            device_module.random.set_rng_state_all(checkpoint_rng_state[device_state_key])
+        else:
+            device_module.random.set_rng_state(checkpoint_rng_state[device_state_key])
+    except Exception as e:
+        # Log error if setting RNG state fails
+        logger.error(err_template.format(backend=device_name, exception=e))
