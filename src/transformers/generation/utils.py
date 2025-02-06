@@ -410,16 +410,12 @@ class GenerationMixin:
             model_inputs[input_ids_key] = input_ids.clone(memory_format=torch.contiguous_format)
 
         # 4. Create missing `position_ids` on the fly
-        if self.config.is_encoder_decoder:
-            # `attention_mask` applies to the encoder
-            encoder_attention_mask = attention_mask
-            attention_mask = kwargs.pop("decoder_attention_mask", None)
-            attention_mask_key = "decoder_attention_mask"
-            position_ids_key = "decoder_position_ids"
-        else:
-            attention_mask_key = "attention_mask"
-            position_ids_key = "position_ids"
-
+        encoder_attention_mask = attention_mask if self.config.is_encoder_decoder else None
+        attention_mask = (
+            kwargs.pop("decoder_attention_mask", None) if self.config.is_encoder_decoder else attention_mask
+        )
+        attention_mask_key = "decoder_attention_mask" if self.config.is_encoder_decoder else "attention_mask"
+        position_ids_key = "decoder_position_ids" if self.config.is_encoder_decoder else "position_ids"
         if (
             attention_mask is not None
             and kwargs.get(position_ids_key) is None
