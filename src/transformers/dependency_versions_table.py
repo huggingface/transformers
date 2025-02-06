@@ -4,7 +4,7 @@
 deps = {
     "Pillow": "Pillow>=10.0.1,<=15.0",
     "accelerate": "accelerate>=0.26.0",
-    "av": "av==9.2.0",
+    "av": "av",
     "beautifulsoup4": "beautifulsoup4",
     "blobfile": "blobfile",
     "codecarbon": "codecarbon>=2.8.1",

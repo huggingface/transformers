@@ -450,6 +450,10 @@ class GPTBigCodeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_past_key_values_format(self):
         pass
 
+    @unittest.skip(reason="BigCodeGPT has a non-standard KV cache format and breaks this test.")
+    def test_generate_continue_from_inputs_embeds(self):
+        pass
+
     def test_gpt_bigcode_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_gpt_bigcode_model(*config_and_inputs)
@@ -589,4 +593,4 @@ class GPTBigCodeMQATest(unittest.TestCase):
         attention_mqa_result = attention_mqa(hidden_states)[0]
 
         # CHECK THAT ALL OUTPUTS ARE THE SAME
-        self.assertTrue(torch.allclose(attention_mha_result, attention_mqa_result, atol=1e-5))
+        torch.testing.assert_close(attention_mha_result, attention_mqa_result, rtol=1e-5, atol=1e-5)

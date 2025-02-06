@@ -48,6 +48,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.deprecation import deprecate_kwarg
 from ..auto.modeling_auto import AutoModel
 from .configuration_moshi import MoshiConfig, MoshiDepthConfig
 
@@ -338,6 +339,9 @@ class MoshiRotaryEmbedding(nn.Module):
             self.max_seq_len_cached = seq_len
 
         if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
+            # This .to() is needed if the model has been moved to a device after being initialized (because
+            # the buffer is automatically moved, but not the original copy)
+            self.original_inv_freq = self.original_inv_freq.to(device)
             self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
             self.max_seq_len_cached = self.original_max_seq_len
 
@@ -1359,7 +1363,7 @@ class MoshiDepthDecoder(MoshiPreTrainedModel, GenerationMixin):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type == "cuda"
+            and attention_mask.device.type in ["cuda", "xpu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
@@ -1671,7 +1675,7 @@ class MoshiModel(MoshiPreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type == "cuda"
+            and attention_mask.device.type in ["cuda", "xpu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
@@ -1785,6 +1789,7 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.model
 
+    @deprecate_kwarg("num_logits_to_keep", version="4.50", new_name="logits_to_keep")
     @add_start_docstrings_to_model_forward(MOSHI_DECODER_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=MoshiCausalLMOutputWithPast, config_class=_CONFIG_FOR_DOC)
     def forward(
@@ -1800,7 +1805,7 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         labels: Optional[torch.LongTensor] = None,
-        num_logits_to_keep: int = 0,
+        logits_to_keep: Union[int, torch.Tensor] = 0,
     ) -> Union[Tuple, MoshiCausalLMOutputWithPast]:
         r"""
         Args:
@@ -1809,10 +1814,12 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
                 config.vocab_size]` or -100 (see `input_ids` docstring). Tokens with indices set to `-100` are ignored
                 (masked), the loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`.
 
-            num_logits_to_keep (`int`, *optional*):
-                Calculate logits for the last `num_logits_to_keep` tokens. If `0`, calculate logits for all
+            logits_to_keep (`int` or `torch.Tensor`, *optional*):
+                If an `int`, compute logits for the last `logits_to_keep` tokens. If `0`, calculate logits for all
                 `input_ids` (special case). Only last token logits are needed for generation, and calculating them only for that
                 token can save memory, which becomes pretty significant for long sequences or large vocabulary size.
+                If a `torch.Tensor`, must be 1D corresponding to the indices to keep in the sequence length dimension.
+                This is useful when using packed tensor format (single dimension for batch and sequence length).
 
         Returns:
 
@@ -1858,7 +1865,8 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
                 "Starting from v4.46, the `logits` model output will have the same type as the model (except at train time, where it will always be FP32)"
             )
         # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :])
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
@@ -1893,8 +1901,7 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
 
 
 @add_start_docstrings(
-    "The original Moshi model with an audio encoder, a Moshi depth decoder and a Moshi decoder, "
-    "for speech-to-speech.",
+    "The original Moshi model with an audio encoder, a Moshi depth decoder and a Moshi decoder, for speech-to-speech.",
     MOSHI_START_DOCSTRING,
 )
 class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
@@ -1911,12 +1918,9 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         self.embed_tokens = nn.ModuleList(
             [nn.Embedding(config.audio_vocab_size + 1, config.hidden_size) for _ in range(2 * config.num_codebooks)]
         )
-        self.audio_encoder = AutoModel.from_config(
-            config.audio_encoder_config, attn_implementation=config._attn_implementation
-        )
+        self.audio_encoder = AutoModel.from_config(config.audio_encoder_config)
         self.decoder = MoshiForCausalLM(config)
 
-        config.depth_decoder_config._attn_implementation_internal = config._attn_implementation
         self.depth_decoder = MoshiDepthDecoder(config.depth_decoder_config)
 
         self.num_codebooks = config.num_codebooks
@@ -2446,25 +2450,64 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         cache_position=None,
         position_ids=None,
         use_cache=True,
-        num_logits_to_keep=None,
+        logits_to_keep=None,
         user_delay_pattern_mask=None,
         moshi_delay_pattern_mask=None,
         kwargs_depth_decoder=None,
         blank_user_audio_codes: Optional[torch.FloatTensor] = None,
         **kwargs,
     ):
-        # Overwritten -- Moshi has custom post-processing
-        # 1. Do usual operations done on LLMs like Gemma - because we pre-processed inputs, the first pass always has inputs_embeds
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids=input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
-            position_ids=position_ids,
-            use_cache=use_cache,
-            num_logits_to_keep=num_logits_to_keep,
-            **kwargs,
+        # Overwritten -- Moshi has custom post-processing on the prepared inputs.
+
+        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
+        # Exception 1: when passing input_embeds, input_ids may be missing entries
+        # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
+        # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
+        # (we can't check exception 3 while compiling)
+
+        if past_key_values is not None:
+            if (
+                inputs_embeds is not None  # Exception 1
+                or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
+            ):
+                input_ids = input_ids[:, -cache_position.shape[0] :]
+            elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
+                input_ids = input_ids[:, cache_position]
+
+        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
+        if inputs_embeds is not None and cache_position[0] == 0:
+            model_inputs = {"inputs_embeds": inputs_embeds, "input_ids": None}
+        else:
+            model_inputs = {"input_ids": input_ids, "inputs_embeds": None}
+
+        if isinstance(past_key_values, StaticCache) and attention_mask.ndim == 2:
+            if model_inputs["inputs_embeds"] is not None:
+                batch_size, sequence_length, _ = inputs_embeds.shape
+                device = inputs_embeds.device
+            else:
+                batch_size, sequence_length = input_ids.shape
+                device = input_ids.device
+
+            attention_mask = self.model._prepare_4d_causal_attention_mask_with_cache_position(
+                attention_mask,
+                sequence_length=sequence_length,
+                target_length=past_key_values.get_max_cache_shape(),
+                dtype=self.lm_head.weight.dtype,
+                device=device,
+                cache_position=cache_position,
+                batch_size=batch_size,
+                config=self.config,
+                past_key_values=past_key_values,
+            )
+
+        model_inputs.update(
+            {
+                "position_ids": position_ids,
+                "past_key_values": past_key_values,
+                "use_cache": use_cache,
+                "attention_mask": attention_mask,
+                "cache_position": cache_position,
+            }
         )
 
         # 2. Now that everything is prepared, generate audio_codes using the depth decoder
