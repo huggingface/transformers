@@ -5439,6 +5439,7 @@ if TYPE_CHECKING:
         CTRLTokenizer,
     )
     from .models.cvt import CvtConfig
+    from .models.d_fine import DFineConfig, DFineResNetConfig, DFineResNetStageConfig
     from .models.dab_detr import (
         DabDetrConfig,
     )
@@ -5531,7 +5532,6 @@ if TYPE_CHECKING:
     )
     from .models.depth_anything import DepthAnythingConfig
     from .models.depth_pro import DepthProConfig
-    from .models.d_fine import DFineConfig, DFineResNetConfig, DFineResNetStageConfig
     from .models.detr import DetrConfig
     from .models.diffllama import DiffLlamaConfig
     from .models.dinat import DinatConfig
@@ -6996,6 +6996,11 @@ if TYPE_CHECKING:
             CvtModel,
             CvtPreTrainedModel,
         )
+        from .models.d_fine import (
+            DFineForObjectDetection,
+            DFineModel,
+            DFinePreTrainedModel,
+        )
         from .models.dab_detr import (
             DabDetrForObjectDetection,
             DabDetrModel,
@@ -7220,11 +7225,6 @@ if TYPE_CHECKING:
             DepthProForDepthEstimation,
             DepthProModel,
             DepthProPreTrainedModel,
-        )
-        from .models.d_fine import (
-            DFineForObjectDetection,
-            DFineModel,
-            DFinePreTrainedModel,
         )
         from .models.detr import (
             DetrForObjectDetection,

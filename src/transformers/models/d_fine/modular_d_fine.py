@@ -12,45 +12,46 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ..rt_detr.configuration_rt_detr import RTDetrConfig
-from ..rt_detr.modeling_rt_detr import (
-    RTDetrDecoderLayer,
-    RTDetrDecoder,
-    RTDetrModel,
-    RTDetrMLPPredictionHead,
-    RTDetrDecoderOutput,
-    RTDetrEncoder,
-    RTDetrHybridEncoder,
-    RTDetrRepVggBlock,
-    RTDetrConvNormLayer,
-    RTDetrPreTrainedModel,
-    RTDetrConvEncoder,
-    RTDetrForObjectDetection,
-    inverse_sigmoid,
-)
-
-import torch
-from torch import nn
-import torch.nn.init as init
-import torch.nn.functional as F
+import functools
 import math
 from typing import List, Optional
-import functools
+
+import torch
+import torch.nn.functional as F
+import torch.nn.init as init
+from torch import nn
+
 from ...activations import ACT2CLS
+from ..rt_detr.configuration_rt_detr import RTDetrConfig
+from ..rt_detr.modeling_rt_detr import (
+    RTDetrConvEncoder,
+    RTDetrConvNormLayer,
+    RTDetrDecoder,
+    RTDetrDecoderLayer,
+    RTDetrDecoderOutput,
+    RTDetrEncoder,
+    RTDetrForObjectDetection,
+    RTDetrHybridEncoder,
+    RTDetrMLPPredictionHead,
+    RTDetrModel,
+    RTDetrPreTrainedModel,
+    RTDetrRepVggBlock,
+    inverse_sigmoid,
+)
 
 
 class DFineConfig(RTDetrConfig):
     model_type = "d-fine"
 
     def __init__(
-        self, 
-        decoder_offset_scale=0.5, 
-        eval_idx=-1, 
-        layer_scale=1, 
-        reg_max=32, 
-        reg_scale=4.,
-        depth_mult=1.,
-         **super_kwargs
+        self,
+        decoder_offset_scale=0.5,
+        eval_idx=-1,
+        layer_scale=1,
+        reg_max=32,
+        reg_scale=4.0,
+        depth_mult=1.0,
+        **super_kwargs,
     ):
         super().__init__(**super_kwargs)
 
@@ -85,10 +86,10 @@ def deformable_attention_core_func_v2(
     _, Len_q, _, _, _ = sampling_locations.shape
 
     # sampling_offsets [8, 480, 8, 12, 2]
-    if method == 'default':
+    if method == "default":
         sampling_grids = 2 * sampling_locations - 1
 
-    elif method == 'discrete':
+    elif method == "discrete":
         sampling_grids = sampling_locations
 
     sampling_grids = sampling_grids.permute(0, 2, 1, 3, 4).flatten(0, 1)
@@ -99,15 +100,12 @@ def deformable_attention_core_func_v2(
         value_l = value[level].reshape(bs * n_head, c, h, w)
         sampling_grid_l: torch.Tensor = sampling_locations_list[level]
 
-        if method == 'default':
+        if method == "default":
             sampling_value_l = F.grid_sample(
-                value_l,
-                sampling_grid_l,
-                mode='bilinear',
-                padding_mode='zeros',
-                align_corners=False)
+                value_l, sampling_grid_l, mode="bilinear", padding_mode="zeros", align_corners=False
+            )
 
-        elif method == 'discrete':
+        elif method == "discrete":
             # n * m, seq, n, 2
             sampling_coord = (sampling_grid_l * torch.tensor([[w, h]], device=value_l.device) + 0.5).to(torch.int64)
 
@@ -115,8 +113,12 @@ def deformable_attention_core_func_v2(
             sampling_coord = sampling_coord.clamp(0, h - 1)
             sampling_coord = sampling_coord.reshape(bs * n_head, Len_q * num_points_list[level], 2)
 
-            s_idx = torch.arange(sampling_coord.shape[0], device=value_l.device).unsqueeze(-1).repeat(1, sampling_coord.shape[1])
-            sampling_value_l: torch.Tensor = value_l[s_idx, :, sampling_coord[..., 1], sampling_coord[..., 0]] # n l c
+            s_idx = (
+                torch.arange(sampling_coord.shape[0], device=value_l.device)
+                .unsqueeze(-1)
+                .repeat(1, sampling_coord.shape[1])
+            )
+            sampling_value_l: torch.Tensor = value_l[s_idx, :, sampling_coord[..., 1], sampling_coord[..., 0]]  # n l c
 
             sampling_value_l = sampling_value_l.permute(0, 2, 1).reshape(bs * n_head, c, Len_q, num_points_list[level])
 
@@ -200,13 +202,17 @@ class DFineMultiscaleDeformableAttention(nn.Module):
         sampling_offsets: torch.Tensor = self.sampling_offsets(hidden_states)
         sampling_offsets = sampling_offsets.reshape(bs, Len_q, self.n_heads, sum(self.num_points_list), 2)
 
-        attention_weights = self.attention_weights(hidden_states).reshape(bs, Len_q, self.n_heads, sum(self.num_points_list))
+        attention_weights = self.attention_weights(hidden_states).reshape(
+            bs, Len_q, self.n_heads, sum(self.num_points_list)
+        )
         attention_weights = F.softmax(attention_weights, dim=-1)
 
         if reference_points.shape[-1] == 2:
             offset_normalizer = torch.tensor(spatial_shapes)
             offset_normalizer = offset_normalizer.flip([1]).reshape(1, 1, 1, self.n_levels, 1, 2)
-            sampling_locations = reference_points.reshape(bs, Len_q, 1, self.n_levels, 1, 2) + sampling_offsets / offset_normalizer
+            sampling_locations = (
+                reference_points.reshape(bs, Len_q, 1, self.n_levels, 1, 2) + sampling_offsets / offset_normalizer
+            )
         elif reference_points.shape[-1] == 4:
             # reference_points [8, 480, None, 1,  4]
             # sampling_offsets [8, 480, 8,    12, 2]
@@ -215,8 +221,8 @@ class DFineMultiscaleDeformableAttention(nn.Module):
             sampling_locations = reference_points[:, :, None, :, :2] + offset
         else:
             raise ValueError(
-                "Last dim of reference_points must be 2 or 4, but get {} instead.".
-                format(reference_points.shape[-1]))
+                "Last dim of reference_points must be 2 or 4, but get {} instead.".format(reference_points.shape[-1])
+            )
 
         output = self.ms_deformable_attn_core(
             encoder_hidden_states, spatial_shapes, sampling_locations, attention_weights, self.num_points_list
@@ -258,7 +264,7 @@ class DFineDecoderLayer(RTDetrDecoderLayer):
 
         del self.encoder_attn_layer_norm
         self._reset_parameters()
-    
+
     def with_pos_embed(self, tensor, pos):
         return tensor if pos is None else tensor + pos
 
@@ -750,7 +756,7 @@ class DFineCSPRepLayer(nn.Module):
     Cross Stage Partial (CSP) network layer with RepVGG blocks.
     """
 
-    def __init__(self, config: DFineConfig, in_channels: int, out_channels: int, num_blocks: int, expansion = 1.0):
+    def __init__(self, config: DFineConfig, in_channels: int, out_channels: int, num_blocks: int, expansion=1.0):
         super().__init__()
         in_channels = in_channels
         out_channels = out_channels
@@ -786,10 +792,12 @@ class RepNCSPELAN4(nn.Module):
         self.c = c3 // 2
         self.cv1 = DFineConvNormLayer(config, c1, c3, 1, 1, activation=act)
         self.cv2 = nn.Sequential(
-            DFineCSPRepLayer(config, c3 // 2, c4, num_blocks=numb_blocks), DFineConvNormLayer(config, c4, c4, 3, 1, activation=act)
+            DFineCSPRepLayer(config, c3 // 2, c4, num_blocks=numb_blocks),
+            DFineConvNormLayer(config, c4, c4, 3, 1, activation=act),
         )
         self.cv3 = nn.Sequential(
-            DFineCSPRepLayer(config, c4, c4, num_blocks=numb_blocks), DFineConvNormLayer(config, c4, c4, 3, 1, activation=act)
+            DFineCSPRepLayer(config, c4, c4, num_blocks=numb_blocks),
+            DFineConvNormLayer(config, c4, c4, 3, 1, activation=act),
         )
         self.cv4 = DFineConvNormLayer(config, c3 + (2 * c4), c2, 1, 1, activation=act)
 

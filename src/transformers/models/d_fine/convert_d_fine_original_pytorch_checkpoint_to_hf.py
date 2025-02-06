@@ -23,9 +23,9 @@ from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision import transforms
 
-from transformers import DFineConfig, DFineForObjectDetection, RTDetrImageProcessor, DFineResNetStageConfig
+from transformers import DFineConfig, DFineForObjectDetection, DFineResNetStageConfig, RTDetrImageProcessor
 from transformers.utils import logging
-from PIL import Image
+
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -72,7 +72,7 @@ def get_d_fine_config(model_name: str) -> DFineConfig:
             stage4=[768, 256, 1536, 1, True, True, 5, 4],
         )
         config.decoder_layers = 4
-        config.encoder_in_channels=[384, 768, 1536]
+        config.encoder_in_channels = [384, 768, 1536]
         config.backbone_config.use_lab = True
         config.depth_mult = 0.67
         if model_name == "dfine_m_obj365":
@@ -123,21 +123,21 @@ def create_rename_keys(config):
     # here we list all keys to be renamed (original name on the left, our name on the right)
     rename_keys = []
 
-    rename_keys.append((f"decoder.valid_mask", f"model.decoder.valid_mask"))
-    rename_keys.append((f"decoder.anchors", f"model.decoder.anchors"))
-    rename_keys.append((f"decoder.up", f"model.decoder.up"))
-    rename_keys.append((f"decoder.reg_scale", f"model.decoder.reg_scale"))
+    rename_keys.append(("decoder.valid_mask", "model.decoder.valid_mask"))
+    rename_keys.append(("decoder.anchors", "model.decoder.anchors"))
+    rename_keys.append(("decoder.up", "model.decoder.up"))
+    rename_keys.append(("decoder.reg_scale", "model.decoder.reg_scale"))
 
     # stem
     # fmt: off
     last_key = ["weight", "bias", "running_mean", "running_var"]
     lab_keys = ["lab.scale", "lab.bias"]
 
-    rename_keys.append((f"backbone.stem.stem1.conv.weight", f"model.backbone.model.embedder.stem1.convolution.weight"))
-    rename_keys.append((f"backbone.stem.stem2a.conv.weight", f"model.backbone.model.embedder.stem2a.convolution.weight"))
-    rename_keys.append((f"backbone.stem.stem2b.conv.weight", f"model.backbone.model.embedder.stem2b.convolution.weight"))
-    rename_keys.append((f"backbone.stem.stem3.conv.weight", f"model.backbone.model.embedder.stem3.convolution.weight"))
-    rename_keys.append((f"backbone.stem.stem4.conv.weight", f"model.backbone.model.embedder.stem4.convolution.weight"))
+    rename_keys.append(("backbone.stem.stem1.conv.weight", "model.backbone.model.embedder.stem1.convolution.weight"))
+    rename_keys.append(("backbone.stem.stem2a.conv.weight", "model.backbone.model.embedder.stem2a.convolution.weight"))
+    rename_keys.append(("backbone.stem.stem2b.conv.weight", "model.backbone.model.embedder.stem2b.convolution.weight"))
+    rename_keys.append(("backbone.stem.stem3.conv.weight", "model.backbone.model.embedder.stem3.convolution.weight"))
+    rename_keys.append(("backbone.stem.stem4.conv.weight", "model.backbone.model.embedder.stem4.convolution.weight"))
     for last in last_key:
         rename_keys.append((f"backbone.stem.stem1.bn.{last}", f"model.backbone.model.embedder.stem1.normalization.{last}"))
         rename_keys.append((f"backbone.stem.stem2a.bn.{last}", f"model.backbone.model.embedder.stem2a.normalization.{last}"))
@@ -212,8 +212,8 @@ def create_rename_keys(config):
                             f"backbone.stages.{stage_idx}.blocks.0.layers.{layer_idx}.conv2.{lab}",
                             f"model.backbone.model.encoder.stages.{stage_idx}.blocks.0.layers.{layer_idx}.conv2.{lab}",
                             ))
-                        
-                
+
+
                 #aggregation
                 rename_keys.append(
                         (
@@ -269,7 +269,7 @@ def create_rename_keys(config):
                         f"model.backbone.model.encoder.stages.{stage_idx}.blocks.{b}.layers.{layer_idx}.normalization.{last}",
                     )
                 )
-                    
+
                 if config.backbone_config.use_lab:
                     for lab in lab_keys:
                         rename_keys.append(
@@ -308,7 +308,7 @@ def create_rename_keys(config):
                         f"backbone.stages.{stage_idx}.blocks.{b}.layers.{layer_idx}.conv2.{lab}",
                         f"model.backbone.model.encoder.stages.{stage_idx}.blocks.{b}.layers.{layer_idx}.conv2.{lab}",
                         ))
-            
+
             #downsamle
             if downsample:
                 rename_keys.append(
@@ -573,28 +573,28 @@ def create_rename_keys(config):
 
     # downsample_convs
     rename_keys.append(
-        (f"encoder.downsample_convs.0.0.cv1.conv.weight", f"model.encoder.downsample_convs.0.0.cv1.conv.weight")
+        ("encoder.downsample_convs.0.0.cv1.conv.weight", "model.encoder.downsample_convs.0.0.cv1.conv.weight")
     )
     for last in last_key:
         rename_keys.append(
             (f"encoder.downsample_convs.0.0.cv1.norm.{last}", f"model.encoder.downsample_convs.0.0.cv1.norm.{last}")
         )
     rename_keys.append(
-        (f"encoder.downsample_convs.1.0.cv1.conv.weight", f"model.encoder.downsample_convs.1.0.cv1.conv.weight")
+        ("encoder.downsample_convs.1.0.cv1.conv.weight", "model.encoder.downsample_convs.1.0.cv1.conv.weight")
     )
     for last in last_key:
         rename_keys.append(
             (f"encoder.downsample_convs.1.0.cv1.norm.{last}", f"model.encoder.downsample_convs.1.0.cv1.norm.{last}")
         )
     rename_keys.append(
-        (f"encoder.downsample_convs.0.0.cv2.conv.weight", f"model.encoder.downsample_convs.0.0.cv2.conv.weight")
+        ("encoder.downsample_convs.0.0.cv2.conv.weight", "model.encoder.downsample_convs.0.0.cv2.conv.weight")
     )
     for last in last_key:
         rename_keys.append(
             (f"encoder.downsample_convs.0.0.cv2.norm.{last}", f"model.encoder.downsample_convs.0.0.cv2.norm.{last}")
         )
     rename_keys.append(
-        (f"encoder.downsample_convs.1.0.cv2.conv.weight", f"model.encoder.downsample_convs.1.0.cv2.conv.weight")
+        ("encoder.downsample_convs.1.0.cv2.conv.weight", "model.encoder.downsample_convs.1.0.cv2.conv.weight")
     )
     for last in last_key:
         rename_keys.append(
