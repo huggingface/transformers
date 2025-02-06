@@ -20,7 +20,6 @@ from typing import List, Optional, Tuple, Union
 import torch
 import torch.utils.checkpoint
 from torch import nn
-from torch.nn import CrossEntropyLoss
 from torch.nn import functional as F
 
 from ...activations import ACT2FN
@@ -1291,6 +1290,7 @@ class JetMoeForCausalLM(JetMoePreTrainedModel, GenerationMixin):
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         num_logits_to_keep: int = 0,
+        **kwargs,
     ) -> Union[Tuple, MoeCausalLMOutputWithPast]:
         r"""
         Args:
@@ -1343,8 +1343,12 @@ class JetMoeForCausalLM(JetMoePreTrainedModel, GenerationMixin):
             shift_labels = shift_labels.view(-1)
             # Ensure tensors are on the same device
             shift_labels = shift_labels.to(shift_logits.device)
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(shift_logits, shift_labels)
+            loss = self.loss_function(
+                shift_logits,
+                shift_labels,
+                vocab_size=self.config.vocab_size,
+                **kwargs,
+            )
 
         aux_loss = None
         if output_router_logits:
