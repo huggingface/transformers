@@ -321,9 +321,11 @@ def check_models_equal(model1, model2):
 class ModelUtilsTest(TestCasePlus):
     def setUp(self):
         self.old_dtype = torch.get_default_dtype()
+        super().setUp()
 
     def tearDown(self):
         torch.set_default_dtype(self.old_dtype)
+        super().tearDown()
 
     @slow
     def test_model_from_pretrained(self):
