@@ -153,7 +153,7 @@ class LlamaConfig(PretrainedConfig):
     }
     base_model_pp_plan = {
         "embed_tokens": {"input_keys": ["input_ids"], "output_keys": ["inputs_embeds"]},
-        "layers.*": {"input_keys": ["hidden_states", "attention_mask"], "output_keys": ["hidden_states"]},
+        "layers": {"input_keys": ["hidden_states", "attention_mask"], "output_keys": ["hidden_states"]},
         "norm": {"input_keys": ["hidden_states"], "output_keys": ["hidden_states"]},
     }
 

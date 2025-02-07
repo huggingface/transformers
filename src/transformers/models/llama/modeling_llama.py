@@ -751,6 +751,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": {"input_keys": ["input"], "output_keys": ["logits"]}}
+
     def __init__(self, config):
         super().__init__(config)
         self.model = LlamaModel(config)
