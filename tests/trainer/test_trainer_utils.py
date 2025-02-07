@@ -162,7 +162,7 @@ class TrainerUtilsTest(unittest.TestCase):
         label_smoothed_loss = LabelSmoother(0.1)(model_output, random_labels)
         log_probs = -nn.functional.log_softmax(random_logits, dim=-1)
         expected_loss = (1 - epsilon) * loss + epsilon * log_probs.mean()
-        self.assertTrue(torch.allclose(label_smoothed_loss, expected_loss))
+        torch.testing.assert_close(label_smoothed_loss, expected_loss)
 
         # With a few -100 labels
         random_labels[0, 1] = -100
@@ -178,7 +178,7 @@ class TrainerUtilsTest(unittest.TestCase):
         log_probs[2, 1] = 0.0
         log_probs[2, 3] = 0.0
         expected_loss = (1 - epsilon) * loss + epsilon * log_probs.sum() / (num_labels * 17)
-        self.assertTrue(torch.allclose(label_smoothed_loss, expected_loss))
+        torch.testing.assert_close(label_smoothed_loss, expected_loss)
 
     def test_group_by_length(self):
         # Get some inputs of random lengths
@@ -243,6 +243,33 @@ class TrainerUtilsTest(unittest.TestCase):
             ['0.linear1.weight', '0.linear1.bias', '0.linear2.weight', '0.linear2.bias', '0.bias', '1.0.linear1.weight', '1.0.linear1.bias', '1.0.linear2.weight', '1.0.linear2.bias', '1.0.bias', '1.1.linear1.weight', '1.1.linear1.bias', '1.1.linear2.weight', '1.1.linear2.bias', '1.1.bias']
         )
         # fmt: on
+
+    def test_get_parameter_names_rmsnorm(self):
+        class RMSNorm(nn.Module):
+            def __init__(self, hidden_size):
+                super().__init__()
+                self.weight = nn.Parameter(torch.ones(hidden_size))
+                self.bias = nn.Parameter(torch.zeros(hidden_size))
+
+        class ModelWithRMSNorm(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.linear = nn.Linear(128, 128)
+                self.rmsnorm = RMSNorm(128)
+                self.bias = nn.Parameter(torch.zeros(128))
+
+        model = ModelWithRMSNorm()
+        # Test both type-based and name-based filtering
+        decay_parameters = get_parameter_names(model, [], ["bias", "rmsnorm"])
+
+        # Parameters that should be in weight decay
+        self.assertIn("linear.weight", decay_parameters)
+
+        # Parameters that should NOT be in weight decay
+        self.assertNotIn("linear.bias", decay_parameters)
+        self.assertNotIn("rmsnorm.weight", decay_parameters)
+        self.assertNotIn("rmsnorm.bias", decay_parameters)
+        self.assertNotIn("bias", decay_parameters)
 
     def test_distributed_sampler_with_loop(self):
         batch_size = 16

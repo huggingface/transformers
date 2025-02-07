@@ -596,7 +596,7 @@ class TrainingArguments:
                     fsdp_min_num_params or fsdp_transformer_layer_cls_to_wrap.
 
         deepspeed (`str` or `dict`, *optional*):
-            Use [Deepspeed](https://github.com/microsoft/deepspeed). This is an experimental feature and its API may
+            Use [Deepspeed](https://github.com/deepspeedai/DeepSpeed). This is an experimental feature and its API may
             evolve in the future. The value is either the location of DeepSpeed json config file (e.g.,
             `ds_config.json`) or an already loaded json file as a `dict`"
 

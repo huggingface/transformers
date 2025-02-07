@@ -16,7 +16,7 @@ rendered properly in your Markdown viewer.
 
 # DeepSpeed Integration
 
-[DeepSpeed](https://github.com/microsoft/DeepSpeed) は、[ZeRO 論文](https://arxiv.org/abs/1910.02054) で説明されているすべてを実装します。現在、次のものを完全にサポートしています。
+[DeepSpeed](https://github.com/deepspeedai/DeepSpeed) は、[ZeRO 論文](https://arxiv.org/abs/1910.02054) で説明されているすべてを実装します。現在、次のものを完全にサポートしています。
 
 1. オプティマイザーの状態分割 (ZeRO ステージ 1)
 2. 勾配分割 (ZeRO ステージ 2)
@@ -32,7 +32,7 @@ DeepSpeed ZeRO-2 は、その機能が推論には役に立たないため、主
 DeepSpeed ZeRO-3 は、巨大なモデルを複数の GPU にロードできるため、推論にも使用できます。
 単一の GPU では不可能です。
 
-🤗 Transformers は、2 つのオプションを介して [DeepSpeed](https://github.com/microsoft/DeepSpeed) を統合します。
+🤗 Transformers は、2 つのオプションを介して [DeepSpeed](https://github.com/deepspeedai/DeepSpeed) を統合します。
 
 1. [`Trainer`] によるコア DeepSpeed 機能の統合。何でもやってくれるタイプです
    統合の場合 - カスタム構成ファイルを指定するか、テンプレートを使用するだけで、他に何もする必要はありません。たいていの
@@ -78,7 +78,7 @@ pip install deepspeed
 pip install transformers[deepspeed]
 ```
 
-または、[DeepSpeed の GitHub ページ](https://github.com/microsoft/deepspeed#installation) で詳細を確認してください。
+または、[DeepSpeed の GitHub ページ](https://github.com/deepspeedai/DeepSpeed#installation) で詳細を確認してください。
 [高度なインストール](https://www.deepspeed.ai/tutorials/advanced-install/)。
 
 それでもビルドに苦労する場合は、まず [CUDA 拡張機能のインストール ノート](trainer#cuda-extension-installation-notes) を必ず読んでください。
@@ -89,7 +89,7 @@ pip install transformers[deepspeed]
 DeepSpeed のローカル ビルドを作成するには:
 
 ```bash
-git clone https://github.com/microsoft/DeepSpeed/
+git clone https://github.com/deepspeedai/DeepSpeed/
 cd DeepSpeed
 rm -rf build
 TORCH_CUDA_ARCH_LIST="8.6" DS_BUILD_CPU_ADAM=1 DS_BUILD_UTILS=1 pip install . \
@@ -113,7 +113,7 @@ CUDA_VISIBLE_DEVICES=0 python -c "import torch; print(torch.cuda.get_device_capa
 複数のマシンで同じセットアップを使用する必要がある場合は、バイナリ ホイールを作成します。
 
 ```bash
-git clone https://github.com/microsoft/DeepSpeed/
+git clone https://github.com/deepspeedai/DeepSpeed/
 cd DeepSpeed
 rm -rf build
 TORCH_CUDA_ARCH_LIST="8.6" DS_BUILD_CPU_ADAM=1 DS_BUILD_UTILS=1 \
@@ -154,7 +154,7 @@ _CudaDeviceProperties(name='GeForce RTX 3090', major=8, minor=6, total_memory=24
 目的のアーチを明示的に指定することをお勧めします。
 
 提案されたことをすべて試してもまだビルドの問題が発生する場合は、GitHub の問題に進んでください。
-[ディープスピード](https://github.com/microsoft/DeepSpeed/issues)、
+[ディープスピード](https://github.com/deepspeedai/DeepSpeed/issues)、
 
 <a id='deepspeed-multi-gpu'></a>
 
@@ -481,11 +481,11 @@ deepspeed examples/pytorch/translation/run_translation.py ...
 設定ファイルで使用できる DeepSpeed 設定オプションの完全なガイドについては、次を参照してください。
 [次のドキュメント](https://www.deepspeed.ai/docs/config-json/) にアクセスしてください。
 
-さまざまな実際のニーズに対応する数十の DeepSpeed 構成例を [DeepSpeedExamples](https://github.com/microsoft/DeepSpeedExamples)で見つけることができます。
+さまざまな実際のニーズに対応する数十の DeepSpeed 構成例を [DeepSpeedExamples](https://github.com/deepspeedai/DeepSpeedExamples)で見つけることができます。
 リポジトリ:
 
 ```bash
-git clone https://github.com/microsoft/DeepSpeedExamples
+git clone https://github.com/deepspeedai/DeepSpeedExamples
 cd DeepSpeedExamples
 find . -name '*json'
 ```
@@ -497,7 +497,7 @@ find . -name '*json'
 grep -i Lamb $(find . -name '*json')
 ```
 
-さらにいくつかの例が [メイン リポジトリ](https://github.com/microsoft/DeepSpeed) にもあります。
+さらにいくつかの例が [メイン リポジトリ](https://github.com/deepspeedai/DeepSpeed) にもあります。
 
 DeepSpeed を使用する場合は、常に DeepSpeed 構成ファイルを指定する必要がありますが、一部の構成パラメータには
 コマンドライン経由で設定します。微妙な違いについては、このガイドの残りの部分で説明します。
@@ -868,7 +868,7 @@ ZeRO-Infinity は、GPU と CPU メモリを NVMe メモリで拡張すること
 書き込みでは、読み取り最大 3.5 GB/秒、書き込み最大 3 GB/秒のピーク速度が得られます)。
 
 最適な`aio`構成ブロックを見つけるには、ターゲット設定でベンチマークを実行する必要があります。
-[ここで説明](https://github.com/microsoft/DeepSpeed/issues/998)。
+[ここで説明](https://github.com/deepspeedai/DeepSpeed/issues/998)。
 
 <a id='deepspeed-zero2-zero3-performance'></a>
 
@@ -1934,7 +1934,7 @@ SW: Model with 2783M total params, 65M largest layer params.
   問題が解決しない場合にのみ、Deepspeed について言及し、必要な詳細をすべて提供してください。
 
 - 問題が統合部分ではなく DeepSpeed コアにあることが明らかな場合は、問題を提出してください。
-  [Deepspeed](https://github.com/microsoft/DeepSpeed/) を直接使用します。よくわからない場合でも、ご安心ください。
+  [Deepspeed](https://github.com/deepspeedai/DeepSpeed/) を直接使用します。よくわからない場合でも、ご安心ください。
   どちらの問題トラッカーでも問題ありません。投稿されたらそれを判断し、次の場合は別の問題トラッカーにリダイレクトします。
   そうである必要がある。
 
@@ -1994,7 +1994,7 @@ SW: Model with 2783M total params, 65M largest layer params.
 
 ### Notes
 
-- DeepSpeed には pip でインストール可能な PyPI パッケージがありますが、ハードウェアに最も適合するように、また有効にする必要がある場合は、[ソース](https://github.com/microsoft/deepspeed#installation) からインストールすることを強くお勧めします。
+- DeepSpeed には pip でインストール可能な PyPI パッケージがありますが、ハードウェアに最も適合するように、また有効にする必要がある場合は、[ソース](https://github.com/deepspeedai/DeepSpeed#installation) からインストールすることを強くお勧めします。
   1 ビット Adam などの特定の機能は、pypi ディストリビューションでは利用できません。
 - 🤗 Transformers で DeepSpeed を使用するために [`Trainer`] を使用する必要はありません - 任意のモデルを使用できます
   後者は [DeepSpeed 統合手順](https://www.deepspeed.ai/getting-started/#writing-deepspeed-models) に従って調整する必要があります。
@@ -2239,7 +2239,7 @@ RUN_SLOW=1 pytest tests/deepspeed
 
 ## Main DeepSpeed Resources
 
-- [プロジェクトの github](https://github.com/microsoft/deepspeed)
+- [プロジェクトの github](https://github.com/deepspeedai/DeepSpeed)
 - [使用方法ドキュメント](https://www.deepspeed.ai/getting-started/)
 - [API ドキュメント](https://deepspeed.readthedocs.io/en/latest/index.html)
 - [ブログ投稿](https://www.microsoft.com/en-us/research/search/?q=deepspeed)
@@ -2251,4 +2251,4 @@ RUN_SLOW=1 pytest tests/deepspeed
 - [ZeRO-Infinity: 極限スケールの深層学習のための GPU メモリの壁を打ち破る](https://arxiv.org/abs/2104.07857)
 
 最後に、HuggingFace [`Trainer`] は DeepSpeed のみを統合していることを覚えておいてください。
-DeepSpeed の使用に関して問題や質問がある場合は、[DeepSpeed GitHub](https://github.com/microsoft/DeepSpeed/issues) に問題を提出してください。
+DeepSpeed の使用に関して問題や質問がある場合は、[DeepSpeed GitHub](https://github.com/deepspeedai/DeepSpeed/issues) に問題を提出してください。
