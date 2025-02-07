@@ -3153,7 +3153,6 @@ class Trainer:
                         self.state.stateful_callbacks[cb_name] = cb_state
                 self.state.save_to_json(os.path.join(output_dir, TRAINER_STATE_NAME))
 
-            with self.accelerator.local_main_process_first():
                 if os.path.exists(output_dir):
                     try:
                         os.renames(output_dir, checkpoint_dir)
