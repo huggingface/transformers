@@ -791,11 +791,10 @@ class TrainingArguments:
             [original code](https://github.com/neelsjain/NEFTune). Support transformers `PreTrainedModel` and also
             `PeftModel` from peft. The original paper used values in the range [5.0, 15.0].
         optim_target_modules (`Union[str, List[str]]`, *optional*):
-            The target modules to optimize, i.e. the module names that you would like to train, right now this is used only for GaLore algorithm
-            https://arxiv.org/abs/2403.03507
-            See: https://github.com/jiaweizzhao/GaLore for more details. You need to make sure to pass a valid GaloRe
-            optimizer, e.g. one of: "galore_adamw", "galore_adamw_8bit", "galore_adafactor" and make sure that the target modules are `nn.Linear` modules
-            only.
+            The target modules to optimize, i.e. the module names that you would like to train.
+            Currently used for the GaLore algorithm (https://arxiv.org/abs/2403.03507) and APOLLO algorithm (https://arxiv.org/abs/2412.05270).
+            See GaLore implementation (https://github.com/jiaweizzhao/GaLore) and APOLLO implementation (https://github.com/zhuhanqing/APOLLO) for more details.
+            You need to make sure to pass a valid GaLore or APOLLO optimizer, e.g., one of: "apollo_adamw", "galore_adamw", "galore_adamw_8bit", "galore_adafactor" and make sure that the target modules are `nn.Linear` modules only.
 
         batch_eval_metrics (`Optional[bool]`, defaults to `False`):
             If set to `True`, evaluation will call compute_metrics at the end of each batch to accumulate statistics

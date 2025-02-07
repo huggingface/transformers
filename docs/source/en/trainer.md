@@ -545,7 +545,7 @@ import torch
 import datasets
 import trl
 
-from transformers import TrainingArguments, AutoConfig, AutoTokenizer, AutoModelForCausalLM
+from transformers import TrainingArguments, AutoTokenizer, AutoModelForCausalLM
 
 train_dataset = datasets.load_dataset('imdb', split='train')
 
@@ -559,10 +559,8 @@ args = TrainingArguments(
 
 model_id = "google/gemma-2b"
 
-config = AutoConfig.from_pretrained(model_id)
-
 tokenizer = AutoTokenizer.from_pretrained(model_id)
-model = AutoModelForCausalLM.from_config(config).to(0)
+model = AutoModelForCausalLM.from_pretrained(model_id, low_cpu_mem_usage=True).to(0)
 
 trainer = trl.SFTTrainer(
     model=model,
