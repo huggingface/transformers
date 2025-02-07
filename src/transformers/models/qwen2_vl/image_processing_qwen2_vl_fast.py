@@ -36,9 +36,7 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
-    VideoInput,
     get_image_size,
-    make_batched_videos,
     make_flat_list_of_images,
     valid_images,
 )
@@ -52,6 +50,7 @@ from ...utils import (
     is_vision_available,
     logging,
 )
+from ...video_utils import VideoInput, make_batched_videos
 from .image_processing_qwen2_vl import smart_resize
 
 

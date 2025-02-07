@@ -17,12 +17,21 @@ import inspect
 import json
 import os
 import tempfile
+import time
 import warnings
 
 import numpy as np
+from packaging import version
 
 from transformers import AutoVideoProcessor
-from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_vision
+from transformers.testing_utils import (
+    check_json_file_has_correct_format,
+    require_torch,
+    require_torch_gpu,
+    require_vision,
+    slow,
+    torch_device,
+)
 from transformers.utils import is_torch_available, is_vision_available
 
 
@@ -33,21 +42,22 @@ if is_vision_available():
     from PIL import Image
 
 
-def prepare_video(num_frames, num_channels, width=10, height=10, numpify=False, torchify=False):
+def prepare_video(num_frames, num_channels, width=10, height=10, return_tensors="pil"):
     """This function prepares a video as a list of PIL images/NumPy arrays/PyTorch tensors."""
 
     video = []
     for i in range(num_frames):
-        video.append(np.random.randint(255, size=(num_channels, width, height), dtype=np.uint8))
+        video.append(np.random.randint(255, size=(width, height, num_channels), dtype=np.uint8))
 
-    if not numpify and not torchify:
+    if return_tensors == "pil":
         # PIL expects the channel dimension as last dimension
-        video = [Image.fromarray(np.moveaxis(frame, 0, -1)) for frame in video]
-    elif torchify:
-        video = torch.tensor(video)
-    elif numpify:
+        video = [Image.fromarray(frame) for frame in video]
+    elif return_tensors == "torch":
+        # Torch images are typically in channels first format
+        video = torch.tensor(video).permute(0, 3, 1, 2)
+    elif return_tensors == "np":
         # Numpy images are typically in channels last format
-        video = np.array([image.transpose(1, 2, 0) for image in video])
+        video = np.array(video)
 
     return video
 
@@ -59,16 +69,13 @@ def prepare_video_inputs(
     min_resolution,
     max_resolution,
     equal_resolution=False,
-    numpify=False,
-    torchify=False,
+    return_tensors="pil",
 ):
     """This function prepares a batch of videos: a list of list of PIL images, or a list of list of numpy arrays if
-    one specifies numpify=True, or a list of list of PyTorch tensors if one specifies torchify=True.
+    one specifies return_tensors="np", or a list of list of PyTorch tensors if one specifies return_tensors="torch".
 
     One can specify whether the videos are of the same resolution or not.
     """
-
-    assert not (numpify and torchify), "You cannot specify both numpy and PyTorch tensors at the same time"
 
     video_inputs = []
     for i in range(batch_size):
@@ -76,14 +83,13 @@ def prepare_video_inputs(
             width = height = max_resolution
         else:
             width, height = np.random.choice(np.arange(min_resolution, max_resolution), 2)
-            video = prepare_video(
-                num_frames=num_frames,
-                num_channels=num_channels,
-                width=width,
-                height=height,
-                numpify=numpify,
-                torchify=torchify,
-            )
+        video = prepare_video(
+            num_frames=num_frames,
+            num_channels=num_channels,
+            width=width,
+            height=height,
+            return_tensors=return_tensors,
+        )
         video_inputs.append(video)
 
     return video_inputs
@@ -155,7 +161,8 @@ class VideoProcessingTestMixin:
                 saved_file = video_processor_first.save_pretrained(tmpdirname)[0]
                 check_json_file_has_correct_format(saved_file)
 
-                video_processor_second = AutoVideoProcessor.from_pretrained(tmpdirname)
+                use_fast = video_processing_class.__name__.endswith("Fast")
+                video_processor_second = AutoVideoProcessor.from_pretrained(tmpdirname, use_fast=use_fast)
 
             self.assertEqual(video_processor_second.to_dict(), video_processor_first.to_dict())
 
@@ -163,6 +170,211 @@ class VideoProcessingTestMixin:
         for video_processing_class in self.video_processor_list:
             video_processor = video_processing_class()
             self.assertIsNotNone(video_processor)
+
+    @require_vision
+    @require_torch
+    def test_slow_fast_equivalence(self):
+        if not self.test_slow_video_processor or not self.test_fast_video_processor:
+            self.skipTest(reason="Skipping slow/fast equivalence test")
+
+        if self.video_processing_class is None or self.fast_video_processing_class is None:
+            self.skipTest(reason="Skipping slow/fast equivalence test as one of the video processors is not defined")
+
+        video_inputs = self.video_processor_tester.prepare_video_inputs(equal_resolution=False, return_tensors="torch")
+        video_processor_slow = self.video_processing_class(**self.video_processor_dict)
+        video_processor_fast = self.fast_video_processing_class(**self.video_processor_dict)
+
+        encoding_slow = video_processor_slow(video_inputs, return_tensors="pt")
+        encoding_fast = video_processor_fast(video_inputs, return_tensors="pt")
+        self.assertTrue(torch.allclose(encoding_slow[self.input_name], encoding_fast[self.input_name], atol=1e-1))
+        self.assertLessEqual(
+            torch.mean(torch.abs(encoding_slow[self.input_name] - encoding_fast[self.input_name])).item(), 1e-3
+        )
+
+    @require_vision
+    @require_torch
+    def test_slow_fast_equivalence_batched(self):
+        if not self.test_slow_video_processor or not self.test_fast_video_processor:
+            self.skipTest(reason="Skipping slow/fast equivalence test")
+
+        if self.video_processing_class is None or self.fast_video_processing_class is None:
+            self.skipTest(reason="Skipping slow/fast equivalence test as one of the video processors is not defined")
+
+        if hasattr(self.video_processor_tester, "do_center_crop") and self.video_processor_tester.do_center_crop:
+            self.skipTest(
+                reason="Skipping as do_center_crop is True and center_crop functions are not equivalent for fast and slow processors"
+            )
+
+        video_inputs = self.video_processor_tester.prepare_video_inputs(equal_resolution=False, return_tensors="torch")
+        video_processor_slow = self.video_processing_class(**self.video_processor_dict)
+        video_processor_fast = self.fast_video_processing_class(**self.video_processor_dict)
+
+        encoding_slow = video_processor_slow(video_inputs, return_tensors="pt")
+        encoding_fast = video_processor_fast(video_inputs, return_tensors="pt")
+
+        self.assertTrue(torch.allclose(encoding_slow[self.input_name], encoding_fast[self.input_name], atol=1e-1))
+        self.assertLessEqual(
+            torch.mean(torch.abs(encoding_slow[self.input_name] - encoding_fast[self.input_name])).item(), 1e-3
+        )
+
+    @require_vision
+    @require_torch
+    def test_fast_is_faster_than_slow(self):
+        if not self.test_slow_video_processor or not self.test_fast_video_processor:
+            self.skipTest(reason="Skipping speed test")
+
+        if self.video_processing_class is None or self.fast_video_processing_class is None:
+            self.skipTest(reason="Skipping speed test as one of the video processors is not defined")
+
+        def measure_time(video_processor, video):
+            # Warmup
+            for _ in range(5):
+                _ = video_processor(video, return_tensors="pt")
+            start = time.perf_counter()
+            _ = video_processor(video, return_tensors="pt")
+            return time.perf_counter() - start
+
+        video_processor_slow = self.video_processing_class(**self.video_processor_dict)
+        video_processor_fast = self.fast_video_processing_class(**self.video_processor_dict)
+
+        # Inputs in torch.Tensor
+        video_inputs_torch = self.video_processor_tester.prepare_video_inputs(
+            equal_resolution=False, return_tensors="torch"
+        )
+        fast_time_torch = measure_time(video_processor_fast, video_inputs_torch)
+        slow_time_torch = measure_time(video_processor_slow, video_inputs_torch)
+
+        self.assertLessEqual(fast_time_torch, slow_time_torch)
+
+        # Inputs in np.ndarray
+        self.video_processor_tester.batch_size = 7
+        video_inputs_np = self.video_processor_tester.prepare_video_inputs(equal_resolution=True, return_tensors="np")
+        fast_time_np = measure_time(video_processor_fast, video_inputs_np)
+        slow_time_np = measure_time(video_processor_slow, video_inputs_np)
+
+        self.assertLessEqual(fast_time_np, slow_time_np)
+
+        # Inputs in PIL.Image
+        video_inputs_pil = self.video_processor_tester.prepare_video_inputs(
+            equal_resolution=False, return_tensors="pil"
+        )
+        fast_time_pil = measure_time(video_processor_fast, video_inputs_pil)
+        slow_time_pil = measure_time(video_processor_slow, video_inputs_pil)
+
+        self.assertLessEqual(fast_time_pil, slow_time_pil)
+
+    def test_save_load_fast_slow(self):
+        "Test that we can load a fast video processor from a slow one and vice-versa."
+        if self.video_processing_class is None or self.fast_video_processing_class is None:
+            self.skipTest("Skipping slow/fast save/load test as one of the video processors is not defined")
+
+        video_processor_dict = self.video_processor_tester.prepare_video_processor_dict()
+        video_processor_slow_0 = self.video_processing_class(**video_processor_dict)
+
+        # Load fast video processor from slow one
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            video_processor_slow_0.save_pretrained(tmpdirname)
+            video_processor_fast_0 = self.fast_video_processing_class.from_pretrained(tmpdirname)
+
+        video_processor_fast_1 = self.fast_video_processing_class(**video_processor_dict)
+
+        # Load slow video processor from fast one
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            video_processor_fast_1.save_pretrained(tmpdirname)
+            video_processor_slow_1 = self.video_processing_class.from_pretrained(tmpdirname)
+
+        dict_slow_0 = video_processor_slow_0.to_dict()
+        dict_slow_1 = video_processor_slow_1.to_dict()
+        difference = {
+            key: dict_slow_0.get(key) if key in dict_slow_0 else dict_slow_1.get(key)
+            for key in set(dict_slow_0) ^ set(dict_slow_1)
+        }
+        dict_slow_0 = {key: dict_slow_0[key] for key in set(dict_slow_0) & set(dict_slow_1)}
+        dict_slow_1 = {key: dict_slow_1[key] for key in set(dict_slow_0) & set(dict_slow_1)}
+        # check that all additional keys are None, except for `default_to_square` which is only set in fast processors
+        self.assertTrue(all(value is None for key, value in difference.items() if key not in ["default_to_square"]))
+        # check that the remaining keys are the same
+        self.assertEqual(dict_slow_1, dict_slow_0)
+
+        dict_fast_0 = video_processor_fast_0.to_dict()
+        dict_fast_1 = video_processor_fast_1.to_dict()
+        difference = {
+            key: dict_fast_0.get(key) if key in dict_fast_0 else dict_fast_1.get(key)
+            for key in set(dict_fast_0) ^ set(dict_fast_1)
+        }
+        dict_fast_0 = {key: dict_fast_0[key] for key in set(dict_fast_0) & set(dict_fast_1)}
+        dict_fast_1 = {key: dict_fast_1[key] for key in set(dict_fast_0) & set(dict_fast_1)}
+        # check that all additional keys are None, except for `default_to_square` which is only set in fast processors
+        self.assertTrue(all(value is None for key, value in difference.items() if key not in ["default_to_square"]))
+        # check that the remaining keys are the same
+        self.assertEqual(dict_fast_0, dict_fast_1)
+
+    def test_save_load_fast_slow_auto(self):
+        "Test that we can load a fast video processor from a slow one and vice-versa using AutoVideoProcessor."
+        if self.video_processing_class is None or self.fast_video_processing_class is None:
+            self.skipTest("Skipping slow/fast save/load test as one of the video processors is not defined")
+
+        video_processor_dict = self.video_processor_tester.prepare_video_processor_dict()
+        video_processor_slow_0 = self.video_processing_class(**video_processor_dict)
+
+        # Load fast video processor from slow one
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            video_processor_slow_0.save_pretrained(tmpdirname)
+            video_processor_fast_0 = AutoVideoProcessor.from_pretrained(tmpdirname, use_fast=True)
+
+        video_processor_fast_1 = self.fast_video_processing_class(**video_processor_dict)
+
+        # Load slow video processor from fast one
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            video_processor_fast_1.save_pretrained(tmpdirname)
+            video_processor_slow_1 = AutoVideoProcessor.from_pretrained(tmpdirname, use_fast=False)
+
+        dict_slow_0 = video_processor_slow_0.to_dict()
+        dict_slow_1 = video_processor_slow_1.to_dict()
+        difference = {
+            key: dict_slow_0.get(key) if key in dict_slow_0 else dict_slow_1.get(key)
+            for key in set(dict_slow_0) ^ set(dict_slow_1)
+        }
+        dict_slow_0 = {key: dict_slow_0[key] for key in set(dict_slow_0) & set(dict_slow_1)}
+        dict_slow_1 = {key: dict_slow_1[key] for key in set(dict_slow_0) & set(dict_slow_1)}
+        # check that all additional keys are None, except for `default_to_square` which is only set in fast processors
+        self.assertTrue(all(value is None for key, value in difference.items() if key not in ["default_to_square"]))
+        # check that the remaining keys are the same
+        self.assertEqual(dict_slow_0, dict_slow_1)
+
+        dict_fast_0 = video_processor_fast_0.to_dict()
+        dict_fast_1 = video_processor_fast_1.to_dict()
+        difference = {
+            key: dict_fast_0.get(key) if key in dict_fast_0 else dict_fast_1.get(key)
+            for key in set(dict_fast_0) ^ set(dict_fast_1)
+        }
+        dict_fast_0 = {key: dict_fast_0[key] for key in set(dict_fast_0) & set(dict_fast_1)}
+        dict_fast_1 = {key: dict_fast_1[key] for key in set(dict_fast_0) & set(dict_fast_1)}
+        # check that all additional keys are None, except for `default_to_square` which is only set in fast processors
+        self.assertTrue(all(value is None for key, value in difference.items() if key not in ["default_to_square"]))
+        # check that the remaining keys are the same
+        self.assertEqual(dict_fast_0, dict_fast_1)
+
+    @slow
+    @require_torch_gpu
+    @require_vision
+    def test_can_compile_fast_video_processor(self):
+        if self.fast_video_processing_class is None:
+            self.skipTest("Skipping compilation test as fast video processor is not defined")
+        if version.parse(torch.__version__) < version.parse("2.3"):
+            self.skipTest(reason="This test requires torch >= 2.3 to run.")
+
+        torch.compiler.reset()
+        video_inputs = self.video_processor_tester.prepare_video_inputs(equal_resolution=False, return_tensors="torch")
+        video_processor = self.fast_video_processing_class(**self.video_processor_dict)
+        output_eager = video_processor(video_inputs, device=torch_device, return_tensors="pt")
+
+        video_processor = torch.compile(video_processor, mode="reduce-overhead")
+        output_compiled = video_processor(video_inputs, device=torch_device, return_tensors="pt")
+
+        torch.testing.assert_close(
+            output_eager[self.input_name], output_compiled[self.input_name], rtol=1e-4, atol=1e-4
+        )
 
     @require_torch
     @require_vision
@@ -173,7 +385,9 @@ class VideoProcessingTestMixin:
                 video_processor = video_processing_class(**self.video_processor_dict)
 
                 # create random PyTorch tensors
-                video_inputs = self.video_processor_tester.prepare_video_inputs(equal_resolution=False, torchify=True)
+                video_inputs = self.video_processor_tester.prepare_video_inputs(
+                    equal_resolution=False, return_tensors="torch"
+                )
 
                 encoding = video_processor(video_inputs, return_tensors="pt")
 
@@ -227,7 +441,9 @@ class VideoProcessingTestMixin:
             # Initialize video_processing
             video_processing = video_processing_class(**self.video_processor_dict)
             # create random numpy tensors
-            video_inputs = self.video_processor_tester.prepare_video_inputs(equal_resolution=False, numpify=True)
+            video_inputs = self.video_processor_tester.prepare_video_inputs(
+                equal_resolution=False, return_tensors="np"
+            )
             for video in video_inputs:
                 self.assertIsInstance(video, np.ndarray)
 
@@ -248,7 +464,9 @@ class VideoProcessingTestMixin:
             # Initialize video_processing
             video_processing = video_processing_class(**self.video_processor_dict)
             # create random PyTorch tensors
-            video_inputs = self.video_processor_tester.prepare_video_inputs(equal_resolution=False, torchify=True)
+            video_inputs = self.video_processor_tester.prepare_video_inputs(
+                equal_resolution=False, return_tensors="torch"
+            )
 
             for video in video_inputs:
                 self.assertIsInstance(video, torch.Tensor)
@@ -270,7 +488,9 @@ class VideoProcessingTestMixin:
         """Tests that the processor can work with nested list where each video is a list of arrays"""
         for video_processing_class in self.video_processor_list:
             video_processing = video_processing_class(**self.video_processor_dict)
-            video_inputs = self.video_processor_tester.prepare_video_inputs(equal_resolution=False, numpify=True)
+            video_inputs = self.video_processor_tester.prepare_video_inputs(
+                equal_resolution=False, return_tensors="np"
+            )
 
             # Test not batched input
             video_inputs = [list(video) for video in video_inputs]
@@ -294,7 +514,9 @@ class VideoProcessingTestMixin:
 
             # create random numpy tensors
             self.video_processor_tester.num_channels = 4
-            video_inputs = self.video_processor_tester.prepare_video_inputs(equal_resolution=False, numpify=True)
+            video_inputs = self.video_processor_tester.prepare_video_inputs(
+                equal_resolution=False, return_tensors="pil"
+            )
 
             # Test not batched input
             encoded_videos = video_processor(
@@ -305,6 +527,9 @@ class VideoProcessingTestMixin:
                 image_std=1,
             )[self.input_name]
             expected_output_video_shape = self.video_processor_tester.expected_output_video_shape([video_inputs[0]])
+            if video_processor.do_convert_rgb:
+                expected_output_video_shape = list(expected_output_video_shape)
+                expected_output_video_shape[1] = 3
             self.assertEqual(tuple(encoded_videos.shape), (1, *expected_output_video_shape))
 
             # Test batched
@@ -316,6 +541,9 @@ class VideoProcessingTestMixin:
                 image_std=1,
             )[self.input_name]
             expected_output_video_shape = self.video_processor_tester.expected_output_video_shape(video_inputs)
+            if video_processor.do_convert_rgb:
+                expected_output_video_shape = list(expected_output_video_shape)
+                expected_output_video_shape[1] = 3
             self.assertEqual(
                 tuple(encoded_videos.shape), (self.video_processor_tester.batch_size, *expected_output_video_shape)
             )

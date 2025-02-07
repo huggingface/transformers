@@ -46,7 +46,7 @@ from ...video_processing_utils_fast import (
     DefaultFastVideoProcessorInitKwargs,
 )
 from ...video_utils import group_videos_by_shape, reorder_videos
-from .video_processing_qwen2_5_vl import smart_resize
+from .image_processing_qwen2_5_vl import smart_resize
 
 
 if is_torch_available():
@@ -102,6 +102,7 @@ class Qwen2_5_VLVideoProcessorFast(BaseVideoProcessorFast):
 
     def __init__(self, **kwargs: Unpack[Qwen2_5_VLFastVideoProcessorInitKwargs]):
         super().__init__(**kwargs)
+        self.size = {"shortest_edge": self.min_pixels, "longest_edge": self.max_pixels}
 
     def _preprocess(
         self,
@@ -144,13 +145,12 @@ class Qwen2_5_VLVideoProcessorFast(BaseVideoProcessorFast):
                 Whether to convert the video to RGB.
             return_tensors
         """
-        height, width = get_image_size(videos[0], channel_dim=ChannelDimension.FIRST)
-        resized_height, resized_width = height, width
-
         # Group videos by size for batched resizing
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
         resized_videos_grouped = {}
         for shape, stacked_videos in grouped_videos.items():
+            height, width = get_image_size(stacked_videos[0], channel_dim=ChannelDimension.FIRST)
+            resized_height, resized_width = height, width
             if do_resize:
                 resized_height, resized_width = smart_resize(
                     height,
@@ -169,45 +169,54 @@ class Qwen2_5_VLVideoProcessorFast(BaseVideoProcessorFast):
         # Needed in case do_resize is False, or resize returns videos with different sizes
         grouped_videos, grouped_videos_index = group_videos_by_shape(resized_videos)
         processed_videos_grouped = {}
+        processed_grids = {}
         for shape, stacked_videos in grouped_videos.items():
+            resized_height, resized_width = get_image_size(stacked_videos[0], channel_dim=ChannelDimension.FIRST)
+
             # Fused rescale and normalize
             stacked_videos = self.rescale_and_normalize(
                 stacked_videos, do_rescale, rescale_factor, do_normalize, image_mean, image_std
             )
-            processed_videos_grouped[shape] = stacked_videos
+            patches = stacked_videos
+
+            # Check that videos have `num_frames` divisible by `temporal_patch_size`
+            if patches.shape[1] % self.temporal_patch_size != 0:
+                repeats = patches[:, -1:].repeat(1, self.temporal_patch_size - 1, 1, 1, 1)
+                patches = torch.cat([patches, repeats], dim=0)
+
+            batch_size, grid_t, channel = patches.shape[:3]
+            grid_t = grid_t // self.temporal_patch_size
+            grid_h, grid_w = resized_height // self.patch_size, resized_width // self.patch_size
+
+            patches = patches.view(
+                batch_size,
+                grid_t,
+                self.temporal_patch_size,
+                channel,
+                grid_h // self.merge_size,
+                self.merge_size,
+                self.patch_size,
+                grid_w // self.merge_size,
+                self.merge_size,
+                self.patch_size,
+            )
+            patches = patches.permute(0, 1, 4, 7, 5, 8, 3, 2, 6, 9)
+            flatten_patches = patches.reshape(
+                batch_size,
+                grid_t * grid_h * grid_w,
+                channel * self.temporal_patch_size * self.patch_size * self.patch_size,
+            )
+
+            processed_videos_grouped[shape] = flatten_patches
+            processed_grids[shape] = [[grid_t, grid_h, grid_w]] * batch_size
 
         processed_videos = reorder_videos(processed_videos_grouped, grouped_videos_index)
-        patches = torch.stack(processed_videos, dim=0)
-
-        # Check that videos have `num_frames` divisible by `temporal_patch_size`
-        if patches.shape[1] % self.temporal_patch_size != 0:
-            repeats = patches[:, -1:].repeat(1, self.temporal_patch_size - 1, 1, 1, 1)
-            patches = torch.cat([patches, repeats], dim=0)
-
-        batch_size, grid_t, channel = patches.shape[:3]
-        grid_t = grid_t // self.temporal_patch_size
-        grid_h, grid_w = resized_height // self.patch_size, resized_width // self.patch_size
-
-        patches = patches.view(
-            batch_size,
-            grid_t,
-            self.temporal_patch_size,
-            channel,
-            grid_h // self.merge_size,
-            self.merge_size,
-            self.patch_size,
-            grid_w // self.merge_size,
-            self.merge_size,
-            self.patch_size,
-        )
-        patches = patches.permute(0, 1, 4, 7, 5, 8, 3, 2, 6, 9)
-        flatten_patches = patches.reshape(
-            batch_size * grid_t * grid_h * grid_w,
-            channel * self.temporal_patch_size * self.patch_size * self.patch_size,
-        )
+        processed_grids = reorder_videos(processed_grids, grouped_videos_index)
+        pixel_values_videos = torch.cat(processed_videos, dim=0)
+        video_grid_thw = torch.tensor(processed_grids)
 
         return BatchFeature(
-            data={"pixel_values_videos": flatten_patches, "video_grid_thw": (grid_t, grid_h, grid_w)},
+            data={"pixel_values_videos": pixel_values_videos, "video_grid_thw": video_grid_thw},
             tensor_type=return_tensors,
         )
 

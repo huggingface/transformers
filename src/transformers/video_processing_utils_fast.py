@@ -199,22 +199,7 @@ class BaseVideoProcessorFast(BaseVideoProcessor):
     valid_init_kwargs = DefaultFastVideoProcessorInitKwargs
     valid_preprocess_kwargs = DefaultFastVideoProcessorPreprocessKwargs
 
-    def __init__(
-        self,
-        do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
-        default_to_square: Optional[bool] = None,
-        resample: Optional[Union["PILImageResampling", "F.InterpolationMode"]] = None,
-        do_center_crop: Optional[bool] = None,
-        crop_size: Optional[Dict[str, int]] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[Union[int, float]] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        do_convert_rgb: Optional[bool] = None,
-        **kwargs,
-    ) -> None:
+    def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
         size = kwargs.pop("size", self.size)
         self.size = (
@@ -227,6 +212,8 @@ class BaseVideoProcessorFast(BaseVideoProcessor):
         for key in self.valid_init_kwargs.__annotations__.keys():
             if kwargs.get(key) is not None:
                 setattr(self, key, kwargs[key])
+            else:
+                setattr(self, key, getattr(self, key, None))
 
     def resize(
         self,
@@ -385,7 +372,7 @@ class BaseVideoProcessorFast(BaseVideoProcessor):
         # There is a transparency layer, blend it with a white background.
         # Calculate the alpha proportion for blending.
         alpha = video[..., 3, :, :] / 255.0
-        video = (1 - alpha[..., None, :, :]) * 255 + alpha[..., None, :, :] * video[..., 3, :, :]
+        video = (1 - alpha[..., None, :, :]) * 255 + alpha[..., None, :, :] * video[..., :3, :, :]
         return video
 
     def _prepare_videos_structure(

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -19,27 +19,19 @@ from typing import Dict, List, Optional, Union
 import numpy as np
 
 from ...image_processing_utils import BatchFeature, get_size_dict
-from ...image_transforms import (
-    convert_to_rgb,
-    resize,
-    to_channel_dimension_format,
-)
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    VideoInput,
-    infer_channel_dimension_format,
     is_scaled_image,
-    make_batched_videos,
     to_numpy_array,
-    valid_images,
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, is_vision_available, logging
 from ...video_processing_utils import BaseVideoProcessor
+from ...video_utils import VideoInput, infer_channel_dimension_format, make_batched_videos, to_channel_dimension_format
 
 
 logger = logging.get_logger(__name__)
@@ -162,41 +154,29 @@ class LlavaOnevisionVideoProcessor(BaseVideoProcessor):
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
-        if do_convert_rgb:
-            images = [convert_to_rgb(image) for image in images]
 
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
+        # All transformations expect numpy arrays
+        images = to_numpy_array(images)
+
+        if do_convert_rgb:
+            images = self.convert_to_rgb(images, input_data_format=input_data_format)
 
         if do_rescale and is_scaled_image(images[0]):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled videos. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+                " videos have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
             )
 
-        if input_data_format is None:
-            # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0])
-
         if do_resize:
-            images = [
-                resize(image, size=size, resample=resample, input_data_format=input_data_format) for image in images
-            ]
+            images = self.resize(images, size=size, resample=resample, input_data_format=input_data_format)
 
         if do_rescale:
-            images = [
-                self.rescale(image, scale=rescale_factor, input_data_format=input_data_format) for image in images
-            ]
+            images = self.rescale(images, scale=rescale_factor, input_data_format=input_data_format)
 
         if do_normalize:
-            images = [
-                self.normalize(image, mean=image_mean, std=image_std, input_data_format=input_data_format)
-                for image in images
-            ]
+            images = self.normalize(images, mean=image_mean, std=image_std, input_data_format=input_data_format)
 
-        images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
-        ]
+        images = to_channel_dimension_format(images, data_format, input_channel_dim=input_data_format)
 
         return images
 
@@ -272,12 +252,6 @@ class LlavaOnevisionVideoProcessor(BaseVideoProcessor):
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
         videos = make_batched_videos(videos)
-
-        if not valid_images(videos[0]):
-            raise ValueError(
-                "Invalid video type. Must be a list consisting of PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
 
         validate_preprocess_arguments(
             do_rescale=do_rescale,

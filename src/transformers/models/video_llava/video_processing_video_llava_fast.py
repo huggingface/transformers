@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Video processor class for LLaVa-Onevision."""
+"""Video processor class for Video-LLaVA."""
 
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
@@ -24,16 +24,15 @@ from ...video_processing_utils_fast import (
 )
 
 
-class LlavaOnevisionVideoProcessorFast(BaseVideoProcessorFast):
+class VideoLlavaVideoProcessorFast(BaseVideoProcessorFast):
     resample = PILImageResampling.BICUBIC
     image_mean = OPENAI_CLIP_MEAN
     image_std = OPENAI_CLIP_STD
-    size = {"height": 384, "width": 384}
-    rescale_factor = 1 / 255
+    size = {"shortest_edge": 224}
     default_to_square = False
-    crop_size = None
+    crop_size = {"height": 224, "width": 224}
     do_resize = True
-    do_center_crop = None
+    do_center_crop = True
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
@@ -43,4 +42,4 @@ class LlavaOnevisionVideoProcessorFast(BaseVideoProcessorFast):
         super().__init__(**kwargs)
 
 
-__all__ = ["LlavaOnevisionVideoProcessorFast"]
+__all__ = ["VideoLlavaVideoProcessorFast"]

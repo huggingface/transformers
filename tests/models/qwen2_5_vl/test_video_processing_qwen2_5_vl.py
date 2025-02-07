@@ -19,7 +19,7 @@ import numpy as np
 
 from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_video_processing_common import VideoProcessingTestMixin, prepare_video_inputs
 
@@ -33,6 +33,9 @@ if is_vision_available():
     from transformers import Qwen2_5_VLVideoProcessor
     from transformers.image_utils import get_image_size
     from transformers.models.qwen2_vl.video_processing_qwen2_vl import smart_resize
+
+    if is_torchvision_available():
+        from transformers import Qwen2_5_VLVideoProcessorFast
 
 
 class Qwen2_5_VLVideoProcessingTester(unittest.TestCase):
@@ -106,7 +109,7 @@ class Qwen2_5_VLVideoProcessingTester(unittest.TestCase):
             seq_len += grid_t * grid_h * grid_w
         return [seq_len, hidden_dim]
 
-    def prepare_video_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+    def prepare_video_inputs(self, equal_resolution=False, return_tensors="pil"):
         videos = prepare_video_inputs(
             batch_size=self.batch_size,
             num_frames=self.num_frames,
@@ -114,8 +117,7 @@ class Qwen2_5_VLVideoProcessingTester(unittest.TestCase):
             min_resolution=self.min_resolution,
             max_resolution=self.max_resolution,
             equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
+            return_tensors=return_tensors,
         )
         return videos
 
@@ -124,6 +126,7 @@ class Qwen2_5_VLVideoProcessingTester(unittest.TestCase):
 @require_vision
 class Qwen2_5_VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
     video_processing_class = Qwen2_5_VLVideoProcessor if is_vision_available() else None
+    fast_video_processing_class = Qwen2_5_VLVideoProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
@@ -162,7 +165,9 @@ class Qwen2_5_VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase)
         for video_processing_class in self.video_processor_list:
             # Initialize video_processing
             video_processing = video_processing_class(**self.video_processor_dict)
-            video_inputs = self.video_processor_tester.prepare_video_inputs(equal_resolution=False)
+            video_inputs = self.video_processor_tester.prepare_video_inputs(
+                equal_resolution=False, return_tensors="pil"
+            )
 
             # Each video is a list of PIL Images
             for video in video_inputs:
@@ -183,7 +188,9 @@ class Qwen2_5_VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase)
             # Initialize video_processing
             video_processing = video_processing_class(**self.video_processor_dict)
             # create random numpy tensors
-            video_inputs = self.video_processor_tester.prepare_video_inputs(equal_resolution=False, numpify=True)
+            video_inputs = self.video_processor_tester.prepare_video_inputs(
+                equal_resolution=False, return_tensors="np"
+            )
             for video in video_inputs:
                 self.assertIsInstance(video, np.ndarray)
 
@@ -202,7 +209,9 @@ class Qwen2_5_VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase)
             # Initialize video_processing
             video_processing = video_processing_class(**self.video_processor_dict)
             # create random PyTorch tensors
-            video_inputs = self.video_processor_tester.prepare_video_inputs(equal_resolution=False, torchify=True)
+            video_inputs = self.video_processor_tester.prepare_video_inputs(
+                equal_resolution=False, return_tensors="torch"
+            )
 
             for video in video_inputs:
                 self.assertIsInstance(video, torch.Tensor)
@@ -224,7 +233,9 @@ class Qwen2_5_VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase)
         """Tests that the processor can work with nested list where each video is a list of arrays"""
         for video_processing_class in self.video_processor_list:
             video_processing = video_processing_class(**self.video_processor_dict)
-            video_inputs = self.video_processor_tester.prepare_video_inputs(equal_resolution=False, numpify=True)
+            video_inputs = self.video_processor_tester.prepare_video_inputs(
+                equal_resolution=False, return_tensors="np"
+            )
 
             # Test not batched input
             video_inputs_nested = [list(video) for video in video_inputs]
@@ -246,7 +257,9 @@ class Qwen2_5_VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase)
 
             # create random numpy tensors
             self.video_processor_tester.num_channels = 4
-            video_inputs = self.video_processor_tester.prepare_video_inputs(equal_resolution=False, numpify=True)
+            video_inputs = self.video_processor_tester.prepare_video_inputs(
+                equal_resolution=False, return_tensors="np"
+            )
 
             # Test not batched input
             encoded_videos = video_processor(

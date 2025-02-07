@@ -19,72 +19,28 @@
 # limitations under the License.
 """video processor class for Qwen2-5-VL."""
 
-import math
 from typing import Dict, List, Optional, Union
 
 import numpy as np
 
 from ...image_processing_utils import BatchFeature
-from ...image_transforms import (
-    convert_to_rgb,
-    resize,
-    to_channel_dimension_format,
-)
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
     ChannelDimension,
-    ImageInput,
     PILImageResampling,
-    VideoInput,
     get_image_size,
-    infer_channel_dimension_format,
     is_scaled_image,
-    make_list_of_images,
-    make_list_of_videos,
     to_numpy_array,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_vision_available, logging
+from ...utils import TensorType, logging
 from ...video_processing_utils import BaseVideoProcessor
+from ...video_utils import VideoInput, make_batched_videos, to_channel_dimension_format
+from .image_processing_qwen2_5_vl import smart_resize
 
 
 logger = logging.get_logger(__name__)
-
-
-if is_vision_available():
-    pass
-
-
-def smart_resize(
-    height: int, width: int, factor: int = 28, min_pixels: int = 56 * 56, max_pixels: int = 14 * 14 * 4 * 1280
-):
-    """Rescales the video so that the following conditions are met:
-
-    1. Both dimensions (height and width) are divisible by 'factor'.
-
-    2. The total number of pixels is within the range ['min_pixels', 'max_pixels'].
-
-    3. The aspect ratio of the video is maintained as closely as possible.
-
-    """
-    if height < factor or width < factor:
-        raise ValueError(f"height:{height} or width:{width} must be larger than factor:{factor}")
-    elif max(height, width) / min(height, width) > 200:
-        raise ValueError(
-            f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
-        )
-    h_bar = round(height / factor) * factor
-    w_bar = round(width / factor) * factor
-    if h_bar * w_bar > max_pixels:
-        beta = math.sqrt((height * width) / max_pixels)
-        h_bar = math.floor(height / beta / factor) * factor
-        w_bar = math.floor(width / beta / factor) * factor
-    elif h_bar * w_bar < min_pixels:
-        beta = math.sqrt(min_pixels / (height * width))
-        h_bar = math.ceil(height * beta / factor) * factor
-        w_bar = math.ceil(width * beta / factor) * factor
-    return h_bar, w_bar
 
 
 class Qwen2_5_VLVideoProcessor(BaseVideoProcessor):
@@ -152,12 +108,12 @@ class Qwen2_5_VLVideoProcessor(BaseVideoProcessor):
         self.patch_size = patch_size
         self.temporal_patch_size = temporal_patch_size
         self.merge_size = merge_size
-        self.size = {"min_pixels": min_pixels, "max_pixels": max_pixels}
+        self.size = {"shortest_edge": min_pixels, "longest_edge": max_pixels}
         self.do_convert_rgb = do_convert_rgb
 
     def _preprocess(
         self,
-        images: Union[ImageInput, VideoInput],
+        images: VideoInput,
         do_resize: bool = None,
         resample: PILImageResampling = None,
         do_rescale: bool = None,
@@ -204,57 +160,49 @@ class Qwen2_5_VLVideoProcessor(BaseVideoProcessor):
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.   - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
-        images = make_list_of_images(images)
+        # All transformations expect numpy arrays
+        images = to_numpy_array(images)
 
         if do_convert_rgb:
-            images = [convert_to_rgb(image) for image in images]
-
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
+            images = self.convert_to_rgb(images, input_data_format)
 
         if is_scaled_image(images[0]) and do_rescale:
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
             )
-        if input_data_format is None:
-            # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0])
 
-        height, width = get_image_size(images[0], channel_dim=input_data_format)
+        height, width = get_image_size(images, channel_dim=input_data_format)
         resized_height, resized_width = height, width
-        processed_images = []
-        for image in images:
-            if do_resize:
-                resized_height, resized_width = smart_resize(
-                    height,
-                    width,
-                    factor=self.patch_size * self.merge_size,
-                    min_pixels=self.min_pixels,
-                    max_pixels=self.max_pixels,
-                )
-                image = resize(
-                    image, size=(resized_height, resized_width), resample=resample, input_data_format=input_data_format
-                )
+        resized_height, resized_width = smart_resize(
+            height,
+            width,
+            factor=self.patch_size * self.merge_size,
+            min_pixels=self.min_pixels,
+            max_pixels=self.max_pixels,
+        )
+        if do_resize:
+            images = self.resize(
+                images, size=(resized_height, resized_width), resample=resample, input_data_format=input_data_format
+            )
 
-            if do_rescale:
-                image = self.rescale(image, scale=rescale_factor, input_data_format=input_data_format)
+        if do_rescale:
+            images = self.rescale(images, scale=rescale_factor, input_data_format=input_data_format)
 
-            if do_normalize:
-                image = self.normalize(image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+        if do_normalize:
+            images = self.normalize(images, mean=image_mean, std=image_std, input_data_format=input_data_format)
 
-            image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
-            processed_images.append(image)
+        images = to_channel_dimension_format(images, data_format, input_channel_dim=input_data_format)
 
-        patches = np.array(processed_images)
         if data_format == ChannelDimension.LAST:
-            patches = patches.transpose(0, 3, 1, 2)
-        if patches.shape[0] == 1:
-            patches = np.tile(patches, (self.temporal_patch_size, 1, 1, 1))
-        channel = patches.shape[1]
-        grid_t = patches.shape[0] // self.temporal_patch_size
+            images = images.transpose(0, 3, 1, 2)
+        if images.shape[0] == 1:
+            images = np.tile(images, (self.temporal_patch_size, 1, 1, 1))
+
+        channel = images.shape[1]
+        grid_t = images.shape[0] // self.temporal_patch_size
         grid_h, grid_w = resized_height // self.patch_size, resized_width // self.patch_size
-        patches = patches.reshape(
+        patches = images.reshape(
             grid_t,
             self.temporal_patch_size,
             channel,
@@ -344,7 +292,7 @@ class Qwen2_5_VLVideoProcessor(BaseVideoProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
 
-        videos = make_list_of_videos(videos)
+        videos = make_batched_videos(videos)
 
         validate_preprocess_arguments(
             rescale_factor=rescale_factor,
@@ -356,7 +304,7 @@ class Qwen2_5_VLVideoProcessor(BaseVideoProcessor):
             resample=resample,
         )
 
-        pixel_values, vision_grid_thws = [], []
+        pixel_values_videos, video_grid_thws = [], []
         for frames in videos:
             patches, video_grid_thw = self._preprocess(
                 frames,
@@ -371,11 +319,11 @@ class Qwen2_5_VLVideoProcessor(BaseVideoProcessor):
                 do_convert_rgb=do_convert_rgb,
                 input_data_format=input_data_format,
             )
-            pixel_values.extend(patches)
-            vision_grid_thws.append(video_grid_thw)
-        pixel_values = np.array(pixel_values)
-        vision_grid_thws = np.array(vision_grid_thws)
-        data = {"pixel_values_videos": pixel_values, "video_grid_thw": vision_grid_thws}
+            pixel_values_videos.extend(patches)
+            video_grid_thws.append(video_grid_thw)
+        pixel_values_videos = np.array(pixel_values_videos)
+        video_grid_thws = np.array(video_grid_thws)
+        data = {"pixel_values_videos": pixel_values_videos, "video_grid_thw": video_grid_thws}
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 

@@ -17,7 +17,7 @@ import unittest
 
 from transformers.image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_torchvision_available, is_vision_available
 
 from ...test_video_processing_common import VideoProcessingTestMixin, prepare_video_inputs
 
@@ -27,6 +27,9 @@ if is_torch_available():
 
 if is_vision_available():
     from transformers import LlavaOnevisionVideoProcessor
+
+    if is_torchvision_available():
+        from transformers import LlavaOnevisionVideoProcessorFast
 
 
 class LlavaOnevisionVideoProcessingTester(unittest.TestCase):
@@ -45,7 +48,7 @@ class LlavaOnevisionVideoProcessingTester(unittest.TestCase):
         image_std=OPENAI_CLIP_STD,
         do_convert_rgb=True,
     ):
-        size = size if size is not None else {"shortest_edge": 20}
+        size = size if size is not None else {"height": 20, "width": 20}
         self.parent = parent
         self.batch_size = batch_size
         self.num_frames = num_frames
@@ -69,10 +72,10 @@ class LlavaOnevisionVideoProcessingTester(unittest.TestCase):
             "do_convert_rgb": self.do_convert_rgb,
         }
 
-    def expected_output_video_shape(self, images):
-        return self.num_frames, self.num_channels, self.size["shortest_edge"], self.size["shortest_edge"]
+    def expected_output_video_shape(self, video):
+        return self.num_frames, self.num_channels, self.size["height"], self.size["width"]
 
-    def prepare_video_inputs(self, equal_resolution=False, numpify=False, torchify=False):
+    def prepare_video_inputs(self, equal_resolution=False, return_tensors="pil"):
         videos = prepare_video_inputs(
             batch_size=self.batch_size,
             num_frames=self.num_frames,
@@ -80,8 +83,7 @@ class LlavaOnevisionVideoProcessingTester(unittest.TestCase):
             min_resolution=self.min_resolution,
             max_resolution=self.max_resolution,
             equal_resolution=equal_resolution,
-            numpify=numpify,
-            torchify=torchify,
+            return_tensors=return_tensors,
         )
         return videos
 
@@ -90,6 +92,7 @@ class LlavaOnevisionVideoProcessingTester(unittest.TestCase):
 @require_vision
 class LlavaOnevisionVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
     video_processing_class = LlavaOnevisionVideoProcessor if is_vision_available() else None
+    fast_video_processing_class = LlavaOnevisionVideoProcessorFast if is_torchvision_available() else None
 
     def setUp(self):
         super().setUp()
@@ -110,7 +113,7 @@ class LlavaOnevisionVideoProcessingTest(VideoProcessingTestMixin, unittest.TestC
 
     def test_video_processor_from_dict_with_kwargs(self):
         video_processor = self.video_processing_class.from_dict(self.video_processor_dict)
-        self.assertEqual(video_processor.size, {"shortest_edge": 20})
+        self.assertEqual(video_processor.size, {"height": 20, "width": 20})
 
         video_processor = self.video_processing_class.from_dict(self.video_processor_dict, size=42)
         self.assertEqual(video_processor.size, {"shortest_edge": 42})

@@ -30,7 +30,8 @@ import numpy as np
 import typing_extensions
 
 from .dynamic_module_utils import custom_object_save
-from .image_utils import ChannelDimension, is_valid_image, is_vision_available, load_image, load_video
+from .image_utils import ChannelDimension, is_valid_image, is_vision_available, load_image
+from .video_utils import load_video
 
 
 if is_vision_available():

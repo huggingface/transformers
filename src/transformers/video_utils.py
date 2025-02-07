@@ -117,7 +117,7 @@ def is_scaled_video(video: np.ndarray) -> bool:
 
 def convert_videos_to_array(videos: List[VideoInput]) -> List[Union["np.ndarray", "torch.Tensor"]]:
     """
-    Given a batche of videos, converts each video to a 4D array. If video is already in array type,
+    Given a batch of videos, converts each video to a 4D array. If video is already in array type,
     it is simply returned. We assume that all inputs in the list are in the same format, based on the type of the first element.
 
     Args:

@@ -25,11 +25,6 @@ from .dynamic_module_utils import custom_object_save
 from .image_processing_base import BatchFeature, ImageProcessingMixin
 from .image_processing_utils import get_size_dict
 from .image_transforms import center_crop, normalize, rescale, resize, to_channel_dimension_format
-from .image_utils import (
-    ChannelDimension,
-    infer_channel_dimension_format,
-    load_video,
-)
 from .utils import (
     VIDEO_PROCESSOR_NAME,
     add_model_info_to_auto_map,
@@ -40,6 +35,11 @@ from .utils import (
     is_offline_mode,
     is_remote_url,
     logging,
+)
+from .video_utils import (
+    ChannelDimension,
+    infer_channel_dimension_format,
+    load_video,
 )
 
 
@@ -121,22 +121,16 @@ class BaseVideoProcessor(ImageProcessingMixin):
             video: The resized video.
         """
 
-        if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(video)
-
-        video = to_channel_dimension_format(video, ChannelDimension.LAST, input_data_format)
         if video.ndim == 3:
-            video_resized = resize(video, size, resample=resample, input_data_format=ChannelDimension.LAST)
+            video_resized = resize(
+                video, size, resample=resample, input_data_format=input_data_format, data_format=data_format
+            )
         elif video.ndim == 4:
             video_resized = [
-                resize(frame, size, resample=resample, input_data_format=ChannelDimension.LAST) for frame in video
+                resize(frame, size, resample=resample, input_data_format=input_data_format, data_format=data_format)
+                for frame in video
             ]
             video_resized = np.stack(video_resized)
-        video_resized = (
-            to_channel_dimension_format(video, data_format, input_data_format)
-            if data_format is not None
-            else video_resized
-        )
         return video_resized
 
     def rescale(
@@ -267,25 +261,36 @@ class BaseVideoProcessor(ImageProcessingMixin):
         if not isinstance(video, np.ndarray):
             raise ValueError(f"Video has to be a numpy array to convert to RGB format, but found {type(video)}")
 
-        if video.ndim == 4:
-            return video
-
-        # np.array usually comes with ChannelDimension.LAST so leet's convert it
+        # np.array usually comes with ChannelDimension.LAST but let's make sure
         if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(video)
-        video = to_channel_dimension_format(video, ChannelDimension.FIRST, input_channel_dim=input_data_format)
+            input_data_format = infer_channel_dimension_format(video, num_channels=(1, 3, 4))
+        data_format = input_data_format if data_format is None else data_format
+        video = to_channel_dimension_format(video, ChannelDimension.LAST, input_channel_dim=input_data_format)
 
-        # grayscale video so we repeat it 3 times for each channel
-        if video.ndim == 3:
-            return video[:, None, ...].repeat(3, 1)
+        # Already has 3 channels, so pass
+        if video.shape[-1] == 3:
+            pass
 
-        if not (video[:, 3, ...] < 255).any():
-            return video
+        # Grayscale video has 1 channel, we repeat 3 times for each channel
+        elif video.shape[-1] == 1:
+            return video.repeat(1, 1, 1, 3)
 
-        # There is a transparency layer, blend it with a white background.
-        # Calculate the alpha proportion for blending.
-        alpha = video[:, 3, ...] / 255.0
-        video = (1 - alpha[:, :, np.newaxis]) * 255 + alpha[:, :, np.newaxis] * video[:, :3, ...]
+        # No transparency
+        elif not (video[..., 3] < 255).any():
+            pass
+
+        else:
+            # There is a transparency layer, blend it with a white background.
+            # Calculate the alpha proportion for blending.
+            alpha = video[..., 3] / 255.0
+            video = (1 - alpha[..., np.newaxis]) * 255 + alpha[..., np.newaxis] * video[..., :3]
+            video = video.astype(np.uint8)
+
+        video = (
+            to_channel_dimension_format(video, data_format, input_channel_dim=ChannelDimension.LAST)
+            if data_format is not None
+            else video
+        )
         return video
 
     @classmethod

@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,42 +12,29 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Image processor class for LLaVa-NeXT-Video."""
+"""Video processor class for LLaVa-NeXT-Video."""
 
 from typing import Dict, List, Optional, Union
 
 import numpy as np
 
 from ...image_processing_utils import BatchFeature, get_size_dict
-from ...image_transforms import (
-    convert_to_rgb,
-    get_resize_output_image_size,
-    resize,
-    to_channel_dimension_format,
-)
+from ...image_transforms import get_resize_output_image_size
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
     ChannelDimension,
-    ImageInput,
     PILImageResampling,
-    VideoInput,
-    infer_channel_dimension_format,
     is_scaled_image,
-    make_batched_videos,
-    make_list_of_images,
     to_numpy_array,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, is_vision_available, logging
+from ...utils import TensorType, logging
 from ...video_processing_utils import BaseVideoProcessor
+from ...video_utils import VideoInput, infer_channel_dimension_format, make_batched_videos, to_channel_dimension_format
 
 
 logger = logging.get_logger(__name__)
-
-
-if is_vision_available():
-    pass
 
 
 class LlavaNextVideoVideoProcessor(BaseVideoProcessor):
@@ -130,10 +117,9 @@ class LlavaNextVideoVideoProcessor(BaseVideoProcessor):
         self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
         self.do_convert_rgb = do_convert_rgb
 
-    # Copied from transformers.models.clip.image_processing_clip.CLIPImageProcessor.resize with CLIP->LLaVa
     def resize(
         self,
-        image: np.ndarray,
+        video: np.ndarray,
         size: Dict[str, int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         data_format: Optional[Union[str, ChannelDimension]] = None,
@@ -145,7 +131,7 @@ class LlavaNextVideoVideoProcessor(BaseVideoProcessor):
         resized to keep the input aspect ratio.
 
         Args:
-            image (`np.ndarray`):
+            video (`np.ndarray`):
                 Image to resize.
             size (`Dict[str, int]`):
                 Size of the output image.
@@ -158,22 +144,22 @@ class LlavaNextVideoVideoProcessor(BaseVideoProcessor):
         """
         default_to_square = True
         if "shortest_edge" in size:
-            size = size["shortest_edge"]
+            size_tuple = size["shortest_edge"]
             default_to_square = False
         elif "height" in size and "width" in size:
-            size = (size["height"], size["width"])
+            size_tuple = (size["height"], size["width"])
         else:
-            raise ValueError("Size must contain either 'shortest_edge' or 'height' and 'width'.")
+            raise ValueError(f"Size must contain either 'shortest_edge' or 'height' and 'width', but got {size}")
 
         output_size = get_resize_output_image_size(
-            image,
-            size=size,
+            video,
+            size=size_tuple,
             default_to_square=default_to_square,
             input_data_format=input_data_format,
         )
 
-        return resize(
-            image,
+        return super().resize(
+            video,
             size=output_size,
             resample=resample,
             data_format=data_format,
@@ -183,7 +169,7 @@ class LlavaNextVideoVideoProcessor(BaseVideoProcessor):
 
     def _preprocess(
         self,
-        images: ImageInput,
+        images: VideoInput,
         do_resize: bool = None,
         size: Dict[str, int] = None,
         resample: PILImageResampling = None,
@@ -240,43 +226,31 @@ class LlavaNextVideoVideoProcessor(BaseVideoProcessor):
                 - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
                 - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
         """
-        images = make_list_of_images(images)
+        # All transformations expect numpy arrays.
+        images = to_numpy_array(images)
 
         if do_convert_rgb:
-            images = [convert_to_rgb(image) for image in images]
+            images = self.convert_to_rgb(images, input_data_format=input_data_format)
 
-        # All transformations expect numpy arrays.
-        images = [to_numpy_array(image) for image in images]
-
-        if do_rescale and is_scaled_image(images[0]):
+        if do_rescale and is_scaled_image(images):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
             )
-        if input_data_format is None:
-            # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images[0])
 
-        all_images = []
-        for image in images:
-            if do_resize:
-                image = self.resize(image, size=size, resample=resample, input_data_format=input_data_format)
+        if do_resize:
+            images = self.resize(images, size=size, resample=resample, input_data_format=input_data_format)
 
-            if do_center_crop:
-                image = self.center_crop(image, size=crop_size, input_data_format=input_data_format)
+        if do_center_crop:
+            images = self.center_crop(images, size=crop_size, input_data_format=input_data_format)
 
-            if do_rescale:
-                image = self.rescale(image, scale=rescale_factor, input_data_format=input_data_format)
+        if do_rescale:
+            images = self.rescale(images, scale=rescale_factor, input_data_format=input_data_format)
 
-            if do_normalize:
-                image = self.normalize(image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+        if do_normalize:
+            images = self.normalize(images, mean=image_mean, std=image_std, input_data_format=input_data_format)
 
-            all_images.append(image)
-        images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
-            for image in all_images
-        ]
-
+        images = to_channel_dimension_format(images, data_format, input_channel_dim=input_data_format)
         return images
 
     def preprocess(
@@ -375,6 +349,9 @@ class LlavaNextVideoVideoProcessor(BaseVideoProcessor):
             resample=resample,
         )
 
+        if input_data_format is None:
+            input_data_format = infer_channel_dimension_format(videos[0])
+
         # preprocess each video frame by frame
         pixel_values = [
             self._preprocess(
@@ -389,6 +366,7 @@ class LlavaNextVideoVideoProcessor(BaseVideoProcessor):
                 do_normalize=do_normalize,
                 image_mean=image_mean,
                 image_std=image_std,
+                do_convert_rgb=do_convert_rgb,
                 data_format=data_format,
                 input_data_format=input_data_format,
             )

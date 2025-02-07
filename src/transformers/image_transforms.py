@@ -135,8 +135,8 @@ def rescale(
 
     # Finally downcast to the desired dtype at the end if not already same dtype
     # Check dtypes before casting because `astype()` is not efficient with higher dim array
-    # if not image.dtype == dtype:
-    #     rescaled_image = rescaled_image.astype(dtype)
+    if not image.dtype == dtype:
+        rescaled_image = rescaled_image.astype(dtype)
 
     return rescaled_image
 
