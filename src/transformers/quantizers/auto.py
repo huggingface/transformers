@@ -15,6 +15,7 @@ import warnings
 from typing import Dict, Optional, Union
 
 from ..models.auto.configuration_auto import AutoConfig
+from ..utils import logging
 from ..utils.quantization_config import (
     AqlmConfig,
     AwqConfig,
@@ -81,6 +82,8 @@ AUTO_QUANTIZATION_CONFIG_MAPPING = {
     "bitnet": BitNetConfig,
     "vptq": VptqConfig,
 }
+
+logger = logging.get_logger(__name__)
 
 
 class AutoQuantizationConfig:
@@ -195,3 +198,23 @@ class AutoHfQuantizer:
             warnings.warn(warning_msg)
 
         return quantization_config
+
+    @staticmethod
+    def supports_quant_method(quantization_config_dict):
+        quant_method = quantization_config_dict.get("quant_method", None)
+        if quantization_config_dict.get("load_in_8bit", False) or quantization_config_dict.get("load_in_4bit", False):
+            suffix = "_4bit" if quantization_config_dict.get("load_in_4bit", False) else "_8bit"
+            quant_method = QuantizationMethod.BITS_AND_BYTES + suffix
+        elif quant_method is None:
+            raise ValueError(
+                "The model's quantization config from the arguments has no `quant_method` attribute. Make sure that the model has been correctly quantized"
+            )
+
+        if quant_method not in AUTO_QUANTIZATION_CONFIG_MAPPING.keys():
+            logger.warning(
+                f"Unknown quantization type, got {quant_method} - supported types are:"
+                f" {list(AUTO_QUANTIZER_MAPPING.keys())}. Hence, we will skip the quantization. "
+                "To remove the warning, you can delete the quantization_config attribute in config.json"
+            )
+            return False
+        return True

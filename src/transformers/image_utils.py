@@ -16,6 +16,7 @@
 import base64
 import os
 from contextlib import redirect_stdout
+from dataclasses import dataclass
 from io import BytesIO
 from typing import TYPE_CHECKING, Dict, Iterable, List, Optional, Tuple, Union
 
@@ -424,6 +425,37 @@ def get_image_size(image: np.ndarray, channel_dim: ChannelDimension = None) -> T
         return image.shape[-3], image.shape[-2]
     else:
         raise ValueError(f"Unsupported data format: {channel_dim}")
+
+
+def get_image_size_for_max_height_width(
+    image_size: Tuple[int, int],
+    max_height: int,
+    max_width: int,
+) -> Tuple[int, int]:
+    """
+    Computes the output image size given the input image and the maximum allowed height and width. Keep aspect ratio.
+    Important, even if image_height < max_height and image_width < max_width, the image will be resized
+    to at least one of the edges be equal to max_height or max_width.
+
+    For example:
+        - input_size: (100, 200), max_height: 50, max_width: 50 -> output_size: (25, 50)
+        - input_size: (100, 200), max_height: 200, max_width: 500 -> output_size: (200, 400)
+
+    Args:
+        image_size (`Tuple[int, int]`):
+            The image to resize.
+        max_height (`int`):
+            The maximum allowed height.
+        max_width (`int`):
+            The maximum allowed width.
+    """
+    height, width = image_size
+    height_scale = max_height / height
+    width_scale = max_width / width
+    min_scale = min(height_scale, width_scale)
+    new_height = int(height * min_scale)
+    new_width = int(width * min_scale)
+    return new_height, new_width
 
 
 def is_valid_annotation_coco_detection(annotation: Dict[str, Union[List, Tuple]]) -> bool:
@@ -856,12 +888,16 @@ def validate_fast_preprocess_arguments(
         do_normalize=do_normalize,
         image_mean=image_mean,
         image_std=image_std,
+        do_pad=do_pad,
+        size_divisibility=size_divisibility,
+        do_center_crop=do_center_crop,
+        crop_size=crop_size,
         do_resize=do_resize,
         size=size,
         resample=resample,
     )
     # Extra checks for ImageProcessorFast
-    if return_tensors != "pt":
+    if return_tensors is not None and return_tensors != "pt":
         raise ValueError("Only returning PyTorch tensors is currently supported.")
 
     if data_format != ChannelDimension.FIRST:
@@ -1251,3 +1287,22 @@ def validate_kwargs(valid_processor_keys: List[str], captured_kwargs: List[str])
         unused_key_str = ", ".join(unused_keys)
         # TODO raise a warning here instead of simply logging?
         logger.warning(f"Unused or unrecognized kwargs: {unused_key_str}.")
+
+
+@dataclass(frozen=True)
+class SizeDict:
+    """
+    Hashable dictionary to store image size information.
+    """
+
+    height: int = None
+    width: int = None
+    longest_edge: int = None
+    shortest_edge: int = None
+    max_height: int = None
+    max_width: int = None
+
+    def __getitem__(self, key):
+        if hasattr(self, key):
+            return getattr(self, key)
+        raise KeyError(f"Key {key} not found in SizeDict.")

@@ -755,6 +755,65 @@ class IdeficsForVisionText2TextTest(IdeficsModelTest, GenerationTesterMixin, uni
             )
             self.assertIsNotNone(output_ids_generate)
 
+    @pytest.mark.generate
+    def test_generate_continue_from_inputs_embeds(self):
+        """Overwrite for IDEFICS: Ensure image attention mask is processed while continuing from `inputs_embeds`."""
+
+        for model_class in self.all_generative_model_classes:
+            config, inputs = self.model_tester.prepare_config_and_inputs_for_common()
+            print(inputs)
+
+            model = model_class(config).to(torch_device).eval()
+
+            model.generation_config.pad_token_id = model.generation_config.eos_token_id = -1
+            model.generation_config.forced_eos_token_id = None
+            model.generation_config.use_cache = True
+
+            input_ids = inputs.pop("input_ids")
+            input_embeds = model.get_input_embeddings()(input_ids)
+
+            generation_kwargs = {
+                "return_dict_in_generate": True,
+                "do_sample": False,
+            }
+
+            inputs["inputs_embeds"] = input_embeds
+
+            # Traditional way of generating text, with `return_dict_in_generate` to return the past key values
+            outputs = model.generate(**inputs, max_new_tokens=4, **generation_kwargs)
+            # Let's generate again, but passing the past key values in between (3 + 1 = 4 tokens). Note that the
+            # inputs may need to be tweaked across `generate` calls (like the attention mask).
+            initial_output = model.generate(**inputs, max_new_tokens=3, **generation_kwargs)
+            inputs["past_key_values"] = initial_output.past_key_values
+
+            new_attention_len = input_ids.shape[1] + initial_output.sequences.shape[-1]
+            continued_embeds = torch.cat([input_embeds, model.get_input_embeddings()(initial_output.sequences)], dim=1)
+            inputs["inputs_embeds"] = continued_embeds
+
+            if "attention_mask" in inputs:
+                inputs["attention_mask"] = torch.nn.functional.pad(
+                    inputs["attention_mask"],
+                    (0, new_attention_len - inputs["attention_mask"].shape[1]),
+                    mode="constant",
+                    value=1,
+                )
+            if "image_attention_mask" in inputs:
+                inputs["image_attention_mask"] = inputs["image_attention_mask"][..., -1:, :]
+
+            cached_output = model.generate(**inputs, max_new_tokens=1, **generation_kwargs)
+
+            # Verify that the combined outputs match the full generation.
+            combined_output_sequences = torch.concat([initial_output.sequences, cached_output.sequences], axis=1)
+            self.assertListEqual(outputs.sequences.tolist(), combined_output_sequences.tolist())
+            for layer_idx in range(len(cached_output.past_key_values)):
+                for kv_idx in range(len(cached_output.past_key_values[layer_idx])):
+                    self.assertTrue(
+                        torch.allclose(
+                            outputs.past_key_values[layer_idx][kv_idx],
+                            cached_output.past_key_values[layer_idx][kv_idx],
+                        )
+                    )
+
     def _check_attentions_for_generate(
         self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
     ):
