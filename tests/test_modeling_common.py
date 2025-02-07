@@ -2349,10 +2349,9 @@ class ModelTesterMixin:
                 safe_save_file(placeholder_dict, os.path.join(tmp_dir, "model.safetensors"), metadata={"format": "pt"})
                 model_reloaded, infos = model_class.from_pretrained(tmp_dir, output_loading_info=True)
 
-                prefix = f"{model_reloaded.base_model_prefix}."
                 params = dict(model_reloaded.named_parameters())
                 params.update(dict(model_reloaded.named_buffers()))
-                param_names = {k[len(prefix) :] if k.startswith(prefix) else k for k in params.keys()}
+                param_names = set(params.keys())
 
                 missing_keys = set(infos["missing_keys"])
 
@@ -2364,7 +2363,6 @@ class ModelTesterMixin:
                     ptrs[id_tensor_storage(tensor)].append(name)
                 tied_params = [names for _, names in ptrs.items() if len(names) > 1]
                 for group in tied_params:
-                    group = {k[len(prefix) :] if k.startswith(prefix) else k for k in group}
                     # We remove the group from extra_missing if not all weights from group are in it
                     if len(group - extra_missing) > 0:
                         extra_missing = extra_missing - set(group)
@@ -2380,9 +2378,6 @@ class ModelTesterMixin:
                 # Remove nonpersistent buffers from missed_missing
                 buffers = [n for n, _ in model_reloaded.named_buffers()]
                 nonpersistent_buffers = {n for n in buffers if n not in model_reloaded.state_dict()}
-                nonpersistent_buffers = {
-                    k[len(prefix) :] if k.startswith(prefix) else k for k in nonpersistent_buffers
-                }
                 missed_missing = missed_missing - nonpersistent_buffers
 
                 if model_reloaded._keys_to_ignore_on_load_missing is None:

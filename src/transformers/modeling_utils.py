@@ -1417,15 +1417,19 @@ def _adjust_loaded_keys_prefix(
 ) -> List[str]:
     """Adjust a set of loaded `keys` by adding or removing `prefix` to make them match the actual model state dict."""
     _prefix = f"{prefix}."
-    if isinstance(keys, str):
+    is_str = isinstance(keys, str)
+    if is_str:
         keys = [keys]
+
     # In this case, we need to add the prefix to the keys, to match them to the expected keys
     if loading_task_model_from_base_state_dict:
         keys = [".".join([prefix, key]) for key in keys]
     # In this case we need to remove the prefix from the key to match them to the expected keys
     elif loading_base_model_from_task_state_dict:
         keys = [key[len(_prefix) :] if key.startswith(_prefix) else key for key in keys]
-    if len(keys) == 1:
+
+    # In this case, unpack
+    if is_str:
         keys = keys[0]
     return keys
 
@@ -1456,6 +1460,12 @@ def _find_missing_and_unexpected_keys(
     # Adjust prefix of the keys to make them match loaded keys before removing them
     missing_keys = sorted(set(expected_keys) - set(loaded_keys))
     unexpected_keys = set(loaded_keys) - set(expected_keys)
+    # If a module has the same name under the base and task specific model, we have to re-add it to unexpected keys (it
+    # means that it is present 2 times in the adjusted loaded keys)
+    if loading_base_model_from_task_state_dict:
+        for key in set(loaded_keys):
+            if sum(key == x for x in loaded_keys) > 1:
+                unexpected_keys.add(key)
 
     # Remove nonpersistent buffers from unexpected keys: they are not in the expected keys (model state dict), but
     # may be in the loaded keys
