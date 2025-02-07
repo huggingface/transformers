@@ -36,7 +36,7 @@ _CONFIG_FOR_DOC = "DeepseekV3Config"
 
 
 class DeepseekV3RMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size, eps=1e-4):
         """
         DeepseekV3RMSNorm is equivalent to T5LayerNorm
         """
@@ -731,8 +731,8 @@ class DeepseekV3Model(DeepseekV3PreTrainedModel):
                     position_embeddings=position_embeddings,
                     **flash_attn_kwargs,
                 )
-                nan_count = torch.sum(torch.isnan(layer_outputs[0])).item()
-                print("nan_count", nan_count, "layer", idx)
+                # nan_count = torch.sum(torch.isnan(layer_outputs[0])).item()
+                # print("nan_count", nan_count, "layer", idx)
             hidden_states = layer_outputs[0]
 
             if output_attentions:
