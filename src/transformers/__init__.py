@@ -5601,7 +5601,6 @@ if TYPE_CHECKING:
     from .models.granite import GraniteConfig
     from .models.granitemoe import GraniteMoeConfig
     from .models.granitemoeshared import GraniteMoeSharedConfig
-
     from .models.grounding_dino import (
         GroundingDinoConfig,
         GroundingDinoProcessor,
@@ -7473,7 +7472,6 @@ if TYPE_CHECKING:
             GraniteMoeSharedModel,
             GraniteMoeSharedPreTrainedModel,
         )
-
         from .models.grounding_dino import (
             GroundingDinoForObjectDetection,
             GroundingDinoModel,
