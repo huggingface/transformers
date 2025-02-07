@@ -20,7 +20,7 @@
 """PyTorch Qwen2.5-VL model."""
 
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -828,46 +828,6 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
             }
         )
         return model_inputs
-
-    @staticmethod
-    def _expand_inputs_for_generation(
-        expand_size: int = 1,
-        is_encoder_decoder: bool = False,
-        input_ids: Optional[torch.LongTensor] = None,
-        **model_kwargs,
-    ) -> Tuple[torch.LongTensor, Dict[str, Any]]:
-        # Overwritten -- Support for expanding tensors without a batch size dimension
-        # e.g., pixel_values, image_grid_thw, pixel_values_videos, video_grid_thw, second_per_grid_t
-
-        if expand_size == 1:
-            return input_ids, model_kwargs
-
-        def _expand_dict_for_generation(dict_to_expand):
-            for key in dict_to_expand:
-                if (
-                    key != "cache_position"
-                    and dict_to_expand[key] is not None
-                    and isinstance(dict_to_expand[key], torch.Tensor)
-                ):
-                    # The original torch.repeat_interleave operation will disrupt the order of tensors without a batch size dimension
-                    dict_to_expand[key] = torch.cat([dict_to_expand[key]] * expand_size)
-                elif key == "second_per_grid_t":
-                    assert isinstance(dict_to_expand[key], list)
-                    dict_to_expand[key] = dict_to_expand[key] * expand_size
-            return dict_to_expand
-
-        if input_ids is not None:
-            # Modified for consistency
-            input_ids = torch.cat([input_ids] * expand_size)
-
-        model_kwargs = _expand_dict_for_generation(model_kwargs)
-
-        if is_encoder_decoder:
-            if model_kwargs.get("encoder_outputs") is None:
-                raise ValueError("If `is_encoder_decoder` is True, make sure that `encoder_outputs` is defined.")
-            model_kwargs["encoder_outputs"] = _expand_dict_for_generation(model_kwargs["encoder_outputs"])
-
-        return input_ids, model_kwargs
 
 
 class Qwen2_5_VLImageProcessor(Qwen2VLImageProcessor):
