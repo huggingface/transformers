@@ -1806,6 +1806,7 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
         cache_position: Optional[torch.LongTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
+        **kwargs,
     ) -> Union[Tuple, MoshiCausalLMOutputWithPast]:
         r"""
         Args:
@@ -1876,12 +1877,16 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
             shift_logits = logits[..., :-1, :].contiguous()
             shift_labels = labels[..., 1:].contiguous()
             # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
             shift_logits = shift_logits.view(-1, self.config.vocab_size)
             shift_labels = shift_labels.view(-1)
             # Enable model parallelism
             shift_labels = shift_labels.to(shift_logits.device)
-            loss = loss_fct(shift_logits, shift_labels)
+            loss = self.loss_function(
+                shift_logits,
+                shift_labels,
+                vocab_size=self.config.vocab_size,
+                **kwargs,
+            )
 
         if not return_dict:
             output = (
@@ -1901,8 +1906,7 @@ class MoshiForCausalLM(MoshiPreTrainedModel, GenerationMixin):
 
 
 @add_start_docstrings(
-    "The original Moshi model with an audio encoder, a Moshi depth decoder and a Moshi decoder, "
-    "for speech-to-speech.",
+    "The original Moshi model with an audio encoder, a Moshi depth decoder and a Moshi decoder, for speech-to-speech.",
     MOSHI_START_DOCSTRING,
 )
 class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
@@ -2458,18 +2462,57 @@ class MoshiForConditionalGeneration(MoshiPreTrainedModel, GenerationMixin):
         blank_user_audio_codes: Optional[torch.FloatTensor] = None,
         **kwargs,
     ):
-        # Overwritten -- Moshi has custom post-processing
-        # 1. Do usual operations done on LLMs like Gemma - because we pre-processed inputs, the first pass always has inputs_embeds
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids=input_ids,
-            past_key_values=past_key_values,
-            attention_mask=attention_mask,
-            inputs_embeds=inputs_embeds,
-            cache_position=cache_position,
-            position_ids=position_ids,
-            use_cache=use_cache,
-            logits_to_keep=logits_to_keep,
-            **kwargs,
+        # Overwritten -- Moshi has custom post-processing on the prepared inputs.
+
+        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
+        # Exception 1: when passing input_embeds, input_ids may be missing entries
+        # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
+        # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
+        # (we can't check exception 3 while compiling)
+
+        if past_key_values is not None:
+            if (
+                inputs_embeds is not None  # Exception 1
+                or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
+            ):
+                input_ids = input_ids[:, -cache_position.shape[0] :]
+            elif input_ids.shape[1] != cache_position.shape[0]:  # Default case (the "else", a no op, is Exception 2)
+                input_ids = input_ids[:, cache_position]
+
+        # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
+        if inputs_embeds is not None and cache_position[0] == 0:
+            model_inputs = {"inputs_embeds": inputs_embeds, "input_ids": None}
+        else:
+            model_inputs = {"input_ids": input_ids, "inputs_embeds": None}
+
+        if isinstance(past_key_values, StaticCache) and attention_mask.ndim == 2:
+            if model_inputs["inputs_embeds"] is not None:
+                batch_size, sequence_length, _ = inputs_embeds.shape
+                device = inputs_embeds.device
+            else:
+                batch_size, sequence_length = input_ids.shape
+                device = input_ids.device
+
+            attention_mask = self.model._prepare_4d_causal_attention_mask_with_cache_position(
+                attention_mask,
+                sequence_length=sequence_length,
+                target_length=past_key_values.get_max_cache_shape(),
+                dtype=self.lm_head.weight.dtype,
+                device=device,
+                cache_position=cache_position,
+                batch_size=batch_size,
+                config=self.config,
+                past_key_values=past_key_values,
+            )
+
+        model_inputs.update(
+            {
+                "position_ids": position_ids,
+                "past_key_values": past_key_values,
+                "use_cache": use_cache,
+                "attention_mask": attention_mask,
+                "cache_position": cache_position,
+            }
         )
 
         # 2. Now that everything is prepared, generate audio_codes using the depth decoder
