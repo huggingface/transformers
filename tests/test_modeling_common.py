@@ -2385,7 +2385,7 @@ class ModelTesterMixin:
                 else:
                     expected_missing = set()
                     for pattern in model_reloaded._keys_to_ignore_on_load_missing:
-                        expected_missing.update({k for k in model_reloaded.state_dict().keys() if re.search(pattern, k) is not None})
+                        expected_missing.update({k for k in param_names if re.search(pattern, k) is not None})
                 self.assertEqual(
                     missed_missing,
                     expected_missing,
