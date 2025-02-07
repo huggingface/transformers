@@ -3153,14 +3153,16 @@ class Trainer:
                         self.state.stateful_callbacks[cb_name] = cb_state
                 self.state.save_to_json(os.path.join(output_dir, TRAINER_STATE_NAME))
 
-            try:
-                os.renames(output_dir, checkpoint_dir)
-            except OSError as e:
-                if e.errno in [errno.ENOTEMPTY, errno.EEXIST]:  # Directory/File already exists
-                    shutil.rmtree(checkpoint_dir)
-                    os.renames(output_dir, checkpoint_dir)
-                else:
-                    raise
+            with self.accelerator.local_main_process_first():
+                if os.path.exists(output_dir):
+                    try:
+                        os.renames(output_dir, checkpoint_dir)
+                    except OSError as e:
+                        if e.errno in [errno.ENOTEMPTY, errno.EEXIST]:  # Directory/File already exists
+                            shutil.rmtree(checkpoint_dir)
+                            os.renames(output_dir, checkpoint_dir)
+                        else:
+                            raise
 
         if self.args.push_to_hub:
             self._push_from_checkpoint(checkpoint_dir)
