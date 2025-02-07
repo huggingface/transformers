@@ -1311,6 +1311,99 @@ class Trainer:
             "betas": (args.adam_beta1, args.adam_beta2),
             "eps": args.adam_epsilon,
         }
+
+        # Helper function for GaLore and Apollo optimizers
+        def setup_low_rank_optimizer(optimizer_name, optimizer_mapping, optim_kwargs, is_layerwise_supported=True):
+            """
+            Helper function to set up low-rank optimizers like GaLore and Apollo.
+
+            Args:
+                optimizer_name (str): Name of the optimizer.
+                optimizer_mapping (dict): Mapping of optimizer names to their classes.
+                optim_kwargs (dict): Keyword arguments for the optimizer.
+                is_layerwise_supported (bool): Whether layerwise optimization is supported.
+
+            Returns:
+                Tuple[Any, Any]: Optimizer class and updated optimizer kwargs.
+            """
+            is_layerwise = optimizer_name.lower().endswith("layerwise")
+            if is_layerwise and args.parallel_mode == ParallelMode.DISTRIBUTED and is_layerwise_supported:
+                raise NotImplementedError(f"Layer-wise {optimizer_name} does not support DDP at this time")
+
+            optimizer_cls = optimizer_mapping[optimizer_name]
+
+            if args.optim_target_modules is None:
+                raise ValueError(f"You need to define `optim_target_modules` to use {optimizer_name} optimizers")
+
+            if not isinstance(args.optim_target_modules, (list, str)):
+                raise ValueError(
+                    f"`optim_target_modules` must be a list of strings, a regex string, or 'all-linear'. Got: {args.optim_target_modules}"
+                )
+
+            if model is None:
+                raise ValueError(f"You need to pass a model to initialize {optimizer_name} optimizer.")
+
+            all_linear = (
+                isinstance(args.optim_target_modules, str)
+                and args.optim_target_modules.replace("_", "-") == "all-linear"
+            )
+
+            target_params = []
+            target_params_names = []
+            for module_name, module in model.named_modules():
+                target_module_exists, is_regex = check_target_module_exists(
+                    args.optim_target_modules, module_name, return_is_regex=True
+                )
+
+                if not isinstance(module, nn.Linear):
+                    if target_module_exists and not is_regex:
+                        logger.warning(
+                            f"{module_name} matched but ignored. {optimizer_name} only supports linear layers."
+                        )
+                    continue
+
+                if not target_module_exists and not all_linear:
+                    continue
+
+                target_params.append(module.weight)
+                target_params_names.append(module_name + ".weight")
+
+            if len(target_params) == 0:
+                raise ValueError(f"No target modules found for {optimizer_name} ({args.optim_target_modules}).")
+
+            non_target_params = [p for n, p in model.named_parameters() if n not in target_params_names]
+            optim_kwargs.update(optim_args)
+
+            param_groups = [
+                {"params": non_target_params},
+                {"params": target_params, **optim_kwargs},
+            ]
+
+            if is_layerwise:
+                if args.gradient_accumulation_steps != 1:
+                    raise ValueError(f"Layerwise {optimizer_name} does not support gradient accumulation!")
+
+                optimizer_dict = {}
+                for param in non_target_params:
+                    optimizer_dict[param] = optimizer_cls([{"params": [param]}], **optimizer_kwargs)
+                for param in target_params:
+                    optimizer_dict[param] = optimizer_cls([{"params": [param], **optim_kwargs}], **optimizer_kwargs)
+
+                def optimizer_hook(param):
+                    if param.grad is not None:
+                        optimizer_dict[param].step()
+                        optimizer_dict[param].zero_grad()
+
+                for param in model.parameters():
+                    if param.requires_grad:
+                        param.register_post_accumulate_grad_hook(optimizer_hook)
+
+                optimizer_cls = LayerWiseDummyOptimizer
+                optimizer_kwargs.update({"optimizer_dict": optimizer_dict})
+
+            optimizer_kwargs.update({"params": param_groups})
+            return optimizer_cls, optimizer_kwargs
+
         if args.optim == OptimizerNames.ADAFACTOR:
             optimizer_cls = Adafactor
             optimizer_kwargs.update({"scale_parameter": False, "relative_step": False})
@@ -1472,10 +1565,6 @@ class Trainer:
                 )
             from galore_torch import GaLoreAdafactor, GaLoreAdamW, GaLoreAdamW8bit
 
-            is_layerwise = args.optim.lower().endswith("layerwise")
-            if is_layerwise and args.parallel_mode == ParallelMode.DISTRIBUTED:
-                raise NotImplementedError("Layer-wise GaLore does not support DDP at this time")
-
             optimizer_mapping = {
                 OptimizerNames.GALORE_ADAMW: GaLoreAdamW,
                 OptimizerNames.GALORE_ADAMW_8BIT: GaLoreAdamW8bit,
@@ -1485,59 +1574,6 @@ class Trainer:
                 OptimizerNames.GALORE_ADAFACTOR_LAYERWISE: GaLoreAdafactor,
             }
 
-            optimizer_cls = optimizer_mapping[args.optim]
-
-            if args.optim_target_modules is None:
-                raise ValueError(
-                    "You need to define a `optim_target_modules` in order to properly use GaLore optimizers"
-                )
-
-            if not isinstance(args.optim_target_modules, (list, str)):
-                raise ValueError(
-                    f"`optim_target_modules` has to be a list of strings, a string corresponding to a regex, or a specific module or 'all-linear', you passed {args.optim_target_modules}"
-                )
-
-            if model is None:
-                raise ValueError("You need to pass a model in order to correctly initialize a GaLore optimizer.")
-
-            logger.warning(
-                "Activated GaLoRE fine-tuning, depending on your model size and hardware, the training might take a while before starting. Please be patient !"
-            )
-
-            all_linear = (
-                isinstance(args.optim_target_modules, str)
-                and args.optim_target_modules.replace("_", "-") == "all-linear"
-            )
-
-            galore_params = []
-            galore_params_names = []
-            for module_name, module in model.named_modules():
-                target_module_exists, is_regex = check_target_module_exists(
-                    args.optim_target_modules, module_name, return_is_regex=True
-                )
-
-                if not isinstance(module, nn.Linear):
-                    # Warn in case we match but it's not a linear layer
-                    if target_module_exists and not is_regex:
-                        logger.warning(
-                            f"{module_name} has been matched but ignored as GaLore only supports linear layers. Please double check your `optim_target_modules`!"
-                        )
-
-                    continue
-
-                if not target_module_exists and not all_linear:
-                    continue
-
-                galore_params.append(module.weight)
-                galore_params_names.append(module_name + ".weight")
-
-            if len(galore_params) == 0:
-                raise ValueError(
-                    f"None of the target modules were found! ({args.optim_target_modules}). Please make sure to pass a valid `target_modules`."
-                )
-
-            non_galore_params = [p for n, p in model.named_parameters() if n not in galore_params_names]
-
             galore_optim_kwargs = {
                 "rank": int(optim_args.pop("rank", 128)),
                 "update_proj_gap": int(optim_args.pop("update_proj_gap", 200)),
@@ -1545,43 +1581,9 @@ class Trainer:
                 "proj_type": optim_args.pop("proj_type", "std"),
             }
 
-            # The default args are from the official repository: https://github.com/jiaweizzhao/GaLore
-            param_groups = [
-                {"params": non_galore_params},
-                {"params": galore_params, **galore_optim_kwargs},
-            ]
-
-            if is_layerwise:
-                # For layer-wise optimizers, the optimization step is done through post accumulation
-                # gradient hooks. The trick is to first attach these hooks to the model parameters then
-                # create a dummy optimizer that will perform no-ops in the Trainer.
-                # See the original implementation or the nice implementation from @hiyouga
-                # here: https://github.com/hiyouga/LLaMA-Factory/commit/8664262cde3919e10eaecbd66e8c5d356856362e#diff-ebe08ab14496dfb9e06075f0fdd36799ef6d1535cc4dd4715b74c4e3e06fe3ba
-                if args.gradient_accumulation_steps != 1:
-                    raise ValueError("Layerwise GaLoRE optimizer do not support gradient accumulation !")
-
-                optimizer_dict = {}
-                for param in non_galore_params:
-                    param_groups = [{"params": [param]}]
-                    optimizer_dict[param] = optimizer_cls(param_groups, **optimizer_kwargs)
-                for param in galore_params:
-                    param_groups = [{"params": [param], **galore_optim_kwargs}]
-                    optimizer_dict[param] = optimizer_cls(param_groups, **optimizer_kwargs)
-
-                def optimizer_hook(param):
-                    if param.grad is not None:
-                        optimizer_dict[param].step()
-                        optimizer_dict[param].zero_grad()
-
-                for param in model.parameters():
-                    if param.requires_grad:
-                        param.register_post_accumulate_grad_hook(optimizer_hook)
-
-                optimizer_cls = LayerWiseDummyOptimizer
-                optimizer_kwargs.update({"optimizer_dict": optimizer_dict})
-
-            optimizer_kwargs.update({"params": param_groups})
-
+            optimizer_cls, optimizer_kwargs = setup_low_rank_optimizer(
+                args.optim, optimizer_mapping, galore_optim_kwargs
+            )
             if args.optim == OptimizerNames.GALORE_ADAFACTOR:
                 optimizer_kwargs.update({"scale_parameter": False, "relative_step": False})
         elif args.optim in [
@@ -1595,63 +1597,11 @@ class Trainer:
                 )
             from apollo_torch import APOLLOAdamW
 
-            is_layerwise = args.optim.lower().endswith("layerwise")
-            if is_layerwise and args.parallel_mode == ParallelMode.DISTRIBUTED:
-                raise NotImplementedError("Layer-wise APOLLO does not support DDP at this time")
-
             optimizer_mapping = {
                 OptimizerNames.APOLLO_ADAMW: APOLLOAdamW,
                 OptimizerNames.APOLLO_ADAMW_LAYERWISE: APOLLOAdamW,
             }
 
-            optimizer_cls = optimizer_mapping[args.optim]
-
-            if args.optim_target_modules is None:
-                raise ValueError(
-                    "You need to define a `optim_target_modules` in order to properly use APOLLO optimizers"
-                )
-
-            if not isinstance(args.optim_target_modules, (list, str)):
-                raise ValueError(
-                    f"`optim_target_modules` has to be a list of strings, a string corresponding to a regex, or a specific module or 'all-linear', you passed {args.optim_target_modules}"
-                )
-
-            if model is None:
-                raise ValueError("You need to pass a model in order to correctly initialize a APOLLO optimizer.")
-
-            all_linear = (
-                isinstance(args.optim_target_modules, str)
-                and args.optim_target_modules.replace("_", "-") == "all-linear"
-            )
-
-            apollo_params = []
-            apollo_params_names = []
-            for module_name, module in model.named_modules():
-                target_module_exists, is_regex = check_target_module_exists(
-                    args.optim_target_modules, module_name, return_is_regex=True
-                )
-
-                if not isinstance(module, nn.Linear):
-                    # Warn in case we match but it's not a linear layer
-                    if target_module_exists and not is_regex:
-                        logger.warning(
-                            f"{module_name} has been matched but ignored as APOLLO only supports linear layers. Please double check your `optim_target_modules`!"
-                        )
-
-                    continue
-
-                if not target_module_exists and not all_linear:
-                    continue
-
-                apollo_params.append(module.weight)
-                apollo_params_names.append(module_name + ".weight")
-
-            if len(apollo_params) == 0:
-                raise ValueError(
-                    f"None of the target modules were found! ({args.optim_target_modules}). Please make sure to pass a valid `target_modules`."
-                )
-
-            non_apollo_params = [p for n, p in model.named_parameters() if n not in apollo_params_names]
             apollo_optim_kwargs = {
                 "rank": int(optim_args.pop("rank", 128)),
                 "proj": optim_args.pop("proj", "random"),
@@ -1661,42 +1611,9 @@ class Trainer:
                 "proj_type": optim_args.pop("proj_type", "std"),
             }
 
-            # The default args are from the official repository: https://github.com/zhuhanqing/APOLLO
-            param_groups = [
-                {"params": non_apollo_params},
-                {"params": apollo_params, **apollo_optim_kwargs},
-            ]
-
-            if is_layerwise:
-                # For layer-wise optimizers, the optimization step is done through post accumulation
-                # gradient hooks. The trick is to first attach these hooks to the model parameters then
-                # create a dummy optimizer that will perform no-ops in the Trainer.
-                # See the original implementation or the nice implementation from @hiyouga
-                # here: https://github.com/hiyouga/LLaMA-Factory/commit/8664262cde3919e10eaecbd66e8c5d356856362e#diff-ebe08ab14496dfb9e06075f0fdd36799ef6d1535cc4dd4715b74c4e3e06fe3ba
-                if args.gradient_accumulation_steps != 1:
-                    raise ValueError("Layerwise APOLLO optimizer do not support gradient accumulation !")
-
-                optimizer_dict = {}
-                for param in non_apollo_params:
-                    param_groups = [{"params": [param]}]
-                    optimizer_dict[param] = optimizer_cls(param_groups, **optimizer_kwargs)
-                for param in apollo_params:
-                    param_groups = [{"params": [param], **apollo_optim_kwargs}]
-                    optimizer_dict[param] = optimizer_cls(param_groups, **optimizer_kwargs)
-
-                def optimizer_hook(param):
-                    if param.grad is not None:
-                        optimizer_dict[param].step()
-                        optimizer_dict[param].zero_grad()
-
-                for param in model.parameters():
-                    if param.requires_grad:
-                        param.register_post_accumulate_grad_hook(optimizer_hook)
-
-                optimizer_cls = LayerWiseDummyOptimizer
-                optimizer_kwargs.update({"optimizer_dict": optimizer_dict})
-
-            optimizer_kwargs.update({"params": param_groups})
+            optimizer_cls, optimizer_kwargs = setup_low_rank_optimizer(
+                args.optim, optimizer_mapping, apollo_optim_kwargs
+            )
         elif args.optim in [OptimizerNames.LOMO, OptimizerNames.ADALOMO]:
             if not is_lomo_available():
                 raise ImportError(
