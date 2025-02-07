@@ -229,7 +229,7 @@ def main():
     )
     parser.add_argument(
         "--hub_repo_id",
-        default="apple/depth-pro-hf",
+        default="apple/DepthPro-hf",
         help="Huggingface hub repo to write the converted model and processor",
     )
     args = parser.parse_args()

@@ -329,7 +329,7 @@ class DepthProModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @slow
     def test_model_from_pretrained(self):
-        model_path = "apple/depth-pro-hf"
+        model_path = "apple/DepthPro-hf"
         model = DepthProModel.from_pretrained(model_path)
         self.assertIsNotNone(model)
 
@@ -345,7 +345,7 @@ def prepare_img():
 @slow
 class DepthProModelIntegrationTest(unittest.TestCase):
     def test_inference_depth_estimation(self):
-        model_path = "apple/depth-pro-hf"
+        model_path = "apple/DepthPro-hf"
         image_processor = DepthProImageProcessor.from_pretrained(model_path)
         model = DepthProForDepthEstimation.from_pretrained(model_path).to(torch_device)
         config = model.config
@@ -378,7 +378,7 @@ class DepthProModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(outputs.field_of_view, expected_slice, atol=1e-4, rtol=1e-4)
 
     def test_post_processing_depth_estimation(self):
-        model_path = "apple/depth-pro-hf"
+        model_path = "apple/DepthPro-hf"
         image_processor = DepthProImageProcessor.from_pretrained(model_path)
         model = DepthProForDepthEstimation.from_pretrained(model_path)
 
