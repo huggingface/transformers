@@ -151,6 +151,11 @@ class LlamaConfig(PretrainedConfig):
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
     }
+    base_model_pp_plan = {
+        "input_processing": {"embed_tokens": "inputs_embeds"},
+        "decoder_stack": {"layers": "layer_outputs"},
+        "output_processing": {"norm": "hidden_states"},
+    }
 
     def __init__(
         self,
