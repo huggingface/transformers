@@ -40,6 +40,7 @@ from huggingface_hub import (
     create_repo,
     hf_hub_download,
     hf_hub_url,
+    snapshot_download,
     try_to_load_from_cache,
 )
 from huggingface_hub.file_download import REGEX_COMMIT_HASH, http_get
@@ -409,6 +410,217 @@ def cached_file(
             f"Incorrect path_or_model_id: '{path_or_repo_id}'. Please provide either the path to a local folder or the repo_id of a model on the Hub."
         ) from e
     return resolved_file
+
+
+def cached_files(
+    path_or_repo_id: Union[str, os.PathLike],
+    filenames: List[str],
+    cache_dir: Optional[Union[str, os.PathLike]] = None,
+    force_download: bool = False,
+    resume_download: Optional[bool] = None,
+    proxies: Optional[Dict[str, str]] = None,
+    token: Optional[Union[bool, str]] = None,
+    revision: Optional[str] = None,
+    local_files_only: bool = False,
+    subfolder: str = "",
+    repo_type: Optional[str] = None,
+    user_agent: Optional[Union[str, Dict[str, str]]] = None,
+    _raise_exceptions_for_gated_repo: bool = True,
+    _raise_exceptions_for_missing_entries: bool = True,
+    _raise_exceptions_for_connection_errors: bool = True,
+    _commit_hash: Optional[str] = None,
+    **deprecated_kwargs,
+) -> Optional[str]:
+    """
+    Tries to locate a file in a local folder and repo, downloads and cache it if necessary.
+
+    Args:
+        path_or_repo_id (`str` or `os.PathLike`):
+            This can be either:
+
+            - a string, the *model id* of a model repo on huggingface.co.
+            - a path to a *directory* potentially containing the file.
+        filenames (`List[str]`):
+            The name of all the files to locate in `path_or_repo`.
+        cache_dir (`str` or `os.PathLike`, *optional*):
+            Path to a directory in which a downloaded pretrained model configuration should be cached if the standard
+            cache should not be used.
+        force_download (`bool`, *optional*, defaults to `False`):
+            Whether or not to force to (re-)download the configuration files and override the cached versions if they
+            exist.
+        resume_download:
+            Deprecated and ignored. All downloads are now resumed by default when possible.
+            Will be removed in v5 of Transformers.
+        proxies (`Dict[str, str]`, *optional*):
+            A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
+            'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
+        token (`str` or *bool*, *optional*):
+            The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
+            when running `huggingface-cli login` (stored in `~/.huggingface`).
+        revision (`str`, *optional*, defaults to `"main"`):
+            The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
+            git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
+            identifier allowed by git.
+        local_files_only (`bool`, *optional*, defaults to `False`):
+            If `True`, will only try to load the tokenizer configuration from local files.
+        subfolder (`str`, *optional*, defaults to `""`):
+            In case the relevant files are located inside a subfolder of the model repo on huggingface.co, you can
+            specify the folder name here.
+        repo_type (`str`, *optional*):
+            Specify the repo type (useful when downloading from a space for instance).
+
+    <Tip>
+
+    Passing `token=True` is required when you want to use a private model.
+
+    </Tip>
+
+    Returns:
+        `Optional[str]`: Returns the resolved file (to the cache folder if downloaded from a repo).
+
+    Examples:
+
+    ```python
+    # Download a model weight from the Hub and cache it.
+    model_weights_file = cached_file("google-bert/bert-base-uncased", "pytorch_model.bin")
+    ```
+    """
+
+    use_auth_token = deprecated_kwargs.pop("use_auth_token", None)
+    if use_auth_token is not None:
+        warnings.warn(
+            "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
+            FutureWarning,
+        )
+        if token is not None:
+            raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
+        token = use_auth_token
+
+    # Private arguments
+    #     _raise_exceptions_for_gated_repo: if False, do not raise an exception for gated repo error but return
+    #         None.
+    #     _raise_exceptions_for_missing_entries: if False, do not raise an exception for missing entries but return
+    #         None.
+    #     _raise_exceptions_for_connection_errors: if False, do not raise an exception for connection errors but return
+    #         None.
+    #     _commit_hash: passed when we are chaining several calls to various files (e.g. when loading a tokenizer or
+    #         a pipeline). If files are cached for this commit hash, avoid calls to head and get from the cache.
+    if is_offline_mode() and not local_files_only:
+        logger.info("Offline mode: forcing local_files_only=True")
+        local_files_only = True
+    if subfolder is None:
+        subfolder = ""
+
+    # Add folder to filenames
+    filenames = [os.path.join(subfolder, file) for file in filenames]
+
+    path_or_repo_id = str(path_or_repo_id)
+    existing_files = []
+    for filename in filenames:
+        if os.path.isdir(path_or_repo_id):
+            resolved_file = os.path.join(path_or_repo_id, filename)
+            if not os.path.isfile(resolved_file):
+                if _raise_exceptions_for_missing_entries and filename != os.path.join(subfolder, "config.json"):
+                    raise EnvironmentError(
+                        f"{path_or_repo_id} does not appear to have a file named {filename}. Checkout "
+                        f"'https://huggingface.co/{path_or_repo_id}/tree/{revision}' for available files."
+                    )
+                else:
+                    return None
+            existing_files.append(resolved_file)
+
+    # All files exist
+    if len(existing_files) == len(filenames):
+        return existing_files
+
+    if cache_dir is None:
+        cache_dir = TRANSFORMERS_CACHE
+    if isinstance(cache_dir, Path):
+        cache_dir = str(cache_dir)
+
+    existing_files = []
+    if _commit_hash is not None and not force_download:
+        for filename in filenames:
+            # If the file is cached under that commit hash, we return it directly.
+            resolved_file = try_to_load_from_cache(
+                path_or_repo_id, filename, cache_dir=cache_dir, revision=_commit_hash, repo_type=repo_type
+            )
+            if resolved_file is not None:
+                if resolved_file is not _CACHED_NO_EXIST:
+                    existing_files.append(resolved_file)
+                elif not _raise_exceptions_for_missing_entries:
+                    return None
+                else:
+                    raise EnvironmentError(f"Could not locate {filename} inside {path_or_repo_id}.")
+
+    if len(existing_files) == len(filenames):
+        return existing_files
+
+    user_agent = http_user_agent(user_agent)
+    try:
+        # Load from URL or cache if already cached
+        resolved_folder = snapshot_download(
+            path_or_repo_id,
+            allow_patterns=filenames,
+            repo_type=repo_type,
+            revision=revision,
+            cache_dir=cache_dir,
+            user_agent=user_agent,
+            force_download=force_download,
+            proxies=proxies,
+            resume_download=resume_download,
+            token=token,
+            local_files_only=local_files_only,
+        )
+    except GatedRepoError as e:
+        resolved_files = [
+            _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, revision) for filename in filenames
+        ]
+        if all(file is not None for file in resolved_files) or not _raise_exceptions_for_gated_repo:
+            return resolved_files
+        raise EnvironmentError(
+            "You are trying to access a gated repo.\nMake sure to have access to it at "
+            f"https://huggingface.co/{path_or_repo_id}.\n{str(e)}"
+        ) from e
+    except RepositoryNotFoundError as e:
+        raise EnvironmentError(
+            f"{path_or_repo_id} is not a local folder and is not a valid model identifier "
+            "listed on 'https://huggingface.co/models'\nIf this is a private repository, make sure to pass a token "
+            "having permission to this repo either by logging in with `huggingface-cli login` or by passing "
+            "`token=<your_token>`"
+        ) from e
+    except RevisionNotFoundError as e:
+        raise EnvironmentError(
+            f"{revision} is not a valid git identifier (branch name, tag name or commit id) that exists "
+            "for this model name. Check the model page at "
+            f"'https://huggingface.co/{path_or_repo_id}' for available revisions."
+        ) from e
+    except LocalEntryNotFoundError as e:
+        resolved_files = [
+            _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, revision) for filename in filenames
+        ]
+        if (
+            all(file is not None for file in resolved_files)
+            or not _raise_exceptions_for_missing_entries
+            or not _raise_exceptions_for_connection_errors
+        ):
+            return resolved_files
+        raise EnvironmentError(
+            f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load the files, couldn't find it in the"
+            f" cached files and it looks like {path_or_repo_id} is not the path to a directory containing files named"
+            f" {*filenames,}.\nCheckout your internet connection or see how to run the library in offline mode at"
+            " 'https://huggingface.co/docs/transformers/installation#offline-mode'."
+        ) from e
+    except HTTPError as err:
+        resolved_files = [
+            _get_cache_file_to_return(path_or_repo_id, filename, cache_dir, revision) for filename in filenames
+        ]
+        if all(file is not None for file in resolved_files) or not _raise_exceptions_for_connection_errors:
+            return resolved_file
+        raise EnvironmentError(f"There was a specific connection error when trying to load {path_or_repo_id}:\n{err}")
+
+    resolved_files = [os.path.join(resolved_folder, filename) for filename in filenames]
+    return resolved_files
 
 
 # TODO: deprecate `get_file_from_repo` or document it differently?
@@ -1024,44 +1236,34 @@ def get_checkpoint_shard_files(
         return shard_filenames, sharded_metadata
 
     # At this stage pretrained_model_name_or_path is a model identifier on the Hub
-    cached_filenames = []
-    # Check if the model is already cached or not. We only try the last checkpoint, this should cover most cases of
-    # downloaded (if interrupted).
-    last_shard = try_to_load_from_cache(
-        pretrained_model_name_or_path, shard_filenames[-1], cache_dir=cache_dir, revision=_commit_hash
-    )
-    show_progress_bar = last_shard is None or force_download
-    for shard_filename in tqdm(shard_filenames, desc="Downloading shards", disable=not show_progress_bar):
-        try:
-            # Load from URL
-            cached_filename = cached_file(
-                pretrained_model_name_or_path,
-                shard_filename,
-                cache_dir=cache_dir,
-                force_download=force_download,
-                proxies=proxies,
-                resume_download=resume_download,
-                local_files_only=local_files_only,
-                token=token,
-                user_agent=user_agent,
-                revision=revision,
-                subfolder=subfolder,
-                _commit_hash=_commit_hash,
-            )
-        # We have already dealt with RepositoryNotFoundError and RevisionNotFoundError when getting the index, so
-        # we don't have to catch them here.
-        except EntryNotFoundError:
-            raise EnvironmentError(
-                f"{pretrained_model_name_or_path} does not appear to have a file named {shard_filename} which is "
-                "required according to the checkpoint index."
-            )
-        except HTTPError:
-            raise EnvironmentError(
-                f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load {shard_filename}. You should try"
-                " again after checking your internet connection."
-            )
-
-        cached_filenames.append(cached_filename)
+    try:
+        # Load from URL
+        cached_filenames = cached_files(
+            pretrained_model_name_or_path,
+            shard_filenames,
+            cache_dir=cache_dir,
+            force_download=force_download,
+            proxies=proxies,
+            resume_download=resume_download,
+            local_files_only=local_files_only,
+            token=token,
+            user_agent=user_agent,
+            revision=revision,
+            subfolder=subfolder,
+            _commit_hash=_commit_hash,
+        )
+    # We have already dealt with RepositoryNotFoundError and RevisionNotFoundError when getting the index, so
+    # we don't have to catch them here.
+    except EntryNotFoundError:
+        raise EnvironmentError(
+            f"{pretrained_model_name_or_path} does not appear to have a file named {shard_filenames} which is "
+            "required according to the checkpoint index."
+        )
+    except HTTPError:
+        raise EnvironmentError(
+            f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load {shard_filenames}. You should try"
+            " again after checking your internet connection."
+        )
 
     return cached_filenames, sharded_metadata
 
