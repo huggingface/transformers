@@ -435,10 +435,10 @@ model_name = "bigscience/bloom-1b7"
 model_4bit = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype="auto", device_map="auto", load_in_4bit=True)
 ```
 
-To load a model in 4-bit for inference with multiple GPUs, you can control how much GPU RAM you want to allocate to each GPU. For example, to distribute 5GB of memory to the first GPU and 10GB of memory to the second GPU:
+To load a model in 4-bit for inference with multiple GPUs, you can control how much GPU RAM you want to allocate to each GPU. For example, to distribute 2GB of memory to the first GPU and 5GB of memory to the second GPU:
 
 ```py
-max_memory_mapping = {0: "5GB", 1: "10GB"}
+max_memory_mapping = {0: "2GB", 1: "5GB"}
 model_name = "bigscience/bloom-3b"
 model_4bit = AutoModelForCausalLM.from_pretrained(
     model_name, torch_dtype="auto", device_map="auto", load_in_4bit=True, max_memory=max_memory_mapping
@@ -477,10 +477,10 @@ generated_ids = model_8bit.generate(**inputs)
 outputs = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
 ```
 
-To load a model in 8-bit for inference with multiple GPUs, you can control how much GPU RAM you want to allocate to each GPU. For example, to distribute 5GB of memory to the first GPU and 10GB of memory to the second GPU:
+To load a model in 8-bit for inference with multiple GPUs, you can control how much GPU RAM you want to allocate to each GPU. For example, to distribute 2GB of memory to the first GPU and 5GB of memory to the second GPU:
 
 ```py
-max_memory_mapping = {0: "5GB", 1: "10GB"}
+max_memory_mapping = {0: "2GB", 1: "5GB"}
 model_name = "bigscience/bloom-3b"
 model_8bit = AutoModelForCausalLM.from_pretrained(
     model_name, torch_dtype="auto", device_map="auto", load_in_8bit=True, max_memory=max_memory_mapping
