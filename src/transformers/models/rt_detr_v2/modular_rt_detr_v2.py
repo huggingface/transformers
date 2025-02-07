@@ -12,6 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import warnings
 from functools import partial
 from typing import List, Optional
 
@@ -31,7 +32,6 @@ from ..rt_detr.modeling_rt_detr import (
     RTDetrForObjectDetection,
     RTDetrMLPPredictionHead,
     RTDetrModel,
-    RTDetrMultiscaleDeformableAttention,
     RTDetrPreTrainedModel,
 )
 
@@ -466,22 +466,47 @@ def multi_scale_deformable_attention_v2(
 
 
 # the main change
-class RTDetrV2MultiscaleDeformableAttention(RTDetrMultiscaleDeformableAttention):
+class RTDetrV2MultiscaleDeformableAttention(nn.Module):
     """
     RTDetrV2 version of multiscale deformable attention, extending the base implementation
     with improved offset handling and initialization.
     """
 
     def __init__(self, config: RTDetrV2Config):
+        super().__init__()
         num_heads = config.decoder_attention_heads
         n_points = config.decoder_n_points
-        # Initialize parent class with config parameters
-        super().__init__(config=config, num_heads=num_heads, n_points=n_points)
+
+        if config.d_model % num_heads != 0:
+            raise ValueError(
+                f"embed_dim (d_model) must be divisible by num_heads, but got {config.d_model} and {num_heads}"
+            )
+        dim_per_head = config.d_model // num_heads
+        # check if dim_per_head is power of 2
+        if not ((dim_per_head & (dim_per_head - 1) == 0) and dim_per_head != 0):
+            warnings.warn(
+                "You'd better set embed_dim (d_model) in RTDetrV2MultiscaleDeformableAttention to make the"
+                " dimension of each attention head a power of 2 which is more efficient in the authors' CUDA"
+                " implementation."
+            )
+
+        self.im2col_step = 64
+
+        self.d_model = config.d_model
 
         # V2-specific attributes
         self.n_levels = config.decoder_n_levels
+        self.n_heads = num_heads
+        self.n_points = n_points
+
+        self.sampling_offsets = nn.Linear(config.d_model, num_heads * self.n_levels * n_points * 2)
+        self.attention_weights = nn.Linear(config.d_model, num_heads * self.n_levels * n_points)
+        self.value_proj = nn.Linear(config.d_model, config.d_model)
+        self.output_proj = nn.Linear(config.d_model, config.d_model)
+
         self.offset_scale = config.decoder_offset_scale
         self.method = config.decoder_method
+
         # Initialize n_points list and scale
         n_points_list = [self.n_points for _ in range(self.n_levels)]
         self.n_points_list = n_points_list
@@ -503,7 +528,7 @@ class RTDetrV2MultiscaleDeformableAttention(RTDetrMultiscaleDeformableAttention)
     ):
         # Process inputs up to sampling locations calculation using parent class logic
         if position_embeddings is not None:
-            hidden_states = self.with_pos_embed(hidden_states, position_embeddings)
+            hidden_states = hidden_states + position_embeddings
 
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
