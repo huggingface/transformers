@@ -1671,7 +1671,7 @@ def _get_tp_key_registry(model_to_load: "PreTrainedModel") -> Dict[str, Dict]:
             break
     if layer_prefix is None:
         raise ValueError("Could not parse format of the base_model_tp_plan in the config.")
-    
+
     # Separate between layer plan, and other module plans
     layer_wise_tp_plan = {}
     other_modules_tp_plan = {}
@@ -1701,7 +1701,7 @@ def _get_tp_key_registry(model_to_load: "PreTrainedModel") -> Dict[str, Dict]:
                 tp_key_registry[key] = {"children": {key}, "plan": other_modules_tp_plan[key]}
             else:
                 tp_key_registry[key]["children"].add(key)
-    
+
     return tp_key_registry
 
 
@@ -4739,13 +4739,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if not is_fsdp_enabled() and not is_deepspeed_zero3_enabled():
                 dispatch_model(model, **device_map_kwargs)
 
-        # This is needed for the RotaryEmbedding, which was not initialized on the correct device as it is
-        # not part of the state_dict (persistent=False)
-        if device_mesh is not None:
-            for buffer in model.buffers():
-                if buffer.device != tp_device:
-                    buffer.data = buffer.to(tp_device)
-
         if hf_quantizer is not None:
             hf_quantizer.postprocess_model(model, config=config)
             model.hf_quantizer = hf_quantizer
@@ -4861,9 +4854,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         weights_only: bool = True,
         _fast_init: bool = True,
     ):
-        # Some useful flags
+        # Useful flags
         is_quantized = hf_quantizer is not None
-        is_from_file = pretrained_model_name_or_path is not None or gguf_file is not None
 
         # Get all the keys of the state dicts that we have to initialize the model
         if sharded_metadata is not None:
@@ -4883,7 +4875,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         loading_task_model_from_base_state_dict = not has_prefix_module and expects_prefix_module
         loading_base_model_from_task_state_dict = has_prefix_module and not expects_prefix_module
 
-        # Make sure we are able to load base models as well as derived models (with heads)
+        # Make sure we are able to load base models as well as derived models (specific task models, with heads)
         model_to_load = model
         start_prefix_to_remove = ""
         # In this case, we load a BaseModel from a ForTaskModel state dict
@@ -4953,20 +4945,20 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         is_offloaded_safetensors = False
         # This offload index if for params explicitly on the "disk" in the device_map
         disk_offload_index = None
-        # Find checkpoint files containing only weights offloaded to disk if any (allows to be faster)
         disk_only_shard_files = []
+        # Prepare parameters offloading if needed
         if device_map is not None and "disk" in device_map.values():
-            is_offloaded_safetensors = is_from_file and checkpoint_files[0].endswith(".safetensors")
+            if offload_state_dict is None:
+                offload_state_dict = True
+            if disk_offload_folder is not None:
+                os.makedirs(disk_offload_folder, exist_ok=True)
+            is_offloaded_safetensors = checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors")
             if disk_offload_folder is None and not is_offloaded_safetensors:
                 raise ValueError(
                     "The current `device_map` had weights offloaded to the disk. Please provide an `offload_folder`"
                     " for them. Alternatively, make sure you have `safetensors` installed if the model you are using"
                     " offers the weights in this format."
                 )
-            if disk_offload_folder is not None:
-                os.makedirs(disk_offload_folder, exist_ok=True)
-            if offload_state_dict is None:
-                offload_state_dict = True
             if is_offloaded_safetensors:
                 param_device_map = expand_device_map(device_map, loaded_state_dict_keys, start_prefix_to_remove)
                 str_dtype = str(dtype).replace("torch.", "") if dtype is not None else "float32"
@@ -4989,11 +4981,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             else:
                 disk_offload_index = {}
 
-        # Prepare inputs if using tensor parallel
-        tp_key_registry = None
-        if device_mesh is not None:
-            tp_key_registry = _get_tp_key_registry(model_to_load)
-                    
         # This offload index if for params that are supposed to be on the "cpu", either with or without a device_map
         # It allows to load parameters one-by-one from the state dict, avoiding a memory peak of 2 x state_dict_size,
         # i.e. 1x to load it, and 1x to copy it to model
@@ -5002,6 +4989,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if offload_state_dict:
             cpu_offload_folder = tempfile.mkdtemp()
             cpu_offload_index = {}
+
+        # Prepare inputs if using tensor parallel
+        tp_key_registry = None
+        if device_mesh is not None:
+            tp_key_registry = _get_tp_key_registry(model_to_load)
 
         map_location = None
         if (
