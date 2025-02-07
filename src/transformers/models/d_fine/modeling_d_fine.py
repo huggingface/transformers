@@ -18,7 +18,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import functools
 import math
 from dataclasses import dataclass
@@ -1280,11 +1279,14 @@ class DFineDecoder(DFinePreTrainedModel):
                 ref_points_initial = new_reference_points.detach()
 
             # Refine bounding box corners using FDR, integrating previous layer's corrections
-            pred_corners = self.bbox_embed[i](hidden_states + output_detach) + pred_corners_undetach
-            inter_ref_bbox = distance2bbox(ref_points_initial, self.integral(pred_corners, project), self.reg_scale)
+            if self.bbox_embed is not None:
+                pred_corners = self.bbox_embed[i](hidden_states + output_detach) + pred_corners_undetach
+                inter_ref_bbox = distance2bbox(
+                    ref_points_initial, self.integral(pred_corners, project), self.reg_scale
+                )
+                pred_corners_undetach = pred_corners
+                ref_points_detach = inter_ref_bbox.detach()
 
-            pred_corners_undetach = pred_corners
-            ref_points_detach = inter_ref_bbox.detach()
             output_detach = hidden_states.detach()
 
             intermediate += (hidden_states,)
@@ -1295,8 +1297,16 @@ class DFineDecoder(DFinePreTrainedModel):
                 scores = self.lqe_layers[i](scores, pred_corners)
                 intermediate_logits += (scores,)
                 intermediate_logits = torch.stack(intermediate_logits, dim=1)
-                intermediate_reference_points += (inter_ref_bbox,)
+                intermediate_reference_points += (
+                    (inter_ref_bbox,) if self.bbox_embed is not None else (reference_points,)
+                )
                 intermediate_reference_points = torch.stack(intermediate_reference_points, dim=1)
+
+            if output_attentions:
+                all_self_attns += (output[1],)
+
+                if encoder_hidden_states is not None:
+                    all_cross_attentions += (output[2],)
 
         # Keep batch_size as first dimension
         intermediate = torch.stack(intermediate, dim=1)
@@ -1837,9 +1847,8 @@ class DFineForObjectDetection(DFinePreTrainedModel):
 
         loss, loss_dict, auxiliary_outputs, enc_topk_logits, enc_topk_bboxes = None, None, None, None, None
         if labels is not None:
-            if self.training and denoising_meta_values is not None:
-                enc_topk_logits = outputs.enc_topk_logits if return_dict else outputs[-5]
-                enc_topk_bboxes = outputs.enc_topk_bboxes if return_dict else outputs[-4]
+            enc_topk_logits = outputs.enc_topk_logits if return_dict else outputs[-5]
+            enc_topk_bboxes = outputs.enc_topk_bboxes if return_dict else outputs[-4]
             loss, loss_dict, auxiliary_outputs = self.loss_function(
                 logits,
                 labels,
