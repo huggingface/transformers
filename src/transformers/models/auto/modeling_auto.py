@@ -78,6 +78,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("cpmant", "CpmAntModel"),
         ("ctrl", "CTRLModel"),
         ("cvt", "CvtModel"),
+        ("dab-detr", "DabDetrModel"),
         ("dac", "DacModel"),
         ("data2vec-audio", "Data2VecAudioModel"),
         ("data2vec-text", "Data2VecTextModel"),
@@ -119,6 +120,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("git", "GitModel"),
         ("glm", "GlmModel"),
         ("glpn", "GLPNModel"),
+        ("got_ocr2", "GotOcr2ForConditionalGeneration"),
         ("gpt-sw3", "GPT2Model"),
         ("gpt2", "GPT2Model"),
         ("gpt_bigcode", "GPTBigCodeModel"),
@@ -237,6 +239,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("roc_bert", "RoCBertModel"),
         ("roformer", "RoFormerModel"),
         ("rt_detr", "RTDetrModel"),
+        ("rt_detr_v2", "RTDetrV2Model"),
         ("rwkv", "RwkvModel"),
         ("sam", "SamModel"),
         ("seamless_m4t", "SeamlessM4TModel"),
@@ -304,6 +307,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("yolos", "YolosModel"),
         ("yoso", "YosoModel"),
         ("zamba", "ZambaModel"),
+        ("zamba2", "Zamba2Model"),
     ]
 )
 
@@ -512,6 +516,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("gemma2", "Gemma2ForCausalLM"),
         ("git", "GitForCausalLM"),
         ("glm", "GlmForCausalLM"),
+        ("got_ocr2", "GotOcr2ForConditionalGeneration"),
         ("gpt-sw3", "GPT2LMHeadModel"),
         ("gpt2", "GPT2LMHeadModel"),
         ("gpt_bigcode", "GPTBigCodeForCausalLM"),
@@ -579,6 +584,7 @@ MODEL_FOR_CAUSAL_LM_MAPPING_NAMES = OrderedDict(
         ("xlnet", "XLNetLMHeadModel"),
         ("xmod", "XmodForCausalLM"),
         ("zamba", "ZambaForCausalLM"),
+        ("zamba2", "Zamba2ForCausalLM"),
     ]
 )
 
@@ -590,6 +596,7 @@ MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
         ("conditional_detr", "ConditionalDetrModel"),
         ("convnext", "ConvNextModel"),
         ("convnextv2", "ConvNextV2Model"),
+        ("dab-detr", "DabDetrModel"),
         ("data2vec-vision", "Data2VecVisionModel"),
         ("deformable_detr", "DeformableDetrModel"),
         ("deit", "DeiTModel"),
@@ -811,6 +818,7 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("emu3", "Emu3ForConditionalGeneration"),
         ("fuyu", "FuyuForCausalLM"),
         ("git", "GitForCausalLM"),
+        ("got_ocr2", "GotOcr2ForConditionalGeneration"),
         ("idefics", "IdeficsForVisionText2Text"),
         ("idefics2", "Idefics2ForConditionalGeneration"),
         ("idefics3", "Idefics3ForConditionalGeneration"),
@@ -887,10 +895,12 @@ MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES = OrderedDict(
     [
         # Model for Object Detection mapping
         ("conditional_detr", "ConditionalDetrForObjectDetection"),
+        ("dab-detr", "DabDetrForObjectDetection"),
         ("deformable_detr", "DeformableDetrForObjectDetection"),
         ("deta", "DetaForObjectDetection"),
         ("detr", "DetrForObjectDetection"),
         ("rt_detr", "RTDetrForObjectDetection"),
+        ("rt_detr_v2", "RTDetrV2ForObjectDetection"),
         ("table-transformer", "TableTransformerForObjectDetection"),
         ("yolos", "YolosForObjectDetection"),
     ]
@@ -1058,6 +1068,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("xmod", "XmodForSequenceClassification"),
         ("yoso", "YosoForSequenceClassification"),
         ("zamba", "ZambaForSequenceClassification"),
+        ("zamba2", "Zamba2ForSequenceClassification"),
     ]
 )
 

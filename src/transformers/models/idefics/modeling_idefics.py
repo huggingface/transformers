@@ -868,7 +868,7 @@ class IdeficsGatedCrossAttentionLayer(nn.Module):
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.config, training=self.training)
         # Fill in zeros for cross_attention hidden_states of tokens attending to no images
-        hidden_states[cross_attention_gate == 0] = hidden_states[cross_attention_gate == 0].fill_(0)
+        hidden_states = hidden_states.masked_fill((cross_attention_gate == 0)[:, :, None], 0.0)
         hidden_states = residual + self.act_cross_attn(self.alpha_cross_attn) * hidden_states
 
         # Fully Connected
@@ -917,7 +917,7 @@ class IdeficsPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["IdeficsDecoderLayer", "IdeficsGatedCrossAttentionLayer"]
     _supports_sdpa = True
     _supports_cache_class = True
-    _supports_static_cache = True
+    _supports_static_cache = False  # IDEFICS cannot compile due to dynamic control flow when checking inputs
 
     def _init_weights(self, module):
         # important: this ported version of Idefics isn't meant for training from scratch - only
@@ -1155,7 +1155,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
         elif position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        if (pixel_values, image_encoder_embeddings, perceiver_embeddings).count(None) != 2:
+        if sum([x is None for x in [pixel_values, image_encoder_embeddings, perceiver_embeddings]]) != 2:
             raise ValueError(
                 "Exactly 1 of pixel_values, image_encoder_embeddings or perceiver_embeddings has to be not-None."
             )
@@ -1408,7 +1408,7 @@ class IdeficsModel(IdeficsPreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type == "cuda"
+            and attention_mask.device.type in ["cuda", "xpu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
@@ -1674,10 +1674,13 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
         else:
             model_inputs["pixel_values"] = pixel_values
 
-        # If we have cache: let's slice `input_ids` through `cache_position`, to keep only the unprocessed tokens
+        # If we have cache: let's slice `input_ids` or `input embeds` through `cache_position`, to keep only the unprocessed tokens
         if past_key_values is not None:
             if inputs_embeds is not None:
-                input_ids = input_ids[:, -cache_position.shape[0] :]
+                if input_ids.shape[1] == 0:
+                    inputs_embeds = inputs_embeds[:, -cache_position.shape[0] :]
+                else:
+                    input_ids = input_ids[:, -cache_position.shape[0] :]
             elif input_ids.shape[1] != cache_position.shape[0]:
                 input_ids = input_ids[:, cache_position]
                 if image_attention_mask is not None:
@@ -1687,14 +1690,19 @@ class IdeficsForVisionText2Text(IdeficsPreTrainedModel, GenerationMixin):
             # create position_ids on the fly for batch generation
             position_ids = attention_mask.long().cumsum(-1) - 1
             position_ids.masked_fill_(attention_mask == 0, 1)
+
+            # If past_key_values are present then slice the postion ids for only only the unprocessed tokens.
             if past_key_values:
-                position_ids = position_ids[:, -input_ids.shape[1] :]
+                if inputs_embeds is not None and input_ids.shape[1] == 0:
+                    position_ids = position_ids[:, -inputs_embeds.shape[1] :]
+                else:
+                    position_ids = position_ids[:, -input_ids.shape[1] :]
 
                 # This `clone` call is needed to avoid recapturing cuda graphs with `torch.compile`'s  `mode="reduce-overhead`, as otherwise the input `position_ids` would have various stride during the decoding. Here, simply using `.contiguous()` is not sufficient as in the batch size = 1 case, `position_ids` is already contiguous but with varying stride which retriggers a capture.
                 position_ids = position_ids.clone(memory_format=torch.contiguous_format)
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and cache_position[0] == 0:
+        if inputs_embeds is not None and len(cache_position) == inputs_embeds.shape[1]:
             model_inputs.update({"inputs_embeds": inputs_embeds, "input_ids": None})
         else:
             # The clone here is for the same reason as for `position_ids`.

@@ -52,6 +52,7 @@ FlashAttention-2 is currently supported for the following architectures:
 * [Emu3](https://huggingface.co/docs/transformers/model_doc/emu3)
 * [Gemma](https://huggingface.co/docs/transformers/model_doc/gemma#transformers.GemmaModel)
 * [Gemma2](https://huggingface.co/docs/transformers/model_doc/gemma2#transformers.Gemma2Model)
+* [GotOcr2](https://huggingface.co/docs/transformers/model_doc/got_ocr2#transformers.GotOcr2ForConditionalGeneration)
 * [GPT2](https://huggingface.co/docs/transformers/model_doc/gpt2)
 * [GPTBigCode](https://huggingface.co/docs/transformers/model_doc/gpt_bigcode#transformers.GPTBigCodeModel)
 * [GPTNeo](https://huggingface.co/docs/transformers/model_doc/gpt_neo#transformers.GPTNeoModel)
@@ -112,6 +113,7 @@ FlashAttention-2 is currently supported for the following architectures:
 * [UniSpeech](https://huggingface.co/docs/transformers/v4.39.3/en/model_doc/unispeech#transformers.UniSpeechModel)
 * [unispeech_sat](https://huggingface.co/docs/transformers/v4.39.3/en/model_doc/unispeech-sat#transformers.UniSpeechSatModel)
 * [helium](https://huggingface.co/docs/transformers/main/en/model_doc/heliumtransformers.HeliumModel)
+* [Zamba2](https://huggingface.co/docs/transformers/model_doc/zamba2)
 
 You can request to add FlashAttention-2 support for another model by opening a GitHub Issue or Pull Request.
 
@@ -253,6 +255,7 @@ For now, Transformers supports SDPA inference and training for the following arc
 * [Falcon](https://huggingface.co/docs/transformers/model_doc/falcon#transformers.FalconModel)
 * [Gemma](https://huggingface.co/docs/transformers/model_doc/gemma#transformers.GemmaModel)
 * [Gemma2](https://huggingface.co/docs/transformers/model_doc/gemma2#transformers.Gemma2Model)
+* [GotOcr2](https://huggingface.co/docs/transformers/model_doc/got_ocr2#transformers.GotOcr2ForConditionalGeneration)
 * [Granite](https://huggingface.co/docs/transformers/model_doc/granite#transformers.GraniteModel)
 * [GPT2](https://huggingface.co/docs/transformers/model_doc/gpt2)
 * [GPTBigCode](https://huggingface.co/docs/transformers/model_doc/gpt_bigcode#transformers.GPTBigCodeModel)
@@ -331,6 +334,7 @@ For now, Transformers supports SDPA inference and training for the following arc
 * [XLM-RoBERTa-XL](https://huggingface.co/docs/transformers/model_doc/xlm-roberta-xl#transformers.XLMRobertaXLModel)
 * [YOLOS](https://huggingface.co/docs/transformers/model_doc/yolos#transformers.YolosModel)
 * [helium](https://huggingface.co/docs/transformers/main/en/model_doc/heliumtransformers.HeliumModel)
+* [Zamba2](https://huggingface.co/docs/transformers/model_doc/zamba2)
 
 <Tip>
 
