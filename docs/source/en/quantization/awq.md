@@ -31,6 +31,11 @@ Make sure you have autoawq installed:
 ```bash
 pip install autoawq
 ```
+<Tip warning={true}>
+
+Note autoawq has version requirements for transformers. You might need to reinstall transformers' version after installing autoawq.
+
+</Tip>
 
 AWQ-quantized models can be identified by checking the `quantization_config` attribute in the model's [config.json](https://huggingface.co/TheBloke/zephyr-7B-alpha-AWQ/blob/main/config.json) file:
 
@@ -59,13 +64,14 @@ A quantized model is loaded with the [`~PreTrainedModel.from_pretrained`] method
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 model_id = "TheBloke/zephyr-7B-alpha-AWQ"
-model = AutoModelForCausalLM.from_pretrained(model_id, device_map="cuda:0")
+model = AutoModelForCausalLM.from_pretrained(model_id, device_map="auto")
 ```
 
 Loading an AWQ-quantized model automatically sets other weights to fp16 by default for performance reasons. If you want to load these other weights in a different format, use the `torch_dtype` parameter:
 
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer
+import torch
 
 model_id = "TheBloke/zephyr-7B-alpha-AWQ"
 model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.float32)
@@ -175,7 +181,7 @@ quantization_config = AwqConfig(
     }
 )
 
-model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=quantization_config).to(0)
+model = AutoModelForCausalLM.from_pretrained(model_id, quantization_config=quantization_config, trust_remote_code=True).to(0)
 ```
 
 The parameter `modules_to_fuse` should include:
@@ -232,12 +238,12 @@ Note this feature is supported on AMD GPUs.
 </Tip>
 
 
-## CPU support
+## Intel CPU/GPU support
 
-Recent versions of `autoawq` supports CPU with ipex op optimizations. To get started, first install the latest version of `autoawq` by running:
+Recent versions of `autoawq` supports Intel CPU/GPU with ipex op optimizations. To get started, first install the latest version of `autoawq` by running:
 
 ```bash
-pip install intel-extension-for-pytorch
+pip install intel-extension-for-pytorch # for IPEXGPU pls refer to https://github.com/intel/intel-extension-for-pytorch 
 pip install git+https://github.com/casper-hansen/AutoAWQ.git
 ```
 
@@ -247,20 +253,21 @@ Get started by passing an `AwqConfig()` with `version="ipex"`.
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer, AwqConfig
 
+device = "cpu" # set to "xpu" for Intel GPU
 quantization_config = AwqConfig(version="ipex")
 
 model = AutoModelForCausalLM.from_pretrained(
     "TheBloke/TinyLlama-1.1B-Chat-v0.3-AWQ",
     quantization_config=quantization_config,
-    device_map="cpu",
+    device_map=device,
 )
 
-input_ids = torch.randint(0, 100, (1, 128), dtype=torch.long, device="cpu")
+input_ids = torch.randint(0, 100, (1, 128), dtype=torch.long, device=device)
 output = model(input_ids)
 print(output.logits)
 
 tokenizer = AutoTokenizer.from_pretrained("TheBloke/TinyLlama-1.1B-Chat-v0.3-AWQ")
-input_ids = tokenizer.encode("How to make a cake", return_tensors="pt")
+input_ids = tokenizer.encode("How to make a cake", return_tensors="pt").to(device)
 pad_token_id = tokenizer.eos_token_id
 output = model.generate(input_ids, do_sample=True, max_length=50, pad_token_id=pad_token_id)
 print(tokenizer.decode(output[0], skip_special_tokens=True))
@@ -268,6 +275,6 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 <Tip warning={true}>
 
-Note this feature is supported on Intel CPUs.
+Note this feature is supported on Intel CPUs/GPUs.
 
 </Tip>
