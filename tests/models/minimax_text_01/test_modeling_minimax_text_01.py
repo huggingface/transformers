@@ -61,6 +61,7 @@ class MiniMaxText01ModelTester:
         num_hidden_layers=2,
         num_attention_heads=4,
         num_key_value_heads=2,
+        head_dim=6,
         intermediate_size=37,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
@@ -74,6 +75,8 @@ class MiniMaxText01ModelTester:
         pad_token_id=0,
         scope=None,
         router_jitter_noise=0.1,
+        attn_type_list=[1, 1],
+        block_size=3,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -87,6 +90,7 @@ class MiniMaxText01ModelTester:
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.num_key_value_heads = num_key_value_heads
+        self.head_dim = head_dim
         self.intermediate_size = intermediate_size
         self.hidden_act = hidden_act
         self.hidden_dropout_prob = hidden_dropout_prob
@@ -100,6 +104,8 @@ class MiniMaxText01ModelTester:
         self.pad_token_id = pad_token_id
         self.scope = scope
         self.router_jitter_noise = router_jitter_noise
+        self.attn_type_list = attn_type_list
+        self.block_size = block_size
 
     # Copied from tests.models.mistral.test_modeling_mistral.MistralModelTester.prepare_config_and_inputs
     def prepare_config_and_inputs(self):
@@ -132,6 +138,7 @@ class MiniMaxText01ModelTester:
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
             num_key_value_heads=self.num_key_value_heads,
+            head_dim=None,
             intermediate_size=self.intermediate_size,
             hidden_act=self.hidden_act,
             hidden_dropout_prob=self.hidden_dropout_prob,
@@ -144,6 +151,8 @@ class MiniMaxText01ModelTester:
             num_experts_per_tok=2,
             num_local_experts=2,
             router_jitter_noise=self.router_jitter_noise,
+            attn_type_list=self.attn_type_list,
+            block_size=self.block_size,
         )
 
     # Copied from tests.models.llama.test_modeling_llama.LlamaModelTester.create_and_check_model with Llama->MiniMaxText01

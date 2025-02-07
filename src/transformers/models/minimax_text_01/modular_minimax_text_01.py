@@ -42,7 +42,6 @@ from ...utils import (
     add_start_docstrings_to_model_forward,
 )
 from ..mixtral.modeling_mixtral import (
-    eager_attention_forward,
     MIXTRAL_INPUTS_DOCSTRING,
     MixtralRMSNorm,
     MixtralAttention,

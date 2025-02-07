@@ -82,6 +82,18 @@ class MiniMaxText01RMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
+class MiniMaxText01Cache(DynamicCache):
+    def __init__(self):
+        super().__init__()
+        self.kv_cache: dict[int : torch.Tensor] = {}
+
+    def set_kv_cache(self, kv_cache, layer_idx):
+        self.kv_cache[layer_idx] = kv_cache
+
+    def get_kv_cache(self, layer_idx):
+        return self.kv_cache.get(layer_idx)
+
+
 class MiniMaxText01LightningAttentionDecay(nn.Module):
     def __init__(self, config: MiniMaxText01Config, layer_idx: int):
         super().__init__()
@@ -92,7 +104,7 @@ class MiniMaxText01LightningAttentionDecay(nn.Module):
         self.num_hidden_layers = config.num_hidden_layers
         self.block_size = config.block_size
 
-    def forward(self, x, seq_len):
+    def forward(self, x, seq_len, return_slope_rate=False):
         num_blocks = (seq_len + self.block_size - 1) // self.block_size
         padding = num_blocks * self.block_size - seq_len
 
@@ -100,8 +112,11 @@ class MiniMaxText01LightningAttentionDecay(nn.Module):
         block_size_range = torch.arange(self.block_size).to(x) + 1
 
         slope_rate = (1 / (2 ** (8 / self.num_heads))) ** num_heads_range
-        slope_rate *= 1 - self.layer_idx / (self.num_hidden_layers - 1) + 1e-5  # check small addition
+        slope_rate *= 1 - self.layer_idx / (self.num_hidden_layers - 1) + 1e-5
         slope_rate = slope_rate[:, None, None]
+
+        if return_slope_rate:
+            return slope_rate
 
         query_decay = torch.exp(-slope_rate * block_size_range[:, None])
         query_decay = query_decay[:, None, :, :]
@@ -164,41 +179,60 @@ class MiniMaxText01LightningAttention(nn.Module):
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
 
-        # apply attention_mask
-        if attention_mask is not None:
-            value_states = value_states.masked_fill((1 - attention_mask).unsqueeze(1).unsqueeze(-1).to(torch.bool), 0)
+        kv_cache = None
+        if past_key_value is not None:
+            kv_cache = past_key_value.get_kv_cache(self.layer_idx)
 
-        query_states = F.pad(query_states, (0, 0, 0, padding))
-        key_states = F.pad(key_states, (0, 0, 0, padding))
-        value_states = F.pad(value_states, (0, 0, 0, padding))
+        if kv_cache is None:
+            kv_cache = torch.zeros(batch_size, self.num_heads, 1, self.head_dim, self.head_dim).to(value_states)
 
-        query_states = query_states.reshape(batch_size, self.num_heads, num_blocks, self.block_size, self.head_dim)
-        key_states = key_states.reshape(batch_size, self.num_heads, num_blocks, self.block_size, self.head_dim)
-        value_states = value_states.reshape(batch_size, self.num_heads, num_blocks, self.block_size, self.head_dim)
+            # apply attention_mask
+            if attention_mask is not None:
+                value_states = value_states.masked_fill(
+                    (1 - attention_mask).unsqueeze(1).unsqueeze(-1).to(torch.bool), 0
+                )
 
-        # TODO: get from past_key_value[layer_idx]
-        next_cache = torch.zeros(batch_size, self.num_heads, 1, self.head_dim, self.head_dim).to(value_states)
+            query_states = F.pad(query_states, (0, 0, 0, padding))
+            key_states = F.pad(key_states, (0, 0, 0, padding))
+            value_states = F.pad(value_states, (0, 0, 0, padding))
 
-        # get decay factors
-        key_decay, query_decay, diagonal_decay, block_decay = self.decay_factors(query_states, seq_len)
+            query_states = query_states.reshape(batch_size, self.num_heads, num_blocks, self.block_size, self.head_dim)
+            key_states = key_states.reshape(batch_size, self.num_heads, num_blocks, self.block_size, self.head_dim)
+            value_states = value_states.reshape(batch_size, self.num_heads, num_blocks, self.block_size, self.head_dim)
 
-        # intra: ( Q @ K.T ) @ V -> QK * V
-        attn_weights_intra = torch.matmul(query_states, key_states.transpose(-1, -2))
-        attn_output_intra = torch.matmul(attn_weights_intra * diagonal_decay, value_states)
+            # get decay factors
+            key_decay, query_decay, diagonal_decay, block_decay = self.decay_factors(query_states, seq_len)
 
-        # inter: Q @ ( K.T @ V ) -> Q * KV
-        attn_weights_inter = torch.matmul((key_states * key_decay).transpose(-1, -2), value_states)
-        attn_weights_inter = torch.cat([next_cache, attn_weights_inter], dim=2)
-        for i in range(num_blocks):
-            attn_weights_inter[:, :, i + 1, :, :] += attn_weights_inter[:, :, i, :, :] * block_decay[:, i, :, :]
-        next_cache = attn_weights_inter[:, :, -1, :, :]
-        attn_weights_inter = attn_weights_inter[:, :, :-1, :, :]
-        attn_output_inter = torch.matmul(query_states * query_decay, attn_weights_inter)
+            # intra: ( Q @ K.T ) @ V -> QK * V
+            attn_weights_intra = torch.matmul(query_states, key_states.transpose(-1, -2))
+            attn_output_intra = torch.matmul(attn_weights_intra * diagonal_decay, value_states)
 
-        # inter + intra
-        attn_output = attn_output_inter + attn_output_intra
-        attn_output = attn_output.reshape(batch_size, self.num_heads, seq_len + padding, self.head_dim)
-        attn_output = attn_output[:, :, :seq_len, :]
+            # inter: Q @ ( K.T @ V ) -> Q * KV
+            attn_weights_inter = torch.matmul((key_states * key_decay).transpose(-1, -2), value_states)
+            attn_weights_inter = torch.cat([kv_cache, attn_weights_inter], dim=2)
+            for i in range(num_blocks):
+                attn_weights_inter[:, :, i + 1, :, :] += attn_weights_inter[:, :, i, :, :] * block_decay[:, i, :, :]
+            kv_cache = attn_weights_inter[:, :, -1, :, :]
+            attn_weights_inter = attn_weights_inter[:, :, :-1, :, :]
+            attn_output_inter = torch.matmul(query_states * query_decay, attn_weights_inter)
+
+            # inter + intra
+            attn_output = attn_output_inter + attn_output_intra
+            attn_output = attn_output.reshape(batch_size, self.num_heads, seq_len + padding, self.head_dim)
+            attn_output = attn_output[:, :, :seq_len, :]
+        else:
+            slope_rate = self.decay_factors(query_states, seq_len, return_slope_rate=True)
+            ratio = torch.exp(-slope_rate)
+            attn_output = []
+            for i in range(seq_len):
+                kv_cache = ratio * kv_cache + torch.einsum(
+                    "... n d, ... n e -> ... d e",
+                    key_states[:, :, i : i + 1],
+                    value_states[:, :, i : i + 1],
+                )
+                attn_output_i = torch.einsum("... n e, ... e d -> ... n d", query_states[:, :, i : i + 1], kv_cache)
+                attn_output.append(attn_output_i)
+            attn_output = torch.concat(attn_output, dim=-2)
 
         # final output projection
         attn_output = attn_output.transpose(1, 2)
@@ -207,13 +241,14 @@ class MiniMaxText01LightningAttention(nn.Module):
         attn_output = F.sigmoid(self.output_gate(hidden_states)) * attn_output
         attn_output = self.out_proj(attn_output)
 
-        # TODO: put to past_key_value[layer_idx]
-        next_cache
+        # update cache
+        if past_key_value is not None:
+            past_key_value.set_kv_cache(kv_cache, self.layer_idx)
 
         # TODO: remove these
         print()
         print(self.layer_idx)
-        print(next_cache)
+        print(kv_cache)
 
         return attn_output, None
 
@@ -478,7 +513,6 @@ class MiniMaxText01DecoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        causal_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_value: Optional[Tuple[torch.Tensor]] = None,
         output_attentions: Optional[bool] = False,
@@ -493,8 +527,6 @@ class MiniMaxText01DecoderLayer(nn.Module):
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.Tensor`, *optional*): attention mask of size
                 `(batch, sequence_length)` where padding elements are indicated by 0.
-            causal_mask (`torch.Tensor`, *optional*): causal attention mask of size
-                `(batch, 1, query_length, key_value_length)` where padding elements are indicated by 0.
             past_key_value (`Tuple(torch.FloatTensor)`, *optional*): cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
@@ -519,7 +551,6 @@ class MiniMaxText01DecoderLayer(nn.Module):
             residual = hidden_states
 
         # Self Attention
-        attention_mask = attention_mask if self.attn_type == 0 else causal_mask
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
             position_embeddings=position_embeddings,
@@ -645,7 +676,7 @@ class MiniMaxText01PreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
     _supports_cache_class = True
     _supports_quantized_cache = True
-    _supports_static_cache = True
+    _supports_static_cache = False  # MoE models don't work with torch.compile (`torch.where(condition)` not supported)
     _supports_attention_backend = True
 
     def _init_weights(self, module):
@@ -807,7 +838,7 @@ class MiniMaxText01Model(MiniMaxText01PreTrainedModel):
                 use_cache = False
 
         if use_cache and past_key_values is None:
-            past_key_values = DynamicCache()
+            past_key_values = MiniMaxText01Cache()
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
@@ -838,12 +869,17 @@ class MiniMaxText01Model(MiniMaxText01PreTrainedModel):
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
+            if decoder_layer.attn_type == 0:
+                # lightning attention uses original attention_mask, and uses it only for the first step
+                input_attention_mask = attention_mask
+            else:
+                input_attention_mask = causal_mask
+
             if self.gradient_checkpointing and self.training:
                 layer_outputs = self._gradient_checkpointing_func(
                     decoder_layer.__call__,
                     hidden_states,
-                    attention_mask,
-                    causal_mask,
+                    input_attention_mask,
                     position_ids,
                     past_key_values,
                     output_attentions,
@@ -855,8 +891,7 @@ class MiniMaxText01Model(MiniMaxText01PreTrainedModel):
             else:
                 layer_outputs = decoder_layer(
                     hidden_states,
-                    attention_mask=attention_mask,
-                    causal_mask=causal_mask,
+                    attention_mask=input_attention_mask,
                     position_ids=position_ids,
                     past_key_value=past_key_values,
                     output_attentions=output_attentions,
@@ -963,7 +998,7 @@ class MiniMaxText01Model(MiniMaxText01PreTrainedModel):
         if (
             self.config._attn_implementation == "sdpa"
             and attention_mask is not None
-            and attention_mask.device.type == "cuda"
+            and attention_mask.device.type in ["cuda", "xpu"]
             and not output_attentions
         ):
             # Attend to all tokens in fully masked rows in the causal_mask, for example the relevant first rows when
@@ -1351,17 +1386,20 @@ class MiniMaxText01ForSequenceClassification(MiniMaxText01PreTrainedModel):
         if self.config.pad_token_id is None and batch_size != 1:
             raise ValueError("Cannot handle batch sizes > 1 if no padding token is defined.")
         if self.config.pad_token_id is None:
-            sequence_lengths = -1
+            last_non_pad_token = -1
+        elif input_ids is not None:
+            # To handle both left- and right- padding, we take the rightmost token that is not equal to pad_token_id
+            non_pad_mask = (input_ids != self.config.pad_token_id).to(logits.device, torch.int32)
+            token_indices = torch.arange(input_ids.shape[-1], device=logits.device)
+            last_non_pad_token = (token_indices * non_pad_mask).argmax(-1)
         else:
-            if input_ids is not None:
-                # if no pad token found, use modulo instead of reverse indexing for ONNX compatibility
-                sequence_lengths = torch.eq(input_ids, self.config.pad_token_id).int().argmax(-1) - 1
-                sequence_lengths = sequence_lengths % input_ids.shape[-1]
-                sequence_lengths = sequence_lengths.to(logits.device)
-            else:
-                sequence_lengths = -1
+            last_non_pad_token = -1
+            logger.warning_once(
+                f"{self.__class__.__name__} will not detect padding tokens in `inputs_embeds`. Results may be "
+                "unexpected if using padding tokens in conjunction with `inputs_embeds.`"
+            )
 
-        pooled_logits = logits[torch.arange(batch_size, device=logits.device), sequence_lengths]
+        pooled_logits = logits[torch.arange(batch_size, device=logits.device), last_non_pad_token]
 
         loss = None
         if labels is not None:

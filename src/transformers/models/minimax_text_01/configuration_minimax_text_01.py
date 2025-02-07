@@ -121,7 +121,7 @@ class MiniMaxText01Config(PretrainedConfig):
         vocab_size=32000,
         hidden_size=4096,
         intermediate_size=14336,
-        num_hidden_layers=32,
+        num_hidden_layers=12,
         num_attention_heads=32,
         num_key_value_heads=8,
         head_dim=None,
@@ -142,7 +142,7 @@ class MiniMaxText01Config(PretrainedConfig):
         output_router_logits=False,
         router_aux_loss_coef=0.001,
         router_jitter_noise=0.0,
-        attn_type_list=None,
+        attn_type_list=[0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1],
         block_size=256,
         residual_post_norm=False,
         layernorm_attention_alpha=1,
@@ -174,15 +174,7 @@ class MiniMaxText01Config(PretrainedConfig):
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
         self.router_jitter_noise = router_jitter_noise
-
-        # use softmax-attention after `interval` lightning-attentions
-        interval = num_hidden_layers // 10
-        self.attn_type_list = (
-            [1 if i % interval == interval - 1 else 0 for i in range(num_hidden_layers)]
-            if attn_type_list is None
-            else attn_type_list
-        )
-
+        self.attn_type_list = attn_type_list
         self.block_size = block_size
         self.residual_post_norm = residual_post_norm
         self.layernorm_attention_alpha = layernorm_attention_alpha
