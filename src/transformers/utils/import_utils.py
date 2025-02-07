@@ -866,7 +866,7 @@ def is_ninja_available():
         return True
 
 
-def is_ipex_available():
+def is_ipex_available(min_version: str = ""):
     def get_major_and_minor_from_version(full_version):
         return str(version.parse(full_version).major) + "." + str(version.parse(full_version).minor)
 
@@ -881,6 +881,8 @@ def is_ipex_available():
             f" but PyTorch {_torch_version} is found. Please switch to the matching version and run again."
         )
         return False
+    if min_version:
+        return version.parse(_ipex_version) >= version.parse(min_version)
     return True
 
 

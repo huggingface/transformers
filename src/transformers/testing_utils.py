@@ -989,6 +989,17 @@ def require_torch_gpu(test_case):
     return unittest.skipUnless(torch_device == "cuda", "test requires CUDA")(test_case)
 
 
+def require_torch_large_gpu(test_case, memory: float = 20):
+    """Decorator marking a test that requires a CUDA GPU with more than `memory` GiB of memory."""
+    if torch_device != "cuda":
+        return unittest.skip(reason=f"test requires a CUDA GPU with more than {memory} GiB of memory")(test_case)
+
+    return unittest.skipUnless(
+        torch.cuda.get_device_properties(0).total_memory / 1024**3 > memory,
+        f"test requires a GPU with more than {memory} GiB of memory",
+    )(test_case)
+
+
 def require_torch_gpu_if_bnb_not_multi_backend_enabled(test_case):
     """
     Decorator marking a test that requires a GPU if bitsandbytes multi-backend feature is not enabled.
@@ -1432,6 +1443,7 @@ def set_model_tester_for_less_flaky_test(test_case):
     # TODO (if possible): Avoid exceptional cases
     exceptional_classes = [
         "ZambaModelTester",
+        "Zamba2ModelTester",
         "RwkvModelTester",
         "AriaVisionText2TextModelTester",
         "GPTNeoModelTester",
@@ -1495,7 +1507,16 @@ def set_config_for_less_flaky_test(config):
 
 def set_model_for_less_flaky_test(model):
     # Another way to make sure norm layers have desired epsilon. (Some models don't set it from its config.)
-    target_names = ("LayerNorm", "GroupNorm", "BatchNorm", "RMSNorm", "BatchNorm2d", "BatchNorm1d")
+    target_names = (
+        "LayerNorm",
+        "GroupNorm",
+        "BatchNorm",
+        "RMSNorm",
+        "BatchNorm2d",
+        "BatchNorm1d",
+        "BitGroupNormActivation",
+        "WeightStandardizedConv2d",
+    )
     target_attrs = ["eps", "epsilon", "variance_epsilon"]
     if is_torch_available() and isinstance(model, torch.nn.Module):
         for module in model.modules():
