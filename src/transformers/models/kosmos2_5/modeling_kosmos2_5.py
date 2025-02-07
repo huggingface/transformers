@@ -1601,6 +1601,7 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[Tuple, CausalLMOutputWithCrossAttentions]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1633,26 +1634,23 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel):
         )
         lm_logits = self.lm_head(outputs[0])
 
-        loss = None
+        lm_loss = None
         if labels is not None:
             # move labels to correct device to enable model parallelism
             labels = labels.to(lm_logits.device)
-            # Shift so that tokens < n predict n
-            shift_logits = lm_logits[..., :-1, :].contiguous()
-            shift_labels = labels[..., 1:].contiguous()
-            batch_size, seq_length, vocab_size = shift_logits.shape
-            # Flatten the tokens
-            loss_fct = CrossEntropyLoss()
-            loss = loss_fct(
-                shift_logits.view(batch_size * seq_length, vocab_size), shift_labels.view(batch_size * seq_length)
+            lm_loss = self.loss_function(
+                lm_logits,
+                labels,
+                vocab_size=self.config.vocab_size,
+                **kwargs,
             )
 
         if not return_dict:
             output = (lm_logits,) + outputs[1:]
-            return (loss,) + output if loss is not None else output
+            return (lm_loss,) + output if lm_loss is not None else output
 
         return CausalLMOutputWithCrossAttentions(
-            loss=loss,
+            loss=lm_loss,
             logits=lm_logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
