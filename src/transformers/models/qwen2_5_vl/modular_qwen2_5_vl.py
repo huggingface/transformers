@@ -20,7 +20,7 @@
 """PyTorch Qwen2.5-VL model."""
 
 from dataclasses import dataclass
-from typing import List, Optional, Tuple, Union, Dict, Any
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import torch
 import torch.nn as nn
