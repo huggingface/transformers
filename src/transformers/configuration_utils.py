@@ -200,7 +200,7 @@ class PretrainedConfig(PushToHubMixin):
     is_composition: bool = False
     attribute_map: Dict[str, str] = {}
     base_model_tp_plan: Optional[Dict[str, Any]] = None
-    base_model_pp_plan: Optional[Dict[Dict[str, str]]] = None
+    base_model_pp_plan: Optional[Dict[str, Any]] = None
     _auto_class: Optional[str] = None
 
     def __setattr__(self, key, value):
