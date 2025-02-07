@@ -150,6 +150,7 @@ class StyleTextToSpeech2DecoderConfig(StyleTextToSpeech2SubModelConfig):
         upsample_kernel_sizes=[20, 12],
         gen_istft_n_fft=20,
         gen_istft_hop_size=5,
+        sampling_rate=24000,
         **kwargs
     ):
         self.resblock_kernel_sizes = resblock_kernel_sizes
@@ -159,7 +160,7 @@ class StyleTextToSpeech2DecoderConfig(StyleTextToSpeech2SubModelConfig):
         self.upsample_kernel_sizes = upsample_kernel_sizes
         self.gen_istft_n_fft = gen_istft_n_fft
         self.gen_istft_hop_size = gen_istft_hop_size
-
+        self.sampling_rate = sampling_rate
         super().__init__(**kwargs)
 
 
