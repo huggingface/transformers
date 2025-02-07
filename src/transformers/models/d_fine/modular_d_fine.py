@@ -510,11 +510,12 @@ class DFineDecoder(RTDetrDecoder):
                 ref_points_initial = new_reference_points.detach()
 
             # Refine bounding box corners using FDR, integrating previous layer's corrections
-            pred_corners = self.bbox_embed[i](hidden_states + output_detach) + pred_corners_undetach
-            inter_ref_bbox = distance2bbox(ref_points_initial, self.integral(pred_corners, project), self.reg_scale)
-
-            pred_corners_undetach = pred_corners
-            ref_points_detach = inter_ref_bbox.detach()
+            if self.bbox_embed is not None:
+                pred_corners = self.bbox_embed[i](hidden_states + output_detach) + pred_corners_undetach
+                inter_ref_bbox = distance2bbox(ref_points_initial, self.integral(pred_corners, project), self.reg_scale)
+                pred_corners_undetach = pred_corners
+                ref_points_detach = inter_ref_bbox.detach()
+            
             output_detach = hidden_states.detach()
 
             intermediate += (hidden_states,)
@@ -525,8 +526,14 @@ class DFineDecoder(RTDetrDecoder):
                 scores = self.lqe_layers[i](scores, pred_corners)
                 intermediate_logits += (scores,)
                 intermediate_logits = torch.stack(intermediate_logits, dim=1)
-                intermediate_reference_points += (inter_ref_bbox,)
+                intermediate_reference_points += (inter_ref_bbox,) if self.bbox_embed is not None else (reference_points,)
                 intermediate_reference_points = torch.stack(intermediate_reference_points, dim=1)
+            
+            if output_attentions:
+                all_self_attns += (output[1],)
+
+                if encoder_hidden_states is not None:
+                    all_cross_attentions += (output[2],)
 
         # Keep batch_size as first dimension
         intermediate = torch.stack(intermediate, dim=1)
