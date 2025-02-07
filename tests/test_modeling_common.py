@@ -2364,7 +2364,7 @@ class ModelTesterMixin:
                 tied_params = [names for _, names in ptrs.items() if len(names) > 1]
                 for group in tied_params:
                     # We remove the group from extra_missing if not all weights from group are in it
-                    if len(group - extra_missing) > 0:
+                    if len(set(group) - extra_missing) > 0:
                         extra_missing = extra_missing - set(group)
 
                 self.assertEqual(
