@@ -4837,7 +4837,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # correctly initialize the missing keys if it was skipped before
         if _fast_init:
             model._initialize_missing_keys(
-                renamed_loaded_keys, ignore_mismatched_sizes, has_prefix_module, expects_prefix_module, is_quantized
+                renamed_loaded_keys,
+                ignore_mismatched_sizes,
+                loading_base_model_from_task_state_dict,
+                loading_task_model_from_base_state_dict,
+                is_quantized,
             )
 
         # Set some modules to fp32 if needed
