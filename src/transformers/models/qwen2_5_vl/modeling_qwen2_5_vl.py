@@ -162,8 +162,8 @@ class Qwen2_5_VLPatchMerger(nn.Module):
 
 def apply_rotary_pos_emb_flashatt(tensor: torch.Tensor, freqs: torch.Tensor) -> torch.Tensor:
     tensor_ = tensor.float()
-    cos = freqs.cos()
-    sin = freqs.sin()
+    cos = freqs.cos().float()
+    sin = freqs.sin().float()
     output = apply_rotary_emb(tensor_, cos, sin).type_as(tensor)
     return output
 
@@ -1872,8 +1872,12 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
         # Exception 2: some generation methods do special slicing of input_ids, so we don't need to do it here
         # Exception 3: with synced GPUs cache_position may go out of bounds, but we only want dummy token in that case.
         #              (we can't check exception 3 while compiling)
+        # Exception 4: If input_embeds are passed then slice it through `cache_position`, to keep only the unprocessed tokens and
+        # generate the first token for each sequence. Later use the generated Input ids for continuation.
         if past_key_values is not None:
-            if (
+            if inputs_embeds is not None and input_ids.shape[1] == 0:  # Exception 4
+                inputs_embeds = inputs_embeds[:, -cache_position.shape[0] :]
+            elif (
                 inputs_embeds is not None  # Exception 1
                 or (is_torchdynamo_compiling() or cache_position[-1] >= input_ids.shape[1])  # Exception 3
             ):
@@ -1886,7 +1890,7 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2_5_VLPreTrainedModel, GenerationMi
             pixel_values_videos = None
 
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step
-        if inputs_embeds is not None and cache_position[0] == 0:
+        if inputs_embeds is not None and len(cache_position) == inputs_embeds.shape[1]:
             model_inputs = {"inputs_embeds": inputs_embeds, "input_ids": None}
         else:
             model_inputs = {"input_ids": input_ids, "inputs_embeds": None}
