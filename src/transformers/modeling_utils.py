@@ -775,7 +775,7 @@ def _load_state_dict_into_meta_model(
     model: "PreTrainedModel",
     state_dict: Dict,
     start_prefix: str,
-    expected_keys: Dict,
+    expected_keys: List[str],
     device_map: Optional[Dict] = None,
     disk_offload_folder: Optional[str] = None,
     disk_offload_index: Optional[Dict] = None,
@@ -785,7 +785,7 @@ def _load_state_dict_into_meta_model(
     hf_quantizer: Optional[HfQuantizer] = None,
     is_safetensors: bool = False,
     keep_in_fp32_modules: Optional[List[str]] = None,
-    unexpected_keys: Optional[Dict] = None,  # passing `unexpected` for cleanup from quantization items
+    unexpected_keys: Optional[List[str]] = None,  # passing `unexpected` for cleanup from quantization items
     device_mesh: Optional[torch.distributed.device_mesh.DeviceMesh] = None,
     tp_key_registry: Optional[Dict] = None,
 ) -> Tuple[List[str], Optional[Dict], Optional[Dict]]:
@@ -1508,96 +1508,6 @@ def _find_missing_and_unexpected_keys(
             unexpected_keys = [k for k in unexpected_keys if re.search(pattern, k) is None]
 
     return missing_keys, unexpected_keys
-
-
-def _move_missing_keys_back_to_cpu(
-    model: "PreTrainedModel",
-    missing_keys: List[str],
-    unexpected_keys: List[str],
-    dtype: Optional[torch.dtype],
-    keep_in_fp32_modules: Optional[List[str]],
-    hf_quantizer: Optional[HfQuantizer],
-) -> "PreTrainedModel":
-    """Move the missing keys (keys that are part of the model parameters, but were NOT found in the loaded state dicts) back
-    from meta device to cpu.
-    """
-    is_quantized = hf_quantizer is not None
-
-    model_state_dict = model.state_dict()
-    for key in missing_keys:
-        param = model_state_dict[key]
-        if param.device == torch.device("meta"):
-            # upcast in fp32 if any
-            target_dtype = dtype
-            if (
-                keep_in_fp32_modules is not None
-                and dtype == torch.float16
-                and any(module_to_keep_in_fp32 in key.split(".") for module_to_keep_in_fp32 in keep_in_fp32_modules)
-            ):
-                target_dtype = torch.float32
-
-            value = torch.empty(*param.size(), dtype=target_dtype)
-            if (
-                not is_quantized
-                or (getattr(hf_quantizer, "requires_parameters_quantization", False))
-                or not hf_quantizer.check_quantized_param(model, param_value=value, param_name=key, state_dict={})
-            ):
-                set_module_tensor_to_device(model, key, "cpu", value)
-            else:
-                hf_quantizer.create_quantized_param(model, value, key, "cpu", model_state_dict, unexpected_keys)
-
-    return model
-
-
-def _initialize_missing_keys(
-    model: "PreTrainedModel",
-    loaded_keys: List[str],
-    ignore_mismatched_sizes: bool,
-    loading_base_model_from_task_state_dict: bool,
-    loading_task_model_from_base_state_dict: bool,
-    is_quantized: bool,
-) -> "PreTrainedModel":
-    """Initialize the missing keys (keys that are part of the model parameters, but were NOT found in the loaded state dicts), according to
-    `_initialize_weights`. Indeed, since the corresponding weights are missing from the state dict, they will not be replaced and need to
-    be initialized correctly (i.e. weight initialization distribution).
-    Also take care of setting the `_is_hf_initialized` flag for keys that are not missing.
-    """
-    prefix = model.base_model_prefix
-
-    if not ignore_mismatched_sizes:
-        loaded_keys = _adjust_loaded_keys_prefix(
-            loaded_keys, prefix, loading_base_model_from_task_state_dict, loading_task_model_from_base_state_dict
-        )
-        not_initialized_submodules = set_initialized_submodules(model, loaded_keys)
-        # If we're about to tie the output embeds to the input embeds we don't need to init them
-        if (
-            hasattr(model.config.get_text_config(decoder=True), "tie_word_embeddings")
-            and model.config.get_text_config(decoder=True).tie_word_embeddings
-        ):
-            output_embeddings = model.get_output_embeddings()
-            if output_embeddings is not None:
-                # Still need to initialize if there is a bias term since biases are not tied.
-                if not hasattr(output_embeddings, "bias") or output_embeddings.bias is None:
-                    output_embeddings._is_hf_initialized = True
-    else:
-        not_initialized_submodules = dict(model.named_modules())
-    # This will only initialize submodules that are not marked as initialized by the line above.
-    if is_deepspeed_zero3_enabled() and not is_quantized:
-        import deepspeed
-
-        not_initialized_parameters = list(
-            set(
-                itertools.chain.from_iterable(
-                    submodule.parameters(recurse=False) for submodule in not_initialized_submodules.values()
-                )
-            )
-        )
-        with deepspeed.zero.GatheredParameters(not_initialized_parameters, modifier_rank=0):
-            model.apply(model._initialize_weights)
-    else:
-        model.apply(model._initialize_weights)
-
-    return model
 
 
 def _find_mismatched_keys(
@@ -4915,8 +4825,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Move missing keys back to cpu from meta device (because they won't be moved when loading the weights as
         # they are not in the loaded state dict)
         if low_cpu_mem_usage:
-            model = _move_missing_keys_back_to_cpu(
-                model, missing_keys, unexpected_keys, dtype, keep_in_fp32_modules, hf_quantizer
+            model._move_missing_keys_back_to_cpu(
+                missing_keys, unexpected_keys, dtype, keep_in_fp32_modules, hf_quantizer
             )
             # In this case we also need to move everything back
             if is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized:
@@ -4926,13 +4836,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
         # correctly initialize the missing keys if it was skipped before
         if _fast_init:
-            model = _initialize_missing_keys(
-                model,
-                renamed_loaded_keys,
-                ignore_mismatched_sizes,
-                has_prefix_module,
-                expects_prefix_module,
-                is_quantized,
+            model._initialize_missing_keys(
+                renamed_loaded_keys, ignore_mismatched_sizes, has_prefix_module, expects_prefix_module, is_quantized
             )
 
         # Set some modules to fp32 if needed
@@ -4993,7 +4898,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Prepare inputs if using tensor parallel
         tp_key_registry = None
         if device_mesh is not None:
-            tp_key_registry = _get_tp_key_registry(model_to_load)
+            tp_key_registry = model_to_load._get_tp_key_registry()
 
         map_location = None
         if (
@@ -5011,10 +4916,13 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # To be able to iterate, even if we don't use it if the state_dict is already provided
         checkpoint_files = checkpoint_files if state_dict is None else [""]
 
-        # TODO: CHECK THAT
+        # Compute expected model keys
         expected_keys = list(model_to_load.state_dict().keys())
         if hf_quantizer is not None:
-            expected_keys = hf_quantizer.update_expected_keys(model_to_load, expected_keys, loaded_state_dict_keys)
+            modified_keys = loaded_state_dict_keys
+            if loading_base_model_from_task_state_dict:
+                modified_keys = [s[len(_prefix) :] for s in loaded_state_dict_keys if s.startswith(_prefix)]
+            expected_keys = hf_quantizer.update_expected_keys(model_to_load, expected_keys, modified_keys)
 
         error_msgs = []
         mismatched_keys = []
@@ -5493,6 +5401,157 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
     @classmethod
     def is_backend_compatible(cls):
         return cls._supports_attention_backend
+
+    def _move_missing_keys_back_to_cpu(
+        self,
+        missing_keys: List[str],
+        unexpected_keys: List[str],
+        dtype: Optional[torch.dtype],
+        keep_in_fp32_modules: Optional[List[str]],
+        hf_quantizer: Optional[HfQuantizer],
+    ) -> "PreTrainedModel":
+        """Move the missing keys (keys that are part of the model parameters, but were NOT found in the loaded state dicts) back
+        from meta device to cpu.
+        """
+        is_quantized = hf_quantizer is not None
+
+        model_state_dict = self.state_dict()
+        for key in missing_keys:
+            param = model_state_dict[key]
+            if param.device == torch.device("meta"):
+                # upcast in fp32 if any
+                target_dtype = dtype
+                if (
+                    keep_in_fp32_modules is not None
+                    and dtype == torch.float16
+                    and any(
+                        module_to_keep_in_fp32 in key.split(".") for module_to_keep_in_fp32 in keep_in_fp32_modules
+                    )
+                ):
+                    target_dtype = torch.float32
+
+                value = torch.empty(*param.size(), dtype=target_dtype)
+                if (
+                    not is_quantized
+                    or (getattr(hf_quantizer, "requires_parameters_quantization", False))
+                    or not hf_quantizer.check_quantized_param(self, param_value=value, param_name=key, state_dict={})
+                ):
+                    set_module_tensor_to_device(self, key, "cpu", value)
+                else:
+                    hf_quantizer.create_quantized_param(self, value, key, "cpu", model_state_dict, unexpected_keys)
+
+    def _initialize_missing_keys(
+        self,
+        loaded_keys: List[str],
+        ignore_mismatched_sizes: bool,
+        loading_base_model_from_task_state_dict: bool,
+        loading_task_model_from_base_state_dict: bool,
+        is_quantized: bool,
+    ) -> "PreTrainedModel":
+        """Initialize the missing keys (keys that are part of the model parameters, but were NOT found in the loaded state dicts), according to
+        `_initialize_weights`. Indeed, since the corresponding weights are missing from the state dict, they will not be replaced and need to
+        be initialized correctly (i.e. weight initialization distribution).
+        Also take care of setting the `_is_hf_initialized` flag for keys that are not missing.
+        """
+        prefix = self.base_model_prefix
+
+        if not ignore_mismatched_sizes:
+            loaded_keys = _adjust_loaded_keys_prefix(
+                loaded_keys, prefix, loading_base_model_from_task_state_dict, loading_task_model_from_base_state_dict
+            )
+            not_initialized_submodules = set_initialized_submodules(self, loaded_keys)
+            # If we're about to tie the output embeds to the input embeds we don't need to init them
+            if (
+                hasattr(self.config.get_text_config(decoder=True), "tie_word_embeddings")
+                and self.config.get_text_config(decoder=True).tie_word_embeddings
+            ):
+                output_embeddings = self.get_output_embeddings()
+                if output_embeddings is not None:
+                    # Still need to initialize if there is a bias term since biases are not tied.
+                    if not hasattr(output_embeddings, "bias") or output_embeddings.bias is None:
+                        output_embeddings._is_hf_initialized = True
+        else:
+            not_initialized_submodules = dict(self.named_modules())
+        # This will only initialize submodules that are not marked as initialized by the line above.
+        if is_deepspeed_zero3_enabled() and not is_quantized:
+            import deepspeed
+
+            not_initialized_parameters = list(
+                set(
+                    itertools.chain.from_iterable(
+                        submodule.parameters(recurse=False) for submodule in not_initialized_submodules.values()
+                    )
+                )
+            )
+            with deepspeed.zero.GatheredParameters(not_initialized_parameters, modifier_rank=0):
+                self.apply(self._initialize_weights)
+        else:
+            self.apply(self._initialize_weights)
+
+    def _get_tp_key_registry(self) -> Dict[str, Dict]:
+        """Create a registry of all keys of the model, and the entity under which they should be parallelized using
+        TP (tensor parallel). The strategy is to parallelize each individual Layer as a single entity, then other
+        individual modules as specified in the tp_plan, if they are not part of a bigger Layer module.
+
+        This strategy ensures the best tradeoff between loading speed and memory footprint while parallelizing the model.
+        Indeed, loading the whole model and then parallelizing creates a huge memory overhead, as each process must
+        first load the full model on its given device. The other extreme, parallelizing each leaf of the model (Linear layers)
+        as their parameters are loaded creates a huge speed overhead, due to a lot of call to
+        `torch.distributed.tensor.parallel.parallelize_module`. Parallelizing each layer as soon as their parameters are loaded
+        provides the best of both world: almost no memory overhead, and as fast (sometimes even faster) as parallelizing
+        the full model at once.
+        """
+        prefix = self.base_model_prefix
+        is_task_specific_model = hasattr(self, prefix) if len(prefix) > 0 else False
+
+        full_tp_plan = self.config.base_model_tp_plan
+        if is_task_specific_model:
+            # Add the prefix to the base model plan
+            full_tp_plan = {f"{prefix}.{key}": plan for key, plan in full_tp_plan.items()}
+            # Add potential task-specific additional plan
+            full_tp_plan.update(getattr(self, "_tp_plan", {}))
+
+        # Extract full prefix before the layer numbers
+        layer_prefix = None
+        for key in full_tp_plan.keys():
+            if "*" in key:
+                # extract everything before the first "*" corresponding to layer number
+                layer_prefix = key.split("*", 1)[0]
+                break
+        if layer_prefix is None:
+            raise ValueError("Could not parse format of the base_model_tp_plan in the config.")
+
+        # Separate between layer plan, and other module plans
+        layer_wise_tp_plan = {}
+        other_modules_tp_plan = {}
+        for key, plan in full_tp_plan.items():
+            # In this case, keep the key starting after the "*" layer number indicator
+            if key.startswith(layer_prefix):
+                layer_key = key.split("*", 1)[1][1:]
+                layer_wise_tp_plan[layer_key] = translate_to_torch_parallel_style(plan)
+            else:
+                other_modules_tp_plan[key] = translate_to_torch_parallel_style(plan)
+
+        # Create the registry. Here we use the layers as single entities to parallelize (and other individual modules if any)
+        tp_key_registry = {}
+        for key in self.state_dict().keys():
+            # This pattern is used to capture the whole model prefix before the layer
+            pattern = rf"^({layer_prefix}[0-9]+)"
+            match = re.match(pattern, key)
+            # In this case, the current key is part of a layer to parallelize as a single entity
+            if match is not None:
+                layer = match.group(1)
+                if layer not in tp_key_registry:
+                    tp_key_registry[layer] = {"children": {key}, "plan": layer_wise_tp_plan}
+                else:
+                    tp_key_registry[layer]["children"].add(key)
+            elif key in other_modules_tp_plan:
+                if key not in tp_key_registry:
+                    tp_key_registry[key] = {"children": {key}, "plan": other_modules_tp_plan[key]}
+                else:
+                    tp_key_registry[key]["children"].add(key)
+
+        return tp_key_registry
 
 
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)
