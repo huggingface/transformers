@@ -1399,7 +1399,7 @@ class LlamaForCausalLM(LlamaPreTrainedModel, GenerationMixin):
             logits = torch.cat(logits, dim=-1)
         else:
             # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-            logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :])
+            logits = self.lm_head(hidden_states[:, -num_logits_to_keep:, :].contiguous())
 
         loss = None
         if labels is not None:
