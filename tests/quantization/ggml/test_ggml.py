@@ -223,7 +223,7 @@ class GgufIntegrationTests(unittest.TestCase):
         from collections import OrderedDict
 
         q2_k_gguf_model_id = self.gguf_filename.format(quant_type=QuantType.Q2_K.name)
-        with self.assertRaises(NotImplementedError):
+        with self.assertRaises(RuntimeError):
             AutoModelForCausalLM.from_pretrained(
                 self.gguf_model_id,
                 device_map=OrderedDict(
