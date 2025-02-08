@@ -152,9 +152,9 @@ class LlamaConfig(PretrainedConfig):
         "layers.*.mlp.down_proj": "rowwise",
     }
     base_model_pp_plan = {
-        "embed_tokens": {"input_keys": ["input_ids"], "output_keys": ["inputs_embeds"]},
-        "layers": {"input_keys": ["hidden_states", "attention_mask"], "output_keys": ["hidden_states"]},
-        "norm": {"input_keys": ["hidden_states"], "output_keys": ["hidden_states"]},
+        "embed_tokens": [["input_ids"], ["inputs_embeds"]],
+        "layers": [["hidden_states", "attention_mask"], ["hidden_states"]],
+        "norm": [["hidden_states"], ["hidden_states"]],
     }
 
     def __init__(
