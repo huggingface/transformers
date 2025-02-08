@@ -21,7 +21,7 @@ import os
 from dataclasses import dataclass
 from enum import Enum
 from inspect import Parameter, signature
-from typing import Any, Dict, List, Optional, Union, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from packaging import version
 
@@ -1550,13 +1550,14 @@ class BitNetConfig(QuantizationConfigMixin):
         """
         pass
 
+
 @dataclass
 class FP8Config(QuantizationConfigMixin):
     def __init__(
         self,
         modules_to_not_convert: Optional[List] = None,
         activation_scheme: Optional[str] = "dynamic",
-        weight_block_size: Optional[Tuple[int, int]] = None,
+        weight_block_size: Optional[Tuple[int, int]] = (128, 128),
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.FP8
@@ -1569,4 +1570,10 @@ class FP8Config(QuantizationConfigMixin):
         r"""
         Safety checker that arguments are correct
         """
-        pass
+        self.activation_scheme = self.activation_scheme.lower()
+        if self.activation_scheme not in ["dynamic"]:
+            raise ValueError(f"Activation scheme {self.activation_scheme} not supported")
+        if len(self.weight_block_size) != 2:
+            raise ValueError("weight_block_size must be a tuple of two integers")
+        if self.weight_block_size[0] <= 0 or self.weight_block_size[1] <= 0:
+            raise ValueError("weight_block_size must be a tuple of two positive integers")

@@ -1,22 +1,26 @@
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+
 import torch
 import torch.nn as nn
 from torch.nn.parameter import Parameter as Parameter
-from .base import HfQuantizer
+
 from ..utils import is_accelerate_available, logging
+from .base import HfQuantizer
 from .quantizers_utils import get_module_from_name
+
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
 logger = logging.get_logger(__name__)
 
+
 class FP8HfQuantizer(HfQuantizer):
     """
     FP8 quantization implementation supporting both standard and MoE models.
     Supports both e4m3fn and e4m3fnuz formats based on platform.
     """
-    
+
     requires_parameters_quantization = True
     requires_calibration = False
     required_packages = ["accelerate"]
@@ -38,30 +42,35 @@ class FP8HfQuantizer(HfQuantizer):
         if not torch.cuda.is_available():
             raise RuntimeError("No GPU found. A GPU is needed for FP8 quantization.")
 
+        compute_capability = torch.cuda.get_device_capability()
+        major, minor = compute_capability
+        if major < 9:
+            raise ValueError(
+                "FP8 quantized models is only supported on GPUs with compute capability >= 9.0 (e.g H100)"
+            )
+
         device_map = kwargs.get("device_map", None)
         if device_map is None:
             logger.warning_once(
-                "You have loaded an FP8 model on CPU and have a CUDA device available. "
-                "Make sure to set your model on a GPU device to run your model."
-            )
-        elif isinstance(device_map, dict) and ("cpu" in device_map.values() or "disk" in device_map.values()):
-            raise ValueError(
-                "FP8 models do not support CPU or disk offloading in the device map. "
-                "Please remove CPU/disk devices from the device map."
+                "You have loaded an FP8 model on CPU and have a CUDA device available, make sure to set "
+                "your model on a GPU device in order to run your model. To remove this warning, pass device_map = 'cuda'. "
             )
 
-    def update_torch_dtype(self, torch_dtype):
-        torch_dtype = torch.float32
+    def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
+        if torch_dtype is None:
+            logger.info("Setting torch_dtype to torch.float32 as no torch_dtype was specified in from_pretrained")
+            # we need to set the torch_dtype, otherwise we have dtype mismatch when performing the quantized linear op
+            torch_dtype = torch.float32
         return torch_dtype
-    
+
     def create_quantized_param(
-    self,
-    model: "PreTrainedModel",
-    param_value: "torch.Tensor",
-    param_name: str,
-    target_device: "torch.device",
-    state_dict: Dict[str, Any],
-    unexpected_keys: Optional[List[str]] = None,
+        self,
+        model: "PreTrainedModel",
+        param_value: "torch.Tensor",
+        param_name: str,
+        target_device: "torch.device",
+        state_dict: Dict[str, Any],
+        unexpected_keys: Optional[List[str]] = None,
     ):
         """
         Quantizes weights to FP8 format using either:
@@ -74,39 +83,39 @@ class FP8HfQuantizer(HfQuantizer):
         fp8_max = torch.finfo(torch.float8_e4m3fn).max
         if self.quantization_config.weight_block_size is None:
             self.quantization_config.weight_block_size = (128, 128)
-        else :
             block_size_m, block_size_n = self.quantization_config.weight_block_size
-        
+        else:
+            block_size_m, block_size_n = self.quantization_config.weight_block_size
+
         rows, cols = param_value.shape[-2:]
-        
-        # Check if dimensions are divisible by block sizes
+
         if rows % block_size_m != 0 or cols % block_size_n != 0:
             raise ValueError(
                 f"Matrix dimensions ({rows}, {cols}) must be divisible by block sizes ({block_size_m}, {block_size_n})"
             )
-        
+
         param_value_orig_shape = param_value.shape
-        
-        # Create blocks using unfold
-        param_value = param_value.reshape(-1, rows // block_size_m, block_size_m, cols // block_size_n, block_size_n).permute(0, 1, 3, 2, 4)
-        
+
+        param_value = param_value.reshape(
+            -1, rows // block_size_m, block_size_m, cols // block_size_n, block_size_n
+        ).permute(0, 1, 3, 2, 4)
+
         # Calculate scaling factor for each block
         max_abs = torch.amax(torch.abs(param_value), dim=(-1, -2))
         scale = fp8_max / max_abs
         scale_orig_shape = scale.shape
-        # Expand scale to match block dimensions for multiplication
         scale = scale.unsqueeze(-1).unsqueeze(-1)
-        
+
         # Quantize the weights
         quantized_param = torch.clamp(param_value * scale, min=fp8_min, max=fp8_max).to(torch.float8_e4m3fn)
 
         quantized_param = quantized_param.permute(0, 1, 3, 2, 4)
         # Reshape back to matrix shape
         quantized_param = quantized_param.reshape(param_value_orig_shape)
-        
+
         # Reshape scale to match the number of blocks
         scale = scale.reshape(scale_orig_shape).squeeze().reciprocal()
-            
+
         module._parameters[tensor_name] = quantized_param.to(target_device)
         module.register_parameter("weight_scale_inv", nn.Parameter(scale.to(target_device)))
 
@@ -118,17 +127,17 @@ class FP8HfQuantizer(HfQuantizer):
         state_dict: Dict[str, Any],
         **kwargs,
     ):
-        from ..integrations.fp8 import FP8Linear, FP8MoELinear
-        
+        from ..integrations.fp8 import FP8Linear
+
         module, tensor_name = get_module_from_name(model, param_name)
-        
+
         if isinstance(module, FP8Linear):
             if self.pre_quantized or tensor_name == "bias":
                 if tensor_name == "weight" and param_value.dtype != torch.float8_e4m3fn:
                     raise ValueError("Expect quantized weights but got an unquantized weight")
                 return False
             else:
-                if tensor_name == "weight_scale":
+                if tensor_name == "weight_scale_inv":
                     raise ValueError("Expect unquantized weights but got a quantized weight_scale")
                 return True
         return False
@@ -141,27 +150,26 @@ class FP8HfQuantizer(HfQuantizer):
         **kwargs,
     ):
         from ..integrations.fp8 import replace_with_fp8_linear
-        
+
         self.modules_to_not_convert = ["lm_head"] + modules_to_not_convert
-        
+
         if self.quantization_config.modules_to_not_convert:
             self.modules_to_not_convert.extend(self.quantization_config.modules_to_not_convert)
-        
+
         model = replace_with_fp8_linear(
             model,
             modules_to_not_convert=self.modules_to_not_convert,
             quantization_config=self.quantization_config,
         )
-        
+
         model.config.quantization_config = self.quantization_config
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
         return model
-    
+
     def adjust_max_memory(self, max_memory: Dict[str, Union[int, str]]) -> Dict[str, Union[int, str]]:
         max_memory = {key: val * 0.90 for key, val in max_memory.items()}
         return max_memory
-
 
     def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
         from ..integrations import FP8Linear
@@ -181,6 +189,6 @@ class FP8HfQuantizer(HfQuantizer):
     def is_serializable(self, safe_serialization=None):
         return True
 
-    @property 
+    @property
     def is_trainable(self) -> bool:
-        return False  # FP8 quantization is typically used for inference only
+        return False

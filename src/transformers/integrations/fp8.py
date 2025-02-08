@@ -13,41 +13,31 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from typing import List, Optional, Tuple
+
 import torch
 import torch.nn as nn
-from typing import Optional, List, Tuple, Union
-from ..utils import is_accelerate_available, logging
-from torch.nn import functional as F
 import triton
 import triton.language as tl
-from triton import Config
+from torch.nn import functional as F
+
+from ..utils import is_accelerate_available, logging
+
 
 if is_accelerate_available():
     from accelerate import init_empty_weights
 
+
+
 logger = logging.get_logger(__name__)
 
-ACTIVATION_SCHEMES = ["dynamic"]
-quant_dtype = torch.float8_e4m3fn
-
-# def fp8_quantize(weight: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
-#     """Quantize weights to FP8."""
-   
-#         # Calculate scale as max value divided by absmax
-#     scale = 448.0 / weight.abs().max().clamp(min=1e-12)
-#     # Scale and clamp tensor to FP8 range
-#     qweight = (weight * scale).clamp(min=-448.0, max=448.0)
-#     scale = scale.float().reciprocal()
-
-#     qweight = qweight.to(quant_dtype)
-#     return qweight, scale
 
 @triton.jit
 def act_quant_kernel(x_ptr, y_ptr, s_ptr, BLOCK_SIZE: tl.constexpr):
     pid = tl.program_id(axis=0)
     offs = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
     x = tl.load(x_ptr + offs).to(tl.float32)
-    s = tl.max(tl.abs(x)) / 448.
+    s = tl.max(tl.abs(x)) / 448.0
     y = x / s
     y = y.to(y_ptr.dtype.element_ty)
     tl.store(y_ptr + offs, y)
@@ -56,80 +46,16 @@ def act_quant_kernel(x_ptr, y_ptr, s_ptr, BLOCK_SIZE: tl.constexpr):
 
 def act_quant(x: torch.Tensor, block_size: int = 128) -> Tuple[torch.Tensor, torch.Tensor]:
     assert x.is_contiguous()
-    assert x.shape[-1] % block_size[0] == 0
+    assert x.shape[-1] % block_size == 0
     y = torch.empty_like(x, dtype=torch.float8_e4m3fn)
-    s = x.new_empty(*x.size()[:-1], x.size(-1) // block_size[0], dtype=torch.float32)
-    grid = lambda meta: (triton.cdiv(x.numel(), meta['BLOCK_SIZE']), )
-    act_quant_kernel[grid](x, y, s, BLOCK_SIZE=block_size[0])
+    s = x.new_empty(*x.size()[:-1], x.size(-1) // block_size, dtype=torch.float32)
+
+    def grid(meta):
+        return (triton.cdiv(x.numel(), meta["BLOCK_SIZE"]),)
+
+    act_quant_kernel[grid](x, y, s, BLOCK_SIZE=block_size)
     return y, s
 
-
-@triton.jit
-def weight_dequant_kernel(x_ptr, s_ptr, y_ptr, M, N, BLOCK_SIZE: tl.constexpr):
-    pid_m = tl.program_id(axis=0)
-    pid_n = tl.program_id(axis=1)
-    n = tl.cdiv(N, BLOCK_SIZE)
-    offs_m = pid_m * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
-    offs_n = pid_n * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
-    offs = offs_m[:, None] * N + offs_n[None, :]
-    mask = (offs_m[:, None] < M) & (offs_n[None, :] < N)
-    x = tl.load(x_ptr + offs, mask=mask).to(tl.float32)
-    s = tl.load(s_ptr + pid_m * n + pid_n)
-    y = x * s
-    tl.store(y_ptr + offs, y, mask=mask)
-
-
-def weight_dequant(x: torch.Tensor, s: torch.Tensor, block_size: int = 128) -> torch.Tensor:
-    assert x.is_contiguous() and s.is_contiguous()
-    assert x.dim() == 2 and s.dim() == 2
-    M, N = x.size()
-    y = torch.empty_like(x, dtype=torch.get_default_dtype())
-    grid = lambda meta: (triton.cdiv(M, meta['BLOCK_SIZE']), triton.cdiv(N, meta['BLOCK_SIZE']))
-    weight_dequant_kernel[grid](x, s, y, M, N, BLOCK_SIZE=block_size)
-    return y
-
-
-fp8_gemm_configs = [
-    Config({'BLOCK_SIZE_M': block_m, 'BLOCK_SIZE_N': block_n, 'BLOCK_SIZE_K': 128}, num_stages=num_stages, num_warps=8)
-    for block_m in [16, 32, 64] for block_n in [32, 64, 128] for num_stages in [3, 4, 5, 6]
-]
-
-@triton.autotune(configs=fp8_gemm_configs, key=['N', 'K'])
-@triton.jit
-def fp8_gemm_kernel(a_ptr, b_ptr, c_ptr,
-                    a_s_ptr, b_s_ptr,
-                    M, N: tl.constexpr, K: tl.constexpr,
-                    BLOCK_SIZE_M: tl.constexpr,
-                    BLOCK_SIZE_N: tl.constexpr,
-                    BLOCK_SIZE_K: tl.constexpr):
-    pid_m = tl.program_id(axis=0)
-    pid_n = tl.program_id(axis=1)
-    k = tl.cdiv(K, BLOCK_SIZE_K)
-    offs_m = (pid_m * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)) % M
-    offs_n = (pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)) % N
-    offs_k = tl.arange(0, BLOCK_SIZE_K)
-    a_ptrs = a_ptr + offs_m[:, None] * K + offs_k[None, :]
-    b_ptrs = b_ptr + offs_n[None, :] * K + offs_k[:, None]
-    a_s_ptrs = a_s_ptr + offs_m * k
-    b_s_ptrs = b_s_ptr + (offs_n // BLOCK_SIZE_K) * k
-
-    accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
-    for i in range(k):
-        a = tl.load(a_ptrs, mask=offs_k[None, :] < K - i * BLOCK_SIZE_K, other=0.0)
-        b = tl.load(b_ptrs, mask=offs_k[:, None] < K - i * BLOCK_SIZE_K, other=0.0)
-        a_s = tl.load(a_s_ptrs)
-        b_s = tl.load(b_s_ptrs)
-        accumulator += tl.dot(a, b) * a_s[:, None] * b_s[None, :]
-        a_ptrs += BLOCK_SIZE_K
-        b_ptrs += BLOCK_SIZE_K
-        a_s_ptrs += 1
-        b_s_ptrs += 1
-    c = accumulator.to(c_ptr.dtype.element_ty)
-    offs_m = pid_m * BLOCK_SIZE_M + tl.arange(0, BLOCK_SIZE_M)
-    offs_n = pid_n * BLOCK_SIZE_N + tl.arange(0, BLOCK_SIZE_N)
-    c_ptrs = c_ptr + offs_m[:, None] * N + offs_n[None, :]
-    mask = (offs_m[:, None] < M) & (offs_n[None, :] < N)
-    tl.store(c_ptrs, c, mask=mask)
 
 @triton.jit
 def _w8a8_block_fp8_matmul(
@@ -190,12 +116,8 @@ def _w8a8_block_fp8_matmul(
 
     accumulator = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_N), dtype=tl.float32)
     for k in range(0, tl.cdiv(K, BLOCK_SIZE_K)):
-        a = tl.load(a_ptrs,
-                    mask=offs_k[None, :] < K - k * BLOCK_SIZE_K,
-                    other=0.0)
-        b = tl.load(b_ptrs,
-                    mask=offs_k[:, None] < K - k * BLOCK_SIZE_K,
-                    other=0.0)
+        a = tl.load(a_ptrs, mask=offs_k[None, :] < K - k * BLOCK_SIZE_K, other=0.0)
+        b = tl.load(b_ptrs, mask=offs_k[:, None] < K - k * BLOCK_SIZE_K, other=0.0)
 
         k_start = k * BLOCK_SIZE_K
         offs_ks = k_start // group_k
@@ -218,7 +140,9 @@ def _w8a8_block_fp8_matmul(
     c_ptrs = C + stride_cm * offs_cm[:, None] + stride_cn * offs_cn[None, :]
     c_mask = (offs_cm[:, None] < M) & (offs_cn[None, :] < N)
     tl.store(c_ptrs, c, mask=c_mask)
-def w8a8_block_fp8_matmul(
+
+
+def w8a8_block_fp8_matmul_triton(
     A: torch.Tensor,
     B: torch.Tensor,
     As: torch.Tensor,
@@ -254,7 +178,7 @@ def w8a8_block_fp8_matmul(
     assert triton.cdiv(N, block_n) == Bs.shape[0]
     assert triton.cdiv(K, block_k) == Bs.shape[1]
 
-    C_shape = A.shape[:-1] + (N, )
+    C_shape = A.shape[:-1] + (N,)
     C = A.new_empty(C_shape, dtype=output_dtype)
 
     # TODO:
@@ -270,8 +194,7 @@ def w8a8_block_fp8_matmul(
     BLOCK_SIZE_N = block_n
 
     def grid(META):
-        return (triton.cdiv(M, META["BLOCK_SIZE_M"]) *
-                triton.cdiv(N, META["BLOCK_SIZE_N"]), )
+        return (triton.cdiv(M, META["BLOCK_SIZE_M"]) * triton.cdiv(N, META["BLOCK_SIZE_N"]),)
 
     _w8a8_block_fp8_matmul[grid](
         A,
@@ -303,33 +226,118 @@ def w8a8_block_fp8_matmul(
     return C
 
 
-def fp8_gemm(a: torch.Tensor, a_s: torch.Tensor, b: torch.Tensor, b_s: torch.Tensor):
-    assert a.is_contiguous() and b.is_contiguous()
-    assert a_s.is_contiguous() and b_s.is_contiguous()
-    K = a.size(-1)
-    M = a.numel() // K
-    N = b.size(0)
-    c = a.new_empty(*a.size()[:-1], N, dtype=torch.get_default_dtype())
-    grid = lambda META: (triton.cdiv(M, META['BLOCK_SIZE_M']), triton.cdiv(N, META['BLOCK_SIZE_N']))
-    fp8_gemm_kernel[grid](a, b, c, a_s, b_s, M, N, K)
-    return c
+# Python version of the above triton function
+@torch.compile
+def w8a8_block_fp8_matmul_compile(
+    input_q: torch.Tensor,  # [batch, seq_len, hidden_dim]
+    weight_q: torch.Tensor,  # [out_features, hidden_dim]
+    input_scale: torch.Tensor,  # [batch * seq_len, num_input_groups]
+    weight_scale: torch.Tensor,  # [num_weight_blocks_m, num_weight_blocks_n]
+    block_size: Optional[Tuple[int, int]] = None,  # (M=128, N=128) for weights for example
+    output_dtype: torch.dtype = torch.float32,
+) -> torch.Tensor:
+    """
+    Performs blocked matrix multiplication with FP8 quantized matrices.
 
-def linear(x: torch.Tensor, weight: torch.Tensor, weight_scale: torch.Tensor, bias: Optional[torch.Tensor] = None, block_size: Optional[Tuple[int, int]] = None, activation_scheme: str = "dynamic") -> torch.Tensor:
+    Args:
+        input_q: Quantized input tensor with 1x128 block quantization
+        weight_q: Quantized weight tensor with 128x128 block quantization
+        input_scale: Scaling factors for input blocks
+        weight_scale: Scaling factors for weight blocks
+        block_size: Tuple of (M, N) for weight block dimensions
+        output_dtype: Desired output dtype
+    """
+    batch_size, seq_len, hidden_dim = input_q.shape if input_q.ndim == 3 else (1, input_q.shape[0], input_q.shape[1])
+    out_features = weight_q.shape[0]
+
+    # Reshape input for batched matmul
+    input_reshaped = input_q.view(-1, hidden_dim)  # [batch*seq_len, hidden_dim]
+    input_scale_reshaped = input_scale.view(input_scale.shape[0], -1)  # [batch*seq_len, 1]
+    # Calculate number of blocks
+    num_weight_blocks_m = out_features // block_size[0]
+    num_weight_blocks_n = hidden_dim // block_size[1]
+
+    # Initialize output tensor
+    output = torch.zeros((batch_size * seq_len, out_features), dtype=torch.float32, device=input_q.device)
+
+    # Process each block
+    for i in range(num_weight_blocks_m):
+        m_start = i * block_size[0]
+        m_end = m_start + block_size[0]
+
+        for j in range(num_weight_blocks_n):
+            n_start = j * block_size[1]
+            n_end = n_start + block_size[1]
+
+            # Extract current blocks
+            input_block = input_reshaped[:, n_start:n_end]
+            weight_block = weight_q[m_start:m_end, n_start:n_end]
+
+            # Get corresponding scales
+            curr_input_scale = input_scale_reshaped[:, j : j + 1]  # [batch*seq_len, 1]
+            curr_weight_scale = weight_scale[i, j]  # scalar
+
+            block_result = (
+                torch._scaled_mm(
+                    input_block,
+                    weight_block.t(),
+                    scale_a=torch.tensor(1, dtype=torch.float32, device=input_q.device),
+                    scale_b=curr_weight_scale,
+                    out_dtype=output_dtype,
+                )
+                * curr_input_scale
+            )
+
+            output[:, m_start:m_end] += block_result
+
+    output = output.view(batch_size, seq_len, out_features)
+
+    return output.to(output_dtype)
+
+
+def linear(
+    input: torch.Tensor,
+    weight: torch.Tensor,
+    weight_scale: torch.Tensor,
+    bias: Optional[torch.Tensor] = None,
+    block_size: Optional[Tuple[int, int]] = None,
+    activation_scheme: str = "dynamic",
+) -> torch.Tensor:
     if weight.element_size() > 1:
-        return F.linear(x, weight, bias)
+        print("value not the one expected")
+        return F.linear(input, weight, bias)
     else:
-        x, scale = act_quant(x, block_size)
-        y = fp8_gemm(x, scale, weight, weight_scale)
-        # y = w8a8_block_fp8_matmul(x, weight, scale, weight_scale, block_size)
+        with torch.cuda.device(input.device):
+            qinput, scale = act_quant(input, block_size[1])
+        torch.cuda.synchronize(device=input.device)
+        with torch.cuda.device(input.device):
+            output = w8a8_block_fp8_matmul_triton(
+                qinput,
+                weight,
+                scale,
+                weight_scale,
+                block_size,
+                output_dtype=input.dtype,
+            )
+        torch.cuda.synchronize(device=input.device)
         if bias is not None:
-            y += bias
-        return y
+            output = output + bias
+        return output.to(dtype=input.dtype)
 
 
 class FP8Linear(nn.Linear):
     dtype = torch.float8_e4m3fn
 
-    def __init__(self, in_features: int, out_features: int, bias: bool = False, dtype = None, block_size: Optional[Tuple[int, int]] = None, device=None, activation_scheme="dynamic"):
+    def __init__(
+        self,
+        in_features: int,
+        out_features: int,
+        bias: bool = False,
+        dtype=None,
+        block_size: Optional[Tuple[int, int]] = None,
+        device=None,
+        activation_scheme="dynamic",
+    ):
         super().__init__(in_features=in_features, out_features=out_features)
         self.in_features = in_features
         self.out_features = out_features
@@ -340,84 +348,29 @@ class FP8Linear(nn.Linear):
         if self.weight.element_size() == 1:
             scale_out_features = (out_features + block_size[0] - 1) // block_size[0]
             scale_in_features = (in_features + block_size[1] - 1) // block_size[1]
-            self.weight_scale_inv = nn.Parameter(torch.empty(scale_out_features, scale_in_features, dtype=torch.float32, device=device))
+            self.weight_scale_inv = nn.Parameter(
+                torch.empty(scale_out_features, scale_in_features, dtype=torch.float32, device=device)
+            )
         else:
             self.register_parameter("weight_scale_inv", None)
 
         self.block_size = block_size
 
         if activation_scheme != "dynamic":
-            raise ValueError(f"Only dynamic activation scheme is supported for FP8Linear for now, you provided {activation_scheme}")
+            raise ValueError(
+                f"Only dynamic activation scheme is supported for FP8Linear for now, you provided {activation_scheme}"
+            )
         self.activation_scheme = activation_scheme
 
         if bias:
-            self.bias = nn.Parameter(torch.empty(self.part_out_features))
+            self.bias = nn.Parameter(torch.empty(self.out_features))
         else:
             self.register_parameter("bias", None)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         return linear(x, self.weight, self.weight_scale_inv, self.bias, self.block_size, self.activation_scheme)
-class FP8MoELinear(FP8Linear):
-    """FP8 Linear layer for MoE implementation."""
-    
-    def __init__(
-        self,
-        n_experts: int,
-        in_features: int,
-        out_features: int,
-        bias: bool,
-        device=None,
-        dtype=None,
-        activation_scheme="dynamic",
-        weight_block_size=None
-    ):
-        super().__init__(
-            in_features,
-            out_features,
-            bias,
-            device,
-            dtype,
-            activation_scheme,
-            weight_block_size
-        )
-        self.n_experts = n_experts
-        
-        # Reshape weight and scale for experts
-        self.weight = nn.Parameter(
-            torch.empty((n_experts, out_features, in_features), 
-            dtype=quant_dtype, 
-            device=device)
-        )
-        self.weight_scale = nn.Parameter(
-            torch.empty((n_experts, 1), 
-            dtype=torch.float32, 
-            device=device)
-        )
 
-    def forward(self, x: torch.Tensor, expert_indices: torch.Tensor) -> torch.Tensor:
 
-        
-        if self.activation_scheme == "dynamic":
-            input_scale = x.abs().max() / torch.finfo(quant_dtype).max
-        
-        # Select expert weights and scales
-        selected_weights = self.weight[expert_indices]
-        selected_scales = self.weight_scale[expert_indices]
-        
-        # Perform FP8 matmul for each expert
-        output = torch._scaled_mm(
-            x,
-            selected_weights.transpose(-1, -2),
-            scale_a=input_scale,
-            scale_b=selected_scales,
-            out_dtype=x.dtype
-        )
-        
-        if self.bias is not None:
-            output = output + self.bias[expert_indices]
-            
-        return output
-    
 def _replace_with_fp8_linear(
     model,
     modules_to_not_convert=None,
@@ -431,12 +384,11 @@ def _replace_with_fp8_linear(
 
     for name, module in model.named_children():
         current_key_name.append(name)
-        
+
         if isinstance(module, nn.Linear) and name not in (modules_to_not_convert or []):
             current_key_name_str = ".".join(current_key_name)
             if not any(key in current_key_name_str for key in (modules_to_not_convert or [])):
                 with init_empty_weights():
-                    # Check if this is an MoE layer
                     model._modules[name] = FP8Linear(
                         in_features=module.in_features,
                         out_features=module.out_features,
@@ -444,10 +396,10 @@ def _replace_with_fp8_linear(
                         device=module.weight.device,
                         dtype=module.weight.dtype,
                         activation_scheme=quantization_config.activation_scheme,
-                        block_size=quantization_config.weight_block_size
+                        block_size=quantization_config.weight_block_size,
                     )
                     has_been_replaced = True
-                    
+
         if len(list(module.children())) > 0:
             _, has_been_replaced = _replace_with_fp8_linear(
                 module,
@@ -456,10 +408,11 @@ def _replace_with_fp8_linear(
                 quantization_config,
                 has_been_replaced=has_been_replaced,
             )
-            
+
         current_key_name.pop(-1)
-        
+
     return model, has_been_replaced
+
 
 def replace_with_fp8_linear(
     model,
@@ -468,21 +421,21 @@ def replace_with_fp8_linear(
 ):
     """Helper function to replace model layers with FP8 versions."""
     modules_to_not_convert = ["lm_head"] if modules_to_not_convert is None else modules_to_not_convert
-    
+
     if quantization_config.modules_to_not_convert is not None:
         modules_to_not_convert.extend(quantization_config.modules_to_not_convert)
     modules_to_not_convert = list(set(modules_to_not_convert))
-    
+
     model, has_been_replaced = _replace_with_fp8_linear(
         model,
         modules_to_not_convert=modules_to_not_convert,
         quantization_config=quantization_config,
     )
-    
+
     if not has_been_replaced:
         logger.warning(
             "You are loading your model using fp8 but no linear modules were found in your model."
             " Please double check your model architecture."
         )
-    
+
     return model
