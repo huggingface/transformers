@@ -33,7 +33,8 @@ from ...utils import TensorType, is_torch_available
 
 EVOLLA_STANDARD_MEAN = [0.48145466, 0.4578275, 0.40821073]
 EVOLLA_STANDARD_STD = [0.26862954, 0.26130258, 0.27577711]
-
+EVOLLA_VALID_AA = list("ACDEFGHIKLMNPQRSTVWY#")
+EVOLLA_VALID_FS = list("pynwrqhgdlvtmfsaeikc#")
 
 def convert_to_rgb(image):
     # `image.convert("RGB")` would only work for .jpg images, as it creates a wrong background
@@ -47,6 +48,71 @@ def convert_to_rgb(image):
     alpha_composite = alpha_composite.convert("RGB")
     return alpha_composite
 
+class EvollaSequenceProcessor(BaseImageProcessor):
+    r"""
+    Constructs a Evolla amino acid sequence processor.
+    
+    Args:
+        sequence_max_length (`int`, *optional*, defaults to 1024):
+            The maximum length of the sequence.
+    """
+    def __init__(self, sequence_max_length: int = 1024, SaProt_tokenizer=None, **kwargs) -> None:
+        super().__init__(**kwargs)
+        self.sequence_max_length = sequence_max_length
+        self.SaProt_tokenizer = SaProt_tokenizer
+    
+    def preprocess(
+        self,
+        proteins: List[dict],
+        sequence_max_length: Optional[int] = None,
+        uppercase: Optional[bool] = None,
+        check_validity_strategy: Optional[str] = "raise",
+        **kwargs
+    ):
+        """
+        Preprocess a list of sequences.
+
+        Args:
+            sequences (`List[str]`):
+                A list of sequences to preprocess.
+            sequence_max_length (`int`, *optional*, defaults to `self.sequence_max_length`):
+                The maximum length of the sequence. If `None` - the default value of the processor will be used. If 
+                minus or zero - the sequence will be padded to the maximum length.
+            uppercase (`bool`, *optional*, defaults to `None`):
+                Whether to convert the sequences to uppercase. If `None` - the sequences will not be converted to
+                uppercase. If `True` - the sequences will be converted to uppercase. If `False` - the sequences will not
+                be converted to uppercase.
+            check_validity_strategy (`str`, *optional*, defaults to `"raise"`):
+                The strategy to use for checking the validity of the sequences. Can be one of `"raise"`, `"warning"`, 
+                `"ignore"`. If `"raise"` - an exception will be raised if the sequences are not valid, `"warning"` - a warning
+                information will be printed, `"ignore"` - no action will be taken.
+
+        Returns:
+            a list of preprocessed sequences
+        """
+        assert isinstance(sequences, list), f"sequences should be a list of strings, but is {type(sequences)}"
+
+        sequence_max_length = sequence_max_length if sequence_max_length is not None else self.sequence_max_length
+        
+        if sequence_max_length <= 0:
+            sequence_max_length = max([len(seq) for seq in sequences])
+        sequences = [seq[:sequence_max_length] for seq in sequences]
+
+        if uppercase:
+            sequences = [seq.upper() for seq in sequences]
+        
+        if check_validity_strategy == "raise":
+            if any(s not in EVOLLA_VALID_AA for seq in sequences for s in seq):
+                raise ValueError(f"Invalid amino acid found in the sequences: {sequences}")
+        elif check_validity_strategy == "warning":
+            if any(s not in EVOLLA_VALID_AA for seq in sequences for s in seq):
+                print(f"Invalid amino acid found in the sequences: {sequences}", flush=True)
+        elif check_validity_strategy == "ignore":
+            pass
+        else:
+            raise ValueError(f"Invalid check_validity_strategy: {check_validity_strategy}")
+        
+        return sequences
 
 class EvollaProteinProcessor(BaseImageProcessor):
     r"""

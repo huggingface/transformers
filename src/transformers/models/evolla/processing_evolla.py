@@ -237,7 +237,6 @@ class EvollaProcessor(ProcessorMixin):
 
         sa_sequences = []
         for protein in proteins:
-            print(protein)
             aa_seq = protein.get("aa_seq")
             foldseek = protein.get("foldseek")
             sa_sequence = "".join([s.upper()+f.lower() for s, f in zip(aa_seq, foldseek)])

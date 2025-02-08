@@ -32,6 +32,7 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import cached_property
+from transformers import EsmTokenizer, LlamaTokenizerFast
 
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -325,7 +326,7 @@ class EvollaModelTester:
 
 
 @require_torch
-class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+class EvollaModel2Test(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (EvollaModel, EvollaForVisionText2Text) if is_torch_available() else ()
     test_pruning = False
     test_headmasking = False
@@ -584,6 +585,85 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_sdpa_can_dispatch_non_composite_models(self):
         pass
 
+
+@require_torch
+class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
+    all_model_classes = (EvollaModel) if is_torch_available() else ()
+
+    def setUp(self):
+        self.model = EvollaModel(EvollaConfig())
+        protein_tokenizer = EsmTokenizer.from_pretrained("/zhouxibin/workspaces/ProteinQA/Models/SaProt_35M_AF2")
+        tokenizer = LlamaTokenizerFast.from_pretrained("/zhouxibin/workspaces/ProteinQA/Models/meta-llama_Meta-Llama-3-8B-Instruct")
+
+        self.processor = EvollaProcessor(protein_tokenizer, tokenizer)
+    def prepare_input_and_expected_output(self):
+        amino_acid_sequence = "AAAA"
+        foldseek_sequence = "dddd"
+        question = "What is the function of this protein?"
+        answer = "I don't know"
+
+        expected_output = {
+            "protein_input_ids": torch.tensor([[0, 13, 13, 13, 13, 2]]),
+            "protein_attention_mask": torch.tensor([[1, 1, 1, 1, 1, 1]]),
+            "text_input_ids": torch.tensor([[128000, 128006,   9125, 128007,    271,   2675,    527,    459,  15592,
+            6335,    430,    649,   4320,    904,   4860,    922,  13128,     13,
+          128009, 128006,    882, 128007,    271,   3923,    374,    279,    734,
+             315,    420,  13128,     30, 128009, 128006,  78191, 128007,    271]]),
+            "text_attention_mask": torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+          1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]),
+        }
+        protein_dict = {
+            "aa_seq": amino_acid_sequence,
+            "foldseek": foldseek_sequence
+        }
+        message = [{"role": "system", "content": "You are an AI expert that can answer any questions about protein."},
+                   {"role": "user", "content": question}]
+        return protein_dict, message, expected_output
+
+    def test_processor(self):
+        protein_dict, message, expected_output = self.prepare_input_and_expected_output()
+        inputs = self.processor(proteins=[protein_dict],
+                                messages_list=[message])
+        
+        # check if the input is correct
+        for key, value in expected_output.items():
+            self.assertTrue(torch.equal(inputs[key], value))
+
+    def test_saprot_output(self):
+        protein_dict, message, expected_output = self.prepare_input_and_expected_output()
+        inputs = self.processor(proteins=[protein_dict],
+                                messages_list=[message])
+        
+        protein_informations = {
+            "input_ids": inputs["protein_input_ids"],
+            "attention_mask": inputs["protein_attention_mask"],
+        }
+        saprot_outputs = self.model.protein_encoder.sequence_encode(**protein_informations, return_dict=True, output_hidden_states=False)
+        # TODO: check accuracy
+        print(saprot_outputs)
+        print(saprot_outputs.last_hidden_state.shape)
+        print(saprot_outputs.pooler_output.shape)
+
+    def test_protein_encoder_output(self):
+        protein_dict, message, expected_output = self.prepare_input_and_expected_output()
+        inputs = self.processor(proteins=[protein_dict],
+                                messages_list=[message])
+        
+        protein_informations = {
+            "input_ids": inputs["protein_input_ids"],
+            "attention_mask": inputs["protein_attention_mask"],
+        }
+        protein_encoder_outputs = self.model.protein_encoder(**protein_informations, return_dict=True)
+        # TODO: check accuracy
+        print(protein_encoder_outputs)
+    
+    def test_single_forward(self):
+        protein_dict, message, expected_output = self.prepare_input_and_expected_output()
+        inputs = self.processor(proteins=[protein_dict],
+                                messages_list=[message])
+        
+        outputs = self.model(**inputs)
+        print(outputs)
 
 @require_torch
 class EvollaForVisionText2TextTest(EvollaModelTest, GenerationTesterMixin, unittest.TestCase):
@@ -865,3 +945,7 @@ class EvollaModelIntegrationTest(TestCasePlus):
 
         self.assertIn("image of two cats", generated_text[0])
         self.assertIn("image of two dogs", generated_text[1])
+
+
+if __name__ == "__main__":
+    model = EvollaModel(EvollaConfig())

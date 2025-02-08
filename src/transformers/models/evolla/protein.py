@@ -28,10 +28,20 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, Bas
 from ...utils import ModelOutput, logging
 from .configuration_evolla import EvollaProteinConfig, EvollaProteinEncoderConfig
 from .sequence_compressor import SequenceCompressorResampler
+from ...modeling_utils import get_parameter_dtype
 
 
 logger = logging.get_logger(__name__)
 
+
+@dataclass
+class ProteinEncoderModelOutput(ModelOutput):
+    """
+    """
+    sequence_compressor_output: torch.FloatTensor = None
+    last_hidden_state: Optional[torch.FloatTensor] = None
+    hidden_states: Optional[Tuple[torch.FloatTensor, ...]] = None
+    attentions: Optional[Tuple[torch.FloatTensor, ...]] = None
 
 @dataclass
 class EvollaVisionModelOutput(ModelOutput):
@@ -64,7 +74,7 @@ class EvollaVisionModelOutput(ModelOutput):
 
 # Adapted from transformers.models.clip.modeling_clip.CLIPVisionEmbeddings
 class EvollaVisionEmbeddings(nn.Module):
-    def __init__(self, config: EvollaVisionConfig):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -285,7 +295,7 @@ class EvollaVisionMLP(nn.Module):
 
 # Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoderLayer with AltCLIP->EvollaVision
 class EvollaVisionEncoderLayer(nn.Module):
-    def __init__(self, config: EvollaVisionConfig):
+    def __init__(self, config):
         super().__init__()
         self.embed_dim = config.hidden_size
         self.self_attn = EvollaVisionAttention(config)
@@ -341,10 +351,10 @@ class EvollaVisionEncoder(nn.Module):
     [`EvollaVisionEncoderLayer`].
 
     Args:
-        config: EvollaVisionConfig
+        config
     """
 
-    def __init__(self, config: EvollaVisionConfig):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         self.layers = nn.ModuleList([EvollaVisionEncoderLayer(config) for _ in range(config.num_hidden_layers)])
@@ -535,6 +545,57 @@ class SaProtEmbeddings(nn.Module):
         )
         return position_ids.unsqueeze(0).expand(input_shape)
 
+def rotate_half(x):
+    x1, x2 = x.chunk(2, dim=-1)
+    return torch.cat((-x2, x1), dim=-1)
+
+def apply_rotary_pos_emb(x, cos, sin):
+    cos = cos[:, :, : x.shape[-2], :]
+    sin = sin[:, :, : x.shape[-2], :]
+
+    return (x * cos) + (rotate_half(x) * sin)
+
+class RotaryEmbedding(torch.nn.Module):
+    """
+    Rotary position embeddings based on those in
+    [RoFormer](https://huggingface.co/docs/transformers/model_doc/roformer). Query and keys are transformed by rotation
+    matrices which depend on their relative positions.
+    """
+
+    def __init__(self, dim: int):
+        super().__init__()
+        # Generate and save the inverse frequency buffer (non trainable)
+        inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
+        inv_freq = inv_freq
+        self.register_buffer("inv_freq", inv_freq)
+
+        self._seq_len_cached = None
+        self._cos_cached = None
+        self._sin_cached = None
+
+    def _update_cos_sin_tables(self, x, seq_dimension=2):
+        seq_len = x.shape[seq_dimension]
+
+        # Reset the tables if the sequence length has changed,
+        # or if we're on a new device (possibly due to tracing for instance)
+        if seq_len != self._seq_len_cached or self._cos_cached.device != x.device:
+            self._seq_len_cached = seq_len
+            t = torch.arange(x.shape[seq_dimension], device=x.device).type_as(self.inv_freq)
+            freqs = torch.outer(t, self.inv_freq)
+            emb = torch.cat((freqs, freqs), dim=-1).to(x.device)
+
+            self._cos_cached = emb.cos()[None, None, :, :]
+            self._sin_cached = emb.sin()[None, None, :, :]
+
+        return self._cos_cached, self._sin_cached
+
+    def forward(self, q: torch.Tensor, k: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+        self._cos_cached, self._sin_cached = self._update_cos_sin_tables(k, seq_dimension=-2)
+
+        return (
+            apply_rotary_pos_emb(q, self._cos_cached, self._sin_cached),
+            apply_rotary_pos_emb(k, self._cos_cached, self._sin_cached),
+        )
 
 class SaProtSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
@@ -735,6 +796,13 @@ class SaProtAttention(nn.Module):
         attention_output = self.output(self_outputs[0], hidden_states)
         outputs = (attention_output,) + self_outputs[1:]  # add attentions if we output them
         return outputs
+
+
+def gelu(x):
+    """
+    This is the gelu implementation from the original ESM repo. Using F.gelu yields subtly wrong results.
+    """
+    return x * 0.5 * (1.0 + torch.erf(x / math.sqrt(2.0)))
 
 class SaProtIntermediate(nn.Module):
     def __init__(self, config):
@@ -991,6 +1059,13 @@ class SaProtProteinEncoder(nn.Module):
     
         self.pooler = SaProtPooler(config) if add_pooling_layer else None
     
+    @property
+    def dtype(self) -> torch.dtype:
+        """
+        `torch.dtype`: The dtype of the module (assuming that all the module parameters have the same dtype).
+        """
+        return get_parameter_dtype(self)
+
     def forward(
         self,
         input_ids: Optional[torch.LongTensor],
@@ -1036,7 +1111,7 @@ class EvollaProteinEncoder(nn.Module):
         super().__init__()
         self.config = config
         self.model = SaProtProteinEncoder(config.protein_encoder_config)
-        self.resampler = SequenceCompressorResampler(config.resampler_config) # TODO
+        self.sequence_compressor_resampler = SequenceCompressorResampler(config.resampler_config) # TODO
     
     def sequence_encode(
         self,
@@ -1058,26 +1133,34 @@ class EvollaProteinEncoder(nn.Module):
         self,
         input_ids: torch.LongTensor,
         attention_mask: torch.FloatTensor,
-        return_dict: Optional[bool] = False,
-        output_hidden_states: Optional[bool] = False,
+        return_dict: Optional[bool] = None,
         **kwargs
     ):
         protein_output = self.sequence_encode(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            return_dict=return_dict,
-            output_hidden_states=output_hidden_states,
+            return_dict=True,
+            output_hidden_states=True,
         )
 
+        # TODO: could be replaced by last hidden state
         protein_embeds = protein_output.hidden_states[-1]
 
-        sequence_repr = self.resampler(protein_embeds, attention_mask)
+        sequence_repr = self.sequence_compressor_resampler(protein_embeds, attention_mask)
 
-        return sequence_repr, protein_embeds, attention_mask
+        if not return_dict:
+            return sequence_repr, protein_embeds, attention_mask
+
+        return ProteinEncoderModelOutput(
+            sequence_compressor_output=sequence_repr,
+            last_hidden_state=protein_output.last_hidden_state,
+            hidden_states=protein_output.hidden_states,
+            attentions=attention_mask,
+        )
 
 # Adapted from transformers.models.clip.modeling_clip.CLIPVisionTransformer
 class EvollaVisionTransformer(nn.Module):
-    def __init__(self, config: EvollaVisionConfig):
+    def __init__(self, config):
         super().__init__()
         self.config = config
         embed_dim = config.hidden_size

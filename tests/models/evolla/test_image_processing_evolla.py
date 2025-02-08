@@ -35,6 +35,12 @@ if is_vision_available():
 
     from transformers import EvollaProteinProcessor
 
+class EvollaProteinProcessorTester:
+    def __init__(
+        self,
+        
+    ):
+        pass
 
 class EvollaImageProcessingTester:
     def __init__(
