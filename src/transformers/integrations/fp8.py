@@ -15,14 +15,15 @@
 
 from typing import List, Optional, Tuple
 
-import torch
-import torch.nn as nn
-import triton
-import triton.language as tl
-from torch.nn import functional as F
+from ..utils import is_accelerate_available, is_torch_available, logging
 
-from ..utils import is_accelerate_available, logging
 
+if is_torch_available():
+    import torch
+    import torch.nn as nn
+    import triton
+    import triton.language as tl
+    from torch.nn import functional as F
 
 if is_accelerate_available():
     from accelerate import init_empty_weights
