@@ -237,7 +237,7 @@ Note this feature is supported on AMD GPUs.
 
 ## Intel CPU/GPU support
 
-Recent versions of `autoawq` supports Intel CPU/GPU with ipex op optimizations. To get started, first install the latest version of `autoawq` by running:
+Recent versions of autoawq supports Intel CPU/GPU with IPEX op optimizations. To get started, install the latest version of autoawq.
 
 ```bash
 pip install intel-extension-for-pytorch # for IPEXGPU pls refer to https://github.com/intel/intel-extension-for-pytorch 
