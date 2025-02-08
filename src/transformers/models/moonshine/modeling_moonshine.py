@@ -47,7 +47,7 @@ from ...utils import (
     add_start_docstrings,
     add_start_docstrings_to_model_forward,
     logging,
-    replace_return_docstrings
+    replace_return_docstrings,
 )
 from .configuration_moonshine import MoonshineConfig
 
