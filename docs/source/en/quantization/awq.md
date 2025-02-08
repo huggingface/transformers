@@ -240,7 +240,7 @@ Note this feature is supported on AMD GPUs.
 Recent versions of autoawq supports Intel CPU/GPU with IPEX op optimizations. To get started, install the latest version of autoawq.
 
 ```bash
-pip install intel-extension-for-pytorch # for IPEXGPU pls refer to https://github.com/intel/intel-extension-for-pytorch 
+pip install intel-extension-for-pytorch # for IPEX-GPU refer to https://intel.github.io/intel-extension-for-pytorch/xpu/2.5.10+xpu/ 
 pip install git+https://github.com/casper-hansen/AutoAWQ.git
 ```
 
