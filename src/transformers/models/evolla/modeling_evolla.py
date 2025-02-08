@@ -32,7 +32,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, StaticCache
 from ...generation import GenerationMixin
 from ...modeling_attn_mask_utils import AttentionMaskConverter
-from ...modeling_outputs import ModelOutput, BaseModelOutputWithPast
+from ...modeling_outputs import ModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import PretrainedConfig, ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...pytorch_utils import ALL_LAYERNORM_LAYERS
@@ -42,9 +42,10 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
-from .configuration_evolla import EvollaConfig
-from .perceiver import EvollaPerceiverResampler
+from .configuration_evolla import EvollaConfig, EvollaLLMConfig
+from .sequence_compressor import SequenceCompressorResampler
 from .protein import EvollaProteinEncoder
+from .sequence_aligner import CrossAttention
 
 
 logger = logging.get_logger(__name__)
@@ -1274,17 +1275,24 @@ class EvollaLLM(PreTrainedModel):
         config: LlamaConfig
     """
 
-    def __init__(self, config: EvollaConfig):
+    def __init__(self, config: EvollaLLMConfig):
         super().__init__(config)
-        self.padding_idx = config.pad_token_id
-        self.vocab_size = config.vocab_size
+        llama_config = config.llama_config
+        sequence_aligner_config = config.sequence_aligner_config
+        self.padding_idx = llama_config.pad_token_id
+        self.vocab_size = llama_config.vocab_size
 
-        self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+        self.embed_tokens = nn.Embedding(llama_config.vocab_size, llama_config.hidden_size, self.padding_idx)
         self.layers = nn.ModuleList(
-            [EvollaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+            [EvollaDecoderLayer(llama_config, layer_idx) for layer_idx in range(llama_config.num_hidden_layers)]
         )
-        self.norm = EvollaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.rotary_emb = EvollaRotaryEmbedding(config=config)
+        every_n_layers = max(llama_config.num_hidden_layers // sequence_aligner_config.num_add_layers, 1)
+        for i, layer in enumerate(range(llama_config.num_hidden_layers)):
+            if (i + 1) % every_n_layers == 0:
+                self.layers[i].adapter = CrossAttention(config)
+
+        self.norm = EvollaRMSNorm(llama_config.hidden_size, eps=llama_config.rms_norm_eps)
+        self.rotary_emb = EvollaRotaryEmbedding(config=llama_config)
         self.gradient_checkpointing = False
 
         # Initialize weights and apply final processing
@@ -1309,13 +1317,19 @@ class EvollaLLM(PreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
-        **flash_attn_kwargs,
+        protein_feats: Optional[torch.FloatTensor] = None,
+        structure_feats: Optional[torch.FloatTensor] = None,
+        msa_feats: Optional[torch.FloatTensor] = None,
+        protein_batch_mask: Optional[torch.Tensor] = None,
+        structure_batch_mask: Optional[torch.Tensor] = None,
+        msa_batch_mask: Optional[torch.Tensor] = None,
+        **kwargs,
     ) -> Union[Tuple, BaseModelOutputWithPast]:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
+        use_cache = use_cache if use_cache is not None else self.config.llama_config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -1355,34 +1369,89 @@ class EvollaLLM(PreTrainedModel):
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
 
-        for decoder_layer in self.layers[: self.config.num_hidden_layers]:
+        for decoder_layer in self.layers:
             if output_hidden_states:
                 all_hidden_states += (hidden_states,)
 
             if self.gradient_checkpointing and self.training:
-                layer_outputs = self._gradient_checkpointing_func(
-                    decoder_layer.__call__,
-                    hidden_states,
-                    causal_mask,
-                    position_ids,
-                    past_key_values,
-                    output_attentions,
-                    use_cache,
-                    cache_position,
-                    position_embeddings,
-                )
+                if not hasattr(decoder_layer, 'adapter'):
+                    layer_outputs = self._gradient_checkpointing_func(
+                        decoder_layer.__call__,
+                        hidden_states,
+                        causal_mask,
+                        position_ids,
+                        past_key_values,
+                        output_attentions,
+                        use_cache,
+                        cache_position,
+                        position_embeddings,
+                    )
+                else:
+                    layer_outputs = self._gradient_checkpointing_func(
+                        decoder_layer.__call__,
+                        hidden_states,
+                        causal_mask,
+                        position_ids,
+                        past_key_values,
+                        output_attentions,
+                        use_cache,
+                        cache_position,
+                        position_embeddings,
+                    )
+                    # keep the hidden_states only, cache other outputs
+                    hidden_states = layer_outputs[0]
+                    other_outputs = layer_outputs[1:]
+                    hidden_states = decoder_layer.adapter(
+                        query_states=hidden_states,
+                        protein_kv_states=protein_feats,
+                        structure_kv_states=structure_feats,
+                        msa_kv_states=msa_feats,
+                        protein_batch_mask=protein_batch_mask,
+                        structure_batch_mask=structure_batch_mask,
+                        msa_batch_mask=msa_batch_mask,
+                        query_attn_mask=attention_mask,
+                    )
+                    layer_outputs = (hidden_states,) + other_outputs
             else:
-                layer_outputs = decoder_layer(
-                    hidden_states,
-                    attention_mask=causal_mask,
-                    position_ids=position_ids,
-                    past_key_value=past_key_values,
-                    output_attentions=output_attentions,
-                    use_cache=use_cache,
-                    cache_position=cache_position,
-                    position_embeddings=position_embeddings,
-                    **flash_attn_kwargs,
-                )
+                if not hasattr(decoder_layer, 'adapter'):
+                    layer_outputs = decoder_layer(
+                        hidden_states,
+                        attention_mask=causal_mask,
+                        position_ids=position_ids,
+                        past_key_value=past_key_values,
+                        output_attentions=output_attentions,
+                        use_cache=use_cache,
+                        cache_position=cache_position,
+                        position_embeddings=position_embeddings,
+                        **kwargs,
+                    )
+                else:
+                    layer_outputs = decoder_layer(
+                        hidden_states,
+                        attention_mask=causal_mask,
+                        position_ids=position_ids,
+                        past_key_value=past_key_values,
+                        output_attentions=output_attentions,
+                        use_cache=use_cache,
+                        cache_position=cache_position,
+                        position_embeddings=position_embeddings,
+                        **kwargs,
+                    )
+
+                    # keep the hidden_states only, cache other outputs
+                    hidden_states = layer_outputs[0]
+                    other_outputs = layer_outputs[1:]
+                    hidden_states = decoder_layer.adapter(
+                        query_states=hidden_states,
+                        protein_kv_states=protein_feats,
+                        structure_kv_states=structure_feats,
+                        msa_kv_states=msa_feats,
+                        protein_batch_mask=protein_batch_mask,
+                        structure_batch_mask=structure_batch_mask,
+                        msa_batch_mask=msa_batch_mask,
+                        query_attn_mask=attention_mask,
+                    )
+                    layer_outputs = (hidden_states,) + other_outputs
 
             hidden_states = layer_outputs[0]
 
@@ -1665,11 +1734,25 @@ class EvollaModel(EvollaPreTrainedModel):
         self.initialize_model()
 
     def initialize_model(self):
-        self.protein_encoder = EvollaProteinEncoder(self.config["protein_encoder"])
+        self.protein_encoder = EvollaProteinEncoder(self.config.protein_config)
 
-        self.llm = EvollaLLM(self.config["llm"])
+        self.llm = EvollaLLM(self.config.llm_config)
         
+    def forward(
+        self,
+        protein_input_ids: torch.LongTensor = None,
+        protein_attention_mask: Optional[torch.Tensor] = None,
+        text_input_ids: torch.LongTensor = None,
+        text_attention_mask: Optional[torch.Tensor] = None,
+    ):
+        protein_outputs = self.protein_encoder(input_ids=protein_input_ids, attention_mask=protein_attention_mask)
 
+        print("protein_outputs: ", protein_outputs)
+
+        text_outputs = self.llm(
+            input_ids=text_input_ids,
+            attention_mask=text_attention_mask,
+        )
         
 
 @add_start_docstrings(

@@ -2,6 +2,7 @@ import math
 
 import torch
 from torch import nn
+from .configuration_evolla import EvollaLLMConfig
 
 class RMSNorm(torch.nn.Module):
     def __init__(self, dim: int, eps: float = 1e-6):
@@ -31,43 +32,46 @@ def FeedForward(dim, mult=None):
 class CrossAttention(nn.Module):
     def __init__(
         self,
-        config,
+        config: EvollaLLMConfig,
     ):
         super().__init__()
-        self.scale = config.num_attention_heads**-0.5
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        llama_config = config.llama_config
+        sequence_aligner_config = config.sequence_aligner_config
+        self.hidden_size = llama_config.hidden_size
+        self.scale = llama_config.num_attention_heads**-0.5
+        self.num_attention_heads = llama_config.num_attention_heads
+        self.attention_head_size = int(self.hidden_size / llama_config.num_attention_heads)
         self.all_head_size = self.num_attention_heads * self.attention_head_size
 
-        self.query = nn.Linear(config.hidden_size, self.all_head_size)
-        if config.protein_encoder_dim is not None:
-            self.key_protein = nn.Linear(config.protein_encoder_dim, self.all_head_size)
-            self.value_protein = nn.Linear(config.protein_encoder_dim, self.all_head_size)
+        self.query = nn.Linear(self.hidden_size, self.all_head_size)
+        if sequence_aligner_config.protein_encoder_dim is not None:
+            self.key_protein = nn.Linear(sequence_aligner_config.protein_encoder_dim, self.all_head_size)
+            self.value_protein = nn.Linear(sequence_aligner_config.protein_encoder_dim, self.all_head_size)
         else:
             self.key_protein = None
             self.value_protein = None
 
-        if config.structure_encoder_dim is not None:
-            self.key_structure = nn.Linear(config.structure_encoder_dim, self.all_head_size)
-            self.value_structure = nn.Linear(config.structure_encoder_dim, self.all_head_size)
+        if sequence_aligner_config.structure_encoder_dim is not None:
+            self.key_structure = nn.Linear(sequence_aligner_config.structure_encoder_dim, self.all_head_size)
+            self.value_structure = nn.Linear(sequence_aligner_config.structure_encoder_dim, self.all_head_size)
         else:
             self.key_structure = None
             self.value_structure = None
 
-        if config.msa_encoder_dim is not None:
-            self.key_msa = nn.Linear(config.msa_encoder_dim, self.all_head_size)
-            self.value_msa = nn.Linear(config.msa_encoder_dim, self.all_head_size)
+        if sequence_aligner_config.msa_encoder_dim is not None:
+            self.key_msa = nn.Linear(sequence_aligner_config.msa_encoder_dim, self.all_head_size)
+            self.value_msa = nn.Linear(sequence_aligner_config.msa_encoder_dim, self.all_head_size)
         else:
             self.key_msa = None
             self.value_msa = None
 
-        self.attention_norm = RMSNorm(config.hidden_size)
+        self.attention_norm = RMSNorm(self.hidden_size)
 
-        self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
+        self.dropout = nn.Dropout(sequence_aligner_config.attention_probs_dropout_prob)
 
-        self.out_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=config.enable_bias)
+        self.out_proj = nn.Linear(self.hidden_size, self.hidden_size, bias=sequence_aligner_config.enable_bias)
 
-        self.ff = FeedForward(config.hidden_size, config.ffn_mult)
+        self.ff = FeedForward(self.hidden_size, sequence_aligner_config.ffn_mult)
         self.gate_attention = nn.Parameter(torch.tensor([0.0]))
         self.gate_ffw = nn.Parameter(torch.tensor([0.0]))
 
