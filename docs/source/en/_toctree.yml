@@ -948,6 +948,8 @@
         title: Segment Anything
       - local: model_doc/siglip
         title: SigLIP
+      - local: model_doc/siglip2
+        title: Siglip2
       - local: model_doc/speech-encoder-decoder
         title: Speech Encoder Decoder Models
       - local: model_doc/tapas
