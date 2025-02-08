@@ -722,29 +722,6 @@ def _load_state_dict_into_model(model_to_load, state_dict, start_prefix, assign_
     return error_msgs
 
 
-def find_submodule_and_param_name(model, long_key, start_prefix):
-    """
-    A helper util to find the last sub-module and the param/buffer name. If `start_prefix` is supplied it'll be removed
-    from the start of the key
-    """
-
-    if len(start_prefix) > 0 and long_key.startswith(start_prefix):
-        long_key = ".".join(long_key.split(".")[1:])
-
-    split_key = long_key.split(".")
-    submodule = model
-    while len(split_key) > 1:
-        if hasattr(submodule, split_key[0]):
-            submodule = getattr(submodule, split_key[0])
-            del split_key[0]
-        else:
-            submodule = None
-            break
-    if submodule == model:
-        submodule = None
-    return submodule, split_key[0]
-
-
 def _load_state_dict_into_meta_model(
     model: "PreTrainedModel",
     state_dict: Dict,
@@ -1595,6 +1572,72 @@ def _get_tp_key_registry(model_to_load: "PreTrainedModel") -> Dict[str, Dict]:
 class PipelineParallel(Enum):
     inputs: 0
     outputs: 1
+
+def _get_tp_key_registry(model: "PreTrainedModel") -> Dict[str, Dict]:
+    """Create a registry of all keys of the model, and the entity under which they should be parallelized using
+    TP (tensor parallel). The strategy is to parallelize each individual Layer as a single entity, then other
+    individual modules as specified in the tp_plan, if they are not part of a bigger Layer module.
+
+    This strategy ensures the best tradeoff between loading speed and memory footprint while parallelizing the model.
+    Indeed, loading the whole model and then parallelizing creates a huge memory overhead, as each process must
+    first load the full model on its given device. The other extreme, parallelizing each leaf of the model (Linear layers)
+    as their parameters are loaded creates a huge speed overhead, due to a lot of call to
+    `torch.distributed.tensor.parallel.parallelize_module`. Parallelizing each layer as soon as their parameters are loaded
+    provides the best of both world: almost no memory overhead, and as fast (sometimes even faster) as parallelizing
+    the full model at once.
+    """
+    prefix = model.base_model_prefix
+    is_task_specific_model = hasattr(model, prefix) if len(prefix) > 0 else False
+
+    full_tp_plan = model.config.base_model_tp_plan
+    if is_task_specific_model:
+        # Add the prefix to the base model plan
+        full_tp_plan = {f"{prefix}.{key}": plan for key, plan in full_tp_plan.items()}
+        # Add potential task-specific additional plan
+        full_tp_plan.update(getattr(model, "_tp_plan", {}))
+
+    # Extract full prefix before the layer numbers
+    layer_prefix = None
+    for key in full_tp_plan.keys():
+        if "*" in key:
+            # extract everything before the first "*" corresponding to layer number
+            layer_prefix = key.split("*", 1)[0]
+            break
+    if layer_prefix is None:
+        raise ValueError("Could not parse format of the base_model_tp_plan in the config.")
+
+    # Separate between layer plan, and other module plans
+    layer_wise_tp_plan = {}
+    other_modules_tp_plan = {}
+    for key, plan in full_tp_plan.items():
+        # In this case, keep the key starting after the "*" layer number indicator
+        if key.startswith(layer_prefix):
+            layer_key = key.split("*", 1)[1][1:]
+            layer_wise_tp_plan[layer_key] = translate_to_torch_parallel_style(plan)
+        else:
+            other_modules_tp_plan[key] = translate_to_torch_parallel_style(plan)
+
+    # Create the registry. Here we use the layers as single entities to parallelize (and other individual modules if any)
+    tp_key_registry = {}
+    for key in model.state_dict().keys():
+        # This pattern is used to capture the whole model prefix before the layer
+        pattern = rf"^({layer_prefix}[0-9]+)"
+        match = re.match(pattern, key)
+        # In this case, the current key is part of a layer to parallelize as a single entity
+        if match is not None:
+            layer = match.group(1)
+            if layer not in tp_key_registry:
+                tp_key_registry[layer] = {"children": {key}, "plan": layer_wise_tp_plan}
+            else:
+                tp_key_registry[layer]["children"].add(key)
+        elif key in other_modules_tp_plan:
+            if key not in tp_key_registry:
+                tp_key_registry[key] = {"children": {key}, "plan": other_modules_tp_plan[key]}
+            else:
+                tp_key_registry[key]["children"].add(key)
+
+    return tp_key_registry
+
 
 class ModuleUtilsMixin:
     """
@@ -4879,7 +4922,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         # Prepare inputs if using tensor parallel
         tp_key_registry = None
         if device_mesh is not None:
-            tp_key_registry = model_to_load._get_tp_key_registry()
+            tp_key_registry = _get_tp_key_registry(model_to_load)
 
         map_location = None
         if (
@@ -5427,71 +5470,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                 self.apply(self._initialize_weights)
         else:
             self.apply(self._initialize_weights)
-
-    def _get_tp_key_registry(self) -> Dict[str, Dict]:
-        """Create a registry of all keys of the model, and the entity under which they should be parallelized using
-        TP (tensor parallel). The strategy is to parallelize each individual Layer as a single entity, then other
-        individual modules as specified in the tp_plan, if they are not part of a bigger Layer module.
-
-        This strategy ensures the best tradeoff between loading speed and memory footprint while parallelizing the model.
-        Indeed, loading the whole model and then parallelizing creates a huge memory overhead, as each process must
-        first load the full model on its given device. The other extreme, parallelizing each leaf of the model (Linear layers)
-        as their parameters are loaded creates a huge speed overhead, due to a lot of call to
-        `torch.distributed.tensor.parallel.parallelize_module`. Parallelizing each layer as soon as their parameters are loaded
-        provides the best of both world: almost no memory overhead, and as fast (sometimes even faster) as parallelizing
-        the full model at once.
-        """
-        prefix = self.base_model_prefix
-        is_task_specific_model = hasattr(self, prefix) if len(prefix) > 0 else False
-
-        full_tp_plan = self.config.base_model_tp_plan
-        if is_task_specific_model:
-            # Add the prefix to the base model plan
-            full_tp_plan = {f"{prefix}.{key}": plan for key, plan in full_tp_plan.items()}
-            # Add potential task-specific additional plan
-            full_tp_plan.update(getattr(self, "_tp_plan", {}))
-
-        # Extract full prefix before the layer numbers
-        layer_prefix = None
-        for key in full_tp_plan.keys():
-            if "*" in key:
-                # extract everything before the first "*" corresponding to layer number
-                layer_prefix = key.split("*", 1)[0]
-                break
-        if layer_prefix is None:
-            raise ValueError("Could not parse format of the base_model_tp_plan in the config.")
-
-        # Separate between layer plan, and other module plans
-        layer_wise_tp_plan = {}
-        other_modules_tp_plan = {}
-        for key, plan in full_tp_plan.items():
-            # In this case, keep the key starting after the "*" layer number indicator
-            if key.startswith(layer_prefix):
-                layer_key = key.split("*", 1)[1][1:]
-                layer_wise_tp_plan[layer_key] = translate_to_torch_parallel_style(plan)
-            else:
-                other_modules_tp_plan[key] = translate_to_torch_parallel_style(plan)
-
-        # Create the registry. Here we use the layers as single entities to parallelize (and other individual modules if any)
-        tp_key_registry = {}
-        for key in self.state_dict().keys():
-            # This pattern is used to capture the whole model prefix before the layer
-            pattern = rf"^({layer_prefix}[0-9]+)"
-            match = re.match(pattern, key)
-            # In this case, the current key is part of a layer to parallelize as a single entity
-            if match is not None:
-                layer = match.group(1)
-                if layer not in tp_key_registry:
-                    tp_key_registry[layer] = {"children": {key}, "plan": layer_wise_tp_plan}
-                else:
-                    tp_key_registry[layer]["children"].add(key)
-            elif key in other_modules_tp_plan:
-                if key not in tp_key_registry:
-                    tp_key_registry[key] = {"children": {key}, "plan": other_modules_tp_plan[key]}
-                else:
-                    tp_key_registry[key]["children"].add(key)
-
-        return tp_key_registry
 
 
 PreTrainedModel.push_to_hub = copy_func(PreTrainedModel.push_to_hub)
