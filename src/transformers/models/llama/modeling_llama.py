@@ -634,6 +634,10 @@ class LlamaModel(LlamaPreTrainedModel):
             if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
+        if self.config._attn_implementation == "flex_attention":
+            from ...integrations.flex_attention import make_flex_block_causal_mask
+            attention_mask = make_flex_block_causal_mask(attention_mask)
+            return attention_mask # return BlockMask type specific to flex attention
 
         # For SDPA, when possible, we will rely on its `is_causal` argument instead of its `attn_mask` argument, in
         # order to dispatch on Flash Attention 2. This feature is not compatible with static cache, as SDPA will fail
