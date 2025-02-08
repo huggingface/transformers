@@ -56,7 +56,7 @@ def act_quant(x: torch.Tensor, block_size: int = 128) -> Tuple[torch.Tensor, tor
     act_quant_kernel[grid](x, y, s, BLOCK_SIZE=block_size)
     return y, s
 
-
+# Adapted from https://github.com/sgl-project/sglang/blob/main/python/sglang/srt/layers/quantization/fp8_kernel.py 
 @triton.jit
 def _w8a8_block_fp8_matmul(
     # Pointers to inputs and output
