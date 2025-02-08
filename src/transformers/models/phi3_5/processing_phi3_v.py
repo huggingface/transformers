@@ -302,9 +302,9 @@ class Phi3VProcessor(ProcessorMixin):
     [`~Phi3VProcessor.__call__`] and [`~Phi3VProcessor.decode`] for more information.
 
     Args:
-        image_processor ([`Phi3VImageProcessor`], *optional*):
+        image_processor ([`Phi3VImageProcessor`]):
             The image processor is a required input.
-        tokenizer ([`LlamaTokenizerFast`], *optional*):
+        tokenizer ([`LlamaTokenizerFast`]):
             The tokenizer is a required input.
     """
 
