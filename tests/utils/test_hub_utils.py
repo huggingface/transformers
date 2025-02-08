@@ -28,7 +28,6 @@ from transformers.utils import (
     TRANSFORMERS_CACHE,
     WEIGHTS_NAME,
     cached_file,
-    get_file_from_repo,
     has_file,
 )
 
@@ -117,18 +116,45 @@ class GetFromCacheTests(unittest.TestCase):
             assert has_file(TINY_BERT_PT_ONLY, WEIGHTS_NAME, local_files_only=True, cache_dir=tmp_dir)
 
     def test_get_file_from_repo_distant(self):
-        # `get_file_from_repo` returns None if the file does not exist
-        self.assertIsNone(get_file_from_repo("google-bert/bert-base-cased", "ahah.txt"))
+        # should return None if the file does not exist
+        self.assertIsNone(
+            cached_file(
+                "google-bert/bert-base-cased",
+                "ahah.txt",
+                _raise_exceptions_for_gated_repo=False,
+                _raise_exceptions_for_missing_entries=False,
+                _raise_exceptions_for_connection_errors=False,
+            )
+        )
 
         # The function raises if the repository does not exist.
         with self.assertRaisesRegex(EnvironmentError, "is not a valid model identifier"):
-            get_file_from_repo("bert-base-case", CONFIG_NAME)
+            cached_file(
+                "bert-base-case",
+                CONFIG_NAME,
+                _raise_exceptions_for_gated_repo=False,
+                _raise_exceptions_for_missing_entries=False,
+                _raise_exceptions_for_connection_errors=False,
+            )
 
         # The function raises if the revision does not exist.
         with self.assertRaisesRegex(EnvironmentError, "is not a valid git identifier"):
-            get_file_from_repo("google-bert/bert-base-cased", CONFIG_NAME, revision="ahaha")
+            cached_file(
+                "google-bert/bert-base-cased",
+                CONFIG_NAME,
+                revision="ahaha",
+                _raise_exceptions_for_gated_repo=False,
+                _raise_exceptions_for_missing_entries=False,
+                _raise_exceptions_for_connection_errors=False,
+            )
 
-        resolved_file = get_file_from_repo("google-bert/bert-base-cased", CONFIG_NAME)
+        resolved_file = cached_file(
+            "google-bert/bert-base-cased",
+            CONFIG_NAME,
+            _raise_exceptions_for_gated_repo=False,
+            _raise_exceptions_for_missing_entries=False,
+            _raise_exceptions_for_connection_errors=False,
+        )
         # The name is the cached name which is not very easy to test, so instead we load the content.
         config = json.loads(open(resolved_file, "r").read())
         self.assertEqual(config["hidden_size"], 768)
@@ -137,9 +163,26 @@ class GetFromCacheTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp_dir:
             filename = Path(tmp_dir) / "a.txt"
             filename.touch()
-            self.assertEqual(get_file_from_repo(tmp_dir, "a.txt"), str(filename))
+            self.assertEqual(
+                cached_file(
+                    tmp_dir,
+                    "a.txt",
+                    _raise_exceptions_for_gated_repo=False,
+                    _raise_exceptions_for_missing_entries=False,
+                    _raise_exceptions_for_connection_errors=False,
+                ),
+                str(filename),
+            )
 
-            self.assertIsNone(get_file_from_repo(tmp_dir, "b.txt"))
+            self.assertIsNone(
+                cached_file(
+                    tmp_dir,
+                    "b.txt",
+                    _raise_exceptions_for_gated_repo=False,
+                    _raise_exceptions_for_missing_entries=False,
+                    _raise_exceptions_for_connection_errors=False,
+                )
+            )
 
     def test_get_file_gated_repo(self):
         """Test download file from a gated repo fails with correct message when not authenticated."""
