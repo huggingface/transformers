@@ -28,7 +28,6 @@ if is_accelerate_available():
     from accelerate import init_empty_weights
 
 
-
 logger = logging.get_logger(__name__)
 
 

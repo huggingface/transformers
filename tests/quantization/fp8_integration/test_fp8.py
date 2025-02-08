@@ -33,6 +33,7 @@ if is_torch_available():
 if is_accelerate_available():
     from accelerate import init_empty_weights
 
+
 @require_torch_gpu
 class FP8ConfigTest(unittest.TestCase):
     def test_to_dict(self):
@@ -200,6 +201,7 @@ class FP8QuantizerTest(unittest.TestCase):
 @require_torch_gpu
 class FP8LinearTest(unittest.TestCase):
     device = "cuda"
+
     def test_linear_preserves_shape(self):
         """
         Test that FP8Linear preserves shape when in_features == out_features.
@@ -217,7 +219,6 @@ class FP8LinearTest(unittest.TestCase):
         Test that FP8Linear generates the correct shape when in_features != out_features.
         """
         from transformers.integrations import FP8Linear
-
 
         linear = FP8Linear(128, 256, device=self.device)
         x = torch.rand((1, 5, 128)).to(self.device)
