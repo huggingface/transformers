@@ -1312,7 +1312,12 @@ class Trainer:
             "eps": args.adam_epsilon,
         }
 
-        def setup_low_rank_optimizer(optimizer_name, optimizer_mapping, optim_kwargs, is_layerwise_supported=True):
+        def setup_low_rank_optimizer(
+            optimizer_name: str,
+            optimizer_mapping: Dict[str, Any],
+            optim_kwargs: Dict[str, Any],
+            is_layerwise_supported: bool = True,
+        ) -> Tuple[Any, Any]:
             """
             Helper function to set up low-rank optimizers like GaLore and Apollo.
 
