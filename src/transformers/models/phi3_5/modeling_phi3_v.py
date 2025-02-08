@@ -363,7 +363,6 @@ PHI3V_PRETRAINED_MODEL_ARCHIVE_LIST = [
 ]
 
 
-# Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Phi3
 class Phi3RMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
@@ -381,7 +380,6 @@ class Phi3RMSNorm(nn.Module):
         return self.weight * hidden_states.to(input_dtype)
 
 
-# Copied from transformers.models.llama.modeling_llama._get_unpad_data
 def _get_unpad_data(attention_mask):
     seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
     indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
@@ -394,27 +392,53 @@ def _get_unpad_data(attention_mask):
     )
 
 
-# Copied from transformers.models.gemma.modeling_gemma.GemmaRotaryEmbedding with gemma->phi3, Gemma->Phi3
+# Copied from transformers.models.gemma.modeling_gemma.GemmaRotaryEmbedding with gemma->phi3_5, Gemma->Phi3V
 class Phi3RotaryEmbedding(nn.Module):
-    def __init__(self, dim, max_position_embeddings=2048, base=10000, device=None):
+    def __init__(self, config: Phi3VConfig, device=None):
         super().__init__()
+        # BC: "rope_type" was originally "type"
+        if hasattr(config, "rope_scaling") and config.rope_scaling is not None:
+            self.rope_type = config.rope_scaling.get("rope_type", config.rope_scaling.get("type"))
+        else:
+            self.rope_type = "default"
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
 
-        self.dim = dim
-        self.max_position_embeddings = max_position_embeddings
-        self.base = base
-        self.register_buffer("inv_freq", None, persistent=False)
+        self.config = config
+        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+
+        inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.original_inv_freq = self.inv_freq
+
+    def _dynamic_frequency_update(self, position_ids, device):
+        """
+        dynamic RoPE layers should recompute `inv_freq` in the following situations:
+        1 - growing beyond the cached sequence length (allow scaling)
+        2 - the current sequence length is in the original scale (avoid losing precision with small sequences)
+        """
+        seq_len = torch.max(position_ids) + 1
+        if seq_len > self.max_seq_len_cached:  # growth
+            inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device, seq_len=seq_len)
+            self.register_buffer("inv_freq", inv_freq, persistent=False)  # TODO joao: may break with compilation
+            self.max_seq_len_cached = seq_len
+
+        if seq_len < self.original_max_seq_len and self.max_seq_len_cached > self.original_max_seq_len:  # reset
+            # This .to() is needed if the model has been moved to a device after being initialized (because
+            # the buffer is automatically moved, but not the original copy)
+            self.original_inv_freq = self.original_inv_freq.to(device)
+            self.register_buffer("inv_freq", self.original_inv_freq, persistent=False)
+            self.max_seq_len_cached = self.original_max_seq_len
 
     @torch.no_grad()
-    def forward(self, x, position_ids, seq_len=None):
-        # x: [bs, num_attention_heads, seq_len, head_size]
-        if self.inv_freq is None:
-            self.inv_freq = 1.0 / (
-                self.base ** (torch.arange(0, self.dim, 2, dtype=torch.int64, device=x.device).float() / self.dim)
-            )
+    def forward(self, x, position_ids):
+        if "dynamic" in self.rope_type:
+            self._dynamic_frequency_update(position_ids, device=x.device)
+
+        # Core RoPE block
         inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1)
         position_ids_expanded = position_ids[:, None, :].float()
-        # Force float32 since bfloat16 loses precision on long contexts
-        # See https://github.com/huggingface/transformers/pull/29285
+        # Force float32 (see https://github.com/huggingface/transformers/pull/29285)
         device_type = x.device.type
         device_type = device_type if isinstance(device_type, str) and device_type != "mps" else "cpu"
         with torch.autocast(device_type=device_type, enabled=False):
@@ -422,6 +446,11 @@ class Phi3RotaryEmbedding(nn.Module):
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos()
             sin = emb.sin()
+
+        # Advanced RoPE types (e.g. yarn) apply a post-processing scaling factor, equivalent to scaling attention
+        cos = cos * self.attention_scaling
+        sin = sin * self.attention_scaling
+
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
@@ -717,7 +746,6 @@ class Phi3FlashAttention2(Phi3Attention):
     flash attention and deal with padding tokens in case the input contains any of them.
     """
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaFlashAttention2.__init__
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
@@ -874,7 +902,6 @@ class Phi3FlashAttention2(Phi3Attention):
 
         return attn_output, attn_weights, past_key_value
 
-    # Copied from transformers.models.mistral.modeling_mistral.MistralFlashAttention2._flash_attention_forward
     def _flash_attention_forward(
         self,
         query_states,
@@ -975,7 +1002,6 @@ class Phi3FlashAttention2(Phi3Attention):
 
         return attn_output
 
-    # Copied from transformers.models.mistral.modeling_mistral.MistralFlashAttention2._upad_input
     def _upad_input(self, query_layer, key_layer, value_layer, attention_mask, query_length):
         batch_size, kv_seq_len, num_heads, head_dim = key_layer.shape
 
@@ -1019,7 +1045,7 @@ class Phi3FlashAttention2(Phi3Attention):
         )
 
 
-# copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention with Llama->Phi3
+# copied from transformers.models.llama.modeling_llama.LlamaSdpaAttention with Llama->Phi3V
 # TODO @Arthur no longer copied from LLama after static cache
 class Phi3SdpaAttention(Phi3Attention):
     """
@@ -1324,7 +1350,7 @@ class Phi3VModel(Phi3VPreTrainedModel):
     Transformer decoder consisting of *config.num_hidden_layers* layers. Each layer is a [`Phi3DecoderLayer`]
 
     Args:
-        config: Phi3Config
+        config: Phi3VConfig
     """
 
     def __init__(self, config: Phi3VConfig):
@@ -1506,7 +1532,7 @@ class Phi3VModel(Phi3VPreTrainedModel):
 class Phi3VForCausalLM(Phi3VPreTrainedModel):
     _tied_weights_keys = ["lm_head.weight"]
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.__init__ with Llama->Phi3
+    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM.__init__ with Llama->Phi3V
     def __init__(self, config):
         super().__init__(config)
         self.model = Phi3VModel(config)
@@ -1634,7 +1660,6 @@ class Phi3VForCausalLM(Phi3VPreTrainedModel):
             attentions=outputs.attentions,
         )
 
-    # Copied from transformers.models.persimmon.modeling_persimmon.PersimmonForCausalLM.prepare_inputs_for_generation
     def prepare_inputs_for_generation(
         self,
         input_ids,
@@ -1714,7 +1739,6 @@ class Phi3VForCausalLM(Phi3VPreTrainedModel):
         return model_inputs
 
     @staticmethod
-    # Copied from transformers.models.llama.modeling_llama.LlamaForCausalLM._reorder_cache
     def _reorder_cache(past_key_values, beam_idx):
         reordered_past = ()
         for layer_past in past_key_values:
@@ -1739,7 +1763,7 @@ class Phi3VForCausalLM(Phi3VPreTrainedModel):
     """,
     PHI3V_START_DOCSTRING,
 )
-# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->Phi3, LLAMA->PHI3, self.transformer->self.model, transformer_outputs->model_outputs
+# Copied from transformers.models.llama.modeling_llama.LlamaForSequenceClassification with Llama->Phi3V, LLAMA->PHI3V, self.transformer->self.model, transformer_outputs->model_outputs
 class Phi3VForSequenceClassification(Phi3VPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
@@ -1759,13 +1783,11 @@ class Phi3VForSequenceClassification(Phi3VPreTrainedModel):
     @add_start_docstrings_to_model_forward(PHI3V_INPUTS_DOCSTRING)
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
+        input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         past_key_values: Optional[Union[Cache, List[torch.FloatTensor]]] = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        image_sizes: Optional[torch.LongTensor] = None,
         labels: Optional[torch.LongTensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1786,8 +1808,6 @@ class Phi3VForSequenceClassification(Phi3VPreTrainedModel):
             position_ids=position_ids,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
-            pixel_values=pixel_values,
-            image_sizes=image_sizes,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
@@ -1818,27 +1838,8 @@ class Phi3VForSequenceClassification(Phi3VPreTrainedModel):
 
         loss = None
         if labels is not None:
-            labels = labels.to(logits.device)
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
+            loss = self.loss_function(logits=logits, labels=labels, pooled_logits=pooled_logits, config=self.config)
 
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(pooled_logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(pooled_logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(pooled_logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(pooled_logits, labels)
         if not return_dict:
             output = (pooled_logits,) + model_outputs[1:]
             return ((loss,) + output) if loss is not None else output
@@ -1859,7 +1860,7 @@ class Phi3VForSequenceClassification(Phi3VPreTrainedModel):
     """,
     PHI3V_START_DOCSTRING,
 )
-# Copied from transformers.models.mpt.modeling_mpt.MptForTokenClassification with Mpt->Phi3,MPT->PHI3,self.transformer->self.model,transformer_outputs->model_outputs
+# Copied from transformers.models.mpt.modeling_mpt.MptForTokenClassification with Mpt->Phi3V,MPT->PHI3V,self.transformer->self.model,transformer_outputs->model_outputs
 class Phi3VForTokenClassification(Phi3VPreTrainedModel):
     def __init__(self, config: Phi3VConfig):
         super().__init__(config)
@@ -1890,8 +1891,6 @@ class Phi3VForTokenClassification(Phi3VPreTrainedModel):
         past_key_values: Optional[Tuple[Tuple[torch.Tensor, torch.Tensor], ...]] = None,
         attention_mask: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        image_sizes: Optional[torch.LongTensor] = None,
         labels: Optional[torch.Tensor] = None,
         use_cache: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
@@ -1912,8 +1911,6 @@ class Phi3VForTokenClassification(Phi3VPreTrainedModel):
             past_key_values=past_key_values,
             attention_mask=attention_mask,
             inputs_embeds=inputs_embeds,
-            pixel_values=pixel_values,
-            image_sizes=image_sizes,
             use_cache=use_cache,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
