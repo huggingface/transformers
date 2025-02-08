@@ -773,6 +773,11 @@ _import_structure = {
         "SiglipTextConfig",
         "SiglipVisionConfig",
     ],
+    "models.siglip2": [
+        "Siglip2Config",
+        "Siglip2TextConfig",
+        "Siglip2VisionConfig",
+    ],
     "models.speech_encoder_decoder": ["SpeechEncoderDecoderConfig"],
     "models.speech_to_text": [
         "Speech2TextConfig",
@@ -3536,6 +3541,15 @@ else:
             "SiglipVisionModel",
         ]
     )
+    _import_structure["models.siglip2"].extend(
+        [
+            "Siglip2ForImageClassification",
+            "Siglip2Model",
+            "Siglip2PreTrainedModel",
+            "Siglip2TextModel",
+            "Siglip2VisionModel",
+        ]
+    )
     _import_structure["models.speech_encoder_decoder"].extend(["SpeechEncoderDecoderModel"])
     _import_structure["models.speech_to_text"].extend(
         [
@@ -5906,6 +5920,11 @@ if TYPE_CHECKING:
         SiglipTextConfig,
         SiglipVisionConfig,
     )
+    from .models.siglip2 import (
+        Siglip2Config,
+        Siglip2TextConfig,
+        Siglip2VisionConfig,
+    )
     from .models.speech_encoder_decoder import SpeechEncoderDecoderConfig
     from .models.speech_to_text import (
         Speech2TextConfig,
@@ -8236,6 +8255,13 @@ if TYPE_CHECKING:
             SiglipPreTrainedModel,
             SiglipTextModel,
             SiglipVisionModel,
+        )
+        from .models.siglip2 import (
+            Siglip2ForImageClassification,
+            Siglip2Model,
+            Siglip2PreTrainedModel,
+            Siglip2TextModel,
+            Siglip2VisionModel,
         )
         from .models.speech_encoder_decoder import SpeechEncoderDecoderModel
         from .models.speech_to_text import (
