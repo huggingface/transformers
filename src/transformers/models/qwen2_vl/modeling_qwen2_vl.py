@@ -1793,8 +1793,43 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
         )
         return model_inputs
 
-    @staticmethod
+    def _get_image_nums_and_video_nums(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        image_grid_thw: Optional[torch.LongTensor] = None,
+        video_grid_thw: Optional[torch.LongTensor] = None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        """
+        Args:
+            input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+                Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+                it.
+            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+                The temporal, height and width of feature shape of each image in LLM.
+            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+                The temporal, height and width of feature shape of each video in LLM.
+
+        Returns:
+            image_nums (`torch.LongTensor` of shape `(batch_size, num_images_sample)`)
+            video_nums (`torch.LongTensor` of shape `(batch_size, num_videos_sample)`)
+        """
+        image_token_id = self.config.image_token_id
+        video_token_id = self.config.video_token_id
+        vision_start_token_id = self.config.vision_start_token_id
+
+        image_nums, video_nums = None, None
+        if input_ids is not None and (image_grid_thw is not None or video_grid_thw is not None):
+            vision_start_mask = input_ids == vision_start_token_id
+            vision_first_mask = torch.roll(vision_start_mask, shifts=1, dims=1)
+            image_mask = input_ids == image_token_id
+            video_mask = input_ids == video_token_id
+            image_nums = torch.sum(vision_first_mask & image_mask, dim=1)
+            video_nums = torch.sum(vision_first_mask & video_mask, dim=1)
+
+        return image_nums, video_nums
+
     def _expand_inputs_for_generation(
+        self,
         expand_size: int = 1,
         is_encoder_decoder: bool = False,
         input_ids: Optional[torch.LongTensor] = None,
@@ -1802,27 +1837,65 @@ class Qwen2VLForConditionalGeneration(Qwen2VLPreTrainedModel, GenerationMixin):
     ) -> Tuple[torch.LongTensor, Dict[str, Any]]:
         # Overwritten -- Support for expanding tensors without a batch size dimension
         # e.g., pixel_values, image_grid_thw, pixel_values_videos, video_grid_thw, second_per_grid_t
+        # pixel_values.shape[0] is sum(seqlen_images for samples)
+        # image_grid_thw.shape[0] is sum(num_images for samples)
 
         if expand_size == 1:
             return input_ids, model_kwargs
 
+        image_grid_thw = model_kwargs.get("image_grid_thw", None)
+        video_grid_thw = model_kwargs.get("video_grid_thw", None)
+        image_nums, video_nums = self._get_image_nums_and_video_nums(input_ids, image_grid_thw, video_grid_thw)
+
+        def _repeat_interleave_samples(x, lengths, repeat_times):
+            samples = torch.split(x, lengths)
+            repeat_args = [repeat_times] + [1] * (x.dim() - 1)
+            result = torch.cat([sample.repeat(*repeat_args) for sample in samples], dim=0)
+            return result
+
         def _expand_dict_for_generation(dict_to_expand):
             for key in dict_to_expand:
-                if (
+                if key == "pixel_values":
+                    # split images into samples
+                    samples = torch.split(image_grid_thw, list(image_nums))
+                    # compute the sequence length of images for each sample
+                    lengths = [torch.prod(sample, dim=1).sum() for sample in samples]
+                    dict_to_expand[key] = _repeat_interleave_samples(
+                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
+                    )
+                elif key == "image_grid_thw":
+                    # get the num of images for each sample
+                    lengths = list(image_nums)
+                    dict_to_expand[key] = _repeat_interleave_samples(
+                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
+                    )
+                elif key == "pixel_values_videos":
+                    samples = torch.split(video_grid_thw, list(video_nums))
+                    lengths = [torch.prod(sample, dim=1).sum() for sample in samples]
+                    dict_to_expand[key] = _repeat_interleave_samples(
+                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
+                    )
+                elif key == "video_grid_thw":
+                    lengths = list(video_nums)
+                    dict_to_expand[key] = _repeat_interleave_samples(
+                        dict_to_expand[key], lengths=lengths, repeat_times=expand_size
+                    )
+                elif key == "second_per_grid_ts":
+                    assert isinstance(dict_to_expand[key], list)
+                    tensor = torch.tensor(dict_to_expand[key])
+                    lengths = list(video_nums)
+                    tensor = _repeat_interleave_samples(tensor, lengths=lengths, repeat_times=expand_size)
+                    dict_to_expand[key] = tensor.tolist()
+                elif (
                     key != "cache_position"
                     and dict_to_expand[key] is not None
                     and isinstance(dict_to_expand[key], torch.Tensor)
                 ):
-                    # The original torch.repeat_interleave operation will disrupt the order of tensors without a batch size dimension
-                    dict_to_expand[key] = torch.cat([dict_to_expand[key]] * expand_size)
-                elif key == "second_per_grid_t":
-                    assert isinstance(dict_to_expand[key], list)
-                    dict_to_expand[key] = dict_to_expand[key] * expand_size
+                    dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=0)
             return dict_to_expand
 
         if input_ids is not None:
-            # Modified for consistency
-            input_ids = torch.cat([input_ids] * expand_size)
+            input_ids = input_ids.repeat_interleave(expand_size, dim=0)
 
         model_kwargs = _expand_dict_for_generation(model_kwargs)
 
