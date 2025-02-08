@@ -1,30 +1,117 @@
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Union
 
 import torch
 
 from ..utils import is_torch_flex_attn_available
 
+"""
+Inspired by torchtune's flex attention implementation
+"""
 
 if is_torch_flex_attn_available():
-    from torch.nn.attention.flex_attention import flex_attention
+    from torch.nn.attention.flex_attention import (
+        flex_attention,
+        BlockMask,
+        create_block_mask as create_block_causal_mask_flex,
+    )
 
+
+def make_flex_block_causal_mask(
+    attention_mask_2d: torch.Tensor
+) -> BlockMask:
+    """
+    Create a block causal document mask for a batch of sequences, both packed and unpacked. 
+    Create Block causal logic and passing it into :func:`torch.nn.attention.flex_attention.create_block_mask`.
+    The resultant BlockMask is a compressed representation of the full block causal
+    mask. BlockMask is essential for performant computation of flex attention.
+    See: https://pytorch.org/blog/flexattention/
+
+    Args:
+        attention_mask_2d (torch.Tensor): Attention mask for packed and padded sequences
+        of shape (batch_size, total_seq_len). e.g.
+
+        For unpacked sequence:
+        [[1, 1, 1, 1, 0, 0, 0],
+         [1, 1, 1, 1, 1, 0, 0]]
+        
+        For packed sequence:
+        [[1, 1, 1, 2, 2, 2, 0],
+         [1, 1, 2, 2, 2, 3, 3]]
+    
+    Returns:
+        BlockMask
+    """
+    device = attention_mask_2d.device
+
+    document_ids = attention_mask_2d
+    batch_size, total_seq_len = document_ids.shape
+
+    # Instead of passing a tensor mask, flex attention requires a mask_mod function
+    # that determines which elements of QK^T should be included in the attention
+    # computation prior to the softmax. For sample packing, we need both the
+    # logic for both causal mask and document mask. See PyTorch's official
+    # blog post for more details: https://pytorch.org/blog/flexattention/#mask-mods
+    def causal_mask_mod(b, h, q_idx, kv_idx):
+        """
+        Defines the logic of a block causal mask by combining both a standard causal mask
+        and a block diagonal document mask.
+
+        See :func:`~torchtune.modules.attention_utils.create_block_causal_mask`
+        for an illustration.
+        """
+        causal_mask = q_idx >= kv_idx
+        document_mask = document_ids[b, q_idx] == document_ids[b, kv_idx]
+        padding_mask = document_ids[b, q_idx] > 0
+        return causal_mask & document_mask & padding_mask
+
+    return create_block_causal_mask_flex(
+        causal_mask_mod,
+        batch_size,
+        None,
+        total_seq_len,
+        total_seq_len,
+        device=device,
+    )
+
+flex_attention_compiled = torch.compile(flex_attention, dynamic=False)
+
+@torch.compiler.disable(recursive=False)
+def compile_friendly_flex_attention(
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    **kwargs,
+) -> torch.Tensor:
+    return flex_attention_compiled(
+        query,
+        key,
+        value,
+        **kwargs,
+    )
 
 def flex_attention_forward(
     module: torch.nn.Module,
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: Optional[Union[torch.Tensor, BlockMask]],
     scaling: Optional[float] = None,
     softcap: Optional[float] = None,
     head_mask: Optional[torch.Tensor] = None,
     **kwargs,
 ) -> Tuple[torch.Tensor, torch.Tensor]:
-    causal_mask = attention_mask
+
+    block_mask = None
+    causal_mask = None
+    if isinstance(attention_mask, BlockMask):
+        block_mask = attention_mask
+    else:
+        causal_mask = attention_mask
+
     if causal_mask is not None:
         causal_mask = causal_mask[:, :, :, : key.shape[-2]]
 
-    def causal_mod(score, b, h, q_idx, kv_idx):
+    def score_mod(score, b, h, q_idx, kv_idx):
         if softcap is not None:
             score = softcap * torch.tanh(score / softcap)
         if causal_mask is not None:
@@ -33,11 +120,12 @@ def flex_attention_forward(
             score = score + head_mask[b][h][0][0]
         return score
 
-    attn_output, attention_weights = flex_attention(
+    attn_output, attention_weights = compile_friendly_flex_attention(
         query,
         key,
         value,
-        score_mod=causal_mod,
+        score_mod=score_mod,
+        block_mask=block_mask,
         enable_gqa=True,
         scale=scaling,
         # Last time checked on PyTorch == 2.5.1: Flex Attention always computes the lse regardless.
