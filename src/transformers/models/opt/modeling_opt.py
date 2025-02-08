@@ -147,7 +147,8 @@ class OPTAttention(nn.Module):
             # reuse k, v, self_attention
             key_states = torch.cat([past_key_value[0], key_states], dim=2)
             value_states = torch.cat([past_key_value[1], value_states], dim=2)
-            past_key_value = (key_states, value_states)
+
+        past_key_value = (key_states, value_states)
 
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
         query_states = self._shape(query_states, tgt_len, bsz).view(*proj_shape)
@@ -257,7 +258,8 @@ class OptFlashAttention2(OPTAttention):
             # reuse k, v, self_attention
             key_states = torch.cat([past_key_value[0], key_states], dim=2)
             value_states = torch.cat([past_key_value[1], value_states], dim=2)
-            past_key_value = (key_states, value_states)
+
+        past_key_value = (key_states, value_states)
 
         query_length = query_states.shape[1]
         tgt_len = key_states.shape[-2]
@@ -356,7 +358,8 @@ class OPTSdpaAttention(OPTAttention):
             # reuse k, v, self_attention
             key_states = torch.cat([past_key_value[0], key_states], dim=2)
             value_states = torch.cat([past_key_value[1], value_states], dim=2)
-            past_key_value = (key_states, value_states)
+
+        past_key_value = (key_states, value_states)
 
         # shape now is (bsz, num_heads, seq_len, head_dim), all are continuous
 
