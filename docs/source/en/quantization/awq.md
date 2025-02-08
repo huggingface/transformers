@@ -272,6 +272,6 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 
 <Tip warning={true}>
 
-Note this feature is supported on Intel CPUs/GPUs.
+This feature is supported on Intel CPUs/GPUs.
 
 </Tip>
