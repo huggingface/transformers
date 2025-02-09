@@ -149,7 +149,8 @@ class HiggsHfQuantizer(HfQuantizer):
         model.config.quantization_config = self.quantization_config
 
     def _process_model_after_weight_loading(self, model: "PreTrainedModel", **kwargs):
-        import flute.utils
+        from flute.tune import maybe_tune_and_repack
+        from flute.utils import make_workspace_streamk
 
         from ..integrations import HiggsLinear
 
@@ -159,32 +160,18 @@ class HiggsHfQuantizer(HfQuantizer):
                 # Every HiggsLinear needs a "workspace": a buffer for the unpacking operation.
                 # This buffer needs to be on the same device as the weights, but can be reused across modules otherwise.
                 if module.weight.device not in flute_workspaces:
-                    flute_workspaces[module.weight.device] = flute.utils.make_workspace_streamk(
+                    flute_workspaces[module.weight.device] = make_workspace_streamk(
                         device=module.weight.device
                     )
                 module.workspace = flute_workspaces[module.weight.device]
 
                 # FLUTE weights are packed in a way that is optimized for a specific number of SMs (GPU streaming multiprocessors).
                 # If the model is loaded on a different device than the one it was saved on, we need to repack the weights.
-                if module.num_sms_packed.item() != get_num_sms_from_device(module.weight.device):
-                    new_device = module.weight.device
-                    new_num_sms = get_num_sms_from_device(new_device)
-                    module.weight.data = flute.utils.pack(
-                        flute.utils.unpack(
-                            weight=module.weight.data,
-                            scales=module.scales.data,
-                            workspace=module.workspace,
-                            num_bits=module.num_bits,
-                            group_size=module.group_size,
-                            num_sms_packed=module.num_sms_packed.item(),
-                        ).T.contiguous(),
-                        module.num_bits,
-                        module.group_size,
-                    )
-                    module.num_sms_packed = torch.nn.Parameter(
-                        torch.tensor(new_num_sms, device=new_device, dtype=torch.int32),
-                        requires_grad=False,
-                    )
+                module.weight.data, module.tune_metadata = maybe_tune_and_repack(
+                    weight=module.weight.data,
+                    scales=module.scales.data,
+                    metadata=module.tune_metadata,
+                )
 
     def update_missing_keys(self, model, missing_keys: List[str], prefix: str) -> List[str]:
         from ..integrations import HiggsLinear
