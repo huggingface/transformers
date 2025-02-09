@@ -603,7 +603,6 @@ class SamHQVisionEncoder(nn.Module):
             all_hidden_states = all_hidden_states + (hidden_states,)
 
         hidden_states = self.neck(hidden_states)
-        print(intermediate_embeddings)
 
         if not return_dict:
             outputs = (hidden_states, intermediate_embeddings)

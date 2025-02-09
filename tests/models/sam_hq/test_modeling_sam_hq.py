@@ -246,9 +246,11 @@ class SamHQModelTester:
         model.to(torch_device)
         model.eval()
         with torch.no_grad():
-            result = model.get_image_embeddings(pixel_values)
+            image_embeddings,intermediate_embeddings = model.get_image_embeddings(pixel_values)
 
-        self.parent.assertEqual(result[0][0].shape, (self.output_channels, 12, 12))
+
+        self.parent.assertEqual(image_embeddings[0].shape, (self.output_channels , 12, 12))
+        self.parent.assertEqual(intermediate_embeddings[0][0].shape, (12, 12,self.hidden_size))
 
     def create_and_check_get_image_hidden_states(self, config, pixel_values):
         model = SamHQModel(config=config)
