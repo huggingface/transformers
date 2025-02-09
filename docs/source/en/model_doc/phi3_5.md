@@ -22,6 +22,15 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] Phi3VConfig
 
+## Phi3VImageProcessor
+
+[[autodoc]] Phi3VImageProcessor
+    - preprocess
+
+## Phi3VProcessor
+
+[[autodoc]] Phi3VProcessor
+
 <frameworkcontent>
 <pt>
 
