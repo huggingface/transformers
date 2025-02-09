@@ -120,6 +120,11 @@ class InternVLProcessor(ProcessorMixin):
         )
         if not isinstance(text, (list, tuple)):
             text = [text]
+
+        if images is None:
+            text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+            return BatchFeature(data=text_inputs)
+
         if not isinstance(images, (list, tuple)):
             images = [images]
 
