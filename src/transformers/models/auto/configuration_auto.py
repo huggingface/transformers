@@ -141,6 +141,7 @@ CONFIG_MAPPING_NAMES = OrderedDict(
         ("graphormer", "GraphormerConfig"),
         ("grounding-dino", "GroundingDinoConfig"),
         ("groupvit", "GroupViTConfig"),
+        ("got_ocr2", "GotOcr2Config"),
         ("helium", "HeliumConfig"),
         ("hiera", "HieraConfig"),
         ("hubert", "HubertConfig"),
