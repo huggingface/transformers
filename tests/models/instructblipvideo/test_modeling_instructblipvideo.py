@@ -581,9 +581,9 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
         self.assertIsNotNone(model)
 
     # overwrite because InstructBLIPVideo internally calls LM.generate() with embeds thus it cannot operate in no cache format
-    def _check_outputs(self, output, config, use_cache=False, num_return_sequences=1, num_beams=1):
+    def _check_generate_outputs(self, output, config, use_cache=False, num_return_sequences=1, num_beams=1):
         use_cache = True  # force this to be True in case False is passed
-        super()._check_outputs(
+        super()._check_generate_outputs(
             output, config, use_cache=use_cache, num_return_sequences=num_return_sequences, num_beams=num_beams
         )
 

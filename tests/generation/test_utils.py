@@ -508,7 +508,7 @@ class GenerationTesterMixin:
                 # Retrocompatibility check
                 self.assertIsInstance(output_generate, GreedySearchDecoderOnlyOutput)
 
-            self._check_outputs(output_generate, model.config)
+            self._check_generate_outputs(output_generate, model.config)
 
     @pytest.mark.generate
     def test_greedy_generate_dict_outputs_use_cache(self):
@@ -542,7 +542,7 @@ class GenerationTesterMixin:
                     output_generate.sequences.shape[-1] == self.max_new_tokens + inputs_dict["input_ids"].shape[-1]
                 )
 
-            self._check_outputs(output_generate, model.config, use_cache=True)
+            self._check_generate_outputs(output_generate, model.config, use_cache=True)
 
     @pytest.mark.generate
     def test_sample_generate(self):
@@ -590,7 +590,7 @@ class GenerationTesterMixin:
                 # Retrocompatibility check
                 self.assertIsInstance(output_generate, SampleDecoderOnlyOutput)
 
-            self._check_outputs(output_generate, model.config, num_return_sequences=2)
+            self._check_generate_outputs(output_generate, model.config, num_return_sequences=2)
 
     @pytest.mark.generate
     def test_beam_search_generate(self):
@@ -640,7 +640,7 @@ class GenerationTesterMixin:
                 # Retrocompatibility check
                 self.assertIsInstance(output_generate, BeamSearchDecoderOnlyOutput)
 
-            self._check_outputs(
+            self._check_generate_outputs(
                 output_generate,
                 model.config,
                 num_return_sequences=beam_kwargs["num_return_sequences"],
@@ -683,7 +683,7 @@ class GenerationTesterMixin:
                     output_generate.sequences.shape[-1] == self.max_new_tokens + inputs_dict["input_ids"].shape[-1]
                 )
 
-            self._check_outputs(
+            self._check_generate_outputs(
                 output_generate,
                 model.config,
                 use_cache=True,
@@ -769,7 +769,7 @@ class GenerationTesterMixin:
                 # Retrocompatibility check
                 self.assertIsInstance(output_generate, BeamSampleDecoderOnlyOutput)
 
-            self._check_outputs(
+            self._check_generate_outputs(
                 output_generate,
                 model.config,
                 num_return_sequences=beam_kwargs["num_return_sequences"],
@@ -861,7 +861,7 @@ class GenerationTesterMixin:
                 # Retrocompatibility check
                 self.assertIsInstance(output_generate, BeamSearchDecoderOnlyOutput)
 
-            self._check_outputs(
+            self._check_generate_outputs(
                 output_generate,
                 model.config,
                 num_return_sequences=beam_kwargs["num_return_sequences"],
@@ -970,7 +970,7 @@ class GenerationTesterMixin:
                 # Retrocompatibility check
                 self.assertIsInstance(output_generate, BeamSearchDecoderOnlyOutput)
 
-            self._check_outputs(
+            self._check_generate_outputs(
                 output_generate,
                 model.config,
                 num_return_sequences=beam_kwargs["num_return_sequences"],
@@ -1044,7 +1044,7 @@ class GenerationTesterMixin:
                     output_generate.sequences.shape[-1] == self.max_new_tokens + inputs_dict["input_ids"].shape[-1]
                 )
 
-            self._check_outputs(output_generate, model.config, use_cache=True)
+            self._check_generate_outputs(output_generate, model.config, use_cache=True)
 
     @pytest.mark.generate
     def test_contrastive_generate_low_memory(self):
@@ -1230,7 +1230,7 @@ class GenerationTesterMixin:
             # The two outputs must match and their shape must be as expected
             self._check_similar_generate_outputs(output_greedy, output_assisted)
             for output in (output_greedy, output_assisted):
-                self._check_outputs(output, model.config, use_cache=True)
+                self._check_generate_outputs(output, model.config, use_cache=True)
 
     @pytest.mark.generate
     def test_prompt_lookup_decoding_matches_greedy_search(self):
@@ -1295,7 +1295,7 @@ class GenerationTesterMixin:
             # The two outputs must match and their shape must be as expected
             self._check_similar_generate_outputs(output_greedy, output_prompt_lookup)
             for output in (output_greedy, output_prompt_lookup):
-                self._check_outputs(output, model.config, use_cache=True)
+                self._check_generate_outputs(output, model.config, use_cache=True)
 
     @pytest.mark.generate
     def test_dola_decoding_sample(self):
@@ -1345,7 +1345,7 @@ class GenerationTesterMixin:
                 "dola_layers": "low",
             }
             output_dola = model.generate(**generation_kwargs, **logits_processor_kwargs, **inputs_dict)
-            self._check_outputs(output_dola, model.config, use_cache=getattr(config, "use_cache", False))
+            self._check_generate_outputs(output_dola, model.config, use_cache=getattr(config, "use_cache", False))
 
     @pytest.mark.generate
     def test_assisted_decoding_sample(self):
@@ -1406,7 +1406,7 @@ class GenerationTesterMixin:
             }
             output_assisted = model.generate(**generation_kwargs, **inputs_dict)
 
-            self._check_outputs(output_assisted, config, use_cache=True)
+            self._check_generate_outputs(output_assisted, config, use_cache=True)
 
     @pytest.mark.generate
     def test_prompt_lookup_decoding_stops_at_eos(self):
@@ -2215,7 +2215,7 @@ class GenerationTesterMixin:
                 )
                 self.assertIsInstance(output_generate, GenerateDecoderOnlyOutput)
 
-            self._check_outputs(output_generate, model.config, use_cache=True)
+            self._check_generate_outputs(output_generate, model.config, use_cache=True)
 
     @pytest.mark.generate
     def test_generate_methods_with_logits_to_keep(self):
@@ -2369,7 +2369,7 @@ class GenerationTesterMixin:
         # check whether we still need the overwrites
         self._test_attention_implementation("flash_attention_2")
 
-    def _check_outputs(self, output, config, use_cache=False, num_return_sequences=1, num_beams=1):
+    def _check_generate_outputs(self, output, config, use_cache=False, num_return_sequences=1, num_beams=1):
         input_batch_size = int(output.sequences.shape[0] / num_return_sequences)
         internal_batch_size = (
             input_batch_size * num_beams if num_beams > 1 else input_batch_size * num_return_sequences
