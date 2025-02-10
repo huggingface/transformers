@@ -37,20 +37,15 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] InternVLConfig
 
-## InternVLModel
+## InternVLVisionModel
 
-[[autodoc]] InternVLModel
+[[autodoc]] InternVLVisionModel
     - forward
 
-## InternVLImageProcessor
+## InternVLForConditionalGeneration
 
-[[autodoc]] InternVLImageProcessor
-    - preprocess
-
-## InternVLImageProcessorFast
-
-[[autodoc]] InternVLImageProcessorFast
-    - preprocess
+[[autodoc]] InternVLForConditionalGeneration
+    - forward
 
 ## InternVLProcessor
 

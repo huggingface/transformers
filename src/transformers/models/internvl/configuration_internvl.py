@@ -88,7 +88,8 @@ class InternVLVisionConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    # model_type = "intervl_vision_model" TODO
+    model_type = "intervl_vision"
+    base_config_key = "vision_config"
 
     def __init__(
         self,

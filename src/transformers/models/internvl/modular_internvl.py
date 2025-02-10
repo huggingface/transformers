@@ -21,18 +21,28 @@ import torch.nn as nn
 import torch.utils.checkpoint
 
 from transformers.models.beit.modeling_beit import (
+    BeitAttention,
+    BeitDropPath,
+    BeitEmbeddings,
+    BeitEncoder,
+    BeitIntermediate,
+    BeitLayer,
     BeitModel,
+    BeitModelOutputWithPooling,
+    BeitOutput,
+    BeitPatchEmbeddings,
+    BeitPooler,
     BeitPreTrainedModel,
     BeitRelativePositionBias,
+    BeitSdpaSelfAttention,
     BeitSelfAttention,
 )
-from transformers.models.got_ocr2.image_processing_got_ocr2 import GotOcr2ImageProcessor
 from transformers.models.llava.modeling_llava import (
     LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
     LlavaPreTrainedModel,
 )
-from transformers.processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from transformers.processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from transformers.tokenization_utils_base import (
     PreTokenizedInput,
     TextInput,
@@ -43,6 +53,7 @@ from ...configuration_utils import PretrainedConfig
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...utils import (
+    add_code_sample_docstrings,
     add_start_docstrings_to_model_forward,
     is_vision_available,
     logging,
@@ -55,8 +66,6 @@ if is_vision_available():
     pass
 
 logger = logging.get_logger(__name__)
-
-_CONFIG_FOR_DOC = "InternVLConfig"
 
 
 class InternVLVisionConfig(PretrainedConfig):
@@ -123,7 +132,8 @@ class InternVLVisionConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    # model_type = "intervl_vision_model" TODO
+    model_type = "intervl_vision"
+    base_config_key = "vision_config"
 
     def __init__(
         self,
@@ -327,49 +337,28 @@ class InternVLConfig(PretrainedConfig):
 __all__ = ["InternVLVisionConfig", "InternVLConfig"]
 
 
-# class InternVLTextKwargs(TextKwargs, total=False):
-#     format: Optional[bool]
+class InternVLImagesKwargs(ImagesKwargs, total=False):
+    min_patches: Optional[int]
+    max_patches: Optional[int]
 
 
-# class InternVLImagesKwargs(ImagesKwargs, total=False):
-#     box: Optional[Union[List, Tuple[float, float], Tuple[float, float, float, float]]]
-#     color: Optional[str]
-#     num_image_tokens: Optional[int]
-#     multi_page: Optional[bool]
-#     crop_to_patches: Optional[bool]
-#     min_patches: Optional[int]
-#     max_patches: Optional[int]
-
-
-class InternVLImageProcessor(GotOcr2ImageProcessor):
-    pass
-
-
-# TODO
 class InternVLProcessorKwargs(ProcessingKwargs, total=False):
-    # text_kwargs: InternVLTextKwargs
-    # images_kwargs: InternVLImagesKwargs
+    images_kwargs: InternVLImagesKwargs
     _defaults = {
-        "text_kwargs": {
-            "padding": False,
+        "images_kwargs": {
+            "min_patches": 1,
+            "max_patches": 12,
         },
-        # "images_kwargs": {
-        #     "num_image_tokens": 256,
-        #     "multi_page": False,
-        #     "crop_to_patches": False,
-        #     "min_patches": 1,
-        #     "max_patches": 12,
-        # },
     }
 
 
 class InternVLProcessor(ProcessorMixin):
     r"""
-    Constructs a InternVL processor which wraps a [`InternVLImageProcessor`] and
+    Constructs a InternVL processor which wraps a [`GotOcr2ImageProcessor`] and
     [`PretrainedTokenizerFast`] tokenizer into a single processor that inherits both the image processor and
     tokenizer functionalities. See the [`~InternVLProcessor.__call__`] and [`~InternVLProcessor.decode`] for more information.
     Args:
-        image_processor ([`InternVLImageProcessor`], *optional*):
+        image_processor ([`GotOcr2ImageProcessor`], *optional*):
             The image processor is a required input.
         tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`], *optional*):
             The tokenizer is a required input.
@@ -378,9 +367,9 @@ class InternVLProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template"]
-    image_processor_class = "InternVLImageProcessor"
-    tokenizer_class = "PreTrainedTokenizerFast"
+    valid_kwargs = ["chat_template", "image_seq_length"]
+    image_processor_class = "AutoImageProcessor"
+    tokenizer_class = "AutoTokenizer"
 
     def __init__(
         self, image_processor=None, tokenizer=None, image_seq_length: int = 256, chat_template=None, **kwargs
@@ -402,7 +391,7 @@ class InternVLProcessor(ProcessorMixin):
         and `kwargs` arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] to encode the text if `text`
         is not `None`, otherwise encode default OCR queries which depends on the `format`, `box`, `color`, `multi_page` and
         `crop_to_patches` arguments. To prepare the vision inputs, this method forwards the `images` and `kwrags` arguments to
-        InternVLImageProcessor's [`~InternVLImageProcessor.__call__`] if `images` is not `None`.
+        GotOcr2ImageProcessor's [`~GotOcr2ImageProcessor.__call__`] if `images` is not `None`.
 
         Args:
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
@@ -429,38 +418,41 @@ class InternVLProcessor(ProcessorMixin):
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
+        if text is None:
+            raise ValueError("You have to specify text.")
+
         output_kwargs = self._merge_kwargs(
             InternVLProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
+
         if not isinstance(text, (list, tuple)):
             text = [text]
 
-        if images is None:
-            text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-            return BatchFeature(data=text_inputs)
+        if images is not None:
+            if not isinstance(images, (list, tuple)):
+                images = [images]
 
-        if not isinstance(images, (list, tuple)):
-            images = [images]
-
-        for index, image_group in enumerate(images):
-            image_group = self.image_processor.crop_image_to_patches(
-                image_group,
-                patch_size=output_kwargs["images_kwargs"].get("size"),
-                min_patches=1,
-                max_patches=12,
-            )
-            images[index] = image_group
-            for i, prompt in enumerate(text):
-                if "<image>" in prompt:
-                    text[i] = prompt.replace(
-                        "<image>", f"<img>{'<IMG_CONTEXT>'*self.image_seq_length* len(image_group)}</img>", 1
-                    )
-                    break
+            for index, image_group in enumerate(images):
+                image_group = self.image_processor.crop_image_to_patches(
+                    image_group,
+                    patch_size=output_kwargs["images_kwargs"].get("size"),
+                    min_patches=1,
+                    max_patches=12,
+                )
+                images[index] = image_group
+                for i, prompt in enumerate(text):
+                    if "<image>" in prompt:
+                        text[i] = prompt.replace(
+                            "<image>", f"<img>{'<IMG_CONTEXT>'*self.image_seq_length* len(image_group)}</img>", 1
+                        )
+                        break
+            image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
+        else:
+            image_inputs = {}
 
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-        image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
 
         return BatchFeature(data={**text_inputs, **image_inputs})
 
@@ -485,11 +477,16 @@ class InternVLProcessor(ProcessorMixin):
         return list(tokenizer_input_names) + list(image_processor_input_names)
 
 
-class InternVLRelativePositionBias(BeitRelativePositionBias):
+_CHECKPOINT_FOR_DOC = "to_be_completed"  # todo
+
+_CONFIG_VISION_FOR_DOC = "InternVLVisionConfig"
+
+
+class InternVLVisionRelativePositionBias(BeitRelativePositionBias):
     pass
 
 
-class InternVLSelfAttention(BeitSelfAttention):
+class InternVLVisionSelfAttention(BeitSelfAttention):
     def __init__(self, config: InternVLVisionConfig, window_size: Optional[tuple] = None) -> None:
         super().__init__()
         self.config = config
@@ -510,7 +507,7 @@ class InternVLSelfAttention(BeitSelfAttention):
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
         if window_size:
-            self.relative_position_bias = InternVLRelativePositionBias(config, window_size=window_size)
+            self.relative_position_bias = InternVLVisionRelativePositionBias(config, window_size=window_size)
         else:
             self.relative_position_bias = None
 
@@ -519,8 +516,108 @@ class InternVLVisionPreTrainedModel(BeitPreTrainedModel):
     pass
 
 
-class InternVLVisionModel(BeitModel, InternVLVisionPreTrainedModel):
+class InternVLVisionModelOutputWithPooling(BeitModelOutputWithPooling):
     pass
+
+
+class InternVLVisionDropPath(BeitDropPath):
+    pass
+
+
+class InternVLVisionPatchEmbeddings(BeitPatchEmbeddings):
+    pass
+
+
+class InternVLVisionEmbeddings(BeitEmbeddings):
+    pass
+
+
+class InternVLVisionSdpaSelfAttention(BeitSdpaSelfAttention):
+    pass
+
+
+class InternVLVisionAttention(BeitAttention):
+    pass
+
+
+class InternVLVisionIntermediate(BeitIntermediate):
+    pass
+
+
+class InternVLVisionOutput(BeitOutput):
+    pass
+
+
+class InternVLVisionLayer(BeitLayer):
+    pass
+
+
+class InternVLVisionEncoder(BeitEncoder):
+    pass
+
+
+class InternVLVisionPooler(BeitPooler):
+    pass
+
+
+_EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
+
+INTERNVL_VISION_INPUTS_DOCSTRING = r"""
+    Args:
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+            Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
+            [`GotOcr2ImageProcessor.__call__`] for details.
+
+        head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
+            Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
+            Whether to interpolate the pre-trained position encodings.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+"""
+
+
+class InternVLVisionModel(BeitModel, InternVLVisionPreTrainedModel):
+    @add_start_docstrings_to_model_forward(INTERNVL_VISION_INPUTS_DOCSTRING)
+    @add_code_sample_docstrings(
+        checkpoint=_CHECKPOINT_FOR_DOC,
+        output_type=InternVLVisionModelOutputWithPooling,
+        config_class=_CONFIG_VISION_FOR_DOC,
+        modality="vision",
+        expected_output=_EXPECTED_OUTPUT_SHAPE,
+    )
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        bool_masked_pos: Optional[torch.BoolTensor] = None,
+        head_mask: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        interpolate_pos_encoding: bool = False,
+        return_dict: Optional[bool] = None,
+    ) -> Union[tuple, InternVLVisionModelOutputWithPooling]:
+        super().forward(
+            pixel_values=pixel_values,
+            bool_masked_pos=bool_masked_pos,
+            head_mask=head_mask,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            interpolate_pos_encoding=interpolate_pos_encoding,
+            return_dict=return_dict,
+        )
+
+
+_CONFIG_FOR_DOC = "InternVLConfig"
 
 
 class InternVLPreTrainedModel(LlavaPreTrainedModel):
@@ -592,8 +689,8 @@ INTERNVL_INPUTS_DOCSTRING = r"""
             Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         pixel_values (`torch.FloatTensor` of shape `(seq_length, num_channels * image_size * image_size)):
             The tensors corresponding to the input images. Pixel values can be obtained using
-            [`AutoImageProcessor`]. See [`InternVLImageProcessor.__call__`] for details. [`InternVLProcessor`] uses
-            [`InternVLImageProcessor`] for processing images.
+            [`AutoImageProcessor`]. See [`GotOcr2ImageProcessor.__call__`] for details. [`InternVLProcessor`] uses
+            [`GotOcr2ImageProcessor`] for processing images.
 """
 
 
@@ -771,7 +868,7 @@ class InternVLForConditionalGeneration(LlavaForConditionalGeneration):
 
         if pixel_values is not None:
             image_features = self.get_image_features(
-                pixel_values=pixel_values,
+                pixel_values=pixel_values.to(inputs_embeds.dtype),
                 vision_feature_layer=vision_feature_layer,
                 downsample_ratio=downsample_ratio,
             )
@@ -837,7 +934,7 @@ __all__ = [
     "InternVLVisionConfig",
     "InternVLConfig",
     "InternVLProcessor",
+    "InternVLVisionModel",
     "InternVLPreTrainedModel",
-    "InternVLImageProcessor",
     "InternVLForConditionalGeneration",
 ]

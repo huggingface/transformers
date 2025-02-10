@@ -47,14 +47,15 @@ from .configuration_internvl import InternVLConfig, InternVLVisionConfig
 
 logger = logging.get_logger(__name__)
 
-# Base docstring
-_CHECKPOINT_FOR_DOC = "microsoft/internvl-base-patch16-224-pt22k"
+
+_CHECKPOINT_FOR_DOC = "to_be_completed"  # todo
+
 
 _CONFIG_FOR_DOC = "InternVLConfig"
 
 
-class InternVLRelativePositionBias(nn.Module):
-    def __init__(self, config: InternVLConfig, window_size: tuple) -> None:
+class InternVLVisionRelativePositionBias(nn.Module):
+    def __init__(self, config: InternVLVisionConfig, window_size: tuple) -> None:
         super().__init__()
         self.window_size = window_size
         self.num_relative_distance = (2 * window_size[0] - 1) * (2 * window_size[1] - 1) + 3
@@ -91,7 +92,7 @@ class InternVLRelativePositionBias(nn.Module):
 
     def forward(self, window_size, interpolate_pos_encoding: bool = False, dim_size=None) -> torch.Tensor:
         """
-        Modification of timm.models.internvl.py: Attention._get_rel_pos_bias to support arbitrary window sizes.
+        Modification of timm.models.internvl_vision.py: Attention._get_rel_pos_bias to support arbitrary window sizes.
         """
         old_height = 2 * self.window_size[0] - 1
         old_width = 2 * self.window_size[1] - 1
@@ -139,7 +140,7 @@ class InternVLRelativePositionBias(nn.Module):
         return relative_position_bias.unsqueeze(0)
 
 
-class InternVLSelfAttention(nn.Module):
+class InternVLVisionSelfAttention(nn.Module):
     def __init__(self, config: InternVLVisionConfig, window_size: Optional[tuple] = None) -> None:
         super().__init__()
         self.config = config
@@ -160,7 +161,7 @@ class InternVLSelfAttention(nn.Module):
         self.dropout = nn.Dropout(config.attention_probs_dropout_prob)
 
         if window_size:
-            self.relative_position_bias = InternVLRelativePositionBias(config, window_size=window_size)
+            self.relative_position_bias = InternVLVisionRelativePositionBias(config, window_size=window_size)
         else:
             self.relative_position_bias = None
 
@@ -174,7 +175,7 @@ class InternVLSelfAttention(nn.Module):
         hidden_states: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        relative_position_bias: Optional["InternVLRelativePositionBias"] = None,
+        relative_position_bias: Optional["InternVLVisionRelativePositionBias"] = None,
         interpolate_pos_encoding: bool = False,
         resolution: Optional[Tuple[int]] = None,
     ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
@@ -229,8 +230,8 @@ class InternVLVisionPreTrainedModel(PreTrainedModel):
     models.
     """
 
-    config_class = InternVLConfig
-    base_model_prefix = "intern_v_l_vision"
+    config_class = InternVLVisionConfig
+    base_model_prefix = "internvl_vision"
     main_input_name = "pixel_values"
     supports_gradient_checkpointing = True
     _no_split_modules = ["InternVLVisionLayer"]
@@ -255,9 +256,9 @@ class InternVLVisionPreTrainedModel(PreTrainedModel):
 
 
 @dataclass
-class InternVLModelOutputWithPooling(BaseModelOutputWithPooling):
+class InternVLVisionModelOutputWithPooling(BaseModelOutputWithPooling):
     """
-    Class for outputs of [`InternVLModel`].
+    Class for outputs of [`InternVLVisionModel`].
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -300,7 +301,7 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     return output
 
 
-class InternVLDropPath(nn.Module):
+class InternVLVisionDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob: Optional[float] = None) -> None:
@@ -314,7 +315,7 @@ class InternVLDropPath(nn.Module):
         return "p={}".format(self.drop_prob)
 
 
-class InternVLPatchEmbeddings(nn.Module):
+class InternVLVisionPatchEmbeddings(nn.Module):
     """
     This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
     `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
@@ -369,13 +370,13 @@ class InternVLPatchEmbeddings(nn.Module):
 
 # Based on timm implementation, which can be found here:
 # https://github.com/rwightman/pytorch-image-models/blob/master/timm/models/vision_transformer.py
-class InternVLEmbeddings(nn.Module):
+class InternVLVisionEmbeddings(nn.Module):
     """
     Construct the CLS token, position and patch embeddings. Optionally, also the mask token.
 
     """
 
-    def __init__(self, config: InternVLConfig) -> None:
+    def __init__(self, config: InternVLVisionConfig) -> None:
         super().__init__()
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
@@ -383,7 +384,7 @@ class InternVLEmbeddings(nn.Module):
             self.mask_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         else:
             self.mask_token = None
-        self.patch_embeddings = InternVLPatchEmbeddings(config)
+        self.patch_embeddings = InternVLVisionPatchEmbeddings(config)
         self.patch_size = config.patch_size
         self.image_size = (
             config.image_size
@@ -469,19 +470,19 @@ class InternVLEmbeddings(nn.Module):
         return embeddings, (patch_height, patch_width)
 
 
-class InternVLSdpaSelfAttention(InternVLSelfAttention):
+class InternVLVisionSdpaSelfAttention(InternVLVisionSelfAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        relative_position_bias: Optional["InternVLRelativePositionBias"] = None,
+        relative_position_bias: Optional["InternVLVisionRelativePositionBias"] = None,
         interpolate_pos_encoding: bool = False,
         resolution: Optional[Tuple[int]] = None,
     ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
         if output_attentions or head_mask is not None:
             logger.warning_once(
-                "`InternVLSdpaSelfAttention` is used but `torch.nn.functional.scaled_dot_product_attention` does not "
+                "`InternVLVisionSdpaSelfAttention` is used but `torch.nn.functional.scaled_dot_product_attention` does not "
                 "support `output_attentions=True` or `head_mask`. Falling back to the manual attention implementation, "
                 "but specifying the manual implementation will be required from Transformers version v5.0.0 onwards. "
                 'This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
@@ -531,13 +532,13 @@ class InternVLSdpaSelfAttention(InternVLSelfAttention):
         return context_layer, None
 
 
-class InternVLSelfOutput(nn.Module):
+class InternVLVisionSelfOutput(nn.Module):
     """
-    The residual connection is defined in InternVLLayer instead of here (as is the case with other models), due to the
+    The residual connection is defined in InternVLVisionLayer instead of here (as is the case with other models), due to the
     layernorm applied before each block.
     """
 
-    def __init__(self, config: InternVLConfig) -> None:
+    def __init__(self, config: InternVLVisionConfig) -> None:
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -549,17 +550,19 @@ class InternVLSelfOutput(nn.Module):
         return hidden_states
 
 
-INTERNVL_SELF_ATTENTION_CLASSES = {
-    "eager": InternVLSelfAttention,
-    "sdpa": InternVLSdpaSelfAttention,
+INTERNVL_VISION_SELF_ATTENTION_CLASSES = {
+    "eager": InternVLVisionSelfAttention,
+    "sdpa": InternVLVisionSdpaSelfAttention,
 }
 
 
-class InternVLAttention(nn.Module):
-    def __init__(self, config: InternVLConfig, window_size: Optional[tuple] = None) -> None:
+class InternVLVisionAttention(nn.Module):
+    def __init__(self, config: InternVLVisionConfig, window_size: Optional[tuple] = None) -> None:
         super().__init__()
-        self.attention = INTERNVL_SELF_ATTENTION_CLASSES[config._attn_implementation](config, window_size=window_size)
-        self.output = InternVLSelfOutput(config)
+        self.attention = INTERNVL_VISION_SELF_ATTENTION_CLASSES[config._attn_implementation](
+            config, window_size=window_size
+        )
+        self.output = InternVLVisionSelfOutput(config)
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
@@ -585,7 +588,7 @@ class InternVLAttention(nn.Module):
         hidden_states: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        relative_position_bias: Optional["InternVLRelativePositionBias"] = None,
+        relative_position_bias: Optional["InternVLVisionRelativePositionBias"] = None,
         interpolate_pos_encoding: bool = False,
         resolution: Optional[Tuple[int]] = None,
     ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
@@ -599,8 +602,8 @@ class InternVLAttention(nn.Module):
         return outputs
 
 
-class InternVLIntermediate(nn.Module):
-    def __init__(self, config: InternVLConfig) -> None:
+class InternVLVisionIntermediate(nn.Module):
+    def __init__(self, config: InternVLVisionConfig) -> None:
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
         if isinstance(config.hidden_act, str):
@@ -615,8 +618,8 @@ class InternVLIntermediate(nn.Module):
         return hidden_states
 
 
-class InternVLOutput(nn.Module):
-    def __init__(self, config: InternVLConfig) -> None:
+class InternVLVisionOutput(nn.Module):
+    def __init__(self, config: InternVLVisionConfig) -> None:
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
@@ -628,20 +631,20 @@ class InternVLOutput(nn.Module):
         return hidden_states
 
 
-class InternVLLayer(nn.Module):
+class InternVLVisionLayer(nn.Module):
     """This corresponds to the Block class in the timm implementation."""
 
     def __init__(
-        self, config: InternVLConfig, window_size: Optional[tuple] = None, drop_path_rate: float = 0.0
+        self, config: InternVLVisionConfig, window_size: Optional[tuple] = None, drop_path_rate: float = 0.0
     ) -> None:
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = InternVLAttention(config, window_size=window_size)
-        self.intermediate = InternVLIntermediate(config)
-        self.output = InternVLOutput(config)
+        self.attention = InternVLVisionAttention(config, window_size=window_size)
+        self.intermediate = InternVLVisionIntermediate(config)
+        self.output = InternVLVisionOutput(config)
         self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.drop_path = InternVLDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
+        self.drop_path = InternVLVisionDropPath(drop_path_rate) if drop_path_rate > 0.0 else nn.Identity()
         self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
         init_values = config.layer_scale_init_value
@@ -656,12 +659,12 @@ class InternVLLayer(nn.Module):
         hidden_states: torch.Tensor,
         head_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        relative_position_bias: Optional["InternVLRelativePositionBias"] = None,
+        relative_position_bias: Optional["InternVLVisionRelativePositionBias"] = None,
         interpolate_pos_encoding: bool = False,
         resolution: Optional[Tuple[int]] = None,
     ) -> Union[Tuple[torch.Tensor], Tuple[torch.Tensor, torch.Tensor]]:
         self_attention_outputs = self.attention(
-            self.layernorm_before(hidden_states),  # in InternVL, layernorm is applied before self-attention
+            self.layernorm_before(hidden_states),  # in InternVLVision, layernorm is applied before self-attention
             head_mask,
             output_attentions=output_attentions,
             relative_position_bias=relative_position_bias,
@@ -678,7 +681,7 @@ class InternVLLayer(nn.Module):
         # first residual connection
         hidden_states = self.drop_path(attention_output) + hidden_states
 
-        # in InternVL, layernorm is also applied after self-attention
+        # in InternVLVision, layernorm is also applied after self-attention
         layer_output = self.layernorm_after(hidden_states)
 
         layer_output = self.intermediate(layer_output)
@@ -695,12 +698,12 @@ class InternVLLayer(nn.Module):
         return outputs
 
 
-class InternVLEncoder(nn.Module):
-    def __init__(self, config: InternVLConfig, window_size: Optional[tuple] = None) -> None:
+class InternVLVisionEncoder(nn.Module):
+    def __init__(self, config: InternVLVisionConfig, window_size: Optional[tuple] = None) -> None:
         super().__init__()
         self.config = config
         if config.use_shared_relative_position_bias:
-            self.relative_position_bias = InternVLRelativePositionBias(config, window_size=window_size)
+            self.relative_position_bias = InternVLVisionRelativePositionBias(config, window_size=window_size)
         else:
             self.relative_position_bias = None
 
@@ -708,7 +711,7 @@ class InternVLEncoder(nn.Module):
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers)]
         self.layer = nn.ModuleList(
             [
-                InternVLLayer(
+                InternVLVisionLayer(
                     config,
                     window_size=window_size if config.use_relative_position_bias else None,
                     drop_path_rate=dpr[i],
@@ -780,8 +783,8 @@ class InternVLEncoder(nn.Module):
         )
 
 
-class InternVLPooler(nn.Module):
-    def __init__(self, config: InternVLConfig) -> None:
+class InternVLVisionPooler(nn.Module):
+    def __init__(self, config: InternVLVisionConfig) -> None:
         super().__init__()
         self.layernorm = (
             nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) if config.use_mean_pooling else None
@@ -799,25 +802,27 @@ class InternVLPooler(nn.Module):
         return pooled_output
 
 
-_EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
-
-
-INTERNVL_START_DOCSTRING = r"""
+INTERNVL_VISION_START_DOCSTRING = r"""
     This model is a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass. Use it
     as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage and
     behavior.
 
     Parameters:
-        config ([`InternVLConfig`]): Model configuration class with all the parameters of the model.
+        config ([`InternVLVisionConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
 
-INTERNVL_INPUTS_DOCSTRING = r"""
+_CONFIG_VISION_FOR_DOC = "InternVLVisionConfig"
+
+
+_EXPECTED_OUTPUT_SHAPE = [1, 197, 768]
+
+INTERNVL_VISION_INPUTS_DOCSTRING = r"""
     Args:
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
             Pixel values. Pixel values can be obtained using [`AutoImageProcessor`]. See
-            [`InternVLImageProcessor.__call__`] for details.
+            [`InternVLVisionImageProcessor.__call__`] for details.
 
         head_mask (`torch.FloatTensor` of shape `(num_heads,)` or `(num_layers, num_heads)`, *optional*):
             Mask to nullify selected heads of the self-attention modules. Mask values selected in `[0, 1]`:
@@ -840,20 +845,20 @@ INTERNVL_INPUTS_DOCSTRING = r"""
 
 @add_start_docstrings(
     "The bare InternVLVision Model transformer outputting raw hidden-states without any specific head on top.",
-    INTERNVL_START_DOCSTRING,
+    INTERNVL_VISION_START_DOCSTRING,
 )
 class InternVLVisionModel(InternVLVisionPreTrainedModel):
-    def __init__(self, config: InternVLConfig, add_pooling_layer: bool = True) -> None:
+    def __init__(self, config: InternVLVisionConfig, add_pooling_layer: bool = True) -> None:
         super().__init__(config)
         self.config = config
 
-        self.embeddings = InternVLEmbeddings(config)
-        self.encoder = InternVLEncoder(config, window_size=self.embeddings.patch_embeddings.patch_shape)
+        self.embeddings = InternVLVisionEmbeddings(config)
+        self.encoder = InternVLVisionEncoder(config, window_size=self.embeddings.patch_embeddings.patch_shape)
 
         self.layernorm = (
             nn.Identity() if config.use_mean_pooling else nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         )
-        self.pooler = InternVLPooler(config) if add_pooling_layer else None
+        self.pooler = InternVLVisionPooler(config) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -869,11 +874,11 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
         for layer, heads in heads_to_prune.items():
             self.encoder.layer[layer].attention.prune_heads(heads)
 
-    @add_start_docstrings_to_model_forward(INTERNVL_INPUTS_DOCSTRING)
+    @add_start_docstrings_to_model_forward(INTERNVL_VISION_INPUTS_DOCSTRING)
     @add_code_sample_docstrings(
         checkpoint=_CHECKPOINT_FOR_DOC,
-        output_type=InternVLModelOutputWithPooling,
-        config_class=_CONFIG_FOR_DOC,
+        output_type=InternVLVisionModelOutputWithPooling,
+        config_class=_CONFIG_VISION_FOR_DOC,
         modality="vision",
         expected_output=_EXPECTED_OUTPUT_SHAPE,
     )
@@ -886,7 +891,7 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
         output_hidden_states: Optional[bool] = None,
         interpolate_pos_encoding: bool = False,
         return_dict: Optional[bool] = None,
-    ) -> Union[tuple, InternVLModelOutputWithPooling]:
+    ) -> Union[tuple, InternVLVisionModelOutputWithPooling]:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`, *optional*):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
@@ -926,12 +931,29 @@ class InternVLVisionModel(InternVLVisionPreTrainedModel):
             head_outputs = (sequence_output, pooled_output) if pooled_output is not None else (sequence_output,)
             return head_outputs + encoder_outputs[1:]
 
-        return InternVLModelOutputWithPooling(
+        return InternVLVisionModelOutputWithPooling(
             last_hidden_state=sequence_output,
             pooler_output=pooled_output,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
+
+
+INTERNVL_START_DOCSTRING = r"""
+    This model inherits from [`PreTrainedModel`]. Check the superclass documentation for the generic methods the
+    library implements for all its model (such as downloading or saving, resizing the input embeddings, pruning heads
+    etc.)
+
+    This model is also a PyTorch [torch.nn.Module](https://pytorch.org/docs/stable/nn.html#torch.nn.Module) subclass.
+    Use it as a regular PyTorch Module and refer to the PyTorch documentation for all matter related to general usage
+    and behavior.
+
+    Parameters:
+        config ([`InternVLConfig`] or [`InternVLVisionConfig`]):
+            Model configuration class with all the parameters of the model. Initializing with a config file does not
+            load the weights associated with the model, only the configuration. Check out the
+            [`~PreTrainedModel.from_pretrained`] method to load the model weights.
+"""
 
 
 @add_start_docstrings(
@@ -1027,6 +1049,83 @@ class InternVLCausalLMOutputWithPast(ModelOutput):
     hidden_states: Optional[Tuple[torch.FloatTensor]] = None
     attentions: Optional[Tuple[torch.FloatTensor]] = None
     image_hidden_states: Optional[torch.FloatTensor] = None
+
+
+INTERNVL_INPUTS_DOCSTRING = r"""
+    Args:
+        input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
+            Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide
+            it.
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            [What are input IDs?](../glossary#input-ids)
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
+            The tensors corresponding to the input images. Pixel values can be obtained using
+            [`AutoImageProcessor`]. See [`CLIPImageProcessor.__call__`] for details ([]`InternVLProcessor`] uses
+            [`CLIPImageProcessor`] for processing images).
+        attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
+
+            Indices can be obtained using [`AutoTokenizer`]. See [`PreTrainedTokenizer.encode`] and
+            [`PreTrainedTokenizer.__call__`] for details.
+
+            If `past_key_values` is used, optionally only the last `decoder_input_ids` have to be input (see
+            `past_key_values`).
+
+            If you want to change padding behavior, you should read [`modeling_opt._prepare_decoder_attention_mask`]
+            and modify to your needs. See diagram 1 in [the paper](https://arxiv.org/abs/1910.13461) for more
+            information on the default strategy.
+
+            - 1 indicates the head is **not masked**,
+            - 0 indicates the head is **masked**.
+        position_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of positions of each input sequence tokens in the position embeddings. Selected in the range `[0,
+            config.n_positions - 1]`. [What are position IDs?](../glossary#position-ids)
+        past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+            Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
+            `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
+            `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+
+            Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
+            blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
+
+            If `past_key_values` are used, the user can optionally input only the last `decoder_input_ids` (those that
+            don't have their past key value states given to this model) of shape `(batch_size, 1)` instead of all
+            `decoder_input_ids` of shape `(batch_size, sequence_length)`.
+        inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+            Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation. This
+            is useful if you want more control over how to convert `input_ids` indices into associated vectors than the
+            model's internal embedding lookup matrix.
+        vision_feature_layer (`Union[int, List[int]], *optional*, defaults to -2`):
+            The index of the layer to select the vision feature. If multiple indices are provided,
+            the vision feature of the corresponding indices will be concatenated to form the
+            vision features.
+        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
+            The feature selection strategy used to select the vision feature from the vision backbone.
+            Can be one of `"default"` or `"full"`.
+        use_cache (`bool`, *optional*):
+            If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding (see
+            `past_key_values`).
+        output_attentions (`bool`, *optional*):
+            Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
+            tensors for more detail.
+        output_hidden_states (`bool`, *optional*):
+            Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
+            more detail.
+        return_dict (`bool`, *optional*):
+            Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+        cache_position (`torch.LongTensor` of shape `(sequence_length)`, *optional*):
+            Indices depicting the position of the input sequence tokens in the sequence. Contrarily to `position_ids`,
+            this tensor is not affected by padding. It is used to update the cache in the correct position and to infer
+            the complete sequence length.
+"""
 
 
 @add_start_docstrings(
@@ -1252,7 +1351,7 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
 
         if pixel_values is not None:
             image_features = self.get_image_features(
-                pixel_values=pixel_values,
+                pixel_values=pixel_values.to(inputs_embeds.dtype),
                 vision_feature_layer=vision_feature_layer,
                 downsample_ratio=downsample_ratio,
             )
@@ -1378,4 +1477,4 @@ class InternVLForConditionalGeneration(InternVLPreTrainedModel, GenerationMixin)
         return vision_features
 
 
-__all__ = ["InternVLPreTrainedModel", "InternVLForConditionalGeneration"]
+__all__ = ["InternVLVisionModel", "InternVLPreTrainedModel", "InternVLForConditionalGeneration"]

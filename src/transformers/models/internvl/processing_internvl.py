@@ -22,38 +22,35 @@
 
 from typing import List, Optional, Union
 
-from transformers.processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
+from transformers.processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
 from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 
 
-# TODO
+class InternVLImagesKwargs(ImagesKwargs, total=False):
+    min_patches: Optional[int]
+    max_patches: Optional[int]
+
+
 class InternVLProcessorKwargs(ProcessingKwargs, total=False):
-    # text_kwargs: InternVLTextKwargs
-    # images_kwargs: InternVLImagesKwargs
+    images_kwargs: InternVLImagesKwargs
     _defaults = {
-        "text_kwargs": {
-            "padding": False,
+        "images_kwargs": {
+            "min_patches": 1,
+            "max_patches": 12,
         },
-        # "images_kwargs": {
-        #     "num_image_tokens": 256,
-        #     "multi_page": False,
-        #     "crop_to_patches": False,
-        #     "min_patches": 1,
-        #     "max_patches": 12,
-        # },
     }
 
 
 class InternVLProcessor(ProcessorMixin):
     r"""
-    Constructs a InternVL processor which wraps a [`InternVLImageProcessor`] and
+    Constructs a InternVL processor which wraps a [`GotOcr2ImageProcessor`] and
     [`PretrainedTokenizerFast`] tokenizer into a single processor that inherits both the image processor and
     tokenizer functionalities. See the [`~InternVLProcessor.__call__`] and [`~InternVLProcessor.decode`] for more information.
     Args:
-        image_processor ([`InternVLImageProcessor`], *optional*):
+        image_processor ([`GotOcr2ImageProcessor`], *optional*):
             The image processor is a required input.
         tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`], *optional*):
             The tokenizer is a required input.
@@ -62,9 +59,9 @@ class InternVLProcessor(ProcessorMixin):
     """
 
     attributes = ["image_processor", "tokenizer"]
-    valid_kwargs = ["chat_template"]
-    image_processor_class = "InternVLImageProcessor"
-    tokenizer_class = "PreTrainedTokenizerFast"
+    valid_kwargs = ["chat_template", "image_seq_length"]
+    image_processor_class = "AutoImageProcessor"
+    tokenizer_class = "AutoTokenizer"
 
     def __init__(
         self, image_processor=None, tokenizer=None, image_seq_length: int = 256, chat_template=None, **kwargs
@@ -86,7 +83,7 @@ class InternVLProcessor(ProcessorMixin):
         and `kwargs` arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] to encode the text if `text`
         is not `None`, otherwise encode default OCR queries which depends on the `format`, `box`, `color`, `multi_page` and
         `crop_to_patches` arguments. To prepare the vision inputs, this method forwards the `images` and `kwrags` arguments to
-        InternVLImageProcessor's [`~InternVLImageProcessor.__call__`] if `images` is not `None`.
+        GotOcr2ImageProcessor's [`~GotOcr2ImageProcessor.__call__`] if `images` is not `None`.
 
         Args:
             images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
@@ -113,38 +110,41 @@ class InternVLProcessor(ProcessorMixin):
               `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
+        if text is None:
+            raise ValueError("You have to specify text.")
+
         output_kwargs = self._merge_kwargs(
             InternVLProcessorKwargs,
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
+
         if not isinstance(text, (list, tuple)):
             text = [text]
 
-        if images is None:
-            text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-            return BatchFeature(data=text_inputs)
+        if images is not None:
+            if not isinstance(images, (list, tuple)):
+                images = [images]
 
-        if not isinstance(images, (list, tuple)):
-            images = [images]
-
-        for index, image_group in enumerate(images):
-            image_group = self.image_processor.crop_image_to_patches(
-                image_group,
-                patch_size=output_kwargs["images_kwargs"].get("size"),
-                min_patches=1,
-                max_patches=12,
-            )
-            images[index] = image_group
-            for i, prompt in enumerate(text):
-                if "<image>" in prompt:
-                    text[i] = prompt.replace(
-                        "<image>", f"<img>{'<IMG_CONTEXT>'*self.image_seq_length* len(image_group)}</img>", 1
-                    )
-                    break
+            for index, image_group in enumerate(images):
+                image_group = self.image_processor.crop_image_to_patches(
+                    image_group,
+                    patch_size=output_kwargs["images_kwargs"].get("size"),
+                    min_patches=1,
+                    max_patches=12,
+                )
+                images[index] = image_group
+                for i, prompt in enumerate(text):
+                    if "<image>" in prompt:
+                        text[i] = prompt.replace(
+                            "<image>", f"<img>{'<IMG_CONTEXT>'*self.image_seq_length* len(image_group)}</img>", 1
+                        )
+                        break
+            image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
+        else:
+            image_inputs = {}
 
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-        image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
 
         return BatchFeature(data={**text_inputs, **image_inputs})
 

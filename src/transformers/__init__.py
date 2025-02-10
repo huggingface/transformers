@@ -700,7 +700,7 @@ _import_structure = {
         "Pix2StructVisionConfig",
     ],
     "models.pixtral": ["PixtralProcessor", "PixtralVisionConfig"],
-    "models.internvl": ["InternVLProcessor", "InternVLConfig"],
+    "models.internvl": ["InternVLProcessor", "InternVLConfig", "InternVLVisionConfig"],
     "models.plbart": ["PLBartConfig"],
     "models.poolformer": ["PoolFormerConfig"],
     "models.pop2piano": ["Pop2PianoConfig"],
@@ -1251,7 +1251,6 @@ else:
     _import_structure["models.idefics3"].extend(["Idefics3ImageProcessor"])
     _import_structure["models.imagegpt"].extend(["ImageGPTFeatureExtractor", "ImageGPTImageProcessor"])
     _import_structure["models.instructblipvideo"].extend(["InstructBlipVideoImageProcessor"])
-    _import_structure["models.internvl"].extend(["InternVLImageProcessor"])
     _import_structure["models.layoutlmv2"].extend(["LayoutLMv2FeatureExtractor", "LayoutLMv2ImageProcessor"])
     _import_structure["models.layoutlmv3"].extend(["LayoutLMv3FeatureExtractor", "LayoutLMv3ImageProcessor"])
     _import_structure["models.levit"].extend(["LevitFeatureExtractor", "LevitImageProcessor"])
@@ -1274,7 +1273,6 @@ else:
     _import_structure["models.perceiver"].extend(["PerceiverFeatureExtractor", "PerceiverImageProcessor"])
     _import_structure["models.pix2struct"].extend(["Pix2StructImageProcessor"])
     _import_structure["models.pixtral"].append("PixtralImageProcessor")
-    _import_structure["models.internvl"].append("InternVLImageProcessor")
     _import_structure["models.poolformer"].extend(["PoolFormerFeatureExtractor", "PoolFormerImageProcessor"])
     _import_structure["models.pvt"].extend(["PvtImageProcessor"])
     _import_structure["models.qwen2_5_vl"].extend(["Qwen2_5_VLImageProcessor"])
@@ -1313,7 +1311,6 @@ else:
     _import_structure["models.deformable_detr"].append("DeformableDetrImageProcessorFast")
     _import_structure["models.detr"].append("DetrImageProcessorFast")
     _import_structure["models.pixtral"].append("PixtralImageProcessorFast")
-    _import_structure["models.internvl"].append("InternVLImageProcessorFast")
     _import_structure["models.qwen2_vl"].append("Qwen2VLImageProcessorFast")
     _import_structure["models.rt_detr"].append("RTDetrImageProcessorFast")
     _import_structure["models.vit"].append("ViTImageProcessorFast")
@@ -2631,6 +2628,9 @@ else:
             "InstructBlipVideoVisionModel",
         ]
     )
+    _import_structure["models.internvl"].extend(
+        ["InternVLPreTrainedModel", "InternVLForConditionalGeneration", "InternVLVisionModel"]
+    )
     _import_structure["models.jamba"].extend(
         [
             "JambaForCausalLM",
@@ -3241,7 +3241,6 @@ else:
         ]
     )
     _import_structure["models.pixtral"].extend(["PixtralPreTrainedModel", "PixtralVisionModel"])
-    _import_structure["models.internvl"].extend(["InternVLPreTrainedModel", "InternVLForConditionalGeneration"])
     _import_structure["models.plbart"].extend(
         [
             "PLBartForCausalLM",
@@ -5607,10 +5606,7 @@ if TYPE_CHECKING:
         InstructBlipVideoQFormerConfig,
         InstructBlipVideoVisionConfig,
     )
-    from .models.internvl import (
-        InternVLConfig,
-        InternVLProcessor,
-    )
+    from .models.internvl import InternVLConfig, InternVLProcessor, InternVLVisionConfig
     from .models.jamba import JambaConfig
     from .models.jetmoe import JetMoeConfig
     from .models.kosmos2 import (
@@ -6371,7 +6367,6 @@ if TYPE_CHECKING:
         from .models.idefics3 import Idefics3ImageProcessor
         from .models.imagegpt import ImageGPTFeatureExtractor, ImageGPTImageProcessor
         from .models.instructblipvideo import InstructBlipVideoImageProcessor
-        from .models.internvl import InternVLImageProcessor
         from .models.layoutlmv2 import (
             LayoutLMv2FeatureExtractor,
             LayoutLMv2ImageProcessor,
@@ -6443,7 +6438,6 @@ if TYPE_CHECKING:
         from .image_processing_utils_fast import BaseImageProcessorFast
         from .models.deformable_detr import DeformableDetrImageProcessorFast
         from .models.detr import DetrImageProcessorFast
-        from .models.internvl import InternVLImageProcessor
         from .models.pixtral import PixtralImageProcessorFast
         from .models.qwen2_vl import Qwen2VLImageProcessorFast
         from .models.rt_detr import RTDetrImageProcessorFast
@@ -7522,9 +7516,9 @@ if TYPE_CHECKING:
         )
         from .models.internvl import (
             InternVLForConditionalGeneration,
-            InternVLModel,
             InternVLPreTrainedModel,
             InternVLProcessor,
+            InternVLVisionModel,
         )
         from .models.jamba import (
             JambaForCausalLM,
