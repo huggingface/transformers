@@ -47,8 +47,8 @@ if is_vision_available():
 
 
 @lru_cache(maxsize=256)
-def get_image_size_for_max_number_of_patches(
-    image_height: int, image_width: int, patch_size: int, max_number_of_patches: int, eps: float = 1e-5
+def get_image_size_for_max_num_patches(
+    image_height: int, image_width: int, patch_size: int, max_num_patches: int, eps: float = 1e-5
 ) -> Tuple[int, int]:
     """
     Determine image size based on max number of patches, ensure dimensions are divisible by patch size and image is at least 1 patch.
@@ -60,7 +60,7 @@ def get_image_size_for_max_number_of_patches(
             Original image width.
         patch_size (`int`):
             Patch size for processing.
-        max_number_of_patches (`int`):
+        max_num_patches (`int`):
             Maximum number of patches.
         eps (`float`):
             Small threshold for binary search.
@@ -83,7 +83,7 @@ def get_image_size_for_max_number_of_patches(
         target_width = get_scaled_image_size(scale, image_width, patch_size)
         num_patches = (target_height / patch_size) * (target_width / patch_size)
 
-        if num_patches <= max_number_of_patches:
+        if num_patches <= max_num_patches:
             scale_min = scale
         else:
             scale_max = scale
@@ -183,7 +183,7 @@ class Siglip2ImageProcessor(BaseImageProcessor):
         image_std: Optional[Union[float, List[float]]] = None,
         do_convert_rgb: Optional[bool] = None,
         patch_size: int = 16,
-        max_number_of_patches: int = 256,
+        max_num_patches: int = 256,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -204,7 +204,7 @@ class Siglip2ImageProcessor(BaseImageProcessor):
         self.image_std = image_std
         self.do_convert_rgb = do_convert_rgb
         self.patch_size = patch_size
-        self.max_number_of_patches = max_number_of_patches
+        self.max_num_patches = max_num_patches
 
     @filter_out_non_signature_kwargs()
     def preprocess(
@@ -223,7 +223,7 @@ class Siglip2ImageProcessor(BaseImageProcessor):
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
         do_convert_rgb: Optional[bool] = None,
         patch_size: Optional[int] = None,
-        max_number_of_patches: Optional[int] = None,
+        max_num_patches: Optional[int] = None,
     ) -> "Image.Image":
         """
         Preprocess an image or batch of images.
@@ -272,7 +272,7 @@ class Siglip2ImageProcessor(BaseImageProcessor):
                 Whether to convert the image to RGB.
             patch_size (`int`, *optional*, defaults to `self.patch_size`):
                 Patch size for processing, same as the patch size used in the model.
-            max_number_of_patches (`int`, *optional*, defaults to `self.max_number_of_patches`):
+            max_num_patches (`int`, *optional*, defaults to `self.max_num_patches`):
                 Maximum number of patches per image, the image will be resized to have at most this number of patches.
         """
         do_resize = do_resize if do_resize is not None else self.do_resize
@@ -285,9 +285,7 @@ class Siglip2ImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
         patch_size = patch_size if patch_size is not None else self.patch_size
-        max_number_of_patches = (
-            max_number_of_patches if max_number_of_patches is not None else self.max_number_of_patches
-        )
+        max_num_patches = max_num_patches if max_num_patches is not None else self.max_num_patches
 
         images = make_flat_list_of_images(images)
 
@@ -328,11 +326,11 @@ class Siglip2ImageProcessor(BaseImageProcessor):
 
         for image in images:
             if do_resize:
-                height, width = get_image_size_for_max_number_of_patches(
+                height, width = get_image_size_for_max_num_patches(
                     image_height=image.shape[0],
                     image_width=image.shape[1],
                     patch_size=patch_size,
-                    max_number_of_patches=max_number_of_patches,
+                    max_num_patches=max_num_patches,
                 )
                 image = resize(
                     image=image, size=(height, width), resample=resample, input_data_format=input_data_format
@@ -347,9 +345,9 @@ class Siglip2ImageProcessor(BaseImageProcessor):
                 )
 
             patches = convert_image_to_patches(image, patch_size)
-            patches, mask = pad_along_first_dim(patches, max_number_of_patches)
+            patches, mask = pad_along_first_dim(patches, max_num_patches)
             position_ids = get_position_ids(image, patch_size)
-            position_ids, _ = pad_along_first_dim(position_ids, max_number_of_patches)
+            position_ids, _ = pad_along_first_dim(position_ids, max_num_patches)
 
             pixel_values.append(patches)
             pixel_masks.append(mask)

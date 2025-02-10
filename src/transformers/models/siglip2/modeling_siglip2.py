@@ -252,7 +252,6 @@ class Siglip2VisionEmbeddings(nn.Module):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
-        self.image_size = config.image_size
         self.patch_size = config.patch_size
 
         self.patch_embedding = nn.Linear(
@@ -260,12 +259,9 @@ class Siglip2VisionEmbeddings(nn.Module):
             out_features=self.embed_dim,
         )
 
-        self.num_patches = (self.image_size // self.patch_size) ** 2
-        self.num_positions = self.num_patches
-        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
-
-        self.position_embedding_size = int(self.num_positions**0.5)
+        self.num_patches = config.num_patches
+        self.position_embedding_size = int(self.num_patches**0.5)
+        self.position_embedding = nn.Embedding(self.num_patches, self.embed_dim)
 
     @staticmethod
     def _sample_positional_embeddings_unbatched(
