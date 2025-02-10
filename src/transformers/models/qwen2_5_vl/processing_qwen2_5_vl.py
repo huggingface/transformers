@@ -26,9 +26,10 @@
 from typing import List, Union
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, VideoInput
+from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...video_utils import VideoInput
 
 
 class Qwen2_5_VLVideosProcessorKwargs(VideosKwargs, total=False):

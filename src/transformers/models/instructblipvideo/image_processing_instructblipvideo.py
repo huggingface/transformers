@@ -29,15 +29,14 @@ from ...image_utils import (
     ChannelDimension,
     ImageInput,
     PILImageResampling,
-    VideoInput,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_batched_videos,
     to_numpy_array,
     valid_images,
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, filter_out_non_signature_kwargs, logging
+from ...video_utils import VideoInput, make_batched_videos
 
 
 logger = logging.get_logger(__name__)

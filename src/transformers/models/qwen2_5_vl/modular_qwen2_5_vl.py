@@ -48,10 +48,11 @@ from ...activations import ACT2FN
 from ...cache_utils import StaticCache
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, VideoInput
+from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, Unpack, VideosKwargs
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import is_flash_attn_2_available, is_torchdynamo_compiling
+from ...video_utils import VideoInput
 
 
 if is_flash_attn_2_available():

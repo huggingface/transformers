@@ -20,7 +20,7 @@ import os
 from typing import List, Optional, Union
 
 from ...image_processing_utils import BatchFeature
-from ...image_utils import VideoInput
+from ...video_utils import VideoInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import (
     AddedToken,
