@@ -4819,7 +4819,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         renamed_loaded_keys = list(
             cls._fix_state_dict_keys_on_load({key: "" for key in loaded_state_dict_keys}, key_mapping).keys()
         )
-        # The weight_map has to be changed accordingly to match the keys that will be loaded, then renamed
+        # The weight_map has to be changed accordingly to match the keys that will be loaded, then renamed.
+        # Note that the device_map in contrary is expected to be in the format of the model weights directly, so we don't change it
         if sharded_metadata is not None and "weight_map" in sharded_metadata.keys():
             sharded_metadata["weight_map"] = cls._fix_state_dict_keys_on_load(
                 sharded_metadata["weight_map"], key_mapping
