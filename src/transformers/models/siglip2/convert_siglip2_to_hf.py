@@ -16,13 +16,13 @@
 
 URL: https://github.com/google-research/big_vision/tree/main
 """
-import re
+
 import argparse
 import collections
 import os
+import re
 
 import numpy as np
-import requests
 import torch
 from PIL import Image, ImageDraw
 
@@ -34,7 +34,7 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
-config_options = {
+COMMON_CONFIG_PARAMS = {
     "base": {
         "hidden_size": 768,
         "intermediate_size": 3072,
@@ -49,13 +49,13 @@ config_options = {
     },
 }
 
-model_name_to_checkpoint = {
+MODEL_NAME_TO_CHECKPOINT_PATH = {
     # base checkpoints
     "siglip2-base-patch-16-naflex-256": "./checkpoints/siglip2/siglip2_b16_naflex.npz",
 }
 
 # fmt: off
-expected_outputs = {
+EXPECTED_OUTPUTS = {
     "siglip2-base-patch-16-naflex-256": torch.tensor([
         [  1.0775,   0.0974,  -1.7726],
         [ -4.3421,  -6.1043,  -2.1243],
@@ -98,6 +98,8 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"params/img/MAPHead_0/MlpBlock_0/Dense_1/bias":                                                        r"vision_model.head.mlp.fc2.bias",
     r"params/img/MAPHead_0/MultiHeadDotProductAttention_0/out/kernel":                                      r"vision_model.head.attention.out_proj.weight",
     r"params/img/MAPHead_0/MultiHeadDotProductAttention_0/out/bias":                                        r"vision_model.head.attention.out_proj.bias",
+    r"params/img/MAPHead_0/MultiHeadDotProductAttention_0/qkv/kernel":                                      r"vision_model.head.attention.in_proj_weight",
+    r"params/img/MAPHead_0/MultiHeadDotProductAttention_0/qkv/bias":                                        r"vision_model.head.attention.in_proj_bias",
     # Text embeddings
     r"params/txt/Embed_0/embedding":                                                                        r"text_model.embeddings.token_embedding.weight",
     r"params/txt/pos_embedding":                                                                            r"text_model.embeddings.position_embedding.weight",
@@ -124,12 +126,21 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 # fmt: on
 
 
+# --------------------------------------------------------------------------------------------
+# Model objects: configuration, tokenizer, image processor
+# --------------------------------------------------------------------------------------------
+
+
 def get_siglip2_config(model_name: str) -> Siglip2Config:
+    """
+    Create a configuration for the Siglip2 model based on the model name.
+    """
+
     _, variant, _, patch_size, _, num_patches = model_name.split("-")
     patch_size = int(patch_size)
     num_patches = int(num_patches)
 
-    common_options = config_options[variant]
+    common_options = COMMON_CONFIG_PARAMS[variant]
     vision_config = {
         "patch_size": patch_size,
         "num_patches": num_patches,
@@ -174,7 +185,33 @@ def get_siglip2_image_processor(patch_size: int, max_num_patches: int) -> Siglip
     return image_processor
 
 
-def split_to_layers(state_dict):
+# --------------------------------------------------------------------------------------------
+# Helper functions for state dict conversion
+# --------------------------------------------------------------------------------------------
+
+
+def flatten_nested_dict(params: dict, parent_key: str = "", sep: str = "/") -> dict:
+    """
+    Flatten a nested original checkpoint dictionary into a flat dictionary.
+    """
+    items = []
+    for k, v in params.items():
+        new_key = parent_key + sep + k if parent_key else k
+        if isinstance(v, collections.abc.MutableMapping):
+            items.extend(flatten_nested_dict(v, new_key, sep=sep).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
+
+
+def split_encoderblock_layers(state_dict: dict) -> dict:
+    """
+    Split the encoderblock weight into layers. In some cases they are concatenated in
+    the original checkpoints.
+    """
+    # Make shallow copy
+    state_dict = state_dict.copy()
+    # Split encoderblock weight into layers
     keys = list(state_dict.keys())
     for key in keys:
         if "/encoderblock/" in key:
@@ -185,83 +222,28 @@ def split_to_layers(state_dict):
     return state_dict
 
 
-def read_in_q_k_v_head(state_dict, config):
-    # read in individual input projection layers
-    key_proj_weight = (
-        state_dict.pop("params/img/MAPHead_0/MultiHeadDotProductAttention_0/key/kernel")
-        .reshape(-1, config.vision_config.hidden_size)
-        .T
-    )
-    key_proj_bias = state_dict.pop("params/img/MAPHead_0/MultiHeadDotProductAttention_0/key/bias").reshape(-1)
-    value_proj_weight = (
-        state_dict.pop("params/img/MAPHead_0/MultiHeadDotProductAttention_0/value/kernel")
-        .reshape(-1, config.vision_config.hidden_size)
-        .T
-    )
-    value_proj_bias = state_dict.pop("params/img/MAPHead_0/MultiHeadDotProductAttention_0/value/bias").reshape(-1)
-    query_proj_weight = (
-        state_dict.pop("params/img/MAPHead_0/MultiHeadDotProductAttention_0/query/kernel")
-        .reshape(-1, config.vision_config.hidden_size)
-        .T
-    )
-    query_proj_bias = state_dict.pop("params/img/MAPHead_0/MultiHeadDotProductAttention_0/query/bias").reshape(-1)
+def merge_qkv_for_head(state_dict: dict, config: Siglip2Config) -> dict:
+    """
+    Merge the q/k/v weights and biases for the attention head.
+    """
+    # Make shallow copy
+    state_dict = state_dict.copy()
+    # Read and process q/k/v weights and biases
+    qkv_weights, qkv_biases = [], []
+    for name in ["query", "key", "value"]:
+        prefix = f"params/img/MAPHead_0/MultiHeadDotProductAttention_0/{name}"
+        weight = state_dict.pop(f"{prefix}/kernel").reshape(-1, config.vision_config.hidden_size)
+        bias = state_dict.pop(f"{prefix}/bias").reshape(-1)
+        qkv_weights.append(weight)
+        qkv_biases.append(bias)
 
-    # next, add them to the state dict as a single matrix + vector
-    state_dict["vision_model.head.attention.in_proj_weight"] = torch.from_numpy(
-        np.concatenate([query_proj_weight, key_proj_weight, value_proj_weight], axis=0)
-    )
-    state_dict["vision_model.head.attention.in_proj_bias"] = torch.from_numpy(
-        np.concatenate([query_proj_bias, key_proj_bias, value_proj_bias], axis=0)
-    )
+    # Combine into single tensors
+    state_dict["params/img/MAPHead_0/MultiHeadDotProductAttention_0/qkv/kernel"] = np.concatenate(qkv_weights, axis=1)
+    state_dict["params/img/MAPHead_0/MultiHeadDotProductAttention_0/qkv/bias"] = np.concatenate(qkv_biases, axis=0)
+    return state_dict
 
 
-def create_image(width, height):
-    image = Image.new('RGB', (width, height), color='red')
-    draw = ImageDraw.Draw(image)
-    center_x = image.width // 2
-    center_y = image.height // 2
-    radius = min(center_x, center_y) // 8 * 7
-    draw.ellipse(
-        (center_x - radius, center_y - radius, center_x + radius, center_y + radius),
-        fill='blue',
-        outline='green',
-        width=image.width // 20,
-    )
-    return image
-
-
-def prepare_inputs():
-    text = [
-        'circle',
-        'ellipsoid',
-        'blue circle on red background',
-        'blue circle with green border on red background',
-        'green circle on red background',
-        'a dog',
-        'a blue dog with a green border on a red background',
-    ]
-    img224 = create_image(224, 224)
-    img1024 = create_image(1024, 1024)
-    img224_1024 = create_image(1024, 224)
-
-    images = [img224, img1024, img224_1024]
-    return text, images
-
-
-def flatten_nested_dict(params, parent_key="", sep="/"):
-    items = []
-
-    for k, v in params.items():
-        new_key = parent_key + sep + k if parent_key else k
-
-        if isinstance(v, collections.abc.MutableMapping):
-            items.extend(flatten_nested_dict(v, new_key, sep=sep).items())
-        else:
-            items.append((new_key, v))
-    return dict(items)
-
-
-def convert_old_keys_to_new_keys(state_dict_keys: list):
+def convert_old_keys_to_new_keys(state_dict_keys: list) -> dict:
     """
     This function should be applied only once, on the concatenated keys to efficiently rename using
     the key mappings.
@@ -279,6 +261,55 @@ def convert_old_keys_to_new_keys(state_dict_keys: list):
     return output_dict
 
 
+# --------------------------------------------------------------------------------------------
+# Helper functions for model verification
+# --------------------------------------------------------------------------------------------
+
+
+def create_image(width, height):
+    """
+    Helper function to create an image with a blue circle on a red background.
+    """
+    image = Image.new("RGB", (width, height), color="red")
+    draw = ImageDraw.Draw(image)
+    center_x = image.width // 2
+    center_y = image.height // 2
+    radius = min(center_x, center_y) // 8 * 7
+    draw.ellipse(
+        (center_x - radius, center_y - radius, center_x + radius, center_y + radius),
+        fill="blue",
+        outline="green",
+        width=image.width // 20,
+    )
+    return image
+
+
+def prepare_inputs():
+    """
+    Prepare inputs for the model.
+    """
+    text = [
+        "circle",
+        "ellipsoid",
+        "blue circle on red background",
+        "blue circle with green border on red background",
+        "green circle on red background",
+        "a dog",
+        "a blue dog with a green border on a red background",
+    ]
+    img224 = create_image(224, 224)
+    img1024 = create_image(1024, 1024)
+    img224_1024 = create_image(1024, 224)
+
+    images = [img224, img1024, img224_1024]
+    return text, images
+
+
+# --------------------------------------------------------------------------------------------
+# Convert model
+# --------------------------------------------------------------------------------------------
+
+
 @torch.no_grad()
 def convert_siglip2_checkpoint(model_name, pytorch_dump_folder_path, verify_logits=True, push_to_hub=False):
     """
@@ -292,12 +323,13 @@ def convert_siglip2_checkpoint(model_name, pytorch_dump_folder_path, verify_logi
     # Convert model
     # --------------------------------------------------------------------------------------------
 
-    checkpoint = model_name_to_checkpoint[model_name]
+    checkpoint = MODEL_NAME_TO_CHECKPOINT_PATH[model_name]
 
     print(f"Loading checkpoint from {checkpoint}...")
     data = np.load(checkpoint)
     state_dict = flatten_nested_dict(data)
-    state_dict = split_to_layers(state_dict)
+    state_dict = split_encoderblock_layers(state_dict)
+    state_dict = merge_qkv_for_head(state_dict, config)
 
     # Rename and transform weights
     print("Renaming and transforming weights...")
@@ -308,35 +340,30 @@ def convert_siglip2_checkpoint(model_name, pytorch_dump_folder_path, verify_logi
     new_state_dict = {}
     for original_key in original_keys:
         new_key = hf_keys[original_key]
-        parameter = state_dict[original_key] # change to pop
-        
+        parameter = state_dict.pop(original_key)
+
         if any(layer_name in new_key for layer_name in ("out_proj", "q_proj", "k_proj", "v_proj")):
             if "vision" in new_key:
                 parameter = parameter.reshape(-1, config.vision_config.hidden_size)
             elif "text" in new_key:
                 parameter = parameter.reshape(-1, config.text_config.hidden_size)
-        if "patch_embedding.weight" in new_key:
-            parameter = parameter.T
-        elif new_key.endswith("weight") and "position_embedding" not in new_key and "token_embedding" not in new_key:
-            parameter = parameter.T
         if "position_embedding" in new_key and "vision" in new_key:
             parameter = parameter.reshape(-1, config.vision_config.hidden_size)
         if "position_embedding" in new_key and "text" in new_key:
             parameter = parameter.reshape(-1, config.text_config.hidden_size)
+        if "patch_embedding.weight" in new_key:
+            parameter = parameter.T
+        elif new_key.endswith("weight") and "position_embedding" not in new_key and "token_embedding" not in new_key:
+            parameter = parameter.T
         if new_key.endswith("bias"):
             parameter = parameter.reshape(-1)
 
         new_state_dict[new_key] = torch.from_numpy(parameter)
 
-    state_dict = new_state_dict
-
-    # qkv matrices of attention pooling head need special treatment
-    read_in_q_k_v_head(state_dict, config)
-
     # load HuggingFace model
     print("Loading HuggingFace model...")
     model = Siglip2Model(config).eval()
-    model.load_state_dict(state_dict)
+    model.load_state_dict(new_state_dict)
 
     # Create processor
     print("Creating processor...")
@@ -351,7 +378,7 @@ def convert_siglip2_checkpoint(model_name, pytorch_dump_folder_path, verify_logi
         text, images = prepare_inputs()
         inputs = processor(text=text, images=images, padding="max_length", max_length=64, return_tensors="pt")
         outputs = model(**inputs)
-        torch.testing.assert_close(outputs.logits_per_text, expected_outputs[model_name], atol=1e-3, rtol=1e-3)
+        torch.testing.assert_close(outputs.logits_per_text, EXPECTED_OUTPUTS[model_name], atol=1e-3, rtol=1e-3)
 
     # Save model
     if pytorch_dump_folder_path is not None:
@@ -374,7 +401,7 @@ if __name__ == "__main__":
         "--model_name",
         default="siglip2-base-patch-16-naflex-256",
         type=str,
-        choices=model_name_to_checkpoint.keys(),
+        choices=MODEL_NAME_TO_CHECKPOINT_PATH.keys(),
         help="Name of the model you'd like to convert.",
     )
     parser.add_argument(
