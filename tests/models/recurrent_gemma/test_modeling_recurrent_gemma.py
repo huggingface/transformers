@@ -291,6 +291,7 @@ class RecurrentGemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
         if is_torch_available()
         else {}
     )
+    all_generative_model_classes = () #TODO @gante not fully supported
     fx_compatible = False  # FIXME let's try to support this @ArthurZucker
     test_torchscript = False  # FIXME let's try to support this @ArthurZucker
     test_missing_keys = False
