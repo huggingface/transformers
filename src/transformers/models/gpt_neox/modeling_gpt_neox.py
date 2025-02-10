@@ -758,6 +758,7 @@ class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 class GPTNeoXForCausalLM(GPTNeoXPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["embed_out.weight"]
     _tp_plan = {"embed_out": "colwise_rep"}
+    _pp_plan = {"embed_out": [["hidden_states"], ["logits"]]}
 
     def __init__(self, config):
         super().__init__(config)
