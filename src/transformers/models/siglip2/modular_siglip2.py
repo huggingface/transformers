@@ -1,11 +1,40 @@
 from typing import List, Optional, Union
 
+from transformers.models.siglip.configuration_siglip import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
 from transformers.models.siglip.processing_siglip import SiglipProcessor
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...tokenization_utils_base import PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
 from ...utils import TensorType
+
+
+class Siglip2TextConfig(SiglipTextConfig):
+    pass
+
+
+class Siglip2VisionConfig(SiglipVisionConfig):
+    def __init__(
+        self,
+        hidden_size=768,
+        intermediate_size=3072,
+        num_hidden_layers=12,
+        num_attention_heads=12,
+        num_channels=3,
+        num_patches=256,
+        patch_size=16,
+        hidden_act="gelu_pytorch_tanh",
+        layer_norm_eps=1e-6,
+        attention_dropout=0.0,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self.num_patches = num_patches
+        del self.image_size
+
+
+class Siglip2Config(SiglipConfig):
+    pass
 
 
 # Update: docstring SiglipTokenizer->GemmaTokenizerFast
@@ -23,6 +52,7 @@ class Siglip2Processor(SiglipProcessor):
         tokenizer ([`GemmaTokenizerFast`]):
             The tokenizer is a required input.
     """
+
     image_processor_class = "Siglip2ImageProcessor"
     tokenizer_class = "GemmaTokenizerFast"
 
@@ -85,4 +115,5 @@ class Siglip2Processor(SiglipProcessor):
         """
         return super().__call__(text, images, padding, truncation, max_length, return_tensors)
 
-__all__ = ["Siglip2Processor"]
+
+__all__ = ["Siglip2Processor", "Siglip2Config", "Siglip2TextConfig", "Siglip2VisionConfig"]
