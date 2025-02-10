@@ -70,6 +70,7 @@ PRIVATE_MODELS = [
     "Pop2PianoStack",
     "Qwen2AudioEncoder",
     "Qwen2VisionTransformerPretrainedModel",
+    "Qwen2_5_VisionTransformerPretrainedModel",
     "SwitchTransformersStack",
     "TFDPRSpanPredictor",
     "MaskFormerSwinModel",
@@ -141,10 +142,13 @@ IGNORE_NON_TESTED = (
         "SeamlessM4TTextToUnitForConditionalGeneration",  # Building part of bigger (tested) model.
         "ChameleonVQVAE",  # VQVAE here is used only for encoding (discretizing) and is tested as part of bigger model
         "Qwen2VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2VLForConditionalGeneration.
+        "Qwen2_5_VLModel",  # Building part of bigger (tested) model. Tested implicitly through Qwen2_5_VLForConditionalGeneration.
         "MllamaTextModel",  # Building part of bigger (tested) model. # TODO: add tests
         "MllamaVisionModel",  # Building part of bigger (tested) model. # TODO: add tests
         "MolmoForCausalLM",  # Building part of bigger (tested) model.
         "MolmoTextModel",  # Building part of bigger (tested) model.
+        "Emu3VQVAE",  # Building part of bigger (tested) model
+        "Emu3TextModel",  # Building part of bigger (tested) model
     ]
 )
 
@@ -340,6 +344,8 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "CLIPTextModel",
     "MoshiForConditionalGeneration",  # no auto class for speech-to-speech
     "MolmoTextModel",
+    "Emu3VQVAE",  # no autoclass for VQ-VAE models
+    "Emu3TextModel",  # Building part of bigger (tested) model
 ]
 
 # DO NOT edit this list!
@@ -949,7 +955,6 @@ DEPRECATED_OBJECTS = [
     "LineByLineTextDataset",
     "LineByLineWithRefDataset",
     "LineByLineWithSOPTextDataset",
-    "LogitsWarper",
     "NerPipeline",
     "PretrainedBartModel",
     "PretrainedFSMTModel",
@@ -977,6 +982,7 @@ DEPRECATED_OBJECTS = [
     "xnli_processors",
     "xnli_tasks_num_labels",
     "TFTrainingArguments",
+    "OwlViTFeatureExtractor",
 ]
 
 # Exceptionally, some objects should not be documented after all rules passed.
@@ -1007,11 +1013,6 @@ UNDOCUMENTED_OBJECTS = [
 
 # This list should be empty. Objects in it should get their own doc page.
 SHOULD_HAVE_THEIR_OWN_PAGE = [
-    # Benchmarks
-    "PyTorchBenchmark",
-    "PyTorchBenchmarkArguments",
-    "TensorFlowBenchmark",
-    "TensorFlowBenchmarkArguments",
     "AutoBackbone",
     "BeitBackbone",
     "BitBackbone",

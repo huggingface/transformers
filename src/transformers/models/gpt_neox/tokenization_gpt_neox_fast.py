@@ -14,10 +14,9 @@
 # limitations under the License.
 """Tokenization classes for GPTNeoX."""
 
-import json
 from typing import List, Optional, Tuple
 
-from tokenizers import pre_tokenizers, processors
+from tokenizers import processors
 
 from ...tokenization_utils_fast import PreTrainedTokenizerFast
 from ...utils import logging
@@ -121,14 +120,6 @@ class GPTNeoXTokenizerFast(PreTrainedTokenizerFast):
         self._add_bos_token = add_bos_token
         self._add_eos_token = add_eos_token
         self.update_post_processor()
-
-        pre_tok_state = json.loads(self.backend_tokenizer.pre_tokenizer.__getstate__())
-        if pre_tok_state.get("add_prefix_space", add_prefix_space) != add_prefix_space:
-            pre_tok_class = getattr(pre_tokenizers, pre_tok_state.pop("type"))
-            pre_tok_state["add_prefix_space"] = add_prefix_space
-            self.backend_tokenizer.pre_tokenizer = pre_tok_class(**pre_tok_state)
-
-        self.add_prefix_space = add_prefix_space
 
     @property
     def add_eos_token(self):

@@ -33,7 +33,7 @@ if is_vision_available():
     from transformers import MobileViTImageProcessor
 
 
-class MobileViTImageProcessingTester(unittest.TestCase):
+class MobileViTImageProcessingTester:
     def __init__(
         self,
         parent,
@@ -48,7 +48,6 @@ class MobileViTImageProcessingTester(unittest.TestCase):
         crop_size=None,
         do_flip_channel_order=True,
     ):
-        super().__init__()
         size = size if size is not None else {"shortest_edge": 20}
         crop_size = crop_size if crop_size is not None else {"height": 18, "width": 18}
         self.parent = parent
