@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -273,30 +273,6 @@ class LlavaOnevisionVideoProcessor(BaseVideoProcessor):
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(videos[0])
-
-        pixel_values = []
-        # for video in videos:
-        #     video = to_numpy_array(video)
-        #     # if do_convert_rgb:
-        #     #     video = self.convert_to_rgb(video)
-        #
-        #     if do_rescale and is_scaled_image(video):
-        #         logger.warning_once(
-        #             "It looks like you are trying to rescale already rescaled videos. If the input"
-        #             " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-        #         )
-        #
-        #     # if do_resize:
-        #     #     video = self.resize(video, size=size_tuple, resample=resample, input_data_format=input_data_format)
-        #
-        #     if do_rescale:
-        #         video = self.rescale(video, scale=rescale_factor, input_data_format=input_data_format)
-        #
-        #     if do_normalize:
-        #         video = self.normalize(video, mean=image_mean, std=image_std, input_data_format=input_data_format)
-        #
-        #     video = to_channel_dimension_format(video, data_format, input_channel_dim=input_data_format)
-        #     pixel_values.append(video)
 
         pixel_values = [
             self._preprocess(

@@ -32,7 +32,9 @@ from .image_utils import (
     SizeDict,
     get_image_size_for_max_height_width,
     validate_fast_preprocess_arguments,
+    validate_kwargs,
 )
+from .processing_utils import Unpack
 from .utils import (
     TensorType,
     add_start_docstrings,
@@ -480,11 +482,11 @@ class BaseVideoProcessorFast(BaseVideoProcessor):
     def preprocess(
         self,
         videos: VideoInput,
-        **kwargs,  #: Unpack[DefaultFastImageProcessorPreprocessKwargs],
+        **kwargs: Unpack[DefaultFastVideoProcessorPreprocessKwargs],
     ) -> BatchFeature:
-        # validate_kwargs(
-        #     captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_preprocess_kwargs.__annotations__.keys()
-        # )
+        validate_kwargs(
+            captured_kwargs=kwargs.keys(), valid_processor_keys=self.valid_preprocess_kwargs.__annotations__.keys()
+        )
 
         # Set default kwargs from self. This ensures that if a kwarg is not provided
         # by the user, it gets its default value from the instance, or is set to None.

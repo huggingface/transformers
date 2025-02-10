@@ -212,58 +212,6 @@ class LlavaOnevisionImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
             # Image processor should return same pixel values, independently of input format
             self.assertTrue((encoded_images_nested == encoded_images).all())
 
-    def test_call_pil_video(self):
-        # Initialize image_processing
-        video_processing = self.video_processing_class(**self.image_processor_dict)
-        # create random numpy tensors
-        video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=True)
-        for video in video_inputs:
-            self.assertIsInstance(video[0], Image.Image)
-
-        encoded_videos = video_processing(video_inputs[0], return_tensors="pt").pixel_values_videos
-        expected_output_video_shape = (1, 8, 3, 20, 20)
-        self.assertEqual(tuple(encoded_videos.shape), expected_output_video_shape)
-
-        # Test batched
-        encoded_videos = video_processing(video_inputs, return_tensors="pt").pixel_values_videos
-        expected_output_video_shape = (7, 8, 3, 20, 20)
-        self.assertEqual(tuple(encoded_videos.shape), expected_output_video_shape)
-
-    def test_call_numpy_video(self):
-        # Initialize image_processing
-        video_processing = self.video_processing_class(**self.image_processor_dict)
-        # create random numpy tensors
-        video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=True, numpify=True)
-        for video in video_inputs:
-            self.assertIsInstance(video, np.ndarray)
-
-        encoded_videos = video_processing(video_inputs[0], return_tensors="pt").pixel_values_videos
-        expected_output_video_shape = (1, 8, 3, 20, 20)
-        self.assertEqual(tuple(encoded_videos.shape), expected_output_video_shape)
-
-        # Test batched
-        encoded_videos = video_processing(video_inputs, return_tensors="pt").pixel_values_videos
-        expected_output_video_shape = (7, 8, 3, 20, 20)
-        self.assertEqual(tuple(encoded_videos.shape), expected_output_video_shape)
-
-    def test_call_pytorch_video(self):
-        # Initialize image_processing
-        video_processing = self.video_processing_class(**self.image_processor_dict)
-        # create random PyTorch tensors
-        video_inputs = self.image_processor_tester.prepare_video_inputs(equal_resolution=True, torchify=True)
-        for video in video_inputs:
-            self.assertIsInstance(video, torch.Tensor)
-
-        # Test not batched input
-        encoded_videos = video_processing(video_inputs[0], return_tensors="pt").pixel_values_videos
-        expected_output_video_shape = (1, 8, 3, 20, 20)
-        self.assertEqual(tuple(encoded_videos.shape), expected_output_video_shape)
-
-        # Test batched
-        encoded_videos = video_processing(video_inputs, return_tensors="pt").pixel_values_videos
-        expected_output_video_shape = (7, 8, 3, 20, 20)
-        self.assertEqual(tuple(encoded_videos.shape), expected_output_video_shape)
-
     @unittest.skip(
         reason="LlavaOnevisionImageProcessorFast doesn't compile (infinitely) when using class transforms"
     )  # FIXME yoni

@@ -52,8 +52,8 @@ INIT_SERVICE_KWARGS = [
 ]
 
 
-# For now we start with slow video processor which processed each frame with image processor
-# TODO: @raushan integrate video processor with torchvision to process the whole video at once
+# Uses the underlying transforms from ImageProcessor adapted to handle any-dim input
+# and loops over each video, except for `self.resize`
 class BaseVideoProcessor(ImageProcessingMixin):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
@@ -273,7 +273,7 @@ class BaseVideoProcessor(ImageProcessingMixin):
 
         # Grayscale video has 1 channel, we repeat 3 times for each channel
         elif video.shape[-1] == 1:
-            return video.repeat(1, 1, 1, 3)
+            return video.repeat(3, axis=-1)
 
         # No transparency
         elif not (video[..., 3] < 255).any():

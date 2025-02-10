@@ -372,7 +372,7 @@ class ImageProcessingMixin(PushToHubMixin):
                     "You have image processor config saved in `preprocessor.json` file which is deprecated. "
                     "Image processor configs should be saved in their own `image_preprocessor.json` file. You can rename "
                     "the file or load and save the processor back which renames it automatically. "
-                    "Loading from `preprocessor.json` will be removed in v5.0."
+                    "Loading from `preprocessor.json` will be removed in the future."
                 )
             except EnvironmentError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted to

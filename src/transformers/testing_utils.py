@@ -72,6 +72,7 @@ from .utils import (
     is_compressed_tensors_available,
     is_cv2_available,
     is_cython_available,
+    is_decord_available,
     is_detectron2_available,
     is_eetq_available,
     is_essentia_available,
@@ -1188,6 +1189,13 @@ def require_av(test_case):
     Decorator marking a test that requires av
     """
     return unittest.skipUnless(is_av_available(), "test requires av")(test_case)
+
+
+def require_decord(test_case):
+    """
+    Decorator marking a test that requires decord
+    """
+    return unittest.skipUnless(is_decord_available(), "test requires decord")(test_case)
 
 
 def require_bitsandbytes(test_case):

@@ -330,10 +330,10 @@ def read_video_opencv(video_path: str, num_frames: Optional[int] = None, fps: Op
     total_num_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
     video_fps = video.get(cv2.CAP_PROP_FPS)
     if num_frames is None and fps is not None:
-        nframes = int(total_num_frames / video_fps * fps)
-        if nframes > total_num_frames:
+        num_frames = int(total_num_frames / video_fps * fps)
+        if num_frames > total_num_frames:
             raise ValueError(
-                f"When loading the video with fps={fps}, we identified that nframes ({nframes}) > total_frames ({total_num_frames}) ."
+                f"When loading the video with fps={fps}, we identified that num_frames ({num_frames}) > total_frames ({total_num_frames}) ."
                 f"Make sure that fps of a video is less than the requested fps for loading. Detected video_fps={video_fps}"
             )
     indices = get_uniform_frame_indices(total_num_frames, num_frames=num_frames)
@@ -369,16 +369,16 @@ def read_video_decord(video_path: str, num_frames: Optional[int] = None, fps: Op
             If not specified and `num_frames==None`, all frames are sampled.
 
     Returns:
-        np.ndarray: np array of decoded frames of shape (num_frames, height, width, num_channels).
+        np.ndarray: np array of decoded frames of shape (num_frames, height, width, 3).
     """
     vr = VideoReader(uri=video_path, ctx=cpu(0))  # decord has problems with gpu
     video_fps = vr.get_avg_fps()
     total_num_frames = len(vr)
     if num_frames is None and fps is not None:
-        nframes = int(total_num_frames / video_fps * fps)
-        if nframes > total_num_frames:
+        num_frames = int(total_num_frames / video_fps * fps)
+        if num_frames > total_num_frames:
             raise ValueError(
-                f"When loading the video with fps={fps}, we identified that nframes ({nframes}) > total_frames ({total_num_frames}) ."
+                f"When loading the video with fps={fps}, we identified that num_frames ({num_frames}) > total_frames ({total_num_frames}) ."
                 f"Make sure that fps of a video is less than the requested fps for loading. Detected video_fps={video_fps}"
             )
     indices = get_uniform_frame_indices(total_num_frames=total_num_frames, num_frames=num_frames)
@@ -401,17 +401,17 @@ def read_video_pyav(video_path: str, num_frames: Optional[int] = None, fps: Opti
             If not specified and `num_frames==None`, all frames are sampled.
 
     Returns:
-        np.ndarray: np array of decoded frames of shape (num_frames, height, width, num_channels).
+        np.ndarray: np array of decoded frames of shape (num_frames, height, width, 3).
     """
     container = av.open(video_path)
 
     total_num_frames = container.streams.video[0].frames
     video_fps = container.streams.video[0].average_rate  # should we better use `av_guess_frame_rate`?
     if num_frames is None and fps is not None:
-        nframes = int(total_num_frames / video_fps * fps)
-        if nframes > total_num_frames:
+        num_frames = int(total_num_frames / video_fps * fps)
+        if num_frames > total_num_frames:
             raise ValueError(
-                f"When loading the video with fps={fps}, we identified that nframes ({nframes}) > total_frames ({total_num_frames}) ."
+                f"When loading the video with fps={fps}, we identified that num_frames ({num_frames}) > total_frames ({total_num_frames}) ."
                 f"Make sure that fps of a video is less than the requested fps for loading. Detected video_fps={video_fps}"
             )
     indices = get_uniform_frame_indices(total_num_frames, num_frames=num_frames)
@@ -442,9 +442,9 @@ def read_video_torchvision(video_path: str, num_frames: Optional[int] = None, fp
             If not specified and `num_frames==None`, all frames are sampled.
 
     Returns:
-        np.ndarray: np array of decoded frames of shape (num_frames, height, width, num_channels).
+        np.ndarray: np array of decoded frames of shape (num_frames, height, width, 3).
     """
-    video, audio, info = torchvision_io.read_video(
+    video, _, info = torchvision_io.read_video(
         video_path,
         start_pts=0.0,
         end_pts=None,
@@ -454,10 +454,10 @@ def read_video_torchvision(video_path: str, num_frames: Optional[int] = None, fp
     video_fps = info["video_fps"]
     total_num_frames = video.size(0) - 1
     if num_frames is None and fps is not None:
-        nframes = int(total_num_frames / video_fps * fps)
-        if nframes > total_num_frames:
+        num_frames = int(total_num_frames / video_fps * fps)
+        if num_frames > total_num_frames:
             raise ValueError(
-                f"When loading the video with fps={fps}, we identified that nframes ({nframes}) > total_frames ({total_num_frames}) ."
+                f"When loading the video with fps={fps}, we identified that num_frames ({num_frames}) > total_frames ({total_num_frames}) ."
                 f"Make sure that fps of a video is less than the requested fps for loading. Detected video_fps={video_fps}"
             )
 
@@ -480,7 +480,7 @@ def load_video(
     video: Union[str, "VideoInput"],
     num_frames: Optional[int] = None,
     fps: Optional[int] = None,
-    backend: str = "opencv",
+    backend: str = "pyav",
 ) -> np.array:
     """
     Loads `video` to a numpy array.
@@ -494,11 +494,15 @@ def load_video(
             Number of frames to sample per second. Should be passed only when `num_frames=None`.
             If not specified and `num_frames==None`, all frames are sampled.
         backend (`str`, *optional*, defaults to `"opencv"`):
-            The backend to use when loading the video. Can be any of ["decord", "pyav", "opencv", "torchvision"]. Defaults to "opencv".
+            The backend to use when loading the video. Can be any of ["decord", "pyav", "opencv", "torchvision"]. Defaults to "pyav".
 
     Returns:
-        `torch.Tensor`: A torch tensor of shape (num_frames, channels, height, width).
+        `np.array`: A numpy array of shape (num_frames, channels, height, width).
     """
+
+    if fps is not None and num_frames is not None:
+        raise ValueError("`num_frames` and `fps` are mutually exclusive arguments, please use only one!")
+
     if video.startswith("https://www.youtube.com") or video.startswith("http://www.youtube.com"):
         if not is_yt_dlp_available():
             raise ImportError("To load a video from YouTube url you have  to install `yt_dlp` first.")
