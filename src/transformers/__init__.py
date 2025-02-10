@@ -775,6 +775,7 @@ _import_structure = {
     ],
     "models.siglip2": [
         "Siglip2Config",
+        "Siglip2Processor",
         "Siglip2TextConfig",
         "Siglip2VisionConfig",
     ],
@@ -5923,6 +5924,7 @@ if TYPE_CHECKING:
     )
     from .models.siglip2 import (
         Siglip2Config,
+        Siglip2Processor,
         Siglip2TextConfig,
         Siglip2VisionConfig,
     )
