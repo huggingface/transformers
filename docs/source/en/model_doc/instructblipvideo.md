@@ -61,6 +61,11 @@ The attributes can be obtained from model config, as `model.config.num_query_tok
 [[autodoc]] InstructBlipVideoVideoProcessor
     - preprocess
 
+## InstructBlipVideoVideoProcessorFast
+
+[[autodoc]] InstructBlipVideoVideoProcessorFast
+    - preprocess
+
 ## InstructBlipVideoImageProcessor
 
 [[autodoc]] InstructBlipVideoImageProcessor
