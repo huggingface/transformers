@@ -606,9 +606,9 @@ _import_structure = {
         "MgpstrTokenizer",
     ],
     "models.mimi": ["MimiConfig"],
+    "models.minimax_text_01": ["MiniMaxText01Config"],
     "models.mistral": ["MistralConfig"],
     "models.mixtral": ["MixtralConfig"],
-    "models.minimax_text_01": ["MiniMaxText01Config"],
     "models.mllama": [
         "MllamaConfig",
         "MllamaProcessor",
@@ -2884,6 +2884,16 @@ else:
             "MimiPreTrainedModel",
         ]
     )
+    _import_structure["models.minimax_text_01"].extend(
+        [
+            "MiniMaxText01ForCausalLM",
+            "MiniMaxText01ForQuestionAnswering",
+            "MiniMaxText01ForSequenceClassification",
+            "MiniMaxText01ForTokenClassification",
+            "MiniMaxText01Model",
+            "MiniMaxText01PreTrainedModel",
+        ]
+    )
     _import_structure["models.mistral"].extend(
         [
             "MistralForCausalLM",
@@ -2902,16 +2912,6 @@ else:
             "MixtralForTokenClassification",
             "MixtralModel",
             "MixtralPreTrainedModel",
-        ]
-    )
-    _import_structure["models.minimax_text_01"].extend(
-        [
-            "MiniMaxText01ForCausalLM",
-            "MiniMaxText01ForQuestionAnswering",
-            "MiniMaxText01ForSequenceClassification",
-            "MiniMaxText01ForTokenClassification",
-            "MiniMaxText01Model",
-            "MiniMaxText01PreTrainedModel",
         ]
     )
     _import_structure["models.mllama"].extend(

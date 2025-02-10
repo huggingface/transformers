@@ -496,12 +496,12 @@
         title: MegatronBERT
       - local: model_doc/megatron_gpt2
         title: MegatronGPT2
+      - local: model_doc/minimax_text_01
+        title: MiniMaxText01
       - local: model_doc/mistral
         title: Mistral
       - local: model_doc/mixtral
         title: Mixtral
-      - local: model_doc/minimax_text_01
-        title: MiniMaxText01
       - local: model_doc/mluke
         title: mLUKE
       - local: model_doc/mobilebert

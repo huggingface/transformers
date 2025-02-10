@@ -40,7 +40,7 @@ class MiniMaxText01Config(PretrainedConfig):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 14336):
             Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
+        num_hidden_layers (`int`, *optional*, defaults to 12):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer encoder.
@@ -90,7 +90,7 @@ class MiniMaxText01Config(PretrainedConfig):
             The aux loss factor for the total loss.
         router_jitter_noise (`float`, *optional*, defaults to 0.0):
             Amount of noise to add to the router.
-        attn_type_list (`<fill_type>`, *optional*): <fill_docstring>
+        attn_type_list (`<fill_type>`, *optional*, defaults to `[0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1]`): <fill_docstring>
         block_size (`<fill_type>`, *optional*, defaults to 256): <fill_docstring>
         residual_post_norm (`<fill_type>`, *optional*, defaults to `False`): <fill_docstring>
         layernorm_attention_alpha (`<fill_type>`, *optional*, defaults to 1): <fill_docstring>

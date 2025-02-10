@@ -306,6 +306,13 @@ else:
             ("megatron-bert", ("BertTokenizer", "BertTokenizerFast" if is_tokenizers_available() else None)),
             ("mgp-str", ("MgpstrTokenizer", None)),
             (
+                "minimax_text_01",
+                (
+                    "GPT2Tokenizer" if is_sentencepiece_available() else None,
+                    "GPT2TokenizerFast" if is_tokenizers_available() else None,
+                ),
+            ),
+            (
                 "mistral",
                 (
                     "LlamaTokenizer" if is_sentencepiece_available() else None,
@@ -317,13 +324,6 @@ else:
                 (
                     "LlamaTokenizer" if is_sentencepiece_available() else None,
                     "LlamaTokenizerFast" if is_tokenizers_available() else None,
-                ),
-            ),
-            (
-                "minimax_text_01",
-                (
-                    "GPT2Tokenizer" if is_sentencepiece_available() else None,
-                    "GPT2TokenizerFast" if is_tokenizers_available() else None,
                 ),
             ),
             ("mllama", ("LlamaTokenizer", "LlamaTokenizerFast" if is_tokenizers_available() else None)),
