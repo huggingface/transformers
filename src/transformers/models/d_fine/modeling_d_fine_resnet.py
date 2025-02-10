@@ -65,14 +65,14 @@ class DFineResNetPreTrainedModel(PreTrainedModel):
             nn.init.constant_(module.bias, 0)
 
 
-class LearnableAffineBlock(nn.Module):
+class DFineResNetLearnableAffineBlock(nn.Module):
     def __init__(self, scale_value=1.0, bias_value=0.0):
         super().__init__()
         self.scale = nn.Parameter(torch.tensor([scale_value]), requires_grad=True)
         self.bias = nn.Parameter(torch.tensor([bias_value]), requires_grad=True)
 
-    def forward(self, x):
-        return self.scale * x + self.bias
+    def forward(self, hidden_state):
+        return self.scale * hidden_state + self.bias
 
 
 class DFineResNetConvLayer(nn.Module):
@@ -99,7 +99,7 @@ class DFineResNetConvLayer(nn.Module):
         self.normalization = nn.BatchNorm2d(out_channels)
         self.activation = ACT2FN[activation] if activation is not None else nn.Identity()
         if activation and use_lab:
-            self.lab = LearnableAffineBlock()
+            self.lab = DFineResNetLearnableAffineBlock()
         else:
             self.lab = nn.Identity()
 
@@ -117,13 +117,13 @@ class DFineResNetConvLayerLight(nn.Module):
         self.conv1 = DFineResNetConvLayer(in_chs, out_chs, kernel_size=1, activation=None, use_lab=use_lab)
         self.conv2 = DFineResNetConvLayer(out_chs, out_chs, kernel_size=kernel_size, groups=out_chs, use_lab=use_lab)
 
-    def forward(self, x):
-        x = self.conv1(x)
-        x = self.conv2(x)
-        return x
+    def forward(self, hidden_state):
+        hidden_state = self.conv1(hidden_state)
+        hidden_state = self.conv2(hidden_state)
+        return hidden_state
 
 
-class EseModule(nn.Module):
+class DFineResNetEseModule(nn.Module):
     def __init__(self, chs):
         super().__init__()
         self.conv = nn.Conv2d(
@@ -135,12 +135,12 @@ class EseModule(nn.Module):
         )
         self.sigmoid = nn.Sigmoid()
 
-    def forward(self, x):
-        identity = x
-        x = x.mean((2, 3), keepdim=True)
-        x = self.conv(x)
-        x = self.sigmoid(x)
-        return torch.mul(identity, x)
+    def forward(self, hidden_state):
+        identity = hidden_state
+        hidden_state = hidden_state.mean((2, 3), keepdim=True)
+        hidden_state = self.conv(hidden_state)
+        hidden_state = self.sigmoid(hidden_state)
+        return torch.mul(identity, hidden_state)
 
 
 class DFineResNetEmbeddings(nn.Module):
@@ -197,16 +197,16 @@ class DFineResNetEmbeddings(nn.Module):
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
-        x = self.stem1(pixel_values)
-        x = F.pad(x, (0, 1, 0, 1))
-        x2 = self.stem2a(x)
-        x2 = F.pad(x2, (0, 1, 0, 1))
-        x2 = self.stem2b(x2)
-        x1 = self.pool(x)
-        x = torch.cat([x1, x2], dim=1)
-        x = self.stem3(x)
-        x = self.stem4(x)
-        return x
+        embedding = self.stem1(pixel_values)
+        embedding = F.pad(embedding, (0, 1, 0, 1))
+        emb_stem_2a = self.stem2a(embedding)
+        emb_stem_2a = F.pad(emb_stem_2a, (0, 1, 0, 1))
+        emb_stem_2a = self.stem2b(emb_stem_2a)
+        pooled_emb = self.pool(embedding)
+        embedding = torch.cat([pooled_emb, emb_stem_2a], dim=1)
+        embedding = self.stem3(embedding)
+        embedding = self.stem4(embedding)
+        return embedding
 
 
 class DFineResNetBasicLayer(nn.Module):
@@ -256,24 +256,24 @@ class DFineResNetBasicLayer(nn.Module):
             )
         else:
             aggregation_conv = DFineResNetConvLayer(total_chs, out_chs, kernel_size=1, stride=1, use_lab=use_lab)
-            att = EseModule(out_chs)
+            att = DFineResNetEseModule(out_chs)
             self.aggregation = nn.Sequential(
                 aggregation_conv,
                 att,
             )
         self.drop_path = nn.Dropout(drop_path) if drop_path else nn.Identity()
 
-    def forward(self, x):
-        identity = x
-        output = [x]
+    def forward(self, hidden_state):
+        identity = hidden_state
+        output = [hidden_state]
         for layer in self.layers:
-            x = layer(x)
-            output.append(x)
-        x = torch.cat(output, dim=1)
-        x = self.aggregation(x)
+            hidden_state = layer(hidden_state)
+            output.append(hidden_state)
+        hidden_state = torch.cat(output, dim=1)
+        hidden_state = self.aggregation(hidden_state)
         if self.residual:
-            x = self.drop_path(x) + identity
-        return x
+            hidden_state = self.drop_path(hidden_state) + identity
+        return hidden_state
 
 
 class DFineResNetStage(nn.Module):
@@ -317,10 +317,10 @@ class DFineResNetStage(nn.Module):
             )
         self.blocks = nn.Sequential(*blocks_list)
 
-    def forward(self, x):
-        x = self.downsample(x)
-        x = self.blocks(x)
-        return x
+    def forward(self, hidden_state):
+        hidden_state = self.downsample(hidden_state)
+        hidden_state = self.blocks(hidden_state)
+        return hidden_state
 
 
 class DFineResNetEncoder(nn.Module):
