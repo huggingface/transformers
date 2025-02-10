@@ -28,7 +28,7 @@ from huggingface_hub import hf_hub_download
 from numpy import load
 from PIL import Image
 
-from transformers import Siglip2Config, SiglipImageProcessor, Siglip2Model, SiglipProcessor, SiglipTokenizer
+from transformers import Siglip2Config, Siglip2Model, SiglipImageProcessor, SiglipProcessor, SiglipTokenizer
 from transformers.utils import logging
 
 
@@ -187,7 +187,7 @@ def rename_key(dct, old, new, config):
         val = val.reshape(-1, config.text_config.hidden_size)
 
     if "patch_embedding.weight" in new:
-        val = val.T #transpose(3, 2, 0, 1)
+        val = val.T  # transpose(3, 2, 0, 1)
     elif new.endswith("weight") and "position_embedding" not in new and "token_embedding" not in new:
         val = val.T
 

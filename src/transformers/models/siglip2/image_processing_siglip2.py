@@ -13,16 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Image processor class for SigLIP."""
-import math
-import numpy as np
-from functools import lru_cache
-from typing import Dict, List, Optional, Union, Tuple
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
+import math
+from functools import lru_cache
+from typing import Dict, List, Optional, Tuple, Union
+
+import numpy as np
+
+from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import (
     convert_to_rgb,
     resize,
-    to_channel_dimension_format,
 )
 from ...image_utils import (
     ChannelDimension,
@@ -47,19 +48,15 @@ if is_vision_available():
 
 @lru_cache(maxsize=256)
 def get_image_size_for_max_number_of_patches(
-    image_height: int,
-    image_width: int,
-    patch_size: int,
-    max_number_of_patches: int,
-    eps: float = 1e-5
+    image_height: int, image_width: int, patch_size: int, max_number_of_patches: int, eps: float = 1e-5
 ) -> Tuple[int, int]:
     """
     Determine image size based on max number of patches, ensure dimensions are divisible by patch size and image is at least 1 patch.
-    
+
     Args:
         image_height (`int`):
             Original image height.
-        image_width (`int`): 
+        image_width (`int`):
             Original image width.
         patch_size (`int`):
             Patch size for processing.
@@ -67,7 +64,7 @@ def get_image_size_for_max_number_of_patches(
             Maximum number of patches.
         eps (`float`):
             Small threshold for binary search.
-    
+
     Returns:
         Tuple: (target_height, target_width)
     """
@@ -77,7 +74,7 @@ def get_image_size_for_max_number_of_patches(
         scaled_size = math.ceil(scaled_size / patch_size) * patch_size  # make divisible by patch_size
         scaled_size = max(patch_size, scaled_size)  # ensure at least 1 patch
         return int(scaled_size)
-    
+
     # Binary search for optimal scale
     scale_min, scale_max = eps / 10, 100.0
     while (scale_max - scale_min) >= eps:
@@ -90,7 +87,7 @@ def get_image_size_for_max_number_of_patches(
             scale_min = scale
         else:
             scale_max = scale
-    
+
     scale = scale_min
     target_height = get_scaled_image_size(scale, image_height, patch_size)
     target_width = get_scaled_image_size(scale, image_width, patch_size)
@@ -99,7 +96,7 @@ def get_image_size_for_max_number_of_patches(
 
 def convert_image_to_patches(image: np.ndarray, patch_size: int) -> np.ndarray:
     """
-    Convert 3D array image of shape (image_height, image_width, num_channels) into 2D array of patches of shape 
+    Convert 3D array image of shape (image_height, image_width, num_channels) into 2D array of patches of shape
     (num_patches_height * num_patches_width, patch_size * patch_size * num_channels).
     """
     image_height, image_width, num_channels = image.shape
@@ -190,7 +187,7 @@ class Siglip2ImageProcessor(BaseImageProcessor):
         **kwargs,
     ):
         super().__init__(**kwargs)
-        
+
         # TODO: remove this one
         size = size if size is not None else {"height": 256, "width": 256}
 
@@ -288,7 +285,9 @@ class Siglip2ImageProcessor(BaseImageProcessor):
         image_std = image_std if image_std is not None else self.image_std
         do_convert_rgb = do_convert_rgb if do_convert_rgb is not None else self.do_convert_rgb
         patch_size = patch_size if patch_size is not None else self.patch_size
-        max_number_of_patches = max_number_of_patches if max_number_of_patches is not None else self.max_number_of_patches
+        max_number_of_patches = (
+            max_number_of_patches if max_number_of_patches is not None else self.max_number_of_patches
+        )
 
         images = make_flat_list_of_images(images)
 
@@ -328,7 +327,6 @@ class Siglip2ImageProcessor(BaseImageProcessor):
         pixel_position_ids = []
 
         for image in images:
-
             if do_resize:
                 height, width = get_image_size_for_max_number_of_patches(
                     image_height=image.shape[0],
@@ -336,13 +334,17 @@ class Siglip2ImageProcessor(BaseImageProcessor):
                     patch_size=patch_size,
                     max_number_of_patches=max_number_of_patches,
                 )
-                image = resize(image=image, size=(height, width), resample=resample, input_data_format=input_data_format)
+                image = resize(
+                    image=image, size=(height, width), resample=resample, input_data_format=input_data_format
+                )
 
             if do_rescale:
                 image = self.rescale(image=image, scale=rescale_factor, input_data_format=input_data_format)
 
             if do_normalize:
-                image = self.normalize(image=image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+                image = self.normalize(
+                    image=image, mean=image_mean, std=image_std, input_data_format=input_data_format
+                )
 
             patches = convert_image_to_patches(image, patch_size)
             patches, mask = pad_along_first_dim(patches, max_number_of_patches)
@@ -355,9 +357,13 @@ class Siglip2ImageProcessor(BaseImageProcessor):
 
         pixel_values = np.stack(pixel_values, axis=0)
         pixel_mask = np.stack(pixel_masks, axis=0)
-        pixel_position_ids = np.stack(pixel_position_ids, axis=0)   
+        pixel_position_ids = np.stack(pixel_position_ids, axis=0)
 
-        data = {"pixel_values": pixel_values, "pixel_attention_mask": pixel_mask, "pixel_position_ids": pixel_position_ids}
+        data = {
+            "pixel_values": pixel_values,
+            "pixel_attention_mask": pixel_mask,
+            "pixel_position_ids": pixel_position_ids,
+        }
         return BatchFeature(data=data, tensor_type=return_tensors)
 
 

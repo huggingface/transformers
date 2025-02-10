@@ -21,8 +21,8 @@ from typing import Any, Optional, Tuple, Union
 
 import numpy as np
 import torch
-import torch.utils.checkpoint
 import torch.nn.functional as F
+import torch.utils.checkpoint
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from torch.nn.init import _calculate_fan_in_and_fan_out
@@ -39,7 +39,6 @@ from ...utils import (
     is_flash_attn_greater_or_equal_2_10,
     logging,
     replace_return_docstrings,
-    torch_int,
 )
 from .configuration_siglip2 import Siglip2Config, Siglip2TextConfig, Siglip2VisionConfig
 
@@ -266,13 +265,15 @@ class Siglip2VisionEmbeddings(nn.Module):
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
         self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
-        self.position_embedding_size = int(self.num_positions ** 0.5)
+        self.position_embedding_size = int(self.num_positions**0.5)
 
     @staticmethod
-    def _sample_positional_embeddings_unbatched(positional_embeddings: torch.Tensor, position_ids: torch.Tensor, shape) -> torch.Tensor:
+    def _sample_positional_embeddings_unbatched(
+        positional_embeddings: torch.Tensor, position_ids: torch.Tensor, shape
+    ) -> torch.Tensor:
         """
         Sample the positional embeddings with provided position ids (loop over batch elements, not optimized).
-        
+
         Args:
             positional_embeddings (`torch.Tensor`):
                 Position embeddings of shape (height, width, embed_dim)
@@ -280,13 +281,13 @@ class Siglip2VisionEmbeddings(nn.Module):
                 Pixel position ids of shape (max_num_patches, 2)
 
         Returns:
-            `torch.Tensor`: Embeddings of shape (max_num_patches, embed_dim) 
+            `torch.Tensor`: Embeddings of shape (max_num_patches, embed_dim)
             corresponding to the input pixel position ids.
         """
-        
+
         # Convert from (height, width, embed_dim) to (1, embed_dim, height, width) for interpolation
         positional_embeddings = positional_embeddings.permute(2, 0, 1).unsqueeze(0)
-        
+
         height, width = shape
 
         # resize positional embeddings
@@ -312,17 +313,21 @@ class Siglip2VisionEmbeddings(nn.Module):
 
         return sampled_positional_embeddings
 
-    def sample_positional_embeddings_vmap(self, positional_embeddings: torch.Tensor, position_ids: torch.Tensor) -> torch.Tensor:
+    def sample_positional_embeddings_vmap(
+        self, positional_embeddings: torch.Tensor, position_ids: torch.Tensor
+    ) -> torch.Tensor:
         """This one does not work because of interpolation requires python scalars, but vmap does not allow to pass them
-        and does not allow to """
+        and does not allow to"""
         shapes = tuple([(h, w) for h, w in position_ids.max(dim=1).values + 1])
-        return torch.vmap(self._sample_positional_embeddings_unbatched, in_dims=(None, 0, 0))(positional_embeddings, position_ids, shapes)
+        return torch.vmap(self._sample_positional_embeddings_unbatched, in_dims=(None, 0, 0))(
+            positional_embeddings, position_ids, shapes
+        )
 
     @staticmethod
     def sample_positional_embeddings(positional_embeddings: torch.Tensor, position_ids: torch.Tensor) -> torch.Tensor:
         """
         Sample the positional embeddings with provided position ids (loop over batch elements, not optimized).
-        
+
         Args:
             positional_embeddings (`torch.Tensor`):
                 Position embeddings of shape (height, width, embed_dim)
@@ -330,17 +335,16 @@ class Siglip2VisionEmbeddings(nn.Module):
                 Pixel position ids of shape (batch_size, max_num_patches, 2)
 
         Returns:
-            `torch.Tensor`: Embeddings of shape (batch_size, max_num_patches, embed_dim) 
+            `torch.Tensor`: Embeddings of shape (batch_size, max_num_patches, embed_dim)
             corresponding to the input pixel position ids.
         """
         target_shapes = position_ids.max(dim=1).values + 1
 
         # Convert from (height, width, embed_dim) to (1, embed_dim, height, width) for interpolation
         positional_embeddings = positional_embeddings.permute(2, 0, 1).unsqueeze(0)
-        
+
         resulted_positional_embeddings = []
         for (height, width), position_ids_i in zip(target_shapes, position_ids):
-            
             # resize positional embeddings for i-th image
             # 1, dim, height, width -> 1, dim, target_height, target_width
             resized_embeddings = F.interpolate(
@@ -367,13 +371,15 @@ class Siglip2VisionEmbeddings(nn.Module):
         return resulted_positional_embeddings
 
     @staticmethod
-    def sample_positional_embeddings_with_grid_sample(positional_embeddings: torch.Tensor, position_ids: torch.Tensor) -> torch.Tensor:
+    def sample_positional_embeddings_with_grid_sample(
+        positional_embeddings: torch.Tensor, position_ids: torch.Tensor
+    ) -> torch.Tensor:
         """
         THIS IS OPTIMIZED VERSION OF `sample_positional_embeddings`, BUT DUE TO `antialias=True` IN `F.interpolate`
         THE OUTPUT DOES NOT MATCH AND THAT INFLUENCES THE RESULT A LOT.
 
         Sample the positional embeddings with provided position ids.
-        
+
         Args:
             positional_embeddings (`torch.Tensor`):
                 Position embeddings of shape (height, width, embed_dim)
@@ -381,7 +387,7 @@ class Siglip2VisionEmbeddings(nn.Module):
                 Pixel position ids of shape (batch_size, max_num_patches, 2)
 
         Returns:
-            `torch.Tensor`: Embeddings of shape (batch_size, max_num_patches, embed_dim) 
+            `torch.Tensor`: Embeddings of shape (batch_size, max_num_patches, embed_dim)
             corresponding to the input pixel position ids.
         """
         batch_size = position_ids.shape[0]
@@ -389,7 +395,7 @@ class Siglip2VisionEmbeddings(nn.Module):
         # Convert from (height, width, embed_dim) to (batch_size, embed_dim, height, width) for grid_sample
         positional_embeddings = positional_embeddings.permute(2, 0, 1).unsqueeze(0)
         positional_embeddings = positional_embeddings.expand(batch_size, -1, -1, -1)
-        
+
         # Normalize position_ids to range [-1, 1] for grid_sample
         size = position_ids.max(dim=1, keepdim=True).values + 1
         grid = (position_ids.float() + 0.5) / size * 2 - 1
