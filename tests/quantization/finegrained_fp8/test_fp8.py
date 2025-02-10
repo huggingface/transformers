@@ -230,6 +230,7 @@ class FP8QuantizerTest(unittest.TestCase):
                 self.model_name, device_map=self.offload_device_map, quantization_config=self.quantization_config
             )
 
+
 @require_torch_gpu
 class FP8LinearTest(unittest.TestCase):
     device = "cuda"

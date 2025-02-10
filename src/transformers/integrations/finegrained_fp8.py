@@ -295,6 +295,7 @@ def w8a8_block_fp8_matmul_compile(
 
     return output.to(output_dtype)
 
+
 class FP8Linear(nn.Module):
     dtype = torch.float8_e4m3fn
 
@@ -317,8 +318,7 @@ class FP8Linear(nn.Module):
         scale_out_features = (out_features + block_size[0] - 1) // block_size[0]
         scale_in_features = (in_features + block_size[1] - 1) // block_size[1]
         self.register_buffer(
-            "weight_scale_inv",
-            torch.empty(scale_out_features, scale_in_features, dtype=torch.float32, device=device)
+            "weight_scale_inv", torch.empty(scale_out_features, scale_in_features, dtype=torch.float32, device=device)
         )
 
         self.block_size = block_size
@@ -337,7 +337,7 @@ class FP8Linear(nn.Module):
             # Context manager used to switch among the available cuda devices
             with torch.cuda.device(input.device):
                 qinput, scale = act_quant(input, self.block_size[1])
-            # Blocks the CPU until all CUDA operations on the specified device are complete. It is used to ensure that the results of the 
+            # Blocks the CPU until all CUDA operations on the specified device are complete. It is used to ensure that the results of the
             # preceding operations are ready before proceeding
             torch.cuda.synchronize(device=input.device)
             with torch.cuda.device(input.device):

@@ -1557,13 +1557,14 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
     FineGrainedFP8Config is a configuration class for fine-grained FP8 quantization used mainly for deepseek models.
 
     Attributes:
-        modules_to_not_convert (Optional[List]): 
+        modules_to_not_convert (Optional[List]):
             A list of module names that should not be converted during quantization.
-        activation_scheme (Optional[str]): 
+        activation_scheme (Optional[str]):
             The scheme used for activation, the default and only support scheme for now is "dynamic".
-        weight_block_size (Tuple[int, int]): 
+        weight_block_size (Tuple[int, int]):
             The size of the weight blocks for quantization, default is (128, 128).
     """
+
     def __init__(
         self,
         modules_to_not_convert: Optional[List] = None,

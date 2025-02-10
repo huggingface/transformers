@@ -1,5 +1,5 @@
 import importlib
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 from packaging import version
 
@@ -10,7 +10,6 @@ from .quantizers_utils import get_module_from_name
 
 if is_torch_available():
     import torch
-    import torch.nn as nn
 
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
@@ -74,7 +73,6 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                     "Please use a quantized checkpoint or remove the cpu/disk device from the device_map."
                 )
 
-
     def update_torch_dtype(self, torch_dtype: "torch.dtype") -> "torch.dtype":
         if torch_dtype is None:
             logger.info("Setting torch_dtype to torch.float32 as no torch_dtype was specified in from_pretrained")
@@ -104,7 +102,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         # Get FP8 min/max values
         fp8_min = torch.finfo(torch.float8_e4m3fn).min
         fp8_max = torch.finfo(torch.float8_e4m3fn).max
-        
+
         block_size_m, block_size_n = self.quantization_config.weight_block_size
 
         rows, cols = param_value.shape[-2:]
@@ -114,7 +112,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
                 f"Matrix dimensions ({rows}, {cols}) must be divisible by block sizes ({block_size_m}, {block_size_n})"
             )
         param_value_orig_shape = param_value.shape
-       
+
         param_value = param_value.reshape(
             -1, rows // block_size_m, block_size_m, cols // block_size_n, block_size_n
         ).permute(0, 1, 3, 2, 4)
