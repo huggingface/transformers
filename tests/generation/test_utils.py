@@ -2517,6 +2517,8 @@ class GenerationTesterMixin:
         use_cache = decoder_past_key_values is not None
         has_static_cache = isinstance(decoder_past_key_values, (StaticCache, HybridCache))
 
+        # When `output_attentions=True`, each iteration of generate appends the attentions corresponding to the new
+        # token(s)
         for generated_length, iter_attentions in enumerate(attentions):
             # regardless of using cache, the first forward pass will have the full prompt as input
             if use_cache and generated_length > 0:
@@ -2558,6 +2560,8 @@ class GenerationTesterMixin:
         )
         self.assertEqual(len(hidden_states), (output_length - prompt_length))
 
+        # When `output_hidden_states=True`, each iteration of generate appends the hidden states corresponding to the
+        # new token(s)
         for generated_length, iter_hidden_states in enumerate(hidden_states):
             # regardless of using cache, the first forward pass will have the full prompt as input
             if use_cache and generated_length > 0:
