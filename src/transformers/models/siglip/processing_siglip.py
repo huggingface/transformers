@@ -113,7 +113,7 @@ class SiglipProcessor(ProcessorMixin):
             image_features = self.image_processor(images, return_tensors=return_tensors)
 
         if text is not None and images is not None:
-            encoding["pixel_values"] = image_features.pixel_values
+            encoding.update(image_features)
             return encoding
         elif text is not None:
             return encoding
