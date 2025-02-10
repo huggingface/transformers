@@ -5198,6 +5198,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
     @property
     def loss_function(self):
+        if hasattr(self, "_loss_function"):
+            return self._loss_function
+
         loss_type = getattr(self, "loss_type", None)
 
         if loss_type is None or loss_type not in LOSS_MAPPING:
@@ -5207,6 +5210,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             )
             loss_type = "ForCausalLM"
         return LOSS_MAPPING[loss_type]
+
+    @loss_function.setter
+    def loss_function(self, value):
+        self._loss_function = value
 
     def get_compiled_call(self, compile_config: CompileConfig):
         """Return a `torch.compile`'d version of `self.__call__`. This is useful to dynamically choose between
