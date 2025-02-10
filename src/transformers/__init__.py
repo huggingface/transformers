@@ -1326,14 +1326,14 @@ else:
     _import_structure["models.llava_next"].append("LlavaNextImageProcessorFast")
     _import_structure["models.llava_next_video"].append("LlavaNextVideoVideoProcessorFast")
     _import_structure["models.llava_onevision"].extend(
-        ("LlavaOnevisionVideoProcessorFast", "LlavaOnevisionImageProcessorFast")
+        ("LlavaOnevisionImageProcessorFast", "LlavaOnevisionVideoProcessorFast")
     )
     _import_structure["models.pixtral"].append("PixtralImageProcessorFast")
     _import_structure["models.qwen2_5_vl"].append("Qwen2_5_VLVideoProcessorFast")
     _import_structure["models.qwen2_vl"].extend(("Qwen2VLImageProcessorFast", "Qwen2VLVideoProcessorFast"))
     _import_structure["models.rt_detr"].append("RTDetrImageProcessorFast")
     _import_structure["models.siglip"].append("SiglipImageProcessorFast")
-    _import_structure["models.video_llava"].append("VideoLlavalVideoProcessorFast")
+    _import_structure["models.video_llava"].append("VideoLlavaVideoProcessorFast")
     _import_structure["models.vit"].append("ViTImageProcessorFast")
     _import_structure["video_processing_utils_fast"] = ["BaseVideoProcessorFast"]
 

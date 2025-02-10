@@ -22,27 +22,18 @@ from typing import Dict, List, Optional, Union
 import numpy as np
 
 from ...image_processing_utils import BatchFeature, get_size_dict
-from ...image_transforms import convert_to_rgb, resize, to_channel_dimension_format
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
     ChannelDimension,
-    ImageInput,
     PILImageResampling,
-    VideoInput,
-    infer_channel_dimension_format,
     is_scaled_image,
-    make_list_of_videos,
     to_numpy_array,
-    valid_images,
     validate_preprocess_arguments,
 )
-from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
+from ...utils import TensorType, filter_out_non_signature_kwargs, logging
 from ...video_processing_utils import BaseVideoProcessor
-
-
-if is_vision_available():
-    import PIL
+from ...video_utils import VideoInput, infer_channel_dimension_format, make_batched_videos, to_channel_dimension_format
 
 
 logger = logging.get_logger(__name__)
@@ -153,7 +144,7 @@ class InstructBlipVideoVideoProcessor(BaseVideoProcessor):
             raise ValueError(f"The `size` dictionary must contain the keys `height` and `width`. Got {size.keys()}")
 
         output_size = (size["height"], size["width"])
-        return resize(
+        return super().resize(
             image,
             size=output_size,
             resample=resample,
@@ -178,7 +169,7 @@ class InstructBlipVideoVideoProcessor(BaseVideoProcessor):
         do_convert_rgb: bool = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> PIL.Image.Image:
+    ) -> BatchFeature:
         """
         Preprocess a video or batch of videos.
 
@@ -238,7 +229,7 @@ class InstructBlipVideoVideoProcessor(BaseVideoProcessor):
         size = size if size is not None else self.size
         size = get_size_dict(size, default_to_square=False)
 
-        videos = make_list_of_videos(videos)
+        videos = make_batched_videos(videos)
 
         validate_preprocess_arguments(
             do_rescale=do_rescale,
@@ -251,40 +242,33 @@ class InstructBlipVideoVideoProcessor(BaseVideoProcessor):
             resample=resample,
         )
 
-        if not valid_images(videos):
-            raise ValueError(
-                "Invalid input type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+        if input_data_format is None:
+            input_data_format = infer_channel_dimension_format(videos[0])
 
         pixel_values = [
-            [
-                self._preprocess_image(
-                    image=frame,
-                    do_resize=do_resize,
-                    size=size,
-                    resample=resample,
-                    do_rescale=do_rescale,
-                    rescale_factor=rescale_factor,
-                    do_normalize=do_normalize,
-                    image_mean=image_mean,
-                    image_std=image_std,
-                    do_convert_rgb=do_convert_rgb,
-                    data_format=data_format,
-                    input_data_format=input_data_format,
-                )
-                for frame in video
-            ]
+            self._preprocess_video(
+                video=video,
+                do_resize=do_resize,
+                size=size,
+                resample=resample,
+                do_rescale=do_rescale,
+                rescale_factor=rescale_factor,
+                do_normalize=do_normalize,
+                image_mean=image_mean,
+                image_std=image_std,
+                do_convert_rgb=do_convert_rgb,
+                data_format=data_format,
+                input_data_format=input_data_format,
+            )
             for video in videos
         ]
 
         encoded_outputs = BatchFeature(data={"pixel_values": pixel_values}, tensor_type=return_tensors)
         return encoded_outputs
 
-    # Ignore copy
-    def _preprocess_image(
+    def _preprocess_video(
         self,
-        image: ImageInput = None,
+        video: VideoInput = None,
         do_resize: Optional[bool] = None,
         size: Optional[Dict[str, int]] = None,
         resample: PILImageResampling = None,
@@ -297,35 +281,30 @@ class InstructBlipVideoVideoProcessor(BaseVideoProcessor):
         data_format: ChannelDimension = ChannelDimension.FIRST,
         input_data_format: Optional[Union[str, ChannelDimension]] = None,
     ) -> np.ndarray:
-        # PIL RGBA images are converted to RGB
-        if do_convert_rgb:
-            image = convert_to_rgb(image)
-
         # All transformations expect numpy arrays.
-        image = to_numpy_array(image)
+        video = to_numpy_array(video)
 
-        if do_rescale and is_scaled_image(image):
+        if do_convert_rgb:
+            video = self.convert_to_rgb(video)
+
+        if do_rescale and is_scaled_image(video):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled video frames. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+                " videos have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
             )
 
-        if input_data_format is None:
-            # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(image)
-
         if do_resize:
-            image = self.resize(image, size=size, resample=resample, input_data_format=input_data_format)
+            video = self.resize(video, size=size, resample=resample, input_data_format=input_data_format)
 
         if do_rescale:
-            image = self.rescale(image, scale=rescale_factor, input_data_format=input_data_format)
+            video = self.rescale(video, scale=rescale_factor, input_data_format=input_data_format)
 
         if do_normalize:
-            image = self.normalize(image, mean=image_mean, std=image_std, input_data_format=input_data_format)
+            video = self.normalize(video, mean=image_mean, std=image_std, input_data_format=input_data_format)
 
-        image = to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format)
+        video = to_channel_dimension_format(video, data_format, input_channel_dim=input_data_format)
 
-        return image
+        return video
 
 
 __all__ = ["InstructBlipVideoVideoProcessor"]

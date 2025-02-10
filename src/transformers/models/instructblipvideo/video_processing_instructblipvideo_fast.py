@@ -17,14 +17,33 @@
 Video processor class for InstructBLIPVideo
 """
 
+from typing import List, Optional, Union
+
+from ...image_processing_utils import BatchFeature
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
     PILImageResampling,
+    SizeDict,
 )
-from ...video_processing_utils_fast import (
-    BaseVideoProcessorFast,
+from ...utils import (
+    TensorType,
+    is_torch_available,
+    is_torchvision_available,
+    is_torchvision_v2_available,
 )
+from ...video_processing_utils_fast import BaseVideoProcessorFast
+from ...video_utils import group_videos_by_shape, reorder_videos
+
+
+if is_torch_available():
+    import torch
+
+if is_torchvision_available():
+    if is_torchvision_v2_available():
+        from torchvision.transforms.v2 import functional as F
+    else:
+        from torchvision.transforms import functional as F
 
 
 class InstructBlipVideoVideoProcessorFast(BaseVideoProcessorFast):
@@ -41,6 +60,53 @@ class InstructBlipVideoVideoProcessorFast(BaseVideoProcessorFast):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+
+    def _preprocess(
+        self,
+        videos: List["torch.Tensor"],
+        do_convert_rgb: bool,
+        do_resize: bool,
+        size: SizeDict,
+        interpolation: Optional["F.InterpolationMode"],
+        do_center_crop: bool,
+        crop_size: SizeDict,
+        do_rescale: bool,
+        rescale_factor: float,
+        do_normalize: bool,
+        image_mean: Optional[Union[float, List[float]]],
+        image_std: Optional[Union[float, List[float]]],
+        return_tensors: Optional[Union[str, TensorType]],
+    ) -> BatchFeature:
+        # NOTE: The only diff from Base is that InstructBlipVideo uses `pixel_values` as output key
+
+        # Group videos by size for batched resizing
+        grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
+        resized_videos_grouped = {}
+        for shape, stacked_videos in grouped_videos.items():
+            if do_convert_rgb:
+                stacked_videos = self.convert_to_rgb(stacked_videos)
+            if do_resize:
+                stacked_videos = self.resize(video=stacked_videos, size=size, interpolation=interpolation)
+            resized_videos_grouped[shape] = stacked_videos
+        resized_videos = reorder_videos(resized_videos_grouped, grouped_videos_index)
+
+        # Group videos by size for further processing
+        # Needed in case do_resize is False, or resize returns videos with different sizes
+        grouped_videos, grouped_videos_index = group_videos_by_shape(resized_videos)
+        processed_videos_grouped = {}
+        for shape, stacked_videos in grouped_videos.items():
+            if do_center_crop:
+                stacked_videos = self.center_crop(stacked_videos, crop_size)
+            # Fused rescale and normalize
+            stacked_videos = self.rescale_and_normalize(
+                stacked_videos, do_rescale, rescale_factor, do_normalize, image_mean, image_std
+            )
+            processed_videos_grouped[shape] = stacked_videos
+
+        processed_videos = reorder_videos(processed_videos_grouped, grouped_videos_index)
+        processed_videos = torch.stack(processed_videos, dim=0) if return_tensors else processed_videos
+
+        return BatchFeature(data={"pixel_values": processed_videos}, tensor_type=return_tensors)
 
 
 __all__ = ["InstructBlipVideoVideoProcessorFast"]
