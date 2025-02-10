@@ -1390,7 +1390,6 @@ def _adjust_loaded_keys_prefix(
 def _find_missing_and_unexpected_keys(
     cls,
     model: "PreTrainedModel",
-    original_loaded_keys: List[str],
     renamed_loaded_keys: List[str],
     loading_base_model_from_task_state_dict: bool,
     loading_task_model_from_base_state_dict: bool,
@@ -1405,7 +1404,7 @@ def _find_missing_and_unexpected_keys(
     # Compute expected keys, i.e. keys that the FULL model (not model_to_load) expects
     expected_keys = list(model.state_dict().keys())
     if hf_quantizer is not None:
-        expected_keys = hf_quantizer.update_expected_keys(model, expected_keys, original_loaded_keys)
+        expected_keys = hf_quantizer.update_expected_keys(model, expected_keys, renamed_loaded_keys)
 
     loaded_keys = _adjust_loaded_keys_prefix(
         renamed_loaded_keys, prefix, loading_base_model_from_task_state_dict, loading_task_model_from_base_state_dict
@@ -4824,23 +4823,10 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
             if device_map is not None:
                 device_map = {k.replace(start_prefix_to_remove, ""): v for k, v in device_map.items()}
 
-            # small check
-            task_specific_expected_keys = [s for s in model.state_dict().keys() if not s.startswith(_prefix)]
-            base_model_expected_keys = list(model_to_load.state_dict().keys())
-            if any(
-                key in task_specific_expected_keys and key not in base_model_expected_keys
-                for key in renamed_loaded_keys
-            ):
-                raise ValueError(
-                    "The state dictionary of the model you are trying to load is corrupted. Are you sure it was "
-                    "properly saved?"
-                )
-
         # Find missing and unexpected keys from the state dict
         missing_keys, unexpected_keys = _find_missing_and_unexpected_keys(
             cls,
             model,
-            loaded_state_dict_keys,
             renamed_loaded_keys,
             loading_base_model_from_task_state_dict,
             loading_task_model_from_base_state_dict,
