@@ -16,14 +16,11 @@
 
 from typing import Dict, List, Optional, Union
 
-import numpy as np
-
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
     ChannelDimension,
-    ImageInput,
     PILImageResampling,
     is_scaled_image,
     to_numpy_array,
@@ -102,83 +99,6 @@ class LlavaOnevisionVideoProcessor(BaseVideoProcessor):
         self.image_mean = image_mean if image_mean is not None else OPENAI_CLIP_MEAN
         self.image_std = image_std if image_std is not None else OPENAI_CLIP_STD
         self.do_convert_rgb = do_convert_rgb
-
-    def _preprocess(
-        self,
-        images: ImageInput,
-        do_resize: bool = None,
-        size: Dict[str, int] = None,
-        resample: PILImageResampling = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        do_convert_rgb: bool = None,
-        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> list[np.ndarray]:
-        """
-        Args:
-            images (`ImageInput`):
-                Batch of frames (one video) to preprocess. Expects a batch of frames with pixel values ranging from 0 to 255. If
-                passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-                Whether to resize the image.
-            size (`Dict[str, int]`, *optional*, defaults to `self.size`):
-                Size of the image after resizing. Shortest edge of the image is resized to size["shortest_edge"], with
-                the longest edge resized to keep the input aspect ratio.
-            resample (`int`, *optional*, defaults to `self.resample`):
-                Resampling filter to use if resizing the image. This can be one of the enum `PILImageResampling`. Only
-                has an effect if `do_resize` is set to `True`.
-            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image.
-            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Rescale factor to rescale the image by if `do_rescale` is set to `True`.
-            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-                Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
-                Image mean to use for normalization. Only has an effect if `do_normalize` is set to `True`.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
-                Image standard deviation to use for normalization. Only has an effect if `do_normalize` is set to
-                `True`.
-            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - Unset: Use the channel dimension format of the input image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-        """
-
-        # All transformations expect numpy arrays
-        images = to_numpy_array(images)
-
-        if do_convert_rgb:
-            images = self.convert_to_rgb(images, input_data_format=input_data_format)
-
-        if do_rescale and is_scaled_image(images[0]):
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled videos. If the input"
-                " videos have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
-
-        if do_resize:
-            images = self.resize(images, size=size, resample=resample, input_data_format=input_data_format)
-
-        if do_rescale:
-            images = self.rescale(images, scale=rescale_factor, input_data_format=input_data_format)
-
-        if do_normalize:
-            images = self.normalize(images, mean=image_mean, std=image_std, input_data_format=input_data_format)
-
-        images = to_channel_dimension_format(images, data_format, input_channel_dim=input_data_format)
-
-        return images
 
     def preprocess(
         self,
@@ -274,23 +194,31 @@ class LlavaOnevisionVideoProcessor(BaseVideoProcessor):
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(videos[0])
 
-        pixel_values = [
-            self._preprocess(
-                video,
-                do_resize=do_resize,
-                size=size_tuple,
-                resample=resample,
-                do_rescale=do_rescale,
-                rescale_factor=rescale_factor,
-                do_normalize=do_normalize,
-                image_mean=image_mean,
-                image_std=image_std,
-                do_convert_rgb=do_convert_rgb,
-                data_format=data_format,
-                input_data_format=input_data_format,
-            )
-            for video in videos
-        ]
+        pixel_values = []
+        for video in videos:
+            video = to_numpy_array(video)
+
+            if do_convert_rgb:
+                video = self.convert_to_rgb(video, input_data_format=input_data_format)
+
+            if do_rescale and is_scaled_image(video[0]):
+                logger.warning_once(
+                    "It looks like you are trying to rescale already rescaled videos. If the input"
+                    " videos have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+                )
+
+            if do_resize:
+                video = self.resize(video, size=size_tuple, resample=resample, input_data_format=input_data_format)
+
+            if do_rescale:
+                video = self.rescale(video, scale=rescale_factor, input_data_format=input_data_format)
+
+            if do_normalize:
+                video = self.normalize(video, mean=image_mean, std=image_std, input_data_format=input_data_format)
+
+            video = to_channel_dimension_format(video, data_format, input_channel_dim=input_data_format)
+
+            pixel_values.append(video)
 
         return BatchFeature(
             data={"pixel_values_videos": pixel_values},

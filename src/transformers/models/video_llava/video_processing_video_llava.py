@@ -263,72 +263,35 @@ class VideoLlavaVideoProcessor(BaseVideoProcessor):
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(videos[0])
 
-        pixel_values_videos = [
-            self._preprocess_image(
-                images=video,
-                do_resize=do_resize,
-                size=size,
-                resample=resample,
-                do_rescale=do_rescale,
-                rescale_factor=rescale_factor,
-                do_normalize=do_normalize,
-                image_mean=image_mean,
-                image_std=image_std,
-                do_center_crop=do_center_crop,
-                crop_size=crop_size,
-                do_convert_rgb=do_convert_rgb,
-                data_format=data_format,
-                input_data_format=input_data_format,
-            )
-            for video in videos
-        ]
+        pixel_values_videos = []
+        for video in videos:
+            video = to_numpy_array(video)
+
+            if do_convert_rgb:
+                video = self.convert_to_rgb(video, input_data_format=input_data_format)
+
+            if do_rescale and is_scaled_image(video):
+                logger.warning_once(
+                    "It looks like you are trying to rescale already rescaled videos. If the input"
+                    " videos have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+                )
+
+            if do_resize:
+                video = self.resize(video, size=size, resample=resample, input_data_format=input_data_format)
+
+            if do_center_crop:
+                video = self.center_crop(video, size=crop_size, input_data_format=input_data_format)
+
+            if do_rescale:
+                video = self.rescale(video, scale=rescale_factor, input_data_format=input_data_format)
+
+            if do_normalize:
+                video = self.normalize(video, mean=image_mean, std=image_std, input_data_format=input_data_format)
+
+            video = to_channel_dimension_format(video, data_format, input_channel_dim=input_data_format)
+            pixel_values_videos.append(video)
 
         return BatchFeature({"pixel_values_videos": pixel_values_videos}, tensor_type=return_tensors)
-
-    def _preprocess_image(
-        self,
-        images: VideoInput = None,
-        do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
-        resample: PILImageResampling = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        do_center_crop: bool = None,
-        crop_size: int = None,
-        do_convert_rgb: bool = None,
-        data_format: ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> np.ndarray:
-        # All transformations expect numpy arrays.
-        images = to_numpy_array(images)
-
-        if do_convert_rgb:
-            images = self.convert_to_rgb(images, input_data_format=input_data_format)
-
-        if do_rescale and is_scaled_image(images):
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images/video frames. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
-
-        if do_resize:
-            images = self.resize(images, size=size, resample=resample, input_data_format=input_data_format)
-
-        if do_center_crop:
-            images = self.center_crop(images, size=crop_size, input_data_format=input_data_format)
-
-        if do_rescale:
-            images = self.rescale(images, scale=rescale_factor, input_data_format=input_data_format)
-
-        if do_normalize:
-            images = self.normalize(images, mean=image_mean, std=image_std, input_data_format=input_data_format)
-
-        images = to_channel_dimension_format(images, data_format, input_channel_dim=input_data_format)
-
-        return images
 
 
 __all__ = ["VideoLlavaVideoProcessor"]

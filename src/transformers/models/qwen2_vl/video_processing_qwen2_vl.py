@@ -28,7 +28,6 @@ from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
     ChannelDimension,
-    ImageInput,
     PILImageResampling,
     get_image_size,
     is_scaled_image,
@@ -111,115 +110,6 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         self.merge_size = merge_size
         self.size = {"shortest_edge": min_pixels, "longest_edge": max_pixels}
         self.do_convert_rgb = do_convert_rgb
-
-    def _preprocess(
-        self,
-        images: Union[ImageInput, VideoInput],
-        do_resize: bool = None,
-        resample: PILImageResampling = None,
-        do_rescale: bool = None,
-        rescale_factor: float = None,
-        do_normalize: bool = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        do_convert_rgb: bool = None,
-        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ):
-        """
-        Preprocess an video or batch of images. Copy of the `preprocess` method from `CLIPImageProcessor`.
-
-        Args:
-            images (`ImageInput`):
-                Image or batch of images to preprocess. Expects pixel values ranging from 0 to 255. If pixel values range from 0 to 1, set `do_rescale=False`.
-            vision_info (`List[Dict]`, *optional*):
-                Optional list of dictionaries containing additional information about vision inputs.
-            do_resize (`bool`, *optional*, defaults to `self.do_resize`):
-                Whether to resize the image.
-            resample (`PILImageResampling`, *optional*, defaults to `self.resample`):
-                Resampling filter to use if resizing the image. This can be one of the `PILImageResampling` enums.
-            do_rescale (`bool`, *optional*, defaults to `self.do_rescale`):
-                Whether to rescale the image.
-            rescale_factor (`float`, *optional*, defaults to `self.rescale_factor`):
-                Scale factor to use if rescaling the image.
-            do_normalize (`bool`, *optional*, defaults to `self.do_normalize`):
-                Whether to normalize the image.
-            image_mean (`float` or `List[float]`, *optional*, defaults to `self.image_mean`):
-                Mean to use if normalizing the image. Can be a float or a list of floats corresponding to the number of channels in the image.
-            image_std (`float` or `List[float]`, *optional*, defaults to `self.image_std`):
-                Standard deviation to use if normalizing the image. Can be a float or a list of floats corresponding to the number of channels in the image.
-            do_convert_rgb (`bool`, *optional*, defaults to `self.do_convert_rgb`):
-                Whether to convert the image to RGB.
-            data_format (`ChannelDimension`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - Unset: Use the channel dimension format of the input image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.   - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-        """
-        # All transformations expect numpy arrays
-        images = to_numpy_array(images)
-
-        if do_convert_rgb:
-            images = self.convert_to_rgb(images, input_data_format)
-
-        if is_scaled_image(images[0]) and do_rescale:
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled images. If the input"
-                " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
-
-        height, width = get_image_size(images, channel_dim=input_data_format)
-        resized_height, resized_width = height, width
-        resized_height, resized_width = smart_resize(
-            height,
-            width,
-            factor=self.patch_size * self.merge_size,
-            min_pixels=self.min_pixels,
-            max_pixels=self.max_pixels,
-        )
-        if do_resize:
-            images = self.resize(
-                images, size=(resized_height, resized_width), resample=resample, input_data_format=input_data_format
-            )
-
-        if do_rescale:
-            images = self.rescale(images, scale=rescale_factor, input_data_format=input_data_format)
-
-        if do_normalize:
-            images = self.normalize(images, mean=image_mean, std=image_std, input_data_format=input_data_format)
-
-        images = to_channel_dimension_format(images, data_format, input_channel_dim=input_data_format)
-
-        if data_format == ChannelDimension.LAST:
-            images = images.transpose(0, 3, 1, 2)
-        if images.shape[0] == 1:
-            images = np.tile(images, (self.temporal_patch_size, 1, 1, 1))
-
-        channel = images.shape[1]
-        grid_t = images.shape[0] // self.temporal_patch_size
-        grid_h, grid_w = resized_height // self.patch_size, resized_width // self.patch_size
-        patches = images.reshape(
-            grid_t,
-            self.temporal_patch_size,
-            channel,
-            grid_h // self.merge_size,
-            self.merge_size,
-            self.patch_size,
-            grid_w // self.merge_size,
-            self.merge_size,
-            self.patch_size,
-        )
-        patches = patches.transpose(0, 3, 6, 4, 7, 2, 1, 5, 8)
-        flatten_patches = patches.reshape(
-            grid_t * grid_h * grid_w, channel * self.temporal_patch_size * self.patch_size * self.patch_size
-        )
-
-        return flatten_patches, (grid_t, grid_h, grid_w)
 
     def preprocess(
         self,
@@ -306,22 +196,65 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         )
 
         pixel_values_videos, video_grid_thws = [], []
-        for frames in videos:
-            patches, video_grid_thw = self._preprocess(
-                frames,
-                do_resize=do_resize,
-                resample=resample,
-                do_rescale=do_rescale,
-                rescale_factor=rescale_factor,
-                do_normalize=do_normalize,
-                image_mean=image_mean,
-                image_std=image_std,
-                data_format=data_format,
-                do_convert_rgb=do_convert_rgb,
-                input_data_format=input_data_format,
+        for video in videos:
+            video = to_numpy_array(video)
+
+            if do_convert_rgb:
+                video = self.convert_to_rgb(video, input_data_format)
+
+            if is_scaled_image(video[0]) and do_rescale:
+                logger.warning_once(
+                    "It looks like you are trying to rescale already rescaled videos. If the input"
+                    " videos have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+                )
+
+            height, width = get_image_size(video, channel_dim=input_data_format)
+            resized_height, resized_width = height, width
+            resized_height, resized_width = smart_resize(
+                height,
+                width,
+                factor=self.patch_size * self.merge_size,
+                min_pixels=self.min_pixels,
+                max_pixels=self.max_pixels,
             )
-            pixel_values_videos.extend(patches)
-            video_grid_thws.append(video_grid_thw)
+            if do_resize:
+                video = self.resize(
+                    video, size=(resized_height, resized_width), resample=resample, input_data_format=input_data_format
+                )
+
+            if do_rescale:
+                video = self.rescale(video, scale=rescale_factor, input_data_format=input_data_format)
+
+            if do_normalize:
+                video = self.normalize(video, mean=image_mean, std=image_std, input_data_format=input_data_format)
+
+            video = to_channel_dimension_format(video, data_format, input_channel_dim=input_data_format)
+
+            if data_format == ChannelDimension.LAST:
+                video = video.transpose(0, 3, 1, 2)
+            if video.shape[0] == 1:
+                video = np.tile(video, (self.temporal_patch_size, 1, 1, 1))
+
+            channel = video.shape[1]
+            grid_t = video.shape[0] // self.temporal_patch_size
+            grid_h, grid_w = resized_height // self.patch_size, resized_width // self.patch_size
+            patches = video.reshape(
+                grid_t,
+                self.temporal_patch_size,
+                channel,
+                grid_h // self.merge_size,
+                self.merge_size,
+                self.patch_size,
+                grid_w // self.merge_size,
+                self.merge_size,
+                self.patch_size,
+            )
+            patches = patches.transpose(0, 3, 6, 4, 7, 2, 1, 5, 8)
+            flatten_patches = patches.reshape(
+                grid_t * grid_h * grid_w, channel * self.temporal_patch_size * self.patch_size * self.patch_size
+            )
+            pixel_values_videos.extend(flatten_patches)
+            video_grid_thws.append((grid_t, grid_h, grid_w))
         pixel_values_videos = np.array(pixel_values_videos)
         video_grid_thws = np.array(video_grid_thws)
         data = {"pixel_values_videos": pixel_values_videos, "video_grid_thw": video_grid_thws}

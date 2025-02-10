@@ -245,66 +245,34 @@ class InstructBlipVideoVideoProcessor(BaseVideoProcessor):
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(videos[0])
 
-        pixel_values = [
-            self._preprocess_video(
-                video=video,
-                do_resize=do_resize,
-                size=size,
-                resample=resample,
-                do_rescale=do_rescale,
-                rescale_factor=rescale_factor,
-                do_normalize=do_normalize,
-                image_mean=image_mean,
-                image_std=image_std,
-                do_convert_rgb=do_convert_rgb,
-                data_format=data_format,
-                input_data_format=input_data_format,
-            )
-            for video in videos
-        ]
+        pixel_values = None
+        for video in videos:
+            video = to_numpy_array(video)
+
+            if do_convert_rgb:
+                video = self.convert_to_rgb(video)
+
+            if do_rescale and is_scaled_image(video):
+                logger.warning_once(
+                    "It looks like you are trying to rescale already rescaled video frames. If the input"
+                    " videos have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
+                )
+
+            if do_resize:
+                video = self.resize(video, size=size, resample=resample, input_data_format=input_data_format)
+
+            if do_rescale:
+                video = self.rescale(video, scale=rescale_factor, input_data_format=input_data_format)
+
+            if do_normalize:
+                video = self.normalize(video, mean=image_mean, std=image_std, input_data_format=input_data_format)
+
+            video = to_channel_dimension_format(video, data_format, input_channel_dim=input_data_format)
+
+            pixel_values.append(video)
 
         encoded_outputs = BatchFeature(data={"pixel_values": pixel_values}, tensor_type=return_tensors)
         return encoded_outputs
-
-    def _preprocess_video(
-        self,
-        video: VideoInput = None,
-        do_resize: Optional[bool] = None,
-        size: Optional[Dict[str, int]] = None,
-        resample: PILImageResampling = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, List[float]]] = None,
-        image_std: Optional[Union[float, List[float]]] = None,
-        do_convert_rgb: bool = None,
-        data_format: ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> np.ndarray:
-        # All transformations expect numpy arrays.
-        video = to_numpy_array(video)
-
-        if do_convert_rgb:
-            video = self.convert_to_rgb(video)
-
-        if do_rescale and is_scaled_image(video):
-            logger.warning_once(
-                "It looks like you are trying to rescale already rescaled video frames. If the input"
-                " videos have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
-            )
-
-        if do_resize:
-            video = self.resize(video, size=size, resample=resample, input_data_format=input_data_format)
-
-        if do_rescale:
-            video = self.rescale(video, scale=rescale_factor, input_data_format=input_data_format)
-
-        if do_normalize:
-            video = self.normalize(video, mean=image_mean, std=image_std, input_data_format=input_data_format)
-
-        video = to_channel_dimension_format(video, data_format, input_channel_dim=input_data_format)
-
-        return video
 
 
 __all__ = ["InstructBlipVideoVideoProcessor"]
