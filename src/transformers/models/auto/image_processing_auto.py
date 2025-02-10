@@ -134,6 +134,7 @@ else:
             ("segformer", ("SegformerImageProcessor",)),
             ("seggpt", ("SegGptImageProcessor",)),
             ("siglip", ("SiglipImageProcessor", "SiglipImageProcessorFast")),
+            ("siglip2", ("Siglip2ImageProcessor",)),
             ("superglue", "SuperGlueImageProcessor"),
             ("swiftformer", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("swin", ("ViTImageProcessor", "ViTImageProcessorFast")),
