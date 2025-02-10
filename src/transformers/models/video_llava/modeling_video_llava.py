@@ -380,6 +380,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
         return_dict: Optional[bool] = None,
         cache_position: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, torch.Tensor] = 0,
+        **lm_kwargs,
     ) -> Union[Tuple, VideoLlavaCausalLMOutputWithPast]:
         r"""
         Args:
@@ -533,6 +534,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
             return_dict=return_dict,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
+            **lm_kwargs,
         )
 
         logits = outputs[0]

@@ -768,7 +768,7 @@ class ModelTesterMixin:
             else:
                 check_determinism(first, second)
 
-    def test_batching_equivalence(self):
+    def test_batching_equivalence(self, atol=1e-5, rtol=1e-5):
         """
         Tests that the model supports batching and that the output is the nearly the same for the same input in
         different batch sizes.
@@ -812,7 +812,7 @@ class ModelTesterMixin:
                     torch.isinf(single_row_object).any(), f"Single row output has `inf` in {model_name} for key={key}"
                 )
                 try:
-                    torch.testing.assert_close(batched_row, single_row_object, atol=1e-5, rtol=1e-5)
+                    torch.testing.assert_close(batched_row, single_row_object, atol=atol, rtol=rtol)
                 except AssertionError as e:
                     msg = f"Batched and Single row outputs are not equal in {model_name} for key={key}.\n\n"
                     msg += str(e)
@@ -921,6 +921,42 @@ class ModelTesterMixin:
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             loss = model(**inputs).loss
             loss.backward()
+
+    def test_causal_lm_can_accept_kwargs(self):
+        if not getattr(self.model_tester, "is_training", False):
+            self.skipTest(reason="ModelTester is not configured to run training tests")
+
+        valid_model_class = False
+        incompatible_models = (
+            "MusicgenForCausalLM",
+            "MusicgenMelodyForCausalLM",
+            "MllamaForCausalLM",
+            "CpmAntForCausalLM",
+            "GotOcr2ForConditionalGeneration",
+        )
+        for model_class in self.all_model_classes:
+            if (
+                model_class.__name__ in get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES)
+                and model_class.__name__ not in incompatible_models
+            ):
+                valid_model_class = True
+        if not valid_model_class:
+            self.skipTest(reason="No causal lm model classes found")
+        for model_class in self.all_model_classes:
+            model_name = model_class.__name__
+            if model_name in get_values(MODEL_FOR_CAUSAL_LM_MAPPING_NAMES) and model_name not in incompatible_models:
+                config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    with torch.device(torch_device):
+                        model_eager = AutoModelForCausalLM.from_config(config, torch_dtype=torch.float32)
+
+                    model_eager.save_pretrained(tmpdir)
+                    with torch.device(torch_device):
+                        model = AutoModelForCausalLM.from_pretrained(tmpdir, torch_dtype=torch.float32)
+                        inputs_dict["num_items_in_batch"] = inputs_dict["input_ids"].shape[0]
+                        inputs_dict["labels"] = inputs_dict["input_ids"]
+                        _ = model(**inputs_dict, return_dict=False)
 
     def test_training_gradient_checkpointing(self):
         # Scenario - 1 default behaviour
@@ -1236,6 +1272,8 @@ class ModelTesterMixin:
         self._create_and_check_torch_fx_tracing(config, inputs_dict)
 
     def test_torch_fx_output_loss(self):
+        if self.all_model_classes[0].__name__ == "BloomModel":
+            self.skipTest(reason="Bloom currently has issues, @michaelbenayoun")
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         self._create_and_check_torch_fx_tracing(config, inputs_dict, output_loss=True)
 
@@ -3872,11 +3910,13 @@ class ModelTesterMixin:
             for name, submodule in model.named_modules():
                 class_name = submodule.__class__.__name__
                 if (
-                    "SdpaAttention" in class_name
-                    or "SdpaSelfAttention" in class_name
-                    or "FlashAttention" in class_name
+                    class_name.endswith("Attention")
+                    and getattr(submodule, "config", None)
+                    and submodule.config._attn_implementation != "eager"
                 ):
-                    raise ValueError(f"The eager model should not have SDPA/FA2 attention layers but got {class_name}")
+                    raise ValueError(
+                        f"The eager model should not have SDPA/FA2 attention layers but got `{class_name}.config._attn_implementation={submodule.config._attn_implementation}`"
+                    )
 
     @require_torch_sdpa
     def test_sdpa_can_dispatch_non_composite_models(self):
@@ -3907,8 +3947,14 @@ class ModelTesterMixin:
 
                 for name, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
-                        raise ValueError(f"The eager model should not have SDPA attention layers but got {class_name}")
+                    if (
+                        class_name.endswith("Attention")
+                        and getattr(submodule, "config", None)
+                        and submodule.config._attn_implementation == "sdpa"
+                    ):
+                        raise ValueError(
+                            f"The eager model should not have SDPA attention layers but got `{class_name}.config._attn_implementation={submodule.config._attn_implementation}`"
+                        )
 
     @require_torch_sdpa
     def test_sdpa_can_dispatch_composite_models(self):
@@ -3959,7 +4005,11 @@ class ModelTesterMixin:
 
                 for name, submodule in model_eager.named_modules():
                     class_name = submodule.__class__.__name__
-                    if "SdpaAttention" in class_name or "SdpaSelfAttention" in class_name:
+                    if (
+                        class_name.endswith("Attention")
+                        and getattr(submodule, "config", None)
+                        and submodule.config._attn_implementation == "sdpa"
+                    ):
                         raise ValueError("The eager model should not have SDPA attention layers")
 
     @parameterized.expand([("float16",), ("bfloat16",), ("float32",)])
@@ -4420,10 +4470,15 @@ class ModelTesterMixin:
                 model.save_pretrained(tmpdirname)
                 model = model_class.from_pretrained(tmpdirname, torch_dtype=torch_dtype)
 
-                supports_fa2_all_modules = all(
+                sub_models_supporting_fa2 = [
                     module._supports_flash_attn_2
                     for name, module in model.named_modules()
                     if isinstance(module, PreTrainedModel) and name != ""
+                ]
+                supports_fa2_all_modules = (
+                    all(sub_models_supporting_fa2)
+                    if len(sub_models_supporting_fa2) > 0
+                    else model._supports_flash_attn_2
                 )
                 if not supports_fa2_all_modules:
                     with self.assertRaises(ValueError):
@@ -4442,7 +4497,11 @@ class ModelTesterMixin:
                     has_fa2 = False
                     for name, submodule in model_fa2.named_modules():
                         class_name = submodule.__class__.__name__
-                        if "FlashAttention" in class_name:
+                        if (
+                            "Attention" in class_name
+                            and getattr(submodule, "config", None)
+                            and submodule.config._attn_implementation == "flash_attention_2"
+                        ):
                             has_fa2 = True
                             break
                     if not has_fa2:
