@@ -12,21 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Janus model configuration"""
-import copy
-import os
-from typing import Any, Dict, Optional, Union
 
 from ...configuration_utils import PretrainedConfig
-from ...utils import logging
-
-from ..auto import CONFIG_MAPPING, AutoConfig
 from ...modeling_rope_utils import rope_config_validation
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class JanusEncoderVisionConfig(PretrainedConfig):
+class JanusVisionEncoderConfig(PretrainedConfig):
     """Encoder Vision config in this case its the SIGLIP model"""
 
     model_type = "siglip_vision_model"
@@ -37,23 +32,28 @@ class JanusEncoderVisionConfig(PretrainedConfig):
         hidden_size=1024,
         mlp_ratio=4.0,
         projection_dim=1024,
-        num_hidden_layers=24,
+        num_hidden_layers=4,
         num_attention_heads=16,
         num_channels=3,
-        num_frames=2,
         image_size=384,
-        patch_size=14,
+        patch_size=16,
         hidden_act="gelu",
         layer_norm_eps=1e-6,
-        add_kv_bias=False,
+        qkv_bias=False,
         attention_dropout=0.0,
         drop_path_rate=0.0,
         initializer_range=0.02,
         initializer_factor=1.0,
         logit_scale_init_value=None,
         learnable_logit_scale=False,
-        select_feature = "same",
-        select_layer = -1,
+        select_feature="same",
+        select_layer=-1,
+        num_register_tokens=0,
+        hidden_dropout_rate=0,
+        projection_dropout=0,
+        use_qk_norm = False,
+        layerscale_value=None,
+        vision_use_head = True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -64,20 +64,23 @@ class JanusEncoderVisionConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.num_channels = num_channels
-        self.num_frames = num_frames
         self.patch_size = patch_size
         self.image_size = image_size
-        self.initializer_range = initializer_range
-        self.initializer_factor = initializer_factor
-        self.add_kv_bias = add_kv_bias
+        self.qkv_bias = qkv_bias
         self.attention_dropout = attention_dropout
         self.drop_path_rate = drop_path_rate
         self.layer_norm_eps = layer_norm_eps
         self.hidden_act = hidden_act
-        self.logit_scale_init_value = logit_scale_init_value
-        self.learnable_logit_scale = learnable_logit_scale
-        self.feature_size = image_size
         self.intermediate_size = int(hidden_size * mlp_ratio)
+        self.num_register_tokens = num_register_tokens
+        self.hidden_dropout_rate = hidden_dropout_rate
+        self.projection_dropout = projection_dropout
+        self.use_qk_norm = use_qk_norm
+        self.layerscale_value = layerscale_value
+        self.select_layer = select_layer
+        self.select_feature = select_feature
+        self.vision_use_head = vision_use_head
+
 
 class JanusTextConfig(PretrainedConfig):
     r"""
@@ -272,11 +275,14 @@ class JanusTextConfig(PretrainedConfig):
             **kwargs,
         )
 
+
 class JanusDecoderVisionConfig(PretrainedConfig):
     """A custom VQ config model"""
+
     # TODO
     def __init__(self):
         pass
+
 
 class JanusConfig(PretrainedConfig):
     r"""
@@ -334,9 +340,13 @@ class JanusConfig(PretrainedConfig):
     ```"""
 
     model_type = "janus"
-    sub_configs = {"text_config": JanusTextConfig, "encoder_vision_config": JanusEncoderVisionConfig, "decoder_vision_config": JanusDecoderVisionConfig}
+    sub_configs = {
+        "text_config": JanusTextConfig,
+        "encoder_vision_config": JanusVisionEncoderConfig,
+        "decoder_vision_config": JanusDecoderVisionConfig,
+    }
 
-    def __init__(self, text_config, encoder_vision_config,decoder_vision_config, **kwargs):
+    def __init__(self, text_config, encoder_vision_config, decoder_vision_config, **kwargs):
         super.__init__(**kwargs)
 
         if text_config is None:
@@ -345,14 +355,15 @@ class JanusConfig(PretrainedConfig):
 
         if encoder_vision_config is None:
             encoder_vision_config = {}
-            logger.info("`encodr_vision_config` is None. Initializaing with default JanusEncoderVisionConfig values")
+            logger.info("`encodr_vision_config` is None. Initializaing with default JanusVisionEncoderConfig values")
 
         if decoder_vision_config is None:
             decoder_vision_config = {}
             logger.info("`text_config` is None. Initializaing with default JanusDecoderVisionConfig values")
 
         text_config = JanusTextConfig(**text_config)
-        encoder_vision_config = JanusEncoderVisionConfig(**encoder_vision_config)
+        encoder_vision_config = JanusVisionEncoderConfig(**encoder_vision_config)
         decoder_vision_config = JanusDecoderVisionConfig(**decoder_vision_config)
 
-__all__ = ["JanusDecoderVisionConfig","JanusTextConfig","JanusEncoderVisionConfig","JanusConfig"]
+
+__all__ = ["JanusDecoderVisionConfig", "JanusTextConfig", "JanusVisionEncoderConfig", "JanusConfig"]
