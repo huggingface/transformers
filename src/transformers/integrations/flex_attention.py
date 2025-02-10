@@ -1,12 +1,13 @@
+"""
+Inspired by torchtune's flex attention implementation
+"""
+
 from typing import Optional, Tuple, Union
 
 import torch
 
 from ..utils import is_torch_flex_attn_available
 
-"""
-Inspired by torchtune's flex attention implementation
-"""
 
 if is_torch_flex_attn_available():
     from torch.nn.attention.flex_attention import (
@@ -15,6 +16,35 @@ if is_torch_flex_attn_available():
         create_block_mask as create_block_causal_mask_flex,
     )
 
+
+class wrapped_flex_attention:
+    """
+    We are doing a singleton class so that flex attention is compiled once and only once
+    and only when called.
+    """
+
+    _instance = None
+    _is_flex_compiled = False
+    _compiled_flex_attention = None
+
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            # Create a new instance if one doesn't already exist
+            cls._instance = super().__new__(cls)
+        return cls._instance
+
+    @torch.compiler.disable(recursive=False)
+    def __init__(self):
+        """
+        Initialize or update the singleton instance.
+        """
+        if self._is_flex_compiled is False:
+            self._compiled_flex_attention = torch.compile(flex_attention, dynamic=False)
+            self._is_flex_compiled = True
+
+    def __call__(self):
+        return self._compiled_flex_attention
+        
 
 def make_flex_block_causal_mask(
     attention_mask_2d: torch.Tensor
@@ -68,12 +98,10 @@ def make_flex_block_causal_mask(
         causal_mask_mod,
         batch_size,
         None,
-        total_seq_len,
-        total_seq_len,
+        Q_LEN=total_seq_len,
+        KV_LEN=total_seq_len,
         device=device,
     )
-
-flex_attention_compiled = torch.compile(flex_attention, dynamic=False)
 
 @torch.compiler.disable(recursive=False)
 def compile_friendly_flex_attention(
@@ -82,6 +110,8 @@ def compile_friendly_flex_attention(
     value: torch.Tensor,
     **kwargs,
 ) -> torch.Tensor:
+
+    flex_attention_compiled = wrapped_flex_attention()
     return flex_attention_compiled(
         query,
         key,
