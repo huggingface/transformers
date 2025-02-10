@@ -58,12 +58,14 @@ class EvollaModelTester:
         text_vocab_size=100,
         protein_seq_length=10,
         protein_vocab_size=20,
+        hidden_size=4096, # llama hidden size
         num_hidden_layers=32, # llama hidden layers
         num_attention_heads=32, # llama attention heads
         use_input_mask=True,
     ):
         self.parent = parent
         self.batch_size = batch_size
+        self.hidden_size = hidden_size
         self.protein_seq_length = protein_seq_length
         self.protein_vocab_size = protein_vocab_size
         self.text_seq_length = text_seq_length
