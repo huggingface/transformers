@@ -21,12 +21,9 @@ import re
 from typing import List, Optional, Union
 
 import numpy as np
-import torch
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature
-from ...image_transforms import (
-    convert_to_rgb,
-)
+from ...image_transforms import convert_to_rgb
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
@@ -36,13 +33,17 @@ from ...image_utils import (
 )
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import PaddingStrategy, TextInput, TruncationStrategy
-from ...utils import TensorType, is_vision_available, logging
+from ...utils import TensorType, logging, is_vision_available, is_torch_available, is_torchvision_available
 
 
 if is_vision_available():
     from PIL import Image
 
-import torchvision
+if is_torch_available():
+    import torch
+
+if is_torchvision_available():
+    import torchvision
 
 
 logger = logging.get_logger(__name__)
