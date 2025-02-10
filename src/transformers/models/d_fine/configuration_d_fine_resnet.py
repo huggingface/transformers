@@ -27,7 +27,33 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 
 
 class DFineResNetStageConfig(NamedTuple):
-    # stage: [in_channels, mid_channels, out_channels, num_blocks, downsample, light_block, kernel_size, layer_num]
+    """
+    Configuration for each stage in the D-FINE ResNet backbone.
+    Each stage is defined by a list of parameters in the following order:
+    [in_channels, mid_channels, out_channels, num_blocks, downsample, light_block, kernel_size, layer_num]
+
+    Args:
+        stage1 (`List[Any]`, defaults to [48, 48, 128, 1, False, False, 3, 6]):
+            First stage configuration:
+            - Input channels: 48
+            - Middle (bottleneck) channels: 48
+            - Output channels: 128
+            - Number of blocks: 1
+            - No downsampling
+            - Standard (non-light) blocks
+            - Kernel size: 3
+            - Number of layers per block: 6
+
+        stage2 (`List[Any]`, defaults to [128, 96, 512, 1, True, False, 3, 6]):
+            Second stage with spatial downsampling and channel expansion
+
+        stage3 (`List[Any]`, defaults to [512, 192, 1024, 3, True, True, 5, 6]):
+            Third stage with light blocks and larger kernel size
+
+        stage4 (`List[Any]`, defaults to [1024, 384, 2048, 1, True, True, 5, 6]):
+            Final stage with maximum channel width
+    """
+
     stage1: List[Any] = [48, 48, 128, 1, False, False, 3, 6]
     stage2: List[Any] = [128, 96, 512, 1, True, False, 3, 6]
     stage3: List[Any] = [512, 192, 1024, 3, True, True, 5, 6]
@@ -39,58 +65,28 @@ class DFineResNetStageConfig(NamedTuple):
 
 
 class DFineResNetConfig(BackboneConfigMixin, PretrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`DFineResnetBackbone`]. It is used to instantiate an
-    ResNet model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the ResNet
-    [microsoft/resnet-50](https://huggingface.co/microsoft/resnet-50) architecture.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    """
+    Configuration class for D-FINE ResNet backbone.
+    Extends RTDetrResNetConfig with D-FINE specific parameters.
 
     Args:
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        embedding_size (`int`, *optional*, defaults to 64):
-            Dimensionality (hidden size) for the embedding layer.
-        hidden_sizes (`List[int]`, *optional*, defaults to `[256, 512, 1024, 2048]`):
-            Dimensionality (hidden size) at each stage.
-        depths (`List[int]`, *optional*, defaults to `[3, 4, 6, 3]`):
-            Depth (number of layers) for each stage.
-        layer_type (`str`, *optional*, defaults to `"bottleneck"`):
-            The layer to use, it can be either `"basic"` (used for smaller models, like resnet-18 or resnet-34) or
-            `"bottleneck"` (used for larger models like resnet-50 and above).
-        hidden_act (`str`, *optional*, defaults to `"relu"`):
-            The non-linear activation function in each block. If string, `"gelu"`, `"relu"`, `"selu"` and `"gelu_new"`
-            are supported.
-        downsample_in_first_stage (`bool`, *optional*, defaults to `False`):
-            If `True`, the first stage will downsample the inputs using a `stride` of 2.
-        downsample_in_bottleneck (`bool`, *optional*, defaults to `False`):
-            If `True`, the first conv 1x1 in ResNetBottleNeckLayer will downsample the inputs using a `stride` of 2.
-        out_features (`List[str]`, *optional*):
-            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
-            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
-            corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
-            same order as defined in the `stage_names` attribute.
-        out_indices (`List[int]`, *optional*):
-            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
-            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
-            If unset and `out_features` is unset, will default to the last stage. Must be in the
-            same order as defined in the `stage_names` attribute.
+        stem_channels (`List[int]`, *optional*, defaults to [3, 32, 48]):
+            Channel dimensions for the stem layers:
+            - First number (3) is input image channels
+            - Second number (32) is intermediate stem channels
+            - Third number (48) is output stem channels
 
-    Example:
-    ```python
-    >>> from transformers import DFineResNetConfig, DFineResnetBackbone
+        stage_config (`DFineResNetStageConfig`, *optional*):
+            Configuration for the four stages of the backbone.
+            See DFineResNetStageConfig for details.
 
-    >>> # Initializing a ResNet resnet-50 style configuration
-    >>> configuration = DFineResNetConfig()
+        use_lab (`bool`, *optional*, defaults to False):
+            Whether to use Learnable Affine Blocks (LAB) in the network.
+            LAB adds learnable scale and bias parameters after certain operations.
 
-    >>> # Initializing a model (with random weights) from the resnet-50 style configuration
-    >>> model = DFineResnetBackbone(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```
+        **super_kwargs:
+            Additional arguments from RTDetrResNetConfig, including standard
+            ResNet parameters like hidden_act, layer_norm_eps, etc.
     """
 
     model_type = "d_fine_resnet"
