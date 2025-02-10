@@ -38,8 +38,8 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...video_utils import VideoInput, make_batched_videos
 from ...utils import TensorType, filter_out_non_signature_kwargs, logging
+from ...video_utils import VideoInput, make_batched_videos
 
 
 logger = logging.get_logger(__name__)

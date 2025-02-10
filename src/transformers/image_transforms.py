@@ -126,8 +126,8 @@ def rescale(
         raise TypeError(f"Input image must be of type np.ndarray, got {type(image)}")
 
     # Cast to float to avoid errors that can occur when we get uint8 values and negative scale see #34180.
-    if not np.issubdtype(image.dtype, np.floating):
-        image = image.astype(np.float32)
+    if not np.issubdtype(image.dtype, np.floating) and scale < 0:
+        image = image.astype(np.float64)
 
     rescaled_image = image * scale
     if data_format is not None:

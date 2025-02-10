@@ -20,7 +20,6 @@ import os
 from typing import List, Optional, Union
 
 from ...image_processing_utils import BatchFeature
-from ...video_utils import VideoInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import (
     AddedToken,
@@ -31,6 +30,7 @@ from ...tokenization_utils_base import (
     TruncationStrategy,
 )
 from ...utils import TensorType, logging
+from ...video_utils import VideoInput
 from ..auto import AutoTokenizer
 
 

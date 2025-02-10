@@ -31,12 +31,12 @@ from transformers import is_torch_available, is_vision_available
 from transformers.image_utils import (
     ChannelDimension,
     get_channel_dimension_axis,
-    make_batched_videos,
     make_flat_list_of_images,
     make_list_of_images,
     make_nested_list_of_images,
 )
 from transformers.testing_utils import is_flaky, require_torch, require_vision
+from transformers.video_utils import make_batched_videos
 
 
 if is_torch_available():
@@ -401,25 +401,25 @@ class ImageFeatureExtractionTester(unittest.TestCase):
         # Test a single image is converted to a list of 1 video with 1 frame
         pil_image = get_random_image(16, 32)
         videos_list = make_batched_videos(pil_image)
-        self.assertIsInstance(videos_list[0], list)
-        self.assertEqual(len(videos_list[0]), 1)
-        self.assertIsInstance(videos_list[0][0], PIL.Image.Image)
+        self.assertIsInstance(videos_list, list)
+        self.assertIsInstance(videos_list[0], np.ndarray)
+        self.assertEqual(videos_list[0].shape[0], 1)
+        self.assertEqual(videos_list[0].shape[1], 16)
+        self.assertTrue(np.array_equal(videos_list[0][0], np.array(pil_image)))
 
         # Test a list of images is converted to a list of 1 video
         images = [get_random_image(16, 32) for _ in range(4)]
         videos_list = make_batched_videos(images)
-        self.assertIsInstance(videos_list[0], list)
-        self.assertEqual(len(videos_list), 1)
+        self.assertIsInstance(videos_list, list)
+        self.assertIsInstance(videos_list[0], np.ndarray)
         self.assertEqual(len(videos_list[0]), 4)
-        self.assertIsInstance(videos_list[0][0], PIL.Image.Image)
 
         # Test a nested list of images is not modified
         images = [[get_random_image(16, 32) for _ in range(2)] for _ in range(2)]
-        videos_list = make_nested_list_of_images(images)
-        self.assertIsInstance(videos_list[0], list)
-        self.assertEqual(len(videos_list), 2)
+        videos_list = make_batched_videos(images)
+        self.assertIsInstance(videos_list, list)
+        self.assertIsInstance(videos_list[0], np.ndarray)
         self.assertEqual(len(videos_list[0]), 2)
-        self.assertIsInstance(videos_list[0][0], PIL.Image.Image)
 
     def test_make_batched_videos_numpy(self):
         # Test a single image is converted to a list of 1 video with 1 frame
