@@ -564,7 +564,8 @@ _import_structure = {
     ],
     "models.janus": [
         "JanusConfig",
-       
+        "JanusImageProcessor",
+        "JanusProcessor"
     ],
     "models.llava_next": [
         "LlavaNextConfig",
@@ -5672,6 +5673,9 @@ if TYPE_CHECKING:
         InstructBlipVideoVisionConfig,
     )
     from .models.jamba import JambaConfig
+    from .models.janus import (
+        JanusConfig,
+    )
     from .models.jetmoe import JetMoeConfig
     from .models.kosmos2 import (
         Kosmos2Config,
@@ -5703,10 +5707,6 @@ if TYPE_CHECKING:
     from .models.llava import (
         LlavaConfig,
         LlavaProcessor,
-    )
-    from .models.janus import (
-        JanusConfig,
-       
     )
     from .models.llava_next import (
         LlavaNextConfig,
@@ -7617,6 +7617,10 @@ if TYPE_CHECKING:
             JambaModel,
             JambaPreTrainedModel,
         )
+        from .models.janus import (
+            JanusForConditionalGeneration,
+            JanusPreTrainedModel,
+        )
         from .models.jetmoe import (
             JetMoeForCausalLM,
             JetMoeForSequenceClassification,
@@ -7681,10 +7685,6 @@ if TYPE_CHECKING:
         from .models.llava import (
             LlavaForConditionalGeneration,
             LlavaPreTrainedModel,
-        )
-        from .models.janus import (
-            JanusForConditionalGeneration,
-            JanusPreTrainedModel,
         )
         from .models.llava_next import (
             LlavaNextForConditionalGeneration,
