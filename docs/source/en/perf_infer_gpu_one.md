@@ -52,6 +52,7 @@ FlashAttention-2 is currently supported for the following architectures:
 * [Emu3](https://huggingface.co/docs/transformers/model_doc/emu3)
 * [Gemma](https://huggingface.co/docs/transformers/model_doc/gemma#transformers.GemmaModel)
 * [Gemma2](https://huggingface.co/docs/transformers/model_doc/gemma2#transformers.Gemma2Model)
+* [GotOcr2](https://huggingface.co/docs/transformers/model_doc/got_ocr2#transformers.GotOcr2ForConditionalGeneration)
 * [GPT2](https://huggingface.co/docs/transformers/model_doc/gpt2)
 * [GPTBigCode](https://huggingface.co/docs/transformers/model_doc/gpt_bigcode#transformers.GPTBigCodeModel)
 * [GPTNeo](https://huggingface.co/docs/transformers/model_doc/gpt_neo#transformers.GPTNeoModel)
@@ -253,6 +254,7 @@ For now, Transformers supports SDPA inference and training for the following arc
 * [Falcon](https://huggingface.co/docs/transformers/model_doc/falcon#transformers.FalconModel)
 * [Gemma](https://huggingface.co/docs/transformers/model_doc/gemma#transformers.GemmaModel)
 * [Gemma2](https://huggingface.co/docs/transformers/model_doc/gemma2#transformers.Gemma2Model)
+* [GotOcr2](https://huggingface.co/docs/transformers/model_doc/got_ocr2#transformers.GotOcr2ForConditionalGeneration)
 * [Granite](https://huggingface.co/docs/transformers/model_doc/granite#transformers.GraniteModel)
 * [GPT2](https://huggingface.co/docs/transformers/model_doc/gpt2)
 * [GPTBigCode](https://huggingface.co/docs/transformers/model_doc/gpt_bigcode#transformers.GPTBigCodeModel)
@@ -355,7 +357,7 @@ tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m")
 model = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", torch_dtype=torch.float16).to("cuda")
 
 input_text = "Hello my dog is cute and"
-inputs = tokenizer(input_text, return_tensors="pt").to("cuda")
+inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
 
 + with sdpa_kernel(SDPBackend.FLASH_ATTENTION):
     outputs = model.generate(**inputs)
@@ -429,14 +431,14 @@ To load a model in 4-bit for inference, use the `load_in_4bit` parameter. The `d
 ```py
 from transformers import AutoModelForCausalLM
 
-model_name = "bigscience/bloom-2b5"
+model_name = "bigscience/bloom-1b7"
 model_4bit = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype="auto", device_map="auto", load_in_4bit=True)
 ```
 
-To load a model in 4-bit for inference with multiple GPUs, you can control how much GPU RAM you want to allocate to each GPU. For example, to distribute 600MB of memory to the first GPU and 1GB of memory to the second GPU:
+To load a model in 4-bit for inference with multiple GPUs, you can control how much GPU RAM you want to allocate to each GPU. For example, to distribute 2GB of memory to the first GPU and 5GB of memory to the second GPU:
 
 ```py
-max_memory_mapping = {0: "600MB", 1: "1GB"}
+max_memory_mapping = {0: "2GB", 1: "5GB"}
 model_name = "bigscience/bloom-3b"
 model_4bit = AutoModelForCausalLM.from_pretrained(
     model_name, torch_dtype="auto", device_map="auto", load_in_4bit=True, max_memory=max_memory_mapping
@@ -456,7 +458,7 @@ To load a model in 8-bit for inference, use the `load_in_8bit` parameter. The `d
 ```py
 from transformers import AutoModelForCausalLM, BitsAndBytesConfig
 
-model_name = "bigscience/bloom-2b5"
+model_name = "bigscience/bloom-1b7"
 model_8bit = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype="auto", quantization_config=BitsAndBytesConfig(load_in_8bit=True))
 ```
 
@@ -465,20 +467,20 @@ If you're loading a model in 8-bit for text generation, you should use the [`~tr
 ```py
 from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 
-model_name = "bigscience/bloom-2b5"
+model_name = "bigscience/bloom-1b7"
 tokenizer = AutoTokenizer.from_pretrained(model_name)
 model_8bit = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype="auto", quantization_config=BitsAndBytesConfig(load_in_8bit=True))
 
 prompt = "Hello, my llama is cute"
-inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
-generated_ids = model.generate(**inputs)
+inputs = tokenizer(prompt, return_tensors="pt").to(model_8bit.device)
+generated_ids = model_8bit.generate(**inputs)
 outputs = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
 ```
 
-To load a model in 8-bit for inference with multiple GPUs, you can control how much GPU RAM you want to allocate to each GPU. For example, to distribute 1GB of memory to the first GPU and 2GB of memory to the second GPU:
+To load a model in 8-bit for inference with multiple GPUs, you can control how much GPU RAM you want to allocate to each GPU. For example, to distribute 2GB of memory to the first GPU and 5GB of memory to the second GPU:
 
 ```py
-max_memory_mapping = {0: "1GB", 1: "2GB"}
+max_memory_mapping = {0: "2GB", 1: "5GB"}
 model_name = "bigscience/bloom-3b"
 model_8bit = AutoModelForCausalLM.from_pretrained(
     model_name, torch_dtype="auto", device_map="auto", load_in_8bit=True, max_memory=max_memory_mapping
@@ -543,11 +545,8 @@ quantization_config = BitsAndBytesConfig(
 tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m")
 model = AutoModelForCausalLM.from_pretrained("facebook/opt-350m", torch_dtype="auto", quantization_config=quantization_config)
 
-# enable BetterTransformer
-model = model.to_bettertransformer()
-
 input_text = "Hello my dog is cute and"
-inputs = tokenizer(input_text, return_tensors="pt").to("cuda")
+inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
 
 # enable FlashAttention
 with sdpa_kernel(SDPBackend.FLASH_ATTENTION):
