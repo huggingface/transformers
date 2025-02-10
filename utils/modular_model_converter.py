@@ -571,6 +571,7 @@ ALL_FILE_TYPES = (
     "tokenization",
     "processing",
     "image_processing",
+    "video_processing",
     "feature_extractor",
 )
 
@@ -1068,6 +1069,10 @@ TYPE_TO_FILE_TYPE = {
     "ImageProcessorFast": "image_processing*_fast",  # "*" indicates where to insert the model name before the "_fast" suffix
     "FastImageProcessorInitKwargs": "image_processing*_fast",
     "FastImageProcessorPreprocessKwargs": "image_processing*_fast",
+    "VideoProcessor": "video_processing",
+    "VideoProcessorFast": "video_processing*_fast",
+    "FastVideoProcessorInitKwargs": "video_processing*_fast",
+    "FastVideoProcessorPreprocessKwargs": "video_processing*_fast",
     "FeatureExtractor": "feature_extractor",
     "ProcessorKwargs": "processing",
     "ImagesKwargs": "processing",

@@ -43,6 +43,7 @@ from transformers.models.qwen2_vl.modeling_qwen2_vl import (
     VisionSdpaAttention,
 )
 from transformers.models.qwen2_vl.processing_qwen2_vl import Qwen2VLProcessor
+from transformers.models.qwen2_vl.video_processing_qwen2_vl import Qwen2VLVideoProcessor
 
 from ...activations import ACT2FN
 from ...cache_utils import StaticCache
@@ -827,6 +828,10 @@ class Qwen2_5_VLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         return model_inputs
 
 
+class Qwen2_5_VLVideoProcessor(Qwen2VLVideoProcessor):
+    pass
+
+
 class Qwen2_5_VLImageProcessor(Qwen2VLImageProcessor):
     r"""
     Constructs a Qwen2.5-VL image processor that dynamically resizes images based on the original images.
@@ -1010,5 +1015,6 @@ __all__ = [
     "Qwen2_5_VLModel",
     "Qwen2_5_VLPreTrainedModel",
     "Qwen2_5_VLImageProcessor",
+    "Qwen2_5_VLVideoProcessor",
     "Qwen2_5_VLProcessor",
 ]
