@@ -232,7 +232,6 @@ def cached_file(
     Args:
         path_or_repo_id (`str` or `os.PathLike`):
             This can be either:
-
             - a string, the *model id* of a model repo on huggingface.co.
             - a path to a *directory* potentially containing the file.
         filename (`str`):
@@ -264,6 +263,17 @@ def cached_file(
         repo_type (`str`, *optional*):
             Specify the repo type (useful when downloading from a space for instance).
 
+    Private args:
+        _raise_exceptions_for_gated_repo (`bool`):
+            if False, do not raise an exception for gated repo error but return None.
+        _raise_exceptions_for_missing_entries (`bool`):
+            if False, do not raise an exception for missing entries but return None.
+        _raise_exceptions_for_connection_errors (`bool`):
+            if False, do not raise an exception for connection errors but return None.
+        _commit_hash (`str`, *optional*):
+            passed when we are chaining several calls to various files (e.g. when loading a tokenizer or
+            a pipeline). If files are cached for this commit hash, avoid calls to head and get from the cache.
+
     <Tip>
 
     Passing `token=True` is required when you want to use a private model.
@@ -290,15 +300,6 @@ def cached_file(
             raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
         token = use_auth_token
 
-    # Private arguments
-    #     _raise_exceptions_for_gated_repo: if False, do not raise an exception for gated repo error but return
-    #         None.
-    #     _raise_exceptions_for_missing_entries: if False, do not raise an exception for missing entries but return
-    #         None.
-    #     _raise_exceptions_for_connection_errors: if False, do not raise an exception for connection errors but return
-    #         None.
-    #     _commit_hash: passed when we are chaining several calls to various files (e.g. when loading a tokenizer or
-    #         a pipeline). If files are cached for this commit hash, avoid calls to head and get from the cache.
     if is_offline_mode() and not local_files_only:
         logger.info("Offline mode: forcing local_files_only=True")
         local_files_only = True
@@ -432,12 +433,11 @@ def cached_files(
     **deprecated_kwargs,
 ) -> Optional[str]:
     """
-    Tries to locate a file in a local folder and repo, downloads and cache it if necessary.
+    Tries to locate several files in a local folder and repo, downloads and cache them if necessary.
 
     Args:
         path_or_repo_id (`str` or `os.PathLike`):
             This can be either:
-
             - a string, the *model id* of a model repo on huggingface.co.
             - a path to a *directory* potentially containing the file.
         filenames (`List[str]`):
@@ -469,6 +469,17 @@ def cached_files(
         repo_type (`str`, *optional*):
             Specify the repo type (useful when downloading from a space for instance).
 
+    Private args:
+        _raise_exceptions_for_gated_repo (`bool`):
+            if False, do not raise an exception for gated repo error but return None.
+        _raise_exceptions_for_missing_entries (`bool`):
+            if False, do not raise an exception for missing entries but return None.
+        _raise_exceptions_for_connection_errors (`bool`):
+            if False, do not raise an exception for connection errors but return None.
+        _commit_hash (`str`, *optional*):
+            passed when we are chaining several calls to various files (e.g. when loading a tokenizer or
+            a pipeline). If files are cached for this commit hash, avoid calls to head and get from the cache.
+
     <Tip>
 
     Passing `token=True` is required when you want to use a private model.
@@ -496,15 +507,6 @@ def cached_files(
             raise ValueError("`token` and `use_auth_token` are both specified. Please set only the argument `token`.")
         token = use_auth_token
 
-    # Private arguments
-    #     _raise_exceptions_for_gated_repo: if False, do not raise an exception for gated repo error but return
-    #         None.
-    #     _raise_exceptions_for_missing_entries: if False, do not raise an exception for missing entries but return
-    #         None.
-    #     _raise_exceptions_for_connection_errors: if False, do not raise an exception for connection errors but return
-    #         None.
-    #     _commit_hash: passed when we are chaining several calls to various files (e.g. when loading a tokenizer or
-    #         a pipeline). If files are cached for this commit hash, avoid calls to head and get from the cache.
     if is_offline_mode() and not local_files_only:
         logger.info("Offline mode: forcing local_files_only=True")
         local_files_only = True
