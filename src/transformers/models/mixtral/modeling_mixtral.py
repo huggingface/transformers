@@ -967,7 +967,7 @@ def load_balancing_loss_func(
 class MixtralForCausalLM(MixtralPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
-    _pp_plan = {"lm_head": [["hidden_states"], ["logits"]]}
+    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
     def __init__(self, config):
         super().__init__(config)

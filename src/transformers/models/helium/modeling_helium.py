@@ -748,7 +748,7 @@ class KwargsForCausalLM(FlashAttentionKwargs, LossKwargs): ...
 class HeliumForCausalLM(HeliumPreTrainedModel, GenerationMixin):
     _tied_weights_keys = ["lm_head.weight"]
     _tp_plan = {"lm_head": "colwise_rep"}
-    _pp_plan = {"lm_head": [["hidden_states"], ["logits"]]}
+    _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}
 
     def __init__(self, config: HeliumConfig):
         super().__init__(config)

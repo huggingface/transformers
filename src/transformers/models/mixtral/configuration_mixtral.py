@@ -120,9 +120,9 @@ class MixtralConfig(PretrainedConfig):
         "layers.*.block_sparse_moe.experts.*.w3": "colwise",
     }
     base_model_pp_plan = {
-        "embed_tokens": [["input_ids"], ["inputs_embeds"]],
-        "layers": [["hidden_states", "attention_mask"], ["hidden_states"]],
-        "norm": [["hidden_states"], ["hidden_states"]],
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
     }
 
     def __init__(
