@@ -71,67 +71,55 @@ expected_outputs = {
 # fmt: off
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     # Vision embeddings
-    r"params/img/embedding/kernel":                                                             r"vision_model.embeddings.patch_embedding.weight",
-    r"params/img/embedding/bias":                                                               r"vision_model.embeddings.patch_embedding.bias",
-    r"params/img/pos_embedding":                                                                r"vision_model.embeddings.position_embedding.weight",
+    r"params/img/embedding/kernel":                                                                         r"vision_model.embeddings.patch_embedding.weight",
+    r"params/img/embedding/bias":                                                                           r"vision_model.embeddings.patch_embedding.bias",
+    r"params/img/pos_embedding":                                                                            r"vision_model.embeddings.position_embedding.weight",
     # Vision encoder
-    r"params/img/Transformer/encoderblock_(\d+)/LayerNorm_0/scale":                             r"vision_model.encoder.layers.\1.layer_norm1.weight",
-    r"params/img/Transformer/encoderblock_(\d+)/LayerNorm_0/bias":                              r"vision_model.encoder.layers.\1.layer_norm1.bias",
-    r"params/img/Transformer/encoderblock_(\d+)/LayerNorm_1/scale":                             r"vision_model.encoder.layers.\1.layer_norm2.weight",
-    r"params/img/Transformer/encoderblock_(\d+)/LayerNorm_1/bias":                              r"vision_model.encoder.layers.\1.layer_norm2.bias",
-    r"params/img/Transformer/encoderblock_(\d+)/MlpBlock_0/Dense_0/kernel":                     r"vision_model.encoder.layers.\1.mlp.fc1.weight",
-    r"params/img/Transformer/encoderblock_(\d+)/MlpBlock_0/Dense_0/bias":                       r"vision_model.encoder.layers.\1.mlp.fc1.bias",
-    r"params/img/Transformer/encoderblock_(\d+)/MlpBlock_0/Dense_1/kernel":                     r"vision_model.encoder.layers.\1.mlp.fc2.weight",
-    r"params/img/Transformer/encoderblock_(\d+)/MlpBlock_0/Dense_1/bias":                       r"vision_model.encoder.layers.\1.mlp.fc2.bias",
-    r"params/img/Transformer/encoderblock_(\d+)/MultiHeadDotProductAttention_0/key/kernel":     r"vision_model.encoder.layers.\1.self_attn.k_proj.weight",
-    r"params/img/Transformer/encoderblock_(\d+)/MultiHeadDotProductAttention_0/key/bias":       r"vision_model.encoder.layers.\1.self_attn.k_proj.bias",
-    r"params/img/Transformer/encoderblock_(\d+)/MultiHeadDotProductAttention_0/value/kernel":   r"vision_model.encoder.layers.\1.self_attn.v_proj.weight",
-    r"params/img/Transformer/encoderblock_(\d+)/MultiHeadDotProductAttention_0/value/bias":     r"vision_model.encoder.layers.\1.self_attn.v_proj.bias",
-    r"params/img/Transformer/encoderblock_(\d+)/MultiHeadDotProductAttention_0/query/kernel":   r"vision_model.encoder.layers.\1.self_attn.q_proj.weight",
-    r"params/img/Transformer/encoderblock_(\d+)/MultiHeadDotProductAttention_0/query/bias":     r"vision_model.encoder.layers.\1.self_attn.q_proj.bias",
-    r"params/img/Transformer/encoderblock_(\d+)/MultiHeadDotProductAttention_0/out/kernel":     r"vision_model.encoder.layers.\1.self_attn.out_proj.weight",
-    r"params/img/Transformer/encoderblock_(\d+)/MultiHeadDotProductAttention_0/out/bias":       r"vision_model.encoder.layers.\1.self_attn.out_proj.bias",
+    r"params/img/Transformer/encoderblock_(\d+)/LayerNorm_0/scale":                                         r"vision_model.encoder.layers.\1.layer_norm1.weight",
+    r"params/img/Transformer/encoderblock_(\d+)/LayerNorm_0/bias":                                          r"vision_model.encoder.layers.\1.layer_norm1.bias",
+    r"params/img/Transformer/encoderblock_(\d+)/LayerNorm_1/scale":                                         r"vision_model.encoder.layers.\1.layer_norm2.weight",
+    r"params/img/Transformer/encoderblock_(\d+)/LayerNorm_1/bias":                                          r"vision_model.encoder.layers.\1.layer_norm2.bias",
+    r"params/img/Transformer/encoderblock_(\d+)/MlpBlock_0/Dense_0/kernel":                                 r"vision_model.encoder.layers.\1.mlp.fc1.weight",
+    r"params/img/Transformer/encoderblock_(\d+)/MlpBlock_0/Dense_0/bias":                                   r"vision_model.encoder.layers.\1.mlp.fc1.bias",
+    r"params/img/Transformer/encoderblock_(\d+)/MlpBlock_0/Dense_1/kernel":                                 r"vision_model.encoder.layers.\1.mlp.fc2.weight",
+    r"params/img/Transformer/encoderblock_(\d+)/MlpBlock_0/Dense_1/bias":                                   r"vision_model.encoder.layers.\1.mlp.fc2.bias",
+    r"params/img/Transformer/encoderblock_(\d+)/MultiHeadDotProductAttention_0/(q|k|v|out)[a-z]*/kernel":   r"vision_model.encoder.layers.\1.self_attn.\2_proj.weight",
+    r"params/img/Transformer/encoderblock_(\d+)/MultiHeadDotProductAttention_0/(q|k|v|out)[a-z]*/bias":     r"vision_model.encoder.layers.\1.self_attn.\2_proj.bias",
     # Vision norm
-    r"params/img/Transformer/encoder_norm/scale":                                               r"vision_model.post_layernorm.weight",
-    r"params/img/Transformer/encoder_norm/bias":                                                r"vision_model.post_layernorm.bias",
+    r"params/img/Transformer/encoder_norm/scale":                                                           r"vision_model.post_layernorm.weight",
+    r"params/img/Transformer/encoder_norm/bias":                                                            r"vision_model.post_layernorm.bias",
     # Vision head
-    r"params/img/MAPHead_0/probe":                                                              r"vision_model.head.probe",
-    r"params/img/MAPHead_0/LayerNorm_0/scale":                                                  r"vision_model.head.layernorm.weight",
-    r"params/img/MAPHead_0/LayerNorm_0/bias":                                                   r"vision_model.head.layernorm.bias",
-    r"params/img/MAPHead_0/MlpBlock_0/Dense_0/kernel":                                          r"vision_model.head.mlp.fc1.weight",
-    r"params/img/MAPHead_0/MlpBlock_0/Dense_0/bias":                                            r"vision_model.head.mlp.fc1.bias",
-    r"params/img/MAPHead_0/MlpBlock_0/Dense_1/kernel":                                          r"vision_model.head.mlp.fc2.weight",
-    r"params/img/MAPHead_0/MlpBlock_0/Dense_1/bias":                                            r"vision_model.head.mlp.fc2.bias",
-    r"params/img/MAPHead_0/MultiHeadDotProductAttention_0/out/kernel":                          r"vision_model.head.attention.out_proj.weight",
-    r"params/img/MAPHead_0/MultiHeadDotProductAttention_0/out/bias":                            r"vision_model.head.attention.out_proj.bias",
+    r"params/img/MAPHead_0/probe":                                                                          r"vision_model.head.probe",
+    r"params/img/MAPHead_0/LayerNorm_0/scale":                                                              r"vision_model.head.layernorm.weight",
+    r"params/img/MAPHead_0/LayerNorm_0/bias":                                                               r"vision_model.head.layernorm.bias",
+    r"params/img/MAPHead_0/MlpBlock_0/Dense_0/kernel":                                                      r"vision_model.head.mlp.fc1.weight",
+    r"params/img/MAPHead_0/MlpBlock_0/Dense_0/bias":                                                        r"vision_model.head.mlp.fc1.bias",
+    r"params/img/MAPHead_0/MlpBlock_0/Dense_1/kernel":                                                      r"vision_model.head.mlp.fc2.weight",
+    r"params/img/MAPHead_0/MlpBlock_0/Dense_1/bias":                                                        r"vision_model.head.mlp.fc2.bias",
+    r"params/img/MAPHead_0/MultiHeadDotProductAttention_0/out/kernel":                                      r"vision_model.head.attention.out_proj.weight",
+    r"params/img/MAPHead_0/MultiHeadDotProductAttention_0/out/bias":                                        r"vision_model.head.attention.out_proj.bias",
     # Text embeddings
-    r"params/txt/Embed_0/embedding":                                                            r"text_model.embeddings.token_embedding.weight",
-    r"params/txt/pos_embedding":                                                                r"text_model.embeddings.position_embedding.weight",
+    r"params/txt/Embed_0/embedding":                                                                        r"text_model.embeddings.token_embedding.weight",
+    r"params/txt/pos_embedding":                                                                            r"text_model.embeddings.position_embedding.weight",
     # Text encoder
-    r"params/txt/Encoder_0/encoderblock_(\d+)/LayerNorm_0/scale":                               r"text_model.encoder.layers.\1.layer_norm1.weight",
-    r"params/txt/Encoder_0/encoderblock_(\d+)/LayerNorm_0/bias":                                r"text_model.encoder.layers.\1.layer_norm1.bias",
-    r"params/txt/Encoder_0/encoderblock_(\d+)/LayerNorm_1/scale":                               r"text_model.encoder.layers.\1.layer_norm2.weight",
-    r"params/txt/Encoder_0/encoderblock_(\d+)/LayerNorm_1/bias":                                r"text_model.encoder.layers.\1.layer_norm2.bias",
-    r"params/txt/Encoder_0/encoderblock_(\d+)/MlpBlock_0/Dense_0/kernel":                       r"text_model.encoder.layers.\1.mlp.fc1.weight",
-    r"params/txt/Encoder_0/encoderblock_(\d+)/MlpBlock_0/Dense_0/bias":                         r"text_model.encoder.layers.\1.mlp.fc1.bias",
-    r"params/txt/Encoder_0/encoderblock_(\d+)/MlpBlock_0/Dense_1/kernel":                       r"text_model.encoder.layers.\1.mlp.fc2.weight",
-    r"params/txt/Encoder_0/encoderblock_(\d+)/MlpBlock_0/Dense_1/bias":                         r"text_model.encoder.layers.\1.mlp.fc2.bias",
-    r"params/txt/Encoder_0/encoderblock_(\d+)/MultiHeadDotProductAttention_0/key/kernel":       r"text_model.encoder.layers.\1.self_attn.k_proj.weight",
-    r"params/txt/Encoder_0/encoderblock_(\d+)/MultiHeadDotProductAttention_0/key/bias":         r"text_model.encoder.layers.\1.self_attn.k_proj.bias",
-    r"params/txt/Encoder_0/encoderblock_(\d+)/MultiHeadDotProductAttention_0/value/kernel":     r"text_model.encoder.layers.\1.self_attn.v_proj.weight",
-    r"params/txt/Encoder_0/encoderblock_(\d+)/MultiHeadDotProductAttention_0/value/bias":       r"text_model.encoder.layers.\1.self_attn.v_proj.bias",
-    r"params/txt/Encoder_0/encoderblock_(\d+)/MultiHeadDotProductAttention_0/query/kernel":     r"text_model.encoder.layers.\1.self_attn.q_proj.weight",
-    r"params/txt/Encoder_0/encoderblock_(\d+)/MultiHeadDotProductAttention_0/query/bias":       r"text_model.encoder.layers.\1.self_attn.q_proj.bias",
-    r"params/txt/Encoder_0/encoderblock_(\d+)/MultiHeadDotProductAttention_0/out/kernel":       r"text_model.encoder.layers.\1.self_attn.out_proj.weight",
-    r"params/txt/Encoder_0/encoderblock_(\d+)/MultiHeadDotProductAttention_0/out/bias":         r"text_model.encoder.layers.\1.self_attn.out_proj.bias",
+    r"params/txt/Encoder_0/encoderblock_(\d+)/LayerNorm_0/scale":                                           r"text_model.encoder.layers.\1.layer_norm1.weight",
+    r"params/txt/Encoder_0/encoderblock_(\d+)/LayerNorm_0/bias":                                            r"text_model.encoder.layers.\1.layer_norm1.bias",
+    r"params/txt/Encoder_0/encoderblock_(\d+)/LayerNorm_1/scale":                                           r"text_model.encoder.layers.\1.layer_norm2.weight",
+    r"params/txt/Encoder_0/encoderblock_(\d+)/LayerNorm_1/bias":                                            r"text_model.encoder.layers.\1.layer_norm2.bias",
+    r"params/txt/Encoder_0/encoderblock_(\d+)/MlpBlock_0/Dense_0/kernel":                                   r"text_model.encoder.layers.\1.mlp.fc1.weight",
+    r"params/txt/Encoder_0/encoderblock_(\d+)/MlpBlock_0/Dense_0/bias":                                     r"text_model.encoder.layers.\1.mlp.fc1.bias",
+    r"params/txt/Encoder_0/encoderblock_(\d+)/MlpBlock_0/Dense_1/kernel":                                   r"text_model.encoder.layers.\1.mlp.fc2.weight",
+    r"params/txt/Encoder_0/encoderblock_(\d+)/MlpBlock_0/Dense_1/bias":                                     r"text_model.encoder.layers.\1.mlp.fc2.bias",
+    r"params/txt/Encoder_0/encoderblock_(\d+)/MultiHeadDotProductAttention_0/(q|k|v|out)[a-z]*/kernel":     r"text_model.encoder.layers.\1.self_attn.\2_proj.weight",
+    r"params/txt/Encoder_0/encoderblock_(\d+)/MultiHeadDotProductAttention_0/(q|k|v|out)[a-z]*/bias":       r"text_model.encoder.layers.\1.self_attn.\2_proj.bias",
     # Text encoder norm and head
-    r"params/txt/Encoder_0/encoder_norm/scale":                                                 r"text_model.final_layer_norm.weight",
-    r"params/txt/Encoder_0/encoder_norm/bias":                                                  r"text_model.final_layer_norm.bias",
-    r"params/txt/head/kernel":                                                                  r"text_model.head.weight",
-    r"params/txt/head/bias":                                                                    r"text_model.head.bias",
+    r"params/txt/Encoder_0/encoder_norm/scale":                                                             r"text_model.final_layer_norm.weight",
+    r"params/txt/Encoder_0/encoder_norm/bias":                                                              r"text_model.final_layer_norm.bias",
+    r"params/txt/head/kernel":                                                                              r"text_model.head.weight",
+    r"params/txt/head/bias":                                                                                r"text_model.head.bias",
     # learned temperature and bias
-    r"params/t":                                                                                r"logit_scale",
-    r"params/b":                                                                                r"logit_bias",
+    r"params/t":                                                                                            r"logit_scale",
+    r"params/b":                                                                                            r"logit_bias",
 }
 # fmt: on
 
@@ -341,7 +329,7 @@ def convert_siglip2_checkpoint(model_name, pytorch_dump_folder_path, verify_logi
         new_state_dict[new_key] = torch.from_numpy(parameter)
 
     state_dict = new_state_dict
-    
+
     # qkv matrices of attention pooling head need special treatment
     read_in_q_k_v_head(state_dict, config)
 
