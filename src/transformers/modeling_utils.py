@@ -4702,7 +4702,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return model
 
     @staticmethod
-    def _fix_state_dict_key_on_load(key) -> Tuple[str, bool]:
+    def _fix_state_dict_key_on_load(key: str) -> Tuple[str, bool]:
         """Replace legacy parameter names with their modern equivalents. E.g. beta -> bias, gamma -> weight."""
 
         # Rename LayerNorm beta & gamma params for some early models ported from Tensorflow (e.g. Bert)
@@ -4729,7 +4729,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         return key, False
 
     @classmethod
-    def _fix_state_dict_keys_on_load(cls, state_dict):
+    def _fix_state_dict_keys_on_load(cls, state_dict: Dict[str, Any]):
         """Fixes state dict keys by replacing legacy parameter names with their modern equivalents.
         Logs if any parameters have been renamed.
         """
@@ -4804,7 +4804,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         else:
             loaded_state_dict_keys = list(load_state_dict(checkpoint_files[0], weights_only=weights_only).keys())
 
-        renamed_loaded_keys = [cls._fix_state_dict_key_on_load(key)[0] for key in loaded_state_dict_keys]
+        # Rename the keys (use dummy values in input dict as a small trick)
+        renamed_loaded_keys = list(cls._fix_state_dict_keys_on_load({key: "" for key in loaded_state_dict_keys}).keys())
 
         # Check if we are in a special state, i.e. loading from a state dict coming from a different architecture
         prefix = model.base_model_prefix
