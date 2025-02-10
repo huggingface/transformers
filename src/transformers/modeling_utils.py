@@ -1401,14 +1401,15 @@ def _find_missing_and_unexpected_keys(
     """
     prefix = model.base_model_prefix
 
-    # Compute expected keys, i.e. keys that the FULL model (not model_to_load) expects
-    expected_keys = list(model.state_dict().keys())
-    if hf_quantizer is not None:
-        expected_keys = hf_quantizer.update_expected_keys(model, expected_keys, renamed_loaded_keys)
-
+    # Adjust prefix of the keys if needed
     loaded_keys = _adjust_loaded_keys_prefix(
         renamed_loaded_keys, prefix, loading_base_model_from_task_state_dict, loading_task_model_from_base_state_dict
     )
+
+    # Compute expected keys, i.e. keys that the FULL model (not model_to_load) expects
+    expected_keys = list(model.state_dict().keys())
+    if hf_quantizer is not None:
+        expected_keys = hf_quantizer.update_expected_keys(model, expected_keys, loaded_keys)
 
     # Adjust prefix of the keys to make them match loaded keys before removing them
     missing_keys = sorted(set(expected_keys) - set(loaded_keys))
@@ -1480,7 +1481,7 @@ def _find_mismatched_keys(
             if key not in state_dict:
                 continue
             # Remove the prefix if needed
-            adjusted_key = key[len(prefix_to_remove) :]
+            adjusted_key = key[len(prefix_to_remove) :] if key.startswith(prefix_to_remove) else key
 
             if adjusted_key in model_state_dict and state_dict[key].shape != model_state_dict[adjusted_key].shape:
                 if (
