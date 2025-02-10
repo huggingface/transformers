@@ -319,10 +319,6 @@ def convert_siglip2_checkpoint(model_name, pytorch_dump_folder_path, verify_logi
     # Define Siglip2 configuration
     config = get_siglip2_config(model_name)
 
-    # --------------------------------------------------------------------------------------------
-    # Convert model
-    # --------------------------------------------------------------------------------------------
-
     checkpoint = MODEL_NAME_TO_CHECKPOINT_PATH[model_name]
 
     print(f"Loading checkpoint from {checkpoint}...")
@@ -342,19 +338,16 @@ def convert_siglip2_checkpoint(model_name, pytorch_dump_folder_path, verify_logi
         new_key = hf_keys[original_key]
         parameter = state_dict.pop(original_key)
 
-        if any(layer_name in new_key for layer_name in ("out_proj", "q_proj", "k_proj", "v_proj")):
-            if "vision" in new_key:
-                parameter = parameter.reshape(-1, config.vision_config.hidden_size)
-            elif "text" in new_key:
-                parameter = parameter.reshape(-1, config.text_config.hidden_size)
-        if "position_embedding" in new_key and "vision" in new_key:
-            parameter = parameter.reshape(-1, config.vision_config.hidden_size)
-        if "position_embedding" in new_key and "text" in new_key:
-            parameter = parameter.reshape(-1, config.text_config.hidden_size)
-        if "patch_embedding.weight" in new_key:
+        hidden_size = config.vision_config.hidden_size if "vision" in new_key else config.text_config.hidden_size
+
+        if any(k in new_key for k in ("out_proj", "q_proj", "k_proj", "v_proj", "position_embedding")):
+            parameter = parameter.reshape(-1, hidden_size)
+
+        # Transpose every weight except for position_embedding and token_embedding
+        if new_key.endswith("weight") and "position_embedding" not in new_key and "token_embedding" not in new_key:
             parameter = parameter.T
-        elif new_key.endswith("weight") and "position_embedding" not in new_key and "token_embedding" not in new_key:
-            parameter = parameter.T
+
+        # Reshape every bias
         if new_key.endswith("bias"):
             parameter = parameter.reshape(-1)
 
