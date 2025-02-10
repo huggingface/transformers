@@ -50,7 +50,7 @@ class TestTrainerDistributedLoss(TestCasePlus):
         fixed_diff = [abs(base_loss[i] - fixed_loss[i]) for i in range(len(base_loss))]
         sum_base = sum(base_loss)
         sum_broken = sum(broken_diff)
-        relative_broken = abs(sum_broken - sum_broken) / max(sum_base, sum_broken)
+        relative_broken = abs(sum_base - sum_broken) / max(sum_base, sum_broken)
 
         self.assertGreater(max(broken_diff), 0.5)
         self.assertLess(max(fixed_diff), 0.005)
