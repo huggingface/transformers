@@ -16,12 +16,10 @@
 """PyTorch MiniMax-Text-01 model."""
 
 # TODO: remove these
-from icecream import ic
-from pack_minimax import show_tensor
+# from pack_minimax import show_tensor
 
-from typing import Callable, List, Optional, Tuple, Union
+from typing import List, Optional, Tuple, Union
 
-import math
 import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
@@ -31,26 +29,25 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PretrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...modeling_outputs import (
     BaseModelOutputWithPast,
     MoeModelOutputWithPast,
 )
 from ...processing_utils import Unpack
 from ...utils import (
-    logging,
     add_start_docstrings_to_model_forward,
+    logging,
 )
 from ..mixtral.modeling_mixtral import (
     MIXTRAL_INPUTS_DOCSTRING,
-    MixtralRMSNorm,
     MixtralAttention,
     MixtralDecoderLayer,
-    MixtralModel,
     MixtralForCausalLM,
+    MixtralForQuestionAnswering,
     MixtralForSequenceClassification,
     MixtralForTokenClassification,
-    MixtralForQuestionAnswering,
+    MixtralModel,
+    MixtralRMSNorm,
 )
 
 
@@ -246,15 +243,88 @@ class MiniMaxText01RMSNorm(MixtralRMSNorm):
 
 
 class MiniMaxText01Cache(DynamicCache):
-    def __init__(self):
+    def __init__(self, config, batch_size, dtype=torch.float16, device=None):
         super().__init__()
-        self.kv_cache: dict[int: torch.Tensor] = {}
+        self.config = config
+        self.num_hidden_layers = config.num_hidden_layers
+        self.attn_type_list = config.attn_type_list
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
+        self.num_heads = config.num_attention_heads
+
+        self.batch_size = batch_size
+        self.dtype = dtype
+        self.device = device
+
+        self.kv_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
+        self.key_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
+        self.value_cache = [torch.tensor([[]] * batch_size, device=device) for _ in range(config.num_hidden_layers)]
 
     def set_kv_cache(self, kv_cache, layer_idx):
         self.kv_cache[layer_idx] = kv_cache
 
     def get_kv_cache(self, layer_idx):
-        return self.kv_cache.get(layer_idx)
+        return self.kv_cache[layer_idx]
+
+    def update(
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        layer_idx: int,
+        cache_kwargs=None,
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        # Update the number of seen tokens
+        if layer_idx == 0:
+            self._seen_tokens += key_states.shape[-2]
+
+        # Update the cache
+        if self.key_cache[layer_idx].dim() == 2:
+            self.key_cache[layer_idx] = key_states
+            self.value_cache[layer_idx] = value_states
+        else:
+            self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
+            self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
+
+        return self.key_cache[layer_idx], self.value_cache[layer_idx]
+
+    @classmethod
+    def from_dynamic_cache(cls, past_key_values, config, batch_size, dtype=torch.float16, device=None):
+        new_cache = cls(config, batch_size, dtype, device)
+        # new_cache._seen_tokens = past_key_values._seen_tokens
+        # new_cache.key_cache = past_key_values.key_cache
+        # new_cache.value_cache = past_key_values.value_cache
+        return new_cache
+
+    def to_legacy_cache(self) -> Tuple[Tuple[torch.Tensor], Tuple[torch.Tensor]]:
+        raise NotImplementedError("MiniMaxText01Cache does not have a legacy cache equivalent.")
+
+    @classmethod
+    def from_legacy_cache(cls, past_key_values: Optional[Tuple[Tuple[torch.FloatTensor]]] = None) -> "DynamicCache":
+        raise NotImplementedError("MiniMaxText01Cache does not have a legacy cache equivalent.")
+
+    def __len__(self):
+        """
+        Support for backwards-compatible `past_key_value` length, e.g. `len(past_key_value)`. This value corresponds
+        to the number of layers in the model.
+        """
+        return self.num_hidden_layers
+
+    def batch_repeat_interleave(self, repeats: int):
+        """Repeat the cache `repeats` times in the batch dimension. Used in contrastive search."""
+        for layer_idx in range(len(self)):
+            if self.attn_type_list[layer_idx] == 0:
+                self.kv_cache[layer_idx] = self.kv_cache[layer_idx].repeat_interleave(repeats, dim=0)
+            else:
+                self.key_cache[layer_idx] = self.key_cache[layer_idx].repeat_interleave(repeats, dim=0)
+                self.value_cache[layer_idx] = self.value_cache[layer_idx].repeat_interleave(repeats, dim=0)
+
+    def batch_select_indices(self, indices: torch.Tensor):
+        """Only keep the `indices` in the batch dimension of the cache. Used in contrastive search."""
+        for layer_idx in range(len(self)):
+            if self.attn_type_list[layer_idx] == 0:
+                self.kv_cache[layer_idx] = self.kv_cache[layer_idx][indices, ...]
+            else:
+                self.key_cache[layer_idx] = self.key_cache[layer_idx][indices, ...]
+                self.value_cache[layer_idx] = self.value_cache[layer_idx][indices, ...]
 
 
 class MiniMaxText01LightningAttentionDecay(nn.Module):
@@ -275,7 +345,7 @@ class MiniMaxText01LightningAttentionDecay(nn.Module):
         block_size_range = torch.arange(self.block_size).to(x) + 1
 
         slope_rate = (1 / (2 ** (8 / self.num_heads))) ** num_heads_range
-        slope_rate *= 1 - self.layer_idx / (self.num_hidden_layers - 1) + 1e-5
+        slope_rate *= 1 - self.layer_idx / (self.num_hidden_layers - 1 + 1e-5) + 1e-5
         slope_rate = slope_rate[:, None, None]
 
         if return_slope_rate:
@@ -317,7 +387,7 @@ class MiniMaxText01LightningAttention(nn.Module):
         self.norm = MiniMaxText01RMSNorm(self.head_dim * self.num_heads)
         self.qkv_proj = nn.Linear(config.hidden_size, self.num_heads * self.head_dim * 3, bias=False)
         self.out_proj = nn.Linear(self.num_heads * self.head_dim, config.hidden_size, bias=False)
-        self.output_gate = nn.Linear(config.hidden_size, self.num_heads * self.num_heads, bias=False)
+        self.output_gate = nn.Linear(config.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.decay_factors = MiniMaxText01LightningAttentionDecay(config, layer_idx)
 
     def forward(
@@ -346,12 +416,13 @@ class MiniMaxText01LightningAttention(nn.Module):
         if past_key_value is not None:
             kv_cache = past_key_value.get_kv_cache(self.layer_idx)
 
-        if kv_cache is None:
+        if kv_cache is None or kv_cache.dim() == 2:
             kv_cache = torch.zeros(batch_size, self.num_heads, 1, self.head_dim, self.head_dim).to(value_states)
 
             # apply attention_mask
             if attention_mask is not None:
-                value_states = value_states.masked_fill((1 - attention_mask).unsqueeze(1).unsqueeze(-1).to(torch.bool), 0)
+                attention_mask = attention_mask.to(dtype=torch.bool)  # Ensure it's a boolean tensor
+                value_states = value_states.masked_fill(~attention_mask.unsqueeze(1).unsqueeze(-1), 0)
 
             query_states = F.pad(query_states, (0, 0, 0, padding))
             key_states = F.pad(key_states, (0, 0, 0, padding))
@@ -407,11 +478,11 @@ class MiniMaxText01LightningAttention(nn.Module):
             past_key_value.set_kv_cache(kv_cache, self.layer_idx)
 
         # TODO: remove these
-        print()
-        print(self.layer_idx)
-        print(kv_cache)
+        # print()
+        # print(self.layer_idx)
+        # print(kv_cache)
 
-        return attn_output, None
+        return attn_output, kv_cache
 
 
 class MiniMaxText01Attention(MixtralAttention):
@@ -562,8 +633,22 @@ class MiniMaxText01Model(MixtralModel):
                 )
                 use_cache = False
 
+        config = self.config
+        batch_size = input_ids.shape[0] if input_ids is not None else inputs_embeds.shape[0]
+        dtype = input_ids.dtype if input_ids is not None else inputs_embeds.dtype
         if use_cache and past_key_values is None:
-            past_key_values = MiniMaxText01Cache()
+            past_key_values = MiniMaxText01Cache(
+                config=config,
+                batch_size=batch_size,
+                dtype=dtype,
+            )
+        elif use_cache and not isinstance(past_key_values, MiniMaxText01Cache):
+            past_key_values = MiniMaxText01Cache.from_dynamic_cache(
+                past_key_values,
+                config=config,
+                batch_size=batch_size,
+                dtype=dtype,
+            )
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)

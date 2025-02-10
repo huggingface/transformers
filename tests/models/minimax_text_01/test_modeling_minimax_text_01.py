@@ -19,6 +19,7 @@ import unittest
 import pytest
 
 from transformers import MiniMaxText01Config, is_torch_available
+from transformers.cache_utils import Cache
 from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
@@ -37,6 +38,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
+    # from transformers.models.minimax_text_01.modular_minimax_text_01 import (
     from transformers import (
         MiniMaxText01ForCausalLM,
         MiniMaxText01ForQuestionAnswering,
@@ -75,7 +77,7 @@ class MiniMaxText01ModelTester:
         pad_token_id=0,
         scope=None,
         router_jitter_noise=0.1,
-        attn_type_list=[1, 1],
+        attn_type_list=[1, 0],
         block_size=3,
     ):
         self.parent = parent
@@ -138,7 +140,7 @@ class MiniMaxText01ModelTester:
             num_hidden_layers=self.num_hidden_layers,
             num_attention_heads=self.num_attention_heads,
             num_key_value_heads=self.num_key_value_heads,
-            head_dim=None,
+            head_dim=self.head_dim,
             intermediate_size=self.intermediate_size,
             hidden_act=self.hidden_act,
             hidden_dropout_prob=self.hidden_dropout_prob,
@@ -296,7 +298,7 @@ class MiniMaxText01ModelTester:
 
 
 @require_torch
-# Copied from tests.models.mistral.test_modeling_mistral.MistralModelTest with Mistral->MiniMaxText01
+# Copied from tests.models.mixtral.test_modeling_mixtral.MixtralModelTest with Mixtral->MiniMaxText01
 class MiniMaxText01ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
         (
@@ -467,6 +469,56 @@ class MiniMaxText01ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTe
         # This is to mimic torch.testing.assert_not_close
         self.assertNotAlmostEqual(include_padding_result.aux_loss.item(), result.aux_loss.item())
 
+    # Ignore copy
+    def _check_attentions_for_generate(
+        self, batch_size, attentions, min_length, max_length, config, use_cache=False, num_beam_groups=1
+    ):
+        self.assertIsInstance(attentions, tuple)
+        self.assertListEqual(
+            [isinstance(iter_attentions, tuple) for iter_attentions in attentions], [True] * len(attentions)
+        )
+        self.assertEqual(len(attentions), (max_length - min_length) * num_beam_groups)
+
+        for idx, iter_attentions in enumerate(attentions):
+            tgt_len = min_length + idx if not use_cache else 1
+            src_len = min_length + idx
+
+            for layer_idx, layer_attention in enumerate(iter_attentions):
+                if config.attn_type_list[layer_idx] == 0:
+                    continue
+                expected_shape = (
+                    batch_size * num_beam_groups,
+                    config.num_attention_heads,
+                    tgt_len,
+                    src_len,
+                )
+                self.assertEqual(layer_attention.shape, expected_shape)
+
+    # Ignore copy
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config, num_beam_groups=1):
+        self.assertIsInstance(past_key_values, (tuple, Cache))
+
+        # (batch, head, seq_length, head_features)
+        key_value_cache_expected_shape = (
+            batch_size * num_beam_groups,
+            config.num_key_value_heads,
+            seq_length,
+            config.head_dim,
+        )
+        kv_cache_expected_shape = (
+            batch_size * num_beam_groups,
+            config.num_attention_heads,
+            config.head_dim,
+            config.head_dim,
+        )
+
+        for layer_idx in range(config.num_hidden_layers):
+            if config.attn_type_list[layer_idx] == 0:
+                self.assertEqual(past_key_values.kv_cache[layer_idx].shape, kv_cache_expected_shape)
+            else:
+                self.assertEqual(past_key_values.key_cache[layer_idx].shape, key_value_cache_expected_shape)
+                self.assertEqual(past_key_values.value_cache[layer_idx].shape, key_value_cache_expected_shape)
+
 
 @require_torch
 class MiniMaxText01IntegrationTest(unittest.TestCase):
@@ -486,9 +538,9 @@ class MiniMaxText01IntegrationTest(unittest.TestCase):
         model_id = "hf-internal-testing/MiniMaxText01-tiny"
         dummy_input = torch.LongTensor([[0, 1, 0], [0, 1, 0]]).to(torch_device)
 
-        model = MiniMaxText01ForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True).to(
-            torch_device
-        )
+        model = MiniMaxText01ForCausalLM.from_pretrained(
+            model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True
+        ).to(torch_device)
         # TODO: might need to tweak it in case the logits do not match on our daily runners
         # these logits have been obtained with the original megablocks impelmentation.
         # Key 9 for MI300, Key 8 for A100/A10, and Key 7 for T4.
@@ -523,9 +575,9 @@ class MiniMaxText01IntegrationTest(unittest.TestCase):
         dummy_input = torch.LongTensor([[0, 0, 0, 0, 0, 0, 1, 2, 3], [1, 1, 2, 3, 4, 5, 6, 7, 8]]).to(torch_device)
         attention_mask = dummy_input.ne(0).to(torch.long)
 
-        model = MiniMaxText01ForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True).to(
-            torch_device
-        )
+        model = MiniMaxText01ForCausalLM.from_pretrained(
+            model_id, torch_dtype=torch.bfloat16, low_cpu_mem_usage=True
+        ).to(torch_device)
 
         # TODO: might need to tweak it in case the logits do not match on our daily runners
         #
