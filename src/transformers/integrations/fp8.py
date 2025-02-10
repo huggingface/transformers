@@ -227,7 +227,7 @@ def w8a8_block_fp8_matmul_triton(
     return C
 
 
-# Python version of the above triton function
+# Python version of the above triton function, it's much slower than the triton version
 @torch.compile
 def w8a8_block_fp8_matmul_compile(
     input_q: torch.Tensor,  # [batch, seq_len, hidden_dim]
