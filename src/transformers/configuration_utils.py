@@ -74,7 +74,7 @@ class PretrainedConfig(PushToHubMixin):
       naming of attributes.
     - **base_model_tp_plan** (`Dict[str, Any]`) -- A dict that maps sub-modules FQNs of a base model to a tensor
       parallel plan applied to the sub-module when `model.tensor_parallel` is called.
-    - **base_model_pp_plan** (`Dict[str, Dict[[str, str]]]`) -- A dict that maps child-modules of a base model to a
+    - **base_model_pp_plan** (`Dict[str, Tuple[List[str]]]`) -- A dict that maps child-modules of a base model to a
       pipeline parallel plan that enables users to place the child-module on the appropriate device.
 
     Common attributes (present in all subclasses):
@@ -200,7 +200,7 @@ class PretrainedConfig(PushToHubMixin):
     is_composition: bool = False
     attribute_map: Dict[str, str] = {}
     base_model_tp_plan: Optional[Dict[str, Any]] = None
-    base_model_pp_plan: Optional[Dict[str, List[List[str]]]] = None
+    base_model_pp_plan: Optional[Dict[str, Tuple[List[str]]]] = None
     _auto_class: Optional[str] = None
 
     def __setattr__(self, key, value):
