@@ -14,10 +14,12 @@
 # limitations under the License.
 """Image processor class for Janus."""
 
-from typing import Dict, List, Optional, Union
-import numpy as np
+from typing import List, Optional, Union
 
-from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
+import numpy as np
+from PIL import Image
+
+from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import (
     convert_to_rgb,
     resize,
@@ -37,7 +39,6 @@ from ...image_utils import (
     validate_preprocess_arguments,
 )
 from ...utils import TensorType, filter_out_non_signature_kwargs, is_vision_available, logging
-from PIL import Image
 
 
 logger = logging.get_logger(__name__)
@@ -45,6 +46,8 @@ logger = logging.get_logger(__name__)
 
 if is_vision_available():
     import PIL
+
+
 def expand2square(pil_img, background_color):
     width, height = pil_img.size
     if width == height:
@@ -57,6 +60,7 @@ def expand2square(pil_img, background_color):
         result = Image.new(pil_img.mode, (height, height), background_color)
         result.paste(pil_img, ((height - width) // 2, 0))
         return result
+
 
 # Directly copied from siglip image processing file
 class JanusImageProcessor(BaseImageProcessor):
@@ -131,9 +135,8 @@ class JanusImageProcessor(BaseImageProcessor):
         Returns:
             `np.ndarray`: The resized image.
         """
-        print(image.shape)
         height, width, _ = image.shape
-        max_size = max(height,width)
+        max_size = max(height, width)
         output_size = [
             max(int(height / max_size * self.image_size), self.min_size),
             max(int(width / max_size * self.image_size), self.min_size),
@@ -152,7 +155,6 @@ class JanusImageProcessor(BaseImageProcessor):
         image = expand2square(image, self.background_color)
         image = to_numpy_array(image)
         return image
-
 
     @filter_out_non_signature_kwargs()
     def preprocess(
@@ -254,12 +256,10 @@ class JanusImageProcessor(BaseImageProcessor):
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.
             input_data_format = infer_channel_dimension_format(images[0])
-            print(input_data_format) #ideally should be channel first
 
         if do_resize:
             images = [
-                self.resize(image=image, resample=resample, input_data_format=input_data_format)
-                for image in images
+                self.resize(image=image, resample=resample, input_data_format=input_data_format) for image in images
             ]
         if do_rescale:
             images = [
