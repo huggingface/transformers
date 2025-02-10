@@ -332,6 +332,10 @@ class Zamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         """
         pass
 
+    @unittest.skip(reason="Zamba2 has hybrid cache.")
+    def test_generate_continue_from_inputs_embeds(self):
+        pass
+
     @unittest.skip(reason="A large mamba2 would be necessary (and costly) for that")
     def test_multi_gpu_data_parallel_forward(self):
         pass

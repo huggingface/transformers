@@ -324,6 +324,10 @@ class FuyuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_model_parallelism(self):
         super().test_model_parallelism()
 
+    @unittest.skip(reason="Fuyu `prepare_inputs_for_generation` function doesn't have cache position.")
+    def test_generate_continue_from_inputs_embeds():
+        pass
+
 
 @slow
 @require_torch_accelerator
