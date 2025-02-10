@@ -4985,9 +4985,8 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
 
             if low_cpu_mem_usage or gguf_file is not None:
                 state_dict = cls._fix_state_dict_keys_on_load(state_dict)
-                if is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized:
-                    pass
-                else:
+                # Skip it with fsdp on ranks other than 0
+                if not (is_fsdp_enabled() and not is_local_dist_rank_0() and not is_quantized):
                     new_error_msgs, disk_offload_index, cpu_offload_index = _load_state_dict_into_meta_model(
                         model_to_load,
                         state_dict,
