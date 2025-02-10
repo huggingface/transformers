@@ -41,7 +41,7 @@ from ..rt_detr.modeling_rt_detr import (
 
 
 class DFineConfig(RTDetrConfig):
-    model_type = "d-fine"
+    model_type = "d_fine"
 
     def __init__(
         self,

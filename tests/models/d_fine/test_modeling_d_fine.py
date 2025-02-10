@@ -239,7 +239,6 @@ class DFineModelTester:
             with_box_refine=self.with_box_refine,
         )
 
-
     def prepare_config_and_inputs_for_common(self):
         config, pixel_values, pixel_mask, labels = self.prepare_config_and_inputs()
         inputs_dict = {"pixel_values": pixel_values}
@@ -454,11 +453,342 @@ class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 ],
             )
 
+    def test_hidden_states_output(self):
+            def check_hidden_states_output(inputs_dict, config, model_class):
+                model = model_class(config)
+                model.to(torch_device)
+                model.eval()
 
-TOLERANCE = 1e-4
+                with torch.no_grad():
+                    outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+                hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+
+                expected_num_layers = getattr(
+                    self.model_tester, "expected_num_hidden_layers", len(self.model_tester.encoder_in_channels) - 1
+                )
+                self.assertEqual(len(hidden_states), expected_num_layers)
+
+                self.assertListEqual(
+                    list(hidden_states[1].shape[-2:]),
+                    [
+                        self.model_tester.image_size // self.model_tester.feat_strides[-1],
+                        self.model_tester.image_size // self.model_tester.feat_strides[-1],
+                    ],
+                )
+
+                if config.is_encoder_decoder:
+                    hidden_states = outputs.decoder_hidden_states
+
+                    expected_num_layers = getattr(
+                        self.model_tester, "expected_num_hidden_layers", self.model_tester.decoder_layers + 1
+                    )
+
+                    self.assertIsInstance(hidden_states, (list, tuple))
+                    self.assertEqual(len(hidden_states), expected_num_layers)
+
+                    self.assertListEqual(
+                        list(hidden_states[0].shape[-2:]),
+                        [self.model_tester.num_queries, self.model_tester.d_model],
+                    )
+
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+            for model_class in self.all_model_classes:
+                inputs_dict["output_hidden_states"] = True
+                check_hidden_states_output(inputs_dict, config, model_class)
+
+                # check that output_hidden_states also work using config
+                del inputs_dict["output_hidden_states"]
+                config.output_hidden_states = True
+
+                check_hidden_states_output(inputs_dict, config, model_class)
+    
+    def test_retain_grad_hidden_states_attentions(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config.output_hidden_states = True
+        config.output_attentions = True
+
+        model_class = self.all_model_classes[0]
+        model = model_class(config)
+        model.to(torch_device)
+
+        inputs = self._prepare_for_class(inputs_dict, model_class)
+
+        outputs = model(**inputs)
+
+        # we take the first output since last_hidden_state is the first item
+        output = outputs[0]
+
+        encoder_hidden_states = outputs.encoder_hidden_states[0]
+        encoder_attentions = outputs.encoder_attentions[0]
+        encoder_hidden_states.retain_grad()
+        encoder_attentions.retain_grad()
+
+        decoder_attentions = outputs.decoder_attentions[0]
+        decoder_attentions.retain_grad()
+
+        cross_attentions = outputs.cross_attentions[0]
+        cross_attentions.retain_grad()
+
+        output.flatten()[0].backward(retain_graph=True)
+
+        self.assertIsNotNone(encoder_hidden_states.grad)
+        self.assertIsNotNone(encoder_attentions.grad)
+        self.assertIsNotNone(decoder_attentions.grad)
+        self.assertIsNotNone(cross_attentions.grad)
+    
+    def test_forward_signature(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            signature = inspect.signature(model.forward)
+            arg_names = [*signature.parameters.keys()]
+            expected_arg_names = ["pixel_values"]
+            self.assertListEqual(arg_names[:1], expected_arg_names)
+    
+    def test_different_timm_backbone(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # let's pick a random timm backbone
+        config.backbone = "tf_mobilenetv3_small_075"
+        config.backbone_config = None
+        config.use_timm_backbone = True
+        config.backbone_kwargs = {"out_indices": [2, 3, 4]}
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            if model_class.__name__ == "DFineForObjectDetection":
+                expected_shape = (
+                    self.model_tester.batch_size,
+                    self.model_tester.num_queries,
+                    self.model_tester.num_labels,
+                )
+                self.assertEqual(outputs.logits.shape, expected_shape)
+                # Confirm out_indices was propogated to backbone
+                self.assertEqual(len(model.model.backbone.intermediate_channel_sizes), 3)
+            else:
+                # Confirm out_indices was propogated to backbone
+                self.assertEqual(len(model.backbone.intermediate_channel_sizes), 3)
+
+            self.assertTrue(outputs)
+    
+    def test_hf_backbone(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        # Load a pretrained HF checkpoint as backbone
+        config.backbone = "microsoft/resnet-18"
+        config.backbone_config = None
+        config.use_timm_backbone = False
+        config.use_pretrained_backbone = True
+        config.backbone_kwargs = {"out_indices": [2, 3, 4]}
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**self._prepare_for_class(inputs_dict, model_class))
+
+            if model_class.__name__ == "DFineForObjectDetection":
+                expected_shape = (
+                    self.model_tester.batch_size,
+                    self.model_tester.num_queries,
+                    self.model_tester.num_labels,
+                )
+                self.assertEqual(outputs.logits.shape, expected_shape)
+                # Confirm out_indices was propogated to backbone
+                self.assertEqual(len(model.model.backbone.intermediate_channel_sizes), 3)
+            else:
+                # Confirm out_indices was propogated to backbone
+                self.assertEqual(len(model.backbone.intermediate_channel_sizes), 3)
+
+            self.assertTrue(outputs)
+    
+    def test_initialization(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        configs_no_init = _config_zero_init(config)
+        configs_no_init.initializer_bias_prior_prob = 0.2
+        bias_value = -1.3863  # log_e ((1 - 0.2) / 0.2)
+
+        failed_cases = []
+
+        for model_class in self.all_model_classes:
+            model = model_class(config=configs_no_init)
+            # Skip the check for the backbone
+            for name, module in model.named_modules():
+                if module.__class__.__name__ == "DFineConvEncoder":
+                    backbone_params = [f"{name}.{key}" for key in module.state_dict().keys()]
+                    break
+
+            for name, param in model.named_parameters():
+                if param.requires_grad:
+                    if ("class_embed" in name and "bias" in name) or "enc_score_head.bias" in name:
+                        bias_tensor = torch.full_like(param.data, bias_value)
+                        if not torch.allclose(param.data, bias_tensor, atol=1e-4):
+                            failed_cases.append(
+                                f"Parameter {name} of model {model_class} seems not properly initialized. "
+                                f"Biases should be initialized to {bias_value}, got {param.data}"
+                            )
+                    elif (
+                        "level_embed" in name
+                        or "sampling_offsets.bias" in name
+                        or "value_proj" in name
+                        or "output_proj" in name
+                        or "reference_points" in name
+                        or "enc_score_head.weight" in name
+                        or ("class_embed" in name and "weight" in name)
+                        or name in backbone_params
+                    ):
+                        continue
+                    else:
+                        mean = param.data.mean()
+                        round_mean = (mean * 1e9).round() / 1e9
+                        round_mean = round_mean.item()
+                        if round_mean not in [0.0, 1.0]:
+                            failed_cases.append(
+                                f"Parameter {name} of model {model_class} seems not properly initialized. "
+                                f"Mean is {round_mean}, but should be in [0, 1]"
+                            )
+
+        message = "\n" + "\n".join(failed_cases)
+        self.assertTrue(not failed_cases, message)
+
+    @parameterized.expand(["float32", "float16", "bfloat16"])
+    @require_torch_gpu
+    @slow
+    def test_inference_with_different_dtypes(self, torch_dtype_str):
+        torch_dtype = {
+            "float32": torch.float32,
+            "float16": torch.float16,
+            "bfloat16": torch.bfloat16,
+        }[torch_dtype_str]
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config)
+            model.to(torch_device).to(torch_dtype)
+            model.eval()
+            for key, tensor in inputs_dict.items():
+                if tensor.dtype == torch.float32:
+                    inputs_dict[key] = tensor.to(torch_dtype)
+            with torch.no_grad():
+                _ = model(**self._prepare_for_class(inputs_dict, model_class))
+
+    @parameterized.expand(["float32", "float16", "bfloat16"])
+    @require_torch_gpu
+    @slow
+    def test_inference_equivalence_for_static_and_dynamic_anchors(self, torch_dtype_str):
+        torch_dtype = {
+            "float32": torch.float32,
+            "float16": torch.float16,
+            "bfloat16": torch.bfloat16,
+        }[torch_dtype_str]
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        h, w = inputs_dict["pixel_values"].shape[-2:]
+
+        # convert inputs to the desired dtype
+        for key, tensor in inputs_dict.items():
+            if tensor.dtype == torch.float32:
+                inputs_dict[key] = tensor.to(torch_dtype)
+
+        for model_class in self.all_model_classes:
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model_class(config).save_pretrained(tmpdirname)
+                model_static = model_class.from_pretrained(
+                    tmpdirname, anchor_image_size=[h, w], device_map=torch_device, torch_dtype=torch_dtype
+                ).eval()
+                model_dynamic = model_class.from_pretrained(
+                    tmpdirname, anchor_image_size=None, device_map=torch_device, torch_dtype=torch_dtype
+                ).eval()
+
+            self.assertIsNotNone(model_static.config.anchor_image_size)
+            self.assertIsNone(model_dynamic.config.anchor_image_size)
+
+            with torch.no_grad():
+                outputs_static = model_static(**self._prepare_for_class(inputs_dict, model_class))
+                outputs_dynamic = model_dynamic(**self._prepare_for_class(inputs_dict, model_class))
+
+            self.assertTrue(
+                torch.allclose(
+                    outputs_static.last_hidden_state, outputs_dynamic.last_hidden_state, rtol=1e-4, atol=1e-4
+                ),
+                f"Max diff: {(outputs_static.last_hidden_state - outputs_dynamic.last_hidden_state).abs().max()}",
+            )
+
+# # TOLERANCE = 1e-4
 
 
 # We will verify our results on an image of cute cats
 def prepare_img():
     image = Image.open("./tests/fixtures/tests_samples/COCO/000000039769.png")
     return image
+
+@require_torch
+@require_vision
+class DFineModelIntegrationTest(unittest.TestCase):
+    @cached_property
+    def default_image_processor(self):
+        return RTDetrImageProcessor.from_pretrained(CHECKPOINT) if is_vision_available() else None
+
+    def test_inference_object_detection_head(self):
+        model = DFineForObjectDetection.from_pretrained(CHECKPOINT).to(torch_device)
+
+        image_processor = self.default_image_processor
+        image = prepare_img()
+        inputs = image_processor(images=image, return_tensors="pt").to(torch_device)
+
+        with torch.no_grad():
+            outputs = model(**inputs)
+
+        expected_shape_logits = torch.Size((1, 300, model.config.num_labels))
+        self.assertEqual(outputs.logits.shape, expected_shape_logits)
+
+        expected_logits = torch.tensor(
+            [
+                [-4.84472, -4.72931, -4.59713],
+                [-4.55426, -4.61722, -4.62792],
+                [-4.39344, -4.60641, -4.13995],
+            ]
+        ).to(torch_device)
+        expected_boxes = torch.tensor(
+            [
+                [0.256524, 0.54776, 0.476448],
+                [0.76900, 0.41423, 0.46148],
+                [0.16880, 0.19923, 0.21118],
+            ]
+        ).to(torch_device)
+
+        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, atol=1e-4, rtol=1e-4)
+
+        expected_shape_boxes = torch.Size((1, 300, 4))
+        self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
+        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, atol=1e-4, rtol=1e-4)
+
+        # verify postprocessing
+        results = image_processor.post_process_object_detection(
+            outputs, threshold=0.0, target_sizes=[image.size[::-1]]
+        )[0]
+        expected_scores = torch.tensor([0.9582, 0.9559, 0.9470, 0.9180], device=torch_device)
+        expected_labels = [15, 15, 65, 57]
+        expected_slice_boxes = torch.tensor(
+            [
+                [3.4449e02, 2.3405e01, 6.3984e02, 3.7427e02],
+                [1.1712e01, 5.3518e01, 3.1664e02, 4.7233e02],
+                [4.0461e01, 7.3700e01, 1.7562e02, 1.1757e02],
+                [5.8968e-01, 1.8841e00, 6.4025e02, 4.7474e02],
+            ],
+            device=torch_device,
+        )
+        torch.testing.assert_close(results["scores"][:4], expected_scores, atol=1e-3, rtol=1e-4)
+        self.assertSequenceEqual(results["labels"][:4].tolist(), expected_labels)
+        torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, atol=1e-3, rtol=1e-4)

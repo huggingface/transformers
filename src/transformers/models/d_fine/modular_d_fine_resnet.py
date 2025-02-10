@@ -40,7 +40,7 @@ class DFineResNetStageConfig(NamedTuple):
 
 
 class DFineResNetConfig(RTDetrResNetConfig):
-    model_type = "d-fine-resnet"
+    model_type = "d_fine_resnet"
 
     def __init__(
         self,
