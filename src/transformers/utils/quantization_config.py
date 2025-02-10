@@ -1556,7 +1556,7 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
     """
     FineGrainedFP8Config is a configuration class for fine-grained FP8 quantization used mainly for deepseek models.
 
-    Attributes:
+    Args:
         modules_to_not_convert (Optional[List]):
             A list of module names that should not be converted during quantization.
         activation_scheme (Optional[str]):
