@@ -22,6 +22,7 @@ from typing import Any, Optional, Tuple, Union
 import numpy as np
 import torch
 import torch.utils.checkpoint
+import torch.nn.functional as F
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from torch.nn.init import _calculate_fan_in_and_fan_out
@@ -255,12 +256,9 @@ class Siglip2VisionEmbeddings(nn.Module):
         self.image_size = config.image_size
         self.patch_size = config.patch_size
 
-        self.patch_embedding = nn.Conv2d(
-            in_channels=config.num_channels,
-            out_channels=self.embed_dim,
-            kernel_size=self.patch_size,
-            stride=self.patch_size,
-            padding="valid",
+        self.patch_embedding = nn.Linear(
+            in_features=config.num_channels * self.patch_size * self.patch_size,
+            out_features=self.embed_dim,
         )
 
         self.num_patches = (self.image_size // self.patch_size) ** 2
@@ -268,54 +266,162 @@ class Siglip2VisionEmbeddings(nn.Module):
         self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
         self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
 
-    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        self.position_embedding_size = int(self.num_positions ** 0.5)
+
+    @staticmethod
+    def _sample_positional_embeddings_unbatched(positional_embeddings: torch.Tensor, position_ids: torch.Tensor, shape) -> torch.Tensor:
         """
-        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
-        images. This method is also adapted to support torch.jit tracing and no class embeddings.
+        Sample the positional embeddings with provided position ids (loop over batch elements, not optimized).
+        
+        Args:
+            positional_embeddings (`torch.Tensor`):
+                Position embeddings of shape (height, width, embed_dim)
+            position_ids (`torch.Tensor`):
+                Pixel position ids of shape (max_num_patches, 2)
 
-        Adapted from:
-        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
-        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
+        Returns:
+            `torch.Tensor`: Embeddings of shape (max_num_patches, embed_dim) 
+            corresponding to the input pixel position ids.
         """
+        
+        # Convert from (height, width, embed_dim) to (1, embed_dim, height, width) for interpolation
+        positional_embeddings = positional_embeddings.permute(2, 0, 1).unsqueeze(0)
+        
+        height, width = shape
 
-        num_patches = embeddings.shape[1]
-        num_positions = self.position_embedding.weight.shape[0]
-
-        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
-        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
-            return self.position_embedding(self.position_ids)
-
-        patch_pos_embed = self.position_embedding.weight.unsqueeze(0)
-
-        dim = embeddings.shape[-1]
-
-        new_height = height // self.patch_size
-        new_width = width // self.patch_size
-
-        sqrt_num_positions = torch_int(num_positions**0.5)
-        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
-        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
-
-        patch_pos_embed = nn.functional.interpolate(
-            patch_pos_embed,
-            size=(new_height, new_width),
-            mode="bicubic",
+        # resize positional embeddings
+        # 1, dim, height, width -> 1, dim, target_height, target_width
+        resized_embeddings = F.interpolate(
+            positional_embeddings,
+            size=(height, width),
+            mode="bilinear",
             align_corners=False,
+            antialias=True,
         )
 
-        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
-        return patch_pos_embed
+        # Rearrange: 1, dim, target_height, target_width -> target_height * target_width, dim
+        resized_embeddings = resized_embeddings.squeeze(0).flatten(1).transpose(1, 0)
 
-    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding=False) -> torch.Tensor:
-        _, _, height, width = pixel_values.shape
+        # Convert 2d position ids to 1d absolute position ids
+        y_ids = position_ids[..., 0]
+        x_ids = position_ids[..., 1]
+        position_ids_1d = y_ids * width + x_ids
+
+        # Get the positional embeddings for the absolute position ids
+        sampled_positional_embeddings = resized_embeddings[position_ids_1d]
+
+        return sampled_positional_embeddings
+
+    def sample_positional_embeddings_vmap(self, positional_embeddings: torch.Tensor, position_ids: torch.Tensor) -> torch.Tensor:
+        """This one does not work because of interpolation requires python scalars, but vmap does not allow to pass them
+        and does not allow to """
+        shapes = tuple([(h, w) for h, w in position_ids.max(dim=1).values + 1])
+        return torch.vmap(self._sample_positional_embeddings_unbatched, in_dims=(None, 0, 0))(positional_embeddings, position_ids, shapes)
+
+    @staticmethod
+    def sample_positional_embeddings(positional_embeddings: torch.Tensor, position_ids: torch.Tensor) -> torch.Tensor:
+        """
+        Sample the positional embeddings with provided position ids (loop over batch elements, not optimized).
+        
+        Args:
+            positional_embeddings (`torch.Tensor`):
+                Position embeddings of shape (height, width, embed_dim)
+            position_ids (`torch.Tensor`):
+                Pixel position ids of shape (batch_size, max_num_patches, 2)
+
+        Returns:
+            `torch.Tensor`: Embeddings of shape (batch_size, max_num_patches, embed_dim) 
+            corresponding to the input pixel position ids.
+        """
+        target_shapes = position_ids.max(dim=1).values + 1
+
+        # Convert from (height, width, embed_dim) to (1, embed_dim, height, width) for interpolation
+        positional_embeddings = positional_embeddings.permute(2, 0, 1).unsqueeze(0)
+        
+        resulted_positional_embeddings = []
+        for (height, width), position_ids_i in zip(target_shapes, position_ids):
+            
+            # resize positional embeddings for i-th image
+            # 1, dim, height, width -> 1, dim, target_height, target_width
+            resized_embeddings = F.interpolate(
+                positional_embeddings,
+                size=(height, width),
+                mode="bilinear",
+                align_corners=False,
+                antialias=True,
+            )
+
+            # Rearrange: 1, dim, target_height, target_width -> target_height * target_width, dim
+            resized_embeddings = resized_embeddings.squeeze(0).flatten(1).transpose(1, 0)
+
+            # Convert 2d position ids to 1d absolute position ids
+            y_ids = position_ids_i[..., 0]
+            x_ids = position_ids_i[..., 1]
+            position_ids_1d = y_ids * width + x_ids
+
+            # Get the positional embeddings for the absolute position ids
+            gathered_positional_embeddings = resized_embeddings[position_ids_1d]
+            resulted_positional_embeddings.append(gathered_positional_embeddings)
+
+        resulted_positional_embeddings = torch.stack(resulted_positional_embeddings)
+        return resulted_positional_embeddings
+
+    @staticmethod
+    def sample_positional_embeddings_with_grid_sample(positional_embeddings: torch.Tensor, position_ids: torch.Tensor) -> torch.Tensor:
+        """
+        THIS IS OPTIMIZED VERSION OF `sample_positional_embeddings`, BUT DUE TO `antialias=True` IN `F.interpolate`
+        THE OUTPUT DOES NOT MATCH AND THAT INFLUENCES THE RESULT A LOT.
+
+        Sample the positional embeddings with provided position ids.
+        
+        Args:
+            positional_embeddings (`torch.Tensor`):
+                Position embeddings of shape (height, width, embed_dim)
+            position_ids (`torch.Tensor`):
+                Pixel position ids of shape (batch_size, max_num_patches, 2)
+
+        Returns:
+            `torch.Tensor`: Embeddings of shape (batch_size, max_num_patches, embed_dim) 
+            corresponding to the input pixel position ids.
+        """
+        batch_size = position_ids.shape[0]
+
+        # Convert from (height, width, embed_dim) to (batch_size, embed_dim, height, width) for grid_sample
+        positional_embeddings = positional_embeddings.permute(2, 0, 1).unsqueeze(0)
+        positional_embeddings = positional_embeddings.expand(batch_size, -1, -1, -1)
+        
+        # Normalize position_ids to range [-1, 1] for grid_sample
+        size = position_ids.max(dim=1, keepdim=True).values + 1
+        grid = (position_ids.float() + 0.5) / size * 2 - 1
+
+        # Flip yx -> xy for grid_sample
+        grid = torch.flip(grid, dims=[-1])
+
+        # (batch, 1, num_patches, 2) to match the expected input shape for grid_sample
+        grid = grid.unsqueeze(1)
+
+        # Sample from position embeddings
+        embeddings = F.grid_sample(positional_embeddings, grid, mode="bilinear", align_corners=True)
+        embeddings = embeddings.squeeze(2).transpose(1, 2)
+
+        return embeddings
+
+    def forward(self, pixel_values: torch.FloatTensor, position_ids: torch.LongTensor) -> torch.Tensor:
+        """
+        Args:
+            pixel_values (`torch.FloatTensor`):
+                Pixel values of shape (batch_size, max_num_patches, num_channels * patch_size * patch_size)
+            position_ids (`torch.LongTensor`):
+                Position ids (x, y) of shape (batch_size, max_num_patches, 2)
+        """
+
         target_dtype = self.patch_embedding.weight.dtype
-        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
-        embeddings = patch_embeds.flatten(2).transpose(1, 2)
+        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))
 
-        if interpolate_pos_encoding:
-            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
-        else:
-            embeddings = embeddings + self.position_embedding(self.position_ids)
+        positional_embeddings = self.position_embedding.weight.reshape(
+            self.position_embedding_size, self.position_embedding_size, -1
+        )
+        embeddings = patch_embeds + self.sample_positional_embeddings(positional_embeddings, position_ids)
         return embeddings
 
 
@@ -1072,11 +1178,15 @@ class Siglip2VisionTransformer(nn.Module):
         if self.use_head:
             self.head = Siglip2MultiheadAttentionPoolingHead(config)
 
+        self._use_flash_attention_2 = config._attn_implementation == "flash_attention_2"
+
     @add_start_docstrings_to_model_forward(SIGLIP2_VISION_INPUTS_DOCSTRING)
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=Siglip2VisionConfig)
     def forward(
         self,
-        pixel_values,
+        pixel_values: torch.FloatTensor,
+        position_ids: torch.LongTensor,
+        attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1092,10 +1202,15 @@ class Siglip2VisionTransformer(nn.Module):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+        hidden_states = self.embeddings(pixel_values, position_ids)
+
+        if attention_mask is not None and not self._use_flash_attention_2:
+            # [batch_size, seq_len] -> [batch_size, 1, tgt_seq_len, src_seq_len]
+            attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
 
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
+            attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1163,7 +1278,9 @@ class Siglip2VisionModel(Siglip2PreTrainedModel):
     @replace_return_docstrings(output_type=BaseModelOutputWithPooling, config_class=Siglip2VisionConfig)
     def forward(
         self,
-        pixel_values,
+        pixel_values: torch.FloatTensor,
+        pixel_position_ids: torch.LongTensor,
+        pixel_attention_mask: torch.Tensor,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1195,6 +1312,8 @@ class Siglip2VisionModel(Siglip2PreTrainedModel):
 
         return self.vision_model(
             pixel_values=pixel_values,
+            position_ids=pixel_position_ids,
+            attention_mask=pixel_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1291,6 +1410,8 @@ class Siglip2Model(Siglip2PreTrainedModel):
     def get_image_features(
         self,
         pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_position_ids: Optional[torch.LongTensor] = None,
+        pixel_attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
@@ -1329,6 +1450,8 @@ class Siglip2Model(Siglip2PreTrainedModel):
 
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
+            position_ids=pixel_position_ids,
+            attention_mask=pixel_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1347,6 +1470,8 @@ class Siglip2Model(Siglip2PreTrainedModel):
         pixel_values: Optional[torch.FloatTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
+        pixel_attention_mask: Optional[torch.Tensor] = None,
+        pixel_position_ids: Optional[torch.LongTensor] = None,
         return_loss: Optional[bool] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1391,6 +1516,8 @@ class Siglip2Model(Siglip2PreTrainedModel):
 
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
+            position_ids=pixel_position_ids,
+            attention_mask=pixel_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
@@ -1477,6 +1604,8 @@ class Siglip2ForImageClassification(Siglip2PreTrainedModel):
     def forward(
         self,
         pixel_values: Optional[torch.Tensor] = None,
+        pixel_position_ids: Optional[torch.LongTensor] = None,
+        pixel_attention_mask: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1524,6 +1653,8 @@ class Siglip2ForImageClassification(Siglip2PreTrainedModel):
 
         outputs = self.vision_model(
             pixel_values,
+            position_ids=pixel_position_ids,
+            attention_mask=pixel_attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
