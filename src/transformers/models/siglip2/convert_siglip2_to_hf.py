@@ -187,7 +187,7 @@ def rename_key(dct, old, new, config):
         val = val.reshape(-1, config.text_config.hidden_size)
 
     if "patch_embedding.weight" in new:
-        val = val.transpose(3, 2, 0, 1)
+        val = val.T #transpose(3, 2, 0, 1)
     elif new.endswith("weight") and "position_embedding" not in new and "token_embedding" not in new:
         val = val.T
 
