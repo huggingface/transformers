@@ -5723,9 +5723,9 @@ if TYPE_CHECKING:
     from .models.mimi import (
         MimiConfig,
     )
+    from .models.minimax_text_01 import MiniMaxText01Config
     from .models.mistral import MistralConfig
     from .models.mixtral import MixtralConfig
-    from .models.minimax_text_01 import MiniMaxText01Config
     from .models.mllama import (
         MllamaConfig,
         MllamaProcessor,
@@ -7739,6 +7739,14 @@ if TYPE_CHECKING:
             MimiModel,
             MimiPreTrainedModel,
         )
+        from .models.minimax_text_01 import (
+            MiniMaxText01ForCausalLM,
+            MiniMaxText01ForQuestionAnswering,
+            MiniMaxText01ForSequenceClassification,
+            MiniMaxText01ForTokenClassification,
+            MiniMaxText01Model,
+            MiniMaxText01PreTrainedModel,
+        )
         from .models.mistral import (
             MistralForCausalLM,
             MistralForQuestionAnswering,
@@ -7754,14 +7762,6 @@ if TYPE_CHECKING:
             MixtralForTokenClassification,
             MixtralModel,
             MixtralPreTrainedModel,
-        )
-        from .models.minimax_text_01 import (
-            MiniMaxText01Model,
-            MiniMaxText01ForCausalLM,
-            MiniMaxText01ForSequenceClassification,
-            MiniMaxText01ForTokenClassification,
-            MiniMaxText01ForQuestionAnswering,
-            MiniMaxText01PreTrainedModel,
         )
         from .models.mllama import (
             MllamaForCausalLM,
