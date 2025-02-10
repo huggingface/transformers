@@ -17,6 +17,7 @@ import argparse
 import json
 from pathlib import Path
 
+import re
 import requests
 import torch
 from huggingface_hub import hf_hub_download
@@ -119,703 +120,206 @@ def load_original_state_dict(repo_id, model_name):
     return original_state_dict
 
 
-def create_rename_keys(config):
-    # here we list all keys to be renamed (original name on the left, our name on the right)
-    rename_keys = []
+ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
+   # Decoder base mappings
+    r"decoder.valid_mask": r"model.decoder.valid_mask",
+    r"decoder.anchors": r"model.decoder.anchors",
+    r"decoder.up": r"model.decoder.up",
+    r"decoder.reg_scale": r"model.decoder.reg_scale",
 
-    rename_keys.append(("decoder.valid_mask", "model.decoder.valid_mask"))
-    rename_keys.append(("decoder.anchors", "model.decoder.anchors"))
-    rename_keys.append(("decoder.up", "model.decoder.up"))
-    rename_keys.append(("decoder.reg_scale", "model.decoder.reg_scale"))
+    # Backbone stem mappings - including stem2a and stem2b
+    r"backbone.stem.stem1.conv.weight": r"model.backbone.model.embedder.stem1.convolution.weight",
+    r"backbone.stem.stem2a.conv.weight": r"model.backbone.model.embedder.stem2a.convolution.weight",
+    r"backbone.stem.stem2b.conv.weight": r"model.backbone.model.embedder.stem2b.convolution.weight",
+    r"backbone.stem.stem3.conv.weight": r"model.backbone.model.embedder.stem3.convolution.weight",
+    r"backbone.stem.stem4.conv.weight": r"model.backbone.model.embedder.stem4.convolution.weight",
+    
+    # Stem normalization
+    r"backbone.stem.stem1.bn.(weight|bias|running_mean|running_var)": r"model.backbone.model.embedder.stem1.normalization.\1",
+    r"backbone.stem.stem2a.bn.(weight|bias|running_mean|running_var)": r"model.backbone.model.embedder.stem2a.normalization.\1",
+    r"backbone.stem.stem2b.bn.(weight|bias|running_mean|running_var)": r"model.backbone.model.embedder.stem2b.normalization.\1",
+    r"backbone.stem.stem3.bn.(weight|bias|running_mean|running_var)": r"model.backbone.model.embedder.stem3.normalization.\1",
+    r"backbone.stem.stem4.bn.(weight|bias|running_mean|running_var)": r"model.backbone.model.embedder.stem4.normalization.\1",
+    
+    # Stem lab parameters - fixed with .lab in the path
+    r"backbone.stem.stem1.lab.(scale|bias)": r"model.backbone.model.embedder.stem1.lab.\1",
+    r"backbone.stem.stem2a.lab.(scale|bias)": r"model.backbone.model.embedder.stem2a.lab.\1",
+    r"backbone.stem.stem2b.lab.(scale|bias)": r"model.backbone.model.embedder.stem2b.lab.\1",
+    r"backbone.stem.stem3.lab.(scale|bias)": r"model.backbone.model.embedder.stem3.lab.\1",
+    r"backbone.stem.stem4.lab.(scale|bias)": r"model.backbone.model.embedder.stem4.lab.\1",
 
-    # stem
-    # fmt: off
-    last_key = ["weight", "bias", "running_mean", "running_var"]
-    lab_keys = ["lab.scale", "lab.bias"]
+    # Backbone stages mappings
+    r"backbone.stages.(\d+).blocks.(\d+).layers.(\d+).conv.weight": r"model.backbone.model.encoder.stages.\1.blocks.\2.layers.\3.convolution.weight",
+    r"backbone.stages.(\d+).blocks.(\d+).layers.(\d+).bn.(weight|bias|running_mean|running_var)": r"model.backbone.model.encoder.stages.\1.blocks.\2.layers.\3.normalization.\4",
+    r"backbone.stages.(\d+).blocks.(\d+).layers.(\d+).conv1.conv.weight": r"model.backbone.model.encoder.stages.\1.blocks.\2.layers.\3.conv1.convolution.weight",
+    r"backbone.stages.(\d+).blocks.(\d+).layers.(\d+).conv2.conv.weight": r"model.backbone.model.encoder.stages.\1.blocks.\2.layers.\3.conv2.convolution.weight",
+    r"backbone.stages.(\d+).blocks.(\d+).layers.(\d+).conv1.bn.(weight|bias|running_mean|running_var)": r"model.backbone.model.encoder.stages.\1.blocks.\2.layers.\3.conv1.normalization.\4",
+    r"backbone.stages.(\d+).blocks.(\d+).layers.(\d+).conv2.bn.(weight|bias|running_mean|running_var)": r"model.backbone.model.encoder.stages.\1.blocks.\2.layers.\3.conv2.normalization.\4",
 
-    rename_keys.append(("backbone.stem.stem1.conv.weight", "model.backbone.model.embedder.stem1.convolution.weight"))
-    rename_keys.append(("backbone.stem.stem2a.conv.weight", "model.backbone.model.embedder.stem2a.convolution.weight"))
-    rename_keys.append(("backbone.stem.stem2b.conv.weight", "model.backbone.model.embedder.stem2b.convolution.weight"))
-    rename_keys.append(("backbone.stem.stem3.conv.weight", "model.backbone.model.embedder.stem3.convolution.weight"))
-    rename_keys.append(("backbone.stem.stem4.conv.weight", "model.backbone.model.embedder.stem4.convolution.weight"))
-    for last in last_key:
-        rename_keys.append((f"backbone.stem.stem1.bn.{last}", f"model.backbone.model.embedder.stem1.normalization.{last}"))
-        rename_keys.append((f"backbone.stem.stem2a.bn.{last}", f"model.backbone.model.embedder.stem2a.normalization.{last}"))
-        rename_keys.append((f"backbone.stem.stem2b.bn.{last}", f"model.backbone.model.embedder.stem2b.normalization.{last}"))
-        rename_keys.append((f"backbone.stem.stem3.bn.{last}", f"model.backbone.model.embedder.stem3.normalization.{last}"))
-        rename_keys.append((f"backbone.stem.stem4.bn.{last}", f"model.backbone.model.embedder.stem4.normalization.{last}"))
-    if config.backbone_config.use_lab:
-        for lab in lab_keys:
-            rename_keys.append((f"backbone.stem.stem1.{lab}", f"model.backbone.model.embedder.stem1.{lab}"))
-            rename_keys.append((f"backbone.stem.stem2a.{lab}", f"model.backbone.model.embedder.stem2a.{lab}"))
-            rename_keys.append((f"backbone.stem.stem2b.{lab}", f"model.backbone.model.embedder.stem2b.{lab}"))
-            rename_keys.append((f"backbone.stem.stem3.{lab}", f"model.backbone.model.embedder.stem3.{lab}"))
-            rename_keys.append((f"backbone.stem.stem4.{lab}", f"model.backbone.model.embedder.stem4.{lab}"))
+    # Backbone stages aggregation
+    r"backbone.stages.(\d+).blocks.(\d+).aggregation.0.conv.weight": r"model.backbone.model.encoder.stages.\1.blocks.\2.aggregation.0.convolution.weight",
+    r"backbone.stages.(\d+).blocks.(\d+).aggregation.1.conv.weight": r"model.backbone.model.encoder.stages.\1.blocks.\2.aggregation.1.convolution.weight",
+    r"backbone.stages.(\d+).blocks.(\d+).aggregation.0.bn.(weight|bias|running_mean|running_var)": r"model.backbone.model.encoder.stages.\1.blocks.\2.aggregation.0.normalization.\3",
+    r"backbone.stages.(\d+).blocks.(\d+).aggregation.1.bn.(weight|bias|running_mean|running_var)": r"model.backbone.model.encoder.stages.\1.blocks.\2.aggregation.1.normalization.\3",
+    
+    # Backbone stages lab parameters for aggregation
+    r"backbone.stages.(\d+).blocks.(\d+).aggregation.0.lab.(scale|bias)": r"model.backbone.model.encoder.stages.\1.blocks.\2.aggregation.0.lab.\3",
+    r"backbone.stages.(\d+).blocks.(\d+).aggregation.1.lab.(scale|bias)": r"model.backbone.model.encoder.stages.\1.blocks.\2.aggregation.1.lab.\3",
 
-    for stage_idx, stage in enumerate(config.backbone_config.stage_config):
-        _, _, _, block_num, downsample, _, _, layer_num = stage
-        for b in range(block_num):
-            for layer_idx in range(layer_num):
-                if stage_idx == 0 or stage_idx == 3:
-                    rename_keys.append(
-                        (
-                            f"backbone.stages.{stage_idx}.blocks.0.layers.{layer_idx}.conv.weight",
-                            f"model.backbone.model.encoder.stages.{stage_idx}.blocks.0.layers.{layer_idx}.convolution.weight",
-                        )
-                    )
-                    for last in last_key:
-                        rename_keys.append(
-                        (
-                            f"backbone.stages.{stage_idx}.blocks.0.layers.{layer_idx}.bn.{last}",
-                            f"model.backbone.model.encoder.stages.{stage_idx}.blocks.0.layers.{layer_idx}.normalization.{last}",
-                        )
-                    )
-                    if config.backbone_config.use_lab:
-                        for lab in lab_keys:
-                            rename_keys.append(
-                        (
-                            f"backbone.stages.{stage_idx}.blocks.0.layers.{layer_idx}.{lab}",
-                            f"model.backbone.model.encoder.stages.{stage_idx}.blocks.0.layers.{layer_idx}.{lab}",
-                        )
-                    )
-                    #layers
-                    rename_keys.append(
-                        (
-                            f"backbone.stages.{stage_idx}.blocks.0.layers.{layer_idx}.conv1.conv.weigh",
-                            f"model.backbone.model.encoder.stages.{stage_idx}.blocks.0.layers.{layer_idx}.conv1.convolution.weight",
-                        )
-                    )
-                    rename_keys.append(
-                        (
-                            f"backbone.stages.{stage_idx}.blocks.0.layers.{layer_idx}.conv2.conv.weigh",
-                            f"model.backbone.model.encoder.stages.{stage_idx}.blocks.0.layers.{layer_idx}.conv2.convolution.weight",
-                        )
-                    )
-                    for last in last_key:
-                        rename_keys.append((
-                            f"backbone.stages.{stage_idx}.blocks.0.layers.{layer_idx}.conv1.bn.{last}",
-                            f"model.backbone.model.encoder.stages.{stage_idx}.blocks.0.layers.{layer_idx}.conv1.normalization.{last}",
-                            ))
+    r"backbone.stages.(\d+).blocks.(\d+).layers.(\d+).lab.(scale|bias)": r"model.backbone.model.encoder.stages.\1.blocks.\2.layers.\3.lab.\4",
+    
+    # Conv1/Conv2 layers with lab
+    r"backbone.stages.(\d+).blocks.(\d+).layers.(\d+).conv1.lab.(scale|bias)": r"model.backbone.model.encoder.stages.\1.blocks.\2.layers.\3.conv1.lab.\4",
+    r"backbone.stages.(\d+).blocks.(\d+).layers.(\d+).conv2.lab.(scale|bias)": r"model.backbone.model.encoder.stages.\1.blocks.\2.layers.\3.conv2.lab.\4",
+    
+    # Downsample with lab
+    r"backbone.stages.(\d+).downsample.lab.(scale|bias)": r"model.backbone.model.encoder.stages.\1.downsample.lab.\2",
 
-                    for last in last_key:
-                        rename_keys.append((
-                            f"backbone.stages.{stage_idx}.blocks.0.layers.{layer_idx}.conv2.bn.{last}",
-                            f"model.backbone.model.encoder.stages.{stage_idx}.blocks.0.layers.{layer_idx}.conv2.normalization.{last}",
-                            ))
-                    if config.backbone_config.use_lab:
-                        for lab in lab_keys:
-                            rename_keys.append((
-                            f"backbone.stages.{stage_idx}.blocks.0.layers.{layer_idx}.conv1.{lab}",
-                            f"model.backbone.model.encoder.stages.{stage_idx}.blocks.0.layers.{layer_idx}.conv1.{lab}",
-                            ))
-                            rename_keys.append((
-                            f"backbone.stages.{stage_idx}.blocks.0.layers.{layer_idx}.conv2.{lab}",
-                            f"model.backbone.model.encoder.stages.{stage_idx}.blocks.0.layers.{layer_idx}.conv2.{lab}",
-                            ))
+    # Backbone downsample
+    r"backbone.stages.(\d+).downsample.conv.weight": r"model.backbone.model.encoder.stages.\1.downsample.convolution.weight",
+    r"backbone.stages.(\d+).downsample.bn.(weight|bias|running_mean|running_var)": r"model.backbone.model.encoder.stages.\1.downsample.normalization.\2",
 
+    # Encoder mappings
+    r"encoder.encoder.(\d+).layers.0.self_attn.out_proj.(weight|bias)": r"model.encoder.encoder.\1.layers.0.self_attn.out_proj.\2",
+    r"encoder.encoder.(\d+).layers.0.linear1.(weight|bias)": r"model.encoder.encoder.\1.layers.0.fc1.\2",
+    r"encoder.encoder.(\d+).layers.0.linear2.(weight|bias)": r"model.encoder.encoder.\1.layers.0.fc2.\2",
+    r"encoder.encoder.(\d+).layers.0.norm1.(weight|bias)": r"model.encoder.encoder.\1.layers.0.self_attn_layer_norm.\2",
+    r"encoder.encoder.(\d+).layers.0.norm2.(weight|bias)": r"model.encoder.encoder.\1.layers.0.final_layer_norm.\2",
 
-                #aggregation
-                rename_keys.append(
-                        (
-                            f"backbone.stages.{stage_idx}.blocks.{b}.aggregation.0.conv.weight",
-                            f"model.backbone.model.encoder.stages.{stage_idx}.blocks.{b}.aggregation.0.convolution.weight",
-                        )
-                    )
-                rename_keys.append(
-                        (
-                            f"backbone.stages.{stage_idx}.blocks.{b}.aggregation.1.conv.weight",
-                            f"model.backbone.model.encoder.stages.{stage_idx}.blocks.{b}.aggregation.1.convolution.weight",
-                        )
-                    )
-                for last in last_key:
-                    rename_keys.append(
-                        (
-                            f"backbone.stages.{stage_idx}.blocks.{b}.aggregation.0.bn.{last}",
-                            f"model.backbone.model.encoder.stages.{stage_idx}.blocks.{b}.aggregation.0.normalization.{last}",
-                        )
-                    )
-                    rename_keys.append(
-                        (
-                            f"backbone.stages.{stage_idx}.blocks.{b}.aggregation.1.bn.{last}",
-                            f"model.backbone.model.encoder.stages.{stage_idx}.blocks.{b}.aggregation.1.normalization.{last}",
-                        )
-                    )
-                if config.backbone_config.use_lab:
-                    for lab in lab_keys:
-                        rename_keys.append(
-                        (
-                            f"backbone.stages.{stage_idx}.blocks.{b}.aggregation.0.{lab}",
-                            f"model.backbone.model.encoder.stages.{stage_idx}.blocks.{b}.aggregation.0.{lab}",
-                        )
-                    )
-                        rename_keys.append(
-                            (
-                                f"backbone.stages.{stage_idx}.blocks.{b}.aggregation.1.{lab}",
-                                f"model.backbone.model.encoder.stages.{stage_idx}.blocks.{b}.aggregation.1.{lab}",
-                            )
-                        )
+    # Encoder projections and convolutions
+    r"encoder.input_proj.(\d+).conv.weight": r"model.encoder_input_proj.\1.0.weight",
+    r"encoder.input_proj.(\d+).norm.(weight|bias|running_mean|running_var)": r"model.encoder_input_proj.\1.1.\2",
+    r"encoder.lateral_convs.(\d+).conv.weight": r"model.encoder.lateral_convs.\1.conv.weight",
+    r"encoder.lateral_convs.(\d+).norm.(weight|bias|running_mean|running_var)": r"model.encoder.lateral_convs.\1.norm.\2",
 
-                #layers
-                rename_keys.append(
-                    (
-                        f"backbone.stages.{stage_idx}.blocks.{b}.layers.{layer_idx}.conv.weight",
-                        f"model.backbone.model.encoder.stages.{stage_idx}.blocks.{b}.layers.{layer_idx}.convolution.weight",
-                    )
-                )
-                for last in last_key:
-                    rename_keys.append(
-                    (
-                        f"backbone.stages.{stage_idx}.blocks.{b}.layers.{layer_idx}.bn.{last}",
-                        f"model.backbone.model.encoder.stages.{stage_idx}.blocks.{b}.layers.{layer_idx}.normalization.{last}",
-                    )
-                )
+    # FPN blocks - complete structure
+    # Basic cv1-cv4 convolutions
+    r"encoder.fpn_blocks.(\d+).cv1.conv.weight": r"model.encoder.fpn_blocks.\1.cv1.conv.weight",
+    r"encoder.fpn_blocks.(\d+).cv1.norm.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_blocks.\1.cv1.norm.\2",
+    r"encoder.fpn_blocks.(\d+).cv2.conv.weight": r"model.encoder.fpn_blocks.\1.cv2.conv.weight",
+    r"encoder.fpn_blocks.(\d+).cv2.norm.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_blocks.\1.cv2.norm.\2",
+    r"encoder.fpn_blocks.(\d+).cv3.conv.weight": r"model.encoder.fpn_blocks.\1.cv3.conv.weight",
+    r"encoder.fpn_blocks.(\d+).cv3.norm.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_blocks.\1.cv3.norm.\2",
+    r"encoder.fpn_blocks.(\d+).cv4.conv.weight": r"model.encoder.fpn_blocks.\1.cv4.conv.weight",
+    r"encoder.fpn_blocks.(\d+).cv4.norm.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_blocks.\1.cv4.norm.\2",
 
-                if config.backbone_config.use_lab:
-                    for lab in lab_keys:
-                        rename_keys.append(
-                    (
-                        f"backbone.stages.{stage_idx}.blocks.0.layers.{layer_idx}.{lab}",
-                        f"model.backbone.model.encoder.stages.{stage_idx}.blocks.0.layers.{layer_idx}.{lab}",
-                    )
-                )
+    # FPN cv2/cv3 special structure
+    # cv2 structure
+    r"encoder.fpn_blocks.(\d+).cv2.0.conv1.conv.weight": r"model.encoder.fpn_blocks.\1.cv2.0.conv1.conv.weight",
+    r"encoder.fpn_blocks.(\d+).cv2.0.conv1.norm.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_blocks.\1.cv2.0.conv1.norm.\2",
+    r"encoder.fpn_blocks.(\d+).cv2.0.conv2.conv.weight": r"model.encoder.fpn_blocks.\1.cv2.0.conv2.conv.weight",
+    r"encoder.fpn_blocks.(\d+).cv2.0.conv2.norm.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_blocks.\1.cv2.0.conv2.norm.\2",
+    r"encoder.fpn_blocks.(\d+).cv2.1.conv.weight": r"model.encoder.fpn_blocks.\1.cv2.1.conv.weight",
+    r"encoder.fpn_blocks.(\d+).cv2.1.norm.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_blocks.\1.cv2.1.norm.\2",
 
-                rename_keys.append(
-                    (
-                        f"backbone.stages.{stage_idx}.blocks.{b}.layers.{layer_idx}.conv1.conv.weight",
-                        f"model.backbone.model.encoder.stages.{stage_idx}.blocks.{b}.layers.{layer_idx}.conv1.convolution.weight",
-                    )
-                )
-                rename_keys.append(
-                    (
-                        f"backbone.stages.{stage_idx}.blocks.{b}.layers.{layer_idx}.conv2.conv.weight",
-                        f"model.backbone.model.encoder.stages.{stage_idx}.blocks.{b}.layers.{layer_idx}.conv2.convolution.weight",
-                    )
-                )
-                for last in last_key:
-                    rename_keys.append((
-                        f"backbone.stages.{stage_idx}.blocks.{b}.layers.{layer_idx}.conv1.bn.{last}",
-                        f"model.backbone.model.encoder.stages.{stage_idx}.blocks.{b}.layers.{layer_idx}.conv1.normalization.{last}",
-                        ))
+    # cv3 structure
+    r"encoder.fpn_blocks.(\d+).cv3.0.conv1.conv.weight": r"model.encoder.fpn_blocks.\1.cv3.0.conv1.conv.weight",
+    r"encoder.fpn_blocks.(\d+).cv3.0.conv1.norm.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_blocks.\1.cv3.0.conv1.norm.\2",
+    r"encoder.fpn_blocks.(\d+).cv3.0.conv2.conv.weight": r"model.encoder.fpn_blocks.\1.cv3.0.conv2.conv.weight",
+    r"encoder.fpn_blocks.(\d+).cv3.0.conv2.norm.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_blocks.\1.cv3.0.conv2.norm.\2",
+    r"encoder.fpn_blocks.(\d+).cv3.1.conv.weight": r"model.encoder.fpn_blocks.\1.cv3.1.conv.weight",
+    r"encoder.fpn_blocks.(\d+).cv3.1.norm.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_blocks.\1.cv3.1.norm.\2",
 
-                for last in last_key:
-                    rename_keys.append((
-                        f"backbone.stages.{stage_idx}.blocks.{b}.layers.{layer_idx}.conv2.bn.{last}",
-                        f"model.backbone.model.encoder.stages.{stage_idx}.blocks.{b}.layers.{layer_idx}.conv2.normalization.{last}",
-                        ))
-                if config.backbone_config.use_lab:
-                    for lab in lab_keys:
-                        rename_keys.append((
-                        f"backbone.stages.{stage_idx}.blocks.{b}.layers.{layer_idx}.conv2.{lab}",
-                        f"model.backbone.model.encoder.stages.{stage_idx}.blocks.{b}.layers.{layer_idx}.conv2.{lab}",
-                        ))
+    # FPN bottlenecks for cv2
+    r"encoder.fpn_blocks.(\d+).cv2.0.bottlenecks.(\d+).conv1.conv.weight": r"model.encoder.fpn_blocks.\1.cv2.0.bottlenecks.\2.conv1.conv.weight",
+    r"encoder.fpn_blocks.(\d+).cv2.0.bottlenecks.(\d+).conv1.norm.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_blocks.\1.cv2.0.bottlenecks.\2.conv1.norm.\3",
+    r"encoder.fpn_blocks.(\d+).cv2.0.bottlenecks.(\d+).conv2.conv.weight": r"model.encoder.fpn_blocks.\1.cv2.0.bottlenecks.\2.conv2.conv.weight",
+    r"encoder.fpn_blocks.(\d+).cv2.0.bottlenecks.(\d+).conv2.norm.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_blocks.\1.cv2.0.bottlenecks.\2.conv2.norm.\3",
 
-            #downsamle
-            if downsample:
-                rename_keys.append(
-                    (
-                        f"backbone.stages.{stage_idx}.downsample.conv.weight",
-                        f"model.backbone.model.encoder.stages.{stage_idx}.downsample.convolution.weight",
-                    )
-                )
-                for last in last_key:
-                    rename_keys.append(
-                        (
-                            f"backbone.stages.{stage_idx}.downsample.bn.{last}",
-                            f"model.backbone.model.encoder.stages.{stage_idx}.downsample.normalization.{last}",
-                        )
-                    )
+    # FPN bottlenecks for cv3
+    r"encoder.fpn_blocks.(\d+).cv3.0.bottlenecks.(\d+).conv1.conv.weight": r"model.encoder.fpn_blocks.\1.cv3.0.bottlenecks.\2.conv1.conv.weight",
+    r"encoder.fpn_blocks.(\d+).cv3.0.bottlenecks.(\d+).conv1.norm.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_blocks.\1.cv3.0.bottlenecks.\2.conv1.norm.\3",
+    r"encoder.fpn_blocks.(\d+).cv3.0.bottlenecks.(\d+).conv2.conv.weight": r"model.encoder.fpn_blocks.\1.cv3.0.bottlenecks.\2.conv2.conv.weight",
+    r"encoder.fpn_blocks.(\d+).cv3.0.bottlenecks.(\d+).conv2.norm.(weight|bias|running_mean|running_var)": r"model.encoder.fpn_blocks.\1.cv3.0.bottlenecks.\2.conv2.norm.\3",
 
-    # fmt: on
-    for i in range(config.encoder_layers):
-        # encoder layers: output projection, 2 feedforward neural networks and 2 layernorms
-        rename_keys.append(
-            (
-                f"encoder.encoder.{i}.layers.0.self_attn.out_proj.weight",
-                f"model.encoder.encoder.{i}.layers.0.self_attn.out_proj.weight",
-            )
-        )
-        rename_keys.append(
-            (
-                f"encoder.encoder.{i}.layers.0.self_attn.out_proj.bias",
-                f"model.encoder.encoder.{i}.layers.0.self_attn.out_proj.bias",
-            )
-        )
-        rename_keys.append(
-            (
-                f"encoder.encoder.{i}.layers.0.linear1.weight",
-                f"model.encoder.encoder.{i}.layers.0.fc1.weight",
-            )
-        )
-        rename_keys.append(
-            (
-                f"encoder.encoder.{i}.layers.0.linear1.bias",
-                f"model.encoder.encoder.{i}.layers.0.fc1.bias",
-            )
-        )
-        rename_keys.append(
-            (
-                f"encoder.encoder.{i}.layers.0.linear2.weight",
-                f"model.encoder.encoder.{i}.layers.0.fc2.weight",
-            )
-        )
-        rename_keys.append(
-            (
-                f"encoder.encoder.{i}.layers.0.linear2.bias",
-                f"model.encoder.encoder.{i}.layers.0.fc2.bias",
-            )
-        )
-        rename_keys.append(
-            (
-                f"encoder.encoder.{i}.layers.0.norm1.weight",
-                f"model.encoder.encoder.{i}.layers.0.self_attn_layer_norm.weight",
-            )
-        )
-        rename_keys.append(
-            (
-                f"encoder.encoder.{i}.layers.0.norm1.bias",
-                f"model.encoder.encoder.{i}.layers.0.self_attn_layer_norm.bias",
-            )
-        )
-        rename_keys.append(
-            (
-                f"encoder.encoder.{i}.layers.0.norm2.weight",
-                f"model.encoder.encoder.{i}.layers.0.final_layer_norm.weight",
-            )
-        )
-        rename_keys.append(
-            (
-                f"encoder.encoder.{i}.layers.0.norm2.bias",
-                f"model.encoder.encoder.{i}.layers.0.final_layer_norm.bias",
-            )
-        )
+    # PAN blocks - complete structure
+    # Basic cv1-cv4 convolutions
+    r"encoder.pan_blocks.(\d+).cv1.conv.weight": r"model.encoder.pan_blocks.\1.cv1.conv.weight",
+    r"encoder.pan_blocks.(\d+).cv1.norm.(weight|bias|running_mean|running_var)": r"model.encoder.pan_blocks.\1.cv1.norm.\2",
+    r"encoder.pan_blocks.(\d+).cv2.conv.weight": r"model.encoder.pan_blocks.\1.cv2.conv.weight",
+    r"encoder.pan_blocks.(\d+).cv2.norm.(weight|bias|running_mean|running_var)": r"model.encoder.pan_blocks.\1.cv2.norm.\2",
+    r"encoder.pan_blocks.(\d+).cv3.conv.weight": r"model.encoder.pan_blocks.\1.cv3.conv.weight",
+    r"encoder.pan_blocks.(\d+).cv3.norm.(weight|bias|running_mean|running_var)": r"model.encoder.pan_blocks.\1.cv3.norm.\2",
+    r"encoder.pan_blocks.(\d+).cv4.conv.weight": r"model.encoder.pan_blocks.\1.cv4.conv.weight",
+    r"encoder.pan_blocks.(\d+).cv4.norm.(weight|bias|running_mean|running_var)": r"model.encoder.pan_blocks.\1.cv4.norm.\2",
 
-    for j in range(0, 3):
-        rename_keys.append((f"encoder.input_proj.{j}.conv.weight", f"model.encoder_input_proj.{j}.0.weight"))
-        for last in last_key:
-            rename_keys.append((f"encoder.input_proj.{j}.norm.{last}", f"model.encoder_input_proj.{j}.1.{last}"))
+    # PAN cv2/cv3 special structure
+    # cv2 structure
+    r"encoder.pan_blocks.(\d+).cv2.0.conv1.conv.weight": r"model.encoder.pan_blocks.\1.cv2.0.conv1.conv.weight",
+    r"encoder.pan_blocks.(\d+).cv2.0.conv1.norm.(weight|bias|running_mean|running_var)": r"model.encoder.pan_blocks.\1.cv2.0.conv1.norm.\2",
+    r"encoder.pan_blocks.(\d+).cv2.0.conv2.conv.weight": r"model.encoder.pan_blocks.\1.cv2.0.conv2.conv.weight",
+    r"encoder.pan_blocks.(\d+).cv2.0.conv2.norm.(weight|bias|running_mean|running_var)": r"model.encoder.pan_blocks.\1.cv2.0.conv2.norm.\2",
+    r"encoder.pan_blocks.(\d+).cv2.1.conv.weight": r"model.encoder.pan_blocks.\1.cv2.1.conv.weight",
+    r"encoder.pan_blocks.(\d+).cv2.1.norm.(weight|bias|running_mean|running_var)": r"model.encoder.pan_blocks.\1.cv2.1.norm.\2",
 
-    for i in range(len(config.encoder_in_channels) - 1):
-        # fpn_block
-        # number of cv is 4 according to original implementation
-        for j in range(1, 5):
-            rename_keys.append(
-                (f"encoder.fpn_blocks.{i}.cv{j}.conv.weight", f"model.encoder.fpn_blocks.{i}.cv{j}.conv.weight")
-            )
-            for last in last_key:
-                rename_keys.append(
-                    (
-                        f"encoder.fpn_blocks.{i}.cv{j}.norm.{last}",
-                        f"model.encoder.fpn_blocks.{i}.cv{j}.norm.{last}",
-                    )
-                )
-            if j == 2 or j == 3:
-                rename_keys.append(
-                    (
-                        f"encoder.fpn_blocks.{i}.cv{j}.1.conv.weight",
-                        f"model.encoder.fpn_blocks.{i}.cv{j}.1.conv.weight",
-                    )
-                )
-                rename_keys.append(
-                    (
-                        f"encoder.fpn_blocks.{i}.cv{j}.1.conv.weight",
-                        f"model.encoder.fpn_blocks.{i}.cv{j}.1.conv.weight",
-                    )
-                )
-                rename_keys.append(
-                    (
-                        f"encoder.fpn_blocks.{i}.cv{j}.0.conv1.conv.weight",
-                        f"model.encoder.fpn_blocks.{i}.cv{j}.0.conv1.conv.weight",
-                    )
-                )
-                rename_keys.append(
-                    (
-                        f"encoder.fpn_blocks.{i}.cv{j}.0.conv2.conv.weight",
-                        f"model.encoder.fpn_blocks.{i}.cv{j}.0.conv2.conv.weight",
-                    )
-                )
-                rename_keys.append(
-                    (
-                        f"encoder.fpn_blocks.{i}.cv{j}.1.conv.weight",
-                        f"model.encoder.fpn_blocks.{i}.cv{j}.1.conv.weight",
-                    )
-                )
-                for last in last_key:
-                    rename_keys.append(
-                        (
-                            f"encoder.fpn_blocks.{i}.cv{j}.1.norm.{last}",
-                            f"model.encoder.fpn_blocks.{i}.cv{j}.1.norm.{last}",
-                        )
-                    )
-                for last in last_key:
-                    rename_keys.append(
-                        (
-                            f"encoder.fpn_blocks.{i}.cv{j}.0.conv1.norm.{last}",
-                            f"model.encoder.fpn_blocks.{i}.cv{j}.0.conv1.norm.{last}",
-                        )
-                    )
-                for last in last_key:
-                    rename_keys.append(
-                        (
-                            f"encoder.fpn_blocks.{i}.cv{j}.0.conv2.norm.{last}",
-                            f"model.encoder.fpn_blocks.{i}.cv{j}.0.conv2.norm.{last}",
-                        )
-                    )
+    # cv3 structure
+    r"encoder.pan_blocks.(\d+).cv3.0.conv1.conv.weight": r"model.encoder.pan_blocks.\1.cv3.0.conv1.conv.weight",
+    r"encoder.pan_blocks.(\d+).cv3.0.conv1.norm.(weight|bias|running_mean|running_var)": r"model.encoder.pan_blocks.\1.cv3.0.conv1.norm.\2",
+    r"encoder.pan_blocks.(\d+).cv3.0.conv2.conv.weight": r"model.encoder.pan_blocks.\1.cv3.0.conv2.conv.weight",
+    r"encoder.pan_blocks.(\d+).cv3.0.conv2.norm.(weight|bias|running_mean|running_var)": r"model.encoder.pan_blocks.\1.cv3.0.conv2.norm.\2",
+    r"encoder.pan_blocks.(\d+).cv3.1.conv.weight": r"model.encoder.pan_blocks.\1.cv3.1.conv.weight",
+    r"encoder.pan_blocks.(\d+).cv3.1.norm.(weight|bias|running_mean|running_var)": r"model.encoder.pan_blocks.\1.cv3.1.norm.\2",
 
-        # lateral_convs
-        rename_keys.append((f"encoder.lateral_convs.{i}.conv.weight", f"model.encoder.lateral_convs.{i}.conv.weight"))
-        for last in last_key:
-            rename_keys.append(
-                (f"encoder.lateral_convs.{i}.norm.{last}", f"model.encoder.lateral_convs.{i}.norm.{last}")
-            )
+    # PAN bottlenecks for cv2
+    r"encoder.pan_blocks.(\d+).cv2.0.bottlenecks.(\d+).conv1.conv.weight": r"model.encoder.pan_blocks.\1.cv2.0.bottlenecks.\2.conv1.conv.weight",
+    r"encoder.pan_blocks.(\d+).cv2.0.bottlenecks.(\d+).conv1.norm.(weight|bias|running_mean|running_var)": r"model.encoder.pan_blocks.\1.cv2.0.bottlenecks.\2.conv1.norm.\3",
+    r"encoder.pan_blocks.(\d+).cv2.0.bottlenecks.(\d+).conv2.conv.weight": r"model.encoder.pan_blocks.\1.cv2.0.bottlenecks.\2.conv2.conv.weight",
+    r"encoder.pan_blocks.(\d+).cv2.0.bottlenecks.(\d+).conv2.norm.(weight|bias|running_mean|running_var)": r"model.encoder.pan_blocks.\1.cv2.0.bottlenecks.\2.conv2.norm.\3",
 
-        # fpn_bottlenecks
-        for c in range(2, 4):
-            for j in range(3):
-                for k in range(1, 3):
-                    rename_keys.append(
-                        (
-                            f"encoder.fpn_blocks.{i}.cv{c}.0.bottlenecks.{j}.conv{k}.conv.weight",
-                            f"model.encoder.fpn_blocks.{i}.cv{c}.0.bottlenecks.{j}.conv{k}.conv.weight",
-                        )
-                    )
-                    for last in last_key:
-                        rename_keys.append(
-                            (
-                                f"encoder.fpn_blocks.{i}.cv{c}.0.bottlenecks.{j}.conv{k}.norm.{last}",
-                                f"model.encoder.fpn_blocks.{i}.cv{c}.0.bottlenecks.{j}.conv{k}.norm.{last}",
-                            )
-                        )
-                    rename_keys.append(
-                        (
-                            f"encoder.fpn_blocks.{i}.cv{c}.1.bottlenecks.{j}.conv{k}.conv.weight",
-                            f"model.encoder.fpn_blocks.{i}.cv{c}.1.bottlenecks.{j}.conv{k}.conv.weight",
-                        )
-                    )
-                    for last in last_key:
-                        rename_keys.append(
-                            (
-                                f"encoder.fpn_blocks.{i}.cv{c}.1.bottlenecks.{j}.conv{k}.norm.{last}",
-                                f"model.encoder.fpn_blocks.{i}.cv{c}.1.bottlenecks.{j}.conv{k}.norm.{last}",
-                            )
-                        )
+    # PAN bottlenecks for cv3
+    r"encoder.pan_blocks.(\d+).cv3.0.bottlenecks.(\d+).conv1.conv.weight": r"model.encoder.pan_blocks.\1.cv3.0.bottlenecks.\2.conv1.conv.weight",
+    r"encoder.pan_blocks.(\d+).cv3.0.bottlenecks.(\d+).conv1.norm.(weight|bias|running_mean|running_var)": r"model.encoder.pan_blocks.\1.cv3.0.bottlenecks.\2.conv1.norm.\3",
+    r"encoder.pan_blocks.(\d+).cv3.0.bottlenecks.(\d+).conv2.conv.weight": r"model.encoder.pan_blocks.\1.cv3.0.bottlenecks.\2.conv2.conv.weight",
+    r"encoder.pan_blocks.(\d+).cv3.0.bottlenecks.(\d+).conv2.norm.(weight|bias|running_mean|running_var)": r"model.encoder.pan_blocks.\1.cv3.0.bottlenecks.\2.conv2.norm.\3",
 
-        # pan_block
-        for j in range(1, 5):
-            if j == 2 or j == 3:
-                rename_keys.append(
-                    (
-                        f"encoder.pan_blocks.{i}.cv{j}.0.conv1.conv.weight",
-                        f"model.encoder.pan_blocks.{i}.cv{j}.0.conv1.conv.weight",
-                    )
-                )
-                rename_keys.append(
-                    (
-                        f"encoder.pan_blocks.{i}.cv{j}.0.conv2.conv.weight",
-                        f"model.encoder.pan_blocks.{i}.cv{j}.0.conv2.conv.weight",
-                    )
-                )
-                for last in last_key:
-                    rename_keys.append(
-                        (
-                            f"encoder.pan_blocks.{i}.cv{j}.0.conv1.norm.{last}",
-                            f"model.encoder.pan_blocks.{i}.cv{j}.0.conv1.norm.{last}",
-                        )
-                    )
-                for last in last_key:
-                    rename_keys.append(
-                        (
-                            f"encoder.pan_blocks.{i}.cv{j}.0.conv2.norm.{last}",
-                            f"model.encoder.pan_blocks.{i}.cv{j}.0.conv2.norm.{last}",
-                        )
-                    )
-                rename_keys.append(
-                    (
-                        f"encoder.pan_blocks.{i}.cv{j}.1.conv.weight",
-                        f"model.encoder.pan_blocks.{i}.cv{j}.1.conv.weight",
-                    )
-                )
-                for last in last_key:
-                    rename_keys.append(
-                        (
-                            f"encoder.pan_blocks.{i}.cv{j}.1.norm.{last}",
-                            f"model.encoder.pan_blocks.{i}.cv{j}.1.norm.{last}",
-                        )
-                    )
+    # Downsample convolutions
+    r"encoder.downsample_convs.(\d+).0.cv(\d+).conv.weight": r"model.encoder.downsample_convs.\1.0.cv\2.conv.weight",
+    r"encoder.downsample_convs.(\d+).0.cv(\d+).norm.(weight|bias|running_mean|running_var)": r"model.encoder.downsample_convs.\1.0.cv\2.norm.\3",
 
-            rename_keys.append(
-                (f"encoder.pan_blocks.{i}.cv{j}.conv.weight", f"model.encoder.pan_blocks.{i}.cv{j}.conv.weight")
-            )
-            for last in last_key:
-                rename_keys.append(
-                    (
-                        f"encoder.pan_blocks.{i}.cv{j}.norm.{last}",
-                        f"model.encoder.pan_blocks.{i}.cv{j}.norm.{last}",
-                    )
-                )
+    # Decoder layers
+    r"decoder.decoder.layers.(\d+).self_attn.out_proj.(weight|bias)": r"model.decoder.layers.\1.self_attn.out_proj.\2",
+    r"decoder.decoder.layers.(\d+).cross_attn.sampling_offsets.(weight|bias)": r"model.decoder.layers.\1.encoder_attn.sampling_offsets.\2",
+    r"decoder.decoder.layers.(\d+).cross_attn.attention_weights.(weight|bias)": r"model.decoder.layers.\1.encoder_attn.attention_weights.\2",
+    r"decoder.decoder.layers.(\d+).cross_attn.value_proj.(weight|bias)": r"model.decoder.layers.\1.encoder_attn.value_proj.\2",
+    r"decoder.decoder.layers.(\d+).cross_attn.output_proj.(weight|bias)": r"model.decoder.layers.\1.encoder_attn.output_proj.\2",
+    r"decoder.decoder.layers.(\d+).cross_attn.num_points_scale": r"model.decoder.layers.\1.encoder_attn.num_points_scale",
+    r"decoder.decoder.layers.(\d+).gateway.gate.(weight|bias)": r"model.decoder.layers.\1.gateway.gate.\2",
+    r"decoder.decoder.layers.(\d+).gateway.norm.(weight|bias)": r"model.decoder.layers.\1.gateway.norm.\2",
+    r"decoder.decoder.layers.(\d+).norm1.(weight|bias)": r"model.decoder.layers.\1.self_attn_layer_norm.\2",
+    r"decoder.decoder.layers.(\d+).norm2.(weight|bias)": r"model.decoder.layers.\1.encoder_attn_layer_norm.\2",
+    r"decoder.decoder.layers.(\d+).norm3.(weight|bias)": r"model.decoder.layers.\1.final_layer_norm.\2",
+    r"decoder.decoder.layers.(\d+).linear1.(weight|bias)": r"model.decoder.layers.\1.fc1.\2",
+    r"decoder.decoder.layers.(\d+).linear2.(weight|bias)": r"model.decoder.layers.\1.fc2.\2",
 
-        # pan_bottlenecks
-        for c in range(2, 4):
-            for j in range(3):
-                for k in range(1, 3):
-                    rename_keys.append(
-                        (
-                            f"encoder.pan_blocks.{i}.cv{c}.0.bottlenecks.{j}.conv{k}.conv.weight",
-                            f"model.encoder.pan_blocks.{i}.cv{c}.0.bottlenecks.{j}.conv{k}.conv.weight",
-                        )
-                    )
-                    for last in last_key:
-                        rename_keys.append(
-                            (
-                                f"encoder.pan_blocks.{i}.cv{c}.0.bottlenecks.{j}.conv{k}.norm.{last}",
-                                f"model.encoder.pan_blocks.{i}.cv{c}.0.bottlenecks.{j}.conv{k}.norm.{last}",
-                            )
-                        )
+    # LQE layers
+    r"decoder.decoder.lqe_layers.(\d+).reg_conf.layers.(\d+).(weight|bias)": r"model.decoder.lqe_layers.\1.reg_conf.layers.\2.\3",
 
-    # downsample_convs
-    rename_keys.append(
-        ("encoder.downsample_convs.0.0.cv1.conv.weight", "model.encoder.downsample_convs.0.0.cv1.conv.weight")
-    )
-    for last in last_key:
-        rename_keys.append(
-            (f"encoder.downsample_convs.0.0.cv1.norm.{last}", f"model.encoder.downsample_convs.0.0.cv1.norm.{last}")
-        )
-    rename_keys.append(
-        ("encoder.downsample_convs.1.0.cv1.conv.weight", "model.encoder.downsample_convs.1.0.cv1.conv.weight")
-    )
-    for last in last_key:
-        rename_keys.append(
-            (f"encoder.downsample_convs.1.0.cv1.norm.{last}", f"model.encoder.downsample_convs.1.0.cv1.norm.{last}")
-        )
-    rename_keys.append(
-        ("encoder.downsample_convs.0.0.cv2.conv.weight", "model.encoder.downsample_convs.0.0.cv2.conv.weight")
-    )
-    for last in last_key:
-        rename_keys.append(
-            (f"encoder.downsample_convs.0.0.cv2.norm.{last}", f"model.encoder.downsample_convs.0.0.cv2.norm.{last}")
-        )
-    rename_keys.append(
-        ("encoder.downsample_convs.1.0.cv2.conv.weight", "model.encoder.downsample_convs.1.0.cv2.conv.weight")
-    )
-    for last in last_key:
-        rename_keys.append(
-            (f"encoder.downsample_convs.1.0.cv2.norm.{last}", f"model.encoder.downsample_convs.1.0.cv2.norm.{last}")
-        )
+    # Decoder heads and projections
+    r"decoder.dec_score_head.(\d+).(weight|bias)": r"model.decoder.class_embed.\1.\2",
+    r"decoder.dec_bbox_head.(\d+).layers.(\d+).(weight|bias)": r"model.decoder.bbox_embed.\1.layers.\2.\3",
+    r"decoder.pre_bbox_head.layers.(\d+).(weight|bias)": r"model.decoder.pre_bbox_head.layers.\1.\2",
+    r"decoder.input_proj.(\d+).conv.weight": r"model.decoder_input_proj.\1.0.weight",
+    r"decoder.input_proj.(\d+).norm.(weight|bias|running_mean|running_var)": r"model.decoder_input_proj.\1.1.\2",
 
-    for i in range(config.decoder_layers):
-        # decoder layers: 2 times output projection, 2 feedforward neural networks and 3 layernorms
-        rename_keys.append(
-            (
-                f"decoder.decoder.layers.{i}.self_attn.out_proj.weight",
-                f"model.decoder.layers.{i}.self_attn.out_proj.weight",
-            )
-        )
-        rename_keys.append(
-            (
-                f"decoder.decoder.layers.{i}.self_attn.out_proj.bias",
-                f"model.decoder.layers.{i}.self_attn.out_proj.bias",
-            )
-        )
-        rename_keys.append(
-            (
-                f"decoder.decoder.layers.{i}.cross_attn.sampling_offsets.weight",
-                f"model.decoder.layers.{i}.encoder_attn.sampling_offsets.weight",
-            )
-        )
-        rename_keys.append(
-            (
-                f"decoder.decoder.layers.{i}.cross_attn.num_points_scale",
-                f"model.decoder.layers.{i}.encoder_attn.num_points_scale",
-            )
-        )
-        rename_keys.append(
-            (
-                f"decoder.decoder.layers.{i}.cross_attn.sampling_offsets.bias",
-                f"model.decoder.layers.{i}.encoder_attn.sampling_offsets.bias",
-            )
-        )
-        rename_keys.append(
-            (
-                f"decoder.decoder.layers.{i}.cross_attn.attention_weights.weight",
-                f"model.decoder.layers.{i}.encoder_attn.attention_weights.weight",
-            )
-        )
-        rename_keys.append(
-            (
-                f"decoder.decoder.layers.{i}.cross_attn.attention_weights.bias",
-                f"model.decoder.layers.{i}.encoder_attn.attention_weights.bias",
-            )
-        )
-        rename_keys.append(
-            (
-                f"decoder.decoder.layers.{i}.gateway.gate.weight",
-                f"model.decoder.layers.{i}.gateway.gate.weight",
-            )
-        )
-        rename_keys.append(
-            (
-                f"decoder.decoder.layers.{i}.gateway.gate.bias",
-                f"model.decoder.layers.{i}.gateway.gate.bias",
-            )
-        )
-        rename_keys.append(
-            (
-                f"decoder.decoder.layers.{i}.gateway.norm.weight",
-                f"model.decoder.layers.{i}.gateway.norm.weight",
-            )
-        )
-        rename_keys.append(
-            (
-                f"decoder.decoder.layers.{i}.gateway.norm.bias",
-                f"model.decoder.layers.{i}.gateway.norm.bias",
-            )
-        )
-        rename_keys.append(
-            (
-                f"decoder.decoder.lqe_layers.{i}.reg_conf.layers.0.weight",
-                f"model.decoder.lqe_layers.{i}.reg_conf.layers.0.weight",
-            )
-        )
-        rename_keys.append(
-            (
-                f"decoder.decoder.lqe_layers.{i}.reg_conf.layers.0.bias",
-                f"model.decoder.lqe_layers.{i}.reg_conf.layers.0.bias",
-            )
-        )
-        rename_keys.append(
-            (
-                f"decoder.decoder.lqe_layers.{i}.reg_conf.layers.1.weight",
-                f"model.decoder.lqe_layers.{i}.reg_conf.layers.1.weight",
-            )
-        )
-        rename_keys.append(
-            (
-                f"decoder.decoder.lqe_layers.{i}.reg_conf.layers.1.bias",
-                f"model.decoder.lqe_layers.{i}.reg_conf.layers.1.bias",
-            )
-        )
-
-        rename_keys.append(
-            (f"decoder.decoder.layers.{i}.norm1.weight", f"model.decoder.layers.{i}.self_attn_layer_norm.weight")
-        )
-        rename_keys.append(
-            (f"decoder.decoder.layers.{i}.norm1.bias", f"model.decoder.layers.{i}.self_attn_layer_norm.bias")
-        )
-        rename_keys.append((f"decoder.decoder.layers.{i}.linear1.weight", f"model.decoder.layers.{i}.fc1.weight"))
-        rename_keys.append((f"decoder.decoder.layers.{i}.linear1.bias", f"model.decoder.layers.{i}.fc1.bias"))
-        rename_keys.append((f"decoder.decoder.layers.{i}.linear2.weight", f"model.decoder.layers.{i}.fc2.weight"))
-        rename_keys.append((f"decoder.decoder.layers.{i}.linear2.bias", f"model.decoder.layers.{i}.fc2.bias"))
-        rename_keys.append(
-            (f"decoder.decoder.layers.{i}.norm3.weight", f"model.decoder.layers.{i}.final_layer_norm.weight")
-        )
-        rename_keys.append(
-            (f"decoder.decoder.layers.{i}.norm3.bias", f"model.decoder.layers.{i}.final_layer_norm.bias")
-        )
-
-    for i in range(config.decoder_layers):
-        # decoder + class and bounding box heads
-        rename_keys.append(
-            (
-                f"decoder.dec_score_head.{i}.weight",
-                f"model.decoder.class_embed.{i}.weight",
-            )
-        )
-        rename_keys.append(
-            (
-                f"decoder.dec_score_head.{i}.bias",
-                f"model.decoder.class_embed.{i}.bias",
-            )
-        )
-        rename_keys.append(
-            (
-                f"decoder.dec_bbox_head.{i}.layers.0.weight",
-                f"model.decoder.bbox_embed.{i}.layers.0.weight",
-            )
-        )
-        rename_keys.append(
-            (
-                f"decoder.dec_bbox_head.{i}.layers.0.bias",
-                f"model.decoder.bbox_embed.{i}.layers.0.bias",
-            )
-        )
-        rename_keys.append(
-            (
-                f"decoder.dec_bbox_head.{i}.layers.1.weight",
-                f"model.decoder.bbox_embed.{i}.layers.1.weight",
-            )
-        )
-        rename_keys.append(
-            (
-                f"decoder.dec_bbox_head.{i}.layers.1.bias",
-                f"model.decoder.bbox_embed.{i}.layers.1.bias",
-            )
-        )
-        rename_keys.append(
-            (
-                f"decoder.dec_bbox_head.{i}.layers.2.weight",
-                f"model.decoder.bbox_embed.{i}.layers.2.weight",
-            )
-        )
-        rename_keys.append(
-            (
-                f"decoder.dec_bbox_head.{i}.layers.2.bias",
-                f"model.decoder.bbox_embed.{i}.layers.2.bias",
-            )
-        )
-
-    # decoder projection
-    for i in range(len(config.decoder_in_channels)):
-        rename_keys.append(
-            (
-                f"decoder.input_proj.{i}.conv.weight",
-                f"model.decoder_input_proj.{i}.0.weight",
-            )
-        )
-        for last in last_key:
-            rename_keys.append(
-                (
-                    f"decoder.input_proj.{i}.norm.{last}",
-                    f"model.decoder_input_proj.{i}.1.{last}",
-                )
-            )
-
-    # convolutional projection + query embeddings + layernorm of decoder + class and bounding box heads
-    rename_keys.extend(
-        [
-            ("decoder.denoising_class_embed.weight", "model.denoising_class_embed.weight"),
-            ("decoder.query_pos_head.layers.0.weight", "model.decoder.query_pos_head.layers.0.weight"),
-            ("decoder.query_pos_head.layers.0.bias", "model.decoder.query_pos_head.layers.0.bias"),
-            ("decoder.query_pos_head.layers.1.weight", "model.decoder.query_pos_head.layers.1.weight"),
-            ("decoder.query_pos_head.layers.1.bias", "model.decoder.query_pos_head.layers.1.bias"),
-            ("decoder.enc_output.proj.weight", "model.enc_output.0.weight"),
-            ("decoder.enc_output.proj.bias", "model.enc_output.0.bias"),
-            ("decoder.enc_output.norm.weight", "model.enc_output.1.weight"),
-            ("decoder.enc_output.norm.bias", "model.enc_output.1.bias"),
-            ("decoder.enc_score_head.weight", "model.enc_score_head.weight"),
-            ("decoder.enc_score_head.bias", "model.enc_score_head.bias"),
-            ("decoder.enc_bbox_head.layers.0.weight", "model.enc_bbox_head.layers.0.weight"),
-            ("decoder.enc_bbox_head.layers.0.bias", "model.enc_bbox_head.layers.0.bias"),
-            ("decoder.enc_bbox_head.layers.1.weight", "model.enc_bbox_head.layers.1.weight"),
-            ("decoder.enc_bbox_head.layers.1.bias", "model.enc_bbox_head.layers.1.bias"),
-            ("decoder.enc_bbox_head.layers.2.weight", "model.enc_bbox_head.layers.2.weight"),
-            ("decoder.enc_bbox_head.layers.2.bias", "model.enc_bbox_head.layers.2.bias"),
-            ("decoder.pre_bbox_head.layers.0.weight", "model.decoder.pre_bbox_head.layers.0.weight"),
-            ("decoder.pre_bbox_head.layers.0.bias", "model.decoder.pre_bbox_head.layers.0.bias"),
-            ("decoder.pre_bbox_head.layers.1.weight", "model.decoder.pre_bbox_head.layers.1.weight"),
-            ("decoder.pre_bbox_head.layers.1.bias", "model.decoder.pre_bbox_head.layers.1.bias"),
-            ("decoder.pre_bbox_head.layers.2.weight", "model.decoder.pre_bbox_head.layers.2.weight"),
-            ("decoder.pre_bbox_head.layers.2.bias", "model.decoder.pre_bbox_head.layers.2.bias"),
-        ]
-    )
-
-    return rename_keys
+    # Other decoder components
+    r"decoder.denoising_class_embed.weight": r"model.denoising_class_embed.weight",
+    r"decoder.query_pos_head.layers.(\d+).(weight|bias)": r"model.decoder.query_pos_head.layers.\1.\2",
+    r"decoder.enc_output.proj.(weight|bias)": r"model.enc_output.0.\1",
+    r"decoder.enc_output.norm.(weight|bias)": r"model.enc_output.1.\1",
+    r"decoder.enc_score_head.(weight|bias)": r"model.enc_score_head.\1",
+    r"decoder.enc_bbox_head.layers.(\d+).(weight|bias)": r"model.enc_bbox_head.layers.\1.\2",
+}
 
 
-def rename_key(state_dict, old, new):
-    try:
-        val = state_dict.pop(old)
-        state_dict[new] = val
-    except Exception:
-        pass
+def convert_old_keys_to_new_keys(state_dict_keys: dict = None):
+    # Use the mapping to rename keys
+    for original_key, converted_key in ORIGINAL_TO_CONVERTED_KEY_MAPPING.items():
+        for key in list(state_dict_keys.keys()):
+            new_key = re.sub(original_key, converted_key, key)
+            if new_key != key:
+                state_dict_keys[new_key] = state_dict_keys.pop(key)
+
+    return state_dict_keys
 
 
 def read_in_q_k_v(state_dict, config):
@@ -877,17 +381,14 @@ def convert_d_fine_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub,
     logger.info(f"Converting model {model_name}...")
 
     # rename keys
-    renamed_keys = create_rename_keys(config)
-    for src, dest in renamed_keys:
-        rename_key(state_dict, src, dest)
+    state_dict.pop("decoder.decoder.up", None)
+    state_dict.pop("decoder.decoder.reg_scale", None)
+    state_dict = convert_old_keys_to_new_keys(state_dict)
 
     if not config.anchor_image_size:
         state_dict.pop("model.decoder.valid_mask", None)
         state_dict.pop("model.decoder.anchors", None)
-
-    state_dict.pop("decoder.decoder.up", None)
-    state_dict.pop("decoder.decoder.reg_scale", None)
-
+    
     # query, key and value matrices need special treatment
     read_in_q_k_v(state_dict, config)
     # important: we need to prepend a prefix to each of the base model keys as the head models use different attributes for them
@@ -1140,7 +641,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--model_name",
-        default="dfine_x_coco",
+        default="dfine_s_coco",
         type=str,
         help="model_name of the checkpoint you'd like to convert.",
     )

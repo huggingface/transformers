@@ -93,7 +93,7 @@ class DFineResNetConfig(BackboneConfigMixin, PretrainedConfig):
     ```
     """
 
-    model_type = "d-fine-resnet"
+    model_type = "d_fine_resnet"
     layer_types = ["basic", "bottleneck"]
 
     def __init__(

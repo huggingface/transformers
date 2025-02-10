@@ -179,7 +179,7 @@ class DFineConfig(PretrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "d-fine"
+    model_type = "d_fine"
     layer_types = ["basic", "bottleneck"]
     attribute_map = {
         "hidden_size": "d_model",
