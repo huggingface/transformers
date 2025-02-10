@@ -4911,7 +4911,11 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     )
                     disk_only_shard_files = [os.path.join(folder, f) for f in disk_only_shard_files]
                 disk_offload_index = {
-                    name[len(start_prefix_to_remove) :]: {"safetensors_file": file, "weight_name": name, "dtype": str_dtype}
+                    name[len(start_prefix_to_remove) :]: {
+                        "safetensors_file": file,
+                        "weight_name": name,
+                        "dtype": str_dtype,
+                    }
                     for name, file in weight_map.items()
                     if name.startswith(start_prefix_to_remove)
                     and param_device_map[name[len(start_prefix_to_remove) :]] == "disk"
