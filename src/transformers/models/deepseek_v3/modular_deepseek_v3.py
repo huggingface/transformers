@@ -121,7 +121,9 @@ class DeepseekV3MoE(nn.Module):
             ]
         )
         self.gate = DeepseekV3TopkRouter(config)
-        self.shared_experts = DeepseekV3MLP(config=config, intermediate_size=config.moe_intermediate_size)
+        self.shared_experts = DeepseekV3MLP(
+            config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
+        )
 
     def forward(self, hidden_states):
         residuals = hidden_states
