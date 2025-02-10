@@ -89,9 +89,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         unexpected_keys: Optional[List[str]] = None,
     ):
         """
-        Quantizes weights to FP8 format using either:
-        - Block-wise quantization when weight_block_size is provided
-        - Per-tensor quantization when weight_block_size is None
+        Quantizes weights to FP8 format using Block-wise quantization
         """
         from accelerate.utils import set_module_tensor_to_device
 

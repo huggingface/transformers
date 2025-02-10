@@ -84,9 +84,9 @@ class FP8QuantizerTest(unittest.TestCase):
         "model.layers.13": "cpu",
         "model.layers.14": "cpu",
         "model.layers.15": "cpu",
-        "model.rotary_emb": "cpu",
+        "model.rotary_emb": "disk",
         "model.norm": "disk",
-        "lm_head": "disk",
+        "lm_head": 0,
     }
 
     @classmethod
@@ -229,6 +229,19 @@ class FP8QuantizerTest(unittest.TestCase):
             AutoModelForCausalLM.from_pretrained(
                 self.model_name, device_map=self.offload_device_map, quantization_config=self.quantization_config
             )
+
+    def test_save_pretrained_offload(self):
+        """
+        Simple test that checks if the saved quantized model is working properly cpu/disk offload
+        """
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            self.quantized_model.save_pretrained(tmpdirname)
+
+            input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(self.device_map)
+
+            quantized_model = AutoModelForCausalLM.from_pretrained(tmpdirname, device_map=self.offload_device_map)
+            output = quantized_model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
+            self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
 
 @require_torch_gpu

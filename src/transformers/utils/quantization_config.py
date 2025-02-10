@@ -1568,7 +1568,7 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
     def __init__(
         self,
         modules_to_not_convert: Optional[List] = None,
-        activation_scheme: Optional[str] = "dynamic",
+        activation_scheme: str = "dynamic",
         weight_block_size: Tuple[int, int] = (128, 128),
         **kwargs,
     ):
