@@ -314,9 +314,9 @@ class Siglip2VisionEmbeddings(nn.Module):
     ) -> torch.Tensor:
         """This one does not work because of interpolation requires python scalars, but vmap does not allow to pass them
         and does not allow to"""
-        shapes = tuple([(h, w) for h, w in position_ids.max(dim=1).values + 1])
+        target_shapes = position_ids.max(dim=1).values + 1
         return torch.vmap(self._sample_positional_embeddings_unbatched, in_dims=(None, 0, 0))(
-            positional_embeddings, position_ids, shapes
+            positional_embeddings, position_ids, target_shapes
         )
 
     @staticmethod
