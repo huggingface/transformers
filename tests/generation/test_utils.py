@@ -2519,6 +2519,8 @@ class GenerationTesterMixin:
 
         # When `output_attentions=True`, each iteration of generate appends the attentions corresponding to the new
         # token(s)
+        # NOTE: `HybridCache` may have different lengths on different layers, if this test starts failing add more
+        # elaborate checks
         for generated_length, iter_attentions in enumerate(attentions):
             # regardless of using cache, the first forward pass will have the full prompt as input
             if use_cache and generated_length > 0:
@@ -2562,6 +2564,8 @@ class GenerationTesterMixin:
 
         # When `output_hidden_states=True`, each iteration of generate appends the hidden states corresponding to the
         # new token(s)
+        # NOTE: `HybridCache` may have different lengths on different layers, if this test starts failing add more
+        # elaborate checks
         for generated_length, iter_hidden_states in enumerate(hidden_states):
             # regardless of using cache, the first forward pass will have the full prompt as input
             if use_cache and generated_length > 0:
