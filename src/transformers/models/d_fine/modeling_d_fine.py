@@ -214,9 +214,9 @@ class DFineMultiscaleDeformableAttention(nn.Module):
         return output, attention_weights
 
 
-class Gate(nn.Module):
+class DFineGate(nn.Module):
     def __init__(self, d_model):
-        super(Gate, self).__init__()
+        super(DFineGate, self).__init__()
         self.gate = nn.Linear(2 * d_model, 2 * d_model)
         bias = self._bias_init_with_prob(0.5)
         init.constant_(self.gate.bias, bias)
@@ -374,7 +374,7 @@ class DFineDecoderLayer(nn.Module):
         self.fc2 = nn.Linear(config.decoder_ffn_dim, config.d_model)
         self.final_layer_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
         # gate
-        self.gateway = Gate(config.d_model)
+        self.gateway = DFineGate(config.d_model)
         self._reset_parameters()
 
     def forward(
@@ -1070,7 +1070,7 @@ initialize linear layer bias value according to a given probability value."""
             nn.init.xavier_uniform_(module.denoising_class_embed.weight)
 
 
-class Integral(nn.Module):
+class DFineIntegral(nn.Module):
     """
     A static layer that calculates integral results from a distribution.
 
@@ -1084,7 +1084,7 @@ class Integral(nn.Module):
     """
 
     def __init__(self, reg_max=32):
-        super(Integral, self).__init__()
+        super(DFineIntegral, self).__init__()
         self.reg_max = reg_max
 
     def forward(self, x, project):
@@ -1176,11 +1176,11 @@ class DFineDecoder(DFinePreTrainedModel):
         self.reg_max = config.reg_max
         self.d_model = config.d_model
         self.layer_scale = config.layer_scale
-        self.pre_bbox_head = MLP(config.hidden_size, config.hidden_size, 4, 3)
-        self.integral = Integral(self.reg_max)
+        self.pre_bbox_head = DFineMLP(config.hidden_size, config.hidden_size, 4, 3)
+        self.integral = DFineIntegral(self.reg_max)
         self.num_head = config.decoder_attention_heads
         self.up = nn.Parameter(torch.tensor([0.5]), requires_grad=False)
-        self.lqe_layers = nn.ModuleList([LQE(4, 64, 2, config.reg_max) for _ in range(config.decoder_layers)])
+        self.lqe_layers = nn.ModuleList([DFineLQE(4, 64, 2, config.reg_max) for _ in range(config.decoder_layers)])
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1723,11 +1723,11 @@ class DFineForObjectDetection(DFinePreTrainedModel):
         self.class_embed = nn.ModuleList([self.class_embed() for _ in range(num_pred)])
         self.bbox_embed = nn.ModuleList(
             [
-                MLP(config.hidden_size, config.hidden_size, 4 * (config.reg_max + 1), 3)
+                DFineMLP(config.hidden_size, config.hidden_size, 4 * (config.reg_max + 1), 3)
                 for _ in range(config.eval_idx + 1)
             ]
             + [
-                MLP(scaled_dim, scaled_dim, 4 * (config.reg_max + 1), 3)
+                DFineMLP(scaled_dim, scaled_dim, 4 * (config.reg_max + 1), 3)
                 for _ in range(config.decoder_layers - config.eval_idx - 1)
             ]
         )
@@ -1918,7 +1918,7 @@ class DFineMLPPredictionHead(nn.Module):
         return x
 
 
-class MLP(nn.Module):
+class DFineMLP(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim, num_layers, act="relu"):
         super().__init__()
         self.num_layers = num_layers
@@ -1932,12 +1932,12 @@ class MLP(nn.Module):
         return x
 
 
-class LQE(nn.Module):
+class DFineLQE(nn.Module):
     def __init__(self, k, hidden_dim, num_layers, reg_max):
-        super(LQE, self).__init__()
+        super(DFineLQE, self).__init__()
         self.k = k
         self.reg_max = reg_max
-        self.reg_conf = MLP(4 * (k + 1), hidden_dim, 1, num_layers)
+        self.reg_conf = DFineMLP(4 * (k + 1), hidden_dim, 1, num_layers)
         init.constant_(self.reg_conf.layers[-1].bias, 0)
         init.constant_(self.reg_conf.layers[-1].weight, 0)
 
@@ -2077,7 +2077,7 @@ class DFineCSPRepLayer(nn.Module):
         return self.conv3(hidden_state_1 + hidden_state_2)
 
 
-class RepNCSPELAN4(nn.Module):
+class DFineRepNCSPELAN4(nn.Module):
     # csp-elan
     def __init__(self, config: DFineConfig, act="silu", numb_blocks=3):
         super().__init__()
@@ -2108,7 +2108,7 @@ class RepNCSPELAN4(nn.Module):
         return self.cv4(torch.cat(y, 1))
 
 
-class SCDown(nn.Module):
+class DFineSCDown(nn.Module):
     def __init__(self, config: DFineConfig, c1, c2, k, s):
         super().__init__()
         self.cv1 = DFineConvNormLayer(config, c1, c2, 1, 1)
@@ -2166,7 +2166,7 @@ class DFineHybridEncoder(nn.Module):
             self.lateral_convs.append(
                 DFineConvNormLayer(config, self.encoder_hidden_dim, self.encoder_hidden_dim, 1, 1)
             )
-            self.fpn_blocks.append(RepNCSPELAN4(config, numb_blocks=round(3 * config.depth_mult)))
+            self.fpn_blocks.append(DFineRepNCSPELAN4(config, numb_blocks=round(3 * config.depth_mult)))
 
         # bottom-up pan
         self.downsample_convs = nn.ModuleList()
@@ -2174,10 +2174,10 @@ class DFineHybridEncoder(nn.Module):
         for _ in range(len(self.in_channels) - 1):
             self.downsample_convs.append(
                 nn.Sequential(
-                    SCDown(config, self.encoder_hidden_dim, self.encoder_hidden_dim, 3, 2),
+                    DFineSCDown(config, self.encoder_hidden_dim, self.encoder_hidden_dim, 3, 2),
                 )
             )
-            self.pan_blocks.append(RepNCSPELAN4(config, numb_blocks=round(3 * config.depth_mult)))
+            self.pan_blocks.append(DFineRepNCSPELAN4(config, numb_blocks=round(3 * config.depth_mult)))
 
     @staticmethod
     def build_2d_sincos_position_embedding(

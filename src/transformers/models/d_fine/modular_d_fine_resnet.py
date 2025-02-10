@@ -28,7 +28,33 @@ from ..rt_detr.modeling_rt_detr_resnet import RTDetrResNetBackbone, RTDetrResNet
 
 
 class DFineResNetStageConfig(NamedTuple):
-    # stage: [in_channels, mid_channels, out_channels, num_blocks, downsample, light_block, kernel_size, layer_num]
+    """
+    Configuration for each stage in the D-FINE ResNet backbone.
+    Each stage is defined by a list of parameters in the following order:
+    [in_channels, mid_channels, out_channels, num_blocks, downsample, light_block, kernel_size, layer_num]
+
+    Args:
+        stage1 (`List[Any]`, defaults to [48, 48, 128, 1, False, False, 3, 6]):
+            First stage configuration:
+            - Input channels: 48
+            - Middle (bottleneck) channels: 48
+            - Output channels: 128
+            - Number of blocks: 1
+            - No downsampling
+            - Standard (non-light) blocks
+            - Kernel size: 3
+            - Number of layers per block: 6
+
+        stage2 (`List[Any]`, defaults to [128, 96, 512, 1, True, False, 3, 6]):
+            Second stage with spatial downsampling and channel expansion
+
+        stage3 (`List[Any]`, defaults to [512, 192, 1024, 3, True, True, 5, 6]):
+            Third stage with light blocks and larger kernel size
+
+        stage4 (`List[Any]`, defaults to [1024, 384, 2048, 1, True, True, 5, 6]):
+            Final stage with maximum channel width
+    """
+
     stage1: List[Any] = [48, 48, 128, 1, False, False, 3, 6]
     stage2: List[Any] = [128, 96, 512, 1, True, False, 3, 6]
     stage3: List[Any] = [512, 192, 1024, 3, True, True, 5, 6]
@@ -40,6 +66,30 @@ class DFineResNetStageConfig(NamedTuple):
 
 
 class DFineResNetConfig(RTDetrResNetConfig):
+    """
+    Configuration class for D-FINE ResNet backbone.
+    Extends RTDetrResNetConfig with D-FINE specific parameters.
+
+    Args:
+        stem_channels (`List[int]`, *optional*, defaults to [3, 32, 48]):
+            Channel dimensions for the stem layers:
+            - First number (3) is input image channels
+            - Second number (32) is intermediate stem channels
+            - Third number (48) is output stem channels
+
+        stage_config (`DFineResNetStageConfig`, *optional*):
+            Configuration for the four stages of the backbone.
+            See DFineResNetStageConfig for details.
+
+        use_lab (`bool`, *optional*, defaults to False):
+            Whether to use Learnable Affine Blocks (LAB) in the network.
+            LAB adds learnable scale and bias parameters after certain operations.
+
+        **super_kwargs:
+            Additional arguments from RTDetrResNetConfig, including standard
+            ResNet parameters like hidden_act, layer_norm_eps, etc.
+    """
+
     model_type = "d_fine_resnet"
 
     def __init__(
@@ -59,14 +109,14 @@ class DFineResNetPreTrainedModel(RTDetrResNetPreTrainedModel):
     pass
 
 
-class LearnableAffineBlock(nn.Module):
+class DFineResNetLearnableAffineBlock(nn.Module):
     def __init__(self, scale_value=1.0, bias_value=0.0):
         super().__init__()
         self.scale = nn.Parameter(torch.tensor([scale_value]), requires_grad=True)
         self.bias = nn.Parameter(torch.tensor([bias_value]), requires_grad=True)
 
-    def forward(self, x):
-        return self.scale * x + self.bias
+    def forward(self, hidden_state):
+        return self.scale * hidden_state + self.bias
 
 
 class DFineResNetConvLayer(RTDetrResNetConvLayer):
@@ -91,7 +141,7 @@ class DFineResNetConvLayer(RTDetrResNetConvLayer):
             bias=False,
         )
         if activation and use_lab:
-            self.lab = LearnableAffineBlock()
+            self.lab = DFineResNetLearnableAffineBlock()
         else:
             self.lab = nn.Identity()
 
@@ -109,13 +159,13 @@ class DFineResNetConvLayerLight(nn.Module):
         self.conv1 = DFineResNetConvLayer(in_chs, out_chs, kernel_size=1, activation=None, use_lab=use_lab)
         self.conv2 = DFineResNetConvLayer(out_chs, out_chs, kernel_size=kernel_size, groups=out_chs, use_lab=use_lab)
 
-    def forward(self, x):
-        x = self.conv1(x)
-        x = self.conv2(x)
-        return x
+    def forward(self, hidden_state):
+        hidden_state = self.conv1(hidden_state)
+        hidden_state = self.conv2(hidden_state)
+        return hidden_state
 
 
-class EseModule(nn.Module):
+class DFineResNetEseModule(nn.Module):
     def __init__(self, chs):
         super().__init__()
         self.conv = nn.Conv2d(
@@ -127,12 +177,12 @@ class EseModule(nn.Module):
         )
         self.sigmoid = nn.Sigmoid()
 
-    def forward(self, x):
-        identity = x
-        x = x.mean((2, 3), keepdim=True)
-        x = self.conv(x)
-        x = self.sigmoid(x)
-        return torch.mul(identity, x)
+    def forward(self, hidden_state):
+        identity = hidden_state
+        hidden_state = hidden_state.mean((2, 3), keepdim=True)
+        hidden_state = self.conv(hidden_state)
+        hidden_state = self.sigmoid(hidden_state)
+        return torch.mul(identity, hidden_state)
 
 
 class DFineResNetEmbeddings(nn.Module):
@@ -189,16 +239,16 @@ class DFineResNetEmbeddings(nn.Module):
             raise ValueError(
                 "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
             )
-        x = self.stem1(pixel_values)
-        x = F.pad(x, (0, 1, 0, 1))
-        x2 = self.stem2a(x)
-        x2 = F.pad(x2, (0, 1, 0, 1))
-        x2 = self.stem2b(x2)
-        x1 = self.pool(x)
-        x = torch.cat([x1, x2], dim=1)
-        x = self.stem3(x)
-        x = self.stem4(x)
-        return x
+        embedding = self.stem1(pixel_values)
+        embedding = F.pad(embedding, (0, 1, 0, 1))
+        emb_stem_2a = self.stem2a(embedding)
+        emb_stem_2a = F.pad(emb_stem_2a, (0, 1, 0, 1))
+        emb_stem_2a = self.stem2b(emb_stem_2a)
+        pooled_emb = self.pool(embedding)
+        embedding = torch.cat([pooled_emb, emb_stem_2a], dim=1)
+        embedding = self.stem3(embedding)
+        embedding = self.stem4(embedding)
+        return embedding
 
 
 class DFineResNetBasicLayer(nn.Module):
@@ -248,24 +298,24 @@ class DFineResNetBasicLayer(nn.Module):
             )
         else:
             aggregation_conv = DFineResNetConvLayer(total_chs, out_chs, kernel_size=1, stride=1, use_lab=use_lab)
-            att = EseModule(out_chs)
+            att = DFineResNetEseModule(out_chs)
             self.aggregation = nn.Sequential(
                 aggregation_conv,
                 att,
             )
         self.drop_path = nn.Dropout(drop_path) if drop_path else nn.Identity()
 
-    def forward(self, x):
-        identity = x
-        output = [x]
+    def forward(self, hidden_state):
+        identity = hidden_state
+        output = [hidden_state]
         for layer in self.layers:
-            x = layer(x)
-            output.append(x)
-        x = torch.cat(output, dim=1)
-        x = self.aggregation(x)
+            hidden_state = layer(hidden_state)
+            output.append(hidden_state)
+        hidden_state = torch.cat(output, dim=1)
+        hidden_state = self.aggregation(hidden_state)
         if self.residual:
-            x = self.drop_path(x) + identity
-        return x
+            hidden_state = self.drop_path(hidden_state) + identity
+        return hidden_state
 
 
 class DFineResNetStage(nn.Module):
@@ -309,10 +359,10 @@ class DFineResNetStage(nn.Module):
             )
         self.blocks = nn.Sequential(*blocks_list)
 
-    def forward(self, x):
-        x = self.downsample(x)
-        x = self.blocks(x)
-        return x
+    def forward(self, hidden_state):
+        hidden_state = self.downsample(hidden_state)
+        hidden_state = self.blocks(hidden_state)
+        return hidden_state
 
 
 class DFineResNetEncoder(nn.Module):

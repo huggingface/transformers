@@ -41,6 +41,41 @@ from ..rt_detr.modeling_rt_detr import (
 
 
 class DFineConfig(RTDetrConfig):
+    """
+    Configuration class for D-FINE (Distribution-guided Fine-grained Object Detection).
+    Extends RTDetrConfig with additional parameters specific to D-FINE architecture.
+
+    Args:
+        decoder_offset_scale (`float`, *optional*, defaults to 0.5):
+            Scaling factor for the decoder's sampling offset. Controls how far the attention
+            mechanism can look relative to the reference point's bounding box size.
+
+        eval_idx (`int`, *optional*, defaults to -1):
+            Index of the decoder layer to use for evaluation. If negative, counts from the end
+            (e.g., -1 means use the last layer). This allows for early prediction in the decoder
+            stack while still training later layers.
+
+        layer_scale (`float`, *optional*, defaults to 1.0):
+            Scaling factor for the hidden dimension in later decoder layers. Used to adjust the
+            model capacity after the evaluation layer.
+
+        reg_max (`int`, *optional*, defaults to 32):
+            Maximum number of bins for the distribution-guided bounding box refinement.
+            Higher values allow for more fine-grained localization but increase computation.
+
+        reg_scale (`float`, *optional*, defaults to 4.0):
+            Scale factor for the regression distribution. Controls the range and granularity
+            of the bounding box refinement process.
+
+        depth_mult (`float`, *optional*, defaults to 1.0):
+            Multiplier for the number of blocks in RepNCSPELAN4 layers. Used to scale the model's
+            depth while maintaining its architecture.
+
+        **super_kwargs:
+            Additional arguments from RTDetrConfig, including standard parameters like
+            hidden_size, num_attention_heads, etc.
+    """
+
     model_type = "d_fine"
 
     def __init__(
@@ -231,9 +266,9 @@ class DFineMultiscaleDeformableAttention(nn.Module):
         return output, attention_weights
 
 
-class Gate(nn.Module):
+class DFineGate(nn.Module):
     def __init__(self, d_model):
-        super(Gate, self).__init__()
+        super(DFineGate, self).__init__()
         self.gate = nn.Linear(2 * d_model, 2 * d_model)
         bias = self._bias_init_with_prob(0.5)
         init.constant_(self.gate.bias, bias)
@@ -260,7 +295,7 @@ class DFineDecoderLayer(RTDetrDecoderLayer):
         # override the encoder attention module with d-fine version
         self.encoder_attn = DFineMultiscaleDeformableAttention(config=config)
         # gate
-        self.gateway = Gate(config.d_model)
+        self.gateway = DFineGate(config.d_model)
 
         del self.encoder_attn_layer_norm
         self._reset_parameters()
@@ -386,7 +421,7 @@ class DFinePreTrainedModel(RTDetrPreTrainedModel):
             nn.init.xavier_uniform_(module.denoising_class_embed.weight)
 
 
-class Integral(nn.Module):
+class DFineIntegral(nn.Module):
     """
     A static layer that calculates integral results from a distribution.
 
@@ -400,7 +435,7 @@ class Integral(nn.Module):
     """
 
     def __init__(self, reg_max=32):
-        super(Integral, self).__init__()
+        super(DFineIntegral, self).__init__()
         self.reg_max = reg_max
 
     def forward(self, x, project):
@@ -426,15 +461,15 @@ class DFineDecoder(RTDetrDecoder):
         self.reg_max = config.reg_max
         self.d_model = config.d_model
         self.layer_scale = config.layer_scale
-        self.pre_bbox_head = MLP(config.hidden_size, config.hidden_size, 4, 3)
-        self.integral = Integral(self.reg_max)
+        self.pre_bbox_head = DFineMLP(config.hidden_size, config.hidden_size, 4, 3)
+        self.integral = DFineIntegral(self.reg_max)
         self.num_head = config.decoder_attention_heads
         self.up = nn.Parameter(torch.tensor([0.5]), requires_grad=False)
         self.layers = nn.ModuleList(
             [DFineDecoderLayer(config=config) for _ in range(config.decoder_layers)]
             + [DFineDecoderLayer(config=config) for _ in range(config.decoder_layers - self.eval_idx - 1)]
         )
-        self.lqe_layers = nn.ModuleList([LQE(4, 64, 2, config.reg_max) for _ in range(config.decoder_layers)])
+        self.lqe_layers = nn.ModuleList([DFineLQE(4, 64, 2, config.reg_max) for _ in range(config.decoder_layers)])
 
     def value_op(self, memory, value_proj, value_scale, memory_mask, memory_spatial_shapes):
         """
@@ -512,10 +547,12 @@ class DFineDecoder(RTDetrDecoder):
             # Refine bounding box corners using FDR, integrating previous layer's corrections
             if self.bbox_embed is not None:
                 pred_corners = self.bbox_embed[i](hidden_states + output_detach) + pred_corners_undetach
-                inter_ref_bbox = distance2bbox(ref_points_initial, self.integral(pred_corners, project), self.reg_scale)
+                inter_ref_bbox = distance2bbox(
+                    ref_points_initial, self.integral(pred_corners, project), self.reg_scale
+                )
                 pred_corners_undetach = pred_corners
                 ref_points_detach = inter_ref_bbox.detach()
-            
+
             output_detach = hidden_states.detach()
 
             intermediate += (hidden_states,)
@@ -526,9 +563,11 @@ class DFineDecoder(RTDetrDecoder):
                 scores = self.lqe_layers[i](scores, pred_corners)
                 intermediate_logits += (scores,)
                 intermediate_logits = torch.stack(intermediate_logits, dim=1)
-                intermediate_reference_points += (inter_ref_bbox,) if self.bbox_embed is not None else (reference_points,)
+                intermediate_reference_points += (
+                    (inter_ref_bbox,) if self.bbox_embed is not None else (reference_points,)
+                )
                 intermediate_reference_points = torch.stack(intermediate_reference_points, dim=1)
-            
+
             if output_attentions:
                 all_self_attns += (output[1],)
 
@@ -612,11 +651,11 @@ class DFineForObjectDetection(RTDetrForObjectDetection, DFinePreTrainedModel):
         self.class_embed = nn.ModuleList([self.class_embed() for _ in range(num_pred)])
         self.bbox_embed = nn.ModuleList(
             [
-                MLP(config.hidden_size, config.hidden_size, 4 * (config.reg_max + 1), 3)
+                DFineMLP(config.hidden_size, config.hidden_size, 4 * (config.reg_max + 1), 3)
                 for _ in range(config.eval_idx + 1)
             ]
             + [
-                MLP(scaled_dim, scaled_dim, 4 * (config.reg_max + 1), 3)
+                DFineMLP(scaled_dim, scaled_dim, 4 * (config.reg_max + 1), 3)
                 for _ in range(config.decoder_layers - config.eval_idx - 1)
             ]
         )
@@ -688,7 +727,7 @@ def distance2bbox(points, distance, reg_scale):
     return box_xyxy_to_cxcywh(bboxes)
 
 
-class MLP(nn.Module):
+class DFineMLP(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim, num_layers, act="relu"):
         super().__init__()
         self.num_layers = num_layers
@@ -702,12 +741,12 @@ class MLP(nn.Module):
         return x
 
 
-class LQE(nn.Module):
+class DFineLQE(nn.Module):
     def __init__(self, k, hidden_dim, num_layers, reg_max):
-        super(LQE, self).__init__()
+        super(DFineLQE, self).__init__()
         self.k = k
         self.reg_max = reg_max
-        self.reg_conf = MLP(4 * (k + 1), hidden_dim, 1, num_layers)
+        self.reg_conf = DFineMLP(4 * (k + 1), hidden_dim, 1, num_layers)
         init.constant_(self.reg_conf.layers[-1].bias, 0)
         init.constant_(self.reg_conf.layers[-1].weight, 0)
 
@@ -788,7 +827,7 @@ class DFineCSPRepLayer(nn.Module):
         return self.conv3(hidden_state_1 + hidden_state_2)
 
 
-class RepNCSPELAN4(nn.Module):
+class DFineRepNCSPELAN4(nn.Module):
     # csp-elan
     def __init__(self, config: DFineConfig, act="silu", numb_blocks=3):
         super().__init__()
@@ -819,7 +858,7 @@ class RepNCSPELAN4(nn.Module):
         return self.cv4(torch.cat(y, 1))
 
 
-class SCDown(nn.Module):
+class DFineSCDown(nn.Module):
     def __init__(self, config: DFineConfig, c1, c2, k, s):
         super().__init__()
         self.cv1 = DFineConvNormLayer(config, c1, c2, 1, 1)
@@ -855,7 +894,7 @@ class DFineHybridEncoder(RTDetrHybridEncoder):
             self.lateral_convs.append(
                 DFineConvNormLayer(config, self.encoder_hidden_dim, self.encoder_hidden_dim, 1, 1)
             )
-            self.fpn_blocks.append(RepNCSPELAN4(config, numb_blocks=round(3 * config.depth_mult)))
+            self.fpn_blocks.append(DFineRepNCSPELAN4(config, numb_blocks=round(3 * config.depth_mult)))
 
         # bottom-up pan
         self.downsample_convs = nn.ModuleList()
@@ -863,10 +902,10 @@ class DFineHybridEncoder(RTDetrHybridEncoder):
         for _ in range(len(self.in_channels) - 1):
             self.downsample_convs.append(
                 nn.Sequential(
-                    SCDown(config, self.encoder_hidden_dim, self.encoder_hidden_dim, 3, 2),
+                    DFineSCDown(config, self.encoder_hidden_dim, self.encoder_hidden_dim, 3, 2),
                 )
             )
-            self.pan_blocks.append(RepNCSPELAN4(config, numb_blocks=round(3 * config.depth_mult)))
+            self.pan_blocks.append(DFineRepNCSPELAN4(config, numb_blocks=round(3 * config.depth_mult)))
 
 
 __all__ = [
