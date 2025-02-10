@@ -159,6 +159,7 @@ class PixtralTextConfig(MistralConfig):
     ```python
     >>> TODO
     ```"""
+
     model_type = "pixtral_text"
 
     def __init__(
