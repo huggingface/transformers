@@ -283,6 +283,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         image: "torch.Tensor",
         size: SizeDict,
         interpolation: "F.InterpolationMode" = None,
+        antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":
         """
@@ -324,7 +325,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
                 "Size must contain 'height' and 'width' keys, or 'max_height' and 'max_width', or 'shortest_edge' key. Got"
                 f" {size}."
             )
-        return F.resize(image, new_size, interpolation=interpolation)
+        return F.resize(image, new_size, interpolation=interpolation, antialias=antialias)
 
     def rescale(
         self,
