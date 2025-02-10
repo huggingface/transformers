@@ -40,8 +40,8 @@ class EvollaResamplerConfig(PretrainedConfig):
             heads: int = 8,
             num_latents=64,
             ff_mult=4,
+            **kwargs
     ):
-        super().__init__()
         self.protein_repr_dim = protein_repr_dim
         self.output_repr_dim = output_repr_dim
         self.depth = depth
@@ -49,6 +49,7 @@ class EvollaResamplerConfig(PretrainedConfig):
         self.heads = heads
         self.num_latents = num_latents
         self.ff_mult = ff_mult
+        super().__init__(**kwargs)
 
 class EvollaSequenceCompressorConfig(PretrainedConfig):
     r"""
@@ -63,11 +64,11 @@ class EvollaSequenceCompressorConfig(PretrainedConfig):
         ff_mult=4,
         **kwargs
     ):
-        super().__init__(**kwargs)
         self.depth = depth
         self.heads = heads
         self.num_latents = num_latents
         self.ff_mult = ff_mult
+        super().__init__(**kwargs)
 
 class EvollaProteinEncoderConfig(PretrainedConfig):
     r"""
@@ -161,7 +162,6 @@ class EvollaProteinEncoderConfig(PretrainedConfig):
         token_dropout=True,
         **kwargs,
     ):
-        super().__init__(mask_token_id=mask_token_id, pad_token_id=pad_token_id, **kwargs)
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -177,6 +177,8 @@ class EvollaProteinEncoderConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.emb_layer_norm_before = emb_layer_norm_before
         self.token_dropout = token_dropout
+
+        super().__init__(mask_token_id=mask_token_id, pad_token_id=pad_token_id, **kwargs)
 
 
 
@@ -463,8 +465,8 @@ class EvollaSequenceAlignerConfig(PretrainedConfig):
         enable_bias: bool = True,
         attention_probs_dropout_prob: float = 0.1,
         num_add_layers: int = 8,
+        **kwargs
     ):
-        super().__init__()
         self.ffn_mult = ffn_mult
         self.enable_bias = enable_bias
         self.attention_probs_dropout_prob = attention_probs_dropout_prob
@@ -472,6 +474,7 @@ class EvollaSequenceAlignerConfig(PretrainedConfig):
         self.protein_encoder_dim = None
         self.structure_encoder_dim = None
         self.msa_encoder_dim = None
+        super().__init__(**kwargs)
 
 class EvollaLLMConfig(PretrainedConfig):
     r"""
@@ -488,8 +491,8 @@ class EvollaLLMConfig(PretrainedConfig):
         protein_encoder_dim=None,
         quantization="8bit",
         initializer_range=0.02,
+        **kwargs
     ):
-        super().__init__()
         self.output_attentions = output_attentions
         self.output_hidden_states = output_hidden_states
         if llama_config is None:
@@ -510,6 +513,7 @@ class EvollaLLMConfig(PretrainedConfig):
         
         self.quantization = quantization
         self.initializer_range = initializer_range
+        super().__init__(**kwargs)
 
 
 class EvollaConfig(PretrainedConfig):
