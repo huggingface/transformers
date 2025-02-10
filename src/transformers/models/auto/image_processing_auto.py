@@ -158,6 +158,7 @@ else:
             ("xclip", ("CLIPImageProcessor",)),
             ("yolos", ("YolosImageProcessor",)),
             ("zoedepth", ("ZoeDepthImageProcessor",)),
+            ("janus",('JanusImageProcessor'))
         ]
     )
 
