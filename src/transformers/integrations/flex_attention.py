@@ -81,7 +81,7 @@ def make_flex_block_causal_mask(
     # computation prior to the softmax. For sample packing, we need both the
     # logic for both causal mask and document mask. See PyTorch's official
     # blog post for more details: https://pytorch.org/blog/flexattention/#mask-mods
-    def causal_mask_mod(b, h, q_idx, kv_idx):
+    def causal_mask_mod(batch_idx, head_idx, q_idx, kv_idx):
         """
         Defines the logic of a block causal mask by combining both a standard causal mask
         and a block diagonal document mask.
@@ -90,8 +90,8 @@ def make_flex_block_causal_mask(
         for an illustration.
         """
         causal_mask = q_idx >= kv_idx
-        document_mask = document_ids[b, q_idx] == document_ids[b, kv_idx]
-        padding_mask = document_ids[b, q_idx] > 0
+        document_mask = document_ids[batch_idx, q_idx] == document_ids[batch_idx, kv_idx]
+        padding_mask = document_ids[batch_idx, q_idx] > 0
         return causal_mask & document_mask & padding_mask
 
     return create_block_causal_mask_flex(
@@ -111,7 +111,7 @@ def compile_friendly_flex_attention(
     **kwargs,
 ) -> torch.Tensor:
 
-    flex_attention_compiled = wrapped_flex_attention()
+    flex_attention_compiled = wrapped_flex_attention()()
     return flex_attention_compiled(
         query,
         key,
@@ -141,13 +141,13 @@ def flex_attention_forward(
     if causal_mask is not None:
         causal_mask = causal_mask[:, :, :, : key.shape[-2]]
 
-    def score_mod(score, b, h, q_idx, kv_idx):
+    def score_mod(score, batch_idx, head_idx, q_idx, kv_idx):
         if softcap is not None:
             score = softcap * torch.tanh(score / softcap)
         if causal_mask is not None:
-            score = score + causal_mask[b][0][q_idx][kv_idx]
+            score = score + causal_mask[batch_idx][0][q_idx][kv_idx]
         if head_mask is not None:
-            score = score + head_mask[b][h][0][0]
+            score = score + head_mask[batch_idx][head_idx][0][0]
         return score
 
     attn_output, attention_weights = compile_friendly_flex_attention(
