@@ -4976,7 +4976,7 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     shard_file, is_quantized=is_quantized, map_location=map_location, weights_only=weights_only
                 )
 
-            # Modify the keys in-place if needed
+            # Modify the keys if needed
             state_dict = cls._fix_state_dict_keys_on_load(state_dict)
 
             # Mistmatched keys contains tuples key/shape1/shape2 of weights in the checkpoint that have a shape not
@@ -5008,7 +5008,6 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
                     )
                     error_msgs += new_error_msgs
             else:
-                # Sharded checkpoint or whole but low_cpu_mem_usage==True
                 assign_to_params_buffers = check_support_param_buffer_assignment(
                     model_to_load, state_dict, start_prefix_to_remove
                 )
