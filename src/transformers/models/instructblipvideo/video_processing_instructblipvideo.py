@@ -245,7 +245,7 @@ class InstructBlipVideoVideoProcessor(BaseVideoProcessor):
         if input_data_format is None:
             input_data_format = infer_channel_dimension_format(videos[0])
 
-        pixel_values = None
+        pixel_values = []
         for video in videos:
             video = to_numpy_array(video)
 
