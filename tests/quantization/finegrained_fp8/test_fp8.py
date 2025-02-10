@@ -17,7 +17,7 @@ import gc
 import tempfile
 import unittest
 
-from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, FP8Config, OPTForCausalLM
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, FineGrainedFP8Config, OPTForCausalLM
 from transformers.testing_utils import (
     require_accelerate,
     require_torch_gpu,
@@ -35,12 +35,12 @@ if is_accelerate_available():
 
 
 @require_torch_gpu
-class FP8ConfigTest(unittest.TestCase):
+class FineGrainedFP8ConfigTest(unittest.TestCase):
     def test_to_dict(self):
         """
         Simple test that checks if one uses a config and converts it to a dict, the dict is the same as the config object
         """
-        quantization_config = FP8Config()
+        quantization_config = FineGrainedFP8Config()
         config_to_dict = quantization_config.to_dict()
 
         for key in config_to_dict:
@@ -51,7 +51,7 @@ class FP8ConfigTest(unittest.TestCase):
         Simple test that checks if one uses a dict and converts it to a config object, the config object is the same as the dict
         """
         dict = {"modules_to_not_convert": ["lm_head.weight"], "quant_method": "fp8"}
-        quantization_config = FP8Config.from_dict(dict)
+        quantization_config = FineGrainedFP8Config.from_dict(dict)
 
         self.assertEqual(dict["modules_to_not_convert"], quantization_config.modules_to_not_convert)
         self.assertEqual(dict["quant_method"], quantization_config.quant_method)
@@ -66,16 +66,38 @@ class FP8QuantizerTest(unittest.TestCase):
     max_new_tokens = 10
     EXPECTED_OUTPUT = "Once upon a time, there was a man who was very rich."
     device_map = "cuda"
+    offload_device_map = {
+        "model.embed_tokens": 0,
+        "model.layers.0": 0,
+        "model.layers.1": 0,
+        "model.layers.2": 0,
+        "model.layers.3": 0,
+        "model.layers.4": 0,
+        "model.layers.5": 0,
+        "model.layers.6": 0,
+        "model.layers.7": "cpu",
+        "model.layers.8": "cpu",
+        "model.layers.9": "cpu",
+        "model.layers.10": "cpu",
+        "model.layers.11": "cpu",
+        "model.layers.12": "cpu",
+        "model.layers.13": "cpu",
+        "model.layers.14": "cpu",
+        "model.layers.15": "cpu",
+        "model.rotary_emb": "cpu",
+        "model.norm": "disk",
+        "lm_head": "disk",
+    }
 
     @classmethod
     def setUpClass(cls):
         """
         Setup quantized model
         """
-        quantization_config = FP8Config()
+        cls.quantization_config = FineGrainedFP8Config()
         cls.tokenizer = AutoTokenizer.from_pretrained(cls.model_name)
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
-            cls.model_name, device_map=cls.device_map, quantization_config=quantization_config
+            cls.model_name, device_map=cls.device_map, quantization_config=cls.quantization_config
         )
 
     def tearDown(self):
@@ -92,7 +114,7 @@ class FP8QuantizerTest(unittest.TestCase):
 
         model_id = "facebook/opt-350m"
         config = AutoConfig.from_pretrained(model_id, revision="cb32f77e905cccbca1d970436fb0f5e6b58ee3c5")
-        quantization_config = FP8Config()
+        quantization_config = FineGrainedFP8Config()
 
         with init_empty_weights():
             model = OPTForCausalLM(config)
@@ -112,7 +134,7 @@ class FP8QuantizerTest(unittest.TestCase):
 
         with init_empty_weights():
             model = OPTForCausalLM(config)
-        quantization_config = FP8Config(modules_to_not_convert=["fc1"])
+        quantization_config = FineGrainedFP8Config(modules_to_not_convert=["fc1"])
         model = replace_with_fp8_linear(model, quantization_config=quantization_config)
         nb_fp8_linear = 0
         for module in model.modules():
@@ -159,7 +181,7 @@ class FP8QuantizerTest(unittest.TestCase):
         Simple test that checks if the block size is working properly
         """
         self.assertEqual(self.quantized_model.config.quantization_config.weight_block_size, (128, 128))
-        quantization_config = FP8Config(weight_block_size=(32, 32))
+        quantization_config = FineGrainedFP8Config(weight_block_size=(32, 32))
         quantized_model = AutoModelForCausalLM.from_pretrained(
             self.model_name, device_map=self.device_map, quantization_config=quantization_config
         )
@@ -172,7 +194,7 @@ class FP8QuantizerTest(unittest.TestCase):
         set CUDA_VISIBLE_DEVICES=0,1 if you have more than 2 GPUS
         """
         input_ids = self.tokenizer(self.input_text, return_tensors="pt").to(self.device_map)
-        quantization_config = FP8Config()
+        quantization_config = FineGrainedFP8Config()
         quantized_model = AutoModelForCausalLM.from_pretrained(
             self.model_name, device_map="auto", quantization_config=quantization_config
         )
@@ -197,6 +219,16 @@ class FP8QuantizerTest(unittest.TestCase):
             output = model.generate(**input_ids, max_new_tokens=self.max_new_tokens, do_sample=False)
             self.assertEqual(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUT)
 
+    def test_quantized_model_offload(self):
+        """
+        Simple test that checks if the quantized model returns an error when loading with cpu/disk offloaded
+        """
+        with self.assertRaisesRegex(
+            ValueError, "You are attempting to load an FP8 model with a device_map that contains a cpu/disk device."
+        ):
+            AutoModelForCausalLM.from_pretrained(
+                self.model_name, device_map=self.offload_device_map, quantization_config=self.quantization_config
+            )
 
 @require_torch_gpu
 class FP8LinearTest(unittest.TestCase):
@@ -208,7 +240,7 @@ class FP8LinearTest(unittest.TestCase):
         """
         from transformers.integrations import FP8Linear
 
-        linear = FP8Linear(256, 256, device=self.device)
+        linear = FP8Linear(256, 256, block_size=(128, 128), device=self.device)
         x = torch.rand((1, 5, 256)).to(self.device)
 
         x_ = linear(x)
@@ -220,7 +252,7 @@ class FP8LinearTest(unittest.TestCase):
         """
         from transformers.integrations import FP8Linear
 
-        linear = FP8Linear(128, 256, device=self.device)
+        linear = FP8Linear(128, 256, block_size=(128, 128), device=self.device)
         x = torch.rand((1, 5, 128)).to(self.device)
 
         x_ = linear(x)

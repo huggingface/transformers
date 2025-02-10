@@ -227,7 +227,7 @@ def w8a8_block_fp8_matmul_triton(
     return C
 
 
-# Python version of the above triton function, it's much slower than the triton version
+# Python version of the above triton function, it's much slower than the triton version, for testing
 @torch.compile
 def w8a8_block_fp8_matmul_compile(
     input_q: torch.Tensor,  # [batch, seq_len, hidden_dim]
@@ -295,38 +295,7 @@ def w8a8_block_fp8_matmul_compile(
 
     return output.to(output_dtype)
 
-
-def linear(
-    input: torch.Tensor,
-    weight: torch.Tensor,
-    weight_scale: torch.Tensor,
-    bias: Optional[torch.Tensor] = None,
-    block_size: Optional[Tuple[int, int]] = None,
-    activation_scheme: str = "dynamic",
-) -> torch.Tensor:
-    if weight.element_size() > 1:
-        print("value not the one expected")
-        return F.linear(input, weight, bias)
-    else:
-        with torch.cuda.device(input.device):
-            qinput, scale = act_quant(input, block_size[1])
-        torch.cuda.synchronize(device=input.device)
-        with torch.cuda.device(input.device):
-            output = w8a8_block_fp8_matmul_triton(
-                qinput,
-                weight,
-                scale,
-                weight_scale,
-                block_size,
-                output_dtype=input.dtype,
-            )
-        torch.cuda.synchronize(device=input.device)
-        if bias is not None:
-            output = output + bias
-        return output.to(dtype=input.dtype)
-
-
-class FP8Linear(nn.Linear):
+class FP8Linear(nn.Module):
     dtype = torch.float8_e4m3fn
 
     def __init__(
@@ -339,28 +308,21 @@ class FP8Linear(nn.Linear):
         device=None,
         activation_scheme="dynamic",
     ):
-        super().__init__(in_features=in_features, out_features=out_features)
+        super().__init__()
         self.in_features = in_features
         self.out_features = out_features
-        self.weight = nn.Parameter(torch.empty(out_features, in_features, dtype=FP8Linear.dtype, device=device))
 
-        if block_size is None:
-            block_size = self.weight.shape
-        if self.weight.element_size() == 1:
-            scale_out_features = (out_features + block_size[0] - 1) // block_size[0]
-            scale_in_features = (in_features + block_size[1] - 1) // block_size[1]
-            self.weight_scale_inv = nn.Parameter(
-                torch.empty(scale_out_features, scale_in_features, dtype=torch.float32, device=device)
-            )
-        else:
-            self.register_parameter("weight_scale_inv", None)
+        self.register_buffer("weight", torch.empty(out_features, in_features, dtype=FP8Linear.dtype, device=device))
+
+        scale_out_features = (out_features + block_size[0] - 1) // block_size[0]
+        scale_in_features = (in_features + block_size[1] - 1) // block_size[1]
+        self.register_buffer(
+            "weight_scale_inv",
+            torch.empty(scale_out_features, scale_in_features, dtype=torch.float32, device=device)
+        )
 
         self.block_size = block_size
 
-        if activation_scheme != "dynamic":
-            raise ValueError(
-                f"Only dynamic activation scheme is supported for FP8Linear for now, you provided {activation_scheme}"
-            )
         self.activation_scheme = activation_scheme
 
         if bias:
@@ -368,8 +330,29 @@ class FP8Linear(nn.Linear):
         else:
             self.register_parameter("bias", None)
 
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return linear(x, self.weight, self.weight_scale_inv, self.bias, self.block_size, self.activation_scheme)
+    def forward(self, input: torch.Tensor) -> torch.Tensor:
+        if self.weight.element_size() > 1:
+            return F.linear(input, self.weight, self.bias)
+        else:
+            # Context manager used to switch among the available cuda devices
+            with torch.cuda.device(input.device):
+                qinput, scale = act_quant(input, self.block_size[1])
+            # Blocks the CPU until all CUDA operations on the specified device are complete. It is used to ensure that the results of the 
+            # preceding operations are ready before proceeding
+            torch.cuda.synchronize(device=input.device)
+            with torch.cuda.device(input.device):
+                output = w8a8_block_fp8_matmul_triton(
+                    qinput,
+                    self.weight,
+                    scale,
+                    self.weight_scale_inv,
+                    self.block_size,
+                    output_dtype=input.dtype,
+                )
+            torch.cuda.synchronize(device=input.device)
+            if self.bias is not None:
+                output = output + self.bias
+            return output.to(dtype=input.dtype)
 
 
 def _replace_with_fp8_linear(

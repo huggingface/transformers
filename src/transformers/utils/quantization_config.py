@@ -1552,12 +1552,23 @@ class BitNetConfig(QuantizationConfigMixin):
 
 
 @dataclass
-class FP8Config(QuantizationConfigMixin):
+class FineGrainedFP8Config(QuantizationConfigMixin):
+    """
+    FineGrainedFP8Config is a configuration class for fine-grained FP8 quantization used mainly for deepseek models.
+
+    Attributes:
+        modules_to_not_convert (Optional[List]): 
+            A list of module names that should not be converted during quantization.
+        activation_scheme (Optional[str]): 
+            The scheme used for activation, the default and only support scheme for now is "dynamic".
+        weight_block_size (Tuple[int, int]): 
+            The size of the weight blocks for quantization, default is (128, 128).
+    """
     def __init__(
         self,
         modules_to_not_convert: Optional[List] = None,
         activation_scheme: Optional[str] = "dynamic",
-        weight_block_size: Optional[Tuple[int, int]] = (128, 128),
+        weight_block_size: Tuple[int, int] = (128, 128),
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.FP8

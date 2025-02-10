@@ -14,13 +14,15 @@ rendered properly in your Markdown viewer.
 
 -->
 
-# FP8
+# Fine-grained FP8
 
 With FP8 quantization method, you can quantize your model in FP8 (W8A8):
 - the weights will be quantized in 8bit (FP8) per 2D block (e.g. weight_block_size=(128, 128)) which is inspired from the deepseek implementation
-- the activation will be quantized in 8bit (FP8) per group per token
+- Activations are quantized to 8 bits (FP8) per group per token, with the group value matching that of the weights in the input channels (128 by default)
 
-It's implemented to add support for DeepSeek-V3 and DeepSeek-R1 models, you can see the paper [here](https://arxiv.org/pdf/2412.19437)
+It's implemented to add support for DeepSeek-V3 and DeepSeek-R1 models, you can see the paper [here](https://arxiv.org/pdf/2412.19437), and the image below explains the quantization scheme : 
+
+![](https://huggingface.co/datasets/huggingface/documentation-images/resolve/b7b3b34bf826a6423ea82ffc57ecac80c46c3c76/transformers/quantization/quantization_deepseek.png)
 
 > [!TIP]
 > You need a GPU with compute capability>=9 (e.g. H100) 
