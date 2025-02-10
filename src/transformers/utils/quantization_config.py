@@ -1559,7 +1559,7 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
     Args:
         modules_to_not_convert (`list`, *optional*, default to `None`):
             A list of module names that should not be converted during quantization.
-        activation_scheme (`str`, *optional*, default to `dynamic`):
+        activation_scheme (`str`, *optional*, default to `"dynamic"`):
             The scheme used for activation, the default and only support scheme for now is "dynamic".
         weight_block_size (`typing.Tuple`, default to `(128, 128)`):
             The size of the weight blocks for quantization, default is (128, 128).
