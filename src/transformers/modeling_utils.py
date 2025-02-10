@@ -4823,7 +4823,9 @@ class PreTrainedModel(nn.Module, ModuleUtilsMixin, GenerationMixin, PushToHubMix
         if device_map is not None:
             device_map = cls._fix_state_dict_keys_on_load(device_map, key_mapping)
         if sharded_metadata is not None and "weight_map" in sharded_metadata.keys():
-            sharded_metadata["weight_map"] = cls._fix_state_dict_keys_on_load(sharded_metadata["weight_map"], key_mapping)
+            sharded_metadata["weight_map"] = cls._fix_state_dict_keys_on_load(
+                sharded_metadata["weight_map"], key_mapping
+            )
 
         # Check if we are in a special state, i.e. loading from a state dict coming from a different architecture
         prefix = model.base_model_prefix
