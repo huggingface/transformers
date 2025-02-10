@@ -19,16 +19,14 @@ URL: https://github.com/google-research/big_vision/tree/main
 
 import argparse
 import collections
-from pathlib import Path
+import os
 
 import numpy as np
 import requests
 import torch
-from huggingface_hub import hf_hub_download
-from numpy import load
 from PIL import Image
 
-from transformers import Siglip2Config, Siglip2Model, SiglipImageProcessor, SiglipProcessor, SiglipTokenizer
+from transformers import GemmaTokenizerFast, Siglip2Config, Siglip2ImageProcessor, Siglip2Model, Siglip2Processor
 from transformers.utils import logging
 
 
@@ -36,69 +34,75 @@ logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
 
+config_options = {
+    "base": {
+        "hidden_size": 768,
+        "intermediate_size": 3072,
+        "num_hidden_layers": 12,
+        "num_attention_heads": 12,
+    },
+    "large": {
+        "hidden_size": 1024,
+        "intermediate_size": 4096,
+        "num_hidden_layers": 24,
+        "num_attention_heads": 16,
+    },
+}
+
 model_name_to_checkpoint = {
     # base checkpoints
-    "siglip2-base-patch16-224": "/Users/nielsrogge/Documents/Siglip2/webli_en_b16_224_63724782.npz",
-    "siglip2-base-patch16-256": "/Users/nielsrogge/Documents/Siglip2/webli_en_b16_256_60500360.npz",
-    "siglip2-base-patch16-384": "/Users/nielsrogge/Documents/Siglip2/webli_en_b16_384_68578854.npz",
-    "siglip2-base-patch16-512": "/Users/nielsrogge/Documents/Siglip2/webli_en_b16_512_68580893.npz",
-    # large checkpoints
-    "siglip2-large-patch16-256": "/Users/nielsrogge/Documents/Siglip2/webli_en_l16_256_60552751.npz",
-    "siglip2-large-patch16-384": "/Users/nielsrogge/Documents/Siglip2/webli_en_l16_384_63634585.npz",
-    # multilingual checkpoint
-    "siglip2-base-patch16-256-i18n": "/Users/nielsrogge/Documents/Siglip2/webli_i18n_b16_256_66117334.npz",
-    # so400m checkpoints
-    "siglip2-so400m-patch14-384": "/Users/nielsrogge/Documents/Siglip2/webli_en_so400m_384_58765454.npz",
-}
-
-model_name_to_image_size = {
-    "siglip2-base-patch16-224": 224,
-    "siglip2-base-patch16-256": 256,
-    "siglip2-base-patch16-384": 384,
-    "siglip2-base-patch16-512": 512,
-    "siglip2-large-patch16-256": 256,
-    "siglip2-large-patch16-384": 384,
-    "siglip2-base-patch16-256-i18n": 256,
-    "siglip2-so400m-patch14-384": 384,
+    "siglip2-base-patch-16-naflex-256": "./checkpoints/siglip2/siglip2_b16_naflex.npz",
 }
 
 
-def get_siglip2_config(model_name):
-    config = Siglip2Config()
+def get_siglip2_config(model_name: str) -> Siglip2Config:
+    _, variant, _, patch_size, _, num_patches = model_name.split("-")
+    patch_size = int(patch_size)
+    num_patches = int(num_patches)
 
-    vocab_size = 250000 if "i18n" in model_name else 32000
-    image_size = model_name_to_image_size[model_name]
-    patch_size = 16 if "patch16" in model_name else 14
-
-    # size of the architecture
-    config.vision_config.image_size = image_size
-    config.vision_config.patch_size = patch_size
-    config.text_config.vocab_size = vocab_size
-
-    if "base" in model_name:
-        pass
-    elif "large" in model_name:
-        config.text_config.hidden_size = 1024
-        config.text_config.intermediate_size = 4096
-        config.text_config.num_hidden_layers = 24
-        config.text_config.num_attention_heads = 16
-        config.vision_config.hidden_size = 1024
-        config.vision_config.intermediate_size = 4096
-        config.vision_config.num_hidden_layers = 24
-        config.vision_config.num_attention_heads = 16
-    elif "so400m" in model_name:
-        config.text_config.hidden_size = 1152
-        config.text_config.intermediate_size = 4304
-        config.text_config.num_hidden_layers = 27
-        config.text_config.num_attention_heads = 16
-        config.vision_config.hidden_size = 1152
-        config.vision_config.intermediate_size = 4304
-        config.vision_config.num_hidden_layers = 27
-        config.vision_config.num_attention_heads = 16
-    else:
-        raise ValueError("Model not supported")
-
+    common_options = config_options[variant]
+    vision_config = {
+        "patch_size": patch_size,
+        "num_patches": num_patches,
+        **common_options,
+    }
+    text_config = {
+        "vocab_size": 256_000,
+        **common_options,
+    }
+    config = Siglip2Config(
+        vision_config=vision_config,
+        text_config=text_config,
+    )
     return config
+
+
+def get_siglip2_tokenizer() -> GemmaTokenizerFast:
+    # Load pretrained tokenizer
+    gemma_checkpoint = "google/gemma-7b"
+    tokenizer = GemmaTokenizerFast.from_pretrained(
+        gemma_checkpoint,
+        add_bos_token=False,
+        add_eos_token=True,
+        padding_side="right",
+        # important: make tokenizer NOT return attention_mask since original one doesn't require it
+        model_input_names=["input_ids"],
+    )
+    return tokenizer
+
+
+def get_siglip2_image_processor(patch_size: int, max_num_patches: int) -> Siglip2ImageProcessor:
+    image_processor = Siglip2ImageProcessor(
+        patch_size=patch_size,
+        max_num_patches=max_num_patches,
+        do_resize=True,
+        do_normalize=True,
+        image_mean=[0.5, 0.5, 0.5],
+        image_std=[0.5, 0.5, 0.5],
+        do_rescale=True,
+        rescale_factor=1 / 255,
+    )
+    return image_processor
 
 
 def create_rename_keys(config):
@@ -202,6 +206,17 @@ def rename_key(dct, old, new, config):
     dct[new] = torch.from_numpy(val)
 
 
+def split_to_layers(state_dict):
+    keys = list(state_dict.keys())
+    for key in keys:
+        if "/encoderblock/" in key:
+            weight = state_dict.pop(key)
+            for i, weight_i in enumerate(weight):
+                new_name = key.replace("encoderblock", f"encoderblock_{i}")
+                state_dict[new_name] = weight_i
+    return state_dict
+
+
 def read_in_q_k_v_head(state_dict, config):
     # read in individual input projection layers
     key_proj_weight = (
@@ -264,17 +279,14 @@ def convert_siglip2_checkpoint(model_name, pytorch_dump_folder_path, verify_logi
     # get checkpoint
     checkpoint = model_name_to_checkpoint[model_name]
 
-    # get vocab file
-    if "i18n" in model_name:
-        vocab_file = "/Users/nielsrogge/Documents/Siglip2/multilingual_vocab/sentencepiece.model"
-    else:
-        vocab_file = "/Users/nielsrogge/Documents/Siglip2/english_vocab/sentencepiece.model"
-
     # load original state dict
-    data = load(checkpoint)
+    print(f"Loading checkpoint from {checkpoint}...")
+    data = np.load(checkpoint)
     state_dict = flatten_nested_dict(data)
+    state_dict = split_to_layers(state_dict)
 
     # remove and rename some keys
+    print("Renaming some keys to match HuggingFace model...")
     rename_keys = create_rename_keys(config)
     for src, dest in rename_keys:
         rename_key(state_dict, src, dest, config)
@@ -283,107 +295,29 @@ def convert_siglip2_checkpoint(model_name, pytorch_dump_folder_path, verify_logi
     read_in_q_k_v_head(state_dict, config)
 
     # load HuggingFace model
+    print("Loading HuggingFace model...")
     model = Siglip2Model(config).eval()
     model.load_state_dict(state_dict)
 
-    # create processor
-    # important: make tokenizer not return attention_mask since original one doesn't require it
-    image_size = config.vision_config.image_size
-    size = {"height": image_size, "width": image_size}
-    image_processor = SiglipImageProcessor(size=size)
-    tokenizer = SiglipTokenizer(vocab_file=vocab_file, model_input_names=["input_ids"])
-    processor = SiglipProcessor(image_processor=image_processor, tokenizer=tokenizer)
+    # Create processor
+    print("Creating processor...")
+    # TODO: update with more checkpoints
+    tokenizer = get_siglip2_tokenizer()
+    image_processor = get_siglip2_image_processor(config.vision_config.patch_size, max_num_patches=256)
+    processor = Siglip2Processor(image_processor=image_processor, tokenizer=tokenizer)
 
-    # verify on dummy images and texts
-    url_1 = "https://cdn.openai.com/multimodal-neurons/assets/apple/apple-ipod.jpg"
-    image_1 = Image.open(requests.get(url_1, stream=True).raw).convert("RGB")
-    url_2 = "https://cdn.openai.com/multimodal-neurons/assets/apple/apple-blank.jpg"
-    image_2 = Image.open(requests.get(url_2, stream=True).raw).convert("RGB")
-    texts = ["an apple", "a picture of an apple"]
-
-    inputs = processor(images=[image_1, image_2], text=texts, return_tensors="pt", padding="max_length")
-
-    # verify input_ids against original ones
-    if image_size == 224:
-        filename = "siglip2_pixel_values.pt"
-    elif image_size == 256:
-        filename = "siglip2_pixel_values_256.pt"
-    elif image_size == 384:
-        filename = "siglip2_pixel_values_384.pt"
-    elif image_size == 512:
-        filename = "siglip2_pixel_values_512.pt"
-    else:
-        raise ValueError("Image size not supported")
-
-    filepath = hf_hub_download(repo_id="nielsr/test-image", filename=filename, repo_type="dataset")
-    original_pixel_values = torch.load(filepath)
-    filepath = hf_hub_download(repo_id="nielsr/test-image", filename="siglip2_input_ids.pt", repo_type="dataset")
-    original_input_ids = torch.load(filepath)
-
-    if "i18n" not in model_name:
-        assert inputs.input_ids.tolist() == original_input_ids.tolist()
-
-    print("Mean of original pixel values:", original_pixel_values.mean())
-    print("Mean of new pixel values:", inputs.pixel_values.mean())
-
-    # note: we're testing with original pixel values here since we don't have exact pixel values
-    with torch.no_grad():
-        outputs = model(input_ids=inputs.input_ids, pixel_values=original_pixel_values)
-
-    # with torch.no_grad():
-    #     outputs = model(input_ids=inputs.input_ids, pixel_values=inputs.pixel_values)
-
-    print(outputs.logits_per_image[:3, :3])
-
-    probs = torch.sigmoid(outputs.logits_per_image)  # these are the probabilities
-    print(f"{probs[0][0]:.1%} that image 0 is '{texts[0]}'")
-    print(f"{probs[0][1]:.1%} that image 0 is '{texts[1]}'")
-
-    if verify_logits:
-        if model_name == "siglip2-base-patch16-224":
-            expected_slice = torch.tensor(
-                [[-2.9621, -2.1672], [-0.2713, 0.2910]],
-            )
-        elif model_name == "siglip2-base-patch16-256":
-            expected_slice = torch.tensor(
-                [[-3.1146, -1.9894], [-0.7312, 0.6387]],
-            )
-        elif model_name == "siglip2-base-patch16-384":
-            expected_slice = torch.tensor(
-                [[-2.8098, -2.1891], [-0.4242, 0.4102]],
-            )
-        elif model_name == "siglip2-base-patch16-512":
-            expected_slice = torch.tensor(
-                [[-2.7899, -2.2668], [-0.4295, -0.0735]],
-            )
-        elif model_name == "siglip2-large-patch16-256":
-            expected_slice = torch.tensor(
-                [[-1.5827, -0.5801], [-0.9153, 0.1363]],
-            )
-        elif model_name == "siglip2-large-patch16-384":
-            expected_slice = torch.tensor(
-                [[-2.1523, -0.2899], [-0.2959, 0.7884]],
-            )
-        elif model_name == "siglip2-so400m-patch14-384":
-            expected_slice = torch.tensor([[-1.2441, -0.6649], [-0.7060, 0.7374]])
-        elif model_name == "siglip2-base-patch16-256-i18n":
-            expected_slice = torch.tensor(
-                [[-0.9064, 0.1073], [-0.0299, 0.5304]],
-            )
-
-        assert torch.allclose(outputs.logits_per_image[:3, :3], expected_slice, atol=1e-4)
-        print("Looks ok!")
-
+    # Save model
     if pytorch_dump_folder_path is not None:
-        Path(pytorch_dump_folder_path).mkdir(exist_ok=True)
-        print(f"Saving model {model_name} to {pytorch_dump_folder_path}")
-        model.save_pretrained(pytorch_dump_folder_path)
-        print(f"Saving processor to {pytorch_dump_folder_path}")
-        processor.save_pretrained(pytorch_dump_folder_path)
+        dst_dir = os.path.join(pytorch_dump_folder_path, model_name)
+        print(f"Saving model {model_name} to {dst_dir}...")
+        model.save_pretrained(dst_dir)
+        print(f"Saving processor to {dst_dir}...")
+        processor.save_pretrained(dst_dir)
 
     if push_to_hub:
-        model.push_to_hub(f"nielsr/{model_name}")
-        processor.push_to_hub(f"nielsr/{model_name}")
+        print(f"Pushing model and processor for {model_name} to the HuggingFace Hub...")
+        model.push_to_hub(f"s0225/{model_name}", private=True)
+        processor.push_to_hub(f"s0225/{model_name}", private=True)
 
 
 if __name__ == "__main__":
@@ -391,13 +325,16 @@ if __name__ == "__main__":
     # Required parameters
     parser.add_argument(
         "--model_name",
-        default="siglip2-base-patch16-224",
+        default="siglip2-base-patch-16-naflex-256",
         type=str,
         choices=model_name_to_checkpoint.keys(),
         help="Name of the model you'd like to convert.",
     )
     parser.add_argument(
-        "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
+        "--pytorch_dump_folder_path",
+        default="./checkpoints/siglip2-hf/",
+        type=str,
+        help="Path to the output PyTorch model directory.",
     )
     parser.add_argument(
         "--verify_logits",
