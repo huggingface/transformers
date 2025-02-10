@@ -19,7 +19,7 @@ Processor class for PaliGemma.
 from typing import List, Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, is_valid_image, make_flat_list_of_images, make_nested_list_of_images
+from ...image_utils import ImageInput, is_valid_image, make_flat_list_of_images
 from ...processing_utils import (
     ImagesKwargs,
     ProcessingKwargs,
@@ -256,7 +256,17 @@ class PaliGemmaProcessor(ProcessorMixin):
                         )
 
                 # make a nested list of lists to be able to iterate over the images and text below
-                images = make_nested_list_of_images(images)
+                if is_valid_image(images):
+                    images = [[images]]
+                elif isinstance(images, (list, tuple)) and is_valid_image(images[0]):
+                    images = [[image] for image in images]
+                elif not (
+                    isinstance(images, (list, tuple))
+                    and isinstance(images[0], (list, tuple))
+                    and is_valid_image(images[0][0])
+                ):
+                    raise ValueError("images must be an image, list of images or list of list of images")
+
                 input_strings = [
                     build_string_from_input(
                         prompt=prompt,
