@@ -117,7 +117,7 @@ def normalize_list_like_lines(generation):
     # that are then numbered by digits \d or roman numerals (one or more)
     # and then, optional additional numbering of this line is captured
     # this is then fed to re.finditer.
-    pattern = r"(?:^)(-|\*)?(?!-|\*) ?((?:\d|[ixv])++ )?.+? (-|\*) (((?:\d|[ixv])++)\.(\d|[ixv]) )?.*(?:$)"
+    pattern = r"(?:^)(-|\*)?(?!-|\*) ?([0-9ixv]+ )?.+? (-|\*) (([0-9ixv]+)\.([0-9ixv]) )?.*(?:$)"
 
     for match in reversed(list(re.finditer(pattern, generation, flags=re.I | re.M))):
         start, stop = match.span()
